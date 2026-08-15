@@ -7,7 +7,10 @@ class Exercise {
   final int sets;
   final int reps;
   final String cue;
-  const Exercise(this.name, this.category, this.sets, this.reps, this.cue);
+  final String imageUrl;
+  final String muscleGroup;
+  const Exercise(this.name, this.category, this.sets, this.reps, this.cue,
+      this.imageUrl, this.muscleGroup);
 }
 
 class WorkoutRecord {
@@ -106,14 +109,14 @@ class RiskLead {
 
 class MockData {
   // ---- Member identity -----------------------------------------------
-  static const memberName = 'Aisyah Rahman';
-  static const memberEmail = 'aisyah.r@example.com';
+  static const memberName = 'ZhengYang';
+  static const memberEmail = 'zhengyang@example.com';
   static const memberTier = 'Premium';
-  static const memberGender = 'Female';
-  static const memberAge = 24;
+  static const memberGender = 'Male';
+  static const memberAge = 21;
   static const memberExperience = 'Intermediate';
   static const memberActivityLevel = 'Moderately active';
-  static const memberHeight = 163;
+  static const memberHeight = 170;
   static const memberWeight = 58;
   static const memberTrainingFocus = <String>['Build muscle', 'Improve endurance'];
 
@@ -124,14 +127,42 @@ class MockData {
 
   // ---- Module 2 -------------------------------------------------------
   static const routine = <Exercise>[
-    Exercise('Barbell Squat', 'Compound Lower-Body', 4, 8,
-        'Keep your chest up and drive your knees out.'),
-    Exercise('Romanian Deadlift', 'Compound Lower-Body', 3, 10,
-        'Keep a neutral spine, hinge from the hips.'),
-    Exercise('Overhead Press', 'Compound Upper-Body', 3, 8,
-        'Brace your core, avoid arching your lower back.'),
-    Exercise('Dumbbell Row', 'Isolation Upper-Body', 3, 12,
-        'Pull to the hip, keep your shoulder down.'),
+    Exercise(
+      'Barbell Squat',
+      'Compound Lower-Body',
+      4,
+      8,
+      'Keep your chest up and drive your knees out.',
+      'https://images.unsplash.com/photo-1534368959876-26bf04f2c947?auto=format&fit=crop&w=800&q=80',
+      'Quads · Glutes',
+    ),
+    Exercise(
+      'Romanian Deadlift',
+      'Compound Lower-Body',
+      3,
+      10,
+      'Keep a neutral spine, hinge from the hips.',
+      'https://images.unsplash.com/photo-1583454110551-21f2fa2afe61?auto=format&fit=crop&w=800&q=80',
+      'Hamstrings · Glutes',
+    ),
+    Exercise(
+      'Overhead Press',
+      'Compound Upper-Body',
+      3,
+      8,
+      'Brace your core, avoid arching your lower back.',
+      'https://images.unsplash.com/photo-1541534741688-6078c6bfb5c5?auto=format&fit=crop&w=800&q=80',
+      'Shoulders · Triceps',
+    ),
+    Exercise(
+      'Dumbbell Row',
+      'Isolation Upper-Body',
+      3,
+      12,
+      'Pull to the hip, keep your shoulder down.',
+      'https://images.unsplash.com/photo-1601422407692-ec4eeec1d9b3?auto=format&fit=crop&w=800&q=80',
+      'Back · Biceps',
+    ),
   ];
 
   static const voiceCues = <String>[
@@ -187,7 +218,7 @@ class MockData {
     ['1', 'Farid Zainal', '3,120'],
     ['2', 'Wei Ling Tan', '2,780'],
     ['3', 'Daniel Wong', '2,410'],
-    ['4', 'Aisyah Rahman', '1,840'],
+    ['4', 'ZhengYang', '1,840'],
     ['5', 'Nurul Huda', '1,655'],
   ];
 
@@ -219,17 +250,17 @@ class MockData {
   ];
 
   static final memberBookings = <Booking>[
-    Booking('b1', 'Jason Lim', 'Aisyah Rahman',
+    Booking('b1', 'Jason Lim', 'ZhengYang',
         DateTime.now().add(const Duration(days: 2, hours: 3)), 'Confirmed', 120, null),
-    Booking('b2', 'Priya Menon', 'Aisyah Rahman',
+    Booking('b2', 'Priya Menon', 'ZhengYang',
         DateTime.now().add(const Duration(days: 6)), 'Confirmed', 140, null),
-    Booking('b3', 'Jason Lim', 'Aisyah Rahman',
+    Booking('b3', 'Jason Lim', 'ZhengYang',
         DateTime.now().subtract(const Duration(days: 9)), 'Completed', 120,
         'Good squat depth this session. Work on keeping the chest up during the ascent.'),
   ];
 
   static final coachRoster = <Booking>[
-    Booking('r1', 'Jason Lim', 'Aisyah Rahman',
+    Booking('r1', 'Jason Lim', 'ZhengYang',
         DateTime.now().add(const Duration(days: 2, hours: 3)), 'Confirmed', 120, null),
     Booking('r2', 'Jason Lim', 'Daniel Wong',
         DateTime.now().add(const Duration(days: 2, hours: 5)), 'Confirmed', 120, null),
@@ -271,7 +302,7 @@ class MockData {
 
   // ---- Module 11 ------------------------------------------------------
   static const users = <UserAccount>[
-    UserAccount('Aisyah Rahman', 'aisyah.r@example.com', 'Member', 'Active'),
+    UserAccount('ZhengYang', 'zhengyang@example.com', 'Member', 'Active'),
     UserAccount('Daniel Wong', 'daniel.w@example.com', 'Member', 'Active'),
     UserAccount('Farid Zainal', 'farid.z@example.com', 'Member', 'Suspended'),
     UserAccount('Jason Lim', 'jason.lim@furyfitness.my', 'Coach', 'Verified'),

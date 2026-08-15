@@ -424,7 +424,7 @@ class _ProcessVoucherScreenState extends State<ProcessVoucherScreen> {
                     ],
                   ),
                   const SizedBox(height: 14),
-                  const DetailRow('Member', 'Aisyah Rahman'),
+                  const DetailRow('Member', 'ZhengYang'),
                   const Divider(height: 18),
                   const DetailRow('Reward', 'Protein Shake Voucher'),
                   const Divider(height: 18),
