@@ -1,6 +1,8 @@
 // All mock records for the GainPath frontend prototype.
 // No backend is connected; every screen reads from here.
 
+import 'package:flutter/material.dart' show IconData, Icons;
+
 class Exercise {
   final String name;
   final String category;
@@ -47,18 +49,39 @@ class Booking {
       this.status, this.fee, this.notes);
 }
 
-class Badge {
+class AchievementBadge {
   final String name;
   final String description;
   final bool unlocked;
-  const Badge(this.name, this.description, this.unlocked);
+  final IconData icon;
+
+  /// Only set for locked badges — e.g. "12/14 days" — so the grid can show
+  /// how close a member is rather than just a padlock.
+  final String? progressLabel;
+  final double? progressValue;
+
+  const AchievementBadge(this.name, this.description, this.unlocked, this.icon,
+      {this.progressLabel, this.progressValue});
+}
+
+class MiniGame {
+  final String name;
+  final String tagline;
+  final String imageUrl;
+  final String difficulty;
+  final int bestScore;
+  final IconData icon;
+  final int plays;
+  const MiniGame(this.name, this.tagline, this.imageUrl, this.difficulty, this.bestScore,
+      this.icon, this.plays);
 }
 
 class RewardItem {
   final String title;
   final int points;
   final int stock;
-  const RewardItem(this.title, this.points, this.stock);
+  final String imageUrl;
+  const RewardItem(this.title, this.points, this.stock, this.imageUrl);
 }
 
 class Transaction {
@@ -192,26 +215,64 @@ class MockData {
   static const streak = 12;
   static const longestStreak = 21;
 
-  static const badges = <Badge>[
-    Badge('First Session', 'Complete your first tracked workout.', true),
-    Badge('Week Warrior', 'Train 5 days in one week.', true),
-    Badge('Form Focused', 'Hit 85% posture accuracy in a session.', true),
-    Badge('Consistency', 'Reach a 14-day streak.', false),
-    Badge('Century', 'Log 100 total sessions.', false),
+  static const badges = <AchievementBadge>[
+    AchievementBadge('First Session', 'Complete your first tracked workout.', true, Icons.flag_rounded),
+    AchievementBadge('Week Warrior', 'Train 5 days in one week.', true, Icons.local_fire_department_rounded),
+    AchievementBadge('Form Focused', 'Hit 85% posture accuracy in a session.', true, Icons.verified_rounded),
+    AchievementBadge('Consistency', 'Reach a 14-day streak.', false, Icons.calendar_month_rounded,
+        progressLabel: '12/14 days', progressValue: 12 / 14),
+    AchievementBadge('Century', 'Log 100 total sessions.', false, Icons.emoji_events_rounded,
+        progressLabel: '47/100 sessions', progressValue: 47 / 100),
   ];
 
-  static const miniGames = <String>[
-    'Squat Rush',
-    'Plank Hold Challenge',
-    'Reaction Lunges',
-    'Shadow Boxing Sprint',
+  static const miniGames = <MiniGame>[
+    MiniGame(
+      'Squat Smash',
+      'Smash through as many clean squats as you can before the clock hits zero.',
+      'https://images.unsplash.com/photo-1546483875-ad9014c88eba?auto=format&fit=crop&w=800&q=80',
+      'Medium',
+      1200,
+      Icons.bolt_rounded,
+      2140,
+    ),
+    MiniGame(
+      'Plank Master',
+      'Lock in and hold the zone — the longer you hold, the higher you climb.',
+      'https://images.unsplash.com/photo-1584464491033-06628f3a6b7b?auto=format&fit=crop&w=800&q=80',
+      'Hard',
+      1020,
+      Icons.shield_rounded,
+      1680,
+    ),
+    MiniGame(
+      'Lunge Blitz',
+      'React fast and lunge to the correct side before the prompt disappears.',
+      'https://images.unsplash.com/photo-1517130038641-a774d04afb3c?auto=format&fit=crop&w=800&q=80',
+      'Easy',
+      840,
+      Icons.flash_on_rounded,
+      2960,
+    ),
+    MiniGame(
+      'Combo Rush',
+      'Chain punches on the beat for a fast-paced cardio combo streak.',
+      'https://images.unsplash.com/photo-1554284126-aa88f22d8b74?auto=format&fit=crop&w=800&q=80',
+      'Medium',
+      660,
+      Icons.sports_mma_rounded,
+      1340,
+    ),
   ];
 
   static const rewards = <RewardItem>[
-    RewardItem('Protein Shake Voucher', 400, 24),
-    RewardItem('Gym Towel', 800, 12),
-    RewardItem('One Free Day Pass', 1200, 8),
-    RewardItem('Branded Water Bottle', 1500, 5),
+    RewardItem('Protein Shake Voucher', 400, 24,
+        'https://images.unsplash.com/photo-1553530666-ba11a7da3888?auto=format&fit=crop&w=800&q=80'),
+    RewardItem('Gym Towel', 800, 12,
+        'https://images.unsplash.com/photo-1591117207239-788bf8de6c3b?auto=format&fit=crop&w=800&q=80'),
+    RewardItem('One Free Day Pass', 1200, 8,
+        'https://images.unsplash.com/photo-1571902943202-507ec2618e8f?auto=format&fit=crop&w=800&q=80'),
+    RewardItem('Branded Water Bottle', 1500, 5,
+        'https://images.unsplash.com/photo-1523362628745-0c100150b504?auto=format&fit=crop&w=800&q=80'),
   ];
 
   static const leaderboard = <List<String>>[
