@@ -25,28 +25,123 @@ class WorkoutRecord {
       this.exercise, this.date, this.reps, this.accuracy, this.durationMin);
 }
 
+class WeightEntry {
+  final DateTime date;
+  final double weightKg;
+  const WeightEntry(this.date, this.weightKg);
+}
+
+class MuscleGroupShare {
+  final String label;
+  final double ratio;
+  const MuscleGroupShare(this.label, this.ratio);
+}
+
+/// [bio], [specializationTags], and [fee] are mutable so a coach editing
+/// their own professional profile (coach-side) updates the very same
+/// object members browse in the directory — the "mutate MockData in
+/// place" pattern already used for savedAdvice and Booking.
 class Coach {
   final String id;
   final String name;
   final String specialty;
+  List<String> specializationTags;
   final double rating;
   final int reviews;
-  final String bio;
+  String bio;
   final bool verified;
-  const Coach(this.id, this.name, this.specialty, this.rating, this.reviews,
-      this.bio, this.verified);
+  final String imageUrl;
+  final String branch;
+  double fee;
+  final int yearsExperience;
+  final int sessionsCompleted;
+  final String responseTime;
+  final List<CoachReview> topReviews;
+  Coach({
+    required this.id,
+    required this.name,
+    required this.specialty,
+    required this.specializationTags,
+    required this.rating,
+    required this.reviews,
+    required this.bio,
+    required this.verified,
+    required this.imageUrl,
+    required this.branch,
+    required this.fee,
+    required this.yearsExperience,
+    required this.sessionsCompleted,
+    required this.responseTime,
+    required this.topReviews,
+  });
 }
 
+/// AD-M8.3 — a certification document a coach uploads for gym-staff
+/// verification. [status] is one of Verified / Pending review / Rejected;
+/// [rejectionReason] is set only when rejected. Mutable + stored in a
+/// mutable list so uploading actually adds a Pending entry the coach can
+/// then see, matching the CertificationDocument entity in the data
+/// dictionary (without a backend behind it).
+class CoachCertification {
+  final String name;
+  String status;
+  final DateTime uploadedAt;
+  final String? rejectionReason;
+  CoachCertification(this.name, this.status, this.uploadedAt, {this.rejectionReason});
+}
+
+class CoachReview {
+  final String memberName;
+  final int stars;
+  final String reviewText;
+  final DateTime createdAt;
+  const CoachReview(this.memberName, this.stars, this.reviewText, this.createdAt);
+}
+
+/// Embedded chat message for the member↔coach thread on a single booking,
+/// mirroring the BookingMessage subcollection in the data dictionary
+/// (senderRole, text, sentAt) without a backend behind it.
+class BookingMessage {
+  final String senderRole;
+  final String text;
+  final DateTime sentAt;
+  const BookingMessage(this.senderRole, this.text, this.sentAt);
+}
+
+/// [start], [status], [notes], [rated], and [cancellationReason] are
+/// mutable — rescheduling, cancelling, rating, and a coach publishing
+/// consultation notes all mutate a booking in place rather than
+/// replacing it in the list, the same pattern already used for
+/// `MockData.savedAdvice` in the chatbot module.
 class Booking {
   final String id;
+  final String coachId;
   final String coachName;
   final String memberName;
-  final DateTime start;
-  final String status;
+  DateTime start;
+  final int durationMin;
+  final String branch;
+  String status;
   final double fee;
-  final String? notes;
-  const Booking(this.id, this.coachName, this.memberName, this.start,
-      this.status, this.fee, this.notes);
+  String? notes;
+  bool rated;
+  String? cancellationReason;
+  final List<BookingMessage> messages;
+  Booking({
+    required this.id,
+    required this.coachId,
+    required this.coachName,
+    required this.memberName,
+    required this.start,
+    this.durationMin = 60,
+    required this.branch,
+    required this.status,
+    required this.fee,
+    this.notes,
+    this.rated = false,
+    this.cancellationReason,
+    List<BookingMessage>? messages,
+  }) : messages = messages ?? [];
 }
 
 class AchievementBadge {
@@ -84,6 +179,17 @@ class RewardItem {
   const RewardItem(this.title, this.points, this.stock, this.imageUrl);
 }
 
+class MembershipPlan {
+  final String id;
+  final String name;
+  final double price;
+  final String tagline;
+  final List<String> perks;
+  final bool popular;
+  const MembershipPlan(this.id, this.name, this.price, this.tagline, this.perks,
+      {this.popular = false});
+}
+
 class Transaction {
   final String id;
   final String type;
@@ -97,6 +203,12 @@ class ChatMessage {
   final String text;
   final bool fromUser;
   const ChatMessage(this.text, this.fromUser);
+}
+
+class FaqPrompt {
+  final String question;
+  final String reply;
+  const FaqPrompt(this.question, this.reply);
 }
 
 class RefundClaim {
@@ -145,6 +257,25 @@ class MockData {
 
   static const coachName = 'Jason Lim';
   static const coachEmail = 'jason.lim@furyfitness.my';
+  static const coachPhone = '+60 12-345 6789';
+
+  /// The signed-in coach's own directory record — the same [Coach] object
+  /// members browse. Editing the professional profile coach-side mutates
+  /// this instance, so the public directory reflects the change.
+  static Coach get currentCoach =>
+      coaches.firstWhere((c) => c.name == coachName);
+
+  /// AD-M8.3 — the signed-in coach's uploaded credentials. Mutable so an
+  /// upload adds a Pending entry that then shows in the list.
+  static final coachCertifications = <CoachCertification>[
+    CoachCertification('NASM Certified Personal Trainer', 'Verified',
+        DateTime.now().subtract(const Duration(days: 210))),
+    CoachCertification('First Aid & CPR (Red Crescent)', 'Verified',
+        DateTime.now().subtract(const Duration(days: 120))),
+    CoachCertification('Strength Specialist Level 2', 'Pending review',
+        DateTime.now().subtract(const Duration(days: 3))),
+  ];
+
   static const adminName = 'Muhammad Mustafah';
   static const adminEmail = 'admin@furyfitness.my';
 
@@ -209,6 +340,33 @@ class MockData {
 
   static const postureTrend = <int>[64, 68, 71, 69, 76, 79, 84];
   static const volumeTrend = <int>[2400, 2650, 2580, 2900, 3100, 3050, 3400];
+
+  // ---- Module 5: Progress & Reports (report-specific series) ----------
+  static const heightCm = 170;
+
+  static final weightHistory = <WeightEntry>[
+    WeightEntry(DateTime.now().subtract(const Duration(days: 49)), 60.4),
+    WeightEntry(DateTime.now().subtract(const Duration(days: 42)), 60.1),
+    WeightEntry(DateTime.now().subtract(const Duration(days: 35)), 59.6),
+    WeightEntry(DateTime.now().subtract(const Duration(days: 28)), 59.3),
+    WeightEntry(DateTime.now().subtract(const Duration(days: 21)), 58.9),
+    WeightEntry(DateTime.now().subtract(const Duration(days: 14)), 58.6),
+    WeightEntry(DateTime.now().subtract(const Duration(days: 7)), 58.3),
+    WeightEntry(DateTime.now(), 58.0),
+  ];
+
+  static const muscleGroupSplit = <MuscleGroupShare>[
+    MuscleGroupShare('Legs', 0.42),
+    MuscleGroupShare('Back', 0.24),
+    MuscleGroupShare('Chest', 0.18),
+    MuscleGroupShare('Shoulders', 0.16),
+  ];
+
+  static const sessionsPerWeek = <int>[3, 4, 3, 5, 4, 4, 5];
+  static const sessionWeekLabels = <String>['W1', 'W2', 'W3', 'W4', 'W5', 'W6', 'W7'];
+
+  static const pointsHistory = <int>[180, 220, 195, 260, 240, 310, 275, 290];
+  static const pointsWeekLabels = <String>['W1', 'W2', 'W3', 'W4', 'W5', 'W6', 'W7', 'W8'];
 
   // ---- Module 3 -------------------------------------------------------
   static const points = 1840;
@@ -285,6 +443,8 @@ class MockData {
 
   // ---- Module 4 -------------------------------------------------------
   static final transactions = <Transaction>[
+    Transaction('TXN-2087', 'Coaching session', 140.00,
+        DateTime.now().subtract(const Duration(days: 2)), 'Cleared'),
     Transaction('TXN-2041', 'Membership renewal', 89.00,
         DateTime.now().subtract(const Duration(days: 12)), 'Cleared'),
     Transaction('TXN-1988', 'Coaching session', 120.00,
@@ -293,43 +453,269 @@ class MockData {
         DateTime.now().subtract(const Duration(days: 42)), 'Cleared'),
   ];
 
-  static const membershipPlans = <List<String>>[
-    ['Basic', 'RM 49', 'Gym access and AI form tracking'],
-    ['Premium', 'RM 89', 'Everything in Basic, plus coach booking and reports'],
+  /// The refund policy window (AD-M4.4): only charges within this many days
+  /// are eligible. TXN-2087 above is deliberately recent so the demo can
+  /// show both the eligible and the policy-locked states.
+  static const refundWindowDays = 7;
+
+  static const currentPlanId = 'premium';
+
+  static const membershipPlans = <MembershipPlan>[
+    MembershipPlan(
+      'basic',
+      'Basic',
+      49,
+      'Everything you need to train smart.',
+      [
+        'AI form tracking and rep counting',
+        'Full gym floor access',
+        'Weekly progress reports',
+        'Community leaderboard',
+      ],
+    ),
+    MembershipPlan(
+      'premium',
+      'Premium',
+      89,
+      "Most members' favourite.",
+      [
+        'Everything in Basic',
+        'Book certified coaches',
+        'Deep-dive posture and volume analytics',
+        'Priority reward-shop drops',
+      ],
+      popular: true,
+    ),
+    MembershipPlan(
+      'elite',
+      'Elite',
+      149,
+      'Train with a coach in your corner.',
+      [
+        'Everything in Premium',
+        '2 free coaching sessions every month',
+        'Priority booking slots',
+        '2x gamification points',
+      ],
+    ),
   ];
 
   // ---- Module 7 / 8 ---------------------------------------------------
-  static const coaches = <Coach>[
-    Coach('c1', 'Jason Lim', 'Strength and Conditioning', 4.8, 47,
-        'Six years coaching compound lifts, with a focus on safe progression for beginners.', true),
-    Coach('c2', 'Priya Menon', 'Rehabilitation and Mobility', 4.9, 33,
-        'Physiotherapy background, specialising in returning to training after injury.', true),
-    Coach('c3', 'Hafiz Aziz', 'Hypertrophy', 4.6, 58,
-        'Bodybuilding-oriented programming and technique refinement.', true),
-    Coach('c4', 'Michelle Chan', 'Calisthenics', 4.7, 21,
-        'Bodyweight progressions from first pull-up to advanced skills.', true),
+  static final coaches = <Coach>[
+    Coach(
+      id: 'c1',
+      name: 'Jason Lim',
+      specialty: 'Strength and Conditioning',
+      specializationTags: const ['Strength Training', 'Powerlifting', 'Beginner Friendly'],
+      rating: 4.8,
+      reviews: 47,
+      bio:
+          'Six years coaching compound lifts, with a focus on safe progression for beginners. '
+          'I care most about you leaving every session moving better than you arrived.',
+      verified: true,
+      imageUrl:
+          'https://images.unsplash.com/photo-1633332755192-727a05c4013d?auto=format&fit=crop&w=400&q=80',
+      branch: 'GainPath Kulim',
+      fee: 120,
+      yearsExperience: 6,
+      sessionsCompleted: 312,
+      responseTime: 'Usually responds within 2 hours',
+      topReviews: [
+        CoachReview('Daniel Wong', 5, 'Jason completely fixed my deadlift form in two sessions.',
+            DateTime.now().subtract(const Duration(days: 14))),
+        CoachReview('Farid Zainal', 5, 'Patient and clear with cues. Highly recommend for beginners.',
+            DateTime.now().subtract(const Duration(days: 30))),
+      ],
+    ),
+    Coach(
+      id: 'c2',
+      name: 'Priya Menon',
+      specialty: 'Rehabilitation and Mobility',
+      specializationTags: const ['Injury Recovery', 'Mobility', 'Physiotherapy'],
+      rating: 4.9,
+      reviews: 33,
+      bio:
+          'Physiotherapy background, specialising in returning to training after injury. '
+          'Programming is built around what your body can safely handle this week, not last year.',
+      verified: true,
+      imageUrl:
+          'https://images.unsplash.com/photo-1594381898411-846e7d193883?auto=format&fit=crop&w=400&q=80',
+      branch: 'GainPath Sungai Petani',
+      fee: 140,
+      yearsExperience: 8,
+      sessionsCompleted: 260,
+      responseTime: 'Usually responds within 1 hour',
+      topReviews: [
+        CoachReview('Wei Ling Tan', 5, 'Helped me return to squatting pain-free after a knee injury.',
+            DateTime.now().subtract(const Duration(days: 8))),
+        CoachReview('Nurul Huda', 5, 'Extremely knowledgeable, explains the why behind every drill.',
+            DateTime.now().subtract(const Duration(days: 22))),
+      ],
+    ),
+    Coach(
+      id: 'c3',
+      name: 'Hafiz Aziz',
+      specialty: 'Hypertrophy',
+      specializationTags: const ['Bodybuilding', 'Hypertrophy', 'Nutrition Coaching'],
+      rating: 4.6,
+      reviews: 58,
+      bio:
+          'Bodybuilding-oriented programming and technique refinement. '
+          'I track your numbers every session so progression is never a guess.',
+      verified: true,
+      imageUrl:
+          'https://images.unsplash.com/photo-1567013127542-490d757e51fc?auto=format&fit=crop&w=400&q=80',
+      branch: 'GainPath Kulim',
+      fee: 110,
+      yearsExperience: 4,
+      sessionsCompleted: 401,
+      responseTime: 'Usually responds within 3 hours',
+      topReviews: [
+        CoachReview('Daniel Wong', 4, 'Great programming, gym can get noisy during peak hours though.',
+            DateTime.now().subtract(const Duration(days: 5))),
+        CoachReview('Farid Zainal', 5, 'Put on visible size in 8 weeks following his plan.',
+            DateTime.now().subtract(const Duration(days: 40))),
+      ],
+    ),
+    Coach(
+      id: 'c4',
+      name: 'Michelle Chan',
+      specialty: 'Calisthenics',
+      specializationTags: const ['Calisthenics', 'Mobility', 'Skill Progressions'],
+      rating: 4.7,
+      reviews: 21,
+      bio:
+          'Bodyweight progressions from first pull-up to advanced skills. '
+          'Every plan is broken into small, testable milestones so you always know what to work on next.',
+      verified: true,
+      imageUrl:
+          'https://images.unsplash.com/photo-1548690312-e3b507d8c110?auto=format&fit=crop&w=400&q=80',
+      branch: 'GainPath Sungai Petani',
+      fee: 130,
+      yearsExperience: 5,
+      sessionsCompleted: 148,
+      responseTime: 'Usually responds within 4 hours',
+      topReviews: [
+        CoachReview('Wei Ling Tan', 5, 'Got my first strict pull-up under her programme.',
+            DateTime.now().subtract(const Duration(days: 10))),
+        CoachReview('Nurul Huda', 4, 'Sessions are tough but she scales everything well.',
+            DateTime.now().subtract(const Duration(days: 26))),
+      ],
+    ),
   ];
 
-  static final memberBookings = <Booking>[
-    Booking('b1', 'Jason Lim', 'ZhengYang',
-        DateTime.now().add(const Duration(days: 2, hours: 3)), 'Confirmed', 120, null),
-    Booking('b2', 'Priya Menon', 'ZhengYang',
-        DateTime.now().add(const Duration(days: 6)), 'Confirmed', 140, null),
-    Booking('b3', 'Jason Lim', 'ZhengYang',
-        DateTime.now().subtract(const Duration(days: 9)), 'Completed', 120,
-        'Good squat depth this session. Work on keeping the chest up during the ascent.'),
+  /// The single source of truth for every booking in the system, coach or
+  /// member side. `memberBookings` and `coachRoster` below are filtered
+  /// *views* over this one list, not separate data — Jason Lim (c1) and
+  /// ZhengYang's actual shared session is one `Booking` object here, not
+  /// two disconnected copies that could drift out of sync. That's what
+  /// makes coach↔member messaging real: a reply either side adds lands in
+  /// the same `messages` list the other side reads.
+  static final allBookings = <Booking>[
+    Booking(
+      id: 'bk1',
+      coachId: 'c1',
+      coachName: 'Jason Lim',
+      memberName: 'ZhengYang',
+      start: DateTime.now().add(const Duration(days: 2, hours: 3)),
+      branch: 'GainPath Kulim',
+      status: 'Confirmed',
+      fee: 120,
+      messages: [
+        BookingMessage('Member', 'Hi Jason, should I bring my own knee sleeves?',
+            DateTime.now().subtract(const Duration(hours: 5))),
+        BookingMessage(
+            'Coach',
+            'Not necessary, but bring them if you have them — we will be doing heavy squats.',
+            DateTime.now().subtract(const Duration(hours: 4))),
+      ],
+    ),
+    Booking(
+      id: 'bk2',
+      coachId: 'c2',
+      coachName: 'Priya Menon',
+      memberName: 'ZhengYang',
+      start: DateTime.now().add(const Duration(days: 6)),
+      branch: 'GainPath Sungai Petani',
+      status: 'Confirmed',
+      fee: 140,
+    ),
+    Booking(
+      id: 'bk3',
+      coachId: 'c1',
+      coachName: 'Jason Lim',
+      memberName: 'ZhengYang',
+      start: DateTime.now().subtract(const Duration(days: 9)),
+      branch: 'GainPath Kulim',
+      status: 'Completed',
+      fee: 120,
+      notes: 'Good squat depth this session. Work on keeping the chest up during the ascent.',
+      rated: true,
+    ),
+    Booking(
+      id: 'bk4',
+      coachId: 'c3',
+      coachName: 'Hafiz Aziz',
+      memberName: 'ZhengYang',
+      start: DateTime.now().subtract(const Duration(days: 20)),
+      branch: 'GainPath Kulim',
+      status: 'Completed',
+      fee: 110,
+    ),
+    Booking(
+      id: 'bk5',
+      coachId: 'c4',
+      coachName: 'Michelle Chan',
+      memberName: 'ZhengYang',
+      start: DateTime.now().subtract(const Duration(days: 3)),
+      branch: 'GainPath Sungai Petani',
+      status: 'Cancelled',
+      fee: 130,
+      cancellationReason: 'Member requested — scheduling conflict.',
+    ),
+    Booking(
+      id: 'bk6',
+      coachId: 'c1',
+      coachName: 'Jason Lim',
+      memberName: 'Daniel Wong',
+      start: DateTime.now().add(const Duration(days: 2, hours: 5)),
+      branch: 'GainPath Kulim',
+      status: 'Confirmed',
+      fee: 120,
+      messages: [
+        BookingMessage('Member', 'Can we push my session 30 minutes later?',
+            DateTime.now().subtract(const Duration(hours: 20))),
+      ],
+    ),
+    Booking(
+      id: 'bk7',
+      coachId: 'c1',
+      coachName: 'Jason Lim',
+      memberName: 'Nurul Huda',
+      start: DateTime.now().add(const Duration(days: 4)),
+      branch: 'GainPath Kulim',
+      status: 'Pending',
+      fee: 120,
+    ),
+    Booking(
+      id: 'bk8',
+      coachId: 'c1',
+      coachName: 'Jason Lim',
+      memberName: 'Farid Zainal',
+      start: DateTime.now().subtract(const Duration(days: 1)),
+      branch: 'GainPath Kulim',
+      status: 'Completed',
+      fee: 120,
+    ),
   ];
 
-  static final coachRoster = <Booking>[
-    Booking('r1', 'Jason Lim', 'ZhengYang',
-        DateTime.now().add(const Duration(days: 2, hours: 3)), 'Confirmed', 120, null),
-    Booking('r2', 'Jason Lim', 'Daniel Wong',
-        DateTime.now().add(const Duration(days: 2, hours: 5)), 'Confirmed', 120, null),
-    Booking('r3', 'Jason Lim', 'Nurul Huda',
-        DateTime.now().add(const Duration(days: 4)), 'Pending', 120, null),
-    Booking('r4', 'Jason Lim', 'Farid Zainal',
-        DateTime.now().subtract(const Duration(days: 1)), 'Completed', 120, null),
-  ];
+  /// A member's own bookings, across every coach.
+  static List<Booking> get memberBookings =>
+      allBookings.where((b) => b.memberName == memberName).toList();
+
+  /// The signed-in coach's own client roster, across every member.
+  static List<Booking> get coachRoster =>
+      allBookings.where((b) => b.coachId == currentCoach.id).toList();
 
   // ---- Module 6 -------------------------------------------------------
   static const chatSeed = <ChatMessage>[
@@ -339,11 +725,67 @@ class MockData {
         false),
   ];
 
-  static const savedAdvice = <String>[
+  static final savedAdvice = <String>[
     'Widen your stance slightly and push the knees out on the descent.',
     'Aim for a neutral spine on deadlifts, brace before the pull.',
     'Progressive overload works best in small weekly increments.',
   ];
+
+  static const faqPrompts = <FaqPrompt>[
+    FaqPrompt(
+      'How do I fix my squat depth?',
+      'Depth usually gets limited by tight ankles or hips rather than weak '
+      'legs. Try elevating your heels slightly on a small plate and pause '
+      'for two seconds at the bottom of each rep to build control there.\n\n'
+      'This is general educational guidance, not medical advice.',
+    ),
+    FaqPrompt(
+      'What should I eat after a workout?',
+      'Aim for a mix of protein and carbs within a couple of hours of '
+      'training — think grilled chicken with rice, or a protein shake with '
+      'a banana. Protein supports muscle repair, carbs refill the energy '
+      'you just used.\n\n'
+      'This is general nutrition guidance, not a personalised meal plan.',
+    ),
+    FaqPrompt(
+      'How many rest days do I need per week?',
+      'Most people training 4-5 days a week do well with at least 1-2 full '
+      'rest days, plus lighter days for any muscle group you hit hard. '
+      'Watch for ongoing soreness or dropping performance — that is '
+      'usually a sign to add another rest day.\n\n'
+      'This is general guidance, not medical advice.',
+    ),
+    FaqPrompt(
+      'Why do my knees hurt during lunges?',
+      'Knee discomfort in lunges is often about tracking — check that your '
+      'front knee stays roughly over your ankle rather than drifting '
+      'inward or past your toes, and shorten your stride if it still '
+      'bothers you.\n\n'
+      'If the pain is sharp or persistent, stop and see a physiotherapist '
+      'rather than pushing through it.',
+    ),
+    FaqPrompt(
+      'How do I know when to increase my weights?',
+      'A good rule of thumb: if you can complete all your sets and reps '
+      'with good form and have 2+ reps left in the tank, add a small '
+      'amount of weight next session. Keep increases small and consistent '
+      'rather than jumping up all at once.\n\n'
+      'This is general programming guidance, not personalised coaching.',
+    ),
+  ];
+
+  static String buildProgressAuditReply() {
+    final formChange = postureTrend.last - postureTrend.first;
+    final volumeChangePct =
+        ((volumeTrend.last - volumeTrend.first) / volumeTrend.first * 100).round();
+    final weakest = history.reduce((a, b) => a.accuracy < b.accuracy ? a : b);
+    return 'Over the last ${postureTrend.length} sessions your average form score '
+        'is up $formChange points, and lifting volume has grown about '
+        '$volumeChangePct% over that span. ${weakest.exercise} is currently your '
+        'lowest-scoring lift at ${weakest.accuracy}%, so that is the best place to '
+        'focus next.\n\n'
+        'This is general educational guidance, not medical advice.';
+  }
 
   // ---- Module 10 ------------------------------------------------------
   static const workingHours = <List<String>>[

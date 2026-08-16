@@ -256,7 +256,10 @@ class _RefundClaimDetailScreenState extends State<RefundClaimDetailScreen> {
               child: OutlinedButton(
                 style: OutlinedButton.styleFrom(foregroundColor: AppColors.danger, minimumSize: const Size(0, 48)),
                 onPressed: _processing ? null : _reject,
-                child: const Text('Reject'),
+                child: const FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text('Reject', maxLines: 1),
+                ),
               ),
             ),
             const SizedBox(width: 12),
@@ -267,7 +270,10 @@ class _RefundClaimDetailScreenState extends State<RefundClaimDetailScreen> {
                 child: _processing
                     ? const SizedBox(
                         width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2.4, color: Colors.white))
-                    : const Text('Approve refund'),
+                    : const FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text('Approve refund', maxLines: 1),
+                      ),
               ),
             ),
           ],

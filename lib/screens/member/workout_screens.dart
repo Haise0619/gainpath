@@ -1201,7 +1201,10 @@ class _LiveWorkoutScreenState extends State<LiveWorkoutScreen>
                               ? Icons.play_arrow_rounded
                               : Icons.pause_rounded,
                           size: 20),
-                      label: Text(_paused ? 'Resume' : 'Pause'),
+                      label: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(_paused ? 'Resume' : 'Pause', maxLines: 1),
+                      ),
                     ),
                   ),
                   const SizedBox(width: 10),
@@ -1210,7 +1213,10 @@ class _LiveWorkoutScreenState extends State<LiveWorkoutScreen>
                       style: FilledButton.styleFrom(
                           backgroundColor: AppColors.danger),
                       onPressed: _end,
-                      child: const Text('End session'),
+                      child: const FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text('End session', maxLines: 1),
+                      ),
                     ),
                   ),
                 ],

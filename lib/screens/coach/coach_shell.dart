@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import 'roster_screens.dart';
+import 'scheduling/roster_screen.dart';
 import 'availability_screens.dart';
-import 'earnings_screens.dart';
-import 'coach_profile_screens.dart';
+import 'scheduling/earnings_screen.dart';
+import 'profile/coach_account_screen.dart';
 
 /// Bottom-navigation shell for the Fitness Coach role (Modules 8 to 10).
 class CoachShell extends StatefulWidget {
@@ -19,7 +19,7 @@ class _CoachShellState extends State<CoachShell> {
     CoachRosterScreen(),
     AvailabilityScreen(),
     EarningsScreen(),
-    CoachProfileScreen(),
+    CoachAccountScreen(),
   ];
 
   @override

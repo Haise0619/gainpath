@@ -4,8 +4,8 @@ import '../../data/mock_data.dart';
 import '../../widgets/change_password_sheet.dart';
 import '../../widgets/shared.dart';
 import '../auth/role_select_screen.dart';
-import 'membership_screens.dart';
-import 'reports_screens.dart';
+import 'membership/membership_dashboard_screen.dart';
+import 'progress/progress_dashboard_screen.dart';
 
 /// AD-M1.3 — Fitness Profile Management, plus account settings and logout.
 class MemberProfileScreen extends StatelessWidget {
@@ -156,7 +156,7 @@ class MemberProfileScreen extends StatelessWidget {
                     () => Navigator.push(
                         context,
                         MaterialPageRoute(
-                            builder: (_) => const MembershipScreen()))),
+                            builder: (_) => const MembershipDashboardScreen()))),
                 const Divider(height: 1, indent: 62),
                 _row(context, Icons.insights_rounded, 'Progress and reports',
                     'Volume, form, and goals',

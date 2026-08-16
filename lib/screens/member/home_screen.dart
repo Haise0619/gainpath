@@ -4,11 +4,14 @@ import '../../app/theme.dart';
 import '../../data/mock_data.dart';
 import '../../widgets/shared.dart';
 import 'workout_screens.dart';
-import 'reports_screens.dart';
-import 'chatbot_screens.dart';
+import 'progress/goal_progress_screen.dart';
+import 'progress/progress_dashboard_screen.dart';
+import 'chatbot/chatbot_screen.dart';
+import 'chatbot/saved_advice_screen.dart';
 import 'gamification_screens.dart';
-import 'coach_booking_screens.dart';
-import 'membership_screens.dart';
+import 'coach_booking/booking_schedule_screen.dart';
+import 'coach_booking/browse_coaches_screen.dart';
+import 'membership/membership_dashboard_screen.dart';
 
 /// Member landing screen — the hub every other member flow is reachable
 /// from. It carries the daily check-in prompt (AD-M3.2), the broadcast
@@ -145,7 +148,7 @@ class _MemberHomeScreenState extends State<MemberHomeScreen>
                   const Eyebrow('Goal progress'),
                   _GoalPreviewCard(onTap: () => _go(const GoalProgressScreen())),
                   const SizedBox(height: 20),
-                  _MembershipStrip(onTap: () => _go(const MembershipScreen())),
+                  _MembershipStrip(onTap: () => _go(const MembershipDashboardScreen())),
                 ],
               ),
             ),
@@ -773,7 +776,7 @@ class _QuickActionsGrid extends StatelessWidget {
       _QuickAction(Icons.sports_esports_rounded, 'Mini-games', AppColors.primarySoft,
           () => onSelect(const MiniGamesScreen())),
       _QuickAction(Icons.card_membership_rounded, 'Membership', AppColors.primary,
-          () => onSelect(const MembershipScreen())),
+          () => onSelect(const MembershipDashboardScreen())),
       _QuickAction(Icons.bookmark_rounded, 'Saved tips', AppColors.info,
           () => onSelect(const SavedAdviceScreen())),
     ];

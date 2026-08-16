@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
-import '../../app/theme.dart';
-import '../../data/mock_data.dart';
-import '../../widgets/shared.dart';
+import '../../../app/theme.dart';
+import '../../../data/mock_data.dart';
+import '../../../widgets/shared.dart';
+import 'saved_advice_screen.dart';
+import 'widgets/chatbot_about_sheet.dart';
 
 /// AD-M6.1 — Consult AI Fitness Coach.
 class ChatbotScreen extends StatefulWidget {
@@ -12,6 +14,11 @@ class ChatbotScreen extends StatefulWidget {
 }
 
 class _ChatbotScreenState extends State<ChatbotScreen> {
+  static const _genericReply =
+      'Good question. Focus on controlling the eccentric, keep your core '
+      'braced, and add weight only once the movement feels repeatable.\n\n'
+      'This is general educational guidance, not medical advice.';
+
   final _controller = TextEditingController();
   final _scroll = ScrollController();
   final List<ChatMessage> _messages = [...MockData.chatSeed];
@@ -21,7 +28,7 @@ class _ChatbotScreenState extends State<ChatbotScreen> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _showDisclaimer());
+    WidgetsBinding.instance.addPostFrameCallback((_) => _showFirstOpenDisclaimer());
   }
 
   @override
@@ -31,53 +38,15 @@ class _ChatbotScreenState extends State<ChatbotScreen> {
     super.dispose();
   }
 
-  Future<void> _showDisclaimer() async {
+  Future<void> _showFirstOpenDisclaimer() async {
     if (_disclaimerShown) return;
     _disclaimerShown = true;
-    await showModalBottomSheet(
-      context: context,
-      isDismissible: false,
-      enableDrag: false,
-      backgroundColor: AppColors.surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (ctx) => Padding(
-        padding: EdgeInsets.fromLTRB(
-            20, 20, 20, 20 + MediaQuery.of(ctx).padding.bottom),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Icon(Icons.info_rounded, color: AppColors.primary, size: 28),
-            const SizedBox(height: 14),
-            Text('About this assistant',
-                style: Theme.of(ctx).textTheme.titleLarge),
-            const SizedBox(height: 10),
-            Text(
-              'The AI coach gives general fitness and technique guidance only. '
-              'It cannot diagnose injuries, prescribe treatment, or replace advice '
-              'from a doctor or physiotherapist.\n\n'
-              'If something hurts, stop and speak to a qualified professional.',
-              style: Theme.of(ctx).textTheme.bodyLarge,
-            ),
-            const SizedBox(height: 20),
-            FilledButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('I understand'),
-            ),
-          ],
-        ),
-      ),
-    );
+    await showChatbotAboutSheet(context, dismissible: false);
   }
 
-  void _send() {
-    final text = _controller.text.trim();
-    if (text.isEmpty) return;
+  void _sendMessage(String userText, String reply) {
     setState(() {
-      _messages.add(ChatMessage(text, true));
-      _controller.clear();
+      _messages.add(ChatMessage(userText, true));
       _thinking = true;
     });
     _jump();
@@ -85,13 +54,30 @@ class _ChatbotScreenState extends State<ChatbotScreen> {
       if (!mounted) return;
       setState(() {
         _thinking = false;
-        _messages.add(const ChatMessage(
-            'Good question. Focus on controlling the eccentric, keep your core '
-            'braced, and add weight only once the movement feels repeatable.\n\n'
-            'This is general educational guidance, not medical advice.',
-            false));
+        _messages.add(ChatMessage(reply, false));
       });
       _jump();
+    });
+  }
+
+  void _send() {
+    final text = _controller.text.trim();
+    if (text.isEmpty) return;
+    _controller.clear();
+    _sendMessage(text, _genericReply);
+  }
+
+  void _sendPrompt(FaqPrompt prompt) {
+    _sendMessage(prompt.question, prompt.reply);
+  }
+
+  void _toggleBookmark(String text) {
+    setState(() {
+      if (MockData.savedAdvice.contains(text)) {
+        MockData.savedAdvice.remove(text);
+      } else {
+        MockData.savedAdvice.add(text);
+      }
     });
   }
 
@@ -112,18 +98,18 @@ class _ChatbotScreenState extends State<ChatbotScreen> {
         title: const Text('AI coach'),
         actions: [
           IconButton(
+            icon: const Icon(Icons.help_outline_rounded),
+            tooltip: 'About this assistant',
+            onPressed: () => showChatbotAboutSheet(context),
+          ),
+          IconButton(
             icon: const Icon(Icons.auto_awesome_rounded),
             tooltip: 'Progress audit',
             onPressed: () {
               setState(() {
                 _messages.add(const ChatMessage(
                     'Give me a summary of my progress.', true));
-                _messages.add(const ChatMessage(
-                    'Over the last 7 sessions your average form score rose from '
-                    '64% to 84%, and weekly volume is up about 40%. Squat depth is '
-                    'your strongest area. Romanian deadlifts are still your lowest '
-                    'scoring lift at 71%, so that is the best place to focus next.',
-                    false));
+                _messages.add(ChatMessage(MockData.buildProgressAuditReply(), false));
               });
               _jump();
             },
@@ -155,7 +141,7 @@ class _ChatbotScreenState extends State<ChatbotScreen> {
             child: _messages.isEmpty
                 ? Center(
                     child: Padding(
-                      padding: const EdgeInsets.all(40),
+                      padding: const EdgeInsets.all(32),
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
@@ -165,6 +151,24 @@ class _ChatbotScreenState extends State<ChatbotScreen> {
                           Text('Ask about form, programming, or nutrition.',
                               textAlign: TextAlign.center,
                               style: Theme.of(context).textTheme.bodyMedium),
+                          const SizedBox(height: 20),
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            alignment: WrapAlignment.center,
+                            children: MockData.faqPrompts
+                                .map((p) => ActionChip(
+                                      label: Text(p.question),
+                                      backgroundColor: AppColors.primaryTint,
+                                      side: BorderSide.none,
+                                      labelStyle: const TextStyle(
+                                          color: AppColors.primary,
+                                          fontWeight: FontWeight.w600,
+                                          fontSize: 12.5),
+                                      onPressed: () => _sendPrompt(p),
+                                    ))
+                                .toList(),
+                          ),
                         ],
                       ),
                     ),
@@ -179,12 +183,14 @@ class _ChatbotScreenState extends State<ChatbotScreen> {
                             text: 'Thinking...', fromUser: false);
                       }
                       final m = _messages[i];
+                      final isBookmarked =
+                          !m.fromUser && MockData.savedAdvice.contains(m.text);
                       return _Bubble(
                         text: m.text,
                         fromUser: m.fromUser,
-                        onBookmark: m.fromUser
-                            ? null
-                            : () => showToast(context, 'Saved to your library.'),
+                        isBookmarked: isBookmarked,
+                        onToggleBookmark:
+                            m.fromUser ? null : () => _toggleBookmark(m.text),
                       );
                     },
                   ),
@@ -227,8 +233,14 @@ class _ChatbotScreenState extends State<ChatbotScreen> {
 class _Bubble extends StatelessWidget {
   final String text;
   final bool fromUser;
-  final VoidCallback? onBookmark;
-  const _Bubble({required this.text, required this.fromUser, this.onBookmark});
+  final bool isBookmarked;
+  final VoidCallback? onToggleBookmark;
+  const _Bubble({
+    required this.text,
+    required this.fromUser,
+    this.isBookmarked = false,
+    this.onToggleBookmark,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -260,12 +272,18 @@ class _Bubble extends StatelessWidget {
                     height: 1.45,
                     color: fromUser ? Colors.white : AppColors.ink)),
           ),
-          if (onBookmark != null)
+          if (onToggleBookmark != null)
             Padding(
               padding: const EdgeInsets.only(top: 4, left: 4),
               child: Row(
                 children: [
-                  _tinyAction(Icons.bookmark_border_rounded, 'Save', onBookmark!),
+                  _tinyAction(
+                    isBookmarked
+                        ? Icons.bookmark_rounded
+                        : Icons.bookmark_border_rounded,
+                    isBookmarked ? 'Saved' : 'Save',
+                    onToggleBookmark!,
+                  ),
                   const SizedBox(width: 12),
                   _tinyAction(Icons.thumb_up_outlined, 'Helpful',
                       () => showToast(context, 'Thanks for the feedback.')),
@@ -295,77 +313,6 @@ class _Bubble extends StatelessWidget {
           ],
         ),
       ),
-    );
-  }
-}
-
-/// AD-M6.2 — View Bookmarked Advice Library.
-class SavedAdviceScreen extends StatefulWidget {
-  const SavedAdviceScreen({super.key});
-
-  @override
-  State<SavedAdviceScreen> createState() => _SavedAdviceScreenState();
-}
-
-class _SavedAdviceScreenState extends State<SavedAdviceScreen> {
-  late final List<String> _items = [...MockData.savedAdvice];
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Saved advice')),
-      body: _items.isEmpty
-          ? Center(
-              child: Padding(
-                padding: const EdgeInsets.all(40),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(Icons.bookmark_border_rounded,
-                        size: 40, color: AppColors.hairline),
-                    const SizedBox(height: 14),
-                    Text('Nothing saved yet. Bookmark a reply to keep it here.',
-                        textAlign: TextAlign.center,
-                        style: Theme.of(context).textTheme.bodyMedium),
-                  ],
-                ),
-              ),
-            )
-          : PageBody(
-              children: _items
-                  .map((t) => Padding(
-                        padding: const EdgeInsets.only(bottom: 10),
-                        child: Panel(
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Icon(Icons.bookmark_rounded,
-                                  size: 18, color: AppColors.primary),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Text(t,
-                                    style: const TextStyle(
-                                        fontSize: 14.5, height: 1.45)),
-                              ),
-                              IconButton(
-                                icon: const Icon(Icons.delete_outline_rounded,
-                                    size: 19),
-                                onPressed: () async {
-                                  final ok = await confirmSheet(context,
-                                      title: 'Remove this tip?',
-                                      message:
-                                          'It will be deleted from your saved library.',
-                                      confirmLabel: 'Remove',
-                                      destructive: true);
-                                  if (ok) setState(() => _items.remove(t));
-                                },
-                              ),
-                            ],
-                          ),
-                        ),
-                      ))
-                  .toList(),
-            ),
     );
   }
 }
