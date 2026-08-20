@@ -4,6 +4,7 @@ import '../../app/theme.dart';
 import '../../data/mock_data.dart';
 import '../../widgets/shared.dart';
 import 'workout_screens.dart';
+import 'equipment/equipment_scanner_screen.dart';
 import 'progress/goal_progress_screen.dart';
 import 'progress/progress_dashboard_screen.dart';
 import 'chatbot/chatbot_screen.dart';
@@ -779,6 +780,8 @@ class _QuickActionsGrid extends StatelessWidget {
           () => onSelect(const MembershipDashboardScreen())),
       _QuickAction(Icons.bookmark_rounded, 'Saved tips', AppColors.info,
           () => onSelect(const SavedAdviceScreen())),
+      _QuickAction(Icons.qr_code_scanner_rounded, 'Scan gear', AppColors.primarySoft,
+          () => onSelect(const EquipmentScannerScreen())),
     ];
 
     return GridView.count(

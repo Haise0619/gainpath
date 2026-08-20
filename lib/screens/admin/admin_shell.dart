@@ -7,26 +7,46 @@ import '../auth/login_screen.dart';
 import '../auth/role_select_screen.dart';
 import 'admin_dashboard_screens.dart';
 import 'admin_users_screens.dart';
-import 'admin_content_screens.dart';
-import 'admin_reports_screens.dart';
 import 'admin_recommendation_screens.dart';
 import 'admin_settings_screens.dart';
+import 'content/exercise_tutorials_screen.dart';
+import 'content/routine_templates_screen.dart';
+import 'equipment/equipment_catalog_screen.dart';
+import 'governance/reward_catalog_screen.dart';
+import 'governance/announcements_screen.dart';
+import 'governance/chatbot_disclaimer_screen.dart';
+import 'reports/reports_screen.dart';
+import 'settings/system_settings_screen.dart';
 
-class _Destination {
+/// A single directly-selectable sidebar destination.
+class _NavPage {
   final IconData icon;
   final IconData iconFilled;
   final String label;
   final String subtitle;
   final Widget page;
-  const _Destination(this.icon, this.iconFilled, this.label, this.subtitle, this.page);
+  const _NavPage(this.icon, this.iconFilled, this.label, this.subtitle, this.page);
+}
+
+/// A sidebar destination that expands in place to reveal its children —
+/// Content and Governance, per the console's structure. Never itself
+/// selectable: it holds no page of its own, only a submenu.
+class _NavGroup {
+  final IconData icon;
+  final IconData iconFilled;
+  final String label;
+  final List<_NavPage> children;
+  const _NavGroup(this.icon, this.iconFilled, this.label, this.children);
 }
 
 /// Persistent left-sidebar shell for the Admin / Staff Web Console, per
 /// design doc Section 7.1: desktop-width administrative software favours a
 /// sidebar over a bottom bar, and dense data over card-first mobile layout.
 /// A shared top bar owns page chrome (title, search, notifications, the
-/// signed-in admin) so every section reads as one console rather than five
-/// independent mobile screens dropped into a sidebar frame.
+/// signed-in admin) so every section reads as one console rather than
+/// independent mobile screens dropped into a sidebar frame — no section
+/// ever pushes a new screen or shows a back button; the sidebar is the
+/// only way to move between areas, exactly like a real admin website.
 class AdminShell extends StatefulWidget {
   const AdminShell({super.key});
 
@@ -36,19 +56,77 @@ class AdminShell extends StatefulWidget {
 
 class _AdminShellState extends State<AdminShell> {
   int _index = 0;
+  final Set<String> _expanded = {'Content'};
 
-  static const _destinations = [
-    _Destination(Icons.dashboard_outlined, Icons.dashboard_rounded, 'Dashboard',
-        "How the facility is doing today", AdminDashboardScreen()),
-    _Destination(Icons.people_outline_rounded, Icons.people_rounded, 'Users & Coaches',
+  static const _destinations = <Object>[
+    _NavPage(Icons.dashboard_outlined, Icons.dashboard_rounded, 'Dashboard',
+        'How the facility is doing today', AdminDashboardScreen()),
+    _NavPage(Icons.people_outline_rounded, Icons.people_rounded, 'Users & Coaches',
         'Provision, verify, and manage accounts', AdminUsersScreen()),
-    _Destination(Icons.folder_outlined, Icons.folder_rounded, 'Content',
-        'Tutorials, rewards, and announcements', AdminContentScreen()),
-    _Destination(Icons.auto_awesome_outlined, Icons.auto_awesome_rounded, 'Recommendations',
+    _NavGroup(Icons.folder_outlined, Icons.folder_rounded, 'Content', [
+      _NavPage(Icons.video_library_outlined, Icons.video_library_rounded, 'Exercise Tutorials',
+          'Manage the tutorial video library', ExerciseTutorialsScreen()),
+      _NavPage(Icons.list_alt_outlined, Icons.list_alt_rounded, 'Routine Templates',
+          'Author and assign workout blueprints', RoutineTemplatesScreen()),
+    ]),
+    _NavPage(Icons.fitness_center_outlined, Icons.fitness_center_rounded, 'Equipment Catalog',
+        'Publish and retire gym-floor machines', EquipmentCatalogScreen()),
+    _NavGroup(Icons.gavel_outlined, Icons.gavel_rounded, 'Governance', [
+      _NavPage(Icons.card_giftcard_outlined, Icons.card_giftcard_rounded, 'Reward Catalog',
+          'Points-shop inventory and stock', RewardCatalogScreen()),
+      _NavPage(Icons.campaign_outlined, Icons.campaign_rounded, 'Announcements',
+          'Broadcast messages to every member', AnnouncementsScreen()),
+      _NavPage(Icons.smart_toy_outlined, Icons.smart_toy_rounded, 'AI Chatbot Disclaimer',
+          'The safety notice shown before first use', ChatbotDisclaimerScreen()),
+    ]),
+    _NavPage(Icons.auto_awesome_outlined, Icons.auto_awesome_rounded, 'Recommendations',
         'High-risk exercises and matched leads', RiskLeaderboardScreen()),
-    _Destination(Icons.bar_chart_outlined, Icons.bar_chart_rounded, 'Reports',
-        'Facility-wide analytics and exports', AdminReportsScreen()),
+    _NavPage(Icons.bar_chart_outlined, Icons.bar_chart_rounded, 'Reports',
+        'Sales, branch performance, and analytics', ReportsScreen()),
+    _NavPage(Icons.tune_outlined, Icons.tune_rounded, 'System Settings',
+        'General, reward conversion, legal & compliance', SystemSettingsScreen()),
   ];
+
+  List<_NavPage> get _flatPages {
+    final pages = <_NavPage>[];
+    for (final d in _destinations) {
+      if (d is _NavPage) pages.add(d);
+      if (d is _NavGroup) pages.addAll(d.children);
+    }
+    return pages;
+  }
+
+  String? _groupLabelFor(int flatIndex) {
+    var cursor = 0;
+    for (final d in _destinations) {
+      if (d is _NavPage) {
+        if (cursor == flatIndex) return null;
+        cursor++;
+      } else if (d is _NavGroup) {
+        if (flatIndex >= cursor && flatIndex < cursor + d.children.length) return d.label;
+        cursor += d.children.length;
+      }
+    }
+    return null;
+  }
+
+  void _select(int flatIndex) {
+    final owner = _groupLabelFor(flatIndex);
+    setState(() {
+      _index = flatIndex;
+      if (owner != null) _expanded.add(owner);
+    });
+  }
+
+  void _toggleGroup(String label) {
+    setState(() {
+      if (_expanded.contains(label)) {
+        _expanded.remove(label);
+      } else {
+        _expanded.add(label);
+      }
+    });
+  }
 
   Future<void> _signOut() async {
     final ok = await confirmSheet(context,
@@ -69,19 +147,22 @@ class _AdminShellState extends State<AdminShell> {
 
   @override
   Widget build(BuildContext context) {
+    final flatPages = _flatPages;
+    final current = flatPages[_index];
     return Scaffold(
       backgroundColor: AppColors.bg,
       body: LayoutBuilder(
         builder: (context, constraints) {
           final collapsed = constraints.maxWidth < 980;
-          final current = _destinations[_index];
           return Row(
             children: [
               _Sidebar(
                 collapsed: collapsed,
                 selectedIndex: _index,
+                expandedGroups: _expanded,
                 destinations: _destinations,
-                onSelect: (i) => setState(() => _index = i),
+                onSelect: _select,
+                onToggleGroup: _toggleGroup,
               ),
               Expanded(
                 child: Column(
@@ -90,7 +171,7 @@ class _AdminShellState extends State<AdminShell> {
                     Expanded(
                       child: IndexedStack(
                         index: _index,
-                        children: _destinations.map((d) => d.page).toList(),
+                        children: flatPages.map((d) => d.page).toList(),
                       ),
                     ),
                   ],
@@ -256,7 +337,7 @@ class _ProfileMenu extends StatelessWidget {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       onSelected: (v) {
         if (v == 'signout') onSignOut();
-        if (v == 'settings') {
+        if (v == 'account') {
           Navigator.push(context, MaterialPageRoute(builder: (_) => const AdminSettingsScreen()));
         }
       },
@@ -268,21 +349,21 @@ class _ProfileMenu extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(MockData.adminName, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13)),
-                Text(MockData.adminEmail, style: const TextStyle(fontSize: 11.5, color: AppColors.inkSoft)),
+              children: const [
+                Text(MockData.adminName, style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13)),
+                Text(MockData.adminEmail, style: TextStyle(fontSize: 11.5, color: AppColors.inkSoft)),
               ],
             ),
           ),
         ),
         const PopupMenuDivider(),
         const PopupMenuItem(
-          value: 'settings',
+          value: 'account',
           child: Row(
             children: [
-              Icon(Icons.settings_outlined, size: 18, color: AppColors.inkSoft),
+              Icon(Icons.account_circle_outlined, size: 18, color: AppColors.inkSoft),
               SizedBox(width: 10),
-              Text('Manage settings'),
+              Text('My account'),
             ],
           ),
         ),
@@ -299,14 +380,14 @@ class _ProfileMenu extends StatelessWidget {
       ],
       child: Row(
         mainAxisSize: MainAxisSize.min,
-        children: [
-          const CircleAvatar(
+        children: const [
+          CircleAvatar(
             radius: 17,
             backgroundColor: AppColors.primaryTint,
             child: Icon(Icons.person_rounded, size: 18, color: AppColors.primary),
           ),
-          const SizedBox(width: 6),
-          const Icon(Icons.expand_more_rounded, size: 18, color: AppColors.inkSoft),
+          SizedBox(width: 6),
+          Icon(Icons.expand_more_rounded, size: 18, color: AppColors.inkSoft),
         ],
       ),
     );
@@ -316,18 +397,80 @@ class _ProfileMenu extends StatelessWidget {
 class _Sidebar extends StatelessWidget {
   final bool collapsed;
   final int selectedIndex;
-  final List<_Destination> destinations;
+  final Set<String> expandedGroups;
+  final List<Object> destinations;
   final ValueChanged<int> onSelect;
+  final ValueChanged<String> onToggleGroup;
 
   const _Sidebar({
     required this.collapsed,
     required this.selectedIndex,
+    required this.expandedGroups,
     required this.destinations,
     required this.onSelect,
+    required this.onToggleGroup,
   });
 
   @override
   Widget build(BuildContext context) {
+    var flatCursor = 0;
+    final items = <Widget>[];
+    for (final d in destinations) {
+      if (d is _NavPage) {
+        final index = flatCursor++;
+        items.add(_navTile(context,
+            icon: d.icon,
+            iconFilled: d.iconFilled,
+            label: d.label,
+            selected: index == selectedIndex,
+            onTap: () => onSelect(index)));
+      } else if (d is _NavGroup) {
+        final firstChildIndex = flatCursor;
+        final childIndices = List.generate(d.children.length, (i) => flatCursor + i);
+        flatCursor += d.children.length;
+        final expanded = expandedGroups.contains(d.label);
+        final groupSelected = childIndices.contains(selectedIndex);
+
+        if (collapsed) {
+          // No room for a flyout in the narrow rail — jump straight to the
+          // group's first child, same as tapping any other icon.
+          items.add(_navTile(context,
+              icon: d.icon,
+              iconFilled: d.iconFilled,
+              label: d.label,
+              selected: groupSelected,
+              onTap: () => onSelect(firstChildIndex)));
+          continue;
+        }
+
+        items.add(_navTile(context,
+            icon: d.icon,
+            iconFilled: d.iconFilled,
+            label: d.label,
+            selected: groupSelected && !expanded,
+            trailing: Icon(expanded ? Icons.expand_less_rounded : Icons.expand_more_rounded,
+                size: 18, color: AppColors.inkSoft),
+            onTap: () => onToggleGroup(d.label)));
+
+        if (expanded) {
+          for (var i = 0; i < d.children.length; i++) {
+            final child = d.children[i];
+            final index = childIndices[i];
+            items.add(Padding(
+              padding: const EdgeInsets.only(left: 20),
+              child: _navTile(context,
+                  icon: child.icon,
+                  iconFilled: child.iconFilled,
+                  label: child.label,
+                  selected: index == selectedIndex,
+                  dense: true,
+                  onTap: () => onSelect(index)),
+            ));
+          }
+        }
+      }
+    }
+
     return Container(
       width: collapsed ? 84 : 260,
       decoration: const BoxDecoration(
@@ -372,44 +515,7 @@ class _Sidebar extends StatelessWidget {
           Expanded(
             child: ListView(
               padding: EdgeInsets.symmetric(horizontal: collapsed ? 12 : 14),
-              children: List.generate(destinations.length, (i) {
-                final d = destinations[i];
-                final selected = i == selectedIndex;
-                final item = Material(
-                  color: selected ? AppColors.primaryTint : Colors.transparent,
-                  borderRadius: BorderRadius.circular(12),
-                  child: InkWell(
-                    borderRadius: BorderRadius.circular(12),
-                    onTap: () => onSelect(i),
-                    child: Padding(
-                      padding: EdgeInsets.symmetric(
-                          horizontal: collapsed ? 0 : 14, vertical: collapsed ? 14 : 12),
-                      child: Row(
-                        mainAxisAlignment:
-                            collapsed ? MainAxisAlignment.center : MainAxisAlignment.start,
-                        children: [
-                          Icon(selected ? d.iconFilled : d.icon,
-                              size: 21, color: selected ? AppColors.primary : AppColors.inkSoft),
-                          if (!collapsed) ...[
-                            const SizedBox(width: 14),
-                            Expanded(
-                              child: Text(
-                                d.label,
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-                                  color: selected ? AppColors.primary : AppColors.ink,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
-                    ),
-                  ),
-                );
-                return Padding(padding: const EdgeInsets.only(bottom: 4), child: item);
-              }),
+              children: items,
             ),
           ),
           const Divider(height: 1),
@@ -446,5 +552,51 @@ class _Sidebar extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  Widget _navTile(
+    BuildContext context, {
+    required IconData icon,
+    required IconData iconFilled,
+    required String label,
+    required bool selected,
+    required VoidCallback onTap,
+    Widget? trailing,
+    bool dense = false,
+  }) {
+    final item = Material(
+      color: selected ? AppColors.primaryTint : Colors.transparent,
+      borderRadius: BorderRadius.circular(12),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: onTap,
+        child: Padding(
+          padding: EdgeInsets.symmetric(
+              horizontal: collapsed ? 0 : 14, vertical: collapsed ? 14 : (dense ? 10 : 12)),
+          child: Row(
+            mainAxisAlignment: collapsed ? MainAxisAlignment.center : MainAxisAlignment.start,
+            children: [
+              Icon(selected ? iconFilled : icon,
+                  size: dense ? 18 : 21, color: selected ? AppColors.primary : AppColors.inkSoft),
+              if (!collapsed) ...[
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Text(
+                    label,
+                    style: TextStyle(
+                      fontSize: dense ? 13 : 14,
+                      fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                      color: selected ? AppColors.primary : AppColors.ink,
+                    ),
+                  ),
+                ),
+                if (trailing != null) trailing,
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+    return Padding(padding: const EdgeInsets.only(bottom: 4), child: item);
   }
 }

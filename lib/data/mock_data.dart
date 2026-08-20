@@ -1,7 +1,7 @@
 // All mock records for the GainPath frontend prototype.
 // No backend is connected; every screen reads from here.
 
-import 'package:flutter/material.dart' show IconData, Icons;
+import 'package:flutter/material.dart' show IconData, Icons, TimeOfDay;
 
 class Exercise {
   final String name;
@@ -13,6 +13,43 @@ class Exercise {
   final String muscleGroup;
   const Exercise(this.name, this.category, this.sets, this.reps, this.cue,
       this.imageUrl, this.muscleGroup);
+}
+
+/// UC-2.6 — Equipment recognition catalogue. [category] deliberately uses
+/// the same value space as [Exercise.category] (not a separate taxonomy)
+/// so a scanned/browsed piece of equipment can pull real matching
+/// exercises straight out of `MockData.routine` — see
+/// `EquipmentDetailScreen`'s "Related exercises" section. Some equipment
+/// has no exercise in the current routine sharing its category on
+/// purpose (Cable Crossover, Treadmill), so that screen also has to
+/// handle the honest "nothing matched" case, not just the happy path.
+class GymEquipment {
+  final String id;
+  final String name;
+  final String category;
+  final String description;
+  final List<String> howToUse;
+  final List<String> safetyTips;
+  final String imageUrl;
+  final String muscleGroup;
+
+  /// Mutable so admin can unpublish a broken/removed machine without
+  /// deleting its record — matches `gymEquipment.isActive` in the data
+  /// dictionary. Inactive equipment stays out of the member scanner's
+  /// match pool and the browse catalogue.
+  bool isActive;
+
+  GymEquipment({
+    required this.id,
+    required this.name,
+    required this.category,
+    required this.description,
+    required this.howToUse,
+    required this.safetyTips,
+    required this.imageUrl,
+    required this.muscleGroup,
+    this.isActive = true,
+  });
 }
 
 class WorkoutRecord {
@@ -199,6 +236,85 @@ class Transaction {
   const Transaction(this.id, this.type, this.amount, this.date, this.status);
 }
 
+/// One prescribed exercise within a `RoutineDay` — deliberately just a
+/// name/sets/reps triple rather than a reference to `Exercise`, since an
+/// admin-authored template routinely calls for movements (leg press,
+/// lat pulldown, curls) outside the small pose-tracked library the AI
+/// coach demo covers; the two are related but not the same catalogue.
+class RoutineExerciseRef {
+  final String exerciseName;
+  final int sets;
+  final int reps;
+  const RoutineExerciseRef(this.exerciseName, this.sets, this.reps);
+}
+
+class RoutineDay {
+  final int dayNumber;
+  final List<RoutineExerciseRef> exercises;
+  const RoutineDay(this.dayNumber, this.exercises);
+}
+
+/// AD-M11.4 — an admin-authored `RoutineBlueprint` a coach or member can
+/// be assigned. [assignedMembers] is illustrative — no assignment flow
+/// is modelled yet — kept purely to give the admin catalogue a sense of
+/// which templates are actually in use.
+class RoutineBlueprint {
+  final String id;
+  final String name;
+  final String level;
+  final int assignedMembers;
+  final List<RoutineDay> days;
+  const RoutineBlueprint({
+    required this.id,
+    required this.name,
+    required this.level,
+    required this.assignedMembers,
+    required this.days,
+  });
+}
+
+/// AD-M11.4 — the data dictionary's `Broadcast` entity: a member-facing
+/// announcement with a validity window. [isActive] is computed from
+/// [validFrom]/[validTo] against the current time rather than stored,
+/// so it can never go stale.
+class Announcement {
+  final String id;
+  final String title;
+  final String body;
+  final DateTime validFrom;
+  final DateTime validTo;
+  const Announcement({
+    required this.id,
+    required this.title,
+    required this.body,
+    required this.validFrom,
+    required this.validTo,
+  });
+
+  bool get isActive {
+    final now = DateTime.now();
+    return now.isAfter(validFrom) && now.isBefore(validTo);
+  }
+}
+
+/// A physical facility location, per the data dictionary's `Branch`
+/// entity. Every `Coach.branch` / `Booking.branch` string is expected to
+/// match one of these `name` values.
+class Branch {
+  final String id;
+  final String name;
+  final String address;
+  final String contactPhone;
+  final bool isActive;
+  const Branch({
+    required this.id,
+    required this.name,
+    required this.address,
+    required this.contactPhone,
+    required this.isActive,
+  });
+}
+
 class ChatMessage {
   final String text;
   final bool fromUser;
@@ -240,6 +356,57 @@ class RiskLead {
   final String suggestion;
   const RiskLead(
       this.memberName, this.weakCategory, this.score, this.suggestion);
+}
+
+/// AD-M10.1 — one weekday's recurring working window. [start]/[end]/
+/// [active] are all mutable and edited directly (real time pickers, not
+/// static display text), the same "mutate MockData in place" pattern
+/// used throughout this app's other mutable records.
+class WorkingDay {
+  final String day;
+  TimeOfDay start;
+  TimeOfDay end;
+  bool active;
+  WorkingDay(this.day, this.start, this.end, this.active);
+}
+
+/// AD-M10.1 — a single time-off entry. [type] distinguishes a recurring
+/// daily interruption (a break) from a whole day being unavailable (an
+/// off-day or approved leave) — members shouldn't be able to book into
+/// any of the three, but they read and are edited differently.
+enum BlockType { breakTime, offDay, leave }
+
+extension BlockTypeLabel on BlockType {
+  String get label => switch (this) {
+        BlockType.breakTime => 'Break',
+        BlockType.offDay => 'Off-day',
+        BlockType.leave => 'Leave',
+      };
+
+  IconData get icon => switch (this) {
+        BlockType.breakTime => Icons.free_breakfast_rounded,
+        BlockType.offDay => Icons.weekend_rounded,
+        BlockType.leave => Icons.flight_takeoff_rounded,
+      };
+}
+
+class BlockedSlot {
+  final String id;
+  BlockType type;
+  String reason;
+  DateTime date;
+  bool fullDay;
+  TimeOfDay? startTime;
+  TimeOfDay? endTime;
+  BlockedSlot({
+    required this.id,
+    required this.type,
+    required this.reason,
+    required this.date,
+    required this.fullDay,
+    this.startTime,
+    this.endTime,
+  });
 }
 
 class MockData {
@@ -326,6 +493,127 @@ class MockData {
     'Nice rep. Keep the tempo.',
     'Slow the descent slightly.',
     'Brace your core.',
+  ];
+
+  // ---- Module 2: Equipment scanner (UC-2.6) ----------------------------
+  static final gymEquipment = <GymEquipment>[
+    GymEquipment(
+      id: 'eq1',
+      name: 'Squat Rack',
+      category: 'Compound Lower-Body',
+      description:
+          'A fixed barbell rack with adjustable safety arms, used for barbell squats, rack pulls, '
+          'and overhead presses started from a supported position.',
+      howToUse: [
+        'Set the J-hooks to just below shoulder height.',
+        'Set the safety arms roughly at your lowest squat depth.',
+        'Step under the bar, unrack by standing up, then step back clear of the hooks.',
+        'Re-rack by walking forward until the bar contacts the hooks.',
+      ],
+      safetyTips: [
+        'Always set the safety arms before loading the bar.',
+        'Load and unload plates evenly on both sides.',
+        'Ask for a spot on heavy attempts if the rack has no arms set.',
+      ],
+      imageUrl: 'https://images.unsplash.com/photo-1585152968992-d2b9444408cc?auto=format&fit=crop&w=900&q=80',
+      muscleGroup: 'Quads · Glutes · Hamstrings',
+    ),
+    GymEquipment(
+      id: 'eq2',
+      name: 'Standing Press Station',
+      category: 'Compound Upper-Body',
+      description:
+          'An open barbell station for standing presses — no rack arms overhead, so the bar is '
+          'lifted from the floor or a low rack into the starting position.',
+      howToUse: [
+        'Clean the bar to shoulder height or unrack it from a low set of hooks.',
+        'Brace your core and press straight overhead, moving your head back slightly to clear the bar.',
+        'Lower back to the shoulders under control before the next rep.',
+      ],
+      safetyTips: [
+        'Keep the bar path close to your face on the way up.',
+        'Avoid leaning back excessively — brace the core instead.',
+        'Use a lighter warm-up set to confirm the bar path before loading up.',
+      ],
+      imageUrl: 'https://images.unsplash.com/photo-1517344884509-a0c97ec11bcc?auto=format&fit=crop&w=900&q=80',
+      muscleGroup: 'Shoulders · Triceps',
+    ),
+    GymEquipment(
+      id: 'eq3',
+      name: 'Adjustable Bench',
+      category: 'Isolation Upper-Body',
+      description:
+          'A flat-to-incline bench used to support single-arm or bent-over dumbbell work, letting you '
+          'brace one side of the body while the other moves freely.',
+      howToUse: [
+        'Set the bench flat or at a slight incline depending on the exercise.',
+        'Brace your supporting knee and hand on the bench for a bent-over row.',
+        'Keep your back flat and pull with your elbow, not your hand.',
+      ],
+      safetyTips: [
+        'Check the incline pin is fully locked before loading weight.',
+        'Keep the working weight close to the bench, not extended out.',
+      ],
+      imageUrl: 'https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?auto=format&fit=crop&w=900&q=80',
+      muscleGroup: 'Back · Chest · Shoulders',
+    ),
+    GymEquipment(
+      id: 'eq4',
+      name: 'Dumbbell Rack',
+      category: 'Isolation Upper-Body',
+      description:
+          'A tiered rack holding paired dumbbells across a full weight range, used for rows, presses, '
+          'curls, and most single-limb accessory work.',
+      howToUse: [
+        'Select a pair from the rack matching the exercise and rep target.',
+        'Return dumbbells to their matching slot after your set.',
+        'Choose a weight that lets you complete every rep with control.',
+      ],
+      safetyTips: [
+        'Lift dumbbells off the rack with a neutral spine, not a rounded back.',
+        'Re-rack with both hands rather than dropping them.',
+      ],
+      imageUrl: 'https://images.unsplash.com/photo-1638536532686-d610adfc8e5c?auto=format&fit=crop&w=900&q=80',
+      muscleGroup: 'Full body accessory work',
+    ),
+    GymEquipment(
+      id: 'eq5',
+      name: 'Cable Crossover Machine',
+      category: 'Cable & Machine',
+      description:
+          'A dual-tower cable station with adjustable pulley height, used for crossovers, face pulls, '
+          'tricep pushdowns, and other constant-tension cable work.',
+      howToUse: [
+        'Select the pin weight and pulley height for your exercise.',
+        'Keep tension on the cable throughout the full range of motion.',
+        'Move slowly through the stretch position rather than letting the weight stack slam.',
+      ],
+      safetyTips: [
+        'Check the carabiner clip is fully closed before pulling.',
+        'Stand with a staggered stance for stability on heavier pulls.',
+      ],
+      imageUrl: 'https://images.unsplash.com/photo-1540497077202-7c8a3999166f?auto=format&fit=crop&w=900&q=80',
+      muscleGroup: 'Chest · Back · Shoulders',
+    ),
+    GymEquipment(
+      id: 'eq6',
+      name: 'Treadmill',
+      category: 'Cardio',
+      description:
+          'A motorised running belt with adjustable speed and incline, used for warm-ups, steady-state '
+          'cardio, or interval work.',
+      howToUse: [
+        'Straddle the belt and start it moving before stepping on.',
+        'Clip the safety key to your clothing before you begin.',
+        'Increase speed gradually rather than jumping straight to pace.',
+      ],
+      safetyTips: [
+        'Never step off a moving belt from the front — reduce speed to zero first.',
+        'Keep the safety key attached at all times.',
+      ],
+      imageUrl: 'https://images.unsplash.com/photo-1576678927484-cc907957088c?auto=format&fit=crop&w=900&q=80',
+      muscleGroup: 'Cardiovascular',
+    ),
   ];
 
   // ---- Module 5 -------------------------------------------------------
@@ -707,6 +995,152 @@ class MockData {
       status: 'Completed',
       fee: 120,
     ),
+    // ---- Additional history for Jason Lim (c1), spanning the last ~7
+    // weeks, so the Earnings screen's weekly chart reflects real booking
+    // dates rather than an illustrative static array. Deliberately spread
+    // 2-3 sessions per week rather than aligned to exact week boundaries —
+    // the chart buckets these by real calendar week itself, so the exact
+    // spread only needs to be plausible, not hand-aligned.
+    Booking(
+      id: 'bk9',
+      coachId: 'c1',
+      coachName: 'Jason Lim',
+      memberName: 'Daniel Wong',
+      start: DateTime.now().subtract(const Duration(days: 4)),
+      branch: 'GainPath Kulim',
+      status: 'Completed',
+      fee: 120,
+    ),
+    Booking(
+      id: 'bk10',
+      coachId: 'c1',
+      coachName: 'Jason Lim',
+      memberName: 'Nurul Huda',
+      start: DateTime.now().subtract(const Duration(days: 12)),
+      branch: 'GainPath Kulim',
+      status: 'Completed',
+      fee: 120,
+    ),
+    Booking(
+      id: 'bk11',
+      coachId: 'c1',
+      coachName: 'Jason Lim',
+      memberName: 'Farid Zainal',
+      start: DateTime.now().subtract(const Duration(days: 15)),
+      branch: 'GainPath Kulim',
+      status: 'Completed',
+      fee: 120,
+    ),
+    Booking(
+      id: 'bk12',
+      coachId: 'c1',
+      coachName: 'Jason Lim',
+      memberName: 'Daniel Wong',
+      start: DateTime.now().subtract(const Duration(days: 18)),
+      branch: 'GainPath Kulim',
+      status: 'Completed',
+      fee: 120,
+    ),
+    Booking(
+      id: 'bk13',
+      coachId: 'c1',
+      coachName: 'Jason Lim',
+      memberName: 'ZhengYang',
+      start: DateTime.now().subtract(const Duration(days: 22)),
+      branch: 'GainPath Kulim',
+      status: 'Completed',
+      fee: 120,
+    ),
+    Booking(
+      id: 'bk14',
+      coachId: 'c1',
+      coachName: 'Jason Lim',
+      memberName: 'Nurul Huda',
+      start: DateTime.now().subtract(const Duration(days: 25)),
+      branch: 'GainPath Kulim',
+      status: 'Completed',
+      fee: 120,
+    ),
+    Booking(
+      id: 'bk15',
+      coachId: 'c1',
+      coachName: 'Jason Lim',
+      memberName: 'Aina Rahman',
+      start: DateTime.now().subtract(const Duration(days: 26)),
+      branch: 'GainPath Kulim',
+      status: 'Completed',
+      fee: 120,
+    ),
+    Booking(
+      id: 'bk16',
+      coachId: 'c1',
+      coachName: 'Jason Lim',
+      memberName: 'Daniel Wong',
+      start: DateTime.now().subtract(const Duration(days: 29)),
+      branch: 'GainPath Kulim',
+      status: 'Completed',
+      fee: 120,
+    ),
+    Booking(
+      id: 'bk17',
+      coachId: 'c1',
+      coachName: 'Jason Lim',
+      memberName: 'Farid Zainal',
+      start: DateTime.now().subtract(const Duration(days: 33)),
+      branch: 'GainPath Kulim',
+      status: 'Completed',
+      fee: 120,
+    ),
+    Booking(
+      id: 'bk18',
+      coachId: 'c1',
+      coachName: 'Jason Lim',
+      memberName: 'ZhengYang',
+      start: DateTime.now().subtract(const Duration(days: 36)),
+      branch: 'GainPath Kulim',
+      status: 'Completed',
+      fee: 120,
+    ),
+    Booking(
+      id: 'bk19',
+      coachId: 'c1',
+      coachName: 'Jason Lim',
+      memberName: 'Kevin Tan',
+      start: DateTime.now().subtract(const Duration(days: 39)),
+      branch: 'GainPath Kulim',
+      status: 'Completed',
+      fee: 120,
+    ),
+    Booking(
+      id: 'bk20',
+      coachId: 'c1',
+      coachName: 'Jason Lim',
+      memberName: 'Nurul Huda',
+      start: DateTime.now().subtract(const Duration(days: 43)),
+      branch: 'GainPath Kulim',
+      status: 'Completed',
+      fee: 120,
+    ),
+    Booking(
+      id: 'bk21',
+      coachId: 'c1',
+      coachName: 'Jason Lim',
+      memberName: 'Daniel Wong',
+      start: DateTime.now().subtract(const Duration(days: 46)),
+      branch: 'GainPath Kulim',
+      status: 'Completed',
+      fee: 120,
+    ),
+    Booking(
+      id: 'bk22',
+      coachId: 'c1',
+      coachName: 'Jason Lim',
+      memberName: 'Aina Rahman',
+      start: DateTime.now().subtract(const Duration(days: 47)),
+      branch: 'GainPath Kulim',
+      status: 'Completed',
+      fee: 120,
+    ),
   ];
 
   /// A member's own bookings, across every coach.
@@ -787,21 +1221,38 @@ class MockData {
         'This is general educational guidance, not medical advice.';
   }
 
-  // ---- Module 10 ------------------------------------------------------
-  static const workingHours = <List<String>>[
-    ['Monday', '08:00', '17:00', 'true'],
-    ['Tuesday', '08:00', '17:00', 'true'],
-    ['Wednesday', '08:00', '17:00', 'true'],
-    ['Thursday', '10:00', '19:00', 'true'],
-    ['Friday', '08:00', '15:00', 'true'],
-    ['Saturday', '09:00', '13:00', 'true'],
-    ['Sunday', '00:00', '00:00', 'false'],
+  // ---- Module 10 (AD-M10.1/10.2 — Availability & scheduling limits) ---
+  static final workingDays = <WorkingDay>[
+    WorkingDay('Monday', const TimeOfDay(hour: 8, minute: 0), const TimeOfDay(hour: 17, minute: 0), true),
+    WorkingDay('Tuesday', const TimeOfDay(hour: 8, minute: 0), const TimeOfDay(hour: 17, minute: 0), true),
+    WorkingDay('Wednesday', const TimeOfDay(hour: 8, minute: 0), const TimeOfDay(hour: 17, minute: 0), true),
+    WorkingDay('Thursday', const TimeOfDay(hour: 10, minute: 0), const TimeOfDay(hour: 19, minute: 0), true),
+    WorkingDay('Friday', const TimeOfDay(hour: 8, minute: 0), const TimeOfDay(hour: 15, minute: 0), true),
+    WorkingDay('Saturday', const TimeOfDay(hour: 9, minute: 0), const TimeOfDay(hour: 13, minute: 0), true),
+    WorkingDay('Sunday', const TimeOfDay(hour: 9, minute: 0), const TimeOfDay(hour: 13, minute: 0), false),
   ];
 
-  static final blockedSlots = <List<String>>[
-    ['Medical leave', 'Fri, 12 Sep', 'Full day'],
-    ['Lunch break', 'Daily', '13:00 to 14:00'],
+  static final blockedSlots = <BlockedSlot>[
+    BlockedSlot(
+      id: 'bl1',
+      type: BlockType.leave,
+      reason: 'Medical leave',
+      date: DateTime.now().add(const Duration(days: 5)),
+      fullDay: true,
+    ),
+    BlockedSlot(
+      id: 'bl2',
+      type: BlockType.breakTime,
+      reason: 'Lunch break',
+      date: DateTime.now().add(const Duration(days: 1)),
+      fullDay: false,
+      startTime: const TimeOfDay(hour: 13, minute: 0),
+      endTime: const TimeOfDay(hour: 14, minute: 0),
+    ),
   ];
+
+  static int dailyBookingCap = 4;
+  static int advanceBookingDays = 30;
 
   // ---- Module 11 ------------------------------------------------------
   static const users = <UserAccount>[
@@ -813,12 +1264,55 @@ class MockData {
     UserAccount('Hafiz Aziz', 'hafiz.a@furyfitness.my', 'Coach', 'Pending'),
   ];
 
+  /// AD-M11.4 — `Broadcast` records. Previously the Announcements screen
+  /// was write-only: a compose form with no way to see what had already
+  /// been published or when it stops showing. Mutable so publishing a
+  /// new one actually appends here instead of just toasting.
+  static final announcements = <Announcement>[
+    Announcement(
+      id: 'an1',
+      title: 'Merdeka Day operating hours',
+      body: '31 August: all branches open 8am-2pm only. Normal hours resume 1 September.',
+      validFrom: DateTime.now().subtract(const Duration(days: 2)),
+      validTo: DateTime.now().add(const Duration(days: 5)),
+    ),
+    Announcement(
+      id: 'an2',
+      title: 'New squat rack at Sungai Petani',
+      body: 'A second squat rack is now installed at the Sungai Petani branch to reduce peak-hour waiting.',
+      validFrom: DateTime.now().subtract(const Duration(days: 20)),
+      validTo: DateTime.now().subtract(const Duration(days: 6)),
+    ),
+  ];
+
   // ---- Module 12 ------------------------------------------------------
   static const adminStats = <List<String>>[
     ['Active members', '284', '+12 this month'],
     ['Verified coaches', '9', '1 pending review'],
     ['Sessions this week', '1,206', '+8% vs last week'],
     ['Revenue this month', 'RM 24,180', '+5% vs last month'],
+  ];
+
+  /// AD-M11.1-adjacent — formalises the `Branch` entity from the data
+  /// dictionary, which previously only existed as bare strings scattered
+  /// across `Coach.branch` / `Booking.branch`. Member and coach counts
+  /// are computed live from those same records rather than duplicated
+  /// here, so they can never drift out of sync with the roster.
+  static const branches = <Branch>[
+    Branch(
+      id: 'br1',
+      name: 'GainPath Kulim',
+      address: '12 Jalan Kulim Perdana, 09000 Kulim, Kedah',
+      contactPhone: '+60 4-490 1122',
+      isActive: true,
+    ),
+    Branch(
+      id: 'br2',
+      name: 'GainPath Sungai Petani',
+      address: '88 Jalan Ibrahim, 08000 Sungai Petani, Kedah',
+      contactPhone: '+60 4-421 5580',
+      isActive: true,
+    ),
   ];
 
   static const usageByHour = <int>[
@@ -866,5 +1360,79 @@ class MockData {
     ['Fixing Knee Valgus', 'Compound Lower-Body', 'Active'],
     ['RDL Form Basics', 'Compound Lower-Body', 'Active'],
     ['Overhead Press Setup', 'Compound Upper-Body', 'Active'],
+  ];
+
+  // ---- Module 11: Routine templates (RoutineBlueprint) -----------------
+  static const routineTemplates = <RoutineBlueprint>[
+    RoutineBlueprint(
+      id: 'rt1',
+      name: 'Beginner Full Body',
+      level: 'Beginner',
+      assignedMembers: 62,
+      days: [
+        RoutineDay(1, [
+          RoutineExerciseRef('Barbell Squat', 3, 8),
+          RoutineExerciseRef('Dumbbell Row', 3, 12),
+          RoutineExerciseRef('Plank', 3, 30),
+        ]),
+        RoutineDay(2, [
+          RoutineExerciseRef('Romanian Deadlift', 3, 10),
+          RoutineExerciseRef('Overhead Press', 3, 8),
+          RoutineExerciseRef('Lat Pulldown', 3, 12),
+        ]),
+      ],
+    ),
+    RoutineBlueprint(
+      id: 'rt2',
+      name: 'Push / Pull / Legs',
+      level: 'Intermediate',
+      assignedMembers: 84,
+      days: [
+        RoutineDay(1, [
+          RoutineExerciseRef('Overhead Press', 4, 8),
+          RoutineExerciseRef('Incline Bench Press', 4, 10),
+          RoutineExerciseRef('Tricep Pushdown', 3, 12),
+        ]),
+        RoutineDay(2, [
+          RoutineExerciseRef('Dumbbell Row', 4, 10),
+          RoutineExerciseRef('Lat Pulldown', 4, 10),
+          RoutineExerciseRef('Bicep Curl', 3, 12),
+        ]),
+        RoutineDay(3, [
+          RoutineExerciseRef('Barbell Squat', 4, 8),
+          RoutineExerciseRef('Romanian Deadlift', 3, 10),
+          RoutineExerciseRef('Leg Press', 3, 12),
+        ]),
+      ],
+    ),
+    RoutineBlueprint(
+      id: 'rt3',
+      name: 'Upper / Lower Split',
+      level: 'Intermediate',
+      assignedMembers: 47,
+      days: [
+        RoutineDay(1, [
+          RoutineExerciseRef('Overhead Press', 4, 8),
+          RoutineExerciseRef('Dumbbell Row', 4, 10),
+        ]),
+        RoutineDay(2, [
+          RoutineExerciseRef('Barbell Squat', 4, 8),
+          RoutineExerciseRef('Romanian Deadlift', 4, 10),
+        ]),
+      ],
+    ),
+    RoutineBlueprint(
+      id: 'rt4',
+      name: '5-Day Body Part Split',
+      level: 'Advanced',
+      assignedMembers: 19,
+      days: [
+        RoutineDay(1, [RoutineExerciseRef('Barbell Squat', 5, 6)]),
+        RoutineDay(2, [RoutineExerciseRef('Overhead Press', 5, 6)]),
+        RoutineDay(3, [RoutineExerciseRef('Dumbbell Row', 5, 8)]),
+        RoutineDay(4, [RoutineExerciseRef('Romanian Deadlift', 5, 6)]),
+        RoutineDay(5, [RoutineExerciseRef('Incline Bench Press', 5, 8)]),
+      ],
+    ),
   ];
 }

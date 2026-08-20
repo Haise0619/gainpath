@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../../app/theme.dart';
 import '../../data/mock_data.dart';
 import '../../widgets/shared.dart';
+import 'equipment/equipment_scanner_screen.dart';
 
 const _routineHeroImage =
     'https://images.unsplash.com/photo-1584863231364-2edc166de576?auto=format&fit=crop&w=1200&q=80';
@@ -134,6 +135,15 @@ class WorkoutPrepScreen extends StatelessWidget {
                   subtitle: 'Get the right distance and angle before you start',
                   onTap: () => Navigator.push(
                       context, MaterialPageRoute(builder: (_) => const CameraSetupScreen())),
+                ),
+                const SizedBox(height: 12),
+                _DetourCard(
+                  icon: Icons.qr_code_scanner_rounded,
+                  iconColor: AppColors.primarySoft,
+                  title: 'Scan equipment',
+                  subtitle: 'Point your camera at a machine for how-to and safety tips',
+                  onTap: () => Navigator.push(
+                      context, MaterialPageRoute(builder: (_) => const EquipmentScannerScreen())),
                 ),
                 const SizedBox(height: 28),
                 SizedBox(

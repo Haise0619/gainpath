@@ -46,7 +46,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text('Fury Fitness, Kulim', style: Theme.of(context).textTheme.headlineMedium),
+                          Text('GainPath, Kulim', style: Theme.of(context).textTheme.headlineMedium),
                           const SizedBox(height: 4),
                           Text('Here is how the platform is doing.',
                               style: Theme.of(context).textTheme.bodyLarge),
