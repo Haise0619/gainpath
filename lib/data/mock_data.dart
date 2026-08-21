@@ -25,13 +25,18 @@ class Exercise {
 /// handle the honest "nothing matched" case, not just the happy path.
 class GymEquipment {
   final String id;
-  final String name;
-  final String category;
-  final String description;
-  final List<String> howToUse;
-  final List<String> safetyTips;
-  final String imageUrl;
-  final String muscleGroup;
+
+  /// Mutable, along with the rest of the descriptive fields below, so
+  /// the admin Equipment Catalog's Edit form can update a machine's
+  /// record in place — same "mutate MockData in place" pattern used for
+  /// [isActive].
+  String name;
+  String category;
+  String description;
+  List<String> howToUse;
+  List<String> safetyTips;
+  String imageUrl;
+  String muscleGroup;
 
   /// Mutable so admin can unpublish a broken/removed machine without
   /// deleting its record — matches `gymEquipment.isActive` in the data
@@ -185,14 +190,18 @@ class AchievementBadge {
   final String name;
   final String description;
   final bool unlocked;
-  final IconData icon;
+
+  /// A small cartoon badge illustration (Twemoji, via jsdelivr) instead
+  /// of a flat Material icon — replaces what used to be a plain `IconData`
+  /// here, so the badge grid actually looks like something worth earning.
+  final String imageUrl;
 
   /// Only set for locked badges — e.g. "12/14 days" — so the grid can show
   /// how close a member is rather than just a padlock.
   final String? progressLabel;
   final double? progressValue;
 
-  const AchievementBadge(this.name, this.description, this.unlocked, this.icon,
+  const AchievementBadge(this.name, this.description, this.unlocked, this.imageUrl,
       {this.progressLabel, this.progressValue});
 }
 
@@ -208,12 +217,28 @@ class MiniGame {
       this.icon, this.plays);
 }
 
+/// Fields are mutable so the admin Reward Catalog's Edit form can update
+/// a listing in place instead of only ever creating new ones.
 class RewardItem {
-  final String title;
-  final int points;
-  final int stock;
-  final String imageUrl;
-  const RewardItem(this.title, this.points, this.stock, this.imageUrl);
+  String title;
+  int points;
+  int stock;
+  String imageUrl;
+  RewardItem(this.title, this.points, this.stock, this.imageUrl);
+}
+
+/// AD-M11.4 — one video in the Exercise Tutorial Library.
+/// [coversExercise] names which `riskExercises` entry (if any) this
+/// tutorial actually addresses, empty string if none — that link is
+/// what makes `MockData.contentGaps` real instead of guessed from title
+/// text. Fields are mutable so the admin Edit form can update a video
+/// in place.
+class TutorialVideo {
+  String title;
+  String category;
+  String status;
+  String coversExercise;
+  TutorialVideo({required this.title, required this.category, required this.status, this.coversExercise = ''});
 }
 
 class MembershipPlan {
@@ -257,14 +282,16 @@ class RoutineDay {
 /// AD-M11.4 — an admin-authored `RoutineBlueprint` a coach or member can
 /// be assigned. [assignedMembers] is illustrative — no assignment flow
 /// is modelled yet — kept purely to give the admin catalogue a sense of
-/// which templates are actually in use.
+/// which templates are actually in use. [name], [level], and [days] are
+/// mutable so the admin Edit form can replace them wholesale on save —
+/// simpler than mutating the nested day/exercise structure in place.
 class RoutineBlueprint {
   final String id;
-  final String name;
-  final String level;
+  String name;
+  String level;
   final int assignedMembers;
-  final List<RoutineDay> days;
-  const RoutineBlueprint({
+  List<RoutineDay> days;
+  RoutineBlueprint({
     required this.id,
     required this.name,
     required this.level,
@@ -315,10 +342,37 @@ class Branch {
   });
 }
 
+/// A chatbot reply can carry a rich [attachment] alongside its [text] —
+/// an equipment card with a photo, or a small progress chart — instead
+/// of every answer being a plain text bubble.
 class ChatMessage {
   final String text;
   final bool fromUser;
-  const ChatMessage(this.text, this.fromUser);
+  final ChatAttachment? attachment;
+  const ChatMessage(this.text, this.fromUser, {this.attachment});
+}
+
+sealed class ChatAttachment {
+  const ChatAttachment();
+}
+
+/// A single piece of gym equipment surfaced inline, for questions like
+/// "what machine works my chest?" — tapping it opens the full
+/// `EquipmentDetailScreen` guide.
+class EquipmentAttachment extends ChatAttachment {
+  final GymEquipment equipment;
+  const EquipmentAttachment(this.equipment);
+}
+
+/// A small trend chart surfaced inline, for questions like "how's my
+/// workout going?" — reuses the same session-indexed series the
+/// Progress tab charts are built from.
+class ProgressChartAttachment extends ChatAttachment {
+  final String title;
+  final String unit;
+  final List<int> values;
+  final String delta;
+  const ProgressChartAttachment(this.title, this.unit, this.values, this.delta);
 }
 
 class FaqPrompt {
@@ -341,12 +395,30 @@ class RefundClaim {
       this.amount, this.reason, this.notes, this.submitted, this.status);
 }
 
+/// [status] is mutable — suspending a member, deactivating a coach, and
+/// verifying/rejecting a coach's credentials all mutate the account in
+/// place, the same pattern used for `GymEquipment.isActive` elsewhere.
+/// [branch] and [specialty] are only meaningful for a `Coach` account —
+/// a member's is always null. They're the account-shell counterpart to
+/// `Coach.branch`/`Coach.specialty` in `MockData.coaches`: set the moment
+/// a coach is provisioned, before their full public profile exists.
 class UserAccount {
   final String name;
   final String email;
   final String role;
-  final String status;
-  const UserAccount(this.name, this.email, this.role, this.status);
+  String status;
+  final String? branch;
+  final String? specialty;
+  UserAccount(this.name, this.email, this.role, this.status, {this.branch, this.specialty});
+}
+
+/// One labelled slice for a donut/pie chart — reused across the admin
+/// Reports sections (risk distribution, reward mix, streak buckets)
+/// instead of each section inventing its own tuple shape.
+class ChartSlice {
+  final String label;
+  final double value;
+  const ChartSlice(this.label, this.value);
 }
 
 class RiskLead {
@@ -444,7 +516,7 @@ class MockData {
   ];
 
   static const adminName = 'Muhammad Mustafah';
-  static const adminEmail = 'admin@furyfitness.my';
+  static const adminEmail = 'admin@gainpath.com';
 
   // ---- Module 2 -------------------------------------------------------
   static const routine = <Exercise>[
@@ -661,13 +733,17 @@ class MockData {
   static const streak = 12;
   static const longestStreak = 21;
 
+  static const _twemoji = 'https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/72x72';
+
   static const badges = <AchievementBadge>[
-    AchievementBadge('First Session', 'Complete your first tracked workout.', true, Icons.flag_rounded),
-    AchievementBadge('Week Warrior', 'Train 5 days in one week.', true, Icons.local_fire_department_rounded),
-    AchievementBadge('Form Focused', 'Hit 85% posture accuracy in a session.', true, Icons.verified_rounded),
-    AchievementBadge('Consistency', 'Reach a 14-day streak.', false, Icons.calendar_month_rounded,
+    AchievementBadge(
+        'First Session', 'Complete your first tracked workout.', true, '$_twemoji/1f6a9.png'),
+    AchievementBadge('Week Warrior', 'Train 5 days in one week.', true, '$_twemoji/1f525.png'),
+    AchievementBadge(
+        'Form Focused', 'Hit 85% posture accuracy in a session.', true, '$_twemoji/1f3af.png'),
+    AchievementBadge('Consistency', 'Reach a 14-day streak.', false, '$_twemoji/1f4c5.png',
         progressLabel: '12/14 days', progressValue: 12 / 14),
-    AchievementBadge('Century', 'Log 100 total sessions.', false, Icons.emoji_events_rounded,
+    AchievementBadge('Century', 'Log 100 total sessions.', false, '$_twemoji/1f3c6.png',
         progressLabel: '47/100 sessions', progressValue: 47 / 100),
   ];
 
@@ -710,7 +786,7 @@ class MockData {
     ),
   ];
 
-  static const rewards = <RewardItem>[
+  static final rewards = <RewardItem>[
     RewardItem('Protein Shake Voucher', 400, 24,
         'https://images.unsplash.com/photo-1553530666-ba11a7da3888?auto=format&fit=crop&w=800&q=80'),
     RewardItem('Gym Towel', 800, 12,
@@ -1255,14 +1331,57 @@ class MockData {
   static int advanceBookingDays = 30;
 
   // ---- Module 11 ------------------------------------------------------
-  static const users = <UserAccount>[
+  /// Every coach account here has a matching public profile in
+  /// [coaches] (matched by name) except newly `Invited` ones, which
+  /// haven't completed onboarding yet and so have no profile there —
+  /// the Coaches admin page shows those with a "not yet onboarded" state.
+  static final users = <UserAccount>[
     UserAccount('ZhengYang', 'zhengyang@example.com', 'Member', 'Active'),
     UserAccount('Daniel Wong', 'daniel.w@example.com', 'Member', 'Active'),
     UserAccount('Farid Zainal', 'farid.z@example.com', 'Member', 'Suspended'),
-    UserAccount('Jason Lim', 'jason.lim@furyfitness.my', 'Coach', 'Verified'),
-    UserAccount('Priya Menon', 'priya.m@furyfitness.my', 'Coach', 'Verified'),
-    UserAccount('Hafiz Aziz', 'hafiz.a@furyfitness.my', 'Coach', 'Pending'),
+    UserAccount('Jason Lim', 'jason.lim@furyfitness.my', 'Coach', 'Verified',
+        branch: 'GainPath Kulim', specialty: 'Strength and Conditioning'),
+    UserAccount('Priya Menon', 'priya.m@furyfitness.my', 'Coach', 'Verified',
+        branch: 'GainPath Sungai Petani', specialty: 'Rehabilitation and Mobility'),
+    UserAccount('Hafiz Aziz', 'hafiz.a@furyfitness.my', 'Coach', 'Pending',
+        branch: 'GainPath Kulim', specialty: 'Hypertrophy'),
+    UserAccount('Michelle Chan', 'michelle.c@furyfitness.my', 'Coach', 'Verified',
+        branch: 'GainPath Sungai Petani', specialty: 'Calisthenics'),
+    ..._generatedMembers(),
   ];
+
+  /// A realistically-sized member roster (~55 accounts) so the Members
+  /// admin page has enough rows to actually demonstrate search and
+  /// pagination — the 3 hand-authored members above aren't enough on
+  /// their own. Deterministic, not random, so the list is stable and
+  /// reviewable.
+  static List<UserAccount> _generatedMembers() {
+    const firstNames = [
+      'Aisyah', 'Kumar', 'Siti', 'Arif', 'Ravi', 'Azlan', 'Fatimah', 'Choon Hui',
+      'Suresh', 'Amirah', 'Zulkifli', 'Mei Ling', 'Chong', 'Ismail', 'Kavitha',
+      'Yusof', 'Chandra', 'Aiman', 'Balqis', 'Haziq', 'Sofea', 'Danish', 'Iman',
+      'Naveen', 'Aina', 'Firdaus', 'Poh Ling', 'Shamsul',
+    ];
+    const lastNames = [
+      'Rahman', 'Subramaniam', 'Yusoff', 'Lee', 'Krishnan', 'Ibrahim', 'Tan',
+      'Osman', 'Pillai', 'Ong', 'Hassan', 'Chew', 'Nair', 'Abdullah', 'Lim',
+      'Ganesan', 'Wan', 'Sivakumar', 'Bakar', 'Loh',
+    ];
+    final members = <UserAccount>[];
+    var idx = 0;
+    for (var i = 0; i < firstNames.length; i++) {
+      for (var j = 0; j < 2; j++) {
+        final last = lastNames[(i * 2 + j) % lastNames.length];
+        final name = '${firstNames[i]} $last';
+        final email =
+            '${firstNames[i].toLowerCase().replaceAll(' ', '')}.${last.toLowerCase()}$idx@example.com';
+        final status = idx % 8 == 0 ? 'Suspended' : 'Active';
+        members.add(UserAccount(name, email, 'Member', status));
+        idx++;
+      }
+    }
+    return members;
+  }
 
   /// AD-M11.4 — `Broadcast` records. Previously the Announcements screen
   /// was write-only: a compose form with no way to see what had already
@@ -1331,13 +1450,31 @@ class MockData {
         DateTime.now().subtract(const Duration(days: 5)), 'Pending'),
   ];
 
+  /// `[name, avgScorePct including '%', category]`. The tier ("High" /
+  /// "Moderate" / "Low") used to be a 3rd stored field, but that made it
+  /// impossible to actually implement AD-M13.1's "Configure Risk
+  /// Threshold" — a stored tier can't react to an admin moving a
+  /// threshold slider. Tier is now always computed from [postureRiskThreshold]
+  /// via [riskTierFor] instead.
   static const riskExercises = <List<String>>[
-    ['Romanian Deadlift', '61%', 'High'],
-    ['Barbell Squat', '68%', 'High'],
-    ['Overhead Press', '74%', 'Moderate'],
-    ['Lunges', '76%', 'Moderate'],
-    ['Dumbbell Row', '86%', 'Low'],
+    ['Romanian Deadlift', '61%', 'Lower Body'],
+    ['Barbell Squat', '68%', 'Lower Body'],
+    ['Overhead Press', '74%', 'Upper Body'],
+    ['Lunges', '76%', 'Lower Body'],
+    ['Dumbbell Row', '86%', 'Upper Body'],
+    ['Plank', '82%', 'Core'],
   ];
+
+  /// AD-M13.1 — `RiskThresholdConfig.postureRiskThresholdPercent`. Mutable
+  /// so the admin's slider genuinely reclassifies exercises live rather
+  /// than just changing a label.
+  static int postureRiskThreshold = 70;
+
+  static String riskTierFor(int avgScorePct) {
+    if (avgScorePct < postureRiskThreshold) return 'High';
+    if (avgScorePct < postureRiskThreshold + 12) return 'Moderate';
+    return 'Low';
+  }
 
   static const atRiskLeads = <RiskLead>[
     RiskLead('Nurul Huda', 'Romanian Deadlift', 58, 'Priya Menon'),
@@ -1345,25 +1482,95 @@ class MockData {
     RiskLead('Wei Ling Tan', 'Overhead Press', 65, 'Hafiz Aziz'),
   ];
 
+  /// AD-M13.2 — leads not yet surfaced. Tapping "Refresh queue" reveals
+  /// the next one, simulating the `LeadEvaluator` background job the
+  /// sequence diagram describes generating new leads over time, since
+  /// there's no real background job here to generate them.
+  static const trainerLeadsPool = <RiskLead>[
+    RiskLead('Farid Zainal', 'Lunges', 66, 'Michelle Chan'),
+    RiskLead('Kavitha Raj', 'Dumbbell Row', 63, 'Priya Menon'),
+  ];
+
+  /// Illustrative — the platform doesn't snapshot a historical form-score
+  /// series anywhere, so this is a plausible 8-week trend for the
+  /// Posture Accuracy Trend report's line chart, not derived data.
+  static const postureWeeklyTrend = <int>[71, 73, 72, 75, 77, 76, 79, 81];
+
+  /// Illustrative distribution of the full member base by dropout-risk
+  /// tier, sized against the same ~284-member figure the Revenue report
+  /// already quotes elsewhere — the 3 `atRiskLeads` above are a sample
+  /// of the "High risk" slice, not the whole picture.
+  static const retentionRiskMix = <ChartSlice>[
+    ChartSlice('Low risk', 214),
+    ChartSlice('Medium risk', 47),
+    ChartSlice('High risk', 23),
+  ];
+
+  /// Illustrative weekly redemption counts for the Reward Redemptions
+  /// trend chart.
+  static const rewardWeeklyRedemptions = <int>[9, 11, 14, 10, 16, 19, 17, 22];
+
+  /// Real counts behind the "Most claimed rewards" breakdown — matches
+  /// the 118 total redeemed figure already shown in the Rewards report.
+  static const rewardRedemptionMix = <ChartSlice>[
+    ChartSlice('Protein Shake Voucher', 61),
+    ChartSlice('Gym Towel', 33),
+    ChartSlice('Free Day Pass', 17),
+    ChartSlice('Water Bottle', 7),
+  ];
+
+  /// Illustrative — how many members currently sit in each workout-streak
+  /// bucket, for the Gamification Engagement donut.
+  static const streakDistribution = <ChartSlice>[
+    ChartSlice('0-3 days', 89),
+    ChartSlice('4-7 days', 62),
+    ChartSlice('1-2 weeks', 41),
+    ChartSlice('2+ weeks', 24),
+  ];
+
   static const contentLeads = <RiskLead>[
     RiskLead('Nurul Huda', 'Romanian Deadlift', 58, 'RDL Form Basics'),
     RiskLead('Daniel Wong', 'Barbell Squat', 62, 'Fixing Knee Valgus'),
   ];
 
-  static const contentGaps = <List<String>>[
-    ['Lunges', '76%', 'No tutorial linked'],
-    ['Bulgarian Split Squat', '72%', 'No tutorial linked'],
+  static const contentLeadsPool = <RiskLead>[
+    RiskLead('Chong Wei Ming', 'Lunges', 66, 'Lunge Mechanics Explained'),
   ];
 
-  static const tutorials = <List<String>>[
-    ['Squat Form Fundamentals', 'Compound Lower-Body', 'Active'],
-    ['Fixing Knee Valgus', 'Compound Lower-Body', 'Active'],
-    ['RDL Form Basics', 'Compound Lower-Body', 'Active'],
-    ['Overhead Press Setup', 'Compound Upper-Body', 'Active'],
+  /// AD-M13.1 — "compare leaderboard against tutorial library, filter to
+  /// missing exercise videos." Computed live from [riskExercises] and
+  /// [tutorials] rather than a separately hand-curated list, so it can
+  /// never drift out of sync with either — the old static version listed
+  /// "Bulgarian Split Squat", which isn't even a tracked exercise.
+  static List<List<String>> get contentGaps {
+    final covered = tutorials.map((t) => t.coversExercise).where((name) => name.isNotEmpty).toSet();
+    return riskExercises
+        .where((e) => !covered.contains(e[0]))
+        .map((e) => [e[0], e[1], 'No tutorial linked'])
+        .toList();
+  }
+
+  static final tutorials = <TutorialVideo>[
+    TutorialVideo(
+        title: 'Squat Form Fundamentals',
+        category: 'Compound Lower-Body',
+        status: 'Active',
+        coversExercise: 'Barbell Squat'),
+    TutorialVideo(title: 'Fixing Knee Valgus', category: 'Compound Lower-Body', status: 'Active'),
+    TutorialVideo(
+        title: 'RDL Form Basics',
+        category: 'Compound Lower-Body',
+        status: 'Active',
+        coversExercise: 'Romanian Deadlift'),
+    TutorialVideo(
+        title: 'Overhead Press Setup',
+        category: 'Compound Upper-Body',
+        status: 'Active',
+        coversExercise: 'Overhead Press'),
   ];
 
   // ---- Module 11: Routine templates (RoutineBlueprint) -----------------
-  static const routineTemplates = <RoutineBlueprint>[
+  static final routineTemplates = <RoutineBlueprint>[
     RoutineBlueprint(
       id: 'rt1',
       name: 'Beginner Full Body',

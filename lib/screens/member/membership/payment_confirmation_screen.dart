@@ -53,8 +53,8 @@ class _PaymentConfirmationScreenState extends State<PaymentConfirmationScreen>
                   Container(
                     width: 56,
                     height: 56,
-                    decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.2), shape: BoxShape.circle),
-                    child: const Icon(Icons.check_rounded, size: 32, color: Colors.white),
+                    decoration: BoxDecoration(color: AppColors.overlay.withValues(alpha: 0.2), shape: BoxShape.circle),
+                    child: const Icon(Icons.check_rounded, size: 32, color: AppColors.overlay),
                   ),
                   const SizedBox(height: 14),
                   Text('You are on ${widget.planName} now',

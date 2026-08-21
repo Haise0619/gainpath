@@ -2,11 +2,10 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import '../../app/theme.dart';
 import '../../data/mock_data.dart';
-import '../../widgets/shared.dart';
 import '../auth/login_screen.dart';
 import '../auth/role_select_screen.dart';
 import 'admin_dashboard_screens.dart';
-import 'admin_users_screens.dart';
+import 'admin_dialogs.dart';
 import 'admin_recommendation_screens.dart';
 import 'admin_settings_screens.dart';
 import 'content/exercise_tutorials_screen.dart';
@@ -15,8 +14,11 @@ import 'equipment/equipment_catalog_screen.dart';
 import 'governance/reward_catalog_screen.dart';
 import 'governance/announcements_screen.dart';
 import 'governance/chatbot_disclaimer_screen.dart';
+import 'refunds/refunds_screen.dart';
 import 'reports/reports_screen.dart';
 import 'settings/system_settings_screen.dart';
+import 'users/members_screen.dart';
+import 'users/coaches_screen.dart';
 
 /// A single directly-selectable sidebar destination.
 class _NavPage {
@@ -56,35 +58,44 @@ class AdminShell extends StatefulWidget {
 
 class _AdminShellState extends State<AdminShell> {
   int _index = 0;
-  final Set<String> _expanded = {'Content'};
-
-  static const _destinations = <Object>[
+  final Set<String> _expanded = {'Users & Coaches'};
+  /// Built once (not `const`) so the Dashboard's refund-alert callback can
+  /// close over `this` — rebuilding this list on every `setState` would
+  /// otherwise recreate every page widget and reset their internal state.
+  late final List<Object> _destinations = <Object>[
     _NavPage(Icons.dashboard_outlined, Icons.dashboard_rounded, 'Dashboard',
-        'How the facility is doing today', AdminDashboardScreen()),
-    _NavPage(Icons.people_outline_rounded, Icons.people_rounded, 'Users & Coaches',
-        'Provision, verify, and manage accounts', AdminUsersScreen()),
-    _NavGroup(Icons.folder_outlined, Icons.folder_rounded, 'Content', [
-      _NavPage(Icons.video_library_outlined, Icons.video_library_rounded, 'Exercise Tutorials',
-          'Manage the tutorial video library', ExerciseTutorialsScreen()),
-      _NavPage(Icons.list_alt_outlined, Icons.list_alt_rounded, 'Routine Templates',
-          'Author and assign workout blueprints', RoutineTemplatesScreen()),
-    ]),
-    _NavPage(Icons.fitness_center_outlined, Icons.fitness_center_rounded, 'Equipment Catalog',
-        'Publish and retire gym-floor machines', EquipmentCatalogScreen()),
-    _NavGroup(Icons.gavel_outlined, Icons.gavel_rounded, 'Governance', [
-      _NavPage(Icons.card_giftcard_outlined, Icons.card_giftcard_rounded, 'Reward Catalog',
-          'Points-shop inventory and stock', RewardCatalogScreen()),
-      _NavPage(Icons.campaign_outlined, Icons.campaign_rounded, 'Announcements',
-          'Broadcast messages to every member', AnnouncementsScreen()),
-      _NavPage(Icons.smart_toy_outlined, Icons.smart_toy_rounded, 'AI Chatbot Disclaimer',
-          'The safety notice shown before first use', ChatbotDisclaimerScreen()),
+        'How the facility is doing today',
+        AdminDashboardScreen(onOpenRefunds: () => _select(_indexOfLabel('Refunds')))),
+    _NavGroup(Icons.people_outline_rounded, Icons.people_rounded, 'Users & Coaches', [
+      _NavPage(Icons.groups_outlined, Icons.groups_rounded, 'Members',
+          'Search, filter, and manage member accounts', const MembersScreen()),
+      _NavPage(Icons.sports_outlined, Icons.sports_rounded, 'Coaches',
+          'Provision, verify, and manage coaches by branch', const CoachesScreen()),
     ]),
     _NavPage(Icons.auto_awesome_outlined, Icons.auto_awesome_rounded, 'Recommendations',
-        'High-risk exercises and matched leads', RiskLeaderboardScreen()),
+        'High-risk exercises and matched leads', const RiskLeaderboardScreen()),
+    _NavPage(Icons.receipt_long_outlined, Icons.receipt_long_rounded, 'Refunds',
+        'Approve or reject disputed transactions', const RefundsScreen()),
+    _NavGroup(Icons.folder_outlined, Icons.folder_rounded, 'Content', [
+      _NavPage(Icons.video_library_outlined, Icons.video_library_rounded, 'Exercise Tutorials',
+          'Manage the tutorial video library', const ExerciseTutorialsScreen()),
+      _NavPage(Icons.list_alt_outlined, Icons.list_alt_rounded, 'Routine Templates',
+          'Author and assign workout blueprints', const RoutineTemplatesScreen()),
+    ]),
+    _NavPage(Icons.fitness_center_outlined, Icons.fitness_center_rounded, 'Equipment Catalog',
+        'Publish and retire gym-floor machines', const EquipmentCatalogScreen()),
+    _NavGroup(Icons.gavel_outlined, Icons.gavel_rounded, 'Governance', [
+      _NavPage(Icons.card_giftcard_outlined, Icons.card_giftcard_rounded, 'Reward Catalog',
+          'Points-shop inventory and stock', const RewardCatalogScreen()),
+      _NavPage(Icons.campaign_outlined, Icons.campaign_rounded, 'Announcements',
+          'Broadcast messages to every member', const AnnouncementsScreen()),
+      _NavPage(Icons.smart_toy_outlined, Icons.smart_toy_rounded, 'AI Chatbot Disclaimer',
+          'The safety notice shown before first use', const ChatbotDisclaimerScreen()),
+    ]),
     _NavPage(Icons.bar_chart_outlined, Icons.bar_chart_rounded, 'Reports',
-        'Sales, branch performance, and analytics', ReportsScreen()),
+        'Sales, branch performance, and analytics', const ReportsScreen()),
     _NavPage(Icons.tune_outlined, Icons.tune_rounded, 'System Settings',
-        'General, reward conversion, legal & compliance', SystemSettingsScreen()),
+        'General, reward conversion, legal & compliance', const SystemSettingsScreen()),
   ];
 
   List<_NavPage> get _flatPages {
@@ -95,6 +106,8 @@ class _AdminShellState extends State<AdminShell> {
     }
     return pages;
   }
+
+  int _indexOfLabel(String label) => _flatPages.indexWhere((p) => p.label == label);
 
   String? _groupLabelFor(int flatIndex) {
     var cursor = 0;
@@ -110,7 +123,35 @@ class _AdminShellState extends State<AdminShell> {
     return null;
   }
 
+  int _firstChildIndexOfGroup(String label) {
+    var cursor = 0;
+    for (final d in _destinations) {
+      if (d is _NavPage) {
+        cursor++;
+      } else if (d is _NavGroup) {
+        if (d.label == label) return cursor;
+        cursor += d.children.length;
+      }
+    }
+    return 0;
+  }
+
+  /// `Home` alone for the Dashboard, `Home > Group > Page` (or
+  /// `Home > Page` for a flat top-level item) everywhere else — every
+  /// page in this console can point to where it sits.
+  List<_Crumb> _breadcrumbs() {
+    final crumbs = <_Crumb>[_Crumb('Home', _index == 0 ? null : () => _select(0))];
+    if (_index == 0) return crumbs;
+    final group = _groupLabelFor(_index);
+    if (group != null) {
+      crumbs.add(_Crumb(group, () => _select(_firstChildIndexOfGroup(group))));
+    }
+    crumbs.add(_Crumb(_flatPages[_index].label, null));
+    return crumbs;
+  }
+
   void _select(int flatIndex) {
+    if (flatIndex < 0) return;
     final owner = _groupLabelFor(flatIndex);
     setState(() {
       _index = flatIndex;
@@ -129,7 +170,7 @@ class _AdminShellState extends State<AdminShell> {
   }
 
   Future<void> _signOut() async {
-    final ok = await confirmSheet(context,
+    final ok = await confirmDialog(context,
         title: 'Sign out of the console?',
         message: 'You will need to sign in again next time.',
         confirmLabel: 'Sign out',
@@ -167,7 +208,10 @@ class _AdminShellState extends State<AdminShell> {
               Expanded(
                 child: Column(
                   children: [
-                    _TopBar(title: current.label, subtitle: current.subtitle, onSignOut: _signOut),
+                    _TopBar(
+                        breadcrumbs: _breadcrumbs(),
+                        subtitle: current.subtitle,
+                        onSignOut: _signOut),
                     Expanded(
                       child: IndexedStack(
                         index: _index,
@@ -185,11 +229,20 @@ class _AdminShellState extends State<AdminShell> {
   }
 }
 
+/// One segment of the top bar's breadcrumb — `onTap` is null for the
+/// current (last) segment, which reads as the active page rather than a
+/// link back to itself.
+class _Crumb {
+  final String label;
+  final VoidCallback? onTap;
+  const _Crumb(this.label, this.onTap);
+}
+
 class _TopBar extends StatelessWidget {
-  final String title;
+  final List<_Crumb> breadcrumbs;
   final String subtitle;
   final VoidCallback onSignOut;
-  const _TopBar({required this.title, required this.subtitle, required this.onSignOut});
+  const _TopBar({required this.breadcrumbs, required this.subtitle, required this.onSignOut});
 
   @override
   Widget build(BuildContext context) {
@@ -207,7 +260,19 @@ class _TopBar extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(title, style: Theme.of(context).textTheme.titleLarge),
+                Row(
+                  children: [
+                    for (var i = 0; i < breadcrumbs.length; i++) ...[
+                      if (i > 0)
+                        const Padding(
+                          padding: EdgeInsets.symmetric(horizontal: 6),
+                          child: Icon(Icons.chevron_right_rounded, size: 16, color: AppColors.inkSoft),
+                        ),
+                      _BreadcrumbSegment(crumb: breadcrumbs[i]),
+                    ],
+                  ],
+                ),
+                const SizedBox(height: 2),
                 Text(subtitle, style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontSize: 12.5)),
               ],
             ),
@@ -245,6 +310,30 @@ class _TopBar extends StatelessWidget {
           _ProfileMenu(onSignOut: onSignOut),
         ],
       ),
+    );
+  }
+}
+
+class _BreadcrumbSegment extends StatelessWidget {
+  final _Crumb crumb;
+  const _BreadcrumbSegment({required this.crumb});
+
+  @override
+  Widget build(BuildContext context) {
+    final current = crumb.onTap == null;
+    final text = Text(
+      crumb.label,
+      style: Theme.of(context).textTheme.titleLarge?.copyWith(
+            fontSize: 18,
+            color: current ? AppColors.ink : AppColors.inkSoft,
+            fontWeight: current ? FontWeight.w700 : FontWeight.w600,
+          ),
+    );
+    if (current) return text;
+    return InkWell(
+      borderRadius: BorderRadius.circular(6),
+      onTap: crumb.onTap,
+      child: Padding(padding: const EdgeInsets.symmetric(vertical: 2), child: text),
     );
   }
 }

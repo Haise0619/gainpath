@@ -961,8 +961,20 @@ class _BadgeCard extends StatelessWidget {
               color: badge.unlocked ? null : AppColors.surfaceAlt,
               borderRadius: BorderRadius.circular(14),
             ),
-            child: Icon(badge.unlocked ? badge.icon : Icons.lock_outline_rounded,
-                color: badge.unlocked ? Colors.white : AppColors.inkSoft),
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.all(8),
+                  child: Opacity(
+                    opacity: badge.unlocked ? 1 : 0.35,
+                    child: _networkHero(badge.imageUrl, fit: BoxFit.contain),
+                  ),
+                ),
+                if (!badge.unlocked)
+                  const Icon(Icons.lock_outline_rounded, size: 16, color: AppColors.inkSoft),
+              ],
+            ),
           ),
           const Spacer(),
           Text(badge.name,
@@ -1009,7 +1021,10 @@ class _BadgeCard extends StatelessWidget {
               width: 72,
               height: 72,
               decoration: BoxDecoration(gradient: AppColors.heroGradient, shape: BoxShape.circle),
-              child: Icon(badge.icon, color: Colors.white, size: 34),
+              child: Padding(
+                padding: const EdgeInsets.all(14),
+                child: _networkHero(badge.imageUrl, fit: BoxFit.contain),
+              ),
             ),
             const SizedBox(height: 16),
             Text(badge.name, style: Theme.of(ctx).textTheme.titleLarge),

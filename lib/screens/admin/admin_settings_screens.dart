@@ -87,7 +87,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
                       leading: const Icon(Icons.lock_outline_rounded),
                       title: const Text('Change password'),
                       trailing: const Icon(Icons.arrow_forward_ios_rounded, size: 14),
-                      onTap: () => showChangePasswordSheet(context),
+                      onTap: () => showChangePasswordSheet(context, asDialog: true),
                     ),
                   ),
                   const SizedBox(height: 20),

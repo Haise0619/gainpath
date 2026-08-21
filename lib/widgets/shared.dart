@@ -158,12 +158,14 @@ Widget statusPill(String status) {
       break;
     case 'pending':
     case 'pending review':
+    case 'invited':
       fg = AppColors.warning;
       bg = AppColors.accentTint;
       break;
     case 'suspended':
     case 'cancelled':
     case 'rejected':
+    case 'deactivated':
     case 'high':
       fg = AppColors.danger;
       bg = AppColors.dangerTint;

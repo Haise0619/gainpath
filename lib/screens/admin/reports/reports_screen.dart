@@ -2,29 +2,64 @@ import 'package:flutter/material.dart';
 import '../../../app/theme.dart';
 import '../../../data/mock_data.dart';
 import '../../../widgets/shared.dart';
-import '../admin_reports_screens.dart' show AdminReportDetailScreen;
+import 'report_widgets.dart';
+import 'sections/commerce_sections.dart';
+import 'sections/engagement_sections.dart';
+import 'sections/operations_sections.dart';
 
-/// AD-M12.1 — Reports & Analytics. Sits directly in the sidebar (no back
-/// button, no push) as the platform's data-analysis home: a real sales
-/// and branch-performance picture computed from `MockData.allBookings`
-/// and `MockData.branches`, plus the existing library of deep-dive
-/// reports (usage, posture, retention, etc.) one level down.
-class ReportsScreen extends StatelessWidget {
+/// AD-M12.1/M12.2 — Admin Dashboard & Reporting. One continuous analytics
+/// page instead of eight separate pushed screens each showing a single
+/// chart: a jump-nav strip at the top scrolls straight to any section (no
+/// push, no back button), a real date/branch filter bar reacts live
+/// across the sections whose data can honestly support it, and every
+/// section carries multiple Syncfusion charts plus a real CSV export
+/// instead of one lonely graph and a toast.
+class ReportsScreen extends StatefulWidget {
   const ReportsScreen({super.key});
 
-  static const _reportCards = [
-    ['Platform usage patterns', 'When members are actually training', 'usage', Icons.schedule_rounded],
-    ['Posture accuracy trends', 'Which movements score worst', 'posture', Icons.accessibility_new_rounded],
-    ['Coach booking utilization', 'How full the roster is', 'booking', Icons.event_available_rounded],
-    ['Retention and dropout risk', 'Members going quiet', 'retention', Icons.trending_down_rounded],
-    ['Reward redemptions', 'Voucher issue and clearance', 'rewards', Icons.card_giftcard_rounded],
-    ['Membership and revenue', 'Income and tier split', 'revenue', Icons.payments_rounded],
-    ['Gamification engagement', 'Points, badges, and streaks', 'gamification', Icons.emoji_events_rounded],
-    ['Coach performance', 'Ratings across the roster', 'coaches', Icons.sports_rounded],
+  @override
+  State<ReportsScreen> createState() => _ReportsScreenState();
+}
+
+class _ReportsScreenState extends State<ReportsScreen> {
+  static const _dateOptions = [null, 7, 30, 90];
+  static const _dateLabels = {null: 'All time', 7: '7 days', 30: '30 days', 90: '90 days'};
+
+  int? _days;
+  String? _branch;
+
+  final _overviewKey = GlobalKey();
+  final _usageKey = GlobalKey();
+  final _postureKey = GlobalKey();
+  final _bookingKey = GlobalKey();
+  final _retentionKey = GlobalKey();
+  final _rewardsKey = GlobalKey();
+  final _revenueKey = GlobalKey();
+  final _gamificationKey = GlobalKey();
+  final _coachPerfKey = GlobalKey();
+
+  late final _anchors = [
+    ('Overview', _overviewKey),
+    ('Usage', _usageKey),
+    ('Posture', _postureKey),
+    ('Booking', _bookingKey),
+    ('Retention', _retentionKey),
+    ('Rewards', _rewardsKey),
+    ('Revenue', _revenueKey),
+    ('Gamification', _gamificationKey),
+    ('Coaches', _coachPerfKey),
   ];
+
+  void _jumpTo(GlobalKey key) {
+    final ctx = key.currentContext;
+    if (ctx == null) return;
+    Scrollable.ensureVisible(ctx, duration: const Duration(milliseconds: 320), curve: Curves.easeOut, alignment: 0.02);
+  }
 
   @override
   Widget build(BuildContext context) {
+    final filter = ReportFilter(days: _days, branch: _branch);
+
     final completed = MockData.allBookings.where((b) => b.status == 'Completed').toList();
     final coachingRevenue = completed.fold<double>(0, (sum, b) => sum + b.fee);
     final avgSession = completed.isEmpty ? 0.0 : coachingRevenue / completed.length;
@@ -51,9 +86,15 @@ class ReportsScreen extends StatelessWidget {
               children: [
                 Text('Reports & analytics', style: Theme.of(context).textTheme.headlineMedium),
                 const SizedBox(height: 4),
-                Text('Sales, branch performance, and the full report library.',
+                Text('Sales, operations, and engagement — one page, always live.',
                     style: Theme.of(context).textTheme.bodyLarge),
-                const SizedBox(height: 22),
+                const SizedBox(height: 18),
+                _filterBar(),
+                const SizedBox(height: 14),
+                _anchorNav(),
+                const SizedBox(height: 26),
+
+                Container(key: _overviewKey, child: const Eyebrow('Overview')),
                 Wrap(
                   spacing: 14,
                   runSpacing: 14,
@@ -66,18 +107,19 @@ class ReportsScreen extends StatelessWidget {
                     SizedBox(
                         width: 220,
                         child: StatTile('RM ${avgSession.toStringAsFixed(0)}', 'Avg. revenue per session')),
-                    SizedBox(
-                        width: 220,
-                        child: StatTile('${completed.length}', 'Completed sessions tracked')),
+                    SizedBox(width: 220, child: StatTile('${completed.length}', 'Completed sessions tracked')),
                   ],
                 ),
-                const SizedBox(height: 24),
+                const SizedBox(height: 20),
                 wide
                     ? IntrinsicHeight(
                         child: Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Expanded(flex: 3, child: _salesColumn(context, topCoaches, revenueByCoach, sessionsByCoach, maxCoachRevenue)),
+                            Expanded(
+                                flex: 3,
+                                child:
+                                    _salesColumn(context, topCoaches, revenueByCoach, sessionsByCoach, maxCoachRevenue)),
                             const SizedBox(width: 20),
                             Expanded(flex: 2, child: _branchColumn(context)),
                           ],
@@ -90,55 +132,90 @@ class ReportsScreen extends StatelessWidget {
                           _branchColumn(context),
                         ],
                       ),
+                const SizedBox(height: 12),
+                const Divider(height: 1),
                 const SizedBox(height: 28),
-                const Eyebrow('Detailed reports'),
-                Wrap(
-                  spacing: 16,
-                  runSpacing: 16,
-                  children: _reportCards.map((r) {
-                    return SizedBox(
-                      width: 258,
-                      height: 130,
-                      child: Panel(
-                        onTap: () => Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                              builder: (_) => AdminReportDetailScreen(
-                                  title: r[0] as String, type: r[2] as String)),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                Container(
-                                  width: 36,
-                                  height: 36,
-                                  decoration: BoxDecoration(
-                                    color: AppColors.primaryTint,
-                                    borderRadius: BorderRadius.circular(10),
-                                  ),
-                                  child: Icon(r[3] as IconData, size: 18, color: AppColors.primary),
-                                ),
-                                const Spacer(),
-                                const Icon(Icons.arrow_forward_ios_rounded, size: 13, color: AppColors.inkSoft),
-                              ],
-                            ),
-                            const Spacer(),
-                            Text(r[0] as String, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontSize: 14.5)),
-                            const SizedBox(height: 3),
-                            Text(r[1] as String,
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                                style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontSize: 12)),
-                          ],
-                        ),
-                      ),
-                    );
-                  }).toList(),
-                ),
+
+                UsageEngagementSection(anchorKey: _usageKey, filter: filter),
+                PostureAccuracySection(anchorKey: _postureKey),
+                CoachBookingUtilizationSection(anchorKey: _bookingKey, filter: filter),
+                RetentionRiskSection(anchorKey: _retentionKey),
+                RewardsSection(anchorKey: _rewardsKey),
+                RevenueSection(anchorKey: _revenueKey),
+                GamificationSection(anchorKey: _gamificationKey),
+                CoachPerformanceSection(anchorKey: _coachPerfKey, filter: filter),
               ],
             ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _filterBar() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.hairline),
+      ),
+      child: Wrap(
+        crossAxisAlignment: WrapCrossAlignment.center,
+        spacing: 8,
+        runSpacing: 8,
+        children: [
+          const Icon(Icons.tune_rounded, size: 16, color: AppColors.inkSoft),
+          const SizedBox(width: 2),
+          ..._dateOptions.map((d) {
+            final selected = d == _days;
+            return ChoiceChip(
+              label: Text(_dateLabels[d]!),
+              selected: selected,
+              onSelected: (_) => setState(() => _days = d),
+              backgroundColor: AppColors.surfaceAlt,
+              selectedColor: AppColors.primary,
+              labelStyle: TextStyle(
+                  fontSize: 12, fontWeight: FontWeight.w600, color: selected ? Colors.white : AppColors.ink),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(999), side: const BorderSide(color: AppColors.hairline)),
+            );
+          }),
+          Container(width: 1, height: 20, color: AppColors.hairline, margin: const EdgeInsets.symmetric(horizontal: 4)),
+          DropdownButtonHideUnderline(
+            child: DropdownButton<String?>(
+              value: _branch,
+              hint: const Text('All branches', style: TextStyle(fontSize: 12.5)),
+              isDense: true,
+              style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: AppColors.ink),
+              items: [
+                const DropdownMenuItem(value: null, child: Text('All branches')),
+                ...MockData.branches.map((b) => DropdownMenuItem(value: b.name, child: Text(b.name))),
+              ],
+              onChanged: (v) => setState(() => _branch = v),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _anchorNav() {
+    return SizedBox(
+      height: 34,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        itemCount: _anchors.length,
+        separatorBuilder: (_, __) => const SizedBox(width: 8),
+        itemBuilder: (context, i) {
+          final (label, key) = _anchors[i];
+          return ActionChip(
+            label: Text(label),
+            onPressed: () => _jumpTo(key),
+            backgroundColor: AppColors.primaryTint,
+            labelStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.primary),
+            side: BorderSide.none,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
           );
         },
       ),
@@ -191,9 +268,8 @@ class ReportsScreen extends StatelessWidget {
         const Eyebrow('Branch performance'),
         ...MockData.branches.map((branch) {
           final branchCoaches = MockData.coaches.where((c) => c.branch == branch.name).toList();
-          final branchBookings = MockData.allBookings
-              .where((b) => b.branch == branch.name && b.status == 'Completed')
-              .toList();
+          final branchBookings =
+              MockData.allBookings.where((b) => b.branch == branch.name && b.status == 'Completed').toList();
           final branchRevenue = branchBookings.fold<double>(0, (sum, b) => sum + b.fee);
           return Padding(
             padding: const EdgeInsets.only(bottom: 14),
@@ -203,9 +279,7 @@ class ReportsScreen extends StatelessWidget {
                 children: [
                   Row(
                     children: [
-                      Expanded(
-                        child: Text(branch.name, style: Theme.of(context).textTheme.titleMedium),
-                      ),
+                      Expanded(child: Text(branch.name, style: Theme.of(context).textTheme.titleMedium)),
                       statusPill(branch.isActive ? 'Active' : 'Suspended'),
                     ],
                   ),
@@ -216,8 +290,7 @@ class ReportsScreen extends StatelessWidget {
                   const SizedBox(height: 14),
                   Row(
                     children: [
-                      Expanded(
-                          child: StatTile('${branchCoaches.length}', 'Coaches assigned', compact: true)),
+                      Expanded(child: StatTile('${branchCoaches.length}', 'Coaches assigned', compact: true)),
                       const SizedBox(width: 8),
                       Expanded(
                           child: StatTile('${branchBookings.length}', 'Sessions completed', compact: true)),

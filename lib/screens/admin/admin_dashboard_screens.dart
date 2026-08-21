@@ -2,12 +2,14 @@ import 'package:flutter/material.dart';
 import '../../app/theme.dart';
 import '../../data/mock_data.dart';
 import '../../widgets/shared.dart';
-import 'admin_recommendation_screens.dart';
-import 'admin_refunds_screens.dart';
 
 /// AD-M12.1 — View Admin Dashboard.
 class AdminDashboardScreen extends StatefulWidget {
-  const AdminDashboardScreen({super.key});
+  /// Lets the shell jump straight to the Refunds sidebar page (and a
+  /// specific claim within it) instead of pushing a screen — this
+  /// dashboard has no way to change the shell's own selection itself.
+  final VoidCallback? onOpenRefunds;
+  const AdminDashboardScreen({super.key, this.onOpenRefunds});
 
   @override
   State<AdminDashboardScreen> createState() => _AdminDashboardScreenState();
@@ -205,9 +207,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                   '1 coach awaiting verification', 'Hafiz Aziz uploaded a certificate 2 days ago'),
               const Divider(height: 1, indent: 62),
               _alert(context, Icons.receipt_long_rounded, AppColors.danger, '2 refund requests pending',
-                  'Oldest submitted 3 days ago',
-                  onTap: () => Navigator.push(
-                      context, MaterialPageRoute(builder: (_) => const RefundDisputeDeskScreen()))),
+                  'Oldest submitted 3 days ago', onTap: widget.onOpenRefunds),
               const Divider(height: 1, indent: 62),
               _alert(context, Icons.warning_amber_rounded, AppColors.warning, '3 members flagged at risk',
                   'Low form scores across recent sessions'),
@@ -227,14 +227,6 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                   'Redeem a member reward at the desk',
                   () => Navigator.push(
                       context, MaterialPageRoute(builder: (_) => const ProcessVoucherScreen()))),
-              const Divider(height: 1, indent: 62),
-              _action(
-                  context,
-                  Icons.auto_awesome_rounded,
-                  'Recommendation queue',
-                  'Match at-risk members to coaches',
-                  () => Navigator.push(
-                      context, MaterialPageRoute(builder: (_) => const RecommendationQueueScreen()))),
             ],
           ),
         ),

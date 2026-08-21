@@ -5,9 +5,25 @@ import 'shared.dart';
 /// Shared "Change Password" sub-flow used by every Manage Settings screen
 /// (Gym Member 1.2, Fitness Coach 8.2, Admin / Staff 11.2): a looped
 /// current-password confirmation gate, then a new-password step, committed
-/// together as one save. Built once here so the pattern — and its
-/// look-and-feel — never drifts between roles.
-Future<void> showChangePasswordSheet(BuildContext context) {
+/// together as one save. Built once here so the validation logic never
+/// drifts between roles — only the presentation shell does.
+///
+/// [asDialog] renders the same steps inside a centered desktop `Dialog`
+/// instead of a bottom sheet, for the admin web console; member and coach
+/// (mobile) keep the sheet by leaving it unset.
+Future<void> showChangePasswordSheet(BuildContext context, {bool asDialog = false}) {
+  if (asDialog) {
+    return showDialog(
+      context: context,
+      builder: (_) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 420),
+          child: const _ChangePasswordSheet(asDialog: true),
+        ),
+      ),
+    );
+  }
   return showModalBottomSheet(
     context: context,
     isScrollControlled: true,
@@ -17,7 +33,8 @@ Future<void> showChangePasswordSheet(BuildContext context) {
 }
 
 class _ChangePasswordSheet extends StatefulWidget {
-  const _ChangePasswordSheet();
+  final bool asDialog;
+  const _ChangePasswordSheet({this.asDialog = false});
 
   @override
   State<_ChangePasswordSheet> createState() => _ChangePasswordSheetState();
@@ -80,54 +97,58 @@ class _ChangePasswordSheetState extends State<_ChangePasswordSheet> {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
-      child: SafeArea(
-        top: false,
-        child: Container(
-          decoration: const BoxDecoration(
-            color: AppColors.surface,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-          ),
-          padding: const EdgeInsets.fromLTRB(24, 14, 24, 24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
+    final content = Container(
+      decoration: widget.asDialog
+          ? const BoxDecoration(color: AppColors.surface, borderRadius: BorderRadius.all(Radius.circular(20)))
+          : const BoxDecoration(
+              color: AppColors.surface,
+              borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+            ),
+      padding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (!widget.asDialog)
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                margin: const EdgeInsets.only(bottom: 18),
+                decoration:
+                    BoxDecoration(color: AppColors.hairline, borderRadius: BorderRadius.circular(999)),
+              ),
+            ),
+          Row(
             children: [
-              Center(
-                child: Container(
-                  width: 40,
-                  height: 4,
-                  margin: const EdgeInsets.only(bottom: 18),
-                  decoration:
-                      BoxDecoration(color: AppColors.hairline, borderRadius: BorderRadius.circular(999)),
-                ),
+              Icon(
+                _step == 0 ? Icons.lock_outline_rounded : Icons.password_rounded,
+                color: AppColors.primary,
+                size: 20,
               ),
-              Row(
-                children: [
-                  Icon(
-                    _step == 0 ? Icons.lock_outline_rounded : Icons.password_rounded,
-                    color: AppColors.primary,
-                    size: 20,
-                  ),
-                  const SizedBox(width: 8),
-                  Text('Step ${_step + 1} of 2',
-                      style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: AppColors.inkSoft)),
-                ],
-              ),
-              const SizedBox(height: 8),
-              AnimatedSwitcher(
-                duration: const Duration(milliseconds: 240),
-                transitionBuilder: (child, anim) => FadeTransition(
-                  opacity: anim,
-                  child: SizeTransition(sizeFactor: anim, axisAlignment: -1, child: child),
-                ),
-                child: _step == 0 ? _currentStep(context) : _newStep(context),
-              ),
+              const SizedBox(width: 8),
+              Text('Step ${_step + 1} of 2',
+                  style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: AppColors.inkSoft)),
             ],
           ),
-        ),
+          const SizedBox(height: 8),
+          AnimatedSwitcher(
+            duration: const Duration(milliseconds: 240),
+            transitionBuilder: (child, anim) => FadeTransition(
+              opacity: anim,
+              child: SizeTransition(sizeFactor: anim, axisAlignment: -1, child: child),
+            ),
+            child: _step == 0 ? _currentStep(context) : _newStep(context),
+          ),
+        ],
       ),
+    );
+
+    if (widget.asDialog) return content;
+
+    return Padding(
+      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+      child: SafeArea(top: false, child: content),
     );
   }
 

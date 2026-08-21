@@ -146,7 +146,8 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   void _recover() {
-    showForgotPasswordSheet(context, initialEmail: _email.text.trim());
+    showForgotPasswordSheet(context,
+        initialEmail: _email.text.trim(), asDialog: kIsWeb && widget.role == AppRole.admin);
   }
 
   void _toggleMode() {

@@ -6,7 +6,24 @@ import '../../app/theme.dart';
 /// rather than the generic confirm-sheet pattern: it takes the email
 /// inline, shows a real sending state, and swaps to a success view (with a
 /// resend cooldown) without ever closing and losing context.
-Future<void> showForgotPasswordSheet(BuildContext context, {required String initialEmail}) {
+///
+/// [asDialog] renders the same flow inside a centered desktop `Dialog`
+/// instead of a bottom sheet, for the admin web console; member and coach
+/// (mobile) keep the sheet by leaving it unset.
+Future<void> showForgotPasswordSheet(BuildContext context,
+    {required String initialEmail, bool asDialog = false}) {
+  if (asDialog) {
+    return showDialog(
+      context: context,
+      builder: (_) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 420),
+          child: _ForgotPasswordSheet(initialEmail: initialEmail, asDialog: true),
+        ),
+      ),
+    );
+  }
   return showModalBottomSheet(
     context: context,
     isScrollControlled: true,
@@ -17,7 +34,8 @@ Future<void> showForgotPasswordSheet(BuildContext context, {required String init
 
 class _ForgotPasswordSheet extends StatefulWidget {
   final String initialEmail;
-  const _ForgotPasswordSheet({required this.initialEmail});
+  final bool asDialog;
+  const _ForgotPasswordSheet({required this.initialEmail, this.asDialog = false});
 
   @override
   State<_ForgotPasswordSheet> createState() => _ForgotPasswordSheetState();
@@ -75,41 +93,45 @@ class _ForgotPasswordSheetState extends State<_ForgotPasswordSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final content = Container(
+      decoration: widget.asDialog
+          ? const BoxDecoration(color: AppColors.surface, borderRadius: BorderRadius.all(Radius.circular(20)))
+          : const BoxDecoration(
+              color: AppColors.surface,
+              borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+            ),
+      padding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (!widget.asDialog)
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                margin: const EdgeInsets.only(bottom: 22),
+                decoration:
+                    BoxDecoration(color: AppColors.hairline, borderRadius: BorderRadius.circular(999)),
+              ),
+            ),
+          AnimatedSwitcher(
+            duration: const Duration(milliseconds: 280),
+            transitionBuilder: (child, anim) => FadeTransition(
+              opacity: anim,
+              child: SizeTransition(sizeFactor: anim, axisAlignment: -1, child: child),
+            ),
+            child: _sent ? _successView(context) : _formView(context),
+          ),
+        ],
+      ),
+    );
+
+    if (widget.asDialog) return content;
+
     return Padding(
       padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
-      child: SafeArea(
-        top: false,
-        child: Container(
-          decoration: const BoxDecoration(
-            color: AppColors.surface,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-          ),
-          padding: const EdgeInsets.fromLTRB(24, 14, 24, 24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Center(
-                child: Container(
-                  width: 40,
-                  height: 4,
-                  margin: const EdgeInsets.only(bottom: 22),
-                  decoration:
-                      BoxDecoration(color: AppColors.hairline, borderRadius: BorderRadius.circular(999)),
-                ),
-              ),
-              AnimatedSwitcher(
-                duration: const Duration(milliseconds: 280),
-                transitionBuilder: (child, anim) => FadeTransition(
-                  opacity: anim,
-                  child: SizeTransition(sizeFactor: anim, axisAlignment: -1, child: child),
-                ),
-                child: _sent ? _successView(context) : _formView(context),
-              ),
-            ],
-          ),
-        ),
-      ),
+      child: SafeArea(top: false, child: content),
     );
   }
 
