@@ -13,7 +13,7 @@ import 'package:gainpath/features/workout/presentation/admin/routine_templates_s
 import 'package:gainpath/features/workout/presentation/admin/equipment_catalog_screen.dart';
 import 'package:gainpath/features/gamification/presentation/admin/reward_catalog_screen.dart';
 import 'package:gainpath/screens/admin/governance/announcements_screen.dart';
-import 'package:gainpath/screens/admin/governance/chatbot_disclaimer_screen.dart';
+import 'package:gainpath/features/chatbot/presentation/admin/chatbot_disclaimer_screen.dart';
 import 'package:gainpath/features/membership/presentation/admin/refunds_screen.dart';
 import 'package:gainpath/screens/admin/reports/reports_screen.dart';
 import 'package:gainpath/screens/admin/settings/system_settings_screen.dart';

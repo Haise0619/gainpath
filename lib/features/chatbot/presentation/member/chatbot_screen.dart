@@ -4,8 +4,8 @@ import 'package:gainpath/app/theme/theme.dart';
 import 'package:gainpath/data/mock_data.dart';
 import 'package:gainpath/shared/shared.dart';
 import 'package:gainpath/features/workout/presentation/member/equipment_detail_screen.dart';
-import 'package:gainpath/screens/member/chatbot/saved_advice_screen.dart';
-import 'package:gainpath/screens/member/chatbot/widgets/chatbot_about_sheet.dart';
+import 'package:gainpath/features/chatbot/presentation/member/saved_advice_screen.dart';
+import 'package:gainpath/features/chatbot/presentation/member/widgets/chatbot_about_sheet.dart';
 
 /// Defensive network image loader, same pattern used across the member
 /// modules — a broken/slow link never breaks the layout.

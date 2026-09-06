@@ -7,8 +7,8 @@ import 'package:gainpath/features/workout/presentation/member/workout_screens.da
 import 'package:gainpath/features/workout/presentation/member/equipment_scanner_screen.dart';
 import 'package:gainpath/screens/member/progress/goal_progress_screen.dart';
 import 'package:gainpath/screens/member/progress/progress_dashboard_screen.dart';
-import 'package:gainpath/screens/member/chatbot/chatbot_screen.dart';
-import 'package:gainpath/screens/member/chatbot/saved_advice_screen.dart';
+import 'package:gainpath/features/chatbot/presentation/member/chatbot_screen.dart';
+import 'package:gainpath/features/chatbot/presentation/member/saved_advice_screen.dart';
 import 'package:gainpath/features/gamification/presentation/member/gamification_screens.dart';
 import 'package:gainpath/features/coaching/presentation/member/booking_schedule_screen.dart';
 import 'package:gainpath/features/coaching/presentation/member/browse_coaches_screen.dart';
