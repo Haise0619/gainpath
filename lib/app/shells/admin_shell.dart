@@ -6,7 +6,7 @@ import 'package:gainpath/features/identity/presentation/shared/login_screen.dart
 import 'package:gainpath/features/identity/presentation/shared/role_select_screen.dart';
 import 'package:gainpath/features/analytics/presentation/admin/admin_dashboard_screens.dart';
 import 'package:gainpath/screens/admin/admin_dialogs.dart';
-import 'package:gainpath/screens/admin/admin_recommendation_screens.dart';
+import 'package:gainpath/features/recommendation/presentation/admin/admin_recommendation_screens.dart';
 import 'package:gainpath/features/identity/presentation/admin/admin_settings_screens.dart';
 import 'package:gainpath/features/workout/presentation/admin/exercise_tutorials_screen.dart';
 import 'package:gainpath/features/workout/presentation/admin/routine_templates_screen.dart';
