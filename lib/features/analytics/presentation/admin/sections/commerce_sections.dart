@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:syncfusion_flutter_charts/charts.dart';
 import 'package:gainpath/app/theme/theme.dart';
-import 'package:gainpath/data/mock_data.dart';
 import 'package:gainpath/shared/shared.dart';
 import 'package:gainpath/features/analytics/presentation/admin/report_widgets.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:gainpath/features/analytics/domain/entities/analytics_points.dart';
+import 'package:gainpath/features/analytics/domain/repositories/analytics_repository.dart';
 
 class _WeekPoint {
   final String label;
@@ -98,8 +100,8 @@ class RewardsSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final trend = List.generate(MockData.rewardWeeklyRedemptions.length,
-        (i) => _WeekPoint('W${i + 1}', MockData.rewardWeeklyRedemptions[i]));
+    final trend = List.generate(context.read<AnalyticsRepository>().rewardWeeklyRedemptions.length,
+        (i) => _WeekPoint('W${i + 1}', context.read<AnalyticsRepository>().rewardWeeklyRedemptions[i]));
 
     return ReportSection(
       anchorKey: anchorKey,
@@ -112,7 +114,7 @@ class RewardsSection extends StatelessWidget {
         ...trend.map((p) => [p.label, p.value]),
         [],
         ['Reward', 'Redeemed'],
-        ...MockData.rewardRedemptionMix.map((s) => [s.label, s.value.round()]),
+        ...context.read<AnalyticsRepository>().rewardRedemptionMix.map((s) => [s.label, s.value.round()]),
       ],
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -164,7 +166,7 @@ class RewardsSection extends StatelessWidget {
                 legend: const Legend(isVisible: true, position: LegendPosition.right, textStyle: TextStyle(fontSize: 12)),
                 series: <CircularSeries<ChartSlice, String>>[
                   DoughnutSeries<ChartSlice, String>(
-                    dataSource: MockData.rewardRedemptionMix,
+                    dataSource: context.read<AnalyticsRepository>().rewardRedemptionMix,
                     xValueMapper: (d, _) => d.label,
                     yValueMapper: (d, _) => d.value,
                     innerRadius: '65%',

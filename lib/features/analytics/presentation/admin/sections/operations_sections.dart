@@ -2,11 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:gainpath/features/coaching/domain/enums/booking_status.dart';
 import 'package:syncfusion_flutter_charts/charts.dart';
 import 'package:gainpath/app/theme/theme.dart';
-import 'package:gainpath/data/mock_data.dart';
 import 'package:gainpath/shared/shared.dart';
 import 'package:gainpath/features/analytics/presentation/admin/report_widgets.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:gainpath/features/analytics/domain/repositories/analytics_repository.dart';
+import 'package:gainpath/features/coaching/domain/repositories/availability_repository.dart';
+import 'package:gainpath/features/coaching/domain/repositories/booking_repository.dart';
+import 'package:gainpath/features/identity/domain/entities/coach.dart';
+import 'package:gainpath/features/identity/domain/repositories/coach_repository.dart';
 
-/// The three report sections genuinely derivable from `MockData.allBookings`
+/// The three report sections genuinely derivable from `context.read<BookingRepository>().allBookings`
 /// — each `Booking` carries a real `start` date and `branch`, so these are
 /// the sections that actually react to the page's date/branch filter.
 
@@ -23,8 +28,8 @@ class UsageEngagementSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final allDates = MockData.allBookings.map((b) => b.start).toList();
-    var bookings = MockData.allBookings.toList();
+    final allDates = context.read<BookingRepository>().allBookings.map((b) => b.start).toList();
+    var bookings = context.read<BookingRepository>().allBookings.toList();
     if (filter.branch != null) bookings = bookings.where((b) => b.branch == filter.branch).toList();
     bookings = bookings.where((b) => b.start.isAfter(filter.cutoff(allDates))).toList();
 
@@ -32,7 +37,7 @@ class UsageEngagementSection extends StatelessWidget {
     final weekend = bookings.length - weekday;
     final weekendPct = bookings.isEmpty ? 0 : (weekend / bookings.length * 100).round();
 
-    final hourData = List.generate(24, (h) => _HourPoint('$h', MockData.usageByHour[h]));
+    final hourData = List.generate(24, (h) => _HourPoint('$h', context.read<AnalyticsRepository>().usageByHour[h]));
 
     return ReportSection(
       anchorKey: anchorKey,
@@ -108,17 +113,17 @@ class CoachBookingUtilizationSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final allDates = MockData.allBookings.map((b) => b.start).toList();
+    final allDates = context.read<BookingRepository>().allBookings.map((b) => b.start).toList();
     final cutoff = filter.cutoff(allDates);
     final rangeDays = filter.rangeDays(allDates);
-    var coaches = MockData.coaches.toList();
+    var coaches = context.read<CoachRepository>().coaches.toList();
     if (filter.branch != null) coaches = coaches.where((c) => c.branch == filter.branch).toList();
 
     final rows = coaches.map((c) {
-      final sessions = MockData.allBookings
+      final sessions = context.read<BookingRepository>().allBookings
           .where((b) => b.coachId == c.id && b.start.isAfter(cutoff) && b.status != BookingStatus.cancelled)
           .length;
-      final capacity = MockData.dailyBookingCap * rangeDays;
+      final capacity = context.read<AvailabilityRepository>().dailyBookingCap * rangeDays;
       final utilization = capacity == 0 ? 0.0 : (sessions / capacity).clamp(0.0, 1.0);
       return (coach: c, sessions: sessions, utilization: utilization);
     }).toList();
@@ -162,14 +167,14 @@ class CoachPerformanceSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final allDates = MockData.allBookings.map((b) => b.start).toList();
+    final allDates = context.read<BookingRepository>().allBookings.map((b) => b.start).toList();
     final cutoff = filter.cutoff(allDates);
-    var coaches = MockData.coaches.toList();
+    var coaches = context.read<CoachRepository>().coaches.toList();
     if (filter.branch != null) coaches = coaches.where((c) => c.branch == filter.branch).toList();
 
     final sessionsInPeriod = {
       for (final c in coaches)
-        c.id: MockData.allBookings.where((b) => b.coachId == c.id && b.start.isAfter(cutoff)).length,
+        c.id: context.read<BookingRepository>().allBookings.where((b) => b.coachId == c.id && b.start.isAfter(cutoff)).length,
     };
 
     return ReportSection(

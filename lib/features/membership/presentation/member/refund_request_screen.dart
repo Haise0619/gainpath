@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:gainpath/features/membership/domain/policies/refund_policy.dart';
 import 'package:gainpath/app/theme/theme.dart';
-import 'package:gainpath/data/mock_data.dart';
 import 'package:gainpath/shared/shared.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:gainpath/features/membership/domain/entities/transaction.dart';
+import 'package:gainpath/features/membership/domain/repositories/membership_repository.dart';
 
 /// AD-M4.4 — Request Refund. Charges outside the policy window are shown
 /// but locked with an explanation rather than silently omitted or silently
@@ -34,7 +36,7 @@ class _RefundRequestScreenState extends State<RefundRequestScreen> {
     super.initState();
     final preselected = widget.preselectedTransactionId;
     if (preselected != null) {
-      final match = MockData.transactions.where((t) => t.id == preselected);
+      final match = context.read<MembershipRepository>().transactions.where((t) => t.id == preselected);
       if (match.isNotEmpty && _isEligible(match.first)) {
         _transactionId = preselected;
       }
@@ -46,7 +48,7 @@ class _RefundRequestScreenState extends State<RefundRequestScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final eligible = MockData.transactions.where(_isEligible).toList();
+    final eligible = context.read<MembershipRepository>().transactions.where(_isEligible).toList();
 
     return Scaffold(
       appBar: AppBar(title: const Text('Request a refund')),
@@ -90,7 +92,7 @@ class _RefundRequestScreenState extends State<RefundRequestScreen> {
               ),
             )
           else
-            ...MockData.transactions.map((t) {
+            ...context.read<MembershipRepository>().transactions.map((t) {
               final ok = _isEligible(t);
               final selected = _transactionId == t.id;
               final daysAgo = DateTime.now().difference(t.date).inDays;

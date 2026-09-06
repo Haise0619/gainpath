@@ -1,12 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:gainpath/features/coaching/domain/enums/booking_status.dart';
 import 'package:gainpath/app/theme/theme.dart';
-import 'package:gainpath/data/mock_data.dart';
 import 'package:gainpath/shared/shared.dart';
 import 'package:gainpath/features/analytics/presentation/admin/report_widgets.dart';
 import 'package:gainpath/features/analytics/presentation/admin/sections/commerce_sections.dart';
 import 'package:gainpath/features/analytics/presentation/admin/sections/engagement_sections.dart';
 import 'package:gainpath/features/analytics/presentation/admin/sections/operations_sections.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:gainpath/features/coaching/domain/repositories/booking_repository.dart';
+import 'package:gainpath/features/identity/domain/repositories/coach_repository.dart';
+import 'package:gainpath/features/identity/domain/repositories/user_account_repository.dart';
 
 /// AD-M12.1/M12.2 — Admin Dashboard & Reporting. One continuous analytics
 /// page instead of eight separate pushed screens each showing a single
@@ -61,7 +64,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
   Widget build(BuildContext context) {
     final filter = ReportFilter(days: _days, branch: _branch);
 
-    final completed = MockData.allBookings.where((b) => b.status == BookingStatus.completed).toList();
+    final completed = context.read<BookingRepository>().allBookings.where((b) => b.status == BookingStatus.completed).toList();
     final coachingRevenue = completed.fold<double>(0, (sum, b) => sum + b.fee);
     final avgSession = completed.isEmpty ? 0.0 : coachingRevenue / completed.length;
 
@@ -232,7 +235,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
                     style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: AppColors.ink),
                     items: [
                       const DropdownMenuItem(value: null, child: Text('All branches')),
-                      ...MockData.branches.map((b) => DropdownMenuItem(value: b.name, child: Text(b.name))),
+                      ...context.read<UserAccountRepository>().branches.map((b) => DropdownMenuItem(value: b.name, child: Text(b.name))),
                     ],
                     onChanged: (v) => setState(() => _branch = v),
                   ),
@@ -321,10 +324,10 @@ class _ReportsScreenState extends State<ReportsScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const Eyebrow('Branch performance'),
-        ...MockData.branches.map((branch) {
-          final branchCoaches = MockData.coaches.where((c) => c.branch == branch.name).toList();
+        ...context.read<UserAccountRepository>().branches.map((branch) {
+          final branchCoaches = context.read<CoachRepository>().coaches.where((c) => c.branch == branch.name).toList();
           final branchBookings =
-              MockData.allBookings.where((b) => b.branch == branch.name && b.status == BookingStatus.completed).toList();
+              context.read<BookingRepository>().allBookings.where((b) => b.branch == branch.name && b.status == BookingStatus.completed).toList();
           final branchRevenue = branchBookings.fold<double>(0, (sum, b) => sum + b.fee);
           return Padding(
             padding: const EdgeInsets.only(bottom: 14),

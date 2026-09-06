@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:syncfusion_flutter_charts/charts.dart';
 import 'package:gainpath/app/theme/theme.dart';
-import 'package:gainpath/data/mock_data.dart';
 import 'package:gainpath/shared/shared.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:gainpath/features/analytics/domain/repositories/analytics_repository.dart';
+import 'package:gainpath/features/workout/domain/repositories/workout_repository.dart';
 
 /// AD-M5.2 (Activity timeline) — a weekly session-frequency column chart
 /// up top (this report's own characteristic: density over time, not
@@ -12,8 +14,8 @@ class ActivityTimelineScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final counts = MockData.sessionsPerWeek;
-    final labels = MockData.sessionWeekLabels;
+    final counts = context.read<AnalyticsRepository>().sessionsPerWeek;
+    final labels = context.read<AnalyticsRepository>().sessionWeekLabels;
     final data = List.generate(counts.length, (i) => _WeekCount(labels[i], counts[i]));
 
     return Scaffold(
@@ -62,7 +64,7 @@ class ActivityTimelineScreen extends StatelessWidget {
           ),
           const SizedBox(height: 20),
           const Eyebrow('Log'),
-          ...MockData.history.map((r) => Padding(
+          ...context.read<WorkoutRepository>().history.map((r) => Padding(
                 padding: const EdgeInsets.only(bottom: 10),
                 child: Panel(
                   child: Row(

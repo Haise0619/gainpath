@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:syncfusion_flutter_charts/charts.dart';
 import 'package:gainpath/app/theme/theme.dart';
-import 'package:gainpath/data/mock_data.dart';
 import 'package:gainpath/shared/shared.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:gainpath/features/analytics/domain/entities/analytics_points.dart';
+import 'package:gainpath/features/analytics/domain/repositories/analytics_repository.dart';
 
 /// AD-M5.2 (Workout performance) — weekly lifted volume as a column
 /// chart, paired with a doughnut breakdown of muscle-group split. Column
@@ -21,7 +23,7 @@ class WorkoutPerformanceScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final volume = MockData.volumeTrend;
+    final volume = context.read<AnalyticsRepository>().volumeTrend;
     final data =
         List.generate(volume.length, (i) => _WeekPoint(_weekLabels[i], volume[i]));
 
@@ -91,7 +93,7 @@ class WorkoutPerformanceScreen extends StatelessWidget {
                 ),
                 series: <CircularSeries<MuscleGroupShare, String>>[
                   DoughnutSeries<MuscleGroupShare, String>(
-                    dataSource: MockData.muscleGroupSplit,
+                    dataSource: context.read<AnalyticsRepository>().muscleGroupSplit,
                     xValueMapper: (d, _) => d.label,
                     yValueMapper: (d, _) => d.ratio,
                     dataLabelMapper: (d, _) => '${(d.ratio * 100).round()}%',

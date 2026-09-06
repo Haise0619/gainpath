@@ -2,9 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:gainpath/features/recommendation/domain/policies/risk_policy.dart';
 import 'package:syncfusion_flutter_charts/charts.dart';
 import 'package:gainpath/app/theme/theme.dart';
-import 'package:gainpath/data/mock_data.dart';
 import 'package:gainpath/shared/shared.dart';
 import 'package:gainpath/features/analytics/presentation/admin/report_widgets.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:gainpath/features/analytics/domain/entities/analytics_points.dart';
+import 'package:gainpath/features/analytics/domain/repositories/analytics_repository.dart';
+import 'package:gainpath/features/recommendation/domain/repositories/recommendation_repository.dart';
 
 /// Posture, Retention, and Gamification — the underlying mock data here
 /// (`riskExercises`, `atRiskLeads`, the weekly-trend series) has no
@@ -27,7 +30,7 @@ class PostureAccuracySection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final trend = _weekSeries(MockData.postureWeeklyTrend);
+    final trend = _weekSeries(context.read<AnalyticsRepository>().postureWeeklyTrend);
 
     return ReportSection(
       anchorKey: anchorKey,
@@ -40,8 +43,8 @@ class PostureAccuracySection extends StatelessWidget {
         ...trend.map((p) => [p.label, p.value]),
         [],
         ['Exercise', 'Avg score', 'Category', 'Risk tier'],
-        ...MockData.riskExercises
-            .map((e) => [e[0], e[1], e[2], RiskPolicy(thresholdPct: MockData.postureRiskThreshold).tierFor(int.parse(e[1].replaceAll('%', '')))]),
+        ...context.read<RecommendationRepository>().riskExercises
+            .map((e) => [e[0], e[1], e[2], RiskPolicy(thresholdPct: context.read<RecommendationRepository>().postureRiskThreshold).tierFor(int.parse(e[1].replaceAll('%', '')))]),
       ],
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -89,9 +92,9 @@ class PostureAccuracySection extends StatelessWidget {
           const Eyebrow('Average form score by exercise'),
           Panel(
             child: Column(
-              children: MockData.riskExercises.map((e) {
+              children: context.read<RecommendationRepository>().riskExercises.map((e) {
                 final pct = int.parse(e[1].replaceAll('%', ''));
-                final tier = RiskPolicy(thresholdPct: MockData.postureRiskThreshold).tierFor(pct);
+                final tier = RiskPolicy(thresholdPct: context.read<RecommendationRepository>().postureRiskThreshold).tierFor(pct);
                 return ProgressRow(
                   e[0],
                   pct / 100,
@@ -127,10 +130,10 @@ class RetentionRiskSection extends StatelessWidget {
       exportFilename: 'retention_risk.csv',
       exportRows: () => [
         ['Risk tier', 'Members'],
-        ...MockData.retentionRiskMix.map((s) => [s.label, s.value.round()]),
+        ...context.read<AnalyticsRepository>().retentionRiskMix.map((s) => [s.label, s.value.round()]),
         [],
         ['Member', 'Weakest movement', 'Score', 'Matched coach'],
-        ...MockData.atRiskLeads.map((l) => [l.memberName, l.weakCategory, l.score, l.suggestion]),
+        ...context.read<RecommendationRepository>().atRiskLeads.map((l) => [l.memberName, l.weakCategory, l.score, l.suggestion]),
       ],
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -142,7 +145,7 @@ class RetentionRiskSection extends StatelessWidget {
                 legend: const Legend(isVisible: true, position: LegendPosition.right, textStyle: TextStyle(fontSize: 12)),
                 series: <CircularSeries<ChartSlice, String>>[
                   DoughnutSeries<ChartSlice, String>(
-                    dataSource: MockData.retentionRiskMix,
+                    dataSource: context.read<AnalyticsRepository>().retentionRiskMix,
                     xValueMapper: (d, _) => d.label,
                     yValueMapper: (d, _) => d.value,
                     dataLabelMapper: (d, _) => '${d.value.round()}',
@@ -161,7 +164,7 @@ class RetentionRiskSection extends StatelessWidget {
           ),
           const SizedBox(height: 14),
           const Eyebrow('Highest-priority members'),
-          ...MockData.atRiskLeads.map((l) => Padding(
+          ...context.read<RecommendationRepository>().atRiskLeads.map((l) => Padding(
                 padding: const EdgeInsets.only(bottom: 10),
                 child: Panel(
                   child: Row(
@@ -198,8 +201,8 @@ class GamificationSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final points = _weekSeries(_weeklyPoints);
-    final totalMembers = MockData.streakDistribution.fold<double>(0, (sum, s) => sum + s.value);
-    final withStreak = MockData.streakDistribution
+    final totalMembers = context.read<AnalyticsRepository>().streakDistribution.fold<double>(0, (sum, s) => sum + s.value);
+    final withStreak = context.read<AnalyticsRepository>().streakDistribution
         .where((s) => s.label != '0-3 days')
         .fold<double>(0, (sum, s) => sum + s.value);
     final streakPct = totalMembers == 0 ? 0 : (withStreak / totalMembers * 100).round();
@@ -215,7 +218,7 @@ class GamificationSection extends StatelessWidget {
         ...points.map((p) => [p.label, p.value]),
         [],
         ['Streak bucket', 'Members'],
-        ...MockData.streakDistribution.map((s) => [s.label, s.value.round()]),
+        ...context.read<AnalyticsRepository>().streakDistribution.map((s) => [s.label, s.value.round()]),
       ],
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -267,7 +270,7 @@ class GamificationSection extends StatelessWidget {
                 legend: const Legend(isVisible: true, position: LegendPosition.right, textStyle: TextStyle(fontSize: 12)),
                 series: <CircularSeries<ChartSlice, String>>[
                   DoughnutSeries<ChartSlice, String>(
-                    dataSource: MockData.streakDistribution,
+                    dataSource: context.read<AnalyticsRepository>().streakDistribution,
                     xValueMapper: (d, _) => d.label,
                     yValueMapper: (d, _) => d.value,
                     innerRadius: '65%',

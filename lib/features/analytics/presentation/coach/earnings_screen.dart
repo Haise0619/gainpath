@@ -3,8 +3,11 @@ import 'package:gainpath/features/coaching/domain/enums/booking_status.dart';
 import 'package:syncfusion_flutter_charts/charts.dart' hide CornerStyle;
 import 'package:syncfusion_flutter_gauges/gauges.dart';
 import 'package:gainpath/app/theme/theme.dart';
-import 'package:gainpath/data/mock_data.dart';
 import 'package:gainpath/shared/shared.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:gainpath/features/coaching/domain/entities/booking.dart';
+import 'package:gainpath/features/coaching/domain/repositories/booking_repository.dart';
+import 'package:gainpath/features/identity/domain/repositories/coach_repository.dart';
 
 const _monthNames = [
   'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
@@ -80,8 +83,8 @@ class _EarningsScreenState extends State<EarningsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final coach = MockData.currentCoach;
-    final roster = MockData.coachRoster;
+    final coach = context.read<CoachRepository>().currentCoach;
+    final roster = context.read<BookingRepository>().coachRoster;
     final completed = roster.where((b) => b.status == BookingStatus.completed).toList()
       ..sort((a, b) => b.start.compareTo(a.start));
     final totalEarned = completed.fold<double>(0, (sum, b) => sum + b.fee);

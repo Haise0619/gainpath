@@ -1,11 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:syncfusion_flutter_charts/charts.dart';
 import 'package:gainpath/app/theme/theme.dart';
-import 'package:gainpath/data/mock_data.dart';
 import 'package:gainpath/shared/shared.dart';
 import 'package:gainpath/features/workout/presentation/member/equipment_detail_screen.dart';
 import 'package:gainpath/features/chatbot/presentation/member/saved_advice_screen.dart';
 import 'package:gainpath/features/chatbot/presentation/member/widgets/chatbot_about_sheet.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:gainpath/features/analytics/domain/repositories/analytics_repository.dart';
+import 'package:gainpath/features/chatbot/domain/entities/chat_message.dart';
+import 'package:gainpath/features/chatbot/domain/entities/faq_prompt.dart';
+import 'package:gainpath/features/chatbot/domain/repositories/chat_repository.dart';
+import 'package:gainpath/features/workout/domain/entities/gym_equipment.dart';
+import 'package:gainpath/features/workout/domain/repositories/equipment_repository.dart';
 
 /// Defensive network image loader, same pattern used across the member
 /// modules — a broken/slow link never breaks the layout.
@@ -41,7 +47,7 @@ class _ChatbotScreenState extends State<ChatbotScreen> {
 
   final _controller = TextEditingController();
   final _scroll = ScrollController();
-  final List<ChatMessage> _messages = [...MockData.chatSeed];
+  late final List<ChatMessage> _messages = [...context.read<ChatRepository>().chatSeed];
   bool _disclaimerShown = false;
   bool _thinking = false;
 
@@ -101,13 +107,13 @@ class _ChatbotScreenState extends State<ChatbotScreen> {
     final equipmentKeywords = ['equipment', 'machine', 'rack', 'bench', 'treadmill', 'cable', 'dumbbell'];
     if (equipmentKeywords.any(q.contains)) {
       GymEquipment? match;
-      for (final e in MockData.gymEquipment.where((e) => e.isActive)) {
+      for (final e in context.read<EquipmentRepository>().gymEquipment.where((e) => e.isActive)) {
         if (q.contains(e.name.toLowerCase()) || q.contains(e.muscleGroup.toLowerCase())) {
           match = e;
           break;
         }
       }
-      match ??= MockData.gymEquipment.firstWhere((e) => e.isActive, orElse: () => MockData.gymEquipment.first);
+      match ??= context.read<EquipmentRepository>().gymEquipment.firstWhere((e) => e.isActive, orElse: () => context.read<EquipmentRepository>().gymEquipment.first);
       return ChatMessage(
         'This one fits — tap the card for the full setup and safety guide.',
         false,
@@ -117,14 +123,14 @@ class _ChatbotScreenState extends State<ChatbotScreen> {
 
     final progressKeywords = ['workout', 'progress', 'how am i doing', 'routine', 'improving', 'form score'];
     if (progressKeywords.any(q.contains)) {
-      final delta = MockData.postureTrend.last - MockData.postureTrend.first;
+      final delta = context.read<AnalyticsRepository>().postureTrend.last - context.read<AnalyticsRepository>().postureTrend.first;
       return ChatMessage(
-        'Here is how your form score has trended over your last ${MockData.postureTrend.length} sessions.',
+        'Here is how your form score has trended over your last ${context.read<AnalyticsRepository>().postureTrend.length} sessions.',
         false,
         attachment: ProgressChartAttachment(
           'Form score trend',
           'pts',
-          MockData.postureTrend,
+          context.read<AnalyticsRepository>().postureTrend,
           '${delta >= 0 ? '+' : ''}$delta pts',
         ),
       );
@@ -135,10 +141,10 @@ class _ChatbotScreenState extends State<ChatbotScreen> {
 
   void _toggleBookmark(String text) {
     setState(() {
-      if (MockData.savedAdvice.contains(text)) {
-        MockData.savedAdvice.remove(text);
+      if (context.read<ChatRepository>().savedAdvice.contains(text)) {
+        context.read<ChatRepository>().savedAdvice.remove(text);
       } else {
-        MockData.savedAdvice.add(text);
+        context.read<ChatRepository>().savedAdvice.add(text);
       }
     });
   }
@@ -168,17 +174,17 @@ class _ChatbotScreenState extends State<ChatbotScreen> {
             icon: const Icon(Icons.auto_awesome_rounded),
             tooltip: 'Progress audit',
             onPressed: () {
-              final delta = MockData.volumeTrend.last - MockData.volumeTrend.first;
+              final delta = context.read<AnalyticsRepository>().volumeTrend.last - context.read<AnalyticsRepository>().volumeTrend.first;
               setState(() {
                 _messages.add(const ChatMessage(
                     'Give me a summary of my progress.', true));
                 _messages.add(ChatMessage(
-                  MockData.buildProgressAuditReply(),
+                  context.read<ChatRepository>().buildProgressAuditReply(),
                   false,
                   attachment: ProgressChartAttachment(
                     'Training volume trend',
                     'kg',
-                    MockData.volumeTrend,
+                    context.read<AnalyticsRepository>().volumeTrend,
                     '${delta >= 0 ? '+' : ''}$delta kg',
                   ),
                 ));
@@ -238,7 +244,7 @@ class _ChatbotScreenState extends State<ChatbotScreen> {
                                         color: AppColors.accentDark, fontWeight: FontWeight.w600, fontSize: 12.5),
                                     onPressed: () => _sendMessage(q, _buildReply(q)),
                                   )),
-                              ...MockData.faqPrompts.map((p) => ActionChip(
+                              ...context.read<ChatRepository>().faqPrompts.map((p) => ActionChip(
                                     label: Text(p.question),
                                     backgroundColor: AppColors.primaryTint,
                                     side: BorderSide.none,
@@ -265,7 +271,7 @@ class _ChatbotScreenState extends State<ChatbotScreen> {
                       }
                       final m = _messages[i];
                       final isBookmarked =
-                          !m.fromUser && MockData.savedAdvice.contains(m.text);
+                          !m.fromUser && context.read<ChatRepository>().savedAdvice.contains(m.text);
                       return _Bubble(
                         text: m.text,
                         fromUser: m.fromUser,

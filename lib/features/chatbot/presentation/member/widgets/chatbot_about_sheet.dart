@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:gainpath/app/theme/theme.dart';
-import 'package:gainpath/data/mock_data.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:gainpath/features/chatbot/domain/repositories/chat_repository.dart';
 
 /// The AI coach's About/disclaimer popup, shared between the forced
 /// first-open path (`dismissible: false` — the member must tap "Got
@@ -75,7 +76,7 @@ Future<void> showChatbotAboutSheet(BuildContext context, {bool dismissible = tru
                         const SizedBox(height: 18),
                         Text('Try asking about', style: Theme.of(ctx).textTheme.titleMedium),
                         const SizedBox(height: 8),
-                        ...MockData.faqPrompts.map(
+                        ...context.read<ChatRepository>().faqPrompts.map(
                           (p) => Padding(
                             padding: const EdgeInsets.only(bottom: 6),
                             child: Row(

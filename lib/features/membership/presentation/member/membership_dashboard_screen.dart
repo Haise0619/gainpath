@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:gainpath/app/theme/theme.dart';
-import 'package:gainpath/data/mock_data.dart';
 import 'package:gainpath/shared/shared.dart';
 import 'package:gainpath/features/membership/presentation/member/billing_history_screen.dart';
 import 'package:gainpath/features/membership/presentation/member/browse_plans_screen.dart';
 import 'package:gainpath/features/membership/presentation/member/refund_request_screen.dart';
 import 'package:gainpath/features/membership/presentation/member/renew_screen.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:gainpath/features/membership/domain/entities/membership_plan.dart';
+import 'package:gainpath/features/membership/domain/repositories/membership_repository.dart';
 
 /// AD-M4.2 — View Membership Dashboard. The hub for this module: current
 /// plan status and auto-renew control up top, then quick entry points into
@@ -23,7 +25,7 @@ class _MembershipDashboardScreenState extends State<MembershipDashboardScreen> {
   bool _autoRenew = true;
 
   MembershipPlan get _plan =>
-      MockData.membershipPlans.firstWhere((p) => p.id == MockData.currentPlanId);
+      context.read<MembershipRepository>().membershipPlans.firstWhere((p) => p.id == context.read<MembershipRepository>().currentPlanId);
 
   Future<void> _toggleAutoRenew(bool value) async {
     if (!value) {
@@ -43,7 +45,7 @@ class _MembershipDashboardScreenState extends State<MembershipDashboardScreen> {
   @override
   Widget build(BuildContext context) {
     final plan = _plan;
-    final recent = MockData.transactions.take(2).toList();
+    final recent = context.read<MembershipRepository>().transactions.take(2).toList();
 
     return Scaffold(
       appBar: AppBar(title: const Text('Membership')),

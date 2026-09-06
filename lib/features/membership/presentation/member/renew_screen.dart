@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:gainpath/app/theme/theme.dart';
-import 'package:gainpath/data/mock_data.dart';
 import 'package:gainpath/features/membership/presentation/member/billplz_checkout_screen.dart';
 import 'package:gainpath/shared/shared.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:gainpath/features/membership/domain/entities/membership_plan.dart';
+import 'package:gainpath/features/membership/domain/repositories/membership_repository.dart';
 
 /// AD-M4.3 — Renew Membership Subscription. Reads the member's actual
 /// current plan rather than a fixed sample, so this stays correct however
@@ -10,8 +12,10 @@ import 'package:gainpath/shared/shared.dart';
 class RenewScreen extends StatelessWidget {
   const RenewScreen({super.key});
 
-  MembershipPlan get _plan =>
-      MockData.membershipPlans.firstWhere((p) => p.id == MockData.currentPlanId);
+  MembershipPlan _plan(BuildContext context) {
+    final repo = context.read<MembershipRepository>();
+    return repo.membershipPlans.firstWhere((p) => p.id == repo.currentPlanId);
+  }
 
   String get _newExpiry {
     const months = [
@@ -24,7 +28,7 @@ class RenewScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final plan = _plan;
+    final plan = _plan(context);
     return Scaffold(
       appBar: AppBar(title: const Text('Renew membership')),
       body: PageBody(

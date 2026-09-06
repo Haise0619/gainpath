@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:gainpath/app/theme/theme.dart';
-import 'package:gainpath/data/mock_data.dart';
 import 'package:gainpath/shared/shared.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:gainpath/features/chatbot/domain/repositories/chat_repository.dart';
 
 /// AD-M6.2 — View Bookmarked Advice Library. Reads and mutates
-/// `MockData.savedAdvice` directly (not a local copy) so a bookmark
+/// `context.read<ChatRepository>().savedAdvice` directly (not a local copy) so a bookmark
 /// added from the chat screen shows up here immediately, and removing
 /// a tip here is reflected back in the chat bubbles' bookmark icons.
 class SavedAdviceScreen extends StatefulWidget {
@@ -17,7 +18,7 @@ class SavedAdviceScreen extends StatefulWidget {
 class _SavedAdviceScreenState extends State<SavedAdviceScreen> {
   @override
   Widget build(BuildContext context) {
-    final items = MockData.savedAdvice;
+    final items = context.read<ChatRepository>().savedAdvice;
     return Scaffold(
       appBar: AppBar(title: const Text('Saved advice')),
       body: items.isEmpty
@@ -64,7 +65,7 @@ class _SavedAdviceScreenState extends State<SavedAdviceScreen> {
                                       confirmLabel: 'Remove',
                                       destructive: true);
                                   if (ok) {
-                                    setState(() => MockData.savedAdvice.remove(t));
+                                    setState(() => context.read<ChatRepository>().savedAdvice.remove(t));
                                   }
                                 },
                               ),

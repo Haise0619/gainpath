@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:syncfusion_flutter_charts/charts.dart' hide CornerStyle;
 import 'package:syncfusion_flutter_gauges/gauges.dart';
 import 'package:gainpath/app/theme/theme.dart';
-import 'package:gainpath/data/mock_data.dart';
 import 'package:gainpath/shared/shared.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:gainpath/features/analytics/domain/repositories/analytics_repository.dart';
+import 'package:gainpath/features/gamification/domain/repositories/gamification_repository.dart';
 
 /// New Progress sub-report tying into the Gamification module: points
 /// earned per week as a filled area trend, plus the current streak read
@@ -13,8 +15,8 @@ class GamificationProgressScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final pts = MockData.pointsHistory;
-    final labels = MockData.pointsWeekLabels;
+    final pts = context.read<AnalyticsRepository>().pointsHistory;
+    final labels = context.read<AnalyticsRepository>().pointsWeekLabels;
     final data = List.generate(pts.length, (i) => _WeekPoints(labels[i], pts[i]));
 
     return Scaffold(
@@ -23,10 +25,10 @@ class GamificationProgressScreen extends StatelessWidget {
         children: [
           Row(
             children: [
-              Expanded(child: StatTile('${MockData.points}', 'Total points')),
+              Expanded(child: StatTile('${context.read<GamificationRepository>().points}', 'Total points')),
               const SizedBox(width: 10),
               Expanded(
-                  child: StatTile('${MockData.streak}', 'Day streak',
+                  child: StatTile('${context.read<GamificationRepository>().streak}', 'Day streak',
                       valueColor: AppColors.accentDark)),
             ],
           ),
@@ -73,7 +75,7 @@ class GamificationProgressScreen extends StatelessWidget {
                     axes: [
                       RadialAxis(
                         minimum: 0,
-                        maximum: MockData.longestStreak.toDouble(),
+                        maximum: context.read<GamificationRepository>().longestStreak.toDouble(),
                         showLabels: false,
                         showTicks: false,
                         startAngle: 270,
@@ -86,7 +88,7 @@ class GamificationProgressScreen extends StatelessWidget {
                         ),
                         pointers: [
                           RangePointer(
-                            value: MockData.streak.toDouble(),
+                            value: context.read<GamificationRepository>().streak.toDouble(),
                             width: 0.16,
                             sizeUnit: GaugeSizeUnit.factor,
                             color: AppColors.accentDark,
@@ -96,7 +98,7 @@ class GamificationProgressScreen extends StatelessWidget {
                         annotations: [
                           GaugeAnnotation(
                             positionFactor: 0,
-                            widget: Text('${MockData.streak}d',
+                            widget: Text('${context.read<GamificationRepository>().streak}d',
                                 style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
                           ),
                         ],
@@ -107,9 +109,9 @@ class GamificationProgressScreen extends StatelessWidget {
                 const SizedBox(width: 16),
                 Expanded(
                   child: Text(
-                    'Your current streak is ${MockData.streak} days — '
-                    '${MockData.longestStreak - MockData.streak} days from your personal '
-                    'best of ${MockData.longestStreak}.',
+                    'Your current streak is ${context.read<GamificationRepository>().streak} days — '
+                    '${context.read<GamificationRepository>().longestStreak - context.read<GamificationRepository>().streak} days from your personal '
+                    'best of ${context.read<GamificationRepository>().longestStreak}.',
                     style: Theme.of(context).textTheme.bodyMedium,
                   ),
                 ),

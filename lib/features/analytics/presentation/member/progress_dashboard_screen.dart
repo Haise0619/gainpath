@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:gainpath/app/theme/theme.dart';
-import 'package:gainpath/data/mock_data.dart';
 import 'package:gainpath/shared/shared.dart';
 import 'package:gainpath/features/analytics/presentation/member/activity_timeline_screen.dart';
 import 'package:gainpath/features/analytics/presentation/member/body_metrics_screen.dart';
@@ -9,6 +8,9 @@ import 'package:gainpath/features/analytics/presentation/member/goal_progress_sc
 import 'package:gainpath/features/analytics/presentation/member/posture_accuracy_screen.dart';
 import 'package:gainpath/features/analytics/presentation/member/widgets/report_preview_tile.dart';
 import 'package:gainpath/features/analytics/presentation/member/workout_performance_screen.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:gainpath/features/analytics/domain/repositories/analytics_repository.dart';
+import 'package:gainpath/features/gamification/domain/repositories/gamification_repository.dart';
 
 /// AD-M5.1 — View Personalized Progress Dashboard. The hub for every
 /// Progress & Report screen: a computed highlight up top, four tappable
@@ -61,7 +63,7 @@ class _ProgressDashboardScreenState extends State<ProgressDashboardScreen>
   Widget build(BuildContext context) {
     // The volume record check is computed, not asserted, so this stays
     // correct if the underlying weekly figures ever change.
-    final volume = MockData.volumeTrend;
+    final volume = context.read<AnalyticsRepository>().volumeTrend;
     final isRecordWeek = volume.last >= volume.reduce((a, b) => a > b ? a : b);
 
     return Scaffold(
@@ -72,8 +74,8 @@ class _ProgressDashboardScreenState extends State<ProgressDashboardScreen>
             _HighlightCard(
               isRecordWeek: isRecordWeek,
               volumeThisWeek: volume.last,
-              streak: MockData.streak,
-              longestStreak: MockData.longestStreak,
+              streak: context.read<GamificationRepository>().streak,
+              longestStreak: context.read<GamificationRepository>().longestStreak,
             ),
             0.0,
             0.6,
@@ -118,9 +120,9 @@ class _ProgressDashboardScreenState extends State<ProgressDashboardScreen>
                 ),
                 _StatCard(
                   icon: Icons.local_fire_department_rounded,
-                  value: '${MockData.streak}',
+                  value: '${context.read<GamificationRepository>().streak}',
                   label: 'Day Streak',
-                  delta: 'Best ${MockData.longestStreak} days',
+                  delta: 'Best ${context.read<GamificationRepository>().longestStreak} days',
                   deltaColor: AppColors.accentDark,
                   onTap: () => Navigator.push(context,
                       MaterialPageRoute(builder: (_) => const GamificationProgressScreen())),
@@ -139,7 +141,7 @@ class _ProgressDashboardScreenState extends State<ProgressDashboardScreen>
                   icon: Icons.bar_chart_rounded,
                   title: 'Workout performance',
                   subtitle: 'Volume and muscle group split',
-                  sparkData: MockData.volumeTrend.map((v) => v.toDouble()).toList(),
+                  sparkData: context.read<AnalyticsRepository>().volumeTrend.map((v) => v.toDouble()).toList(),
                   onTap: () => Navigator.push(context,
                       MaterialPageRoute(builder: (_) => const WorkoutPerformanceScreen())),
                 ),
@@ -148,7 +150,7 @@ class _ProgressDashboardScreenState extends State<ProgressDashboardScreen>
                   icon: Icons.show_chart_rounded,
                   title: 'Posture accuracy',
                   subtitle: 'How your form is changing',
-                  sparkData: MockData.postureTrend.map((v) => v.toDouble()).toList(),
+                  sparkData: context.read<AnalyticsRepository>().postureTrend.map((v) => v.toDouble()).toList(),
                   sparkColor: AppColors.success,
                   onTap: () => Navigator.push(context,
                       MaterialPageRoute(builder: (_) => const PostureAccuracyScreen())),
@@ -158,7 +160,7 @@ class _ProgressDashboardScreenState extends State<ProgressDashboardScreen>
                   icon: Icons.history_rounded,
                   title: 'Activity timeline',
                   subtitle: 'Everything you have logged',
-                  sparkData: MockData.sessionsPerWeek.map((v) => v.toDouble()).toList(),
+                  sparkData: context.read<AnalyticsRepository>().sessionsPerWeek.map((v) => v.toDouble()).toList(),
                   sparkColor: AppColors.primarySoft,
                   onTap: () => Navigator.push(context,
                       MaterialPageRoute(builder: (_) => const ActivityTimelineScreen())),
@@ -178,7 +180,7 @@ class _ProgressDashboardScreenState extends State<ProgressDashboardScreen>
                   icon: Icons.emoji_events_rounded,
                   title: 'Points & streak',
                   subtitle: 'Your gamification momentum',
-                  sparkData: MockData.pointsHistory.map((v) => v.toDouble()).toList(),
+                  sparkData: context.read<AnalyticsRepository>().pointsHistory.map((v) => v.toDouble()).toList(),
                   sparkColor: AppColors.accentDark,
                   onTap: () => Navigator.push(context,
                       MaterialPageRoute(builder: (_) => const GamificationProgressScreen())),
@@ -188,7 +190,7 @@ class _ProgressDashboardScreenState extends State<ProgressDashboardScreen>
                   icon: Icons.monitor_weight_rounded,
                   title: 'Body metrics',
                   subtitle: 'Weight trend and BMI',
-                  sparkData: MockData.weightHistory.map((e) => e.weightKg).toList(),
+                  sparkData: context.read<AnalyticsRepository>().weightHistory.map((e) => e.weightKg).toList(),
                   sparkColor: AppColors.primaryDark,
                   onTap: () => Navigator.push(context,
                       MaterialPageRoute(builder: (_) => const BodyMetricsScreen())),

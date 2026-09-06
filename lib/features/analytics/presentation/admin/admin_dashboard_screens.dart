@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:gainpath/app/theme/theme.dart';
-import 'package:gainpath/data/mock_data.dart';
 import 'package:gainpath/shared/shared.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:gainpath/features/analytics/domain/repositories/analytics_repository.dart';
 
 /// AD-M12.1 — View Admin Dashboard.
 class AdminDashboardScreen extends StatefulWidget {
@@ -87,7 +88,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                 Wrap(
                   spacing: 14,
                   runSpacing: 14,
-                  children: MockData.adminStats
+                  children: context.read<AnalyticsRepository>().adminStats
                       .map((s) => _KpiCard(label: s[0], value: s[1], delta: s[2]))
                       .toList(),
                 ),
@@ -127,7 +128,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              BarChart(MockData.usageByHour, height: 150),
+              BarChart(context.read<AnalyticsRepository>().usageByHour, height: 150),
               const SizedBox(height: 10),
               Text('Peak demand sits between 5pm and 8pm on weekdays.',
                   style: Theme.of(context).textTheme.bodyMedium),

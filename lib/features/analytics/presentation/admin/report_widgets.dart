@@ -3,7 +3,7 @@ import 'package:gainpath/app/theme/theme.dart';
 import 'package:gainpath/shared/shared.dart';
 import 'package:gainpath/core/platform/csv_export.dart';
 
-/// A `MockData.allBookings`-derived date/branch filter, applied live
+/// A `context.read<BookingRepository>().allBookings`-derived date/branch filter, applied live
 /// across every report section that can honestly support it. Sections
 /// whose underlying mock data has no date/branch dimension (posture,
 /// retention, rewards, gamification) don't take a filter — pretending to

@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:gainpath/app/theme/theme.dart';
-import 'package:gainpath/data/mock_data.dart';
 import 'package:gainpath/shared/shared.dart';
 import 'package:gainpath/shared/widgets/admin_dialogs.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:gainpath/features/membership/domain/entities/refund_claim.dart';
+import 'package:gainpath/features/membership/domain/repositories/membership_repository.dart';
 
 /// AD-M11.7 — Process Refund Request. Promoted from a Dashboard-alert-only
 /// flow into a real sidebar destination: list and detail live in one
@@ -17,7 +19,7 @@ class RefundsScreen extends StatefulWidget {
 }
 
 class RefundsScreenState extends State<RefundsScreen> {
-  late final List<RefundClaim> _claims = [...MockData.refundClaims];
+  late final List<RefundClaim> _claims = [...context.read<MembershipRepository>().refundClaims];
   RefundClaim? _selected;
   bool _processing = false;
   String _query = '';
@@ -293,7 +295,7 @@ class RefundsScreenState extends State<RefundsScreen> {
   }
 
   Widget _transactionHistory(BuildContext context, RefundClaim claim) {
-    final related = MockData.transactions.where((t) => t.id != claim.transactionId).take(3).toList();
+    final related = context.read<MembershipRepository>().transactions.where((t) => t.id != claim.transactionId).take(3).toList();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [

@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:syncfusion_flutter_charts/charts.dart';
 import 'package:syncfusion_flutter_gauges/gauges.dart';
 import 'package:gainpath/app/theme/theme.dart';
-import 'package:gainpath/data/mock_data.dart';
 import 'package:gainpath/shared/shared.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:gainpath/features/analytics/domain/repositories/analytics_repository.dart';
+import 'package:gainpath/features/workout/domain/repositories/workout_repository.dart';
 
 /// New Progress sub-report on body composition: a weight trend line (the
 /// natural chart shape for "one number over time") and a BMI range
@@ -21,9 +23,9 @@ class BodyMetricsScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final history = MockData.weightHistory;
+    final history = context.read<AnalyticsRepository>().weightHistory;
     final current = history.last.weightKg;
-    final heightM = MockData.heightCm / 100;
+    final heightM = context.read<WorkoutRepository>().heightCm / 100;
     final bmi = current / (heightM * heightM);
     final weights = history.map((e) => e.weightKg).toList();
     final points = history.map((e) => _WeightPoint(_shortDate(e.date), e.weightKg)).toList();

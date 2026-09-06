@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:gainpath/data/mock_data.dart';
 import 'package:gainpath/shared/shared.dart';
 import 'package:gainpath/features/membership/presentation/member/purchase_plan_screen.dart';
 import 'package:gainpath/features/membership/presentation/member/widgets/plan_card.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:gainpath/features/membership/domain/repositories/membership_repository.dart';
 
 /// AD-M4.1 — Purchase Membership Plan (browse step). A dedicated screen
 /// for comparing tiers, split out from the dashboard so switching plans
@@ -20,8 +21,8 @@ class BrowsePlansScreen extends StatelessWidget {
           Text('Compare plans and switch anytime. Changes apply from your next billing date.',
               style: Theme.of(context).textTheme.bodyLarge),
           const SizedBox(height: 20),
-          ...MockData.membershipPlans.map((plan) {
-            final isCurrent = plan.id == MockData.currentPlanId;
+          ...context.read<MembershipRepository>().membershipPlans.map((plan) {
+            final isCurrent = plan.id == context.read<MembershipRepository>().currentPlanId;
             return Padding(
               padding: const EdgeInsets.only(bottom: 14),
               child: PlanCard(

@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:gainpath/features/membership/domain/policies/refund_policy.dart';
 import 'package:gainpath/app/theme/theme.dart';
-import 'package:gainpath/data/mock_data.dart';
 import 'package:gainpath/shared/shared.dart';
 import 'package:gainpath/features/membership/presentation/member/refund_request_screen.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:gainpath/features/membership/domain/entities/transaction.dart';
+import 'package:gainpath/features/membership/domain/repositories/membership_repository.dart';
 
 /// AD-M4.2 (billing history detail) — split out from the dashboard into
 /// its own screen so the full transaction list, filtering, and per-charge
@@ -32,11 +34,11 @@ class _BillingHistoryScreenState extends State<BillingHistoryScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final visible = MockData.transactions.where((t) {
+    final visible = context.read<MembershipRepository>().transactions.where((t) {
       if (_filter == 'All') return true;
       return t.type.toLowerCase().contains(_filter.toLowerCase());
     }).toList();
-    final totalThisYear = MockData.transactions
+    final totalThisYear = context.read<MembershipRepository>().transactions
         .where((t) => t.date.year == DateTime.now().year)
         .fold<double>(0, (sum, t) => sum + t.amount);
 

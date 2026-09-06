@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:syncfusion_flutter_charts/charts.dart';
 import 'package:gainpath/app/theme/theme.dart';
-import 'package:gainpath/data/mock_data.dart';
 import 'package:gainpath/shared/shared.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:gainpath/features/analytics/domain/repositories/analytics_repository.dart';
 
 /// AD-M5.2 (Posture accuracy) — a smoothed trend area answers "is form
 /// improving over time"; a horizontal bar ranking answers "which exercise
@@ -22,7 +23,7 @@ class PostureAccuracyScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final trend = MockData.postureTrend;
+    final trend = context.read<AnalyticsRepository>().postureTrend;
     final data =
         List.generate(trend.length, (i) => _SessionPoint(_sessionLabels[i], trend[i]));
 

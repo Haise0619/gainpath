@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:gainpath/app/theme/theme.dart';
-import 'package:gainpath/data/mock_data.dart';
 import 'package:gainpath/shared/shared.dart';
+import 'package:gainpath/features/membership/domain/entities/membership_plan.dart';
 
 /// Full-detail plan card used on the Browse Plans screen: name, price,
 /// perks checklist, and a call to action that adapts to whether this is
