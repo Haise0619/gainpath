@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:gainpath/app/theme/theme.dart';
-import 'package:gainpath/screens/auth/login_screen.dart';
+import 'package:gainpath/features/identity/presentation/shared/login_screen.dart';
 import 'package:gainpath/core/domain/app_role.dart';
 export 'package:gainpath/core/domain/app_role.dart';
 

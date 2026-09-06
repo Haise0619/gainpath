@@ -6,9 +6,9 @@ import 'package:gainpath/shared/shared.dart';
 import 'package:gainpath/app/shells/member_shell.dart';
 import 'package:gainpath/app/shells/coach_shell.dart';
 import 'package:gainpath/app/shells/admin_shell.dart';
-import 'package:gainpath/screens/auth/email_verification_screen.dart';
-import 'package:gainpath/screens/auth/forgot_password_sheet.dart';
-import 'package:gainpath/screens/auth/role_select_screen.dart';
+import 'package:gainpath/features/identity/presentation/shared/email_verification_screen.dart';
+import 'package:gainpath/features/identity/presentation/shared/forgot_password_sheet.dart';
+import 'package:gainpath/features/identity/presentation/shared/role_select_screen.dart';
 
 /// AD-M1.1 / AD-M8.1 / AD-M11.1 — Login and Recovery.
 ///

@@ -2,12 +2,12 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:gainpath/app/theme/theme.dart';
 import 'package:gainpath/data/mock_data.dart';
-import 'package:gainpath/screens/auth/login_screen.dart';
-import 'package:gainpath/screens/auth/role_select_screen.dart';
+import 'package:gainpath/features/identity/presentation/shared/login_screen.dart';
+import 'package:gainpath/features/identity/presentation/shared/role_select_screen.dart';
 import 'package:gainpath/screens/admin/admin_dashboard_screens.dart';
 import 'package:gainpath/screens/admin/admin_dialogs.dart';
 import 'package:gainpath/screens/admin/admin_recommendation_screens.dart';
-import 'package:gainpath/screens/admin/admin_settings_screens.dart';
+import 'package:gainpath/features/identity/presentation/admin/admin_settings_screens.dart';
 import 'package:gainpath/screens/admin/content/exercise_tutorials_screen.dart';
 import 'package:gainpath/screens/admin/content/routine_templates_screen.dart';
 import 'package:gainpath/screens/admin/equipment/equipment_catalog_screen.dart';
@@ -17,8 +17,8 @@ import 'package:gainpath/screens/admin/governance/chatbot_disclaimer_screen.dart
 import 'package:gainpath/screens/admin/refunds/refunds_screen.dart';
 import 'package:gainpath/screens/admin/reports/reports_screen.dart';
 import 'package:gainpath/screens/admin/settings/system_settings_screen.dart';
-import 'package:gainpath/screens/admin/users/members_screen.dart';
-import 'package:gainpath/screens/admin/users/coaches_screen.dart';
+import 'package:gainpath/features/identity/presentation/admin/members_screen.dart';
+import 'package:gainpath/features/identity/presentation/admin/coaches_screen.dart';
 
 /// A single directly-selectable sidebar destination.
 class _NavPage {

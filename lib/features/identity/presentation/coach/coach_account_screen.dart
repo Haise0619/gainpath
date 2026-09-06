@@ -2,12 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:gainpath/app/theme/theme.dart';
 import 'package:gainpath/data/mock_data.dart';
 import 'package:gainpath/shared/shared.dart';
-import 'package:gainpath/screens/auth/role_select_screen.dart';
+import 'package:gainpath/features/identity/presentation/shared/role_select_screen.dart';
 import 'package:gainpath/screens/member/coach_booking/coach_profile_screen.dart' as public;
 import 'package:gainpath/screens/member/coach_booking/widgets/coach_card.dart' show networkAvatar;
-import 'package:gainpath/screens/coach/profile/certifications_screen.dart';
-import 'package:gainpath/screens/coach/profile/coach_settings_screen.dart';
-import 'package:gainpath/screens/coach/profile/edit_coach_profile_screen.dart';
+import 'package:gainpath/features/identity/presentation/coach/certifications_screen.dart';
+import 'package:gainpath/features/identity/presentation/coach/coach_settings_screen.dart';
+import 'package:gainpath/features/identity/presentation/coach/edit_coach_profile_screen.dart';
 
 /// AD-M8.3 — Coach Account & Profile Management hub. Deliberately framed
 /// as a *professional identity* screen, not a personal one: where the
