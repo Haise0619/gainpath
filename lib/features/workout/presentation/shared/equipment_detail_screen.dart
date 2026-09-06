@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:gainpath/app/theme/theme.dart';
 import 'package:gainpath/shared/shared.dart';
-import 'package:gainpath/features/workout/presentation/member/workout_screens.dart' show ExerciseTutorialScreen;
+import 'package:gainpath/features/workout/presentation/member/exercise_tutorial_screen.dart' show ExerciseTutorialScreen;
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:gainpath/features/workout/domain/entities/gym_equipment.dart';
 import 'package:gainpath/features/workout/domain/repositories/workout_repository.dart';
