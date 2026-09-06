@@ -3,7 +3,7 @@ import 'package:gainpath/app/home/member_home_screen.dart';
 import 'package:gainpath/features/workout/presentation/member/workout_prep_screen.dart';
 import 'package:gainpath/features/gamification/presentation/member/gamification_dashboard_screen.dart';
 import 'package:gainpath/features/coaching/presentation/member/browse_coaches_screen.dart';
-import 'package:gainpath/features/identity/presentation/member/profile_screens.dart';
+import 'package:gainpath/features/identity/presentation/member/member_profile_screen.dart';
 
 /// Bottom-navigation shell for the Gym Member role (Modules 1 to 7).
 class MemberShell extends StatefulWidget {
