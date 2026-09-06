@@ -12,11 +12,11 @@ import 'package:gainpath/features/workout/presentation/admin/exercise_tutorials_
 import 'package:gainpath/features/workout/presentation/admin/routine_templates_screen.dart';
 import 'package:gainpath/features/workout/presentation/admin/equipment_catalog_screen.dart';
 import 'package:gainpath/features/gamification/presentation/admin/reward_catalog_screen.dart';
-import 'package:gainpath/screens/admin/governance/announcements_screen.dart';
+import 'package:gainpath/features/content/presentation/admin/announcements_screen.dart';
 import 'package:gainpath/features/chatbot/presentation/admin/chatbot_disclaimer_screen.dart';
 import 'package:gainpath/features/membership/presentation/admin/refunds_screen.dart';
 import 'package:gainpath/features/analytics/presentation/admin/reports_screen.dart';
-import 'package:gainpath/screens/admin/settings/system_settings_screen.dart';
+import 'package:gainpath/features/content/presentation/admin/system_settings_screen.dart';
 import 'package:gainpath/features/identity/presentation/admin/members_screen.dart';
 import 'package:gainpath/features/identity/presentation/admin/coaches_screen.dart';
 
