@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:gainpath/app/theme.dart';
+import 'package:gainpath/app/theme/theme.dart';
 
 /// AD-M1.1 forgot-password sub-flow. A dedicated, self-contained sheet
 /// rather than the generic confirm-sheet pattern: it takes the email

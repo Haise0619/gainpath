@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:gainpath/app/theme.dart';
+import 'package:gainpath/app/theme/theme.dart';
 import 'package:gainpath/data/mock_data.dart';
 import 'package:gainpath/widgets/shared.dart';
-import 'package:gainpath/screens/admin/admin_breadcrumb.dart';
+import 'package:gainpath/app/shells/admin_breadcrumb.dart';
 import 'package:gainpath/screens/admin/equipment/equipment_catalog_screen.dart' show EditableStringList;
 
 Widget _networkHero(String url, {BoxFit fit = BoxFit.cover}) {

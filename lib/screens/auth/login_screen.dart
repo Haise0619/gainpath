@@ -1,11 +1,11 @@
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
-import 'package:gainpath/app/theme.dart';
+import 'package:gainpath/app/theme/theme.dart';
 import 'package:gainpath/data/mock_data.dart';
 import 'package:gainpath/widgets/shared.dart';
-import 'package:gainpath/screens/member/member_shell.dart';
-import 'package:gainpath/screens/coach/coach_shell.dart';
-import 'package:gainpath/screens/admin/admin_shell.dart';
+import 'package:gainpath/app/shells/member_shell.dart';
+import 'package:gainpath/app/shells/coach_shell.dart';
+import 'package:gainpath/app/shells/admin_shell.dart';
 import 'package:gainpath/screens/auth/email_verification_screen.dart';
 import 'package:gainpath/screens/auth/forgot_password_sheet.dart';
 import 'package:gainpath/screens/auth/role_select_screen.dart';

@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:gainpath/app/theme.dart';
+import 'package:gainpath/app/theme/theme.dart';
 import 'package:gainpath/data/mock_data.dart';
 import 'package:gainpath/widgets/change_password_sheet.dart';
 import 'package:gainpath/widgets/shared.dart';

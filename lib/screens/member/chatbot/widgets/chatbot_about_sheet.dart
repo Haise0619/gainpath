@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:gainpath/app/theme.dart';
+import 'package:gainpath/app/theme/theme.dart';
 import 'package:gainpath/data/mock_data.dart';
 
 /// The AI coach's About/disclaimer popup, shared between the forced

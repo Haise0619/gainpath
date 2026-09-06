@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:syncfusion_flutter_gauges/gauges.dart';
-import 'package:gainpath/app/theme.dart';
+import 'package:gainpath/app/theme/theme.dart';
 import 'package:gainpath/widgets/shared.dart';
 
 /// AD-M5.3 — View Goal Progress Comparison. Each goal gets its own radial

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:syncfusion_flutter_charts/sparkcharts.dart';
-import 'package:gainpath/app/theme.dart';
+import 'package:gainpath/app/theme/theme.dart';
 
 /// A dashboard entry point into one deep-dive report: icon, title,
 /// one-line description, and a spark-chart thumbnail giving an

@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:gainpath/app/theme.dart';
+import 'package:gainpath/app/theme/theme.dart';
 
 /// One segment of an in-page breadcrumb — the local counterpart to the
 /// shell-level `Home > Section` trail in the top bar, for a second drill

@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:gainpath/app/theme.dart';
+import 'package:gainpath/app/theme/theme.dart';
 import 'package:gainpath/data/mock_data.dart';
 import 'package:gainpath/widgets/shared.dart';
-import 'package:gainpath/screens/admin/admin_breadcrumb.dart';
+import 'package:gainpath/app/shells/admin_breadcrumb.dart';
 
 /// Defensive network image loader — a broken/slow link never breaks the
 /// layout, same pattern used across the member-facing modules.

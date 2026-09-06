@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:gainpath/app/theme.dart';
+import 'package:gainpath/app/theme/theme.dart';
 import 'package:gainpath/data/mock_data.dart';
 import 'package:gainpath/screens/member/coach_booking/booking_schedule_screen.dart';
 import 'package:gainpath/screens/member/coach_booking/coach_profile_screen.dart';

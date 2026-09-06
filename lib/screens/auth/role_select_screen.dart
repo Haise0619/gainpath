@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:gainpath/app/theme.dart';
+import 'package:gainpath/app/theme/theme.dart';
 import 'package:gainpath/screens/auth/login_screen.dart';
 
 /// Prototype entry point for Windows desktop and mobile. In the real system

@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:gainpath/app/theme.dart';
+import 'package:gainpath/app/theme/theme.dart';
 
 /// Every modal action anywhere in the admin web console — confirm, edit,
 /// provision, publish — opens through one of the primitives in this

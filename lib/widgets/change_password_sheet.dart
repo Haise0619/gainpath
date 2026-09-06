@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:gainpath/app/theme.dart';
+import 'package:gainpath/app/theme/theme.dart';
 import 'package:gainpath/widgets/shared.dart';
 
 /// Shared "Change Password" sub-flow used by every Manage Settings screen

@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:gainpath/app/theme.dart';
+import 'package:gainpath/app/theme/theme.dart';
 import 'package:gainpath/widgets/shared.dart';
 import 'package:gainpath/screens/auth/profile_setup_screen.dart';
 
