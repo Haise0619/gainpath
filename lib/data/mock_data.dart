@@ -394,10 +394,6 @@ class MockData {
         DateTime.now().subtract(const Duration(days: 42)), TransactionStatus.cleared),
   ];
 
-  /// The refund policy window (AD-M4.4): only charges within this many days
-  /// are eligible. TXN-2087 above is deliberately recent so the demo can
-  /// show both the eligible and the policy-locked states.
-  static const refundWindowDays = 7;
 
   static const currentPlanId = 'premium';
 
@@ -1047,11 +1043,6 @@ class MockData {
   /// than just changing a label.
   static int postureRiskThreshold = 70;
 
-  static String riskTierFor(int avgScorePct) {
-    if (avgScorePct < postureRiskThreshold) return 'High';
-    if (avgScorePct < postureRiskThreshold + 12) return 'Moderate';
-    return 'Low';
-  }
 
   static const atRiskLeads = <RiskLead>[
     RiskLead('Nurul Huda', 'Romanian Deadlift', 58, 'Priya Menon'),

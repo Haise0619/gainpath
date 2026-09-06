@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:gainpath/features/membership/domain/policies/refund_policy.dart';
 import 'package:gainpath/app/theme/theme.dart';
 import 'package:gainpath/data/mock_data.dart';
 import 'package:gainpath/shared/shared.dart';
@@ -41,7 +42,7 @@ class _RefundRequestScreenState extends State<RefundRequestScreen> {
   }
 
   bool _isEligible(Transaction t) =>
-      DateTime.now().difference(t.date).inDays <= MockData.refundWindowDays;
+      const RefundPolicy().isEligible(t.date);
 
   @override
   Widget build(BuildContext context) {
@@ -61,7 +62,7 @@ class _RefundRequestScreenState extends State<RefundRequestScreen> {
                 const SizedBox(width: 10),
                 Expanded(
                   child: Text(
-                    'Refunds can be requested within ${MockData.refundWindowDays} days of a charge. '
+                    'Refunds can be requested within ${RefundPolicy.defaultWindowDays} days of a charge. '
                     'Staff review each request before any money is returned.',
                     style: Theme.of(context).textTheme.bodyMedium,
                   ),
@@ -81,7 +82,7 @@ class _RefundRequestScreenState extends State<RefundRequestScreen> {
                   SizedBox(width: 10),
                   Expanded(
                     child: Text(
-                      'No charges in the last ${MockData.refundWindowDays} days are eligible for a refund.',
+                      'No charges in the last ${RefundPolicy.defaultWindowDays} days are eligible for a refund.',
                       style: TextStyle(fontSize: 13.5, color: AppColors.danger),
                     ),
                   ),
@@ -117,7 +118,7 @@ class _RefundRequestScreenState extends State<RefundRequestScreen> {
                               Text(
                                   ok
                                       ? '${t.id}  ·  $daysAgo days ago'
-                                      : '${t.id}  ·  Outside the ${MockData.refundWindowDays}-day window',
+                                      : '${t.id}  ·  Outside the ${RefundPolicy.defaultWindowDays}-day window',
                                   style: ok
                                       ? Theme.of(context).textTheme.bodyMedium
                                       : Theme.of(context).textTheme.bodyMedium?.copyWith(color: AppColors.danger)),

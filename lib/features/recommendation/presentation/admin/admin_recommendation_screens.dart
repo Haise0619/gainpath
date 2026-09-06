@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:gainpath/features/recommendation/domain/policies/risk_policy.dart';
 import 'package:syncfusion_flutter_charts/charts.dart';
 import 'package:gainpath/app/theme/theme.dart';
 import 'package:gainpath/data/mock_data.dart';
@@ -156,7 +157,7 @@ class _RiskLeaderboardScreenState extends State<RiskLeaderboardScreen>
     const categories = ['All', 'Lower Body', 'Upper Body', 'Core'];
     final rows = MockData.riskExercises.where((e) => _category == 'All' || e[2] == _category).toList();
     final highRiskCount =
-        MockData.riskExercises.where((e) => MockData.riskTierFor(int.parse(e[1].replaceAll('%', ''))) == 'High').length;
+        MockData.riskExercises.where((e) => RiskPolicy(thresholdPct: MockData.postureRiskThreshold).tierFor(int.parse(e[1].replaceAll('%', ''))) == 'High').length;
     final gaps = MockData.contentGaps;
 
     return SingleChildScrollView(
@@ -172,7 +173,7 @@ class _RiskLeaderboardScreenState extends State<RiskLeaderboardScreen>
           ['Rank', 'Exercise', 'Avg score', 'Category', 'Risk tier'],
           ...List.generate(MockData.riskExercises.length, (i) {
             final e = MockData.riskExercises[i];
-            return [i + 1, e[0], e[1], e[2], MockData.riskTierFor(int.parse(e[1].replaceAll('%', '')))];
+            return [i + 1, e[0], e[1], e[2], RiskPolicy(thresholdPct: MockData.postureRiskThreshold).tierFor(int.parse(e[1].replaceAll('%', '')))];
           }),
         ],
         child: LayoutBuilder(builder: (context, constraints) {
@@ -243,7 +244,7 @@ class _RiskLeaderboardScreenState extends State<RiskLeaderboardScreen>
                   xValueMapper: (e, _) => e[0],
                   yValueMapper: (e, _) => int.parse(e[1].replaceAll('%', '')),
                   pointColorMapper: (e, _) {
-                    final tier = MockData.riskTierFor(int.parse(e[1].replaceAll('%', '')));
+                    final tier = RiskPolicy(thresholdPct: MockData.postureRiskThreshold).tierFor(int.parse(e[1].replaceAll('%', '')));
                     return tier == 'High'
                         ? AppColors.danger
                         : tier == 'Moderate'
@@ -276,7 +277,7 @@ class _RiskLeaderboardScreenState extends State<RiskLeaderboardScreen>
         ...List.generate(rows.length, (i) {
           final e = rows[i];
           final pct = int.parse(e[1].replaceAll('%', ''));
-          final tier = MockData.riskTierFor(pct);
+          final tier = RiskPolicy(thresholdPct: MockData.postureRiskThreshold).tierFor(pct);
           return Padding(
             padding: const EdgeInsets.only(bottom: 10),
             child: Panel(

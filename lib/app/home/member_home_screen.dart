@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import 'package:gainpath/features/gamification/domain/policies/reward_policy.dart';
 import 'package:gainpath/features/coaching/domain/enums/booking_status.dart';
 import 'package:gainpath/app/theme/theme.dart';
 import 'package:gainpath/data/mock_data.dart';
@@ -33,7 +34,6 @@ class MemberHomeScreen extends StatefulWidget {
 
 class _MemberHomeScreenState extends State<MemberHomeScreen>
     with SingleTickerProviderStateMixin {
-  static const _dailyReward = 50;
 
   bool _claimed = false;
   bool _dismissedBroadcast = false;
@@ -66,10 +66,10 @@ class _MemberHomeScreenState extends State<MemberHomeScreen>
   void _claim() {
     setState(() {
       _claimed = true;
-      _points += _dailyReward;
+      _points += RewardPolicy.dailyCheckIn;
     });
     _claimController.forward(from: 0);
-    showToast(context, 'Checked in. +$_dailyReward points, streak extended.');
+    showToast(context, 'Checked in. +${RewardPolicy.dailyCheckIn} points, streak extended.');
   }
 
   Future<void> _refresh() async {
@@ -127,7 +127,7 @@ class _MemberHomeScreenState extends State<MemberHomeScreen>
                     claimed: _claimed,
                     scale: _claimScale,
                     onClaim: _claim,
-                    reward: _dailyReward,
+                    reward: RewardPolicy.dailyCheckIn,
                   ),
                   const SizedBox(height: 20),
                   const Eyebrow("Today's session"),

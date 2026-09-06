@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:gainpath/features/recommendation/domain/policies/risk_policy.dart';
 import 'package:syncfusion_flutter_charts/charts.dart';
 import 'package:gainpath/app/theme/theme.dart';
 import 'package:gainpath/data/mock_data.dart';
@@ -40,7 +41,7 @@ class PostureAccuracySection extends StatelessWidget {
         [],
         ['Exercise', 'Avg score', 'Category', 'Risk tier'],
         ...MockData.riskExercises
-            .map((e) => [e[0], e[1], e[2], MockData.riskTierFor(int.parse(e[1].replaceAll('%', '')))]),
+            .map((e) => [e[0], e[1], e[2], RiskPolicy(thresholdPct: MockData.postureRiskThreshold).tierFor(int.parse(e[1].replaceAll('%', '')))]),
       ],
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -90,7 +91,7 @@ class PostureAccuracySection extends StatelessWidget {
             child: Column(
               children: MockData.riskExercises.map((e) {
                 final pct = int.parse(e[1].replaceAll('%', ''));
-                final tier = MockData.riskTierFor(pct);
+                final tier = RiskPolicy(thresholdPct: MockData.postureRiskThreshold).tierFor(pct);
                 return ProgressRow(
                   e[0],
                   pct / 100,

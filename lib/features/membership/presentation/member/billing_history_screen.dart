@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:gainpath/features/membership/domain/policies/refund_policy.dart';
 import 'package:gainpath/app/theme/theme.dart';
 import 'package:gainpath/data/mock_data.dart';
 import 'package:gainpath/shared/shared.dart';
@@ -19,7 +20,7 @@ class _BillingHistoryScreenState extends State<BillingHistoryScreen> {
   String _filter = 'All';
 
   bool _isEligible(Transaction t) =>
-      DateTime.now().difference(t.date).inDays <= MockData.refundWindowDays;
+      const RefundPolicy().isEligible(t.date);
 
   String _date(DateTime d) {
     const months = [
@@ -201,7 +202,7 @@ class _BillingHistoryScreenState extends State<BillingHistoryScreen> {
                       label: const Text('Request a refund'),
                     )
                   : Text(
-                      'Outside the ${MockData.refundWindowDays}-day refund window.',
+                      'Outside the ${RefundPolicy.defaultWindowDays}-day refund window.',
                       textAlign: TextAlign.center,
                       style: const TextStyle(fontSize: 12.5, color: AppColors.inkSoft),
                     ),
