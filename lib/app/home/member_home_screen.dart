@@ -4,7 +4,7 @@ import 'package:gainpath/features/gamification/domain/policies/reward_policy.dar
 import 'package:gainpath/features/coaching/domain/enums/booking_status.dart';
 import 'package:gainpath/app/theme/theme.dart';
 import 'package:gainpath/shared/shared.dart';
-import 'package:gainpath/features/workout/presentation/member/workout_screens.dart';
+import 'package:gainpath/features/workout/presentation/member/workout_prep_screen.dart';
 import 'package:gainpath/features/workout/presentation/member/equipment_scanner_screen.dart';
 import 'package:gainpath/features/analytics/presentation/member/goal_progress_screen.dart';
 import 'package:gainpath/features/analytics/presentation/shared/progress_dashboard_screen.dart';
