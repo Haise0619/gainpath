@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:gainpath/features/identity/domain/enums/account_status.dart';
 import 'package:gainpath/app/theme/theme.dart';
-import 'package:gainpath/data/mock_data.dart';
 import 'package:gainpath/shared/shared.dart';
 import 'package:gainpath/shared/widgets/admin_dialogs.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:gainpath/features/identity/domain/entities/user_account.dart';
+import 'package:gainpath/features/identity/domain/repositories/user_account_repository.dart';
 
 /// Every user-account action in the admin console (suspend, deactivate,
 /// verify, provision) opens through one of the dialogs in this file —
@@ -248,7 +250,7 @@ class _ProvisionCoachDialogState extends State<_ProvisionCoachDialog> {
     setState(() => _triedSubmit = true);
     final formOk = _formKey.currentState?.validate() ?? false;
     if (!formOk || _branch == null) return;
-    MockData.users.add(UserAccount(_name.text.trim(), _email.text.trim(), 'Coach', AccountStatus.invited,
+    context.read<UserAccountRepository>().users.add(UserAccount(_name.text.trim(), _email.text.trim(), 'Coach', AccountStatus.invited,
         branch: _branch, specialty: _specialty.text.trim()));
     Navigator.pop(context, true);
   }
@@ -289,7 +291,7 @@ class _ProvisionCoachDialogState extends State<_ProvisionCoachDialog> {
                       if (!RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(value)) {
                         return 'Enter a valid email.';
                       }
-                      final taken = MockData.users.any((u) => u.email.toLowerCase() == value.toLowerCase());
+                      final taken = context.read<UserAccountRepository>().users.any((u) => u.email.toLowerCase() == value.toLowerCase());
                       if (taken) return 'Already registered.';
                       return null;
                     },
@@ -317,7 +319,7 @@ class _ProvisionCoachDialogState extends State<_ProvisionCoachDialog> {
                       isDense: true,
                       errorText: _triedSubmit && _branch == null ? 'Required' : null,
                     ),
-                    items: MockData.branches.map((b) => DropdownMenuItem(value: b.name, child: Text(b.name))).toList(),
+                    items: context.read<UserAccountRepository>().branches.map((b) => DropdownMenuItem(value: b.name, child: Text(b.name))).toList(),
                     onChanged: (v) => setState(() => _branch = v),
                   ),
                 ),

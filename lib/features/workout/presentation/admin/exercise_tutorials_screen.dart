@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:gainpath/features/workout/domain/enums/tutorial_status.dart';
 import 'package:gainpath/app/theme/theme.dart';
-import 'package:gainpath/data/mock_data.dart';
 import 'package:gainpath/shared/shared.dart';
 import 'package:gainpath/app/shells/admin_breadcrumb.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:gainpath/features/recommendation/domain/repositories/recommendation_repository.dart';
+import 'package:gainpath/features/workout/domain/entities/tutorial_video.dart';
+import 'package:gainpath/features/workout/domain/repositories/tutorial_repository.dart';
 
 /// Defensive network image loader — a broken/slow link never breaks the
 /// layout, same pattern used across the member-facing modules.
@@ -52,7 +55,7 @@ class _ExerciseTutorialsScreenState extends State<ExerciseTutorialsScreen> {
       return _TutorialFormPage(existing: _editing, onDone: _closeForm);
     }
 
-    final active = MockData.tutorials.where((t) => t.status == TutorialStatus.active).length;
+    final active = context.read<TutorialRepository>().tutorials.where((t) => t.status == TutorialStatus.active).length;
     return Scaffold(
       backgroundColor: Colors.transparent,
       body: SingleChildScrollView(
@@ -63,7 +66,7 @@ class _ExerciseTutorialsScreenState extends State<ExerciseTutorialsScreen> {
             Row(
               children: [
                 Expanded(
-                  child: Text('$active of ${MockData.tutorials.length} tutorials are live to members.',
+                  child: Text('$active of ${context.read<TutorialRepository>().tutorials.length} tutorials are live to members.',
                       style: Theme.of(context).textTheme.bodyLarge),
                 ),
                 FilledButton.icon(
@@ -77,8 +80,8 @@ class _ExerciseTutorialsScreenState extends State<ExerciseTutorialsScreen> {
             Panel(
               padding: EdgeInsets.zero,
               child: Column(
-                children: List.generate(MockData.tutorials.length, (i) {
-                  final t = MockData.tutorials[i];
+                children: List.generate(context.read<TutorialRepository>().tutorials.length, (i) {
+                  final t = context.read<TutorialRepository>().tutorials[i];
                   return Column(
                     children: [
                       if (i > 0) const Divider(height: 1, indent: 74),
@@ -188,7 +191,7 @@ class _TutorialFormPageState extends State<_TutorialFormPage> {
         ..thumbnailUrl = _thumbnailUrl.text.trim()
         ..description = _description.text.trim();
     } else {
-      MockData.tutorials.add(TutorialVideo(
+      context.read<TutorialRepository>().tutorials.add(TutorialVideo(
         title: _title.text.trim(),
         category: _category,
         status: TutorialStatus.fromLabel(_status),
@@ -345,7 +348,7 @@ class _TutorialFormPageState extends State<_TutorialFormPage> {
                   decoration: const InputDecoration(labelText: 'Covers exercise (optional)', isDense: true),
                   items: [
                     const DropdownMenuItem(value: null, child: Text('None')),
-                    ...MockData.riskExercises.map((e) => DropdownMenuItem(value: e[0], child: Text(e[0]))),
+                    ...context.read<RecommendationRepository>().riskExercises.map((e) => DropdownMenuItem(value: e[0], child: Text(e[0]))),
                   ],
                   onChanged: (v) => setState(() => _coversExercise = v),
                 ),

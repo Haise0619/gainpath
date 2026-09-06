@@ -2,8 +2,13 @@ import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:gainpath/app/theme/theme.dart';
-import 'package:gainpath/data/mock_data.dart';
 import 'package:gainpath/shared/shared.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:gainpath/features/gamification/domain/entities/achievement_badge.dart';
+import 'package:gainpath/features/gamification/domain/entities/mini_game.dart';
+import 'package:gainpath/features/gamification/domain/entities/reward_item.dart';
+import 'package:gainpath/features/gamification/domain/repositories/gamification_repository.dart';
+import 'package:gainpath/features/identity/domain/repositories/member_profile_repository.dart';
 
 /// Full-bleed network image with a graceful gradient fallback so a dead
 /// link never breaks the layout — the same defensive pattern used across
@@ -31,8 +36,8 @@ class GamificationDashboardScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final unlocked = MockData.badges.where((b) => b.unlocked).length;
-    final rank = MockData.leaderboard.firstWhere((r) => r[1] == MockData.memberName, orElse: () => const ['—', '', '']);
+    final unlocked = context.read<GamificationRepository>().badges.where((b) => b.unlocked).length;
+    final rank = context.read<GamificationRepository>().leaderboard.firstWhere((r) => r[1] == context.read<MemberProfileRepository>().memberName, orElse: () => const ['—', '', '']);
 
     return Scaffold(
       appBar: AppBar(title: const Text('Rewards')),
@@ -62,7 +67,7 @@ class GamificationDashboardScreen extends StatelessWidget {
                                   fontSize: 11, letterSpacing: 1.4, fontWeight: FontWeight.w700, color: Colors.white70)),
                           const SizedBox(height: 6),
                           TweenAnimationBuilder<int>(
-                            tween: IntTween(begin: 0, end: MockData.points),
+                            tween: IntTween(begin: 0, end: context.read<GamificationRepository>().points),
                             duration: const Duration(milliseconds: 900),
                             curve: Curves.easeOutCubic,
                             builder: (context, value, _) => Text('$value',
@@ -103,7 +108,7 @@ class GamificationDashboardScreen extends StatelessWidget {
                 const SizedBox(height: 14),
                 Row(
                   children: [
-                    _miniStat(Icons.local_fire_department_rounded, '${MockData.streak} day streak'),
+                    _miniStat(Icons.local_fire_department_rounded, '${context.read<GamificationRepository>().streak} day streak'),
                     const SizedBox(width: 18),
                     _miniStat(Icons.military_tech_rounded, '$unlocked badges'),
                   ],
@@ -119,12 +124,12 @@ class GamificationDashboardScreen extends StatelessWidget {
               children: [
                 ProgressRow(
                   'Progress to 14-day badge',
-                  MockData.streak / 14,
-                  '${MockData.streak}/14',
+                  context.read<GamificationRepository>().streak / 14,
+                  '${context.read<GamificationRepository>().streak}/14',
                   color: AppColors.accent,
                 ),
                 const SizedBox(height: 6),
-                Text('Longest streak so far: ${MockData.longestStreak} days',
+                Text('Longest streak so far: ${context.read<GamificationRepository>().longestStreak} days',
                     style: Theme.of(context).textTheme.bodyMedium),
               ],
             ),
@@ -143,21 +148,21 @@ class GamificationDashboardScreen extends StatelessWidget {
                 icon: Icons.sports_esports_rounded,
                 color: AppColors.primary,
                 title: 'Mini-games',
-                stat: '${MockData.miniGames.length} challenges',
+                stat: '${context.read<GamificationRepository>().miniGames.length} challenges',
                 onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const MiniGamesScreen())),
               ),
               _ExploreCard(
                 icon: Icons.military_tech_rounded,
                 color: AppColors.warning,
                 title: 'Badges',
-                stat: '$unlocked/${MockData.badges.length} unlocked',
+                stat: '$unlocked/${context.read<GamificationRepository>().badges.length} unlocked',
                 onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const BadgesScreen())),
               ),
               _ExploreCard(
                 icon: Icons.card_giftcard_rounded,
                 color: AppColors.success,
                 title: 'Redeem points',
-                stat: '${MockData.rewards.length} rewards',
+                stat: '${context.read<GamificationRepository>().rewards.length} rewards',
                 onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const RewardShopScreen())),
               ),
               _ExploreCard(
@@ -268,7 +273,7 @@ class MiniGamesScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final games = MockData.miniGames;
+    final games = context.read<GamificationRepository>().miniGames;
     final featured = games.first;
     final rest = games.skip(1).toList();
 
@@ -907,7 +912,7 @@ class BadgesScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final unlocked = MockData.badges.where((b) => b.unlocked).length;
+    final unlocked = context.read<GamificationRepository>().badges.where((b) => b.unlocked).length;
     return Scaffold(
       appBar: AppBar(title: const Text('Badges')),
       body: Column(
@@ -920,7 +925,7 @@ class BadgesScreen extends StatelessWidget {
                 children: [
                   const Icon(Icons.military_tech_rounded, color: AppColors.primary),
                   const SizedBox(width: 12),
-                  Text('$unlocked of ${MockData.badges.length} badges unlocked',
+                  Text('$unlocked of ${context.read<GamificationRepository>().badges.length} badges unlocked',
                       style: Theme.of(context).textTheme.titleMedium),
                 ],
               ),
@@ -933,7 +938,7 @@ class BadgesScreen extends StatelessWidget {
               crossAxisSpacing: 12,
               mainAxisSpacing: 12,
               childAspectRatio: 0.92,
-              children: MockData.badges.map((b) => _BadgeCard(badge: b)).toList(),
+              children: context.read<GamificationRepository>().badges.map((b) => _BadgeCard(badge: b)).toList(),
             ),
           ),
         ],
@@ -1069,7 +1074,7 @@ class RewardShopScreen extends StatelessWidget {
                 const Icon(Icons.account_balance_wallet_rounded, color: Colors.white),
                 const SizedBox(width: 12),
                 TweenAnimationBuilder<int>(
-                  tween: IntTween(begin: 0, end: MockData.points),
+                  tween: IntTween(begin: 0, end: context.read<GamificationRepository>().points),
                   duration: const Duration(milliseconds: 800),
                   curve: Curves.easeOutCubic,
                   builder: (context, value, _) => Text('$value points available',
@@ -1079,9 +1084,9 @@ class RewardShopScreen extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 18),
-          ...MockData.rewards.map((r) {
-            final affordable = MockData.points >= r.points;
-            final needed = r.points - MockData.points;
+          ...context.read<GamificationRepository>().rewards.map((r) {
+            final affordable = context.read<GamificationRepository>().points >= r.points;
+            final needed = r.points - context.read<GamificationRepository>().points;
             return Padding(
               padding: const EdgeInsets.only(bottom: 10),
               child: Panel(
@@ -1281,12 +1286,12 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final top3 = MockData.leaderboard.take(3).toList();
-    final rest = MockData.leaderboard.skip(3).toList();
-    final you = MockData.leaderboard.firstWhere((r) => r[1] == MockData.memberName,
+    final top3 = context.read<GamificationRepository>().leaderboard.take(3).toList();
+    final rest = context.read<GamificationRepository>().leaderboard.skip(3).toList();
+    final you = context.read<GamificationRepository>().leaderboard.firstWhere((r) => r[1] == context.read<MemberProfileRepository>().memberName,
         orElse: () => const ['—', '', '0']);
     final youPoints = int.tryParse(you[2].replaceAll(',', '')) ?? 0;
-    final ahead = MockData.leaderboard
+    final ahead = context.read<GamificationRepository>().leaderboard
         .where((r) => (int.tryParse(r[2].replaceAll(',', '')) ?? 0) > youPoints)
         .toList();
     final gap = ahead.isEmpty
@@ -1342,7 +1347,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
             ),
           const SizedBox(height: 20),
           ...rest.map((row) {
-            final isYou = row[1] == MockData.memberName;
+            final isYou = row[1] == context.read<MemberProfileRepository>().memberName;
             final rankNum = int.tryParse(row[0]) ?? 0;
             final trendUp = rankNum.isEven;
             return Padding(
@@ -1405,7 +1410,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
   }
 
   Widget _podiumSlot(BuildContext context, List<String> row, int podiumIndex) {
-    final isYou = row[1] == MockData.memberName;
+    final isYou = row[1] == context.read<MemberProfileRepository>().memberName;
     final color = _podiumColors[podiumIndex];
     return Column(
       mainAxisSize: MainAxisSize.min,

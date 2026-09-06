@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:gainpath/app/theme/theme.dart';
-import 'package:gainpath/data/mock_data.dart';
 import 'package:gainpath/features/coaching/presentation/member/booking_schedule_screen.dart';
 import 'package:gainpath/features/coaching/presentation/shared/coach_profile_screen.dart';
 import 'package:gainpath/features/coaching/presentation/member/widgets/coach_card.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:gainpath/features/identity/domain/repositories/coach_repository.dart';
 
 enum _SortBy { rating, priceLow, experience }
 
@@ -31,9 +32,9 @@ class _BrowseCoachesScreenState extends State<BrowseCoachesScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final specialties = ['All', ...{for (final c in MockData.coaches) c.specialty}];
+    final specialties = ['All', ...{for (final c in context.read<CoachRepository>().coaches) c.specialty}];
 
-    var visible = MockData.coaches.where((c) {
+    var visible = context.read<CoachRepository>().coaches.where((c) {
       final matchesSpecialty = _specialtyFilter == 'All' || c.specialty == _specialtyFilter;
       final q = _query.trim().toLowerCase();
       final matchesQuery = q.isEmpty ||

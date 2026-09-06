@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:gainpath/app/theme/theme.dart';
-import 'package:gainpath/data/mock_data.dart';
 import 'package:gainpath/shared/shared.dart';
 import 'package:gainpath/features/workout/presentation/member/equipment_detail_screen.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:gainpath/features/workout/domain/entities/gym_equipment.dart';
+import 'package:gainpath/features/workout/domain/repositories/equipment_repository.dart';
 
 /// Defensive network image loader: a broken/slow link never breaks the
 /// layout — the same pattern used across onboarding, profile setup, and
@@ -33,7 +35,7 @@ class _EquipmentBrowseScreenState extends State<EquipmentBrowseScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final published = MockData.gymEquipment.where((e) => e.isActive).toList();
+    final published = context.read<EquipmentRepository>().gymEquipment.where((e) => e.isActive).toList();
     final categories = ['All', ...{for (final e in published) e.category}];
     final visible =
         _category == 'All' ? published : published.where((e) => e.category == _category).toList();

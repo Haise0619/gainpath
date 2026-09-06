@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:gainpath/app/theme/theme.dart';
-import 'package:gainpath/data/mock_data.dart';
 import 'package:gainpath/features/identity/presentation/shared/change_password_sheet.dart';
 import 'package:gainpath/shared/shared.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:gainpath/features/identity/domain/repositories/coach_repository.dart';
 
 /// AD-M8.2 — Authenticated Session & Settings Management (Fitness Coach).
 /// Contact details, notification preferences tuned to a coach's workflow
@@ -25,8 +26,8 @@ class _CoachSettingsScreenState extends State<CoachSettingsScreen> {
   @override
   void initState() {
     super.initState();
-    _email = TextEditingController(text: MockData.coachEmail);
-    _phone = TextEditingController(text: MockData.coachPhone);
+    _email = TextEditingController(text: context.read<CoachRepository>().coachEmail);
+    _phone = TextEditingController(text: context.read<CoachRepository>().coachPhone);
   }
 
   @override

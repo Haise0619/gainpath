@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:gainpath/features/identity/domain/enums/account_status.dart';
 import 'package:gainpath/app/theme/theme.dart';
-import 'package:gainpath/data/mock_data.dart';
 import 'package:gainpath/shared/shared.dart';
 import 'package:gainpath/shared/widgets/admin_dialogs.dart';
 import 'package:gainpath/features/identity/presentation/admin/user_action_dialogs.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:gainpath/features/identity/domain/entities/user_account.dart';
+import 'package:gainpath/features/identity/domain/repositories/user_account_repository.dart';
 
 const _pageSize = 24;
 
@@ -66,7 +68,7 @@ class _MembersScreenState extends State<MembersScreen> {
 
   void _refresh() => setState(() {});
 
-  List<UserAccount> get _members => MockData.users.where((u) => u.role == 'Member').toList();
+  List<UserAccount> get _members => context.read<UserAccountRepository>().users.where((u) => u.role == 'Member').toList();
 
   @override
   Widget build(BuildContext context) {

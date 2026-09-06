@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:gainpath/app/theme/theme.dart';
-import 'package:gainpath/data/mock_data.dart';
 import 'package:gainpath/shared/shared.dart';
+import 'package:gainpath/features/coaching/domain/entities/booking.dart';
 
 /// Reschedule an existing confirmed/pending booking to a new day and
 /// time. Mutates `booking.start` in place — the same `Booking` instance
-/// already sitting in `MockData.memberBookings`, so nothing needs to be
+/// already sitting in `context.read<BookingRepository>().memberBookings`, so nothing needs to be
 /// re-fetched or replaced in the list for the change to show up back on
 /// "My bookings."
 class RescheduleScreen extends StatefulWidget {

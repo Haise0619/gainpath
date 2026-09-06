@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:gainpath/app/theme/theme.dart';
-import 'package:gainpath/data/mock_data.dart';
 import 'package:gainpath/shared/shared.dart';
+import 'package:gainpath/features/identity/domain/entities/coach.dart';
 
 /// A coach summary card for the Browse Coaches list: online avatar,
 /// verified badge, top specialization tags, rating, and fee — enough to

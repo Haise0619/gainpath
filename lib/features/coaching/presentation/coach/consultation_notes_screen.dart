@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:gainpath/features/coaching/domain/enums/booking_status.dart';
 import 'package:gainpath/app/theme/theme.dart';
-import 'package:gainpath/data/mock_data.dart';
 import 'package:gainpath/shared/shared.dart';
+import 'package:gainpath/features/coaching/domain/entities/booking.dart';
 
 /// AD-M9.2 — Generate Post-Workout Consultation Notes. Two real fixes
 /// over the old version: publishing actually writes to `booking.notes`

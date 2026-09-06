@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:gainpath/features/gamification/domain/policies/reward_policy.dart';
 import 'package:gainpath/features/coaching/domain/enums/booking_status.dart';
 import 'package:gainpath/app/theme/theme.dart';
-import 'package:gainpath/data/mock_data.dart';
 import 'package:gainpath/shared/shared.dart';
 import 'package:gainpath/features/workout/presentation/member/workout_screens.dart';
 import 'package:gainpath/features/workout/presentation/member/equipment_scanner_screen.dart';
@@ -15,6 +14,12 @@ import 'package:gainpath/features/gamification/presentation/member/gamification_
 import 'package:gainpath/features/coaching/presentation/member/booking_schedule_screen.dart';
 import 'package:gainpath/features/coaching/presentation/member/browse_coaches_screen.dart';
 import 'package:gainpath/features/membership/presentation/member/membership_dashboard_screen.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:gainpath/features/coaching/domain/entities/booking.dart';
+import 'package:gainpath/features/coaching/domain/repositories/booking_repository.dart';
+import 'package:gainpath/features/gamification/domain/repositories/gamification_repository.dart';
+import 'package:gainpath/features/identity/domain/repositories/member_profile_repository.dart';
+import 'package:gainpath/features/workout/domain/repositories/workout_repository.dart';
 
 /// Member landing screen — the hub every other member flow is reachable
 /// from. It carries the daily check-in prompt (AD-M3.2), the broadcast
@@ -37,7 +42,7 @@ class _MemberHomeScreenState extends State<MemberHomeScreen>
 
   bool _claimed = false;
   bool _dismissedBroadcast = false;
-  int _points = MockData.points;
+  late int _points = context.read<GamificationRepository>().points;
 
   late final AnimationController _claimController;
   late final Animation<double> _claimScale;
@@ -86,7 +91,7 @@ class _MemberHomeScreenState extends State<MemberHomeScreen>
 
   /// The member's next confirmed coaching session, if any.
   Booking? get _nextBooking {
-    final upcoming = MockData.memberBookings
+    final upcoming = context.read<BookingRepository>().memberBookings
         .where((b) => b.status == BookingStatus.confirmed && b.start.isAfter(DateTime.now()))
         .toList()
       ..sort((a, b) => a.start.compareTo(b.start));
@@ -99,7 +104,7 @@ class _MemberHomeScreenState extends State<MemberHomeScreen>
 
   @override
   Widget build(BuildContext context) {
-    final firstName = MockData.memberName.split(' ').first;
+    final firstName = context.read<MemberProfileRepository>().memberName.split(' ').first;
     return Scaffold(
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => _go(const ChatbotScreen()),
@@ -357,8 +362,8 @@ class _StreakCard extends StatelessWidget {
   /// Which of the last seven days already have a logged session. Derived
   /// from real history rather than hardcoded so the strip and the streak
   /// count never contradict each other.
-  List<bool> get _week {
-    final trained = MockData.history
+  List<bool> _week(BuildContext context) {
+    final trained = context.read<WorkoutRepository>().history
         .map((r) => DateTime(r.date.year, r.date.month, r.date.day))
         .toSet();
     final now = DateTime.now();
@@ -372,7 +377,7 @@ class _StreakCard extends StatelessWidget {
   Widget build(BuildContext context) {
     const labels = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
     final now = DateTime.now();
-    final week = _week;
+    final week = _week(context);
 
     return ScaleTransition(
       scale: scale,
@@ -398,7 +403,7 @@ class _StreakCard extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('${MockData.streak}-day streak',
+                      Text('${context.read<GamificationRepository>().streak}-day streak',
                           style: Theme.of(context).textTheme.titleMedium),
                       Text(
                         claimed
@@ -505,7 +510,7 @@ class _TodayWorkoutCard extends StatelessWidget {
                             ?.copyWith(color: Colors.white, fontSize: 20)),
                     const SizedBox(height: 4),
                     Text(
-                      '${MockData.routine.length} exercises  ·  about 45 min',
+                      '${context.read<WorkoutRepository>().routine.length} exercises  ·  about 45 min',
                       style: TextStyle(
                           fontSize: 13, color: Colors.white.withValues(alpha: 0.82)),
                     ),
@@ -528,7 +533,7 @@ class _TodayWorkoutCard extends StatelessWidget {
           Wrap(
             spacing: 6,
             runSpacing: 6,
-            children: MockData.routine
+            children: context.read<WorkoutRepository>().routine
                 .take(3)
                 .map((e) => Container(
                       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
@@ -899,7 +904,7 @@ class _MembershipStrip extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('${MockData.memberTier} membership',
+                Text('${context.read<MemberProfileRepository>().memberTier} membership',
                     style: Theme.of(context).textTheme.titleMedium?.copyWith(fontSize: 14)),
                 Text('Renews 12 Oct  ·  28 days left',
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontSize: 12.5)),

@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:gainpath/app/theme/theme.dart';
-import 'package:gainpath/data/mock_data.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:gainpath/features/coaching/domain/entities/booking.dart';
+import 'package:gainpath/features/identity/domain/entities/coach.dart';
+import 'package:gainpath/features/identity/domain/repositories/coach_repository.dart';
 
 /// A real per-booking message thread — not a one-shot "send and forget"
 /// sheet. Reads and appends directly to `booking.messages`, the same
-/// `Booking` instance stored in `MockData.memberBookings`, so the
+/// `Booking` instance stored in `context.read<BookingRepository>().memberBookings`, so the
 /// conversation is still there if this screen is reopened. No simulated
 /// auto-reply: a human coach isn't instant, and this module is
 /// deliberately a different feature from the AI chatbot, so faking a
@@ -29,7 +32,7 @@ class _MessageCoachScreenState extends State<MessageCoachScreen> {
   }
 
   Coach? get _coach {
-    for (final c in MockData.coaches) {
+    for (final c in context.read<CoachRepository>().coaches) {
       if (c.id == widget.booking.coachId) return c;
     }
     return null;

@@ -2,9 +2,11 @@ import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:gainpath/app/theme/theme.dart';
-import 'package:gainpath/data/mock_data.dart';
 import 'package:gainpath/shared/shared.dart';
 import 'package:gainpath/features/workout/presentation/member/equipment_scanner_screen.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:gainpath/features/workout/domain/entities/exercise.dart';
+import 'package:gainpath/features/workout/domain/repositories/workout_repository.dart';
 
 const _routineHeroImage =
     'https://images.unsplash.com/photo-1584863231364-2edc166de576?auto=format&fit=crop&w=1200&q=80';
@@ -34,7 +36,7 @@ class WorkoutPrepScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final routine = MockData.routine;
+    final routine = context.read<WorkoutRepository>().routine;
     final totalSets = routine.fold<int>(0, (sum, e) => sum + e.sets);
 
     return Scaffold(
@@ -373,7 +375,7 @@ class RoutineScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final routine = MockData.routine;
+    final routine = context.read<WorkoutRepository>().routine;
     return Scaffold(
       appBar: AppBar(title: const Text('Today\'s routine')),
       body: PageBody(
@@ -893,7 +895,7 @@ class _LiveWorkoutScreenState extends State<LiveWorkoutScreen>
   int _lowStreak = 0;
   String? _pauseReason;
 
-  Exercise get _currentExercise => MockData.routine[_exerciseIndex];
+  Exercise get _currentExercise => context.read<WorkoutRepository>().routine[_exerciseIndex];
 
   @override
   void initState() {
@@ -916,7 +918,7 @@ class _LiveWorkoutScreenState extends State<LiveWorkoutScreen>
           _reps++;
           _advanceRoutineProgress();
           if (_voiceOn) {
-            _cue = MockData.voiceCues[_rng.nextInt(MockData.voiceCues.length)];
+            _cue = context.read<WorkoutRepository>().voiceCues[_rng.nextInt(context.read<WorkoutRepository>().voiceCues.length)];
           }
         }
       });
@@ -932,7 +934,7 @@ class _LiveWorkoutScreenState extends State<LiveWorkoutScreen>
     _repsInSet = 0;
     if (_setNumber < _currentExercise.sets) {
       _setNumber++;
-    } else if (_exerciseIndex < MockData.routine.length - 1) {
+    } else if (_exerciseIndex < context.read<WorkoutRepository>().routine.length - 1) {
       _exerciseIndex++;
       _setNumber = 1;
     }
@@ -1089,7 +1091,7 @@ class _LiveWorkoutScreenState extends State<LiveWorkoutScreen>
                               const SizedBox(width: 6),
                               Flexible(
                                 child: Text(
-                                  'Exercise ${_exerciseIndex + 1} of ${MockData.routine.length} · '
+                                  'Exercise ${_exerciseIndex + 1} of ${context.read<WorkoutRepository>().routine.length} · '
                                   '${_currentExercise.name} · Set $_setNumber/${_currentExercise.sets}',
                                   overflow: TextOverflow.ellipsis,
                                   style: const TextStyle(
@@ -1519,8 +1521,8 @@ class _WorkoutResultScreenState extends State<WorkoutResultScreen>
           Panel(
             padding: EdgeInsets.zero,
             child: Column(
-              children: List.generate(MockData.routine.length, (i) {
-                final e = MockData.routine[i];
+              children: List.generate(context.read<WorkoutRepository>().routine.length, (i) {
+                final e = context.read<WorkoutRepository>().routine[i];
                 final pct = (widget.accuracy + (e.name.hashCode % 11 - 5)).clamp(58, 99);
                 return Column(
                   children: [

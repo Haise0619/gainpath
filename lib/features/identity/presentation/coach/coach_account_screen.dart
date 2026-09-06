@@ -1,13 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:gainpath/features/identity/domain/enums/certification_status.dart';
 import 'package:gainpath/app/theme/theme.dart';
-import 'package:gainpath/data/mock_data.dart';
 import 'package:gainpath/shared/shared.dart';
 import 'package:gainpath/features/identity/presentation/shared/role_select_screen.dart';
 import 'package:gainpath/features/coaching/presentation/shared/coach_profile_screen.dart' as public;
 import 'package:gainpath/features/identity/presentation/coach/certifications_screen.dart';
 import 'package:gainpath/features/identity/presentation/coach/coach_settings_screen.dart';
 import 'package:gainpath/features/identity/presentation/coach/edit_coach_profile_screen.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:gainpath/features/identity/domain/entities/coach.dart';
+import 'package:gainpath/features/identity/domain/repositories/coach_repository.dart';
 
 /// AD-M8.3 — Coach Account & Profile Management hub. Deliberately framed
 /// as a *professional identity* screen, not a personal one: where the
@@ -32,11 +34,11 @@ class _CoachAccountScreenState extends State<CoachAccountScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final coach = MockData.currentCoach;
+    final coach = context.read<CoachRepository>().currentCoach;
     final verifiedCerts =
-        MockData.coachCertifications.where((c) => c.status == CertificationStatus.verified).length;
+        context.read<CoachRepository>().coachCertifications.where((c) => c.status == CertificationStatus.verified).length;
     final pendingCerts =
-        MockData.coachCertifications.where((c) => c.status == CertificationStatus.pendingReview).length;
+        context.read<CoachRepository>().coachCertifications.where((c) => c.status == CertificationStatus.pendingReview).length;
 
     return Scaffold(
       appBar: AppBar(title: const Text('My account')),

@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:gainpath/data/mock_data.dart';
 import 'package:gainpath/features/identity/presentation/shared/change_password_sheet.dart';
 import 'package:gainpath/shared/shared.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:gainpath/features/identity/domain/repositories/user_account_repository.dart';
 
 /// AD-M11.2 — Admin Session and Settings. Distinct from AD-M11.6's
 /// platform-wide configuration: this is the signed-in admin's own contact
@@ -39,12 +40,12 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         TextField(
-                          controller: TextEditingController(text: MockData.adminName),
+                          controller: TextEditingController(text: context.read<UserAccountRepository>().adminName),
                           decoration: const InputDecoration(labelText: 'Full name'),
                         ),
                         const SizedBox(height: 12),
                         TextField(
-                          controller: TextEditingController(text: MockData.adminEmail),
+                          controller: TextEditingController(text: context.read<UserAccountRepository>().adminEmail),
                           decoration: const InputDecoration(labelText: 'Work email'),
                         ),
                       ],

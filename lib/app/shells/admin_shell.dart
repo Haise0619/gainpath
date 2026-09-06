@@ -1,7 +1,6 @@
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:gainpath/app/theme/theme.dart';
-import 'package:gainpath/data/mock_data.dart';
 import 'package:gainpath/features/identity/presentation/shared/login_screen.dart';
 import 'package:gainpath/features/identity/presentation/shared/role_select_screen.dart';
 import 'package:gainpath/features/analytics/presentation/admin/admin_dashboard_screens.dart';
@@ -19,6 +18,8 @@ import 'package:gainpath/features/analytics/presentation/admin/reports_screen.da
 import 'package:gainpath/features/content/presentation/admin/system_settings_screen.dart';
 import 'package:gainpath/features/identity/presentation/admin/members_screen.dart';
 import 'package:gainpath/features/identity/presentation/admin/coaches_screen.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:gainpath/features/identity/domain/repositories/user_account_repository.dart';
 
 /// A single directly-selectable sidebar destination.
 class _NavPage {
@@ -439,8 +440,8 @@ class _ProfileMenu extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(MockData.adminName, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13)),
-                Text(MockData.adminEmail, style: const TextStyle(fontSize: 11.5, color: AppColors.inkSoft)),
+                Text(context.read<UserAccountRepository>().adminName, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13)),
+                Text(context.read<UserAccountRepository>().adminEmail, style: const TextStyle(fontSize: 11.5, color: AppColors.inkSoft)),
               ],
             ),
           ),
@@ -625,10 +626,10 @@ class _Sidebar extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Text(MockData.adminName,
+                        Text(context.read<UserAccountRepository>().adminName,
                             overflow: TextOverflow.ellipsis,
                             style: Theme.of(context).textTheme.titleMedium?.copyWith(fontSize: 13.5)),
-                        Text(MockData.adminEmail,
+                        Text(context.read<UserAccountRepository>().adminEmail,
                             overflow: TextOverflow.ellipsis,
                             style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontSize: 11.5)),
                       ],

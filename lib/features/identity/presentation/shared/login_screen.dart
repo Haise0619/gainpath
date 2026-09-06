@@ -1,7 +1,6 @@
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:gainpath/app/theme/theme.dart';
-import 'package:gainpath/data/mock_data.dart';
 import 'package:gainpath/shared/shared.dart';
 import 'package:gainpath/app/shells/member_shell.dart';
 import 'package:gainpath/app/shells/coach_shell.dart';
@@ -9,6 +8,10 @@ import 'package:gainpath/app/shells/admin_shell.dart';
 import 'package:gainpath/features/identity/presentation/shared/email_verification_screen.dart';
 import 'package:gainpath/features/identity/presentation/shared/forgot_password_sheet.dart';
 import 'package:gainpath/features/identity/presentation/shared/role_select_screen.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:gainpath/features/identity/domain/repositories/coach_repository.dart';
+import 'package:gainpath/features/identity/domain/repositories/member_profile_repository.dart';
+import 'package:gainpath/features/identity/domain/repositories/user_account_repository.dart';
 
 /// AD-M1.1 / AD-M8.1 / AD-M11.1 — Login and Recovery.
 ///
@@ -52,11 +55,11 @@ class _LoginScreenState extends State<LoginScreen> {
   String get _seedEmail {
     switch (widget.role) {
       case AppRole.member:
-        return MockData.memberEmail;
+        return context.read<MemberProfileRepository>().memberEmail;
       case AppRole.coach:
-        return MockData.coachEmail;
+        return context.read<CoachRepository>().coachEmail;
       case AppRole.admin:
-        return MockData.adminEmail;
+        return context.read<UserAccountRepository>().adminEmail;
     }
   }
 

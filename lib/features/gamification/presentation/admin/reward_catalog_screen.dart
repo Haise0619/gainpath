@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:gainpath/app/theme/theme.dart';
-import 'package:gainpath/data/mock_data.dart';
 import 'package:gainpath/shared/shared.dart';
 import 'package:gainpath/app/shells/admin_breadcrumb.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:gainpath/features/gamification/domain/entities/reward_item.dart';
+import 'package:gainpath/features/gamification/domain/repositories/gamification_repository.dart';
 
 Widget _networkHero(String url, {BoxFit fit = BoxFit.cover}) {
   if (url.trim().isEmpty) {
@@ -47,7 +49,7 @@ class _RewardCatalogScreenState extends State<RewardCatalogScreen> {
       return _RewardFormPage(existing: _editing, onDone: _closeForm);
     }
 
-    final lowStock = MockData.rewards.where((r) => r.stock <= 10).length;
+    final lowStock = context.read<GamificationRepository>().rewards.where((r) => r.stock <= 10).length;
     return Scaffold(
       backgroundColor: Colors.transparent,
       body: SingleChildScrollView(
@@ -59,7 +61,7 @@ class _RewardCatalogScreenState extends State<RewardCatalogScreen> {
               children: [
                 Expanded(
                   child: Text(
-                    '${MockData.rewards.length} items in the shop'
+                    '${context.read<GamificationRepository>().rewards.length} items in the shop'
                     '${lowStock > 0 ? '  ·  $lowStock running low on stock' : ''}',
                     style: Theme.of(context).textTheme.bodyLarge,
                   ),
@@ -72,7 +74,7 @@ class _RewardCatalogScreenState extends State<RewardCatalogScreen> {
               ],
             ),
             const SizedBox(height: 20),
-            ...MockData.rewards.map((r) => Padding(
+            ...context.read<GamificationRepository>().rewards.map((r) => Padding(
                   padding: const EdgeInsets.only(bottom: 10),
                   child: Panel(
                     onTap: () => _openEdit(r),
@@ -182,7 +184,7 @@ class _RewardFormPageState extends State<_RewardFormPage> {
         ..redemptionLimitPerMember = limit
         ..expiresAt = _expiresAt;
     } else {
-      MockData.rewards.add(RewardItem(_title.text.trim(), points, stock, _imageUrl.text.trim(),
+      context.read<GamificationRepository>().rewards.add(RewardItem(_title.text.trim(), points, stock, _imageUrl.text.trim(),
           category: _category,
           description: _description.text.trim(),
           redemptionLimitPerMember: limit,

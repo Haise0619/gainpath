@@ -1,12 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:gainpath/features/coaching/domain/enums/booking_status.dart';
 import 'package:gainpath/app/theme/theme.dart';
-import 'package:gainpath/data/mock_data.dart';
 import 'package:gainpath/shared/shared.dart';
 import 'package:gainpath/features/coaching/presentation/shared/coach_profile_screen.dart';
 import 'package:gainpath/features/coaching/presentation/member/message_coach_screen.dart';
 import 'package:gainpath/features/coaching/presentation/member/reschedule_screen.dart';
 import 'package:gainpath/features/coaching/presentation/member/widgets/booking_card.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:gainpath/features/coaching/domain/entities/booking.dart';
+import 'package:gainpath/features/coaching/domain/repositories/booking_repository.dart';
+import 'package:gainpath/features/identity/domain/entities/coach.dart';
+import 'package:gainpath/features/identity/domain/entities/coach_review.dart';
+import 'package:gainpath/features/identity/domain/repositories/coach_repository.dart';
+import 'package:gainpath/features/identity/domain/repositories/member_profile_repository.dart';
 
 const _cancelReasons = [
   'Schedule conflict',
@@ -16,7 +22,7 @@ const _cancelReasons = [
 ];
 
 /// AD-M7.3 — View Booking Schedule. Three buckets — Upcoming, Completed,
-/// Cancelled — each backed by the live `MockData.memberBookings` list, so
+/// Cancelled — each backed by the live `context.read<BookingRepository>().memberBookings` list, so
 /// cancelling, rescheduling, or rating here (or from the coach's own
 /// profile) is reflected immediately without any local copy to keep in
 /// sync.
@@ -29,7 +35,7 @@ class BookingScheduleScreen extends StatefulWidget {
 
 class _BookingScheduleScreenState extends State<BookingScheduleScreen> {
   Coach? _coachById(String id) {
-    for (final c in MockData.coaches) {
+    for (final c in context.read<CoachRepository>().coaches) {
       if (c.id == id) return c;
     }
     return null;
@@ -37,13 +43,13 @@ class _BookingScheduleScreenState extends State<BookingScheduleScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final upcoming = MockData.memberBookings
+    final upcoming = context.read<BookingRepository>().memberBookings
         .where((b) => b.status == BookingStatus.confirmed || b.status == BookingStatus.pending)
         .toList()
       ..sort((a, b) => a.start.compareTo(b.start));
-    final completed = MockData.memberBookings.where((b) => b.status == BookingStatus.completed).toList()
+    final completed = context.read<BookingRepository>().memberBookings.where((b) => b.status == BookingStatus.completed).toList()
       ..sort((a, b) => b.start.compareTo(a.start));
-    final cancelled = MockData.memberBookings.where((b) => b.status == BookingStatus.cancelled).toList()
+    final cancelled = context.read<BookingRepository>().memberBookings.where((b) => b.status == BookingStatus.cancelled).toList()
       ..sort((a, b) => b.start.compareTo(a.start));
 
     return Scaffold(
@@ -256,7 +262,7 @@ class _BookingScheduleScreenState extends State<BookingScheduleScreen> {
         coach.topReviews.insert(
           0,
           CoachReview(
-            MockData.memberName,
+            context.read<MemberProfileRepository>().memberName,
             stars,
             reviewText.isEmpty ? 'Great session.' : reviewText,
             DateTime.now(),

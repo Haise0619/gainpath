@@ -2,8 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:gainpath/features/coaching/domain/enums/booking_status.dart';
 import 'package:gainpath/features/coaching/presentation/coach/block_type_icon.dart';
 import 'package:gainpath/app/theme/theme.dart';
-import 'package:gainpath/data/mock_data.dart';
 import 'package:gainpath/shared/shared.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:gainpath/features/coaching/domain/entities/availability.dart';
+import 'package:gainpath/features/coaching/domain/repositories/availability_repository.dart';
+import 'package:gainpath/features/coaching/domain/repositories/booking_repository.dart';
 
 String _fmtTime(TimeOfDay t) => '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
 int _toMinutes(TimeOfDay t) => t.hour * 60 + t.minute;
@@ -36,7 +39,7 @@ Color _blockColor(BlockType type) {
 /// one-off override, which is exactly the kind of scheduling bug real
 /// calendar systems spend a lot of effort avoiding.
 ///
-/// Every edit here writes straight to `MockData.workingDays` /
+/// Every edit here writes straight to `context.read<AvailabilityRepository>().workingDays` /
 /// `blockedSlots` — no local copy that only *looks* saved. The previous
 /// version copied both into local lists and never wrote them back at
 /// all, including the "add block" sheet, which silently threw away
@@ -51,8 +54,8 @@ class AvailabilityScreen extends StatefulWidget {
 
 class _AvailabilityScreenState extends State<AvailabilityScreen> {
   final _dayKeys = List.generate(7, (_) => GlobalKey());
-  late double _dailyCap = MockData.dailyBookingCap.toDouble();
-  late double _lookAhead = MockData.advanceBookingDays.toDouble();
+  late double _dailyCap = context.read<AvailabilityRepository>().dailyBookingCap.toDouble();
+  late double _lookAhead = context.read<AvailabilityRepository>().advanceBookingDays.toDouble();
 
   void _jumpToDay(int index) {
     final ctx = _dayKeys[index].currentContext;
@@ -78,10 +81,10 @@ class _AvailabilityScreenState extends State<AvailabilityScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final days = MockData.workingDays;
-    final blocks = [...MockData.blockedSlots]..sort((a, b) => a.date.compareTo(b.date));
+    final days = context.read<AvailabilityRepository>().workingDays;
+    final blocks = [...context.read<AvailabilityRepository>().blockedSlots]..sort((a, b) => a.date.compareTo(b.date));
     final now = DateTime.now();
-    final bookedThisWeek = MockData.coachRoster
+    final bookedThisWeek = context.read<BookingRepository>().coachRoster
         .where((b) => b.start.isAfter(now) && b.start.isBefore(now.add(const Duration(days: 7))) && b.status != BookingStatus.cancelled)
         .length;
 
@@ -241,7 +244,7 @@ class _AvailabilityScreenState extends State<AvailabilityScreen> {
                                 message: 'That time reopens for members to book.',
                                 confirmLabel: 'Remove',
                                 destructive: true);
-                            if (ok) setState(() => MockData.blockedSlots.remove(b));
+                            if (ok) setState(() => context.read<AvailabilityRepository>().blockedSlots.remove(b));
                           },
                         ),
                       ],
@@ -326,8 +329,8 @@ class _AvailabilityScreenState extends State<AvailabilityScreen> {
           const SizedBox(height: 18),
           FilledButton(
             onPressed: () {
-              MockData.dailyBookingCap = _dailyCap.round();
-              MockData.advanceBookingDays = _lookAhead.round();
+              context.read<AvailabilityRepository>().dailyBookingCap = _dailyCap.round();
+              context.read<AvailabilityRepository>().advanceBookingDays = _lookAhead.round();
               showToast(context, 'Availability saved.');
             },
             child: const Text('Save changes'),
@@ -426,7 +429,7 @@ class _BlockSlotSheetState extends State<_BlockSlotSheet> {
         ..startTime = _fullDay ? null : _start
         ..endTime = _fullDay ? null : _end;
     } else {
-      MockData.blockedSlots.add(BlockedSlot(
+      context.read<AvailabilityRepository>().blockedSlots.add(BlockedSlot(
         id: 'bl${DateTime.now().millisecondsSinceEpoch}',
         type: _type,
         reason: _reason.text.trim(),

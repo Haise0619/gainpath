@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:gainpath/app/theme/theme.dart';
-import 'package:gainpath/data/mock_data.dart';
 import 'package:gainpath/shared/shared.dart';
 import 'package:gainpath/shared/widgets/admin_dialogs.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:gainpath/features/workout/domain/entities/gym_equipment.dart';
+import 'package:gainpath/features/workout/domain/repositories/equipment_repository.dart';
 
 /// Defensive network image loader: a broken/slow link never breaks the
 /// layout — the same pattern used across the member-facing modules.
@@ -17,7 +19,7 @@ Widget _networkHero(String url, {BoxFit fit = BoxFit.cover}) {
   );
 }
 
-/// Admin management view over `MockData.gymEquipment` — the catalogue
+/// Admin management view over `context.read<EquipmentRepository>().gymEquipment` — the catalogue
 /// the member-facing equipment scanner matches against and browses.
 /// This is the software side of a genuinely physical feature: every
 /// entry here corresponds to a real machine on the gym floor, so
@@ -36,7 +38,7 @@ class _EquipmentCatalogScreenState extends State<EquipmentCatalogScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final equipment = MockData.gymEquipment;
+    final equipment = context.read<EquipmentRepository>().gymEquipment;
     final categories = ['All', ...{for (final e in equipment) e.category}];
     final visible =
         _category == 'All' ? equipment : equipment.where((e) => e.category == _category).toList();
@@ -183,7 +185,7 @@ class _EquipmentFormDialogState extends State<_EquipmentFormDialog> {
         ..howToUse = _howToUse
         ..safetyTips = _safetyTips;
     } else {
-      MockData.gymEquipment.add(GymEquipment(
+      context.read<EquipmentRepository>().gymEquipment.add(GymEquipment(
         id: 'eq${DateTime.now().millisecondsSinceEpoch}',
         name: _name.text.trim(),
         category: _category.text.trim(),

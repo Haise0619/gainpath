@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:gainpath/features/identity/domain/enums/certification_status.dart';
 import 'package:gainpath/app/theme/theme.dart';
-import 'package:gainpath/data/mock_data.dart';
 import 'package:gainpath/shared/shared.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:gainpath/features/identity/domain/entities/coach_certification.dart';
+import 'package:gainpath/features/identity/domain/repositories/coach_repository.dart';
 
 /// AD-M8.3 — Upload & Manage Certification Documents. Reads and writes the
-/// live `MockData.coachCertifications` list: "upload" appends a real
+/// live `context.read<CoachRepository>().coachCertifications` list: "upload" appends a real
 /// Pending entry (simulating a file pick) that immediately shows in the
 /// list and bumps the count on the account hub. Verified / Pending /
 /// Rejected each render distinctly, and a rejected doc surfaces its
@@ -29,11 +31,11 @@ class _CertificationsScreenState extends State<CertificationsScreen> {
   void _upload() {
     // Stands in for a real file picker: pick the next sample name not
     // already in the list, add it as Pending review.
-    final existing = MockData.coachCertifications.map((c) => c.name).toSet();
+    final existing = context.read<CoachRepository>().coachCertifications.map((c) => c.name).toSet();
     final next = _sampleNames.firstWhere((n) => !existing.contains(n),
-        orElse: () => 'New Certificate ${MockData.coachCertifications.length + 1}');
+        orElse: () => 'New Certificate ${context.read<CoachRepository>().coachCertifications.length + 1}');
     setState(() {
-      MockData.coachCertifications.add(
+      context.read<CoachRepository>().coachCertifications.add(
         CoachCertification(next, CertificationStatus.pendingReview, DateTime.now()),
       );
     });
@@ -42,7 +44,7 @@ class _CertificationsScreenState extends State<CertificationsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final certs = MockData.coachCertifications;
+    final certs = context.read<CoachRepository>().coachCertifications;
     return Scaffold(
       appBar: AppBar(title: const Text('Certifications')),
       body: PageBody(

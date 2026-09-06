@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:gainpath/features/coaching/domain/enums/booking_status.dart';
 import 'package:gainpath/app/theme/theme.dart';
-import 'package:gainpath/data/mock_data.dart';
 import 'package:gainpath/shared/shared.dart';
 import 'package:gainpath/features/coaching/presentation/coach/client_posture_screen.dart';
 import 'package:gainpath/features/coaching/presentation/coach/consultation_notes_screen.dart';
 import 'package:gainpath/features/coaching/presentation/coach/message_inbox_screen.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:gainpath/features/coaching/domain/entities/booking.dart';
+import 'package:gainpath/features/coaching/domain/repositories/booking_repository.dart';
 
 /// AD-M9.1 — View Upcoming Session Schedule. Built around a day-rail +
 /// vertical timeline rather than the flat panel list every other module
@@ -81,7 +83,7 @@ class _CoachRosterScreenState extends State<CoachRosterScreen>
 
   @override
   Widget build(BuildContext context) {
-    final roster = MockData.coachRoster;
+    final roster = context.read<BookingRepository>().coachRoster;
     final days = _days;
     final selectedDay = days[_dayIndex];
     final now = DateTime.now();
@@ -429,8 +431,8 @@ class _ClientStats {
     required this.mostRecentNote,
   });
 
-  factory _ClientStats.of(String memberName) {
-    final bookings = MockData.coachRoster.where((b) => b.memberName == memberName).toList()
+  factory _ClientStats.of(BuildContext context, String memberName) {
+    final bookings = context.read<BookingRepository>().coachRoster.where((b) => b.memberName == memberName).toList()
       ..sort((a, b) => a.start.compareTo(b.start));
     final completed = bookings.where((b) => b.status == BookingStatus.completed).toList();
     final withNotes = [...completed]..sort((a, b) => b.start.compareTo(a.start));
@@ -448,7 +450,7 @@ class _ClientStats {
 }
 
 void _showClientSnapshot(BuildContext context, Booking booking) {
-  final stats = _ClientStats.of(booking.memberName);
+  final stats = _ClientStats.of(context, booking.memberName);
   const months = [
     'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
     'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
@@ -567,7 +569,7 @@ class _SessionCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isPast = booking.start.isBefore(DateTime.now());
-    final stats = _ClientStats.of(booking.memberName);
+    final stats = _ClientStats.of(context, booking.memberName);
     final relationship = stats.sessionsTogether <= 1
         ? 'New client'
         : '${_ordinal(stats.sessionsTogether)} session together';

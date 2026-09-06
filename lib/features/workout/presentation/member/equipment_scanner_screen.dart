@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:gainpath/app/theme/theme.dart';
-import 'package:gainpath/data/mock_data.dart';
 import 'package:gainpath/features/workout/presentation/member/equipment_browse_screen.dart';
 import 'package:gainpath/features/workout/presentation/member/equipment_detail_screen.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:gainpath/features/workout/domain/repositories/equipment_repository.dart';
 
 const _viewfinderHero =
     'https://images.unsplash.com/photo-1534438327276-14e5300c3a48?auto=format&fit=crop&w=1200&q=80';
@@ -25,7 +26,7 @@ Widget _networkHero(String url, {BoxFit fit = BoxFit.cover}) {
 /// wired up yet — there's no backend to match against — so this
 /// simulates the recognition flow end to end: a viewfinder over a static
 /// "camera feed" image, an animated scan line, a brief scanning state,
-/// then a match against `MockData.gymEquipment` — including the honest
+/// then a match against `context.read<EquipmentRepository>().gymEquipment` — including the honest
 /// case where nothing matches, roughly every fourth scan.
 ///
 /// Swapping in a real camera preview and an on-device classifier later
@@ -77,7 +78,7 @@ class _EquipmentScannerScreenState extends State<EquipmentScannerScreen>
       return;
     }
 
-    final active = MockData.gymEquipment.where((e) => e.isActive).toList();
+    final active = context.read<EquipmentRepository>().gymEquipment.where((e) => e.isActive).toList();
     if (active.isEmpty) {
       if (!mounted) return;
       setState(() => _noMatch = true);

@@ -2,7 +2,7 @@ import 'package:flutter/material.dart' show TimeOfDay;
 
 /// AD-M10.1 — one weekday's recurring working window. [start]/[end]/
 /// [active] are all mutable and edited directly (real time pickers, not
-/// static display text), the same "mutate MockData in place" pattern
+/// static display text), the same "mutate the seed in place" pattern
 /// used throughout this app's other mutable records.
 class WorkingDay {
   final String day;

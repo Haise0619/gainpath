@@ -1,10 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:gainpath/features/identity/domain/enums/account_status.dart';
 import 'package:gainpath/app/theme/theme.dart';
-import 'package:gainpath/data/mock_data.dart';
 import 'package:gainpath/shared/shared.dart';
 import 'package:gainpath/shared/widgets/admin_dialogs.dart';
 import 'package:gainpath/features/identity/presentation/admin/user_action_dialogs.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:gainpath/features/identity/domain/entities/coach.dart';
+import 'package:gainpath/features/identity/domain/entities/user_account.dart';
+import 'package:gainpath/features/identity/domain/repositories/coach_repository.dart';
+import 'package:gainpath/features/identity/domain/repositories/user_account_repository.dart';
 
 Widget _networkHero(String url, {BoxFit fit = BoxFit.cover}) {
   return Image.network(
@@ -31,10 +35,10 @@ class CoachesScreen extends StatefulWidget {
 class _CoachesScreenState extends State<CoachesScreen> {
   void _refresh() => setState(() {});
 
-  List<UserAccount> get _coaches => MockData.users.where((u) => u.role == 'Coach').toList();
+  List<UserAccount> get _coaches => context.read<UserAccountRepository>().users.where((u) => u.role == 'Coach').toList();
 
   Coach? _profileFor(UserAccount user) {
-    for (final c in MockData.coaches) {
+    for (final c in context.read<CoachRepository>().coaches) {
       if (c.name == user.name) return c;
     }
     return null;
@@ -71,7 +75,7 @@ class _CoachesScreenState extends State<CoachesScreen> {
               ],
             ),
             const SizedBox(height: 22),
-            ...MockData.branches.map((branch) {
+            ...context.read<UserAccountRepository>().branches.map((branch) {
               final roster = coaches.where((c) => c.branch == branch.name).toList();
               if (roster.isEmpty) return const SizedBox.shrink();
               return Padding(

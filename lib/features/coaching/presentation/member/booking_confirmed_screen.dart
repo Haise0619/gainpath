@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:gainpath/app/theme/theme.dart';
-import 'package:gainpath/data/mock_data.dart';
 import 'package:gainpath/shared/shared.dart';
+import 'package:gainpath/features/coaching/domain/entities/booking.dart';
 
 /// Shown right after a successful Billplz payment for a coaching
 /// session. Takes the actual [Booking] that was just created (and
-/// already added to `MockData.memberBookings`) rather than loose
+/// already added to `context.read<BookingRepository>().memberBookings`) rather than loose
 /// coach/time parameters, so every figure shown here is guaranteed to
 /// match what "My bookings" will show afterwards.
 class BookingConfirmedScreen extends StatelessWidget {

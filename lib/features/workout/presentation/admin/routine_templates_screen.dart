@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:gainpath/app/theme/theme.dart';
-import 'package:gainpath/data/mock_data.dart';
 import 'package:gainpath/shared/shared.dart';
 import 'package:gainpath/app/shells/admin_breadcrumb.dart';
 import 'package:gainpath/features/workout/presentation/admin/equipment_catalog_screen.dart' show EditableStringList;
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:gainpath/features/workout/domain/entities/routine_blueprint.dart';
+import 'package:gainpath/features/workout/domain/repositories/routine_template_repository.dart';
 
 Widget _networkHero(String url, {BoxFit fit = BoxFit.cover}) {
   if (url.trim().isEmpty) {
@@ -22,7 +24,7 @@ Widget _networkHero(String url, {BoxFit fit = BoxFit.cover}) {
 /// AD-M11.4 — Manage Routine Templates. Previously a stub — the Content
 /// hub's card linked here only to show a toast ("Routine template
 /// editor.") with no real screen or data behind it at all. Backed now by
-/// `MockData.routineTemplates`; each card expands in place to show its
+/// `context.read<RoutineTemplateRepository>().routineTemplates`; each card expands in place to show its
 /// full day-by-day breakdown. Create/Edit is a full page rather than a
 /// dialog — a day/exercise builder plus goal/tags/equipment metadata is
 /// genuinely a lot of content, the kind of "Create" flow that gets its
@@ -52,7 +54,7 @@ class _RoutineTemplatesScreenState extends State<RoutineTemplatesScreen> {
       return _TemplateFormPage(existing: _editing, onDone: _closeForm);
     }
 
-    final templates = MockData.routineTemplates;
+    final templates = context.read<RoutineTemplateRepository>().routineTemplates;
     final totalAssigned = templates.fold<int>(0, (sum, t) => sum + t.assignedMembers);
 
     return Scaffold(
@@ -360,7 +362,7 @@ class _TemplateFormPageState extends State<_TemplateFormPage> {
         ..equipmentNeeded = _equipmentNeeded
         ..imageUrl = _imageUrl.text.trim();
     } else {
-      MockData.routineTemplates.add(RoutineBlueprint(
+      context.read<RoutineTemplateRepository>().routineTemplates.add(RoutineBlueprint(
         id: 'rt${DateTime.now().millisecondsSinceEpoch}',
         name: _name.text.trim(),
         level: _level,

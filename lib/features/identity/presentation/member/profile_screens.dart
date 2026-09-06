@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:gainpath/app/theme/theme.dart';
-import 'package:gainpath/data/mock_data.dart';
 import 'package:gainpath/features/identity/presentation/shared/change_password_sheet.dart';
 import 'package:gainpath/shared/shared.dart';
 import 'package:gainpath/features/identity/presentation/shared/role_select_screen.dart';
 import 'package:gainpath/features/membership/presentation/member/membership_dashboard_screen.dart';
 import 'package:gainpath/features/analytics/presentation/member/progress_dashboard_screen.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:gainpath/features/identity/domain/repositories/member_profile_repository.dart';
 
 /// AD-M1.3 — Fitness Profile Management, plus account settings and logout.
 class MemberProfileScreen extends StatelessWidget {
@@ -68,10 +69,10 @@ class MemberProfileScreen extends StatelessWidget {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(MockData.memberName,
+                          Text(context.read<MemberProfileRepository>().memberName,
                               style: Theme.of(context).textTheme.titleLarge),
                           const SizedBox(height: 2),
-                          Text(MockData.memberEmail,
+                          Text(context.read<MemberProfileRepository>().memberEmail,
                               style: Theme.of(context).textTheme.bodyMedium),
                           const SizedBox(height: 6),
                           Container(
@@ -99,10 +100,10 @@ class MemberProfileScreen extends StatelessWidget {
                   spacing: 10,
                   runSpacing: 10,
                   children: [
-                    _QuickStat(Icons.wc_rounded, MockData.memberGender),
-                    _QuickStat(Icons.cake_outlined, '${MockData.memberAge} yrs'),
-                    _QuickStat(Icons.height_rounded, '${MockData.memberHeight} cm'),
-                    _QuickStat(Icons.monitor_weight_outlined, '${MockData.memberWeight} kg'),
+                    _QuickStat(Icons.wc_rounded, context.read<MemberProfileRepository>().memberGender),
+                    _QuickStat(Icons.cake_outlined, '${context.read<MemberProfileRepository>().memberAge} yrs'),
+                    _QuickStat(Icons.height_rounded, '${context.read<MemberProfileRepository>().memberHeight} cm'),
+                    _QuickStat(Icons.monitor_weight_outlined, '${context.read<MemberProfileRepository>().memberWeight} kg'),
                   ],
                 ),
               ],
@@ -118,20 +119,20 @@ class MemberProfileScreen extends StatelessWidget {
                     context,
                     Icons.badge_outlined,
                     'Physical profile',
-                    '${MockData.memberGender} · ${MockData.memberAge} yrs · ${MockData.memberHeight} cm · '
-                        '${MockData.memberWeight} kg',
+                    '${context.read<MemberProfileRepository>().memberGender} · ${context.read<MemberProfileRepository>().memberAge} yrs · ${context.read<MemberProfileRepository>().memberHeight} cm · '
+                        '${context.read<MemberProfileRepository>().memberWeight} kg',
                     () => Navigator.push(context,
                         MaterialPageRoute(builder: (_) => const PhysicalProfileScreen()))),
                 const Divider(height: 1, indent: 62),
                 _row(context, Icons.school_rounded, 'Experience level',
-                    MockData.memberExperience,
+                    context.read<MemberProfileRepository>().memberExperience,
                     () => Navigator.push(
                         context,
                         MaterialPageRoute(
                             builder: (_) => const ExperienceLevelScreen()))),
                 const Divider(height: 1, indent: 62),
                 _row(context, Icons.bolt_rounded, 'Activity level',
-                    MockData.memberActivityLevel,
+                    context.read<MemberProfileRepository>().memberActivityLevel,
                     () => Navigator.push(context,
                         MaterialPageRoute(builder: (_) => const ActivityLevelScreen()))),
                 const Divider(height: 1, indent: 62),
@@ -139,7 +140,7 @@ class MemberProfileScreen extends StatelessWidget {
                     context,
                     Icons.flag_rounded,
                     'Fitness goals',
-                    '${MockData.memberTrainingFocus.length} focus areas  ·  3 targets',
+                    '${context.read<MemberProfileRepository>().memberTrainingFocus.length} focus areas  ·  3 targets',
                     () => Navigator.push(context,
                         MaterialPageRoute(builder: (_) => const GoalsScreen()))),
               ],
@@ -294,10 +295,10 @@ class PhysicalProfileScreen extends StatefulWidget {
 }
 
 class _PhysicalProfileScreenState extends State<PhysicalProfileScreen> {
-  late String _gender = MockData.memberGender;
-  double _age = MockData.memberAge.toDouble();
-  double _height = MockData.memberHeight.toDouble();
-  double _weight = MockData.memberWeight.toDouble();
+  late String _gender = context.read<MemberProfileRepository>().memberGender;
+  late double _age = context.read<MemberProfileRepository>().memberAge.toDouble();
+  late double _height = context.read<MemberProfileRepository>().memberHeight.toDouble();
+  late double _weight = context.read<MemberProfileRepository>().memberWeight.toDouble();
 
   static const _genders = ['Female', 'Male', 'Prefer not to say'];
 
@@ -396,7 +397,7 @@ class ExperienceLevelScreen extends StatefulWidget {
 }
 
 class _ExperienceLevelScreenState extends State<ExperienceLevelScreen> {
-  String _level = MockData.memberExperience;
+  late String _level = context.read<MemberProfileRepository>().memberExperience;
 
   static const _options = [
     ['Beginner', 'New to lifting, or returning after a long break', Icons.spa_outlined],
@@ -447,7 +448,7 @@ class ActivityLevelScreen extends StatefulWidget {
 }
 
 class _ActivityLevelScreenState extends State<ActivityLevelScreen> {
-  late String _activity = MockData.memberActivityLevel;
+  late String _activity = context.read<MemberProfileRepository>().memberActivityLevel;
 
   static const _options = [
     ['Sedentary', 'Little to no exercise', Icons.event_seat_rounded],
@@ -502,7 +503,7 @@ class GoalsScreen extends StatefulWidget {
 }
 
 class _GoalsScreenState extends State<GoalsScreen> {
-  late final Set<String> _focus = {...MockData.memberTrainingFocus};
+  late final Set<String> _focus = {...context.read<MemberProfileRepository>().memberTrainingFocus};
   final List<List<String>> _targets = [
     ['Train 4 times per week', 'Frequency'],
     ['Reach 85% average form', 'Technique'],

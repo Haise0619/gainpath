@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:syncfusion_flutter_charts/charts.dart';
 import 'package:gainpath/app/theme/theme.dart';
-import 'package:gainpath/data/mock_data.dart';
 import 'package:gainpath/shared/shared.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:gainpath/features/analytics/domain/repositories/analytics_repository.dart';
 
 /// UC-9.5 — View Client Posture History. Uses the same Syncfusion chart
 /// language already established in the member-facing Progress module
@@ -24,7 +25,7 @@ class ClientPostureScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final trend = MockData.postureTrend;
+    final trend = context.read<AnalyticsRepository>().postureTrend;
     final data = List.generate(trend.length, (i) => _SessionPoint(_sessionLabels[i], trend[i]));
     final weakest = _byMovement.reduce((a, b) => a.accuracy < b.accuracy ? a : b);
     final atRisk = weakest.accuracy < 75;

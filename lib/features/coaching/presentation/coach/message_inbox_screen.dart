@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:gainpath/features/coaching/domain/enums/booking_status.dart';
 import 'package:gainpath/app/theme/theme.dart';
-import 'package:gainpath/data/mock_data.dart';
 import 'package:gainpath/shared/shared.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:gainpath/features/coaching/domain/entities/booking.dart';
+import 'package:gainpath/features/coaching/domain/repositories/booking_repository.dart';
 
-/// AD-M9.4 — Respond to Member Messages. Reads `MockData.coachRoster`,
+/// AD-M9.4 — Respond to Member Messages. Reads `context.read<BookingRepository>().coachRoster`,
 /// which is now a filtered view over the same `allBookings` list members
 /// read from — so a message a member sends from `MessageCoachScreen`
 /// shows up here for real, and a reply sent here shows up back in the
@@ -19,7 +21,7 @@ class CoachMessageInboxScreen extends StatefulWidget {
 class _CoachMessageInboxScreenState extends State<CoachMessageInboxScreen> {
   @override
   Widget build(BuildContext context) {
-    final conversations = MockData.coachRoster
+    final conversations = context.read<BookingRepository>().coachRoster
         .where((b) =>
             b.messages.isNotEmpty || b.status == BookingStatus.confirmed || b.status == BookingStatus.pending)
         .toList()

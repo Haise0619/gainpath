@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:gainpath/app/theme/theme.dart';
-import 'package:gainpath/data/mock_data.dart';
 import 'package:gainpath/shared/shared.dart';
 import 'package:gainpath/features/workout/presentation/member/workout_screens.dart' show ExerciseTutorialScreen;
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:gainpath/features/workout/domain/entities/gym_equipment.dart';
+import 'package:gainpath/features/workout/domain/repositories/workout_repository.dart';
 
 /// Defensive network image loader: a broken/slow link never breaks the
 /// layout — the same pattern used across onboarding, profile setup, and
@@ -23,7 +25,7 @@ Widget _networkHero(String url, {BoxFit fit = BoxFit.cover}) {
 /// play/pause/scrubber mechanic as `ExerciseTutorialScreen` — tapping
 /// play swaps the thumbnail for a dimmed, "now playing" state with a
 /// real progress bar, so it reads and behaves like a video without
-/// actually streaming one. "Related exercises" queries `MockData.routine`
+/// actually streaming one. "Related exercises" queries `context.read<WorkoutRepository>().routine`
 /// by category rather than storing a manual join, mirroring how the data
 /// dictionary itself resolves GymEquipment↔ExerciseVideo — and shows an
 /// honest empty state when nothing in the current routine matches.
@@ -81,7 +83,7 @@ class _EquipmentDetailScreenState extends State<EquipmentDetailScreen>
   @override
   Widget build(BuildContext context) {
     final equipment = widget.equipment;
-    final related = MockData.routine.where((e) => e.category == equipment.category).toList();
+    final related = context.read<WorkoutRepository>().routine.where((e) => e.category == equipment.category).toList();
 
     return Scaffold(
       appBar: AppBar(title: Text(equipment.name)),

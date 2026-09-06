@@ -2,7 +2,7 @@ import 'package:gainpath/features/identity/domain/entities/coach_review.dart';
 
 /// [bio], [specializationTags], and [fee] are mutable so a coach editing
 /// their own professional profile (coach-side) updates the very same
-/// object members browse in the directory — the "mutate MockData in
+/// object members browse in the directory — the "mutate the seed in
 /// place" pattern already used for savedAdvice and Booking.
 class Coach {
   final String id;

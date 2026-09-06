@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:gainpath/features/coaching/domain/enums/booking_status.dart';
 import 'package:gainpath/app/theme/theme.dart';
-import 'package:gainpath/data/mock_data.dart';
 import 'package:gainpath/shared/shared.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:gainpath/features/coaching/domain/entities/booking.dart';
+import 'package:gainpath/features/identity/domain/entities/coach.dart';
+import 'package:gainpath/features/identity/domain/repositories/coach_repository.dart';
 
 /// A single booking on "My bookings," with an action row that adapts to
 /// the booking's own status rather than always showing the same three
@@ -27,8 +30,8 @@ class BookingCard extends StatelessWidget {
     this.onBookAgain,
   });
 
-  Coach? get _coach {
-    for (final c in MockData.coaches) {
+  Coach? _coach(BuildContext context) {
+    for (final c in context.read<CoachRepository>().coaches) {
       if (c.id == booking.coachId) return c;
     }
     return null;
@@ -36,7 +39,7 @@ class BookingCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final coach = _coach;
+    final coach = _coach(context);
     return Panel(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

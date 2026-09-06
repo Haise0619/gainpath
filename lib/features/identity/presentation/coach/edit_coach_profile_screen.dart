@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:gainpath/app/theme/theme.dart';
-import 'package:gainpath/data/mock_data.dart';
 import 'package:gainpath/shared/shared.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:gainpath/features/identity/domain/repositories/coach_repository.dart';
 
 /// AD-M8.3 — Manage Professional Profile. Publishing actually writes back
-/// to `MockData.currentCoach`, so a coach's edits here show up on the very
+/// to `context.read<CoachRepository>().currentCoach`, so a coach's edits here show up on the very
 /// same public directory card members browse (verify via the account
 /// hub's "Preview public profile"). A short suggestion chip set makes
 /// adding specialties tap-to-add rather than free-typing from scratch.
@@ -36,7 +37,7 @@ class _EditCoachProfileScreenState extends State<EditCoachProfileScreen> {
   @override
   void initState() {
     super.initState();
-    final coach = MockData.currentCoach;
+    final coach = context.read<CoachRepository>().currentCoach;
     _bio = TextEditingController(text: coach.bio);
     _fee = TextEditingController(text: coach.fee.toStringAsFixed(0));
     _tags = [...coach.specializationTags];
@@ -55,7 +56,7 @@ class _EditCoachProfileScreenState extends State<EditCoachProfileScreen> {
   }
 
   void _publish() {
-    final coach = MockData.currentCoach;
+    final coach = context.read<CoachRepository>().currentCoach;
     coach.bio = _bio.text.trim();
     coach.specializationTags = [..._tags];
     final parsedFee = double.tryParse(_fee.text.trim());
@@ -141,7 +142,7 @@ class _EditCoachProfileScreenState extends State<EditCoachProfileScreen> {
                 const Icon(Icons.location_on_outlined, size: 18, color: AppColors.inkSoft),
                 const SizedBox(width: 10),
                 Expanded(
-                  child: Text(MockData.currentCoach.branch,
+                  child: Text(context.read<CoachRepository>().currentCoach.branch,
                       style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.w600)),
                 ),
                 Text('Set by gym staff', style: Theme.of(context).textTheme.bodyMedium),
