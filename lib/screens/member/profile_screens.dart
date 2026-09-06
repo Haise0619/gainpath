@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:gainpath/app/theme/theme.dart';
 import 'package:gainpath/data/mock_data.dart';
-import 'package:gainpath/widgets/change_password_sheet.dart';
+import 'package:gainpath/features/identity/presentation/shared/change_password_sheet.dart';
 import 'package:gainpath/shared/shared.dart';
 import 'package:gainpath/screens/auth/role_select_screen.dart';
 import 'package:gainpath/screens/member/membership/membership_dashboard_screen.dart';

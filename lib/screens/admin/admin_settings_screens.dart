@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:gainpath/data/mock_data.dart';
-import 'package:gainpath/widgets/change_password_sheet.dart';
+import 'package:gainpath/features/identity/presentation/shared/change_password_sheet.dart';
 import 'package:gainpath/shared/shared.dart';
 
 /// AD-M11.2 — Admin Session and Settings. Distinct from AD-M11.6's
