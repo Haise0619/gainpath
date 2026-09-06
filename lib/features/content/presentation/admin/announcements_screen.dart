@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:gainpath/app/theme/theme.dart';
-import 'package:gainpath/data/mock_data.dart';
 import 'package:gainpath/shared/shared.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:gainpath/features/content/domain/entities/announcement.dart';
+import 'package:gainpath/features/content/domain/repositories/content_repository.dart';
 
 const _months = [
   'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
@@ -13,7 +15,7 @@ String _fmt(DateTime d) => '${d.day} ${_months[d.month - 1]}';
 /// compose form that toasted "Announcement published" and forgot
 /// whatever was typed, with no way to see what had gone out before or
 /// whether it was still showing to members. This reads and writes the
-/// real `MockData.announcements` list, and each entry's active/expired
+/// real `context.read<ContentRepository>().announcements` list, and each entry's active/expired
 /// state is computed from its validity window, not stored as a flag
 /// that could drift out of date.
 class AnnouncementsScreen extends StatefulWidget {
@@ -53,7 +55,7 @@ class _AnnouncementsScreenState extends State<AnnouncementsScreen> {
       return;
     }
     setState(() {
-      MockData.announcements.insert(
+      context.read<ContentRepository>().announcements.insert(
         0,
         Announcement(
           id: 'an${DateTime.now().millisecondsSinceEpoch}',
@@ -72,7 +74,7 @@ class _AnnouncementsScreenState extends State<AnnouncementsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final announcements = [...MockData.announcements]..sort((a, b) => b.validFrom.compareTo(a.validFrom));
+    final announcements = [...context.read<ContentRepository>().announcements]..sort((a, b) => b.validFrom.compareTo(a.validFrom));
     final activeCount = announcements.where((a) => a.isActive).length;
 
     return Scaffold(

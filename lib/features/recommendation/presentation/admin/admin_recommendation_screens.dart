@@ -2,10 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:gainpath/features/recommendation/domain/policies/risk_policy.dart';
 import 'package:syncfusion_flutter_charts/charts.dart';
 import 'package:gainpath/app/theme/theme.dart';
-import 'package:gainpath/data/mock_data.dart';
 import 'package:gainpath/shared/shared.dart';
 import 'package:gainpath/features/analytics/presentation/admin/report_widgets.dart' show ReportSection;
 import 'package:gainpath/shared/widgets/admin_dialogs.dart' show AdminDialog;
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:gainpath/features/recommendation/domain/entities/risk_lead.dart';
+import 'package:gainpath/features/recommendation/domain/repositories/recommendation_repository.dart';
 
 /// AD-M13.1/M13.2 — AI-Powered Trainer and Content Recommendation. Three
 /// genuinely distinct jobs — analysing which exercises are risky,
@@ -32,14 +34,14 @@ class _RiskLeaderboardScreenState extends State<RiskLeaderboardScreen>
   final _trainerKey = GlobalKey();
   final _contentKey = GlobalKey();
 
-  late int _threshold = MockData.postureRiskThreshold;
+  late int _threshold = context.read<RecommendationRepository>().postureRiskThreshold;
   String _category = 'All';
 
-  late final List<RiskLead> _trainerLeads = [...MockData.atRiskLeads];
+  late final List<RiskLead> _trainerLeads = [...context.read<RecommendationRepository>().atRiskLeads];
   int _trainerPoolIndex = 0;
   String _trainerQuery = '';
 
-  late final List<RiskLead> _contentLeads = [...MockData.contentLeads];
+  late final List<RiskLead> _contentLeads = [...context.read<RecommendationRepository>().contentLeads];
   int _contentPoolIndex = 0;
   String _contentQuery = '';
 
@@ -57,9 +59,9 @@ class _RiskLeaderboardScreenState extends State<RiskLeaderboardScreen>
   }
 
   void _refreshTrainerQueue() {
-    if (_trainerPoolIndex < MockData.trainerLeadsPool.length) {
+    if (_trainerPoolIndex < context.read<RecommendationRepository>().trainerLeadsPool.length) {
       setState(() {
-        _trainerLeads.add(MockData.trainerLeadsPool[_trainerPoolIndex]);
+        _trainerLeads.add(context.read<RecommendationRepository>().trainerLeadsPool[_trainerPoolIndex]);
         _trainerPoolIndex++;
       });
       showToast(context, '1 new lead added to the queue.');
@@ -69,9 +71,9 @@ class _RiskLeaderboardScreenState extends State<RiskLeaderboardScreen>
   }
 
   void _refreshContentQueue() {
-    if (_contentPoolIndex < MockData.contentLeadsPool.length) {
+    if (_contentPoolIndex < context.read<RecommendationRepository>().contentLeadsPool.length) {
       setState(() {
-        _contentLeads.add(MockData.contentLeadsPool[_contentPoolIndex]);
+        _contentLeads.add(context.read<RecommendationRepository>().contentLeadsPool[_contentPoolIndex]);
         _contentPoolIndex++;
       });
       showToast(context, '1 new lead added to the queue.');
@@ -155,10 +157,10 @@ class _RiskLeaderboardScreenState extends State<RiskLeaderboardScreen>
 
   Widget _leaderboardTab(BuildContext context) {
     const categories = ['All', 'Lower Body', 'Upper Body', 'Core'];
-    final rows = MockData.riskExercises.where((e) => _category == 'All' || e[2] == _category).toList();
+    final rows = context.read<RecommendationRepository>().riskExercises.where((e) => _category == 'All' || e[2] == _category).toList();
     final highRiskCount =
-        MockData.riskExercises.where((e) => RiskPolicy(thresholdPct: MockData.postureRiskThreshold).tierFor(int.parse(e[1].replaceAll('%', ''))) == 'High').length;
-    final gaps = MockData.contentGaps;
+        context.read<RecommendationRepository>().riskExercises.where((e) => RiskPolicy(thresholdPct: context.read<RecommendationRepository>().postureRiskThreshold).tierFor(int.parse(e[1].replaceAll('%', ''))) == 'High').length;
+    final gaps = context.read<RecommendationRepository>().contentGaps;
 
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(28, 20, 28, 40),
@@ -171,9 +173,9 @@ class _RiskLeaderboardScreenState extends State<RiskLeaderboardScreen>
         exportFilename: 'high_risk_leaderboard.csv',
         exportRows: () => [
           ['Rank', 'Exercise', 'Avg score', 'Category', 'Risk tier'],
-          ...List.generate(MockData.riskExercises.length, (i) {
-            final e = MockData.riskExercises[i];
-            return [i + 1, e[0], e[1], e[2], RiskPolicy(thresholdPct: MockData.postureRiskThreshold).tierFor(int.parse(e[1].replaceAll('%', '')))];
+          ...List.generate(context.read<RecommendationRepository>().riskExercises.length, (i) {
+            final e = context.read<RecommendationRepository>().riskExercises[i];
+            return [i + 1, e[0], e[1], e[2], RiskPolicy(thresholdPct: context.read<RecommendationRepository>().postureRiskThreshold).tierFor(int.parse(e[1].replaceAll('%', '')))];
           }),
         ],
         child: LayoutBuilder(builder: (context, constraints) {
@@ -244,7 +246,7 @@ class _RiskLeaderboardScreenState extends State<RiskLeaderboardScreen>
                   xValueMapper: (e, _) => e[0],
                   yValueMapper: (e, _) => int.parse(e[1].replaceAll('%', '')),
                   pointColorMapper: (e, _) {
-                    final tier = RiskPolicy(thresholdPct: MockData.postureRiskThreshold).tierFor(int.parse(e[1].replaceAll('%', '')));
+                    final tier = RiskPolicy(thresholdPct: context.read<RecommendationRepository>().postureRiskThreshold).tierFor(int.parse(e[1].replaceAll('%', '')));
                     return tier == 'High'
                         ? AppColors.danger
                         : tier == 'Moderate'
@@ -277,7 +279,7 @@ class _RiskLeaderboardScreenState extends State<RiskLeaderboardScreen>
         ...List.generate(rows.length, (i) {
           final e = rows[i];
           final pct = int.parse(e[1].replaceAll('%', ''));
-          final tier = RiskPolicy(thresholdPct: MockData.postureRiskThreshold).tierFor(pct);
+          final tier = RiskPolicy(thresholdPct: context.read<RecommendationRepository>().postureRiskThreshold).tierFor(pct);
           return Padding(
             padding: const EdgeInsets.only(bottom: 10),
             child: Panel(
@@ -342,7 +344,7 @@ class _RiskLeaderboardScreenState extends State<RiskLeaderboardScreen>
                 label: '$_threshold%',
                 onChanged: (v) => setState(() {
                   _threshold = v.round();
-                  MockData.postureRiskThreshold = _threshold;
+                  context.read<RecommendationRepository>().postureRiskThreshold = _threshold;
                 }),
               ),
             ],
