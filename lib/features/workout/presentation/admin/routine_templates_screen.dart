@@ -3,7 +3,7 @@ import 'package:gainpath/app/theme/theme.dart';
 import 'package:gainpath/data/mock_data.dart';
 import 'package:gainpath/shared/shared.dart';
 import 'package:gainpath/app/shells/admin_breadcrumb.dart';
-import 'package:gainpath/screens/admin/equipment/equipment_catalog_screen.dart' show EditableStringList;
+import 'package:gainpath/features/workout/presentation/admin/equipment_catalog_screen.dart' show EditableStringList;
 
 Widget _networkHero(String url, {BoxFit fit = BoxFit.cover}) {
   if (url.trim().isEmpty) {

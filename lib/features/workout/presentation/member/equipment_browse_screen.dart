@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:gainpath/app/theme/theme.dart';
 import 'package:gainpath/data/mock_data.dart';
 import 'package:gainpath/shared/shared.dart';
-import 'package:gainpath/screens/member/equipment/equipment_detail_screen.dart';
+import 'package:gainpath/features/workout/presentation/member/equipment_detail_screen.dart';
 
 /// Defensive network image loader: a broken/slow link never breaks the
 /// layout — the same pattern used across onboarding, profile setup, and

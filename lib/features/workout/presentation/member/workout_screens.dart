@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:gainpath/app/theme/theme.dart';
 import 'package:gainpath/data/mock_data.dart';
 import 'package:gainpath/shared/shared.dart';
-import 'package:gainpath/screens/member/equipment/equipment_scanner_screen.dart';
+import 'package:gainpath/features/workout/presentation/member/equipment_scanner_screen.dart';
 
 const _routineHeroImage =
     'https://images.unsplash.com/photo-1584863231364-2edc166de576?auto=format&fit=crop&w=1200&q=80';
