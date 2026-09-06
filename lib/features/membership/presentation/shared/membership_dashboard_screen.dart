@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:gainpath/features/membership/application/membership_bloc.dart';
 import 'package:gainpath/app/theme/theme.dart';
 import 'package:gainpath/shared/shared.dart';
 import 'package:gainpath/features/membership/presentation/member/billing_history_screen.dart';
@@ -22,8 +23,6 @@ class MembershipDashboardScreen extends StatefulWidget {
 }
 
 class _MembershipDashboardScreenState extends State<MembershipDashboardScreen> {
-  bool _autoRenew = true;
-
   MembershipPlan get _plan =>
       context.read<MembershipRepository>().membershipPlans.firstWhere((p) => p.id == context.read<MembershipRepository>().currentPlanId);
 
@@ -39,11 +38,13 @@ class _MembershipDashboardScreenState extends State<MembershipDashboardScreen> {
       );
       if (!ok) return;
     }
-    setState(() => _autoRenew = value);
+    if (!mounted) return;
+    context.read<MembershipBloc>().add(AutoRenewToggled(value));
   }
 
   @override
   Widget build(BuildContext context) {
+    final membership = context.watch<MembershipBloc>().state;
     final plan = _plan;
     final recent = context.read<MembershipRepository>().transactions.take(2).toList();
 
@@ -88,7 +89,7 @@ class _MembershipDashboardScreenState extends State<MembershipDashboardScreen> {
                         child: Text('Auto-renew', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
                       ),
                       Switch(
-                        value: _autoRenew,
+                        value: membership.autoRenew,
                         onChanged: _toggleAutoRenew,
                         activeThumbColor: Colors.white,
                         activeTrackColor: Colors.white.withValues(alpha: 0.4),

@@ -9,4 +9,10 @@ abstract class MembershipRepository {
   String get currentPlanId;
   List<MembershipPlan> get membershipPlans;
   List<RefundClaim> get refundClaims;
+
+  set currentPlanId(String id);
+  bool get autoRenew;
+  set autoRenew(bool v);
+  void addTransaction(Transaction t);
+  void addRefundClaim(RefundClaim c);
 }

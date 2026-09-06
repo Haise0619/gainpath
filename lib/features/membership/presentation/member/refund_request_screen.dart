@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:gainpath/features/membership/application/membership_bloc.dart';
 import 'package:gainpath/features/membership/domain/policies/refund_policy.dart';
 import 'package:gainpath/app/theme/theme.dart';
 import 'package:gainpath/shared/shared.dart';
@@ -23,6 +24,7 @@ class RefundRequestScreen extends StatefulWidget {
 class _RefundRequestScreenState extends State<RefundRequestScreen> {
   String? _transactionId;
   String? _reason;
+  final _notes = TextEditingController();
 
   final _reasons = const [
     'Coach cancelled the session',
@@ -45,6 +47,12 @@ class _RefundRequestScreenState extends State<RefundRequestScreen> {
 
   bool _isEligible(Transaction t) =>
       const RefundPolicy().isEligible(t.date);
+
+  @override
+  void dispose() {
+    _notes.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -154,16 +162,24 @@ class _RefundRequestScreenState extends State<RefundRequestScreen> {
             ),
           ),
           const SizedBox(height: 14),
-          const TextField(
+          TextField(
+            controller: _notes,
             maxLines: 4,
             decoration:
-                InputDecoration(hintText: 'Add any details that would help'),
+                const InputDecoration(hintText: 'Add any details that would help'),
           ),
           const SizedBox(height: 18),
           FilledButton(
             onPressed: (_transactionId == null || _reason == null)
                 ? null
                 : () {
+                    final bloc = context.read<MembershipBloc>();
+                    bloc.add(RefundRequested(
+                        transactionId: _transactionId!, reason: _reason!, notes: _notes.text.trim()));
+                    if (bloc.state.error != null) {
+                      showToast(context, bloc.state.error!);
+                      return;
+                    }
                     Navigator.pop(context);
                     showToast(context,
                         'Request submitted. We will email you once it is reviewed.');

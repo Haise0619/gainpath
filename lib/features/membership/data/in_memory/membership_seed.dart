@@ -17,7 +17,8 @@ class MembershipSeed {
         DateTime.now().subtract(const Duration(days: 42)), TransactionStatus.cleared),
   ];
 
-  static const currentPlanId = 'premium';
+  static String currentPlanId = 'premium';
+  static bool autoRenew = true;
 
   static const membershipPlans = <MembershipPlan>[
     MembershipPlan(

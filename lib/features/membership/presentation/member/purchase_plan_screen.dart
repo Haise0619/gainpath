@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:gainpath/features/membership/domain/policies/promo_policy.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:gainpath/features/membership/application/membership_bloc.dart';
 import 'package:gainpath/app/theme/theme.dart';
 import 'package:gainpath/features/membership/presentation/shared/billplz_checkout_screen.dart';
 import 'package:gainpath/shared/shared.dart';
@@ -44,12 +47,8 @@ class _PurchasePlanScreenState extends State<PurchasePlanScreen> {
     if (!mounted) return;
     setState(() {
       _applying = false;
-      if (code == 'GAINPATH10') {
-        _discountPct = 0.10;
-      } else {
-        _discountPct = null;
-        _promoError = 'Invalid or expired code.';
-      }
+      _discountPct = const PromoPolicy().discountFor(code);
+      if (_discountPct == null) _promoError = 'Invalid or expired code.';
     });
   }
 
@@ -61,6 +60,7 @@ class _PurchasePlanScreenState extends State<PurchasePlanScreen> {
       ),
     );
     if (success != true || !mounted) return;
+    context.read<MembershipBloc>().add(PlanPurchased(widget.plan.id, _total));
     Navigator.pushReplacement(
       context,
       MaterialPageRoute(

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:gainpath/features/membership/application/membership_bloc.dart';
 import 'package:gainpath/app/theme/theme.dart';
 import 'package:gainpath/features/membership/presentation/shared/billplz_checkout_screen.dart';
 import 'package:gainpath/shared/shared.dart';
@@ -76,6 +77,7 @@ class RenewScreen extends StatelessWidget {
                 ),
               );
               if (success != true || !context.mounted) return;
+              context.read<MembershipBloc>().add(MembershipRenewed(plan.price));
               Navigator.pop(context);
               showToast(context, 'Membership renewed until $_newExpiry.');
             },

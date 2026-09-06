@@ -1,5 +1,8 @@
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:gainpath/features/identity/domain/repositories/member_profile_repository.dart';
+import 'package:gainpath/features/membership/domain/repositories/membership_repository.dart';
+import 'package:gainpath/features/membership/application/membership_bloc.dart';
 import 'package:gainpath/features/gamification/domain/repositories/gamification_repository.dart';
 import 'package:gainpath/features/gamification/application/gamification_bloc.dart';
 import 'package:gainpath/features/coaching/domain/repositories/booking_repository.dart';
@@ -31,6 +34,12 @@ class GainPathApp extends StatelessWidget {
           ),
           BlocProvider(
             create: (context) => GamificationBloc(context.read<GamificationRepository>()),
+          ),
+          BlocProvider(
+            create: (context) => MembershipBloc(
+              context.read<MembershipRepository>(),
+              memberName: context.read<MemberProfileRepository>().memberName,
+            ),
           ),
         ],
         child: MaterialApp(

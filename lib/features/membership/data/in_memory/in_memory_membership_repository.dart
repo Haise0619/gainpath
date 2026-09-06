@@ -17,4 +17,19 @@ class InMemoryMembershipRepository implements MembershipRepository {
 
   @override
   List<RefundClaim> get refundClaims => MembershipSeed.refundClaims;
+
+  @override
+  set currentPlanId(String id) => MembershipSeed.currentPlanId = id;
+
+  @override
+  bool get autoRenew => MembershipSeed.autoRenew;
+
+  @override
+  set autoRenew(bool v) => MembershipSeed.autoRenew = v;
+
+  @override
+  void addTransaction(Transaction t) => MembershipSeed.transactions.insert(0, t);
+
+  @override
+  void addRefundClaim(RefundClaim c) => MembershipSeed.refundClaims.insert(0, c);
 }
