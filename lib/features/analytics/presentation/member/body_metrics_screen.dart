@@ -23,7 +23,7 @@ class BodyMetricsScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final history = MockData.weightHistory;
     final current = history.last.weightKg;
-    const heightM = MockData.heightCm / 100;
+    final heightM = MockData.heightCm / 100;
     final bmi = current / (heightM * heightM);
     final weights = history.map((e) => e.weightKg).toList();
     final points = history.map((e) => _WeightPoint(_shortDate(e.date), e.weightKg)).toList();

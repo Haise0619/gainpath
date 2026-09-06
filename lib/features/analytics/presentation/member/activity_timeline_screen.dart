@@ -12,8 +12,8 @@ class ActivityTimelineScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const counts = MockData.sessionsPerWeek;
-    const labels = MockData.sessionWeekLabels;
+    final counts = MockData.sessionsPerWeek;
+    final labels = MockData.sessionWeekLabels;
     final data = List.generate(counts.length, (i) => _WeekCount(labels[i], counts[i]));
 
     return Scaffold(

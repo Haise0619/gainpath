@@ -438,9 +438,9 @@ class _ProfileMenu extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
-              children: const [
-                Text(MockData.adminName, style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13)),
-                Text(MockData.adminEmail, style: TextStyle(fontSize: 11.5, color: AppColors.inkSoft)),
+              children: [
+                Text(MockData.adminName, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13)),
+                Text(MockData.adminEmail, style: const TextStyle(fontSize: 11.5, color: AppColors.inkSoft)),
               ],
             ),
           ),

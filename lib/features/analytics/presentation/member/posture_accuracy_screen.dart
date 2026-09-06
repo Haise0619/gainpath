@@ -22,7 +22,7 @@ class PostureAccuracyScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const trend = MockData.postureTrend;
+    final trend = MockData.postureTrend;
     final data =
         List.generate(trend.length, (i) => _SessionPoint(_sessionLabels[i], trend[i]));
 

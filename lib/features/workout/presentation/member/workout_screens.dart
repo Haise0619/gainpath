@@ -34,7 +34,7 @@ class WorkoutPrepScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const routine = MockData.routine;
+    final routine = MockData.routine;
     final totalSets = routine.fold<int>(0, (sum, e) => sum + e.sets);
 
     return Scaffold(
@@ -373,7 +373,7 @@ class RoutineScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const routine = MockData.routine;
+    final routine = MockData.routine;
     return Scaffold(
       appBar: AppBar(title: const Text('Today\'s routine')),
       body: PageBody(

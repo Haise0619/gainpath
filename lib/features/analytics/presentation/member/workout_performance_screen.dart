@@ -21,7 +21,7 @@ class WorkoutPerformanceScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const volume = MockData.volumeTrend;
+    final volume = MockData.volumeTrend;
     final data =
         List.generate(volume.length, (i) => _WeekPoint(_weekLabels[i], volume[i]));
 

@@ -13,8 +13,8 @@ class GamificationProgressScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const pts = MockData.pointsHistory;
-    const labels = MockData.pointsWeekLabels;
+    final pts = MockData.pointsHistory;
+    final labels = MockData.pointsWeekLabels;
     final data = List.generate(pts.length, (i) => _WeekPoints(labels[i], pts[i]));
 
     return Scaffold(
@@ -22,9 +22,9 @@ class GamificationProgressScreen extends StatelessWidget {
       body: PageBody(
         children: [
           Row(
-            children: const [
+            children: [
               Expanded(child: StatTile('${MockData.points}', 'Total points')),
-              SizedBox(width: 10),
+              const SizedBox(width: 10),
               Expanded(
                   child: StatTile('${MockData.streak}', 'Day streak',
                       valueColor: AppColors.accentDark)),
@@ -93,11 +93,11 @@ class GamificationProgressScreen extends StatelessWidget {
                             cornerStyle: CornerStyle.bothCurve,
                           ),
                         ],
-                        annotations: const [
+                        annotations: [
                           GaugeAnnotation(
                             positionFactor: 0,
                             widget: Text('${MockData.streak}d',
-                                style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
+                                style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
                           ),
                         ],
                       ),

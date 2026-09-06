@@ -24,7 +24,7 @@ class ClientPostureScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const trend = MockData.postureTrend;
+    final trend = MockData.postureTrend;
     final data = List.generate(trend.length, (i) => _SessionPoint(_sessionLabels[i], trend[i]));
     final weakest = _byMovement.reduce((a, b) => a.accuracy < b.accuracy ? a : b);
     final atRisk = weakest.accuracy < 75;

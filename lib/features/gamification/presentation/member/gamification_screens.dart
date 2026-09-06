@@ -268,7 +268,7 @@ class MiniGamesScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const games = MockData.miniGames;
+    final games = MockData.miniGames;
     final featured = games.first;
     final rest = games.skip(1).toList();
 

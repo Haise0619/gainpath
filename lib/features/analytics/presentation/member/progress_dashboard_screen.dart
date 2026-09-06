@@ -61,7 +61,7 @@ class _ProgressDashboardScreenState extends State<ProgressDashboardScreen>
   Widget build(BuildContext context) {
     // The volume record check is computed, not asserted, so this stays
     // correct if the underlying weekly figures ever change.
-    const volume = MockData.volumeTrend;
+    final volume = MockData.volumeTrend;
     final isRecordWeek = volume.last >= volume.reduce((a, b) => a > b ? a : b);
 
     return Scaffold(
