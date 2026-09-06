@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:gainpath/features/coaching/domain/enums/booking_status.dart';
 import 'package:syncfusion_flutter_charts/charts.dart';
 import 'package:gainpath/app/theme/theme.dart';
 import 'package:gainpath/data/mock_data.dart';
@@ -115,7 +116,7 @@ class CoachBookingUtilizationSection extends StatelessWidget {
 
     final rows = coaches.map((c) {
       final sessions = MockData.allBookings
-          .where((b) => b.coachId == c.id && b.start.isAfter(cutoff) && b.status != 'Cancelled')
+          .where((b) => b.coachId == c.id && b.start.isAfter(cutoff) && b.status != BookingStatus.cancelled)
           .length;
       final capacity = MockData.dailyBookingCap * rangeDays;
       final utilization = capacity == 0 ? 0.0 : (sessions / capacity).clamp(0.0, 1.0);

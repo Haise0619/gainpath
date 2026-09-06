@@ -127,7 +127,7 @@ class _BillingHistoryScreenState extends State<BillingHistoryScreen> {
                             Text('RM ${t.amount.toStringAsFixed(2)}',
                                 style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
                             const SizedBox(height: 4),
-                            statusPill(t.status),
+                            statusPill(t.status.label),
                           ],
                         ),
                         const SizedBox(width: 4),
@@ -156,7 +156,7 @@ class _BillingHistoryScreenState extends State<BillingHistoryScreen> {
             Row(
               children: [
                 Expanded(child: Text(t.type, style: Theme.of(ctx).textTheme.titleLarge)),
-                statusPill(t.status),
+                statusPill(t.status.label),
               ],
             ),
             const SizedBox(height: 16),

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:gainpath/features/identity/domain/enums/certification_status.dart';
 import 'package:gainpath/app/theme/theme.dart';
 import 'package:gainpath/data/mock_data.dart';
 import 'package:gainpath/shared/shared.dart';
@@ -33,9 +34,9 @@ class _CoachAccountScreenState extends State<CoachAccountScreen> {
   Widget build(BuildContext context) {
     final coach = MockData.currentCoach;
     final verifiedCerts =
-        MockData.coachCertifications.where((c) => c.status == 'Verified').length;
+        MockData.coachCertifications.where((c) => c.status == CertificationStatus.verified).length;
     final pendingCerts =
-        MockData.coachCertifications.where((c) => c.status == 'Pending review').length;
+        MockData.coachCertifications.where((c) => c.status == CertificationStatus.pendingReview).length;
 
     return Scaffold(
       appBar: AppBar(title: const Text('My account')),

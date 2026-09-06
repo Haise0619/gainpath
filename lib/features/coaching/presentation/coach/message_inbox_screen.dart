@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:gainpath/features/coaching/domain/enums/booking_status.dart';
 import 'package:gainpath/app/theme/theme.dart';
 import 'package:gainpath/data/mock_data.dart';
 import 'package:gainpath/shared/shared.dart';
@@ -20,7 +21,7 @@ class _CoachMessageInboxScreenState extends State<CoachMessageInboxScreen> {
   Widget build(BuildContext context) {
     final conversations = MockData.coachRoster
         .where((b) =>
-            b.messages.isNotEmpty || b.status == 'Confirmed' || b.status == 'Pending')
+            b.messages.isNotEmpty || b.status == BookingStatus.confirmed || b.status == BookingStatus.pending)
         .toList()
       ..sort((a, b) {
         final aNeedsReply = a.messages.isNotEmpty && a.messages.last.senderRole == 'Member';

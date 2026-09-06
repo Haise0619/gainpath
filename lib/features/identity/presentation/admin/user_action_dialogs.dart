@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:gainpath/features/identity/domain/enums/account_status.dart';
 import 'package:gainpath/app/theme/theme.dart';
 import 'package:gainpath/data/mock_data.dart';
 import 'package:gainpath/shared/shared.dart';
@@ -34,7 +35,7 @@ Future<void> suspendMemberFlow(BuildContext context, UserAccount user, VoidCallb
     builder: (ctx) => _SuspendMemberDialog(memberName: user.name),
   );
   if (result != null) {
-    user.status = 'Suspended';
+    user.status = AccountStatus.suspended;
     onChanged();
     if (context.mounted) {
       showToast(context, '${user.name} suspended (${result['duration']}) — ${result['reason']}.');
@@ -46,7 +47,7 @@ Future<void> liftSuspensionFlow(BuildContext context, UserAccount user, VoidCall
   final ok = await confirmDialog(context,
       title: 'Lift suspension for ${user.name}?', message: 'Their account regains full access immediately.');
   if (ok) {
-    user.status = 'Active';
+    user.status = AccountStatus.active;
     onChanged();
     if (context.mounted) showToast(context, '${user.name} can access their account again.');
   }
@@ -59,7 +60,7 @@ Future<void> deactivateCoachFlow(BuildContext context, UserAccount user, VoidCal
     builder: (ctx) => _DeactivateCoachDialog(coachName: user.name),
   );
   if (reason != null && reason.isNotEmpty) {
-    user.status = 'Deactivated';
+    user.status = AccountStatus.deactivated;
     onChanged();
     if (context.mounted) {
       showToast(context, '${user.name} deactivated. Upcoming sessions were cancelled and members notified.');
@@ -247,7 +248,7 @@ class _ProvisionCoachDialogState extends State<_ProvisionCoachDialog> {
     setState(() => _triedSubmit = true);
     final formOk = _formKey.currentState?.validate() ?? false;
     if (!formOk || _branch == null) return;
-    MockData.users.add(UserAccount(_name.text.trim(), _email.text.trim(), 'Coach', 'Invited',
+    MockData.users.add(UserAccount(_name.text.trim(), _email.text.trim(), 'Coach', AccountStatus.invited,
         branch: _branch, specialty: _specialty.text.trim()));
     Navigator.pop(context, true);
   }
@@ -367,7 +368,7 @@ class _VerifyCoachDialogState extends State<_VerifyCoachDialog> {
   }
 
   void _approve() {
-    widget.user.status = 'Verified';
+    widget.user.status = AccountStatus.verified;
     Navigator.pop(context);
     showToast(context, '${widget.user.name} is now visible to members.');
   }
@@ -381,7 +382,7 @@ class _VerifyCoachDialogState extends State<_VerifyCoachDialog> {
       setState(() => _reasonError = 'Enter a reason so the coach knows what to fix.');
       return;
     }
-    widget.user.status = 'Rejected';
+    widget.user.status = AccountStatus.rejected;
     Navigator.pop(context);
     showToast(context, 'Sent back for correction.');
   }

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:gainpath/features/identity/domain/enums/account_status.dart';
 import 'package:gainpath/app/theme/theme.dart';
 import 'package:gainpath/data/mock_data.dart';
 import 'package:gainpath/shared/shared.dart';
@@ -70,11 +71,11 @@ class _MembersScreenState extends State<MembersScreen> {
   @override
   Widget build(BuildContext context) {
     final all = _members;
-    final activeCount = all.where((u) => u.status == 'Active').length;
-    final suspendedCount = all.where((u) => u.status == 'Suspended').length;
+    final activeCount = all.where((u) => u.status == AccountStatus.active).length;
+    final suspendedCount = all.where((u) => u.status == AccountStatus.suspended).length;
 
     final filtered = all.where((u) {
-      final matchesStatus = _status == 'All' || u.status == _status;
+      final matchesStatus = _status == 'All' || u.status.label == _status;
       final matchesQuery = _query.isEmpty ||
           u.name.toLowerCase().contains(_query.toLowerCase()) ||
           u.email.toLowerCase().contains(_query.toLowerCase());
@@ -219,10 +220,10 @@ class _MembersScreenState extends State<MembersScreen> {
         RecordActionItem(
           icon: Icons.block_rounded,
           color: AppColors.danger,
-          label: user.status == 'Suspended' ? 'Lift suspension' : 'Suspend account',
+          label: user.status == AccountStatus.suspended ? 'Lift suspension' : 'Suspend account',
           onTap: () {
             Navigator.pop(context);
-            if (user.status == 'Suspended') {
+            if (user.status == AccountStatus.suspended) {
               liftSuspensionFlow(context, user, _refresh);
             } else {
               suspendMemberFlow(context, user, _refresh);
@@ -386,7 +387,7 @@ class _MemberRow extends StatelessWidget {
                   ],
                 ),
               ),
-              SizedBox(width: 120, child: statusPill(user.status)),
+              SizedBox(width: 120, child: statusPill(user.status.label)),
               SizedBox(
                 width: 40,
                 child: IconButton(

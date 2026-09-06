@@ -1,3 +1,5 @@
+import 'package:gainpath/features/identity/domain/enums/account_status.dart';
+
 /// [status] is mutable — suspending a member, deactivating a coach, and
 /// verifying/rejecting a coach's credentials all mutate the account in
 /// place, the same pattern used for `GymEquipment.isActive` elsewhere.
@@ -9,7 +11,7 @@ class UserAccount {
   final String name;
   final String email;
   final String role;
-  String status;
+  AccountStatus status;
   final String? branch;
   final String? specialty;
   UserAccount(this.name, this.email, this.role, this.status, {this.branch, this.specialty});

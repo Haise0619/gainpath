@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:gainpath/features/identity/domain/enums/account_status.dart';
 import 'package:gainpath/app/theme/theme.dart';
 import 'package:gainpath/data/mock_data.dart';
 import 'package:gainpath/shared/shared.dart';
@@ -42,7 +43,7 @@ class _CoachesScreenState extends State<CoachesScreen> {
   @override
   Widget build(BuildContext context) {
     final coaches = _coaches;
-    final pendingCount = coaches.where((c) => c.status == 'Pending').length;
+    final pendingCount = coaches.where((c) => c.status == AccountStatus.pending).length;
 
     return Scaffold(
       backgroundColor: Colors.transparent,
@@ -114,7 +115,7 @@ class _CoachesScreenState extends State<CoachesScreen> {
       title: user.name,
       subtitle: user.email,
       actions: [
-        if (user.status == 'Pending')
+        if (user.status == AccountStatus.pending)
           RecordActionItem(
             icon: Icons.verified_rounded,
             color: AppColors.success,
@@ -133,7 +134,7 @@ class _CoachesScreenState extends State<CoachesScreen> {
             resetPasswordFlow(context, user);
           },
         ),
-        if (user.status != 'Deactivated')
+        if (user.status != AccountStatus.deactivated)
           RecordActionItem(
             icon: Icons.person_off_rounded,
             color: AppColors.danger,
@@ -210,7 +211,7 @@ class _CoachCard extends StatelessWidget {
               const Text('Not yet onboarded — no public profile',
                   style: TextStyle(fontSize: 11.5, color: AppColors.inkSoft, fontStyle: FontStyle.italic)),
             const SizedBox(height: 10),
-            statusPill(user.status),
+            statusPill(user.status.label),
           ],
         ),
       ),

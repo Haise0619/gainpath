@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:gainpath/features/identity/domain/enums/certification_status.dart';
 import 'package:gainpath/app/theme/theme.dart';
 import 'package:gainpath/data/mock_data.dart';
 import 'package:gainpath/shared/shared.dart';
@@ -33,7 +34,7 @@ class _CertificationsScreenState extends State<CertificationsScreen> {
         orElse: () => 'New Certificate ${MockData.coachCertifications.length + 1}');
     setState(() {
       MockData.coachCertifications.add(
-        CoachCertification(next, 'Pending review', DateTime.now()),
+        CoachCertification(next, CertificationStatus.pendingReview, DateTime.now()),
       );
     });
     showToast(context, 'Uploaded. Gym staff will review it shortly.');
@@ -90,7 +91,7 @@ class _CertCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final rejected = cert.status == 'Rejected';
+    final rejected = cert.status == CertificationStatus.rejected;
     return Panel(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -122,7 +123,7 @@ class _CertCard extends StatelessWidget {
                   ],
                 ),
               ),
-              statusPill(cert.status),
+              statusPill(cert.status.label),
             ],
           ),
           if (rejected && cert.rejectionReason != null) ...[

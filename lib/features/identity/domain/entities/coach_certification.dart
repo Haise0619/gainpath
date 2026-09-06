@@ -1,3 +1,5 @@
+import 'package:gainpath/features/identity/domain/enums/certification_status.dart';
+
 /// AD-M8.3 — a certification document a coach uploads for gym-staff
 /// verification. [status] is one of Verified / Pending review / Rejected;
 /// [rejectionReason] is set only when rejected. Mutable + stored in a
@@ -6,7 +8,7 @@
 /// dictionary (without a backend behind it).
 class CoachCertification {
   final String name;
-  String status;
+  CertificationStatus status;
   final DateTime uploadedAt;
   final String? rejectionReason;
   CoachCertification(this.name, this.status, this.uploadedAt, {this.rejectionReason});

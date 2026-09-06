@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:gainpath/features/workout/domain/enums/tutorial_status.dart';
 import 'package:gainpath/app/theme/theme.dart';
 import 'package:gainpath/data/mock_data.dart';
 import 'package:gainpath/shared/shared.dart';
@@ -51,7 +52,7 @@ class _ExerciseTutorialsScreenState extends State<ExerciseTutorialsScreen> {
       return _TutorialFormPage(existing: _editing, onDone: _closeForm);
     }
 
-    final active = MockData.tutorials.where((t) => t.status == 'Active').length;
+    final active = MockData.tutorials.where((t) => t.status == TutorialStatus.active).length;
     return Scaffold(
       backgroundColor: Colors.transparent,
       body: SingleChildScrollView(
@@ -105,7 +106,7 @@ class _ExerciseTutorialsScreenState extends State<ExerciseTutorialsScreen> {
                         trailing: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            statusPill(t.status),
+                            statusPill(t.status.label),
                             const SizedBox(width: 6),
                             IconButton(
                               icon: const Icon(Icons.edit_outlined, size: 18),
@@ -154,7 +155,7 @@ class _TutorialFormPageState extends State<_TutorialFormPage> {
   late final _duration = TextEditingController(text: '${widget.existing?.durationMin ?? 5}');
   late String _category = widget.existing?.category ?? _categories.first;
   late String _difficulty = widget.existing?.difficulty ?? _difficulties.first;
-  late String _status = widget.existing?.status ?? 'Draft';
+  late String _status = widget.existing?.status.label ?? 'Draft';
   late String? _coversExercise =
       widget.existing?.coversExercise.isEmpty ?? true ? null : widget.existing!.coversExercise;
 
@@ -179,7 +180,7 @@ class _TutorialFormPageState extends State<_TutorialFormPage> {
       widget.existing!
         ..title = _title.text.trim()
         ..category = _category
-        ..status = _status
+        ..status = TutorialStatus.fromLabel(_status)
         ..coversExercise = _coversExercise ?? ''
         ..difficulty = _difficulty
         ..durationMin = duration
@@ -190,7 +191,7 @@ class _TutorialFormPageState extends State<_TutorialFormPage> {
       MockData.tutorials.add(TutorialVideo(
         title: _title.text.trim(),
         category: _category,
-        status: _status,
+        status: TutorialStatus.fromLabel(_status),
         coversExercise: _coversExercise ?? '',
         difficulty: _difficulty,
         durationMin: duration,

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:gainpath/features/coaching/domain/enums/booking_status.dart';
 import 'package:gainpath/app/theme/theme.dart';
 import 'package:gainpath/data/mock_data.dart';
 import 'package:gainpath/shared/shared.dart';
@@ -60,7 +61,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
   Widget build(BuildContext context) {
     final filter = ReportFilter(days: _days, branch: _branch);
 
-    final completed = MockData.allBookings.where((b) => b.status == 'Completed').toList();
+    final completed = MockData.allBookings.where((b) => b.status == BookingStatus.completed).toList();
     final coachingRevenue = completed.fold<double>(0, (sum, b) => sum + b.fee);
     final avgSession = completed.isEmpty ? 0.0 : coachingRevenue / completed.length;
 
@@ -323,7 +324,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
         ...MockData.branches.map((branch) {
           final branchCoaches = MockData.coaches.where((c) => c.branch == branch.name).toList();
           final branchBookings =
-              MockData.allBookings.where((b) => b.branch == branch.name && b.status == 'Completed').toList();
+              MockData.allBookings.where((b) => b.branch == branch.name && b.status == BookingStatus.completed).toList();
           final branchRevenue = branchBookings.fold<double>(0, (sum, b) => sum + b.fee);
           return Padding(
             padding: const EdgeInsets.only(bottom: 14),

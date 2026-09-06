@@ -1,3 +1,5 @@
+import 'package:gainpath/features/coaching/domain/enums/booking_status.dart';
+
 /// Embedded chat message for the member↔coach thread on a single booking,
 /// mirroring the BookingMessage subcollection in the data dictionary
 /// (senderRole, text, sentAt) without a backend behind it.
@@ -21,7 +23,7 @@ class Booking {
   DateTime start;
   final int durationMin;
   final String branch;
-  String status;
+  BookingStatus status;
   final double fee;
   String? notes;
   bool rated;

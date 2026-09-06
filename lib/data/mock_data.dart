@@ -27,6 +27,13 @@ import 'package:gainpath/features/workout/domain/entities/routine_blueprint.dart
 import 'package:gainpath/features/workout/domain/entities/tutorial_video.dart';
 import 'package:gainpath/features/workout/domain/entities/workout_record.dart';
 
+import 'package:gainpath/features/coaching/domain/enums/booking_status.dart';
+import 'package:gainpath/features/identity/domain/enums/account_status.dart';
+import 'package:gainpath/features/identity/domain/enums/certification_status.dart';
+import 'package:gainpath/features/membership/domain/enums/transaction_status.dart';
+import 'package:gainpath/features/membership/domain/enums/refund_status.dart';
+import 'package:gainpath/features/workout/domain/enums/tutorial_status.dart';
+
 export 'package:gainpath/features/analytics/domain/entities/analytics_points.dart';
 export 'package:gainpath/features/chatbot/domain/entities/chat_message.dart';
 export 'package:gainpath/features/chatbot/domain/entities/faq_prompt.dart';
@@ -77,11 +84,11 @@ class MockData {
   /// AD-M8.3 — the signed-in coach's uploaded credentials. Mutable so an
   /// upload adds a Pending entry that then shows in the list.
   static final coachCertifications = <CoachCertification>[
-    CoachCertification('NASM Certified Personal Trainer', 'Verified',
+    CoachCertification('NASM Certified Personal Trainer', CertificationStatus.verified,
         DateTime.now().subtract(const Duration(days: 210))),
-    CoachCertification('First Aid & CPR (Red Crescent)', 'Verified',
+    CoachCertification('First Aid & CPR (Red Crescent)', CertificationStatus.verified,
         DateTime.now().subtract(const Duration(days: 120))),
-    CoachCertification('Strength Specialist Level 2', 'Pending review',
+    CoachCertification('Strength Specialist Level 2', CertificationStatus.pendingReview,
         DateTime.now().subtract(const Duration(days: 3))),
   ];
 
@@ -378,13 +385,13 @@ class MockData {
   // ---- Module 4 -------------------------------------------------------
   static final transactions = <Transaction>[
     Transaction('TXN-2087', 'Coaching session', 140.00,
-        DateTime.now().subtract(const Duration(days: 2)), 'Cleared'),
+        DateTime.now().subtract(const Duration(days: 2)), TransactionStatus.cleared),
     Transaction('TXN-2041', 'Membership renewal', 89.00,
-        DateTime.now().subtract(const Duration(days: 12)), 'Cleared'),
+        DateTime.now().subtract(const Duration(days: 12)), TransactionStatus.cleared),
     Transaction('TXN-1988', 'Coaching session', 120.00,
-        DateTime.now().subtract(const Duration(days: 26)), 'Cleared'),
+        DateTime.now().subtract(const Duration(days: 26)), TransactionStatus.cleared),
     Transaction('TXN-1902', 'Membership renewal', 89.00,
-        DateTime.now().subtract(const Duration(days: 42)), 'Cleared'),
+        DateTime.now().subtract(const Duration(days: 42)), TransactionStatus.cleared),
   ];
 
   /// The refund policy window (AD-M4.4): only charges within this many days
@@ -553,7 +560,7 @@ class MockData {
       memberName: 'ZhengYang',
       start: DateTime.now().add(const Duration(days: 2, hours: 3)),
       branch: 'GainPath Kulim',
-      status: 'Confirmed',
+      status: BookingStatus.confirmed,
       fee: 120,
       messages: [
         BookingMessage('Member', 'Hi Jason, should I bring my own knee sleeves?',
@@ -571,7 +578,7 @@ class MockData {
       memberName: 'ZhengYang',
       start: DateTime.now().add(const Duration(days: 6)),
       branch: 'GainPath Sungai Petani',
-      status: 'Confirmed',
+      status: BookingStatus.confirmed,
       fee: 140,
     ),
     Booking(
@@ -581,7 +588,7 @@ class MockData {
       memberName: 'ZhengYang',
       start: DateTime.now().subtract(const Duration(days: 9)),
       branch: 'GainPath Kulim',
-      status: 'Completed',
+      status: BookingStatus.completed,
       fee: 120,
       notes: 'Good squat depth this session. Work on keeping the chest up during the ascent.',
       rated: true,
@@ -593,7 +600,7 @@ class MockData {
       memberName: 'ZhengYang',
       start: DateTime.now().subtract(const Duration(days: 20)),
       branch: 'GainPath Kulim',
-      status: 'Completed',
+      status: BookingStatus.completed,
       fee: 110,
     ),
     Booking(
@@ -603,7 +610,7 @@ class MockData {
       memberName: 'ZhengYang',
       start: DateTime.now().subtract(const Duration(days: 3)),
       branch: 'GainPath Sungai Petani',
-      status: 'Cancelled',
+      status: BookingStatus.cancelled,
       fee: 130,
       cancellationReason: 'Member requested — scheduling conflict.',
     ),
@@ -614,7 +621,7 @@ class MockData {
       memberName: 'Daniel Wong',
       start: DateTime.now().add(const Duration(days: 2, hours: 5)),
       branch: 'GainPath Kulim',
-      status: 'Confirmed',
+      status: BookingStatus.confirmed,
       fee: 120,
       messages: [
         BookingMessage('Member', 'Can we push my session 30 minutes later?',
@@ -628,7 +635,7 @@ class MockData {
       memberName: 'Nurul Huda',
       start: DateTime.now().add(const Duration(days: 4)),
       branch: 'GainPath Kulim',
-      status: 'Pending',
+      status: BookingStatus.pending,
       fee: 120,
     ),
     Booking(
@@ -638,7 +645,7 @@ class MockData {
       memberName: 'Farid Zainal',
       start: DateTime.now().subtract(const Duration(days: 1)),
       branch: 'GainPath Kulim',
-      status: 'Completed',
+      status: BookingStatus.completed,
       fee: 120,
     ),
     // ---- Additional history for Jason Lim (c1), spanning the last ~7
@@ -654,7 +661,7 @@ class MockData {
       memberName: 'Daniel Wong',
       start: DateTime.now().subtract(const Duration(days: 4)),
       branch: 'GainPath Kulim',
-      status: 'Completed',
+      status: BookingStatus.completed,
       fee: 120,
     ),
     Booking(
@@ -664,7 +671,7 @@ class MockData {
       memberName: 'Nurul Huda',
       start: DateTime.now().subtract(const Duration(days: 12)),
       branch: 'GainPath Kulim',
-      status: 'Completed',
+      status: BookingStatus.completed,
       fee: 120,
     ),
     Booking(
@@ -674,7 +681,7 @@ class MockData {
       memberName: 'Farid Zainal',
       start: DateTime.now().subtract(const Duration(days: 15)),
       branch: 'GainPath Kulim',
-      status: 'Completed',
+      status: BookingStatus.completed,
       fee: 120,
     ),
     Booking(
@@ -684,7 +691,7 @@ class MockData {
       memberName: 'Daniel Wong',
       start: DateTime.now().subtract(const Duration(days: 18)),
       branch: 'GainPath Kulim',
-      status: 'Completed',
+      status: BookingStatus.completed,
       fee: 120,
     ),
     Booking(
@@ -694,7 +701,7 @@ class MockData {
       memberName: 'ZhengYang',
       start: DateTime.now().subtract(const Duration(days: 22)),
       branch: 'GainPath Kulim',
-      status: 'Completed',
+      status: BookingStatus.completed,
       fee: 120,
     ),
     Booking(
@@ -704,7 +711,7 @@ class MockData {
       memberName: 'Nurul Huda',
       start: DateTime.now().subtract(const Duration(days: 25)),
       branch: 'GainPath Kulim',
-      status: 'Completed',
+      status: BookingStatus.completed,
       fee: 120,
     ),
     Booking(
@@ -714,7 +721,7 @@ class MockData {
       memberName: 'Aina Rahman',
       start: DateTime.now().subtract(const Duration(days: 26)),
       branch: 'GainPath Kulim',
-      status: 'Completed',
+      status: BookingStatus.completed,
       fee: 120,
     ),
     Booking(
@@ -724,7 +731,7 @@ class MockData {
       memberName: 'Daniel Wong',
       start: DateTime.now().subtract(const Duration(days: 29)),
       branch: 'GainPath Kulim',
-      status: 'Completed',
+      status: BookingStatus.completed,
       fee: 120,
     ),
     Booking(
@@ -734,7 +741,7 @@ class MockData {
       memberName: 'Farid Zainal',
       start: DateTime.now().subtract(const Duration(days: 33)),
       branch: 'GainPath Kulim',
-      status: 'Completed',
+      status: BookingStatus.completed,
       fee: 120,
     ),
     Booking(
@@ -744,7 +751,7 @@ class MockData {
       memberName: 'ZhengYang',
       start: DateTime.now().subtract(const Duration(days: 36)),
       branch: 'GainPath Kulim',
-      status: 'Completed',
+      status: BookingStatus.completed,
       fee: 120,
     ),
     Booking(
@@ -754,7 +761,7 @@ class MockData {
       memberName: 'Kevin Tan',
       start: DateTime.now().subtract(const Duration(days: 39)),
       branch: 'GainPath Kulim',
-      status: 'Completed',
+      status: BookingStatus.completed,
       fee: 120,
     ),
     Booking(
@@ -764,7 +771,7 @@ class MockData {
       memberName: 'Nurul Huda',
       start: DateTime.now().subtract(const Duration(days: 43)),
       branch: 'GainPath Kulim',
-      status: 'Completed',
+      status: BookingStatus.completed,
       fee: 120,
     ),
     Booking(
@@ -774,7 +781,7 @@ class MockData {
       memberName: 'Daniel Wong',
       start: DateTime.now().subtract(const Duration(days: 46)),
       branch: 'GainPath Kulim',
-      status: 'Completed',
+      status: BookingStatus.completed,
       fee: 120,
     ),
     Booking(
@@ -784,7 +791,7 @@ class MockData {
       memberName: 'Aina Rahman',
       start: DateTime.now().subtract(const Duration(days: 47)),
       branch: 'GainPath Kulim',
-      status: 'Completed',
+      status: BookingStatus.completed,
       fee: 120,
     ),
   ];
@@ -906,16 +913,16 @@ class MockData {
   /// haven't completed onboarding yet and so have no profile there —
   /// the Coaches admin page shows those with a "not yet onboarded" state.
   static final users = <UserAccount>[
-    UserAccount('ZhengYang', 'zhengyang@example.com', 'Member', 'Active'),
-    UserAccount('Daniel Wong', 'daniel.w@example.com', 'Member', 'Active'),
-    UserAccount('Farid Zainal', 'farid.z@example.com', 'Member', 'Suspended'),
-    UserAccount('Jason Lim', 'jason.lim@furyfitness.my', 'Coach', 'Verified',
+    UserAccount('ZhengYang', 'zhengyang@example.com', 'Member', AccountStatus.active),
+    UserAccount('Daniel Wong', 'daniel.w@example.com', 'Member', AccountStatus.active),
+    UserAccount('Farid Zainal', 'farid.z@example.com', 'Member', AccountStatus.suspended),
+    UserAccount('Jason Lim', 'jason.lim@furyfitness.my', 'Coach', AccountStatus.verified,
         branch: 'GainPath Kulim', specialty: 'Strength and Conditioning'),
-    UserAccount('Priya Menon', 'priya.m@furyfitness.my', 'Coach', 'Verified',
+    UserAccount('Priya Menon', 'priya.m@furyfitness.my', 'Coach', AccountStatus.verified,
         branch: 'GainPath Sungai Petani', specialty: 'Rehabilitation and Mobility'),
-    UserAccount('Hafiz Aziz', 'hafiz.a@furyfitness.my', 'Coach', 'Pending',
+    UserAccount('Hafiz Aziz', 'hafiz.a@furyfitness.my', 'Coach', AccountStatus.pending,
         branch: 'GainPath Kulim', specialty: 'Hypertrophy'),
-    UserAccount('Michelle Chan', 'michelle.c@furyfitness.my', 'Coach', 'Verified',
+    UserAccount('Michelle Chan', 'michelle.c@furyfitness.my', 'Coach', AccountStatus.verified,
         branch: 'GainPath Sungai Petani', specialty: 'Calisthenics'),
     ..._generatedMembers(),
   ];
@@ -945,7 +952,7 @@ class MockData {
         final name = '${firstNames[i]} $last';
         final email =
             '${firstNames[i].toLowerCase().replaceAll(' ', '')}.${last.toLowerCase()}$idx@example.com';
-        final status = idx % 8 == 0 ? 'Suspended' : 'Active';
+        final status = idx % 8 == 0 ? AccountStatus.suspended : AccountStatus.active;
         members.add(UserAccount(name, email, 'Member', status));
         idx++;
       }
@@ -1013,11 +1020,11 @@ class MockData {
     RefundClaim('CLM-3092', 'Farid Zainal', 'TXN-1902', 'Membership renewal', 89.00,
         'Charged after cancelling',
         'I cancelled my auto-renewal on the app before the charge date but was billed anyway.',
-        DateTime.now().subtract(const Duration(days: 3)), 'Pending'),
+        DateTime.now().subtract(const Duration(days: 3)), RefundStatus.pendingReview),
     RefundClaim('CLM-3088', 'Daniel Wong', 'TXN-1988', 'Coaching session', 120.00,
         'Coach cancelled the session',
         'Jason had to cancel last minute due to an emergency and the session was never rescheduled.',
-        DateTime.now().subtract(const Duration(days: 5)), 'Pending'),
+        DateTime.now().subtract(const Duration(days: 5)), RefundStatus.pendingReview),
   ];
 
   /// `[name, avgScorePct including '%', category]`. The tier ("High" /
@@ -1124,7 +1131,7 @@ class MockData {
     TutorialVideo(
         title: 'Squat Form Fundamentals',
         category: 'Compound Lower-Body',
-        status: 'Active',
+        status: TutorialStatus.active,
         coversExercise: 'Barbell Squat',
         difficulty: 'Beginner',
         durationMin: 6,
@@ -1132,14 +1139,14 @@ class MockData {
     TutorialVideo(
         title: 'Fixing Knee Valgus',
         category: 'Compound Lower-Body',
-        status: 'Active',
+        status: TutorialStatus.active,
         difficulty: 'Intermediate',
         durationMin: 4,
         thumbnailUrl: 'https://images.unsplash.com/photo-1517836357463-d25dfeac3438?auto=format&fit=crop&w=600&q=80'),
     TutorialVideo(
         title: 'RDL Form Basics',
         category: 'Compound Lower-Body',
-        status: 'Active',
+        status: TutorialStatus.active,
         coversExercise: 'Romanian Deadlift',
         difficulty: 'Beginner',
         durationMin: 5,
@@ -1147,7 +1154,7 @@ class MockData {
     TutorialVideo(
         title: 'Overhead Press Setup',
         category: 'Compound Upper-Body',
-        status: 'Active',
+        status: TutorialStatus.active,
         coversExercise: 'Overhead Press',
         difficulty: 'Beginner',
         durationMin: 5,

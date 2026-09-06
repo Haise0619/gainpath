@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:gainpath/features/coaching/domain/enums/booking_status.dart';
 import 'package:gainpath/app/theme/theme.dart';
 import 'package:gainpath/data/mock_data.dart';
 import 'package:gainpath/shared/shared.dart';
@@ -88,7 +89,7 @@ class _CoachRosterScreenState extends State<CoachRosterScreen>
     final filtering = _statusFilter != 'All';
 
     final visible = filtering
-        ? (roster.where((b) => b.status == _statusFilter).toList()
+        ? (roster.where((b) => b.status.label == _statusFilter).toList()
           ..sort((a, b) => b.start.compareTo(a.start)))
         : (roster.where((b) => _isSameDay(b.start, selectedDay)).toList()
           ..sort((a, b) => a.start.compareTo(b.start)));
@@ -393,17 +394,15 @@ class _TimelineRow extends StatelessWidget {
   }
 }
 
-Color _statusColor(String status) {
+Color _statusColor(BookingStatus status) {
   switch (status) {
-    case 'Confirmed':
-    case 'Completed':
+    case BookingStatus.confirmed:
+    case BookingStatus.completed:
       return AppColors.success;
-    case 'Pending':
+    case BookingStatus.pending:
       return AppColors.warning;
-    case 'Cancelled':
+    case BookingStatus.cancelled:
       return AppColors.danger;
-    default:
-      return AppColors.inkSoft;
   }
 }
 
@@ -433,12 +432,12 @@ class _ClientStats {
   factory _ClientStats.of(String memberName) {
     final bookings = MockData.coachRoster.where((b) => b.memberName == memberName).toList()
       ..sort((a, b) => a.start.compareTo(b.start));
-    final completed = bookings.where((b) => b.status == 'Completed').toList();
+    final completed = bookings.where((b) => b.status == BookingStatus.completed).toList();
     final withNotes = [...completed]..sort((a, b) => b.start.compareTo(a.start));
     return _ClientStats(
       sessionsTogether: bookings.length,
       completed: completed.length,
-      cancelled: bookings.where((b) => b.status == 'Cancelled').length,
+      cancelled: bookings.where((b) => b.status == BookingStatus.cancelled).length,
       revenue: completed.fold(0, (sum, b) => sum + b.fee),
       clientSince: bookings.first.start,
       mostRecentNote: withNotes.isEmpty
@@ -657,7 +656,7 @@ class _SessionCard extends StatelessWidget {
                           Column(
                             crossAxisAlignment: CrossAxisAlignment.end,
                             children: [
-                              statusPill(booking.status),
+                              statusPill(booking.status.label),
                               if (!isPast) ...[
                                 const SizedBox(height: 6),
                                 SizedBox(

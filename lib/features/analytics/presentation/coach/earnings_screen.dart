@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:gainpath/features/coaching/domain/enums/booking_status.dart';
 import 'package:syncfusion_flutter_charts/charts.dart' hide CornerStyle;
 import 'package:syncfusion_flutter_gauges/gauges.dart';
 import 'package:gainpath/app/theme/theme.dart';
@@ -81,10 +82,10 @@ class _EarningsScreenState extends State<EarningsScreen> {
   Widget build(BuildContext context) {
     final coach = MockData.currentCoach;
     final roster = MockData.coachRoster;
-    final completed = roster.where((b) => b.status == 'Completed').toList()
+    final completed = roster.where((b) => b.status == BookingStatus.completed).toList()
       ..sort((a, b) => b.start.compareTo(a.start));
     final totalEarned = completed.fold<double>(0, (sum, b) => sum + b.fee);
-    final notCancelled = roster.where((b) => b.status != 'Cancelled').length;
+    final notCancelled = roster.where((b) => b.status != BookingStatus.cancelled).length;
     final fillRate = roster.isEmpty ? 0 : (notCancelled / roster.length * 100).round();
     final avgPerSession = completed.isEmpty ? 0.0 : totalEarned / completed.length;
 

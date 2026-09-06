@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:gainpath/features/coaching/domain/enums/booking_status.dart';
 import 'package:gainpath/app/theme/theme.dart';
 import 'package:gainpath/data/mock_data.dart';
 import 'package:gainpath/shared/shared.dart';
@@ -51,7 +52,7 @@ class _ConsultationNotesScreenState extends State<ConsultationNotesScreen> {
       return;
     }
     widget.booking.notes = _controller.text.trim();
-    widget.booking.status = 'Completed';
+    widget.booking.status = BookingStatus.completed;
     Navigator.pop(context);
     showToast(context, 'Notes published. Session marked complete.');
   }

@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import 'package:gainpath/features/coaching/domain/enums/booking_status.dart';
 import 'package:gainpath/app/theme/theme.dart';
 import 'package:gainpath/data/mock_data.dart';
 import 'package:gainpath/shared/shared.dart';
@@ -86,7 +87,7 @@ class _MemberHomeScreenState extends State<MemberHomeScreen>
   /// The member's next confirmed coaching session, if any.
   Booking? get _nextBooking {
     final upcoming = MockData.memberBookings
-        .where((b) => b.status == 'Confirmed' && b.start.isAfter(DateTime.now()))
+        .where((b) => b.status == BookingStatus.confirmed && b.start.isAfter(DateTime.now()))
         .toList()
       ..sort((a, b) => a.start.compareTo(b.start));
     return upcoming.isEmpty ? null : upcoming.first;
@@ -746,7 +747,7 @@ class _NextSessionCard extends StatelessWidget {
               ],
             ),
           ),
-          statusPill(booking.status),
+          statusPill(booking.status.label),
           const SizedBox(width: 6),
           const Icon(Icons.arrow_forward_ios_rounded, size: 14, color: AppColors.inkSoft),
         ],

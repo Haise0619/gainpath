@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:gainpath/features/coaching/domain/enums/booking_status.dart';
 import 'package:gainpath/features/coaching/presentation/coach/block_type_icon.dart';
 import 'package:gainpath/app/theme/theme.dart';
 import 'package:gainpath/data/mock_data.dart';
@@ -81,7 +82,7 @@ class _AvailabilityScreenState extends State<AvailabilityScreen> {
     final blocks = [...MockData.blockedSlots]..sort((a, b) => a.date.compareTo(b.date));
     final now = DateTime.now();
     final bookedThisWeek = MockData.coachRoster
-        .where((b) => b.start.isAfter(now) && b.start.isBefore(now.add(const Duration(days: 7))) && b.status != 'Cancelled')
+        .where((b) => b.start.isAfter(now) && b.start.isBefore(now.add(const Duration(days: 7))) && b.status != BookingStatus.cancelled)
         .length;
 
     return Scaffold(

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:gainpath/features/coaching/domain/enums/booking_status.dart';
 import 'package:gainpath/app/theme/theme.dart';
 import 'package:gainpath/data/mock_data.dart';
 import 'package:gainpath/shared/shared.dart';
@@ -65,10 +66,10 @@ class BookingCard extends StatelessWidget {
                   ],
                 ),
               ),
-              statusPill(booking.status),
+              statusPill(booking.status.label),
             ],
           ),
-          if (booking.status == 'Cancelled' && booking.cancellationReason != null) ...[
+          if (booking.status == BookingStatus.cancelled && booking.cancellationReason != null) ...[
             const SizedBox(height: 12),
             Container(
               padding: const EdgeInsets.all(12),
@@ -122,8 +123,8 @@ class BookingCard extends StatelessWidget {
 
   Widget _actions(BuildContext context) {
     switch (booking.status) {
-      case 'Confirmed':
-      case 'Pending':
+      case BookingStatus.confirmed:
+      case BookingStatus.pending:
         return Row(
           children: [
             Expanded(
@@ -155,7 +156,7 @@ class BookingCard extends StatelessWidget {
             ),
           ],
         );
-      case 'Completed':
+      case BookingStatus.completed:
         if (booking.rated) {
           return SizedBox(
             width: double.infinity,
@@ -187,8 +188,7 @@ class BookingCard extends StatelessWidget {
             ),
           ],
         );
-      case 'Cancelled':
-      default:
+      case BookingStatus.cancelled:
         return SizedBox(
           width: double.infinity,
           child: OutlinedButton(

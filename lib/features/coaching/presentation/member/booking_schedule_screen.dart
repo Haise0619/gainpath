@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:gainpath/features/coaching/domain/enums/booking_status.dart';
 import 'package:gainpath/app/theme/theme.dart';
 import 'package:gainpath/data/mock_data.dart';
 import 'package:gainpath/shared/shared.dart';
@@ -37,12 +38,12 @@ class _BookingScheduleScreenState extends State<BookingScheduleScreen> {
   @override
   Widget build(BuildContext context) {
     final upcoming = MockData.memberBookings
-        .where((b) => b.status == 'Confirmed' || b.status == 'Pending')
+        .where((b) => b.status == BookingStatus.confirmed || b.status == BookingStatus.pending)
         .toList()
       ..sort((a, b) => a.start.compareTo(b.start));
-    final completed = MockData.memberBookings.where((b) => b.status == 'Completed').toList()
+    final completed = MockData.memberBookings.where((b) => b.status == BookingStatus.completed).toList()
       ..sort((a, b) => b.start.compareTo(a.start));
-    final cancelled = MockData.memberBookings.where((b) => b.status == 'Cancelled').toList()
+    final cancelled = MockData.memberBookings.where((b) => b.status == BookingStatus.cancelled).toList()
       ..sort((a, b) => b.start.compareTo(a.start));
 
     return Scaffold(
@@ -186,7 +187,7 @@ class _BookingScheduleScreenState extends State<BookingScheduleScreen> {
     );
     if (confirmed != true || !mounted) return;
     setState(() {
-      b.status = 'Cancelled';
+      b.status = BookingStatus.cancelled;
       b.cancellationReason = 'Member requested — ${reason ?? _cancelReasons.first}.';
     });
     if (mounted) showToast(context, 'Session cancelled.');
