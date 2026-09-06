@@ -89,6 +89,18 @@ Dependency rule: `presentation → application → domain ← data`. `domain` im
 
 `flutter analyze` clean (no new warnings vs baseline of 5 infos), `flutter test` green, `flutter build web` succeeds, app launches on web and Windows and each role's shell renders.
 
+## Implementation notes (recorded after execution, 2026-09-06)
+
+Deviations from the layout above, all deliberate:
+
+- **Member home dashboard** lives in `lib/app/home/member_home_screen.dart`, not in a feature: it composes six features, which makes it composition-root code.
+- **Admin dialog primitives** (`AdminDialog`, `confirmDialog`, `showRecordActionsDialog`) moved to `lib/shared/widgets/admin_dialogs.dart`; admin report chart widgets to `lib/shared/charts/report_widgets.dart`. Both are used by several features.
+- **Dependency rule as enforced by `tool/check_imports.dart`:** a feature may import another feature's `domain/` and `presentation/shared/`; `data/` may import another feature's `data/` (the in-memory seeds are one prototype dataset); `domain/` may import `package:flutter/material.dart` only with a `show` list (value types `TimeOfDay`, `IconData`). Cross-feature entry screens (equipment detail, Billplz checkout, membership and progress dashboards, public coach profile) therefore sit in `presentation/shared/`.
+- **Repository interfaces mirror the seed members one-to-one** rather than the hand-shaped signatures sketched in the plan; mutators were added only where a Bloc needed them (`GamificationRepository.addPoints/extendStreak`, `MembershipRepository.setCurrentPlanId/autoRenew/addTransaction/addRefundClaim`).
+- **Blocs are provided at the app root** (`lib/app/app.dart`, above `MaterialApp`) for Auth, Booking, Gamification and Membership so routes pushed on the root Navigator can reach them; `WorkoutSessionBloc` and `ChatBloc` are scoped to their screens.
+- **Small behaviour changes accepted with the Blocs:** a mini-game result now credits points (one per ten score); purchasing a plan switches the current plan and records a transaction; a refund request files a pending claim and is refused outside the 7-day window; the daily check-in can be claimed once per session. Everything else is behaviour-identical.
+- **Phases 5–7** (go_router, engine seam, Firebase scaffold) remain open.
+
 ## Out of scope for this pass
 
 Behaviour changes, new features, Firebase, ML, routing library, monorepo split, UI redesign.
