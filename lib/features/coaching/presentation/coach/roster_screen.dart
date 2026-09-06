@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:gainpath/app/theme/theme.dart';
 import 'package:gainpath/data/mock_data.dart';
 import 'package:gainpath/shared/shared.dart';
-import 'package:gainpath/screens/coach/scheduling/client_posture_screen.dart';
-import 'package:gainpath/screens/coach/scheduling/consultation_notes_screen.dart';
-import 'package:gainpath/screens/coach/scheduling/message_inbox_screen.dart';
+import 'package:gainpath/features/coaching/presentation/coach/client_posture_screen.dart';
+import 'package:gainpath/features/coaching/presentation/coach/consultation_notes_screen.dart';
+import 'package:gainpath/features/coaching/presentation/coach/message_inbox_screen.dart';
 
 /// AD-M9.1 — View Upcoming Session Schedule. Built around a day-rail +
 /// vertical timeline rather than the flat panel list every other module

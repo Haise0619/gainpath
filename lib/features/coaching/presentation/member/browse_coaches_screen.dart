@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:gainpath/app/theme/theme.dart';
 import 'package:gainpath/data/mock_data.dart';
-import 'package:gainpath/screens/member/coach_booking/booking_schedule_screen.dart';
-import 'package:gainpath/screens/member/coach_booking/coach_profile_screen.dart';
-import 'package:gainpath/screens/member/coach_booking/widgets/coach_card.dart';
+import 'package:gainpath/features/coaching/presentation/member/booking_schedule_screen.dart';
+import 'package:gainpath/features/coaching/presentation/member/coach_profile_screen.dart';
+import 'package:gainpath/features/coaching/presentation/member/widgets/coach_card.dart';
 
 enum _SortBy { rating, priceLow, experience }
 

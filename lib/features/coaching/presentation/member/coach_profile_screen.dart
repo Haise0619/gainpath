@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:gainpath/app/theme/theme.dart';
 import 'package:gainpath/data/mock_data.dart';
 import 'package:gainpath/shared/shared.dart';
-import 'package:gainpath/screens/member/coach_booking/book_session_screen.dart';
-import 'package:gainpath/screens/member/coach_booking/widgets/coach_card.dart';
+import 'package:gainpath/features/coaching/presentation/member/book_session_screen.dart';
+import 'package:gainpath/features/coaching/presentation/member/widgets/coach_card.dart';
 
 /// AD-M7.1 (detail) — Coach Profile. Every figure here is read from the
 /// specific [coach] passed in — years of experience, sessions completed,

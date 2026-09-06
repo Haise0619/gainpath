@@ -10,8 +10,8 @@ import 'package:gainpath/screens/member/progress/progress_dashboard_screen.dart'
 import 'package:gainpath/screens/member/chatbot/chatbot_screen.dart';
 import 'package:gainpath/screens/member/chatbot/saved_advice_screen.dart';
 import 'package:gainpath/features/gamification/presentation/member/gamification_screens.dart';
-import 'package:gainpath/screens/member/coach_booking/booking_schedule_screen.dart';
-import 'package:gainpath/screens/member/coach_booking/browse_coaches_screen.dart';
+import 'package:gainpath/features/coaching/presentation/member/booking_schedule_screen.dart';
+import 'package:gainpath/features/coaching/presentation/member/browse_coaches_screen.dart';
 import 'package:gainpath/screens/member/membership/membership_dashboard_screen.dart';
 
 /// Member landing screen — the hub every other member flow is reachable

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:gainpath/screens/coach/scheduling/roster_screen.dart';
-import 'package:gainpath/screens/coach/availability_screens.dart';
+import 'package:gainpath/features/coaching/presentation/coach/roster_screen.dart';
+import 'package:gainpath/features/coaching/presentation/coach/availability_screens.dart';
 import 'package:gainpath/screens/coach/scheduling/earnings_screen.dart';
 import 'package:gainpath/features/identity/presentation/coach/coach_account_screen.dart';
 
