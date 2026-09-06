@@ -12,4 +12,10 @@ abstract class GamificationRepository {
   List<MiniGame> get miniGames;
   List<RewardItem> get rewards;
   List<List<String>> get leaderboard;
+
+  /// Credits [n] points to the member's balance.
+  void addPoints(int n);
+
+  /// Extends the active streak by one day, updating the longest streak.
+  void extendStreak();
 }

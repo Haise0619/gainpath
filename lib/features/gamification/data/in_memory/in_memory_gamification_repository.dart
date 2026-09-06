@@ -26,4 +26,15 @@ class InMemoryGamificationRepository implements GamificationRepository {
 
   @override
   List<List<String>> get leaderboard => GamificationSeed.leaderboard;
+
+  @override
+  void addPoints(int n) => GamificationSeed.points += n;
+
+  @override
+  void extendStreak() {
+    GamificationSeed.streak += 1;
+    if (GamificationSeed.streak > GamificationSeed.longestStreak) {
+      GamificationSeed.longestStreak = GamificationSeed.streak;
+    }
+  }
 }

@@ -5,11 +5,11 @@ import 'package:gainpath/features/gamification/domain/entities/reward_item.dart'
 
 /// In-memory seed data for the gamification feature (frontend prototype).
 class GamificationSeed {
-  static const points = 1840;
+  static int points = 1840;
 
-  static const streak = 12;
+  static int streak = 12;
 
-  static const longestStreak = 21;
+  static int longestStreak = 21;
 
   static const _twemoji = 'https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/72x72';
 
