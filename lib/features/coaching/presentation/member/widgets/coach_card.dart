@@ -3,20 +3,6 @@ import 'package:gainpath/app/theme/theme.dart';
 import 'package:gainpath/data/mock_data.dart';
 import 'package:gainpath/shared/shared.dart';
 
-/// Defensive online-image loader: a broken/slow link never breaks the
-/// layout — the same pattern already used across onboarding, profile
-/// setup, the workout module, and gamification.
-Widget networkAvatar(String url, {BoxFit fit = BoxFit.cover}) {
-  return Image.network(
-    url,
-    fit: fit,
-    loadingBuilder: (context, child, progress) =>
-        progress == null ? child : Container(color: AppColors.surfaceAlt),
-    errorBuilder: (context, error, stack) =>
-        const DecoratedBox(decoration: BoxDecoration(gradient: AppColors.heroGradient)),
-  );
-}
-
 /// A coach summary card for the Browse Coaches list: online avatar,
 /// verified badge, top specialization tags, rating, and fee — enough to
 /// compare coaches at a glance without opening every profile.
