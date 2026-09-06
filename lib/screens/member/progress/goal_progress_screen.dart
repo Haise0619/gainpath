@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:syncfusion_flutter_gauges/gauges.dart';
 import 'package:gainpath/app/theme/theme.dart';
-import 'package:gainpath/widgets/shared.dart';
+import 'package:gainpath/shared/shared.dart';
 
 /// AD-M5.3 — View Goal Progress Comparison. Each goal gets its own radial
 /// gauge: a dial reads as "progress toward a target" more directly than

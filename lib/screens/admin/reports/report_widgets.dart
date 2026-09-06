@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:gainpath/app/theme/theme.dart';
-import 'package:gainpath/widgets/shared.dart';
+import 'package:gainpath/shared/shared.dart';
 import 'package:gainpath/core/platform/csv_export.dart';
 
 /// A `MockData.allBookings`-derived date/branch filter, applied live

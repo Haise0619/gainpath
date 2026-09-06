@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:gainpath/app/theme/theme.dart';
 import 'package:gainpath/data/mock_data.dart';
-import 'package:gainpath/widgets/shared.dart';
+import 'package:gainpath/shared/shared.dart';
 
 /// Reschedule an existing confirmed/pending booking to a new day and
 /// time. Mutates `booking.start` in place — the same `Booking` instance

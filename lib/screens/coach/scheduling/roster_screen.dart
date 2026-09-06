@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:gainpath/app/theme/theme.dart';
 import 'package:gainpath/data/mock_data.dart';
-import 'package:gainpath/widgets/shared.dart';
+import 'package:gainpath/shared/shared.dart';
 import 'package:gainpath/screens/coach/scheduling/client_posture_screen.dart';
 import 'package:gainpath/screens/coach/scheduling/consultation_notes_screen.dart';
 import 'package:gainpath/screens/coach/scheduling/message_inbox_screen.dart';

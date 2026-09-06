@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:gainpath/data/mock_data.dart';
-import 'package:gainpath/widgets/shared.dart';
+import 'package:gainpath/shared/shared.dart';
 import 'package:gainpath/screens/member/membership/purchase_plan_screen.dart';
 import 'package:gainpath/screens/member/membership/widgets/plan_card.dart';
 

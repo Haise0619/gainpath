@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:gainpath/app/theme/theme.dart';
 import 'package:gainpath/data/mock_data.dart';
 import 'package:gainpath/widgets/change_password_sheet.dart';
-import 'package:gainpath/widgets/shared.dart';
+import 'package:gainpath/shared/shared.dart';
 
 /// AD-M8.2 — Authenticated Session & Settings Management (Fitness Coach).
 /// Contact details, notification preferences tuned to a coach's workflow

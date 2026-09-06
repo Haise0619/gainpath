@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:gainpath/app/theme/theme.dart';
-import 'package:gainpath/widgets/shared.dart';
+import 'package:gainpath/shared/shared.dart';
 import 'package:gainpath/screens/admin/admin_dialogs.dart';
 
 /// AD-M11.6 — Configure System Settings. Platform-wide configuration

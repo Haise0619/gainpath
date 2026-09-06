@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:gainpath/app/theme/theme.dart';
 import 'package:gainpath/data/mock_data.dart';
-import 'package:gainpath/widgets/shared.dart';
+import 'package:gainpath/shared/shared.dart';
 import 'package:gainpath/screens/member/coach_booking/widgets/coach_card.dart';
 
 /// A single booking on "My bookings," with an action row that adapts to

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:gainpath/app/theme/theme.dart';
 import 'package:gainpath/data/mock_data.dart';
-import 'package:gainpath/widgets/shared.dart';
+import 'package:gainpath/shared/shared.dart';
 import 'package:gainpath/screens/member/membership/billing_history_screen.dart';
 import 'package:gainpath/screens/member/membership/browse_plans_screen.dart';
 import 'package:gainpath/screens/member/membership/refund_request_screen.dart';

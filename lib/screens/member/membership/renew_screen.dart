@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:gainpath/app/theme/theme.dart';
 import 'package:gainpath/data/mock_data.dart';
 import 'package:gainpath/widgets/billplz_checkout_screen.dart';
-import 'package:gainpath/widgets/shared.dart';
+import 'package:gainpath/shared/shared.dart';
 
 /// AD-M4.3 — Renew Membership Subscription. Reads the member's actual
 /// current plan rather than a fixed sample, so this stays correct however

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:gainpath/app/theme/theme.dart';
-import 'package:gainpath/widgets/shared.dart';
+import 'package:gainpath/shared/shared.dart';
 
 /// AD-M11.4 — Update the AI Chatbot Disclaimer (`ChatbotDisclaimerConfig`).
 /// Distinct from the compliance/privacy document managed under System

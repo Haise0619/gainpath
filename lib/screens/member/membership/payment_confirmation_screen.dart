@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:gainpath/app/theme/theme.dart';
-import 'package:gainpath/widgets/shared.dart';
+import 'package:gainpath/shared/shared.dart';
 
 /// Terminal state of the purchase/plan-switch flow.
 class PaymentConfirmationScreen extends StatefulWidget {

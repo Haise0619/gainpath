@@ -3,7 +3,7 @@ import 'package:syncfusion_flutter_charts/charts.dart' hide CornerStyle;
 import 'package:syncfusion_flutter_gauges/gauges.dart';
 import 'package:gainpath/app/theme/theme.dart';
 import 'package:gainpath/data/mock_data.dart';
-import 'package:gainpath/widgets/shared.dart';
+import 'package:gainpath/shared/shared.dart';
 
 /// New Progress sub-report tying into the Gamification module: points
 /// earned per week as a filled area trend, plus the current streak read
