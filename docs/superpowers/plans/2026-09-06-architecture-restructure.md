@@ -840,6 +840,10 @@ Events: `RoleSelected(AppRole)`, `LoginSubmitted(email, password)`, `LoggedOut`.
 
 ---
 
+## Status (2026-09-06)
+
+Phases 0–4 executed on branch `restructure/feature-first`. Every task above is done, with the deviations recorded in the spec's "Implementation notes" section (home dashboard under `lib/app/home`, seed-mirroring repository interfaces, root-level Bloc providers, relaxed cross-feature rules for `domain/`, `data/` and `presentation/shared/`). Test count went from 1 (broken) to 79 passing; `tool/check_imports.dart` runs inside `flutter test`.
+
 ## Self-review
 
 - **Spec coverage:** Phase 0 (0.1–0.4), Phase 1 (1.1–1.9 incl. cross-role fix and shared split), Phase 2 (entities, enums, policies, seeds/facade), Phase 3 (interfaces, DI, replacement, boundary check), Phase 4 (six Blocs, three file splits, duplicated points state merged), verification and docs. Phases 5–7 intentionally excluded per spec.
