@@ -3,7 +3,7 @@ import 'package:gainpath/features/coaching/domain/enums/booking_status.dart';
 import 'package:syncfusion_flutter_charts/charts.dart';
 import 'package:gainpath/app/theme/theme.dart';
 import 'package:gainpath/shared/shared.dart';
-import 'package:gainpath/features/analytics/presentation/admin/report_widgets.dart';
+import 'package:gainpath/shared/charts/report_widgets.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:gainpath/features/analytics/domain/repositories/analytics_repository.dart';
 import 'package:gainpath/features/coaching/domain/repositories/availability_repository.dart';

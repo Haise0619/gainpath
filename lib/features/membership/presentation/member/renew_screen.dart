@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:gainpath/app/theme/theme.dart';
-import 'package:gainpath/features/membership/presentation/member/billplz_checkout_screen.dart';
+import 'package:gainpath/features/membership/presentation/shared/billplz_checkout_screen.dart';
 import 'package:gainpath/shared/shared.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:gainpath/features/membership/domain/entities/membership_plan.dart';

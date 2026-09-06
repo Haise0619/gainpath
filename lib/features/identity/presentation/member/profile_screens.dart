@@ -3,8 +3,8 @@ import 'package:gainpath/app/theme/theme.dart';
 import 'package:gainpath/features/identity/presentation/shared/change_password_sheet.dart';
 import 'package:gainpath/shared/shared.dart';
 import 'package:gainpath/features/identity/presentation/shared/role_select_screen.dart';
-import 'package:gainpath/features/membership/presentation/member/membership_dashboard_screen.dart';
-import 'package:gainpath/features/analytics/presentation/member/progress_dashboard_screen.dart';
+import 'package:gainpath/features/membership/presentation/shared/membership_dashboard_screen.dart';
+import 'package:gainpath/features/analytics/presentation/shared/progress_dashboard_screen.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:gainpath/features/identity/domain/repositories/member_profile_repository.dart';
 

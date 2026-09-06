@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:syncfusion_flutter_charts/charts.dart';
 import 'package:gainpath/app/theme/theme.dart';
 import 'package:gainpath/shared/shared.dart';
-import 'package:gainpath/features/workout/presentation/member/equipment_detail_screen.dart';
+import 'package:gainpath/features/workout/presentation/shared/equipment_detail_screen.dart';
 import 'package:gainpath/features/chatbot/presentation/member/saved_advice_screen.dart';
 import 'package:gainpath/features/chatbot/presentation/member/widgets/chatbot_about_sheet.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';

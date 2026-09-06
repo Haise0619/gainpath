@@ -1,12 +1,13 @@
+import 'package:gainpath/features/workout/domain/entities/exercise.dart';
+
 /// UC-2.6 — Equipment recognition catalogue. [category] deliberately uses
 /// the same value space as [Exercise.category] (not a separate taxonomy)
 /// so a scanned/browsed piece of equipment can pull real matching
-/// exercises straight out of `context.read<WorkoutRepository>().routine` — see
+/// exercises straight out of the workout routine — see
 /// `EquipmentDetailScreen`'s "Related exercises" section. Some equipment
 /// has no exercise in the current routine sharing its category on
 /// purpose (Cable Crossover, Treadmill), so that screen also has to
 /// handle the honest "nothing matched" case, not just the happy path.
-import 'package:gainpath/features/workout/domain/entities/exercise.dart';
 
 class GymEquipment {
   final String id;

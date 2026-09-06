@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:gainpath/features/coaching/domain/enums/booking_status.dart';
 import 'package:gainpath/app/theme/theme.dart';
 import 'package:gainpath/shared/shared.dart';
-import 'package:gainpath/features/analytics/presentation/admin/report_widgets.dart';
+import 'package:gainpath/shared/charts/report_widgets.dart';
 import 'package:gainpath/features/analytics/presentation/admin/sections/commerce_sections.dart';
 import 'package:gainpath/features/analytics/presentation/admin/sections/engagement_sections.dart';
 import 'package:gainpath/features/analytics/presentation/admin/sections/operations_sections.dart';

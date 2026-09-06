@@ -3,7 +3,7 @@ import 'package:gainpath/features/recommendation/domain/policies/risk_policy.dar
 import 'package:syncfusion_flutter_charts/charts.dart';
 import 'package:gainpath/app/theme/theme.dart';
 import 'package:gainpath/shared/shared.dart';
-import 'package:gainpath/features/analytics/presentation/admin/report_widgets.dart' show ReportSection;
+import 'package:gainpath/shared/charts/report_widgets.dart' show ReportSection;
 import 'package:gainpath/shared/widgets/admin_dialogs.dart' show AdminDialog;
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:gainpath/features/recommendation/domain/entities/risk_lead.dart';
