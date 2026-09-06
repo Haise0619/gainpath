@@ -2,10 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:gainpath/app/theme/theme.dart';
 import 'package:gainpath/data/mock_data.dart';
 import 'package:gainpath/shared/shared.dart';
-import 'package:gainpath/screens/admin/reports/report_widgets.dart';
-import 'package:gainpath/screens/admin/reports/sections/commerce_sections.dart';
-import 'package:gainpath/screens/admin/reports/sections/engagement_sections.dart';
-import 'package:gainpath/screens/admin/reports/sections/operations_sections.dart';
+import 'package:gainpath/features/analytics/presentation/admin/report_widgets.dart';
+import 'package:gainpath/features/analytics/presentation/admin/sections/commerce_sections.dart';
+import 'package:gainpath/features/analytics/presentation/admin/sections/engagement_sections.dart';
+import 'package:gainpath/features/analytics/presentation/admin/sections/operations_sections.dart';
 
 /// AD-M12.1/M12.2 — Admin Dashboard & Reporting. One continuous analytics
 /// page instead of eight separate pushed screens each showing a single

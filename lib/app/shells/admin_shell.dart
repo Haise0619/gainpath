@@ -4,7 +4,7 @@ import 'package:gainpath/app/theme/theme.dart';
 import 'package:gainpath/data/mock_data.dart';
 import 'package:gainpath/features/identity/presentation/shared/login_screen.dart';
 import 'package:gainpath/features/identity/presentation/shared/role_select_screen.dart';
-import 'package:gainpath/screens/admin/admin_dashboard_screens.dart';
+import 'package:gainpath/features/analytics/presentation/admin/admin_dashboard_screens.dart';
 import 'package:gainpath/screens/admin/admin_dialogs.dart';
 import 'package:gainpath/screens/admin/admin_recommendation_screens.dart';
 import 'package:gainpath/features/identity/presentation/admin/admin_settings_screens.dart';
@@ -15,7 +15,7 @@ import 'package:gainpath/features/gamification/presentation/admin/reward_catalog
 import 'package:gainpath/screens/admin/governance/announcements_screen.dart';
 import 'package:gainpath/features/chatbot/presentation/admin/chatbot_disclaimer_screen.dart';
 import 'package:gainpath/features/membership/presentation/admin/refunds_screen.dart';
-import 'package:gainpath/screens/admin/reports/reports_screen.dart';
+import 'package:gainpath/features/analytics/presentation/admin/reports_screen.dart';
 import 'package:gainpath/screens/admin/settings/system_settings_screen.dart';
 import 'package:gainpath/features/identity/presentation/admin/members_screen.dart';
 import 'package:gainpath/features/identity/presentation/admin/coaches_screen.dart';

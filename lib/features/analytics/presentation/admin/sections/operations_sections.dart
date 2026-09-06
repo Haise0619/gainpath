@@ -3,7 +3,7 @@ import 'package:syncfusion_flutter_charts/charts.dart';
 import 'package:gainpath/app/theme/theme.dart';
 import 'package:gainpath/data/mock_data.dart';
 import 'package:gainpath/shared/shared.dart';
-import 'package:gainpath/screens/admin/reports/report_widgets.dart';
+import 'package:gainpath/features/analytics/presentation/admin/report_widgets.dart';
 
 /// The three report sections genuinely derivable from `MockData.allBookings`
 /// — each `Booking` carries a real `start` date and `branch`, so these are

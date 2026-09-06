@@ -5,7 +5,7 @@ import 'package:gainpath/features/identity/presentation/shared/change_password_s
 import 'package:gainpath/shared/shared.dart';
 import 'package:gainpath/features/identity/presentation/shared/role_select_screen.dart';
 import 'package:gainpath/features/membership/presentation/member/membership_dashboard_screen.dart';
-import 'package:gainpath/screens/member/progress/progress_dashboard_screen.dart';
+import 'package:gainpath/features/analytics/presentation/member/progress_dashboard_screen.dart';
 
 /// AD-M1.3 — Fitness Profile Management, plus account settings and logout.
 class MemberProfileScreen extends StatelessWidget {

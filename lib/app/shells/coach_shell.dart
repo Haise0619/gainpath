@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:gainpath/features/coaching/presentation/coach/roster_screen.dart';
 import 'package:gainpath/features/coaching/presentation/coach/availability_screens.dart';
-import 'package:gainpath/screens/coach/scheduling/earnings_screen.dart';
+import 'package:gainpath/features/analytics/presentation/coach/earnings_screen.dart';
 import 'package:gainpath/features/identity/presentation/coach/coach_account_screen.dart';
 
 /// Bottom-navigation shell for the Fitness Coach role (Modules 8 to 10).
