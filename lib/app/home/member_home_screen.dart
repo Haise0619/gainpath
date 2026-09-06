@@ -9,7 +9,7 @@ import 'package:gainpath/screens/member/progress/goal_progress_screen.dart';
 import 'package:gainpath/screens/member/progress/progress_dashboard_screen.dart';
 import 'package:gainpath/screens/member/chatbot/chatbot_screen.dart';
 import 'package:gainpath/screens/member/chatbot/saved_advice_screen.dart';
-import 'package:gainpath/screens/member/gamification_screens.dart';
+import 'package:gainpath/features/gamification/presentation/member/gamification_screens.dart';
 import 'package:gainpath/screens/member/coach_booking/booking_schedule_screen.dart';
 import 'package:gainpath/screens/member/coach_booking/browse_coaches_screen.dart';
 import 'package:gainpath/screens/member/membership/membership_dashboard_screen.dart';

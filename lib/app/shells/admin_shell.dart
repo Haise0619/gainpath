@@ -11,7 +11,7 @@ import 'package:gainpath/features/identity/presentation/admin/admin_settings_scr
 import 'package:gainpath/features/workout/presentation/admin/exercise_tutorials_screen.dart';
 import 'package:gainpath/features/workout/presentation/admin/routine_templates_screen.dart';
 import 'package:gainpath/features/workout/presentation/admin/equipment_catalog_screen.dart';
-import 'package:gainpath/screens/admin/governance/reward_catalog_screen.dart';
+import 'package:gainpath/features/gamification/presentation/admin/reward_catalog_screen.dart';
 import 'package:gainpath/screens/admin/governance/announcements_screen.dart';
 import 'package:gainpath/screens/admin/governance/chatbot_disclaimer_screen.dart';
 import 'package:gainpath/screens/admin/refunds/refunds_screen.dart';
