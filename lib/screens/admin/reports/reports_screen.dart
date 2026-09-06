@@ -84,14 +84,9 @@ class _ReportsScreenState extends State<ReportsScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Reports & analytics', style: Theme.of(context).textTheme.headlineMedium),
-                const SizedBox(height: 4),
-                Text('Sales, operations, and engagement — one page, always live.',
-                    style: Theme.of(context).textTheme.bodyLarge),
-                const SizedBox(height: 18),
-                _filterBar(),
-                const SizedBox(height: 14),
-                _anchorNav(),
+                _header(context),
+                const SizedBox(height: 20),
+                _toolbar(),
                 const SizedBox(height: 26),
 
                 Container(key: _overviewKey, child: const Eyebrow('Overview')),
@@ -152,72 +147,131 @@ class _ReportsScreenState extends State<ReportsScreen> {
     );
   }
 
-  Widget _filterBar() {
+  Widget _header(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: 44,
+          height: 44,
+          decoration: BoxDecoration(gradient: AppColors.heroGradient, borderRadius: BorderRadius.circular(12)),
+          child: const Icon(Icons.query_stats_rounded, color: Colors.white, size: 22),
+        ),
+        const SizedBox(width: 14),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Reports & analytics', style: Theme.of(context).textTheme.headlineMedium),
+              const SizedBox(height: 2),
+              Text('Sales, operations, and engagement — one page, always live.',
+                  style: Theme.of(context).textTheme.bodyLarge),
+            ],
+          ),
+        ),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+          decoration: BoxDecoration(color: AppColors.successTint, borderRadius: BorderRadius.circular(999)),
+          child: const Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.bolt_rounded, size: 13, color: AppColors.success),
+              SizedBox(width: 4),
+              Text('Live data', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: AppColors.success)),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Filter controls and the anchor-jump chips used to sit in two
+  /// separate floating rows; grouped into one bordered toolbar so the
+  /// header reads as a single control surface instead of two unrelated
+  /// pieces stacked on top of each other.
+  Widget _toolbar() {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: AppColors.hairline),
       ),
-      child: Wrap(
-        crossAxisAlignment: WrapCrossAlignment.center,
-        spacing: 8,
-        runSpacing: 8,
+      child: Column(
         children: [
-          const Icon(Icons.tune_rounded, size: 16, color: AppColors.inkSoft),
-          const SizedBox(width: 2),
-          ..._dateOptions.map((d) {
-            final selected = d == _days;
-            return ChoiceChip(
-              label: Text(_dateLabels[d]!),
-              selected: selected,
-              onSelected: (_) => setState(() => _days = d),
-              backgroundColor: AppColors.surfaceAlt,
-              selectedColor: AppColors.primary,
-              labelStyle: TextStyle(
-                  fontSize: 12, fontWeight: FontWeight.w600, color: selected ? Colors.white : AppColors.ink),
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(999), side: const BorderSide(color: AppColors.hairline)),
-            );
-          }),
-          Container(width: 1, height: 20, color: AppColors.hairline, margin: const EdgeInsets.symmetric(horizontal: 4)),
-          DropdownButtonHideUnderline(
-            child: DropdownButton<String?>(
-              value: _branch,
-              hint: const Text('All branches', style: TextStyle(fontSize: 12.5)),
-              isDense: true,
-              style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: AppColors.ink),
-              items: [
-                const DropdownMenuItem(value: null, child: Text('All branches')),
-                ...MockData.branches.map((b) => DropdownMenuItem(value: b.name, child: Text(b.name))),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+            child: Wrap(
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                const Icon(Icons.tune_rounded, size: 16, color: AppColors.inkSoft),
+                const SizedBox(width: 2),
+                ..._dateOptions.map((d) {
+                  final selected = d == _days;
+                  return ChoiceChip(
+                    label: Text(_dateLabels[d]!),
+                    selected: selected,
+                    onSelected: (_) => setState(() => _days = d),
+                    backgroundColor: AppColors.surfaceAlt,
+                    selectedColor: AppColors.primary,
+                    labelStyle: TextStyle(
+                        fontSize: 12, fontWeight: FontWeight.w600, color: selected ? Colors.white : AppColors.ink),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(999), side: const BorderSide(color: AppColors.hairline)),
+                  );
+                }),
+                Container(
+                    width: 1, height: 20, color: AppColors.hairline, margin: const EdgeInsets.symmetric(horizontal: 4)),
+                DropdownButtonHideUnderline(
+                  child: DropdownButton<String?>(
+                    value: _branch,
+                    hint: const Text('All branches', style: TextStyle(fontSize: 12.5)),
+                    isDense: true,
+                    style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: AppColors.ink),
+                    items: [
+                      const DropdownMenuItem(value: null, child: Text('All branches')),
+                      ...MockData.branches.map((b) => DropdownMenuItem(value: b.name, child: Text(b.name))),
+                    ],
+                    onChanged: (v) => setState(() => _branch = v),
+                  ),
+                ),
               ],
-              onChanged: (v) => setState(() => _branch = v),
+            ),
+          ),
+          const Divider(height: 1),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
+            child: Row(
+              children: [
+                const Icon(Icons.explore_outlined, size: 15, color: AppColors.inkSoft),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: SizedBox(
+                    height: 30,
+                    child: ListView.separated(
+                      scrollDirection: Axis.horizontal,
+                      itemCount: _anchors.length,
+                      separatorBuilder: (_, __) => const SizedBox(width: 8),
+                      itemBuilder: (context, i) {
+                        final (label, key) = _anchors[i];
+                        return ActionChip(
+                          label: Text(label),
+                          onPressed: () => _jumpTo(key),
+                          backgroundColor: AppColors.primaryTint,
+                          labelStyle: const TextStyle(
+                              fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.primary),
+                          side: BorderSide.none,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
+                        );
+                      },
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _anchorNav() {
-    return SizedBox(
-      height: 34,
-      child: ListView.separated(
-        scrollDirection: Axis.horizontal,
-        itemCount: _anchors.length,
-        separatorBuilder: (_, __) => const SizedBox(width: 8),
-        itemBuilder: (context, i) {
-          final (label, key) = _anchors[i];
-          return ActionChip(
-            label: Text(label),
-            onPressed: () => _jumpTo(key),
-            backgroundColor: AppColors.primaryTint,
-            labelStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.primary),
-            side: BorderSide.none,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
-          );
-        },
       ),
     );
   }

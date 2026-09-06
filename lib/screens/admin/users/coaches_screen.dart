@@ -5,6 +5,17 @@ import '../../../widgets/shared.dart';
 import '../admin_dialogs.dart';
 import 'user_action_dialogs.dart';
 
+Widget _networkHero(String url, {BoxFit fit = BoxFit.cover}) {
+  return Image.network(
+    url,
+    fit: fit,
+    loadingBuilder: (context, child, progress) =>
+        progress == null ? child : Container(color: AppColors.surfaceAlt),
+    errorBuilder: (context, error, stack) =>
+        const DecoratedBox(decoration: BoxDecoration(gradient: AppColors.heroGradient)),
+  );
+}
+
 /// AD-M11.3 — the Coach half of Manage User Accounts. Coaches are few
 /// (a handful per branch) and organised by which physical location they
 /// work out of, so this reads as branch sections of roster cards rather
@@ -155,11 +166,18 @@ class _CoachCard extends StatelessWidget {
           children: [
             Row(
               children: [
-                Container(
-                  width: 36,
-                  height: 36,
-                  decoration: BoxDecoration(color: AppColors.accentTint, borderRadius: BorderRadius.circular(10)),
-                  child: const Icon(Icons.sports_rounded, size: 18, color: AppColors.warning),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(10),
+                  child: SizedBox(
+                    width: 36,
+                    height: 36,
+                    child: profile != null
+                        ? _networkHero(profile!.imageUrl)
+                        : Container(
+                            color: AppColors.accentTint,
+                            child: const Icon(Icons.sports_rounded, size: 18, color: AppColors.warning),
+                          ),
+                  ),
                 ),
                 const SizedBox(width: 10),
                 Expanded(

@@ -224,7 +224,12 @@ class RewardItem {
   int points;
   int stock;
   String imageUrl;
-  RewardItem(this.title, this.points, this.stock, this.imageUrl);
+  String category;
+  String description;
+  int? redemptionLimitPerMember;
+  DateTime? expiresAt;
+  RewardItem(this.title, this.points, this.stock, this.imageUrl,
+      {this.category = 'Merchandise', this.description = '', this.redemptionLimitPerMember, this.expiresAt});
 }
 
 /// AD-M11.4 — one video in the Exercise Tutorial Library.
@@ -238,7 +243,22 @@ class TutorialVideo {
   String category;
   String status;
   String coversExercise;
-  TutorialVideo({required this.title, required this.category, required this.status, this.coversExercise = ''});
+  String difficulty;
+  int durationMin;
+  String videoUrl;
+  String thumbnailUrl;
+  String description;
+  TutorialVideo({
+    required this.title,
+    required this.category,
+    required this.status,
+    this.coversExercise = '',
+    this.difficulty = 'Beginner',
+    this.durationMin = 5,
+    this.videoUrl = '',
+    this.thumbnailUrl = '',
+    this.description = '',
+  });
 }
 
 class MembershipPlan {
@@ -291,12 +311,22 @@ class RoutineBlueprint {
   String level;
   final int assignedMembers;
   List<RoutineDay> days;
+  String goal;
+  List<String> tags;
+  int sessionDurationMin;
+  List<String> equipmentNeeded;
+  String imageUrl;
   RoutineBlueprint({
     required this.id,
     required this.name,
     required this.level,
     required this.assignedMembers,
     required this.days,
+    this.goal = '',
+    this.tags = const [],
+    this.sessionDurationMin = 45,
+    this.equipmentNeeded = const [],
+    this.imageUrl = '',
   });
 }
 
@@ -1555,18 +1585,33 @@ class MockData {
         title: 'Squat Form Fundamentals',
         category: 'Compound Lower-Body',
         status: 'Active',
-        coversExercise: 'Barbell Squat'),
-    TutorialVideo(title: 'Fixing Knee Valgus', category: 'Compound Lower-Body', status: 'Active'),
+        coversExercise: 'Barbell Squat',
+        difficulty: 'Beginner',
+        durationMin: 6,
+        thumbnailUrl: 'https://images.unsplash.com/photo-1534368959876-26bf04f2c947?auto=format&fit=crop&w=600&q=80'),
+    TutorialVideo(
+        title: 'Fixing Knee Valgus',
+        category: 'Compound Lower-Body',
+        status: 'Active',
+        difficulty: 'Intermediate',
+        durationMin: 4,
+        thumbnailUrl: 'https://images.unsplash.com/photo-1517836357463-d25dfeac3438?auto=format&fit=crop&w=600&q=80'),
     TutorialVideo(
         title: 'RDL Form Basics',
         category: 'Compound Lower-Body',
         status: 'Active',
-        coversExercise: 'Romanian Deadlift'),
+        coversExercise: 'Romanian Deadlift',
+        difficulty: 'Beginner',
+        durationMin: 5,
+        thumbnailUrl: 'https://images.unsplash.com/photo-1583454110551-21f2fa2afe61?auto=format&fit=crop&w=600&q=80'),
     TutorialVideo(
         title: 'Overhead Press Setup',
         category: 'Compound Upper-Body',
         status: 'Active',
-        coversExercise: 'Overhead Press'),
+        coversExercise: 'Overhead Press',
+        difficulty: 'Beginner',
+        durationMin: 5,
+        thumbnailUrl: 'https://images.unsplash.com/photo-1541534741688-6078c6bfb5c5?auto=format&fit=crop&w=600&q=80'),
   ];
 
   // ---- Module 11: Routine templates (RoutineBlueprint) -----------------
@@ -1576,6 +1621,7 @@ class MockData {
       name: 'Beginner Full Body',
       level: 'Beginner',
       assignedMembers: 62,
+      imageUrl: 'https://images.unsplash.com/photo-1571731956672-f2b94d7dd0cb?auto=format&fit=crop&w=600&q=80',
       days: [
         RoutineDay(1, [
           RoutineExerciseRef('Barbell Squat', 3, 8),
@@ -1594,6 +1640,7 @@ class MockData {
       name: 'Push / Pull / Legs',
       level: 'Intermediate',
       assignedMembers: 84,
+      imageUrl: 'https://images.unsplash.com/photo-1540496905036-5937c10647cc?auto=format&fit=crop&w=600&q=80',
       days: [
         RoutineDay(1, [
           RoutineExerciseRef('Overhead Press', 4, 8),
@@ -1617,6 +1664,7 @@ class MockData {
       name: 'Upper / Lower Split',
       level: 'Intermediate',
       assignedMembers: 47,
+      imageUrl: 'https://images.unsplash.com/photo-1600965962102-9d260a71890d?auto=format&fit=crop&w=600&q=80',
       days: [
         RoutineDay(1, [
           RoutineExerciseRef('Overhead Press', 4, 8),
@@ -1633,6 +1681,7 @@ class MockData {
       name: '5-Day Body Part Split',
       level: 'Advanced',
       assignedMembers: 19,
+      imageUrl: 'https://images.unsplash.com/photo-1546484396-fb3fc6f95f98?auto=format&fit=crop&w=600&q=80',
       days: [
         RoutineDay(1, [RoutineExerciseRef('Barbell Squat', 5, 6)]),
         RoutineDay(2, [RoutineExerciseRef('Overhead Press', 5, 6)]),

@@ -7,6 +7,46 @@ import 'user_action_dialogs.dart';
 
 const _pageSize = 24;
 
+const _avatarPalette = [
+  (AppColors.primaryTint, AppColors.primary),
+  (AppColors.accentTint, AppColors.accentDark),
+  (AppColors.successTint, AppColors.success),
+  (AppColors.infoTint, AppColors.info),
+  (AppColors.dangerTint, AppColors.danger),
+];
+
+/// A colored-initials avatar (the Slack/Notion pattern) instead of a
+/// flat generic person icon — members have no profile photo on file, so
+/// this is the honest alternative to inventing one. Color is picked
+/// deterministically from the name so the same member always gets the
+/// same color across renders.
+class _InitialsAvatar extends StatelessWidget {
+  final String name;
+  static const _size = 28.0;
+  const _InitialsAvatar({required this.name});
+
+  String get _initials {
+    final parts = name.trim().split(RegExp(r'\s+'));
+    if (parts.isEmpty || parts.first.isEmpty) return '?';
+    final first = parts.first[0];
+    final last = parts.length > 1 && parts.last.isNotEmpty ? parts.last[0] : '';
+    return (first + last).toUpperCase();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = _avatarPalette[name.hashCode.abs() % _avatarPalette.length];
+    return Container(
+      width: _size,
+      height: _size,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(color: palette.$1, borderRadius: BorderRadius.circular(_size * 0.28)),
+      child: Text(_initials,
+          style: TextStyle(fontSize: _size * 0.4, fontWeight: FontWeight.w700, color: palette.$2)),
+    );
+  }
+}
+
 /// AD-M11.3 — the Member half of Manage User Accounts, split out from
 /// Coaches because the two scale and present completely differently:
 /// hundreds of members need search + pagination over a dense table,
@@ -328,13 +368,7 @@ class _MemberRow extends StatelessWidget {
                 flex: 3,
                 child: Row(
                   children: [
-                    Container(
-                      width: 28,
-                      height: 28,
-                      decoration:
-                          BoxDecoration(color: AppColors.primaryTint, borderRadius: BorderRadius.circular(8)),
-                      child: const Icon(Icons.person_rounded, size: 14, color: AppColors.primary),
-                    ),
+                    _InitialsAvatar(name: user.name),
                     const SizedBox(width: 10),
                     Expanded(
                       child: Column(
