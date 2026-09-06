@@ -147,9 +147,15 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                   Text('RM ${_revenueTrend.last}',
                       style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w800, color: AppColors.primary)),
                   const SizedBox(width: 8),
-                  const Padding(
-                    padding: EdgeInsets.only(bottom: 4),
-                    child: _DeltaTag(delta: '+5% vs last month', positive: true),
+                  const Flexible(
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerLeft,
+                      child: Padding(
+                        padding: EdgeInsets.only(bottom: 4),
+                        child: _DeltaTag(delta: '+5% vs last month', positive: true),
+                      ),
+                    ),
                   ),
                 ],
               ),
@@ -342,7 +348,11 @@ class _DeltaTag extends StatelessWidget {
         children: [
           if (positive) const Icon(Icons.arrow_upward_rounded, size: 12, color: AppColors.success),
           if (positive) const SizedBox(width: 3),
-          Text(delta, style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: color)),
+          Flexible(
+            child: Text(delta,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: color)),
+          ),
         ],
       ),
     );
