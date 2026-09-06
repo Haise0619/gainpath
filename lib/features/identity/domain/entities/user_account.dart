@@ -5,7 +5,7 @@ import 'package:gainpath/features/identity/domain/enums/account_status.dart';
 /// place, the same pattern used for `GymEquipment.isActive` elsewhere.
 /// [branch] and [specialty] are only meaningful for a `Coach` account —
 /// a member's is always null. They're the account-shell counterpart to
-/// `Coach.branch`/`Coach.specialty` in `context.read<CoachRepository>().coaches`: set the moment
+/// `Coach.branch`/`Coach.specialty` in `coaches`: set the moment
 /// a coach is provisioned, before their full public profile exists.
 class UserAccount {
   final String name;

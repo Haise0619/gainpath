@@ -26,7 +26,7 @@ Widget _networkHero(String url, {BoxFit fit = BoxFit.cover}) {
 /// wired up yet — there's no backend to match against — so this
 /// simulates the recognition flow end to end: a viewfinder over a static
 /// "camera feed" image, an animated scan line, a brief scanning state,
-/// then a match against `context.read<EquipmentRepository>().gymEquipment` — including the honest
+/// then a match against `gymEquipment` — including the honest
 /// case where nothing matches, roughly every fourth scan.
 ///
 /// Swapping in a real camera preview and an on-device classifier later

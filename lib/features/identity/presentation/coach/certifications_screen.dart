@@ -7,7 +7,7 @@ import 'package:gainpath/features/identity/domain/entities/coach_certification.d
 import 'package:gainpath/features/identity/domain/repositories/coach_repository.dart';
 
 /// AD-M8.3 — Upload & Manage Certification Documents. Reads and writes the
-/// live `context.read<CoachRepository>().coachCertifications` list: "upload" appends a real
+/// live `coachCertifications` list: "upload" appends a real
 /// Pending entry (simulating a file pick) that immediately shows in the
 /// list and bumps the count on the account hub. Verified / Pending /
 /// Rejected each render distinctly, and a rejected doc surfaces its

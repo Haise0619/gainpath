@@ -5,7 +5,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:gainpath/features/identity/domain/repositories/coach_repository.dart';
 
 /// AD-M8.3 — Manage Professional Profile. Publishing actually writes back
-/// to `context.read<CoachRepository>().currentCoach`, so a coach's edits here show up on the very
+/// to `currentCoach`, so a coach's edits here show up on the very
 /// same public directory card members browse (verify via the account
 /// hub's "Preview public profile"). A short suggestion chip set makes
 /// adding specialties tap-to-add rather than free-typing from scratch.

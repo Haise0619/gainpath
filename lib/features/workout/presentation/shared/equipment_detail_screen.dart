@@ -25,7 +25,7 @@ Widget _networkHero(String url, {BoxFit fit = BoxFit.cover}) {
 /// play/pause/scrubber mechanic as `ExerciseTutorialScreen` — tapping
 /// play swaps the thumbnail for a dimmed, "now playing" state with a
 /// real progress bar, so it reads and behaves like a video without
-/// actually streaming one. "Related exercises" queries `context.read<WorkoutRepository>().routine`
+/// actually streaming one. "Related exercises" queries `routine`
 /// by category rather than storing a manual join, mirroring how the data
 /// dictionary itself resolves GymEquipment↔ExerciseVideo — and shows an
 /// honest empty state when nothing in the current routine matches.

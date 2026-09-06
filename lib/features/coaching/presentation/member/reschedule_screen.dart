@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:gainpath/features/coaching/application/booking_bloc.dart';
 import 'package:gainpath/app/theme/theme.dart';
 import 'package:gainpath/shared/shared.dart';
 import 'package:gainpath/features/coaching/domain/entities/booking.dart';
 
 /// Reschedule an existing confirmed/pending booking to a new day and
 /// time. Mutates `booking.start` in place — the same `Booking` instance
-/// already sitting in `context.read<BookingRepository>().memberBookings`, so nothing needs to be
+/// already sitting in `memberBookings`, so nothing needs to be
 /// re-fetched or replaced in the list for the change to show up back on
 /// "My bookings."
 class RescheduleScreen extends StatefulWidget {
@@ -143,7 +145,7 @@ class _RescheduleScreenState extends State<RescheduleScreen> {
     final timeParts = _slots[_slot!].split(':');
     final newStart = DateTime(selectedDay.year, selectedDay.month, selectedDay.day,
         int.parse(timeParts[0]), int.parse(timeParts[1]));
-    widget.booking.start = newStart;
+    context.read<BookingBloc>().add(BookingRescheduled(widget.booking.id, newStart));
     Navigator.pop(context);
     showToast(context, 'Session moved to ${_formatDate(newStart)}.');
   }

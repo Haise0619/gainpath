@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:gainpath/features/coaching/domain/enums/booking_status.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:gainpath/features/coaching/application/booking_bloc.dart';
 import 'package:gainpath/app/theme/theme.dart';
 import 'package:gainpath/shared/shared.dart';
 import 'package:gainpath/features/coaching/domain/entities/booking.dart';
@@ -51,8 +52,7 @@ class _ConsultationNotesScreenState extends State<ConsultationNotesScreen> {
       setState(() => _error = 'Add some notes before publishing.');
       return;
     }
-    widget.booking.notes = _controller.text.trim();
-    widget.booking.status = BookingStatus.completed;
+    context.read<BookingBloc>().add(BookingNotesPublished(widget.booking.id, _controller.text.trim()));
     Navigator.pop(context);
     showToast(context, 'Notes published. Session marked complete.');
   }

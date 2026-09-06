@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:gainpath/features/coaching/application/booking_bloc.dart';
 import 'package:gainpath/features/coaching/domain/enums/booking_status.dart';
 import 'package:gainpath/app/theme/theme.dart';
 import 'package:gainpath/shared/shared.dart';
@@ -83,7 +84,7 @@ class _CoachRosterScreenState extends State<CoachRosterScreen>
 
   @override
   Widget build(BuildContext context) {
-    final roster = context.read<BookingRepository>().coachRoster;
+    final roster = context.watch<BookingBloc>().state.coachRoster;
     final days = _days;
     final selectedDay = days[_dayIndex];
     final now = DateTime.now();

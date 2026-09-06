@@ -24,7 +24,7 @@ Widget _networkHero(String url, {BoxFit fit = BoxFit.cover}) {
 /// AD-M11.4 — Manage Routine Templates. Previously a stub — the Content
 /// hub's card linked here only to show a toast ("Routine template
 /// editor.") with no real screen or data behind it at all. Backed now by
-/// `context.read<RoutineTemplateRepository>().routineTemplates`; each card expands in place to show its
+/// `routineTemplates`; each card expands in place to show its
 /// full day-by-day breakdown. Create/Edit is a full page rather than a
 /// dialog — a day/exercise builder plus goal/tags/equipment metadata is
 /// genuinely a lot of content, the kind of "Create" flow that gets its

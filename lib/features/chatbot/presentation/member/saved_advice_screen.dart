@@ -5,7 +5,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:gainpath/features/chatbot/domain/repositories/chat_repository.dart';
 
 /// AD-M6.2 — View Bookmarked Advice Library. Reads and mutates
-/// `context.read<ChatRepository>().savedAdvice` directly (not a local copy) so a bookmark
+/// `savedAdvice` directly (not a local copy) so a bookmark
 /// added from the chat screen shows up here immediately, and removing
 /// a tip here is reflected back in the chat bubbles' bookmark icons.
 class SavedAdviceScreen extends StatefulWidget {

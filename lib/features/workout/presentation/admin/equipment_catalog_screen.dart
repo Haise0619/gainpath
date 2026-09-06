@@ -19,7 +19,7 @@ Widget _networkHero(String url, {BoxFit fit = BoxFit.cover}) {
   );
 }
 
-/// Admin management view over `context.read<EquipmentRepository>().gymEquipment` — the catalogue
+/// Admin management view over `gymEquipment` — the catalogue
 /// the member-facing equipment scanner matches against and browses.
 /// This is the software side of a genuinely physical feature: every
 /// entry here corresponds to a real machine on the gym floor, so

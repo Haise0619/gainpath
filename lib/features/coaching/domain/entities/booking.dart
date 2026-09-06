@@ -14,7 +14,7 @@ class BookingMessage {
 /// mutable — rescheduling, cancelling, rating, and a coach publishing
 /// consultation notes all mutate a booking in place rather than
 /// replacing it in the list, the same pattern already used for
-/// `context.read<ChatRepository>().savedAdvice` in the chatbot module.
+/// `savedAdvice` in the chatbot module.
 class Booking {
   final String id;
   final String coachId;

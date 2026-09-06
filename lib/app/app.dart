@@ -1,5 +1,8 @@
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:gainpath/features/coaching/domain/repositories/booking_repository.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:gainpath/features/coaching/application/booking_bloc.dart';
 import 'package:gainpath/app/di/app_repositories.dart';
 import 'package:gainpath/app/theme/theme.dart';
 import 'package:gainpath/core/domain/app_role.dart';
@@ -18,11 +21,15 @@ class GainPathApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return AppRepositories(
-      child: MaterialApp(
-        title: kIsWeb ? 'GainPath Admin Console' : 'GainPath',
-        debugShowCheckedModeBanner: false,
-        theme: AppTheme.build(),
-        home: kIsWeb ? const LoginScreen(role: AppRole.admin) : const OnboardingScreen(),
+      child: BlocProvider(
+        create: (context) =>
+            BookingBloc(context.read<BookingRepository>())..add(const BookingsRequested()),
+        child: MaterialApp(
+          title: kIsWeb ? 'GainPath Admin Console' : 'GainPath',
+          debugShowCheckedModeBanner: false,
+          theme: AppTheme.build(),
+          home: kIsWeb ? const LoginScreen(role: AppRole.admin) : const OnboardingScreen(),
+        ),
       ),
     );
   }

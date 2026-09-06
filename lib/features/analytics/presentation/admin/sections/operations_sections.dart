@@ -11,7 +11,7 @@ import 'package:gainpath/features/coaching/domain/repositories/booking_repositor
 import 'package:gainpath/features/identity/domain/entities/coach.dart';
 import 'package:gainpath/features/identity/domain/repositories/coach_repository.dart';
 
-/// The three report sections genuinely derivable from `context.read<BookingRepository>().allBookings`
+/// The three report sections genuinely derivable from `allBookings`
 /// — each `Booking` carries a real `start` date and `branch`, so these are
 /// the sections that actually react to the page's date/branch filter.
 

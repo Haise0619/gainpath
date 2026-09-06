@@ -15,7 +15,7 @@ String _fmt(DateTime d) => '${d.day} ${_months[d.month - 1]}';
 /// compose form that toasted "Announcement published" and forgot
 /// whatever was typed, with no way to see what had gone out before or
 /// whether it was still showing to members. This reads and writes the
-/// real `context.read<ContentRepository>().announcements` list, and each entry's active/expired
+/// real `announcements` list, and each entry's active/expired
 /// state is computed from its validity window, not stored as a flag
 /// that could drift out of date.
 class AnnouncementsScreen extends StatefulWidget {

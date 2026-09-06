@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:gainpath/features/coaching/domain/enums/booking_status.dart';
+import 'package:gainpath/features/coaching/application/booking_bloc.dart';
 import 'package:gainpath/app/theme/theme.dart';
 import 'package:gainpath/shared/shared.dart';
 import 'package:gainpath/features/coaching/presentation/shared/coach_profile_screen.dart';
@@ -8,7 +8,6 @@ import 'package:gainpath/features/coaching/presentation/member/reschedule_screen
 import 'package:gainpath/features/coaching/presentation/member/widgets/booking_card.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:gainpath/features/coaching/domain/entities/booking.dart';
-import 'package:gainpath/features/coaching/domain/repositories/booking_repository.dart';
 import 'package:gainpath/features/identity/domain/entities/coach.dart';
 import 'package:gainpath/features/identity/domain/entities/coach_review.dart';
 import 'package:gainpath/features/identity/domain/repositories/coach_repository.dart';
@@ -22,7 +21,7 @@ const _cancelReasons = [
 ];
 
 /// AD-M7.3 — View Booking Schedule. Three buckets — Upcoming, Completed,
-/// Cancelled — each backed by the live `context.read<BookingRepository>().memberBookings` list, so
+/// Cancelled — each backed by the live `memberBookings` list, so
 /// cancelling, rescheduling, or rating here (or from the coach's own
 /// profile) is reflected immediately without any local copy to keep in
 /// sync.
@@ -43,14 +42,10 @@ class _BookingScheduleScreenState extends State<BookingScheduleScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final upcoming = context.read<BookingRepository>().memberBookings
-        .where((b) => b.status == BookingStatus.confirmed || b.status == BookingStatus.pending)
-        .toList()
-      ..sort((a, b) => a.start.compareTo(b.start));
-    final completed = context.read<BookingRepository>().memberBookings.where((b) => b.status == BookingStatus.completed).toList()
-      ..sort((a, b) => b.start.compareTo(a.start));
-    final cancelled = context.read<BookingRepository>().memberBookings.where((b) => b.status == BookingStatus.cancelled).toList()
-      ..sort((a, b) => b.start.compareTo(a.start));
+    final bookings = context.watch<BookingBloc>().state;
+    final upcoming = bookings.memberUpcoming;
+    final completed = bookings.memberCompleted;
+    final cancelled = bookings.memberCancelled;
 
     return Scaffold(
       appBar: AppBar(title: const Text('My bookings')),
@@ -192,10 +187,8 @@ class _BookingScheduleScreenState extends State<BookingScheduleScreen> {
       ),
     );
     if (confirmed != true || !mounted) return;
-    setState(() {
-      b.status = BookingStatus.cancelled;
-      b.cancellationReason = 'Member requested — ${reason ?? _cancelReasons.first}.';
-    });
+    context.read<BookingBloc>().add(
+        BookingCancelled(b.id, 'Member requested — ${reason ?? _cancelReasons.first}.'));
     if (mounted) showToast(context, 'Session cancelled.');
   }
 
@@ -255,8 +248,8 @@ class _BookingScheduleScreenState extends State<BookingScheduleScreen> {
     final reviewText = controller.text.trim();
     controller.dispose();
     if (stars == 0 || !mounted) return;
+    context.read<BookingBloc>().add(BookingRated(b.id));
     setState(() {
-      b.rated = true;
       final coach = _coachById(b.coachId);
       if (coach != null) {
         coach.topReviews.insert(

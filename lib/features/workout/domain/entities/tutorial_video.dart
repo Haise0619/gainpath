@@ -3,7 +3,7 @@ import 'package:gainpath/features/workout/domain/enums/tutorial_status.dart';
 /// AD-M11.4 — one video in the Exercise Tutorial Library.
 /// [coversExercise] names which `riskExercises` entry (if any) this
 /// tutorial actually addresses, empty string if none — that link is
-/// what makes `context.read<RecommendationRepository>().contentGaps` real instead of guessed from title
+/// what makes `contentGaps` real instead of guessed from title
 /// text. Fields are mutable so the admin Edit form can update a video
 /// in place.
 class TutorialVideo {

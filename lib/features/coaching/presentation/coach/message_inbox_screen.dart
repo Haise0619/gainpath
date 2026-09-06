@@ -6,7 +6,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:gainpath/features/coaching/domain/entities/booking.dart';
 import 'package:gainpath/features/coaching/domain/repositories/booking_repository.dart';
 
-/// AD-M9.4 — Respond to Member Messages. Reads `context.read<BookingRepository>().coachRoster`,
+/// AD-M9.4 — Respond to Member Messages. Reads `coachRoster`,
 /// which is now a filtered view over the same `allBookings` list members
 /// read from — so a message a member sends from `MessageCoachScreen`
 /// shows up here for real, and a reply sent here shows up back in the

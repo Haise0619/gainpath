@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:gainpath/features/coaching/application/booking_bloc.dart';
 import 'package:gainpath/features/coaching/domain/enums/booking_status.dart';
 import 'package:gainpath/app/theme/theme.dart';
 import 'package:gainpath/shared/shared.dart';
@@ -6,13 +7,12 @@ import 'package:gainpath/features/membership/presentation/shared/billplz_checkou
 import 'package:gainpath/features/coaching/presentation/member/booking_confirmed_screen.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:gainpath/features/coaching/domain/entities/booking.dart';
-import 'package:gainpath/features/coaching/domain/repositories/booking_repository.dart';
 import 'package:gainpath/features/identity/domain/entities/coach.dart';
 import 'package:gainpath/features/identity/domain/repositories/member_profile_repository.dart';
 
 /// AD-M7.2 — Book Coaching Session. Fee, day, and time all come from the
 /// coach passed in; confirming payment creates a real `Booking` and adds
-/// it to `context.read<BookingRepository>().allBookings`, so it shows up both on the member's "My
+/// it to `allBookings`, so it shows up both on the member's "My
 /// bookings" and on that coach's own roster — the two are filtered views
 /// over one shared list, not separate data.
 class BookSessionScreen extends StatefulWidget {
@@ -171,7 +171,7 @@ class _BookSessionScreenState extends State<BookSessionScreen> {
       status: BookingStatus.confirmed,
       fee: widget.coach.fee,
     );
-    context.read<BookingRepository>().allBookings.add(booking);
+    context.read<BookingBloc>().add(BookingCreated(booking));
 
     Navigator.pushReplacement(
       context,

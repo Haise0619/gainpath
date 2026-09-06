@@ -39,7 +39,7 @@ Color _blockColor(BlockType type) {
 /// one-off override, which is exactly the kind of scheduling bug real
 /// calendar systems spend a lot of effort avoiding.
 ///
-/// Every edit here writes straight to `context.read<AvailabilityRepository>().workingDays` /
+/// Every edit here writes straight to `workingDays` /
 /// `blockedSlots` — no local copy that only *looks* saved. The previous
 /// version copied both into local lists and never wrote them back at
 /// all, including the "add block" sheet, which silently threw away
