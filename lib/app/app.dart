@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:gainpath/features/identity/application/auth_bloc.dart';
 import 'package:gainpath/features/identity/domain/repositories/member_profile_repository.dart';
 import 'package:gainpath/features/membership/domain/repositories/membership_repository.dart';
 import 'package:gainpath/features/membership/application/membership_bloc.dart';
@@ -28,6 +29,7 @@ class GainPathApp extends StatelessWidget {
     return AppRepositories(
       child: MultiBlocProvider(
         providers: [
+          BlocProvider(create: (_) => AuthBloc()),
           BlocProvider(
             create: (context) =>
                 BookingBloc(context.read<BookingRepository>())..add(const BookingsRequested()),

@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:gainpath/features/identity/application/auth_bloc.dart';
 import 'package:gainpath/app/theme/theme.dart';
 import 'package:gainpath/features/identity/presentation/shared/login_screen.dart';
 import 'package:gainpath/features/identity/presentation/shared/role_select_screen.dart';
@@ -177,6 +178,7 @@ class _AdminShellState extends State<AdminShell> {
         confirmLabel: 'Sign out',
         destructive: true);
     if (ok && mounted) {
+      context.read<AuthBloc>().add(const LoggedOut());
       Navigator.pushAndRemoveUntil(
         context,
         MaterialPageRoute(

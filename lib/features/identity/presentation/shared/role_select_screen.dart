@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:gainpath/features/identity/application/auth_bloc.dart';
 import 'package:gainpath/app/theme/theme.dart';
 import 'package:gainpath/features/identity/presentation/shared/login_screen.dart';
 import 'package:gainpath/core/domain/app_role.dart';
@@ -59,6 +61,7 @@ class RoleSelectScreen extends StatelessWidget {
   }
 
   void _go(BuildContext context, AppRole role) {
+    context.read<AuthBloc>().add(RoleSelected(role));
     Navigator.push(context, MaterialPageRoute(builder: (_) => LoginScreen(role: role)));
   }
 }

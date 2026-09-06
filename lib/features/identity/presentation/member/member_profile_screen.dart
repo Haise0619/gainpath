@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:gainpath/features/identity/application/auth_bloc.dart';
 import 'package:gainpath/app/theme/theme.dart';
 import 'package:gainpath/shared/shared.dart';
 import 'package:gainpath/features/identity/presentation/shared/role_select_screen.dart';
@@ -224,6 +225,7 @@ Future<void> _signOut(BuildContext context) async {
   );
   await Future.delayed(const Duration(milliseconds: 550));
   if (!context.mounted) return;
+  context.read<AuthBloc>().add(const LoggedOut());
   Navigator.pushAndRemoveUntil(
     context,
     MaterialPageRoute(builder: (_) => const RoleSelectScreen()),

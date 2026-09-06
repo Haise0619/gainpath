@@ -1,5 +1,7 @@
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:gainpath/features/identity/application/auth_bloc.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:gainpath/app/theme/theme.dart';
 import 'package:gainpath/shared/shared.dart';
 import 'package:gainpath/app/shells/member_shell.dart';
@@ -8,7 +10,6 @@ import 'package:gainpath/app/shells/admin_shell.dart';
 import 'package:gainpath/features/identity/presentation/shared/email_verification_screen.dart';
 import 'package:gainpath/features/identity/presentation/shared/forgot_password_sheet.dart';
 import 'package:gainpath/features/identity/presentation/shared/role_select_screen.dart';
-import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:gainpath/features/identity/domain/repositories/coach_repository.dart';
 import 'package:gainpath/features/identity/domain/repositories/member_profile_repository.dart';
 import 'package:gainpath/features/identity/domain/repositories/user_account_repository.dart';
@@ -28,8 +29,6 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  static final _emailRegex = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
-
   late final TextEditingController _email;
   final _name = TextEditingController();
   final _password = TextEditingController(text: 'demo1234');
@@ -50,6 +49,7 @@ class _LoginScreenState extends State<LoginScreen> {
   void initState() {
     super.initState();
     _email = TextEditingController(text: _seedEmail);
+    context.read<AuthBloc>().add(RoleSelected(widget.role));
   }
 
   String get _seedEmail {
@@ -84,68 +84,47 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
 
-  bool _validate() {
-    final emailText = _email.text.trim();
-    setState(() {
-      _nameError = _registering && _name.text.trim().isEmpty ? 'Enter your full name.' : null;
-      _emailError = emailText.isEmpty
-          ? 'Enter your email address.'
-          : !_emailRegex.hasMatch(emailText)
-              ? 'Enter a valid email address.'
-              : null;
-      _passwordError = _password.text.isEmpty
-          ? 'Enter your password.'
-          : _registering && _password.text.length < 8
-              ? 'Use at least 8 characters.'
-              : null;
-      _confirmError = _registering && _confirm.text != _password.text ? 'Passwords do not match.' : null;
-    });
-    if (_nameError != null || _emailError != null || _passwordError != null || _confirmError != null) {
-      return false;
-    }
-    if (_registering && !_agreeTerms) {
-      showToast(context, 'Agree to the Terms and Privacy Policy to continue.');
-      return false;
-    }
-    return true;
+  void _submit() {
+    context.read<AuthBloc>().add(LoginSubmitted(
+      email: _email.text,
+      password: _password.text,
+      name: _name.text,
+      confirm: _confirm.text,
+      registering: _registering,
+      agreedTerms: _agreeTerms,
+    ));
   }
 
-  Future<void> _submit() async {
-    if (!_validate()) return;
-    setState(() => _submitting = true);
-    await Future.delayed(const Duration(milliseconds: 600));
-    if (!mounted) return;
-    setState(() => _submitting = false);
+  Widget _shellFor(AppRole role) => switch (role) {
+        AppRole.member => const MemberShell(),
+        AppRole.coach => const CoachShell(),
+        AppRole.admin => const AdminShell(),
+      };
 
+  void _onAuthChanged(BuildContext context, AuthState auth) {
+    setState(() {
+      _submitting = auth.status == AuthStatus.submitting;
+      _nameError = auth.fieldErrors.name;
+      _emailError = auth.fieldErrors.email;
+      _passwordError = auth.fieldErrors.password;
+      _confirmError = auth.fieldErrors.confirm;
+    });
+    if (auth.message != null) showToast(context, auth.message!);
     // A brand-new Gym Member account verifies their email (SD-M1.4) then
-    // walks through the step-by-step profile setup wizard before landing in
-    // the app; every other path (signing in, or the coach/admin roles that
-    // never self-register here) goes straight to its shell.
-    if (widget.role == AppRole.member && _registering) {
+    // walks through the profile setup wizard; every other path goes
+    // straight to its shell.
+    if (auth.status == AuthStatus.needsVerification) {
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(builder: (_) => EmailVerificationScreen(email: _email.text.trim())),
       );
-      return;
+    } else if (auth.status == AuthStatus.signedIn) {
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (_) => _shellFor(widget.role)),
+        (route) => false,
+      );
     }
-
-    Widget destination;
-    switch (widget.role) {
-      case AppRole.member:
-        destination = const MemberShell();
-        break;
-      case AppRole.coach:
-        destination = const CoachShell();
-        break;
-      case AppRole.admin:
-        destination = const AdminShell();
-        break;
-    }
-    Navigator.pushAndRemoveUntil(
-      context,
-      MaterialPageRoute(builder: (_) => destination),
-      (route) => false,
-    );
   }
 
   void _recover() {
@@ -165,6 +144,13 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
+    return BlocListener<AuthBloc, AuthState>(
+      listener: _onAuthChanged,
+      child: _buildForm(context),
+    );
+  }
+
+  Widget _buildForm(BuildContext context) {
     final isAdminWeb = kIsWeb && widget.role == AppRole.admin;
     if (isAdminWeb) return _buildAdmin(context);
     return _buildMobile(context);

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:gainpath/features/identity/application/auth_bloc.dart';
 import 'package:gainpath/features/identity/domain/enums/certification_status.dart';
 import 'package:gainpath/app/theme/theme.dart';
 import 'package:gainpath/shared/shared.dart';
@@ -130,6 +131,7 @@ class _CoachAccountScreenState extends State<CoachAccountScreen> {
         confirmLabel: 'Sign out',
         destructive: true);
     if (ok && mounted) {
+      context.read<AuthBloc>().add(const LoggedOut());
       Navigator.pushAndRemoveUntil(
         context,
         MaterialPageRoute(builder: (_) => const RoleSelectScreen()),
