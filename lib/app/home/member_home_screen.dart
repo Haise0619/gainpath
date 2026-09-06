@@ -12,7 +12,7 @@ import 'package:gainpath/screens/member/chatbot/saved_advice_screen.dart';
 import 'package:gainpath/features/gamification/presentation/member/gamification_screens.dart';
 import 'package:gainpath/features/coaching/presentation/member/booking_schedule_screen.dart';
 import 'package:gainpath/features/coaching/presentation/member/browse_coaches_screen.dart';
-import 'package:gainpath/screens/member/membership/membership_dashboard_screen.dart';
+import 'package:gainpath/features/membership/presentation/member/membership_dashboard_screen.dart';
 
 /// Member landing screen — the hub every other member flow is reachable
 /// from. It carries the daily check-in prompt (AD-M3.2), the broadcast

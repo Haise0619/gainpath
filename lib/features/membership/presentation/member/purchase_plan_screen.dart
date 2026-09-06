@@ -3,7 +3,7 @@ import 'package:gainpath/app/theme/theme.dart';
 import 'package:gainpath/data/mock_data.dart';
 import 'package:gainpath/features/membership/presentation/member/billplz_checkout_screen.dart';
 import 'package:gainpath/shared/shared.dart';
-import 'package:gainpath/screens/member/membership/payment_confirmation_screen.dart';
+import 'package:gainpath/features/membership/presentation/member/payment_confirmation_screen.dart';
 
 /// AD-M4.1 — Purchase Membership Plan (checkout step): pricing summary,
 /// a promo-code loop, and a simulated Billplz-style checkout — first-time

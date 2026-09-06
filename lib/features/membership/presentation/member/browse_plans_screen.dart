@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:gainpath/data/mock_data.dart';
 import 'package:gainpath/shared/shared.dart';
-import 'package:gainpath/screens/member/membership/purchase_plan_screen.dart';
-import 'package:gainpath/screens/member/membership/widgets/plan_card.dart';
+import 'package:gainpath/features/membership/presentation/member/purchase_plan_screen.dart';
+import 'package:gainpath/features/membership/presentation/member/widgets/plan_card.dart';
 
 /// AD-M4.1 — Purchase Membership Plan (browse step). A dedicated screen
 /// for comparing tiers, split out from the dashboard so switching plans

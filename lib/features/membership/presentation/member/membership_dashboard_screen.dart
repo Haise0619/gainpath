@@ -2,10 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:gainpath/app/theme/theme.dart';
 import 'package:gainpath/data/mock_data.dart';
 import 'package:gainpath/shared/shared.dart';
-import 'package:gainpath/screens/member/membership/billing_history_screen.dart';
-import 'package:gainpath/screens/member/membership/browse_plans_screen.dart';
-import 'package:gainpath/screens/member/membership/refund_request_screen.dart';
-import 'package:gainpath/screens/member/membership/renew_screen.dart';
+import 'package:gainpath/features/membership/presentation/member/billing_history_screen.dart';
+import 'package:gainpath/features/membership/presentation/member/browse_plans_screen.dart';
+import 'package:gainpath/features/membership/presentation/member/refund_request_screen.dart';
+import 'package:gainpath/features/membership/presentation/member/renew_screen.dart';
 
 /// AD-M4.2 — View Membership Dashboard. The hub for this module: current
 /// plan status and auto-renew control up top, then quick entry points into
