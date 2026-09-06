@@ -1,14 +1,14 @@
 import 'package:flutter/material.dart';
-import '../../../app/theme.dart';
-import '../../../data/mock_data.dart';
-import '../../../widgets/shared.dart';
-import 'activity_timeline_screen.dart';
-import 'body_metrics_screen.dart';
-import 'gamification_progress_screen.dart';
-import 'goal_progress_screen.dart';
-import 'posture_accuracy_screen.dart';
-import 'widgets/report_preview_tile.dart';
-import 'workout_performance_screen.dart';
+import 'package:gainpath/app/theme.dart';
+import 'package:gainpath/data/mock_data.dart';
+import 'package:gainpath/widgets/shared.dart';
+import 'package:gainpath/screens/member/progress/activity_timeline_screen.dart';
+import 'package:gainpath/screens/member/progress/body_metrics_screen.dart';
+import 'package:gainpath/screens/member/progress/gamification_progress_screen.dart';
+import 'package:gainpath/screens/member/progress/goal_progress_screen.dart';
+import 'package:gainpath/screens/member/progress/posture_accuracy_screen.dart';
+import 'package:gainpath/screens/member/progress/widgets/report_preview_tile.dart';
+import 'package:gainpath/screens/member/progress/workout_performance_screen.dart';
 
 /// AD-M5.1 — View Personalized Progress Dashboard. The hub for every
 /// Progress & Report screen: a computed highlight up top, four tappable

@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
-import '../../../app/theme.dart';
-import '../../../data/mock_data.dart';
-import '../../../widgets/shared.dart';
-import '../../../widgets/billplz_checkout_screen.dart';
-import 'booking_confirmed_screen.dart';
+import 'package:gainpath/app/theme.dart';
+import 'package:gainpath/data/mock_data.dart';
+import 'package:gainpath/widgets/shared.dart';
+import 'package:gainpath/widgets/billplz_checkout_screen.dart';
+import 'package:gainpath/screens/member/coach_booking/booking_confirmed_screen.dart';
 
 /// AD-M7.2 — Book Coaching Session. Fee, day, and time all come from the
 /// coach passed in; confirming payment creates a real `Booking` and adds

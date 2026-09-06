@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import '../../../app/theme.dart';
-import '../../../data/mock_data.dart';
-import '../../../widgets/shared.dart';
-import '../admin_breadcrumb.dart';
+import 'package:gainpath/app/theme.dart';
+import 'package:gainpath/data/mock_data.dart';
+import 'package:gainpath/widgets/shared.dart';
+import 'package:gainpath/screens/admin/admin_breadcrumb.dart';
 
 Widget _networkHero(String url, {BoxFit fit = BoxFit.cover}) {
   if (url.trim().isEmpty) {

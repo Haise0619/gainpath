@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
-import '../../../app/theme.dart';
-import '../../../data/mock_data.dart';
-import '../../../widgets/shared.dart';
-import '../admin_dialogs.dart';
-import 'user_action_dialogs.dart';
+import 'package:gainpath/app/theme.dart';
+import 'package:gainpath/data/mock_data.dart';
+import 'package:gainpath/widgets/shared.dart';
+import 'package:gainpath/screens/admin/admin_dialogs.dart';
+import 'package:gainpath/screens/admin/users/user_action_dialogs.dart';
 
 Widget _networkHero(String url, {BoxFit fit = BoxFit.cover}) {
   return Image.network(

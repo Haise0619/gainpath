@@ -1,4 +1,4 @@
-import 'csv_export_stub.dart' if (dart.library.html) 'csv_export_web.dart' as impl;
+import 'package:gainpath/screens/admin/reports/csv_export_stub.dart' if (dart.library.html) 'package:gainpath/screens/admin/reports/csv_export_web.dart' as impl;
 
 /// Triggers a real browser CSV download of [rows] (first row is the
 /// header) named [filename] — a genuine file, not a toast pretending to

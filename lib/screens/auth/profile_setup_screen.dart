@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import '../../app/theme.dart';
-import '../../widgets/shared.dart';
-import '../member/member_shell.dart';
+import 'package:gainpath/app/theme.dart';
+import 'package:gainpath/widgets/shared.dart';
+import 'package:gainpath/screens/member/member_shell.dart';
 
 /// AD-M1.1 — ProfileSetupScreen. Shown once, immediately after a new Gym
 /// Member account is created, so the AI Virtual Coach and recommendation

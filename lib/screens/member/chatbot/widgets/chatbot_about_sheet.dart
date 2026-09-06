@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import '../../../../app/theme.dart';
-import '../../../../data/mock_data.dart';
+import 'package:gainpath/app/theme.dart';
+import 'package:gainpath/data/mock_data.dart';
 
 /// The AI coach's About/disclaimer popup, shared between the forced
 /// first-open path (`dismissible: false` — the member must tap "Got

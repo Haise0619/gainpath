@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import '../../../app/theme.dart';
-import '../../../data/mock_data.dart';
-import '../../../widgets/shared.dart';
-import 'refund_request_screen.dart';
+import 'package:gainpath/app/theme.dart';
+import 'package:gainpath/data/mock_data.dart';
+import 'package:gainpath/widgets/shared.dart';
+import 'package:gainpath/screens/member/membership/refund_request_screen.dart';
 
 /// AD-M4.2 (billing history detail) — split out from the dashboard into
 /// its own screen so the full transaction list, filtering, and per-charge

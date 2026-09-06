@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import '../../../app/theme.dart';
-import '../../../data/mock_data.dart';
-import '../../../widgets/shared.dart';
+import 'package:gainpath/app/theme.dart';
+import 'package:gainpath/data/mock_data.dart';
+import 'package:gainpath/widgets/shared.dart';
 
 /// AD-M8.3 — Manage Professional Profile. Publishing actually writes back
 /// to `MockData.currentCoach`, so a coach's edits here show up on the very

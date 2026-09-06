@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import '../app/theme.dart';
-import 'shared.dart';
+import 'package:gainpath/app/theme.dart';
+import 'package:gainpath/widgets/shared.dart';
 
 /// Shared "Change Password" sub-flow used by every Manage Settings screen
 /// (Gym Member 1.2, Fitness Coach 8.2, Admin / Staff 11.2): a looped

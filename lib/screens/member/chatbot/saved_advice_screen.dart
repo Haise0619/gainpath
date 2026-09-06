@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import '../../../app/theme.dart';
-import '../../../data/mock_data.dart';
-import '../../../widgets/shared.dart';
+import 'package:gainpath/app/theme.dart';
+import 'package:gainpath/data/mock_data.dart';
+import 'package:gainpath/widgets/shared.dart';
 
 /// AD-M6.2 — View Bookmarked Advice Library. Reads and mutates
 /// `MockData.savedAdvice` directly (not a local copy) so a bookmark

@@ -1,8 +1,8 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import '../../app/theme.dart';
-import '../../widgets/shared.dart';
-import 'profile_setup_screen.dart';
+import 'package:gainpath/app/theme.dart';
+import 'package:gainpath/widgets/shared.dart';
+import 'package:gainpath/screens/auth/profile_setup_screen.dart';
 
 /// SD-M1.4 — Verify Email Address. Triggered automatically right after
 /// account creation in the registration flow; not independently navigable.

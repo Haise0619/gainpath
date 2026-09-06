@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
-import '../../../app/theme.dart';
-import '../../../data/mock_data.dart';
-import '../../../widgets/shared.dart';
-import 'coach_profile_screen.dart';
-import 'message_coach_screen.dart';
-import 'reschedule_screen.dart';
-import 'widgets/booking_card.dart';
+import 'package:gainpath/app/theme.dart';
+import 'package:gainpath/data/mock_data.dart';
+import 'package:gainpath/widgets/shared.dart';
+import 'package:gainpath/screens/member/coach_booking/coach_profile_screen.dart';
+import 'package:gainpath/screens/member/coach_booking/message_coach_screen.dart';
+import 'package:gainpath/screens/member/coach_booking/reschedule_screen.dart';
+import 'package:gainpath/screens/member/coach_booking/widgets/booking_card.dart';
 
 const _cancelReasons = [
   'Schedule conflict',

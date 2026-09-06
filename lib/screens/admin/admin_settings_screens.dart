@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import '../../data/mock_data.dart';
-import '../../widgets/change_password_sheet.dart';
-import '../../widgets/shared.dart';
+import 'package:gainpath/data/mock_data.dart';
+import 'package:gainpath/widgets/change_password_sheet.dart';
+import 'package:gainpath/widgets/shared.dart';
 
 /// AD-M11.2 — Admin Session and Settings. Distinct from AD-M11.6's
 /// platform-wide configuration: this is the signed-in admin's own contact

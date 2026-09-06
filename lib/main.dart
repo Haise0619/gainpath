@@ -1,9 +1,9 @@
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
-import 'app/theme.dart';
-import 'screens/auth/login_screen.dart';
-import 'screens/auth/onboarding_screen.dart';
-import 'screens/auth/role_select_screen.dart';
+import 'package:gainpath/app/theme.dart';
+import 'package:gainpath/screens/auth/login_screen.dart';
+import 'package:gainpath/screens/auth/onboarding_screen.dart';
+import 'package:gainpath/screens/auth/role_select_screen.dart';
 
 void main() => runApp(const GainPathApp());
 

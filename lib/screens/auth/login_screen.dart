@@ -1,14 +1,14 @@
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
-import '../../app/theme.dart';
-import '../../data/mock_data.dart';
-import '../../widgets/shared.dart';
-import '../member/member_shell.dart';
-import '../coach/coach_shell.dart';
-import '../admin/admin_shell.dart';
-import 'email_verification_screen.dart';
-import 'forgot_password_sheet.dart';
-import 'role_select_screen.dart';
+import 'package:gainpath/app/theme.dart';
+import 'package:gainpath/data/mock_data.dart';
+import 'package:gainpath/widgets/shared.dart';
+import 'package:gainpath/screens/member/member_shell.dart';
+import 'package:gainpath/screens/coach/coach_shell.dart';
+import 'package:gainpath/screens/admin/admin_shell.dart';
+import 'package:gainpath/screens/auth/email_verification_screen.dart';
+import 'package:gainpath/screens/auth/forgot_password_sheet.dart';
+import 'package:gainpath/screens/auth/role_select_screen.dart';
 
 /// AD-M1.1 / AD-M8.1 / AD-M11.1 — Login and Recovery.
 ///

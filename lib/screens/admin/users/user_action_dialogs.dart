@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import '../../../app/theme.dart';
-import '../../../data/mock_data.dart';
-import '../../../widgets/shared.dart';
-import '../admin_dialogs.dart';
+import 'package:gainpath/app/theme.dart';
+import 'package:gainpath/data/mock_data.dart';
+import 'package:gainpath/widgets/shared.dart';
+import 'package:gainpath/screens/admin/admin_dialogs.dart';
 
 /// Every user-account action in the admin console (suspend, deactivate,
 /// verify, provision) opens through one of the dialogs in this file —

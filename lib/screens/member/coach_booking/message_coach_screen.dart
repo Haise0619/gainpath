@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import '../../../app/theme.dart';
-import '../../../data/mock_data.dart';
+import 'package:gainpath/app/theme.dart';
+import 'package:gainpath/data/mock_data.dart';
 
 /// A real per-booking message thread — not a one-shot "send and forget"
 /// sheet. Reads and appends directly to `booking.messages`, the same

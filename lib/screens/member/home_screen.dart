@@ -1,18 +1,18 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
-import '../../app/theme.dart';
-import '../../data/mock_data.dart';
-import '../../widgets/shared.dart';
-import 'workout_screens.dart';
-import 'equipment/equipment_scanner_screen.dart';
-import 'progress/goal_progress_screen.dart';
-import 'progress/progress_dashboard_screen.dart';
-import 'chatbot/chatbot_screen.dart';
-import 'chatbot/saved_advice_screen.dart';
-import 'gamification_screens.dart';
-import 'coach_booking/booking_schedule_screen.dart';
-import 'coach_booking/browse_coaches_screen.dart';
-import 'membership/membership_dashboard_screen.dart';
+import 'package:gainpath/app/theme.dart';
+import 'package:gainpath/data/mock_data.dart';
+import 'package:gainpath/widgets/shared.dart';
+import 'package:gainpath/screens/member/workout_screens.dart';
+import 'package:gainpath/screens/member/equipment/equipment_scanner_screen.dart';
+import 'package:gainpath/screens/member/progress/goal_progress_screen.dart';
+import 'package:gainpath/screens/member/progress/progress_dashboard_screen.dart';
+import 'package:gainpath/screens/member/chatbot/chatbot_screen.dart';
+import 'package:gainpath/screens/member/chatbot/saved_advice_screen.dart';
+import 'package:gainpath/screens/member/gamification_screens.dart';
+import 'package:gainpath/screens/member/coach_booking/booking_schedule_screen.dart';
+import 'package:gainpath/screens/member/coach_booking/browse_coaches_screen.dart';
+import 'package:gainpath/screens/member/membership/membership_dashboard_screen.dart';
 
 /// Member landing screen — the hub every other member flow is reachable
 /// from. It carries the daily check-in prompt (AD-M3.2), the broadcast

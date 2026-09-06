@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import '../../app/theme.dart';
-import 'role_select_screen.dart';
+import 'package:gainpath/app/theme.dart';
+import 'package:gainpath/screens/auth/role_select_screen.dart';
 
 class _Slide {
   final String image;

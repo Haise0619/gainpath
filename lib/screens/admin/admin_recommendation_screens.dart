@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:syncfusion_flutter_charts/charts.dart';
-import '../../app/theme.dart';
-import '../../data/mock_data.dart';
-import '../../widgets/shared.dart';
-import 'reports/report_widgets.dart' show ReportSection;
-import 'admin_dialogs.dart' show AdminDialog;
+import 'package:gainpath/app/theme.dart';
+import 'package:gainpath/data/mock_data.dart';
+import 'package:gainpath/widgets/shared.dart';
+import 'package:gainpath/screens/admin/reports/report_widgets.dart' show ReportSection;
+import 'package:gainpath/screens/admin/admin_dialogs.dart' show AdminDialog;
 
 /// AD-M13.1/M13.2 — AI-Powered Trainer and Content Recommendation. Three
 /// genuinely distinct jobs — analysing which exercises are risky,

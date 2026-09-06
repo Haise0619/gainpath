@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import '../../../app/theme.dart';
-import '../../../data/mock_data.dart';
-import 'equipment_browse_screen.dart';
-import 'equipment_detail_screen.dart';
+import 'package:gainpath/app/theme.dart';
+import 'package:gainpath/data/mock_data.dart';
+import 'package:gainpath/screens/member/equipment/equipment_browse_screen.dart';
+import 'package:gainpath/screens/member/equipment/equipment_detail_screen.dart';
 
 const _viewfinderHero =
     'https://images.unsplash.com/photo-1534438327276-14e5300c3a48?auto=format&fit=crop&w=1200&q=80';

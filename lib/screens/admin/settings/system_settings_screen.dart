@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import '../../../app/theme.dart';
-import '../../../widgets/shared.dart';
-import '../admin_dialogs.dart';
+import 'package:gainpath/app/theme.dart';
+import 'package:gainpath/widgets/shared.dart';
+import 'package:gainpath/screens/admin/admin_dialogs.dart';
 
 /// AD-M11.6 — Configure System Settings. Platform-wide configuration
 /// across three areas — General Preferences, Reward Conversion Rates,

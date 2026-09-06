@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../app/theme.dart';
+import 'package:gainpath/app/theme.dart';
 
 /// Simulated Billplz-style checkout: a fake browser chrome wrapping a
 /// payment-method picker, standing in for the embedded WebView the design
