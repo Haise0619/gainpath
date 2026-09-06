@@ -3,7 +3,7 @@ import 'package:gainpath/app/theme/theme.dart';
 import 'package:gainpath/data/mock_data.dart';
 import 'package:gainpath/shared/shared.dart';
 import 'package:gainpath/features/identity/presentation/shared/role_select_screen.dart';
-import 'package:gainpath/features/coaching/presentation/member/coach_profile_screen.dart' as public;
+import 'package:gainpath/features/coaching/presentation/shared/coach_profile_screen.dart' as public;
 import 'package:gainpath/features/coaching/presentation/member/widgets/coach_card.dart' show networkAvatar;
 import 'package:gainpath/features/identity/presentation/coach/certifications_screen.dart';
 import 'package:gainpath/features/identity/presentation/coach/coach_settings_screen.dart';
