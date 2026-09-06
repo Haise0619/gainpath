@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:gainpath/features/gamification/application/gamification_bloc.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:gainpath/app/theme/theme.dart';
 import 'package:gainpath/shared/shared.dart';
@@ -51,7 +52,7 @@ class GamificationDashboardScreen extends StatelessWidget {
                                   fontSize: 11, letterSpacing: 1.4, fontWeight: FontWeight.w700, color: Colors.white70)),
                           const SizedBox(height: 6),
                           TweenAnimationBuilder<int>(
-                            tween: IntTween(begin: 0, end: context.read<GamificationRepository>().points),
+                            tween: IntTween(begin: 0, end: context.watch<GamificationBloc>().state.points),
                             duration: const Duration(milliseconds: 900),
                             curve: Curves.easeOutCubic,
                             builder: (context, value, _) => Text('$value',
@@ -92,7 +93,7 @@ class GamificationDashboardScreen extends StatelessWidget {
                 const SizedBox(height: 14),
                 Row(
                   children: [
-                    _miniStat(Icons.local_fire_department_rounded, '${context.read<GamificationRepository>().streak} day streak'),
+                    _miniStat(Icons.local_fire_department_rounded, '${context.watch<GamificationBloc>().state.streak} day streak'),
                     const SizedBox(width: 18),
                     _miniStat(Icons.military_tech_rounded, '$unlocked badges'),
                   ],
@@ -108,12 +109,12 @@ class GamificationDashboardScreen extends StatelessWidget {
               children: [
                 ProgressRow(
                   'Progress to 14-day badge',
-                  context.read<GamificationRepository>().streak / 14,
-                  '${context.read<GamificationRepository>().streak}/14',
+                  context.watch<GamificationBloc>().state.streak / 14,
+                  '${context.watch<GamificationBloc>().state.streak}/14',
                   color: AppColors.accent,
                 ),
                 const SizedBox(height: 6),
-                Text('Longest streak so far: ${context.read<GamificationRepository>().longestStreak} days',
+                Text('Longest streak so far: ${context.watch<GamificationBloc>().state.longestStreak} days',
                     style: Theme.of(context).textTheme.bodyMedium),
               ],
             ),

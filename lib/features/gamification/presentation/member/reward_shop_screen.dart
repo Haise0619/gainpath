@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:gainpath/features/gamification/application/gamification_bloc.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:gainpath/app/theme/theme.dart';
 import 'package:gainpath/shared/shared.dart';
@@ -28,7 +29,7 @@ class RewardShopScreen extends StatelessWidget {
                 const Icon(Icons.account_balance_wallet_rounded, color: Colors.white),
                 const SizedBox(width: 12),
                 TweenAnimationBuilder<int>(
-                  tween: IntTween(begin: 0, end: context.read<GamificationRepository>().points),
+                  tween: IntTween(begin: 0, end: context.watch<GamificationBloc>().state.points),
                   duration: const Duration(milliseconds: 800),
                   curve: Curves.easeOutCubic,
                   builder: (context, value, _) => Text('$value points available',
@@ -39,8 +40,8 @@ class RewardShopScreen extends StatelessWidget {
           ),
           const SizedBox(height: 18),
           ...context.read<GamificationRepository>().rewards.map((r) {
-            final affordable = context.read<GamificationRepository>().points >= r.points;
-            final needed = r.points - context.read<GamificationRepository>().points;
+            final affordable = context.watch<GamificationBloc>().state.points >= r.points;
+            final needed = r.points - context.watch<GamificationBloc>().state.points;
             return Padding(
               padding: const EdgeInsets.only(bottom: 10),
               child: Panel(

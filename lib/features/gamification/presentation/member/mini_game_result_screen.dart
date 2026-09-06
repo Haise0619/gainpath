@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import 'package:gainpath/features/gamification/application/gamification_bloc.dart';
 import 'package:gainpath/app/theme/theme.dart';
 import 'package:gainpath/shared/shared.dart';
 import 'package:gainpath/features/gamification/domain/entities/mini_game.dart';
@@ -33,6 +34,7 @@ class _MiniGameResultScreenState extends State<MiniGameResultScreen> with Single
   @override
   void initState() {
     super.initState();
+    context.read<GamificationBloc>().add(MiniGameCompleted(widget.score));
     _entrance = AnimationController(vsync: this, duration: const Duration(milliseconds: 700));
     _scale = TweenSequence<double>([
       TweenSequenceItem(tween: Tween(begin: 0.6, end: 1.08), weight: 55),

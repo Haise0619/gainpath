@@ -1,5 +1,7 @@
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:gainpath/features/gamification/domain/repositories/gamification_repository.dart';
+import 'package:gainpath/features/gamification/application/gamification_bloc.dart';
 import 'package:gainpath/features/coaching/domain/repositories/booking_repository.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:gainpath/features/coaching/application/booking_bloc.dart';
@@ -21,9 +23,16 @@ class GainPathApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return AppRepositories(
-      child: BlocProvider(
-        create: (context) =>
-            BookingBloc(context.read<BookingRepository>())..add(const BookingsRequested()),
+      child: MultiBlocProvider(
+        providers: [
+          BlocProvider(
+            create: (context) =>
+                BookingBloc(context.read<BookingRepository>())..add(const BookingsRequested()),
+          ),
+          BlocProvider(
+            create: (context) => GamificationBloc(context.read<GamificationRepository>()),
+          ),
+        ],
         child: MaterialApp(
           title: kIsWeb ? 'GainPath Admin Console' : 'GainPath',
           debugShowCheckedModeBanner: false,

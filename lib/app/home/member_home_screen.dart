@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import 'package:gainpath/features/gamification/application/gamification_bloc.dart';
 import 'package:gainpath/features/gamification/domain/policies/reward_policy.dart';
 import 'package:gainpath/features/coaching/domain/enums/booking_status.dart';
 import 'package:gainpath/app/theme/theme.dart';
@@ -19,7 +20,6 @@ import 'package:gainpath/features/membership/presentation/shared/membership_dash
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:gainpath/features/coaching/domain/entities/booking.dart';
 import 'package:gainpath/features/coaching/domain/repositories/booking_repository.dart';
-import 'package:gainpath/features/gamification/domain/repositories/gamification_repository.dart';
 import 'package:gainpath/features/identity/domain/repositories/member_profile_repository.dart';
 import 'package:gainpath/features/workout/domain/repositories/workout_repository.dart';
 
@@ -42,9 +42,7 @@ class MemberHomeScreen extends StatefulWidget {
 class _MemberHomeScreenState extends State<MemberHomeScreen>
     with SingleTickerProviderStateMixin {
 
-  bool _claimed = false;
   bool _dismissedBroadcast = false;
-  late int _points = context.read<GamificationRepository>().points;
 
   late final AnimationController _claimController;
   late final Animation<double> _claimScale;
@@ -71,10 +69,7 @@ class _MemberHomeScreenState extends State<MemberHomeScreen>
   }
 
   void _claim() {
-    setState(() {
-      _claimed = true;
-      _points += RewardPolicy.dailyCheckIn;
-    });
+    context.read<GamificationBloc>().add(const DailyCheckInClaimed());
     _claimController.forward(from: 0);
     showToast(context, 'Checked in. +${RewardPolicy.dailyCheckIn} points, streak extended.');
   }
@@ -106,6 +101,7 @@ class _MemberHomeScreenState extends State<MemberHomeScreen>
 
   @override
   Widget build(BuildContext context) {
+    final gamification = context.watch<GamificationBloc>().state;
     final firstName = context.read<MemberProfileRepository>().memberName.split(' ').first;
     return Scaffold(
       floatingActionButton: FloatingActionButton.extended(
@@ -121,7 +117,7 @@ class _MemberHomeScreenState extends State<MemberHomeScreen>
         child: CustomScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
           slivers: [
-            _HeroHeader(greeting: _greeting, firstName: firstName, points: _points),
+            _HeroHeader(greeting: _greeting, firstName: firstName, points: gamification.points),
             SliverPadding(
               padding: const EdgeInsets.fromLTRB(16, 18, 16, 96),
               sliver: SliverList.list(
@@ -131,7 +127,7 @@ class _MemberHomeScreenState extends State<MemberHomeScreen>
                     const SizedBox(height: 14),
                   ],
                   _StreakCard(
-                    claimed: _claimed,
+                    claimed: gamification.checkedInToday,
                     scale: _claimScale,
                     onClaim: _claim,
                     reward: RewardPolicy.dailyCheckIn,
@@ -405,7 +401,7 @@ class _StreakCard extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('${context.read<GamificationRepository>().streak}-day streak',
+                      Text('${context.watch<GamificationBloc>().state.streak}-day streak',
                           style: Theme.of(context).textTheme.titleMedium),
                       Text(
                         claimed
