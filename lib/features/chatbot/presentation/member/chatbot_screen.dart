@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:gainpath/features/chatbot/application/chat_bloc.dart';
 import 'package:syncfusion_flutter_charts/charts.dart';
 import 'package:gainpath/app/theme/theme.dart';
 import 'package:gainpath/shared/shared.dart';
@@ -8,7 +9,6 @@ import 'package:gainpath/features/chatbot/presentation/member/widgets/chatbot_ab
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:gainpath/features/analytics/domain/repositories/analytics_repository.dart';
 import 'package:gainpath/features/chatbot/domain/entities/chat_message.dart';
-import 'package:gainpath/features/chatbot/domain/entities/faq_prompt.dart';
 import 'package:gainpath/features/chatbot/domain/repositories/chat_repository.dart';
 import 'package:gainpath/features/workout/domain/entities/gym_equipment.dart';
 import 'package:gainpath/features/workout/domain/repositories/equipment_repository.dart';
@@ -26,30 +26,40 @@ Widget _networkHero(String url, {BoxFit fit = BoxFit.cover}) {
   );
 }
 
-/// AD-M6.1 — Consult AI Fitness Coach.
-class ChatbotScreen extends StatefulWidget {
+/// AD-M6.1 — Consult AI Fitness Coach. Provides a [ChatBloc] scoped to this
+/// screen; the view below renders [ChatState] and dispatches events.
+class ChatbotScreen extends StatelessWidget {
   const ChatbotScreen({super.key});
 
   @override
-  State<ChatbotScreen> createState() => _ChatbotScreenState();
+  Widget build(BuildContext context) {
+    return BlocProvider(
+      create: (context) => ChatBloc(
+        chat: context.read<ChatRepository>(),
+        equipment: context.read<EquipmentRepository>(),
+        analytics: context.read<AnalyticsRepository>(),
+      ),
+      child: const _ChatbotView(),
+    );
+  }
 }
 
-class _ChatbotScreenState extends State<ChatbotScreen> {
+class _ChatbotView extends StatefulWidget {
+  const _ChatbotView();
+
+  @override
+  State<_ChatbotView> createState() => _ChatbotViewState();
+}
+
+class _ChatbotViewState extends State<_ChatbotView> {
   static const _demoPrompts = [
     'Which equipment works my chest?',
     'How is my workout progress trending?',
   ];
 
-  static const _genericReply =
-      'Good question. Focus on controlling the eccentric, keep your core '
-      'braced, and add weight only once the movement feels repeatable.\n\n'
-      'This is general educational guidance, not medical advice.';
-
   final _controller = TextEditingController();
   final _scroll = ScrollController();
-  late final List<ChatMessage> _messages = [...context.read<ChatRepository>().chatSeed];
   bool _disclaimerShown = false;
-  bool _thinking = false;
 
   @override
   void initState() {
@@ -70,250 +80,156 @@ class _ChatbotScreenState extends State<ChatbotScreen> {
     await showChatbotAboutSheet(context, dismissible: false);
   }
 
-  void _sendMessage(String userText, ChatMessage reply) {
-    setState(() {
-      _messages.add(ChatMessage(userText, true));
-      _thinking = true;
-    });
-    _jump();
-    Future.delayed(const Duration(milliseconds: 900), () {
-      if (!mounted) return;
-      setState(() {
-        _thinking = false;
-        _messages.add(reply);
-      });
-      _jump();
-    });
-  }
-
   void _send() {
     final text = _controller.text.trim();
     if (text.isEmpty) return;
     _controller.clear();
-    _sendMessage(text, _buildReply(text));
-  }
-
-  void _sendPrompt(FaqPrompt prompt) {
-    _sendMessage(prompt.question, ChatMessage(prompt.reply, false));
-  }
-
-  /// Rough keyword routing standing in for real NLU: an equipment or
-  /// workout-progress question gets a rich reply — an equipment card
-  /// with a photo, or a small trend chart — instead of every answer
-  /// being plain text.
-  ChatMessage _buildReply(String userText) {
-    final q = userText.toLowerCase();
-
-    final equipmentKeywords = ['equipment', 'machine', 'rack', 'bench', 'treadmill', 'cable', 'dumbbell'];
-    if (equipmentKeywords.any(q.contains)) {
-      GymEquipment? match;
-      for (final e in context.read<EquipmentRepository>().gymEquipment.where((e) => e.isActive)) {
-        if (q.contains(e.name.toLowerCase()) || q.contains(e.muscleGroup.toLowerCase())) {
-          match = e;
-          break;
-        }
-      }
-      match ??= context.read<EquipmentRepository>().gymEquipment.firstWhere((e) => e.isActive, orElse: () => context.read<EquipmentRepository>().gymEquipment.first);
-      return ChatMessage(
-        'This one fits — tap the card for the full setup and safety guide.',
-        false,
-        attachment: EquipmentAttachment(match),
-      );
-    }
-
-    final progressKeywords = ['workout', 'progress', 'how am i doing', 'routine', 'improving', 'form score'];
-    if (progressKeywords.any(q.contains)) {
-      final delta = context.read<AnalyticsRepository>().postureTrend.last - context.read<AnalyticsRepository>().postureTrend.first;
-      return ChatMessage(
-        'Here is how your form score has trended over your last ${context.read<AnalyticsRepository>().postureTrend.length} sessions.',
-        false,
-        attachment: ProgressChartAttachment(
-          'Form score trend',
-          'pts',
-          context.read<AnalyticsRepository>().postureTrend,
-          '${delta >= 0 ? '+' : ''}$delta pts',
-        ),
-      );
-    }
-
-    return const ChatMessage(_genericReply, false);
-  }
-
-  void _toggleBookmark(String text) {
-    setState(() {
-      if (context.read<ChatRepository>().savedAdvice.contains(text)) {
-        context.read<ChatRepository>().savedAdvice.remove(text);
-      } else {
-        context.read<ChatRepository>().savedAdvice.add(text);
-      }
-    });
+    context.read<ChatBloc>().add(MessageSent(text));
   }
 
   void _jump() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_scroll.hasClients) {
         _scroll.animateTo(_scroll.position.maxScrollExtent,
-            duration: const Duration(milliseconds: 250),
-            curve: Curves.easeOut);
+            duration: const Duration(milliseconds: 250), curve: Curves.easeOut);
       }
     });
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('AI coach'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.help_outline_rounded),
-            tooltip: 'About this assistant',
-            onPressed: () => showChatbotAboutSheet(context),
+    return BlocConsumer<ChatBloc, ChatState>(
+      listenWhen: (a, b) => a.messages.length != b.messages.length || a.isReplying != b.isReplying,
+      listener: (_, __) => _jump(),
+      builder: (context, chat) {
+        final bloc = context.read<ChatBloc>();
+        return Scaffold(
+          appBar: AppBar(
+            title: const Text('AI coach'),
+            actions: [
+              IconButton(
+                icon: const Icon(Icons.help_outline_rounded),
+                tooltip: 'About this assistant',
+                onPressed: () => showChatbotAboutSheet(context),
+              ),
+              IconButton(
+                icon: const Icon(Icons.auto_awesome_rounded),
+                tooltip: 'Progress audit',
+                onPressed: () => bloc.add(const ProgressAuditRequested()),
+              ),
+              IconButton(
+                icon: const Icon(Icons.bookmark_border_rounded),
+                tooltip: 'Saved advice',
+                onPressed: () =>
+                    Navigator.push(context, MaterialPageRoute(builder: (_) => const SavedAdviceScreen())),
+              ),
+              IconButton(
+                icon: const Icon(Icons.delete_outline_rounded),
+                tooltip: 'Clear chat',
+                onPressed: () async {
+                  final ok = await confirmSheet(context,
+                      title: 'Clear this conversation?',
+                      message: 'Messages disappear from this screen. Anything you bookmarked stays saved.',
+                      confirmLabel: 'Clear',
+                      destructive: true);
+                  if (ok) bloc.add(const HistoryCleared());
+                },
+              ),
+            ],
           ),
-          IconButton(
-            icon: const Icon(Icons.auto_awesome_rounded),
-            tooltip: 'Progress audit',
-            onPressed: () {
-              final delta = context.read<AnalyticsRepository>().volumeTrend.last - context.read<AnalyticsRepository>().volumeTrend.first;
-              setState(() {
-                _messages.add(const ChatMessage(
-                    'Give me a summary of my progress.', true));
-                _messages.add(ChatMessage(
-                  context.read<ChatRepository>().buildProgressAuditReply(),
-                  false,
-                  attachment: ProgressChartAttachment(
-                    'Training volume trend',
-                    'kg',
-                    context.read<AnalyticsRepository>().volumeTrend,
-                    '${delta >= 0 ? '+' : ''}$delta kg',
-                  ),
-                ));
-              });
-              _jump();
-            },
-          ),
-          IconButton(
-            icon: const Icon(Icons.bookmark_border_rounded),
-            tooltip: 'Saved advice',
-            onPressed: () => Navigator.push(context,
-                MaterialPageRoute(builder: (_) => const SavedAdviceScreen())),
-          ),
-          IconButton(
-            icon: const Icon(Icons.delete_outline_rounded),
-            tooltip: 'Clear chat',
-            onPressed: () async {
-              final ok = await confirmSheet(context,
-                  title: 'Clear this conversation?',
-                  message:
-                      'Messages disappear from this screen. Anything you bookmarked stays saved.',
-                  confirmLabel: 'Clear',
-                  destructive: true);
-              if (ok) setState(() => _messages.clear());
-            },
-          ),
-        ],
-      ),
-      body: Column(
-        children: [
-          Expanded(
-            child: _messages.isEmpty
-                ? Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(32),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(Icons.chat_bubble_outline_rounded,
-                              size: 40, color: AppColors.hairline),
-                          const SizedBox(height: 14),
-                          Text('Ask about form, programming, or nutrition.',
-                              textAlign: TextAlign.center,
-                              style: Theme.of(context).textTheme.bodyMedium),
-                          const SizedBox(height: 20),
-                          Wrap(
-                            spacing: 8,
-                            runSpacing: 8,
-                            alignment: WrapAlignment.center,
+          body: Column(
+            children: [
+              Expanded(
+                child: chat.messages.isEmpty
+                    ? Center(
+                        child: Padding(
+                          padding: const EdgeInsets.all(32),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
                             children: [
-                              ..._demoPrompts.map((q) => ActionChip(
-                                    label: Text(q),
-                                    avatar: const Icon(Icons.auto_awesome_rounded, size: 15, color: AppColors.accent),
-                                    backgroundColor: AppColors.accentTint,
-                                    side: BorderSide.none,
-                                    labelStyle: const TextStyle(
-                                        color: AppColors.accentDark, fontWeight: FontWeight.w600, fontSize: 12.5),
-                                    onPressed: () => _sendMessage(q, _buildReply(q)),
-                                  )),
-                              ...context.read<ChatRepository>().faqPrompts.map((p) => ActionChip(
-                                    label: Text(p.question),
-                                    backgroundColor: AppColors.primaryTint,
-                                    side: BorderSide.none,
-                                    labelStyle: const TextStyle(
-                                        color: AppColors.primary,
-                                        fontWeight: FontWeight.w600,
-                                        fontSize: 12.5),
-                                    onPressed: () => _sendPrompt(p),
-                                  )),
+                              const Icon(Icons.chat_bubble_outline_rounded, size: 40, color: AppColors.hairline),
+                              const SizedBox(height: 14),
+                              Text('Ask about form, programming, or nutrition.',
+                                  textAlign: TextAlign.center, style: Theme.of(context).textTheme.bodyMedium),
+                              const SizedBox(height: 20),
+                              Wrap(
+                                spacing: 8,
+                                runSpacing: 8,
+                                alignment: WrapAlignment.center,
+                                children: [
+                                  ..._demoPrompts.map((q) => ActionChip(
+                                        label: Text(q),
+                                        avatar: const Icon(Icons.auto_awesome_rounded, size: 15, color: AppColors.accent),
+                                        backgroundColor: AppColors.accentTint,
+                                        side: BorderSide.none,
+                                        labelStyle: const TextStyle(
+                                            color: AppColors.accentDark, fontWeight: FontWeight.w600, fontSize: 12.5),
+                                        onPressed: () => bloc.add(MessageSent(q)),
+                                      )),
+                                  ...context.read<ChatRepository>().faqPrompts.map((p) => ActionChip(
+                                        label: Text(p.question),
+                                        backgroundColor: AppColors.primaryTint,
+                                        side: BorderSide.none,
+                                        labelStyle: const TextStyle(
+                                            color: AppColors.primary, fontWeight: FontWeight.w600, fontSize: 12.5),
+                                        onPressed: () => bloc.add(PromptSent(p)),
+                                      )),
+                                ],
+                              ),
                             ],
                           ),
-                        ],
+                        ),
+                      )
+                    : ListView.builder(
+                        controller: _scroll,
+                        padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+                        itemCount: chat.messages.length + (chat.isReplying ? 1 : 0),
+                        itemBuilder: (ctx, i) {
+                          if (i == chat.messages.length) {
+                            return const _Bubble(text: 'Thinking...', fromUser: false);
+                          }
+                          final m = chat.messages[i];
+                          return _Bubble(
+                            text: m.text,
+                            fromUser: m.fromUser,
+                            attachment: m.attachment,
+                            isBookmarked: chat.isBookmarked(m),
+                            onToggleBookmark: m.fromUser ? null : () => bloc.add(AdviceBookmarkToggled(m.text)),
+                          );
+                        },
+                      ),
+              ),
+              Container(
+                padding: EdgeInsets.fromLTRB(12, 10, 12, 10 + MediaQuery.of(context).padding.bottom),
+                decoration: const BoxDecoration(
+                  color: AppColors.surface,
+                  border: Border(top: BorderSide(color: AppColors.hairline)),
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: _controller,
+                        textInputAction: TextInputAction.send,
+                        onSubmitted: (_) => _send(),
+                        decoration: const InputDecoration(
+                          hintText: 'Ask a question',
+                          contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 13),
+                        ),
                       ),
                     ),
-                  )
-                : ListView.builder(
-                    controller: _scroll,
-                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
-                    itemCount: _messages.length + (_thinking ? 1 : 0),
-                    itemBuilder: (ctx, i) {
-                      if (i == _messages.length) {
-                        return const _Bubble(
-                            text: 'Thinking...', fromUser: false);
-                      }
-                      final m = _messages[i];
-                      final isBookmarked =
-                          !m.fromUser && context.read<ChatRepository>().savedAdvice.contains(m.text);
-                      return _Bubble(
-                        text: m.text,
-                        fromUser: m.fromUser,
-                        attachment: m.attachment,
-                        isBookmarked: isBookmarked,
-                        onToggleBookmark:
-                            m.fromUser ? null : () => _toggleBookmark(m.text),
-                      );
-                    },
-                  ),
-          ),
-          Container(
-            padding: EdgeInsets.fromLTRB(
-                12, 10, 12, 10 + MediaQuery.of(context).padding.bottom),
-            decoration: const BoxDecoration(
-              color: AppColors.surface,
-              border: Border(top: BorderSide(color: AppColors.hairline)),
-            ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _controller,
-                    textInputAction: TextInputAction.send,
-                    onSubmitted: (_) => _send(),
-                    decoration: const InputDecoration(
-                      hintText: 'Ask a question',
-                      contentPadding: EdgeInsets.symmetric(
-                          horizontal: 16, vertical: 13),
+                    const SizedBox(width: 8),
+                    IconButton.filled(
+                      onPressed: _send,
+                      icon: const Icon(Icons.arrow_upward_rounded),
                     ),
-                  ),
+                  ],
                 ),
-                const SizedBox(width: 8),
-                IconButton.filled(
-                  onPressed: _send,
-                  icon: const Icon(Icons.arrow_upward_rounded),
-                ),
-              ],
-            ),
+              ),
+            ],
           ),
-        ],
-      ),
+        );
+      },
     );
   }
 }
