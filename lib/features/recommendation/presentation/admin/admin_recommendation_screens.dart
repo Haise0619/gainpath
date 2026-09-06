@@ -4,7 +4,7 @@ import 'package:gainpath/app/theme/theme.dart';
 import 'package:gainpath/data/mock_data.dart';
 import 'package:gainpath/shared/shared.dart';
 import 'package:gainpath/features/analytics/presentation/admin/report_widgets.dart' show ReportSection;
-import 'package:gainpath/screens/admin/admin_dialogs.dart' show AdminDialog;
+import 'package:gainpath/shared/widgets/admin_dialogs.dart' show AdminDialog;
 
 /// AD-M13.1/M13.2 — AI-Powered Trainer and Content Recommendation. Three
 /// genuinely distinct jobs — analysing which exercises are risky,
