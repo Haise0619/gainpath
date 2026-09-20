@@ -1,0 +1,15 @@
+name: gainpath_data
+description: Transport-independent data adapters for GainPath.
+publish_to: none
+resolution: workspace
+version: 0.1.0
+
+environment:
+  sdk: '>=3.6.0 <4.0.0'
+
+dependencies:
+  gainpath_domain:
+    path: ../gainpath_domain
+
+dev_dependencies:
+  test: ^1.25.0

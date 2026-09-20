@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "requestId": "upload-1",
+  "organizationId": "org-1",
+  "memberId": "member-1",
+  "sessionId": "session-1",
+  "exerciseId": "bodyweight_squat",
+  "startedAtMillis": 1790906400000,
+  "endedAtMillis": 1790907000000,
+  "repetitions": 30,
+  "formScorePercent": 85,
+  "trackedDurationMillis": 540000,
+  "rejectedDurationMillis": 60000,
+  "scoringVersion": "squat-v1",
+  "detectorVersion": "detector-v1",
+  "consentVersion": "consent-v1"
+}

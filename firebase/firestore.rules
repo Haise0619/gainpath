@@ -1,0 +1,92 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function activeMember(orgId) {
+      return signedIn()
+        && exists(/databases/$(database)/documents/orgs/$(orgId)/members/$(request.auth.uid))
+        && get(/databases/$(database)/documents/orgs/$(orgId)/members/$(request.auth.uid)).data.status == 'active';
+    }
+
+    function adminMember(orgId) {
+      return activeMember(orgId)
+        && get(/databases/$(database)/documents/orgs/$(orgId)/members/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    function staffBranch(orgId, branchId) {
+      return adminMember(orgId) || (activeMember(orgId)
+        && get(/databases/$(database)/documents/orgs/$(orgId)/members/$(request.auth.uid)).data.role == 'staff'
+        && branchId in get(/databases/$(database)/documents/orgs/$(orgId)/members/$(request.auth.uid)).data.branchIds);
+    }
+
+    function staffProfile(orgId, branchIds) {
+      return adminMember(orgId) || (activeMember(orgId)
+        && get(/databases/$(database)/documents/orgs/$(orgId)/members/$(request.auth.uid)).data.role == 'staff'
+        && branchIds.hasAny(get(/databases/$(database)/documents/orgs/$(orgId)/members/$(request.auth.uid)).data.branchIds));
+    }
+
+    function own(uid) {
+      return signedIn() && request.auth.uid == uid;
+    }
+
+    match /users/{uid} {
+      allow read: if own(uid);
+      allow create: if false;
+      allow update: if own(uid)
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['displayName', 'avatarPath', 'updatedAtMillis']);
+      allow delete: if false;
+    }
+
+    match /orgs/{orgId}/members/{uid} {
+      allow read: if activeMember(orgId) && (own(uid) || staffProfile(orgId, resource.data.branchIds));
+      allow update: if activeMember(orgId) && own(uid)
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['displayName', 'goals', 'updatedAtMillis']);
+      allow create, delete: if false;
+    }
+
+    match /orgs/{orgId}/content/{documentId} {
+      allow read: if activeMember(orgId) && (resource.data.status == 'published' || adminMember(orgId));
+      allow write: if false;
+    }
+
+    match /orgs/{orgId}/coaches/{coachId} {
+      allow read: if activeMember(orgId) && (resource.data.status == 'published' || own(coachId) || adminMember(orgId));
+      allow write: if false;
+    }
+
+    match /orgs/{orgId}/bookings/{bookingId} {
+      allow read: if activeMember(orgId)
+        && (resource.data.memberId == request.auth.uid
+          || resource.data.coachId == request.auth.uid
+          || staffBranch(orgId, resource.data.branchId));
+      allow write: if false;
+    }
+
+    match /orgs/{orgId}/workoutSessions/{sessionId} {
+      allow read: if activeMember(orgId)
+        && (resource.data.memberId == request.auth.uid || adminMember(orgId));
+      allow write: if false;
+    }
+
+    match /orgs/{orgId}/notifications/{notificationId} {
+      allow read: if activeMember(orgId)
+        && resource.data.recipientId == request.auth.uid;
+      allow write: if false;
+    }
+
+    match /orgs/{orgId}/reports/{reportId} {
+      allow read: if adminMember(orgId) || staffBranch(orgId, resource.data.branchId);
+      allow write: if false;
+    }
+
+    match /system/{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

@@ -1,0 +1,10 @@
+export 'src/workout/entities/exercise.dart';
+export 'src/workout/entities/gym_equipment.dart';
+export 'src/workout/entities/routine_blueprint.dart';
+export 'src/workout/entities/tutorial_video.dart';
+export 'src/workout/entities/workout_record.dart';
+export 'src/workout/enums/tutorial_status.dart';
+export 'src/workout/repositories/equipment_repository.dart';
+export 'src/workout/repositories/routine_template_repository.dart';
+export 'src/workout/repositories/tutorial_repository.dart';
+export 'src/workout/repositories/workout_repository.dart';

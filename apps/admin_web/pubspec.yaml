@@ -1,0 +1,33 @@
+name: gainpath_admin_web
+description: GainPath administrator and branch staff web console.
+publish_to: none
+resolution: workspace
+version: 0.1.0
+
+environment:
+  sdk: '>=3.6.0 <4.0.0'
+
+dependencies:
+  equatable: ^2.1.0
+  google_fonts: ^6.2.1
+  syncfusion_flutter_charts: ^34.2.3
+  syncfusion_flutter_gauges: ^34.2.3
+  flutter:
+    sdk: flutter
+  flutter_bloc: ^9.1.1
+  gainpath_domain:
+    path: ../../packages/gainpath_domain
+  gainpath_data:
+    path: ../../packages/gainpath_data
+  gainpath_ui:
+    path: ../../packages/gainpath_ui
+  gainpath_identity:
+    path: ../../packages/gainpath_identity
+
+dev_dependencies:
+  flutter_lints: ^3.0.0
+  flutter_test:
+    sdk: flutter
+
+flutter:
+  uses-material-design: true

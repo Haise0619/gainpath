@@ -1,0 +1,61 @@
+name: Verify workspace
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  flutter:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.38.9'
+          channel: stable
+          cache: true
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - run: flutter pub get --enforce-lockfile
+      - run: dart run tool/check_architecture.dart
+      - run: dart analyze apps packages tool test
+      - name: Workspace tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          flutter test --no-pub test
+          for package in packages/* apps/*; do
+            if [ -d "$package/test" ]; then
+              (cd "$package" && flutter test --no-pub)
+            fi
+          done
+      - run: flutter build web --debug --no-pub --dart-define=BACKEND=mock
+        working-directory: apps/admin_web
+      - run: flutter build apk --debug --no-pub --dart-define=BACKEND=mock
+        working-directory: apps/mobile
+  backend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: functions
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: pnpm
+          cache-dependency-path: functions/pnpm-lock.yaml
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run build
+      - run: pnpm run typecheck:tests
+      - run: pnpm test
+      - run: pnpm run test:emulator

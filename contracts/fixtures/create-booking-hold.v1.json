@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "requestId": "request-1",
+  "organizationId": "org-1",
+  "memberId": "member-1",
+  "branchId": "branch-1",
+  "coachId": "coach-1",
+  "startAtMillis": 1790906400000,
+  "durationMinutes": 60
+}

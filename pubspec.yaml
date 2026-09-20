@@ -1,27 +1,26 @@
-name: gainpath
-description: GainPath - AI-Powered Fitness Coaching and Pose Correction System (Frontend Prototype)
+name: gainpath_workspace
+description: GainPath applications and shared package workspace.
 publish_to: 'none'
 version: 1.0.0+1
 
 environment:
-  sdk: '>=3.0.0 <4.0.0'
+  sdk: '>=3.6.0 <4.0.0'
 
-dependencies:
-  flutter:
-    sdk: flutter
-  cupertino_icons: ^1.0.6
-  google_fonts: ^6.2.1
-  syncfusion_flutter_charts: ^34.2.3
-  syncfusion_flutter_gauges: ^34.2.3
-  web: ^1.0.0
-  flutter_bloc: ^9.1.1
-  equatable: ^2.1.0
+workspace:
+  - apps/mobile
+  - apps/admin_web
+  - packages/gainpath_domain
+  - packages/gainpath_data
+  - packages/gainpath_ui
+  - packages/gainpath_pose
+  - packages/gainpath_identity
 
 dev_dependencies:
+  analyzer: ^8.4.1
+  yaml: ^3.1.3
+  path: ^1.9.1
   flutter_test:
     sdk: flutter
   flutter_lints: ^3.0.0
   bloc_test: ^10.0.0
-
-flutter:
-  uses-material-design: true
+  test: ^1.25.0

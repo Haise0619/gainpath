@@ -1,0 +1,47 @@
+digraph GainPath {
+  graph [rankdir=TB, bgcolor="#F6F8FC", pad="0.35", nodesep="0.35", ranksep="0.55", fontname="Arial", fontsize=24, fontcolor="#152C49", labelloc=t, label="GAINPATH | TARGET ARCHITECTURE\nOne monorepo - two apps - one backend per environment", splines=polyline];
+  node [shape=box, style="rounded,filled", fontname="Arial", fontsize=14, margin="0.2,0.16", color="#BCCCDD", fillcolor="white", fontcolor="#16304D"];
+  edge [fontname="Arial", fontsize=11, color="#7187A2", fontcolor="#425773", arrowsize=0.7];
+  mobile [label="FLUTTER MOBILE\nGym members + coaches\nScreens > BLoC > domain contracts",fillcolor="#D9EAFB"];
+  web [label="FLUTTER ADMIN WEB\nAdmins + branch staff\nIndependent screens, router and build",fillcolor="#D9EAFB"];
+  {rank=same;mobile;web;}
+  local [label="ON DEVICE ONLY\nCamera > pose processing > audio\nUser-scoped session store + outbox",fillcolor="#E4F3E8"];
+  client [label="CLIENT DATA ADAPTERS + AUTH SESSION\nSeparate instances in each app\nFirebase Auth identity + App Check tokens",fillcolor="#EAE5FB"];
+  {rank=same;local;client;}
+  mobile -> local;
+  mobile -> client;
+  web -> client;
+  local -> client [label="summary upload",constraint=false];
+  api [label="CALLABLE COMMANDS\nAuthorize current role + organization\nValidate inputs, limits and retry identity",fillcolor="#FFF2D9"];
+  direct [label="DIRECT CLIENT SDK\nFirestore / Storage Rules + App Check\nScoped reads and permitted personal edits",fillcolor="#FFF2D9"];
+  {rank=same;api;direct;}
+  client -> api [label="business commands"];
+  client -> direct [label="queries / allowed edits"];
+  services [label="MODULAR TYPESCRIPT BACKEND\nIdentity | Workouts | Coaching | Commerce | Rewards\nContent | Analytics | Recommendations | Assistant\nTransactional services + domain repositories",fillcolor="#D7EBDD"];
+  api -> services;
+  db [label="CLOUD FIRESTORE\nOrganization-scoped records\nBookings, ledgers, reports and durable jobs",shape=cylinder];
+  storage [label="CLOUD STORAGE\nPrivate credentials\nApproved content and media",shape=cylinder];
+  adapters [label="SERVER-ONLY ADAPTERS\nPayments | LLM | Mail\nSecrets stay on the server"];
+  {rank=same;db;storage;adapters;}
+  services -> db [label="atomic invariants"];
+  services -> adapters;
+  direct -> db [label="Rules enforced"];
+  direct -> storage;
+  workers [label="IDEMPOTENT WORKERS\nReports, badges, leads, notifications\nExpiry, reconciliation and account cascades",fillcolor="#E4F3E8"];
+  provider [label="EXTERNAL PROVIDERS\nBillplz | LLM | Mail",fillcolor="#EAE5FB"];
+  webhook [label="PAYMENT WEBHOOK\nVerify provider signature and bill details\nDeduplicate; finalize or compensate",fillcolor="#FFF2D9"];
+  {rank=same;workers;provider;}
+  db -> workers [label="committed changes / jobs"];
+  adapters -> provider [label="external requests"];
+  provider -> webhook [label="signed payment event"];
+  webhook -> services [label="verified result",constraint=false];
+  jobs [label="TASKS + SCHEDULER\nDelayed work and recovery\nBounded retries"];
+  delivery [label="NOTIFICATION DELIVERY\nDurable inbox + FCM\nPush is a hint, not source of truth"];
+  {rank=same;jobs;delivery;webhook;}
+  jobs -> workers [constraint=false];
+  workers -> delivery;
+  notes [shape=note,label="SHARED SOURCE: domain contracts, portable data adapters, UI primitives; pure pose package used by mobile only.\nOPERATIONS: Secret Manager, least-privilege IAM, audit logs, metrics, alerts, backups and recovery tests.\nDEPLOYMENT: independent mobile / admin Hosting / Functions / Rules releases; separate dev, staging and production.\nSECURITY: server SDK bypasses Firestore Rules; server authorization is mandatory.",fillcolor="#E8EDF4",fontsize=12];
+  delivery -> notes [style=invis];
+  webhook -> notes [style=invis];
+  jobs -> notes [style=invis];
+}

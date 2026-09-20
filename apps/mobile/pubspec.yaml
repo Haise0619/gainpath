@@ -1,0 +1,37 @@
+name: gainpath_mobile
+description: GainPath member and fitness coach mobile application.
+publish_to: none
+resolution: workspace
+version: 0.1.0
+
+environment:
+  sdk: '>=3.6.0 <4.0.0'
+
+dependencies:
+  equatable: ^2.1.0
+  flutter:
+    sdk: flutter
+  flutter_bloc: ^9.1.1
+  path_provider: ^2.1.5
+  google_fonts: ^6.2.1
+  syncfusion_flutter_charts: ^34.2.3
+  syncfusion_flutter_gauges: ^34.2.3
+  gainpath_domain:
+    path: ../../packages/gainpath_domain
+  gainpath_data:
+    path: ../../packages/gainpath_data
+  gainpath_pose:
+    path: ../../packages/gainpath_pose
+  gainpath_ui:
+    path: ../../packages/gainpath_ui
+  gainpath_identity:
+    path: ../../packages/gainpath_identity
+
+dev_dependencies:
+  flutter_lints: ^3.0.0
+  bloc_test: ^10.0.0
+  flutter_test:
+    sdk: flutter
+
+flutter:
+  uses-material-design: true

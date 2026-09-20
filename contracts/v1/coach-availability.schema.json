@@ -1,0 +1,44 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://gainpath.local/contracts/v1/coach-availability.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "windows"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "windows": {
+      "type": "array",
+      "maxItems": 96,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "branchId",
+          "startAtMillis",
+          "endAtMillis"
+        ],
+        "properties": {
+          "branchId": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,128}$"
+          },
+          "startAtMillis": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 8639999996400000
+          },
+          "endAtMillis": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 8639999996400000
+          }
+        }
+      }
+    }
+  }
+}

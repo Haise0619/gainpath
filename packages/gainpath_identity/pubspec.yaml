@@ -1,0 +1,21 @@
+name: gainpath_identity
+description: Shared authentication behavior and role policy for GainPath applications.
+publish_to: none
+resolution: workspace
+version: 0.1.0
+
+environment:
+  sdk: '>=3.6.0 <4.0.0'
+
+dependencies:
+  equatable: ^2.1.0
+  flutter:
+    sdk: flutter
+  flutter_bloc: ^9.1.1
+  gainpath_domain:
+    path: ../gainpath_domain
+
+dev_dependencies:
+  bloc_test: ^10.0.0
+  flutter_test:
+    sdk: flutter

@@ -1,0 +1,93 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://gainpath.local/contracts/v1/submit-workout-session.request.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "requestId",
+    "organizationId",
+    "memberId",
+    "sessionId",
+    "exerciseId",
+    "startedAtMillis",
+    "endedAtMillis",
+    "repetitions",
+    "formScorePercent",
+    "trackedDurationMillis",
+    "rejectedDurationMillis",
+    "scoringVersion",
+    "detectorVersion",
+    "consentVersion"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "requestId": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{1,128}$"
+    },
+    "organizationId": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{1,128}$"
+    },
+    "memberId": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{1,128}$"
+    },
+    "sessionId": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{1,128}$"
+    },
+    "exerciseId": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{1,128}$"
+    },
+    "startedAtMillis": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 8639999996400000
+    },
+    "endedAtMillis": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 8639999996400000
+    },
+    "repetitions": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 10000
+    },
+    "formScorePercent": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0,
+      "maximum": 100
+    },
+    "trackedDurationMillis": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 86400000
+    },
+    "rejectedDurationMillis": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 86400000
+    },
+    "scoringVersion": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{1,128}$"
+    },
+    "detectorVersion": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{1,128}$"
+    },
+    "consentVersion": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{1,128}$"
+    }
+  }
+}

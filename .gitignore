@@ -4,7 +4,7 @@
 build/
 .flutter-plugins
 .flutter-plugins-dependencies
-pubspec.lock
+# Application workspace dependency resolution is committed.
 
 # IDE
 .idea/
@@ -27,3 +27,14 @@ windows/flutter/ephemeral/
 
 # Misc
 *.log
+
+# Firebase Functions
+functions/node_modules/
+functions/lib/
+.pnpm-store/
+apps/mobile/android/local.properties
+apps/mobile/android/.gradle/
+apps/mobile/android/app/debug/
+apps/mobile/android/app/profile/
+apps/mobile/android/app/release/
+apps/mobile/windows/flutter/ephemeral/
