@@ -48,6 +48,23 @@ void main() {
     expect(find.text('View introduction'), findsOneWidget);
   });
 
+  testWidgets('Firebase registration opens without demo repositories',
+      (tester) async {
+    final repository = InMemoryAuthRepository();
+    await tester.pumpWidget(GainPathMobileApp(
+      authRepository: repository,
+      backendConfig: const BackendConfig(BackendMode.firebase),
+    ));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Create account'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Full name'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox());
+    await repository.dispose();
+  });
+
   testWidgets('authenticated member can enter the local workout flow',
       (tester) async {
     await tester.pumpWidget(const GainPathMobileApp());

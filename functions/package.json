@@ -9,7 +9,7 @@
     "build": "tsc && node -e \"require('./' + require('./package.json').main)\"",
     "test": "vitest run",
     "typecheck:tests": "tsc -p tsconfig.test.json",
-    "test:emulator": "firebase emulators:exec --project demo-gainpath --config ../firebase/emulator.test.json --only firestore \"vitest run --config vitest.emulator.config.ts\"",
+    "test:emulator": "firebase emulators:exec --project demo-gainpath --config ../firebase/emulator.test.json --only firestore,storage \"vitest run --config vitest.emulator.config.ts\"",
     "serve": "pnpm run build && firebase emulators:start --only functions,firestore",
     "deploy": "pnpm run build && firebase deploy --only functions"
   },

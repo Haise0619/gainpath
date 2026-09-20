@@ -39,7 +39,8 @@ abstract interface class FirebaseAuthSessionGateway {
 }
 
 /// Serializes provider mutations and invalidates results immediately on logout.
-class FirebaseAuthRepository implements AuthRepository, AuthSessionLifecycle {
+class FirebaseAuthRepository
+    implements AuthRepository, AuthSessionLifecycle, AuthVerificationActions {
   FirebaseAuthRepository(this._gateway) {
     final gateway = _gateway;
     if (gateway is FirebaseAuthSessionGateway) {
@@ -54,7 +55,7 @@ class FirebaseAuthRepository implements AuthRepository, AuthSessionLifecycle {
           _changes.addError(error);
         }
       }, onError: (Object error) {
-        if (!_disposed) {
+        if (_pending == 0 && !_disposed && !_signedOut) {
           _changes.add(null);
           _changes.addError(error);
         }
@@ -178,6 +179,10 @@ class FirebaseAuthRepository implements AuthRepository, AuthSessionLifecycle {
     return _serialize(_gateway.signOut);
   }
 
+  @override
+  Future<void> resendEmailVerification() =>
+      _serialize(_gateway.sendEmailVerification);
+
   AuthSession _sessionFromClaims(FirebaseAuthUser user,
       {AppRole? requestedRole, bool requireVerification = false}) {
     final organizationId = user.claims['organizationId'];
@@ -200,9 +205,20 @@ class FirebaseAuthRepository implements AuthRepository, AuthSessionLifecycle {
       throw const AuthException(
           'This account is not authorized for this application.');
     }
+    final rawBranchIds = user.claims['branchIds'];
+    if (rawBranchIds is! List ||
+        rawBranchIds.any((id) => id is! String || id.trim().isEmpty)) {
+      throw const AuthException('This account has no valid branch assignment.');
+    }
+    final branchIds = List<String>.unmodifiable(rawBranchIds.cast<String>());
+    if ((role == AppRole.member || role == AppRole.coach) &&
+        branchIds.isEmpty) {
+      throw const AuthException('This account has no valid branch assignment.');
+    }
     return AuthSession(
         userId: user.userId,
         organizationId: organizationId,
+        branchIds: branchIds,
         email: user.email,
         role: role,
         needsVerification: requireVerification || !user.emailVerified);

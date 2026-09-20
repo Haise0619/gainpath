@@ -15,6 +15,7 @@ import '../features/identity/presentation/shared/login_screen.dart';
 import '../features/identity/presentation/shared/onboarding_screen.dart';
 import '../features/identity/presentation/shared/email_verification_screen.dart';
 import '../features/identity/presentation/member/profile_setup_screen.dart';
+import '../infrastructure/firebase/firebase_auth_gateway.dart';
 
 class GainPathMobileApp extends StatelessWidget {
   const GainPathMobileApp({super.key, this.authRepository, this.backendConfig});
@@ -28,7 +29,12 @@ class GainPathMobileApp extends StatelessWidget {
     config.validate();
     return RepositoryProvider<AuthRepository>(
       create: (_) =>
-          authRepository ?? AuthRepositoryFactory.create(config: config),
+          authRepository ??
+          AuthRepositoryFactory.create(
+            config: config,
+            firebaseGateway:
+                config.isFirebase ? FlutterFirebaseAuthGateway() : null,
+          ),
       dispose: (repository) {
         if (authRepository == null && repository is AuthSessionLifecycle) {
           unawaited((repository as AuthSessionLifecycle).dispose());
@@ -38,21 +44,23 @@ class GainPathMobileApp extends StatelessWidget {
         create: (context) =>
             AuthBloc(repository: context.read<AuthRepository>()),
         child: BlocBuilder<AuthBloc, AuthState>(
-          buildWhen: (previous, current) =>
-              (previous.session?.scope, previous.session?.role) !=
-              (current.session?.scope, current.session?.role),
-          builder: (context, state) => AppScope(
-            key: ValueKey((state.session?.scope, state.session?.role)),
-            config: config,
-            child: MaterialApp(
+          buildWhen: (previous, current) => previous.session != current.session,
+          builder: (context, state) {
+            final app = MaterialApp(
               title: 'GainPath',
               debugShowCheckedModeBanner: false,
               theme: AppTheme.build(),
-              home: const _MobileAuthGate(),
+              home: _MobileAuthGate(config: config),
               routes: AppRouteBuilders.builders,
               onGenerateRoute: buildFeatureRoute,
-            ),
-          ),
+            );
+            if (config.isFirebase) return app;
+            return AppScope(
+              key: ValueKey((state.session?.scope, state.session?.role)),
+              config: config,
+              child: app,
+            );
+          },
         ),
       ),
     );
@@ -60,7 +68,8 @@ class GainPathMobileApp extends StatelessWidget {
 }
 
 class _MobileAuthGate extends StatefulWidget {
-  const _MobileAuthGate();
+  const _MobileAuthGate({required this.config});
+  final BackendConfig config;
   @override
   State<_MobileAuthGate> createState() => _MobileAuthGateState();
 }
@@ -80,6 +89,9 @@ class _MobileAuthGateState extends State<_MobileAuthGate> {
           state,
           allowed: const {AppRole.member, AppRole.coach},
         )) {
+          if (widget.config.isFirebase) {
+            return _FirebaseIdentityReadyScreen(session: state.session!);
+          }
           if (_setupProfile) return const ProfileSetupScreen();
           return state.session!.role == AppRole.coach
               ? const CoachShell()
@@ -94,6 +106,14 @@ class _MobileAuthGateState extends State<_MobileAuthGate> {
                     setState(() => _setupProfile = true);
                     await repository.verifyEmailForDemo();
                   }
+                : repository is AuthSessionLifecycle
+                    ? () async => context
+                        .read<AuthBloc>()
+                        .add(const AuthRestoreRequested())
+                    : null,
+            onResend: repository is AuthVerificationActions
+                ? (repository as AuthVerificationActions)
+                    .resendEmailVerification
                 : null,
             onSignOut: () => context.read<AuthBloc>().add(const LoggedOut()),
           );
@@ -220,7 +240,7 @@ class _MobileLoginScreenState extends State<_MobileLoginScreen> {
                                 context,
                                 MaterialPageRoute<void>(
                                     builder: (_) => LoginScreen(
-                                        role: _role,
+                                        role: AppRole.member,
                                         initiallyRegistering: true))),
                         child: const Text('Create account')),
                     TextButton(
@@ -242,4 +262,51 @@ class _MobileLoginScreenState extends State<_MobileLoginScreen> {
       },
     );
   }
+}
+
+class _FirebaseIdentityReadyScreen extends StatelessWidget {
+  const _FirebaseIdentityReadyScreen({required this.session});
+  final AuthSession session;
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+        appBar: AppBar(
+          title: const Text('GainPath'),
+          actions: [
+            TextButton(
+              onPressed: () => context.read<AuthBloc>().add(const LoggedOut()),
+              child: const Text('Sign out'),
+            ),
+          ],
+        ),
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 520),
+              child: Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Firebase identity connected',
+                          style: Theme.of(context).textTheme.headlineSmall),
+                      const SizedBox(height: 12),
+                      Text(session.email),
+                      Text('Organization: ${session.organizationId}'),
+                      Text('Branches: ${session.branchIds.join(', ')}'),
+                      const SizedBox(height: 12),
+                      const Text(
+                        'The remaining mobile features will appear after their Firebase repositories are connected.',
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
 }

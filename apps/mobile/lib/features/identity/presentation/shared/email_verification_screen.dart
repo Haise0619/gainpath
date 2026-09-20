@@ -11,12 +11,20 @@ import 'package:gainpath_ui/gainpath_ui.dart';
 /// real deep link.
 class EmailVerificationScreen extends StatefulWidget {
   final String email;
-  const EmailVerificationScreen({super.key, required this.email, this.onVerified, this.onSignOut});
+  const EmailVerificationScreen({
+    super.key,
+    required this.email,
+    this.onVerified,
+    this.onResend,
+    this.onSignOut,
+  });
   final Future<void> Function()? onVerified;
+  final Future<void> Function()? onResend;
   final VoidCallback? onSignOut;
 
   @override
-  State<EmailVerificationScreen> createState() => _EmailVerificationScreenState();
+  State<EmailVerificationScreen> createState() =>
+      _EmailVerificationScreenState();
 }
 
 class _EmailVerificationScreenState extends State<EmailVerificationScreen>
@@ -29,7 +37,8 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen>
   @override
   void initState() {
     super.initState();
-    _pulse = AnimationController(vsync: this, duration: const Duration(milliseconds: 1600))
+    _pulse = AnimationController(
+        vsync: this, duration: const Duration(milliseconds: 1600))
       ..repeat(reverse: true);
     _startCooldown();
   }
@@ -55,7 +64,9 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen>
     });
   }
 
-  void _resend() {
+  Future<void> _resend() async {
+    await widget.onResend?.call();
+    if (!mounted) return;
     setState(() => _justResent = true);
     _startCooldown();
     showToast(context, 'Verification link re-sent to ${widget.email}.');
@@ -100,25 +111,34 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen>
                         ),
                       ],
                     ),
-                    child: const Icon(Icons.mark_email_unread_rounded, color: Colors.white, size: 42),
+                    child: const Icon(Icons.mark_email_unread_rounded,
+                        color: Colors.white, size: 42),
                   ),
                 ),
               ),
               const SizedBox(height: 32),
               Center(
-                child: Text('Check your inbox', style: Theme.of(context).textTheme.headlineMedium),
+                child: Text('Check your inbox',
+                    style: Theme.of(context).textTheme.headlineMedium),
               ),
               const SizedBox(height: 10),
               Center(
                 child: Text.rich(
                   TextSpan(
-                    style: Theme.of(context).textTheme.bodyLarge?.copyWith(height: 1.5),
+                    style: Theme.of(context)
+                        .textTheme
+                        .bodyLarge
+                        ?.copyWith(height: 1.5),
                     children: [
                       const TextSpan(text: 'We sent a verification link to '),
                       TextSpan(
                           text: widget.email,
-                          style: const TextStyle(fontWeight: FontWeight.w700, color: AppColors.ink)),
-                      const TextSpan(text: '. Open it on this device to confirm your account.'),
+                          style: const TextStyle(
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.ink)),
+                      const TextSpan(
+                          text:
+                              '. Open it on this device to confirm your account.'),
                     ],
                   ),
                   textAlign: TextAlign.center,
@@ -130,7 +150,8 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen>
                 child: _justResent
                     ? Container(
                         key: const ValueKey('resent'),
-                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 14, vertical: 12),
                         decoration: BoxDecoration(
                           color: AppColors.successTint,
                           borderRadius: BorderRadius.circular(12),
@@ -138,11 +159,16 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen>
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: const [
-                            Icon(Icons.check_circle_rounded, size: 18, color: AppColors.success),
+                            Icon(Icons.check_circle_rounded,
+                                size: 18, color: AppColors.success),
                             SizedBox(width: 10),
                             Flexible(
-                              child: Text('Link re-sent. Check your inbox again.',
-                                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.success)),
+                              child: Text(
+                                  'Link re-sent. Check your inbox again.',
+                                  style: TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w600,
+                                      color: AppColors.success)),
                             ),
                           ],
                         ),
@@ -152,7 +178,9 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen>
               const Spacer(),
               OutlinedButton(
                 onPressed: _cooldown > 0 ? null : _resend,
-                child: Text(_cooldown > 0 ? 'Resend link in ${_cooldown}s' : 'Resend verification link'),
+                child: Text(_cooldown > 0
+                    ? 'Resend link in ${_cooldown}s'
+                    : 'Resend verification link'),
               ),
               const SizedBox(height: 10),
               FilledButton(
@@ -160,11 +188,15 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen>
                 child: const Text("I've verified my email"),
               ),
               const SizedBox(height: 6),
-              TextButton(onPressed: widget.onSignOut, child: const Text('Sign out')),
+              TextButton(
+                  onPressed: widget.onSignOut, child: const Text('Sign out')),
               Center(
                 child: Text(
-                  'Prototype shortcut — a real build detects the link automatically.',
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontSize: 11.5),
+                  'After opening the link, return here and continue.',
+                  style: Theme.of(context)
+                      .textTheme
+                      .bodyMedium
+                      ?.copyWith(fontSize: 11.5),
                   textAlign: TextAlign.center,
                 ),
               ),

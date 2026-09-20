@@ -4,7 +4,6 @@ import 'package:gainpath_identity/gainpath_identity.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
 import 'package:gainpath_domain/gainpath_domain.dart' show AppRole;
-import 'package:gainpath_domain/identity.dart';
 
 /// AD-M1.1 / AD-M8.1 / AD-M11.1 — Login and Recovery.
 ///
@@ -14,8 +13,9 @@ import 'package:gainpath_domain/identity.dart';
 /// AD-M11.1.
 class LoginScreen extends StatefulWidget {
   final AppRole role;
-  const LoginScreen({super.key, required this.role, this.initiallyRegistering = false});
+  const LoginScreen({super.key, required this.role, this.initiallyRegistering = false, this.initialEmail = ''});
   final bool initiallyRegistering;
+  final String initialEmail;
 
   @override
   State<LoginScreen> createState() => _LoginScreenState();
@@ -42,19 +42,8 @@ class _LoginScreenState extends State<LoginScreen> {
   void initState() {
     super.initState();
     _registering = widget.initiallyRegistering;
-    _email = TextEditingController(text: _seedEmail);
+    _email = TextEditingController(text: widget.initialEmail);
     context.read<AuthBloc>().add(RoleSelected(widget.role));
-  }
-
-  String get _seedEmail {
-    switch (widget.role) {
-      case AppRole.member:
-        return context.read<MemberProfileRepository>().memberEmail;
-      case AppRole.coach:
-        return context.read<CoachRepository>().coachEmail;
-      case AppRole.admin:
-        return context.read<UserAccountRepository>().adminEmail;
-    }
   }
 
   String get _roleLabel {

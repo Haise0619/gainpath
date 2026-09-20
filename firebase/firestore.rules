@@ -8,6 +8,7 @@ service cloud.firestore {
 
     function activeMember(orgId) {
       return signedIn()
+        && request.auth.token.email_verified == true
         && exists(/databases/$(database)/documents/orgs/$(orgId)/members/$(request.auth.uid))
         && get(/databases/$(database)/documents/orgs/$(orgId)/members/$(request.auth.uid)).data.status == 'active';
     }
@@ -43,7 +44,10 @@ service cloud.firestore {
     }
 
     match /orgs/{orgId}/members/{uid} {
-      allow read: if activeMember(orgId) && (own(uid) || staffProfile(orgId, resource.data.branchIds));
+      // A signed-in account may read only its own assignment before email
+      // verification so the client can show the verification gate.
+      allow read: if own(uid)
+        || (activeMember(orgId) && staffProfile(orgId, resource.data.branchIds));
       allow update: if activeMember(orgId) && own(uid)
         && request.resource.data.diff(resource.data).affectedKeys()
           .hasOnly(['displayName', 'goals', 'updatedAtMillis']);

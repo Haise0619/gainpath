@@ -6,6 +6,12 @@ export interface ActiveMembership {
   readonly branchIds: readonly string[];
   readonly status: string;
 }
+export function requireVerifiedEmail(auth: { token: Record<string, unknown> } | undefined): void {
+  if (!auth) throw new DomainError('unauthenticated', 'Sign in first.');
+  if (auth.token.email_verified !== true) {
+    throw new DomainError('permission-denied', 'Verify the account email before continuing.');
+  }
+}
 export function requireActiveMembership(data: DocumentData | undefined): ActiveMembership {
   if (data?.status !== 'active' || !['member', 'coach', 'staff', 'admin'].includes(String(data.role))
     || !Array.isArray(data.branchIds) || !data.branchIds.every(id => typeof id === 'string')) {

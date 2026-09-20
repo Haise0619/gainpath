@@ -7,7 +7,11 @@ const _user = FirebaseAuthUser(
     userId: 'firebase-user',
     email: 'member@example.com',
     emailVerified: true,
-    claims: {'role': 'member', 'organizationId': 'org-1'});
+    claims: {
+      'role': 'member',
+      'organizationId': 'org-1',
+      'branchIds': ['branch-1']
+    });
 
 class _Gateway implements FirebaseAuthGateway, FirebaseAuthSessionGateway {
   final controller = StreamController<FirebaseAuthUser?>.broadcast();
@@ -64,6 +68,35 @@ void main() {
     await gateway.controller.close();
   });
 
+  test('provider stream errors cannot cancel an in-flight login', () async {
+    final gateway = _Gateway()..login = Completer<FirebaseAuthUser>();
+    final repository = FirebaseAuthRepository(gateway);
+    final sessions = <AuthSession?>[];
+    final errors = <Object>[];
+    final subscription = repository.sessionChanges.listen(
+      sessions.add,
+      onError: errors.add,
+    );
+    final login = repository.signIn(
+      role: AppRole.member,
+      email: 'member@example.com',
+      password: 'password',
+    );
+    await gateway.started.future;
+
+    gateway.controller.addError(StateError('stale membership lookup'));
+    gateway.login!.complete(_user);
+
+    expect(await login, isA<AuthSession>());
+    await Future<void>.delayed(Duration.zero);
+    expect(sessions.whereType<AuthSession>(), hasLength(1));
+    expect(sessions.where((session) => session == null), isEmpty);
+    expect(errors, isEmpty);
+    await subscription.cancel();
+    await repository.dispose();
+    await gateway.controller.close();
+  });
+
   test('restoration and provider changes retain verified account scope',
       () async {
     final gateway = _Gateway();
@@ -71,6 +104,7 @@ void main() {
     final session = await repository.restoreSession();
     expect(session?.scope,
         SessionScope(userId: 'firebase-user', organizationId: 'org-1'));
+    expect(session?.branchIds, ['branch-1']);
     final signedOut =
         repository.sessionChanges.firstWhere((session) => session == null);
     gateway.controller.add(null);

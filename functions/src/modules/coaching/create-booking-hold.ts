@@ -4,10 +4,12 @@ import { DomainError } from '../../platform/errors';
 import { InputValidationError } from '../../platform/validation';
 import { FirestoreStore } from '../../platform/firestore/firestore-store';
 import { createBookingHoldService } from './booking-service';
+import { requireVerifiedEmail } from '../../platform/auth-context';
 
 export const createBookingHold = onCall({ enforceAppCheck: true }, async request => {
   if (!request.auth) throw new HttpsError('unauthenticated', 'Sign in first.');
   try {
+    requireVerifiedEmail(request.auth);
     return await createBookingHoldService(new FirestoreStore(getFirestore()), request.auth.uid, request.data);
   } catch (error) {
     if (error instanceof DomainError) throw new HttpsError(error.code, error.message);

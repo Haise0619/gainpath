@@ -44,7 +44,11 @@ void main() {
         userId: 'firebase-user-1',
         email: 'member@example.com',
         emailVerified: true,
-        claims: {'role': 'member', 'organizationId': 'org-1'},
+        claims: {
+          'role': 'member',
+          'organizationId': 'org-1',
+          'branchIds': ['branch-1']
+        },
       ),
     );
     final repository = FirebaseAuthRepository(gateway);
@@ -58,6 +62,7 @@ void main() {
     expect(session.userId, 'firebase-user-1');
     expect(session.role, AppRole.member);
     expect(session.email, 'member@example.com');
+    expect(session.branchIds, ['branch-1']);
     expect(session.needsVerification, isFalse);
   });
 
@@ -66,7 +71,11 @@ void main() {
       user: const FirebaseAuthUser(
         userId: 'firebase-user-2',
         email: 'member@example.com',
-        claims: {'role': 'member', 'organizationId': 'org-1'},
+        claims: {
+          'role': 'member',
+          'organizationId': 'org-1',
+          'branchIds': ['branch-1']
+        },
       ),
     );
     final repository = FirebaseAuthRepository(gateway);
@@ -87,7 +96,10 @@ void main() {
         user: const FirebaseAuthUser(
           userId: 'firebase-user-3',
           email: 'unknown@example.com',
-          claims: {'organizationId': 'org-1'},
+          claims: {
+            'organizationId': 'org-1',
+            'branchIds': ['branch-1']
+          },
         ),
       ),
     );
@@ -108,7 +120,11 @@ void main() {
       user: const FirebaseAuthUser(
         userId: 'firebase-user-4',
         email: 'new@example.com',
-        claims: {'role': 'member', 'organizationId': 'org-1'},
+        claims: {
+          'role': 'member',
+          'organizationId': 'org-1',
+          'branchIds': ['branch-1']
+        },
       ),
     );
     final repository = FirebaseAuthRepository(gateway);
@@ -133,6 +149,39 @@ void main() {
       ),
       throwsA(isA<AuthException>()),
     );
+  });
+
+  test('rejects member sessions without valid branch scope', () async {
+    for (final branchIds in <Object?>[
+      null,
+      const [],
+      const [''],
+      const [1]
+    ]) {
+      final repository = FirebaseAuthRepository(
+        _FakeFirebaseAuthGateway(
+          user: FirebaseAuthUser(
+            userId: 'firebase-user-branch',
+            email: 'member@example.com',
+            emailVerified: true,
+            claims: {
+              'role': 'member',
+              'organizationId': 'gainpath',
+              if (branchIds != null) 'branchIds': branchIds,
+            },
+          ),
+        ),
+      );
+
+      await expectLater(
+        repository.signIn(
+          role: AppRole.member,
+          email: 'member@example.com',
+          password: 'password123',
+        ),
+        throwsA(isA<AuthException>()),
+      );
+    }
   });
 
   test('delegates sign-out to the provider gateway', () async {

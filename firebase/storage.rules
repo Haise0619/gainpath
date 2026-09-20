@@ -8,6 +8,7 @@ service firebase.storage {
 
     function activeMember(orgId) {
       return signedIn()
+        && request.auth.token.email_verified == true
         && firestore.exists(/databases/(default)/documents/orgs/$(orgId)/members/$(request.auth.uid))
         && firestore.get(/databases/(default)/documents/orgs/$(orgId)/members/$(request.auth.uid)).data.status == 'active';
     }

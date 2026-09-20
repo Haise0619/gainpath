@@ -4,6 +4,7 @@ class AuthSession {
   const AuthSession({
     this.userId = 'demo-user',
     this.organizationId = 'demo-org',
+    this.branchIds = const [],
     required this.email,
     required this.role,
     this.needsVerification = false,
@@ -11,6 +12,7 @@ class AuthSession {
 
   final String userId;
   final String organizationId;
+  final List<String> branchIds;
   SessionScope get scope =>
       SessionScope(userId: userId, organizationId: organizationId);
   final String email;
@@ -22,13 +24,23 @@ class AuthSession {
       other is AuthSession &&
       other.userId == userId &&
       other.organizationId == organizationId &&
+      _sameStrings(other.branchIds, branchIds) &&
       other.email == email &&
       other.role == role &&
       other.needsVerification == needsVerification;
 
   @override
-  int get hashCode =>
-      Object.hash(userId, organizationId, email, role, needsVerification);
+  int get hashCode => Object.hash(userId, organizationId,
+      Object.hashAll(branchIds), email, role, needsVerification);
+}
+
+bool _sameStrings(List<String> left, List<String> right) {
+  if (identical(left, right)) return true;
+  if (left.length != right.length) return false;
+  for (var index = 0; index < left.length; index++) {
+    if (left[index] != right[index]) return false;
+  }
+  return true;
 }
 
 /// Immutable account ownership. Original IDs are never sanitized.

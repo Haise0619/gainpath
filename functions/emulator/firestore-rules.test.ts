@@ -33,7 +33,8 @@ beforeEach(async () => {
     await Promise.all(Object.entries(documents).map(([path, data]) => setDoc(doc(db, path), data)));
   });
 });
-const dbFor = (uid: string, claims = {}) => env.authenticatedContext(uid, claims).firestore();
+const dbFor = (uid: string, claims: Record<string, unknown> = {}) =>
+  env.authenticatedContext(uid, { email_verified: true, ...claims }).firestore();
 
 it('allows an owner and rejects another member, unauthenticated and cross-organization reads', async () => {
   await assertSucceeds(getDoc(doc(dbFor('member'), 'orgs/o/bookings/own')));
@@ -64,6 +65,12 @@ it('protects server-owned writes even from admin client SDKs', async () => {
 it('only exposes published content to ordinary members', async () => {
   await assertSucceeds(getDoc(doc(dbFor('member'), 'orgs/o/content/published')));
   await assertFails(getDoc(doc(dbFor('member'), 'orgs/o/content/draft')));
+});
+it('lets an unverified account read only its own assignment', async () => {
+  const unverified = dbFor('member', { email_verified: false });
+  await assertSucceeds(getDoc(doc(unverified, 'orgs/o/members/member')));
+  await assertFails(getDoc(doc(unverified, 'orgs/o/content/published')));
+  await assertFails(getDoc(doc(unverified, 'orgs/o/bookings/own')));
 });
 it('requires query constraints rather than filtering forbidden results', async () => {
   const own = query(collection(dbFor('member'), 'orgs/o/bookings'), where('memberId', '==', 'member'));

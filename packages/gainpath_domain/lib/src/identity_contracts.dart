@@ -18,6 +18,10 @@ abstract interface class AuthSessionLifecycle {
   Future<void> dispose();
 }
 
+abstract interface class AuthVerificationActions {
+  Future<void> resendEmailVerification();
+}
+
 class AuthException implements Exception {
   const AuthException(this.message);
   final String message;

@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "879719977530",
+    "project_id": "gainpath-0619",
+    "storage_bucket": "gainpath-0619.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:879719977530:android:1f5dee79bccc1ec1959b03",
+        "android_client_info": {
+          "package_name": "com.zyang.gainpath"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCO6j0KbiOPazh3FyiKuXHSB290q2NOLMA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
