@@ -4,6 +4,12 @@
 
 Firebase project: `gainpath-0619` (`GainPath`)
 
+Current development setup (2026-09-24): the `(default)` Firestore Standard
+database is in `asia-southeast1`; Firestore rules and indexes are deployed;
+`provisionMemberRegistration` is deployed as a Node.js 22 callable. Email/Password
+Authentication has been enabled in the Console. Admin Hosting and the other
+backend functions have not been deployed.
+
 | App | Firebase app ID | Platform identifier |
 | --- | --- | --- |
 | Mobile | `1:879719977530:android:1f5dee79bccc1ec1959b03` | `com.zyang.gainpath` |
@@ -109,10 +115,20 @@ Firestore adapters. Firebase mode never displays in-memory demo data.
 
 ## Deployment
 
-After Firestore, Email/Password Authentication, and billing are configured:
+After Firestore, Email/Password Authentication, and billing are configured,
+deploy the identity slice with:
 
 ```powershell
-& "$env:APPDATA\npm\firebase.cmd" deploy --project gainpath-0619 --only firestore:rules,firestore:indexes,functions
+& "$env:APPDATA\npm\firebase.cmd" deploy --project gainpath-0619 --only firestore:rules,firestore:indexes
+Push-Location functions
+pnpm run build
+Pop-Location
+& "$env:APPDATA\npm\firebase.cmd" deploy --project gainpath-0619 --only functions:provisionMemberRegistration --force
+```
+
+To publish the admin identity shell separately:
+
+```powershell
 Push-Location apps/admin_web
 flutter build web --dart-define=BACKEND=firebase
 Pop-Location
