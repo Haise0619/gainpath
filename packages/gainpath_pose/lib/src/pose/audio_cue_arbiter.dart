@@ -24,24 +24,36 @@ class AudioCueArbiter {
   AudioCueArbiter({this.cooldownMicros = 2000000});
 
   final int cooldownMicros;
-  final List<CueRequest> _pending = [];
+  final Map<String, CueRequest> _pending = {};
   final Map<String, int> _lastPlayedAt = {};
 
-  void submit(CueRequest request) => _pending.add(request);
+  void submit(CueRequest request) {
+    // Exercise strategies use a small finite cue vocabulary. Bound even a
+    // misbehaving producer; duplicate IDs replace text rather than queue speech.
+    if (!_pending.containsKey(request.id) && _pending.length >= 32) return;
+    _pending[request.id] = request;
+  }
+
+  /// Discards old frame requests without resetting the spoken-cue cooldown.
+  void clearPending() => _pending.clear();
 
   CueRequest? takeNext({required int nowMicros}) {
     if (_pending.isEmpty) return null;
-    _pending.sort((a, b) => b.priority.weight.compareTo(a.priority.weight));
-    final request = _pending.first;
-    final lastPlayed = _lastPlayedAt[request.id];
-    if (lastPlayed != null && nowMicros - lastPlayed < cooldownMicros) {
-      return null;
-    }
-    _pending.removeAt(0);
+    final eligible = _pending.values.where((request) {
+      final lastPlayed = _lastPlayedAt[request.id];
+      return lastPlayed == null || nowMicros - lastPlayed >= cooldownMicros;
+    }).toList()
+      ..sort((a, b) => b.priority.weight.compareTo(a.priority.weight));
+    if (eligible.isEmpty) return null;
+    final request = eligible.first;
+    _pending.remove(request.id);
+    _lastPlayedAt
+        .removeWhere((_, timestamp) => nowMicros - timestamp >= cooldownMicros);
+    if (_lastPlayedAt.length >= 128) return null;
     _lastPlayedAt[request.id] = nowMicros;
     // A higher-priority cue makes older lower-priority cues stale.
     _pending.removeWhere(
-        (queued) => queued.priority.weight < request.priority.weight);
+        (_, queued) => queued.priority.weight < request.priority.weight);
     return request;
   }
 }
