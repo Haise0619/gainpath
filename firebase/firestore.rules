@@ -18,6 +18,37 @@ service cloud.firestore {
         && get(/databases/$(database)/documents/orgs/$(orgId)/members/$(request.auth.uid)).data.role == 'admin';
     }
 
+    function contentAuthor(orgId) {
+      return activeMember(orgId)
+        && get(/databases/$(database)/documents/orgs/$(orgId)/members/$(request.auth.uid)).data.role in ['admin', 'staff'];
+    }
+
+    function validExerciseCatalogEntry() {
+      let d = request.resource.data;
+      return d.keys().hasAll(['schemaVersion', 'exerciseName', 'muscleCategory', 'videoUrl', 'isActive', 'createdAt', 'updatedAt'])
+        && d.keys().hasOnly(['schemaVersion', 'exerciseName', 'muscleCategory', 'videoUrl', 'isActive', 'createdAt', 'updatedAt'])
+        && d.schemaVersion == 1
+        && d.exerciseName is string && d.exerciseName.size() > 0 && d.exerciseName.size() <= 100
+        && d.muscleCategory is string && d.muscleCategory.size() > 0 && d.muscleCategory.size() <= 80
+        && d.videoUrl is string && d.videoUrl.size() <= 2048
+        && d.isActive is bool
+        && d.createdAt is timestamp
+        && d.updatedAt == request.time;
+    }
+
+    function validRoutineBlueprint() {
+      let d = request.resource.data;
+      return d.keys().hasAll(['schemaVersion', 'name', 'sessionDurationMin', 'days', 'createdAt', 'updatedAt', 'updatedBy'])
+        && d.keys().hasOnly(['schemaVersion', 'name', 'sessionDurationMin', 'days', 'level', 'goal', 'tags', 'equipmentNeeded', 'imageUrl', 'createdAt', 'updatedAt', 'updatedBy'])
+        && d.schemaVersion == 1
+        && d.name is string && d.name.size() > 0 && d.name.size() <= 120
+        && d.sessionDurationMin is int && d.sessionDurationMin >= 5 && d.sessionDurationMin <= 240
+        && d.days is list && d.days.size() > 0 && d.days.size() <= 14
+        && d.updatedBy == request.auth.uid
+        && d.createdAt is timestamp
+        && d.updatedAt == request.time;
+    }
+
     function staffBranch(orgId, branchId) {
       return adminMember(orgId) || (activeMember(orgId)
         && get(/databases/$(database)/documents/orgs/$(orgId)/members/$(request.auth.uid)).data.role == 'staff'
@@ -54,9 +85,78 @@ service cloud.firestore {
       allow create, delete: if false;
     }
 
+    match /orgs/{orgId}/profiles/{uid} {
+      function profileOwner() {
+        return own(uid) && activeMember(orgId)
+          && get(/databases/$(database)/documents/orgs/$(orgId)/members/$(uid)).data.role == 'member';
+      }
+      function validProfile() {
+        let d = request.resource.data;
+        return d.keys().hasAll(['schemaVersion', 'gender', 'age', 'heightCm', 'weightKg',
+            'experience', 'activity', 'goals', 'updatedAt'])
+          && d.keys().hasOnly(['schemaVersion', 'gender', 'age', 'heightCm', 'weightKg',
+            'experience', 'activity', 'goals', 'updatedAt'])
+          && d.schemaVersion is int && d.schemaVersion == 1
+          && d.gender in ['female', 'male', 'unspecified']
+          && d.age is int && d.age >= 13 && d.age <= 80
+          && d.heightCm is int && d.heightCm >= 130 && d.heightCm <= 210
+          && d.weightKg is int && d.weightKg >= 35 && d.weightKg <= 160
+          && d.experience in ['beginner', 'intermediate', 'advanced']
+          && d.activity in ['sedentary', 'lightlyActive', 'moderatelyActive', 'veryActive', 'extremelyActive']
+          && d.goals is list && d.goals.size() > 0 && d.goals.size() <= 6
+          && d.goals.toSet().size() == d.goals.size()
+          && d.goals.hasOnly(['loseWeight', 'buildMuscle', 'improveEndurance',
+            'increaseFlexibility', 'generalFitness', 'reduceStress'])
+          && d.updatedAt == request.time;
+      }
+      allow get: if profileOwner();
+      allow create, update: if profileOwner() && validProfile();
+      allow list, delete: if false;
+    }
+
+    match /orgs/{orgId}/preferences/{uid} {
+      function preferenceOwner() {
+        return own(uid) && activeMember(orgId)
+          && get(/databases/$(database)/documents/orgs/$(orgId)/members/$(uid)).data.role == 'member';
+      }
+      function validPreferences() {
+        let d = request.resource.data;
+        return d.keys().hasAll(['schemaVersion', 'pushNotifications', 'emailUpdates',
+            'voiceCoaching', 'updatedAt'])
+          && d.keys().hasOnly(['schemaVersion', 'pushNotifications', 'emailUpdates',
+            'voiceCoaching', 'updatedAt'])
+          && d.schemaVersion == 1
+          && d.pushNotifications is bool
+          && d.emailUpdates is bool
+          && d.voiceCoaching is bool
+          && d.updatedAt == request.time;
+      }
+      allow get: if preferenceOwner();
+      allow create, update: if preferenceOwner() && validPreferences();
+      allow list, delete: if false;
+    }
+
     match /orgs/{orgId}/content/{documentId} {
       allow read: if activeMember(orgId) && (resource.data.status == 'published' || adminMember(orgId));
       allow write: if false;
+    }
+
+    match /orgs/{orgId}/exerciseVideos/{exerciseId} {
+      allow read: if contentAuthor(orgId);
+      allow create: if contentAuthor(orgId) && validExerciseCatalogEntry()
+        && request.resource.data.createdAt == request.time;
+      allow update: if contentAuthor(orgId) && validExerciseCatalogEntry()
+        && request.resource.data.createdAt == resource.data.createdAt;
+      allow delete: if false;
+    }
+
+    match /orgs/{orgId}/routineBlueprints/{templateId} {
+      allow read: if contentAuthor(orgId);
+      allow create: if contentAuthor(orgId) && validRoutineBlueprint()
+        && request.resource.data.createdAt == request.time;
+      allow update: if contentAuthor(orgId) && validRoutineBlueprint()
+        && request.resource.data.createdAt == resource.data.createdAt;
+      allow delete: if false;
     }
 
     match /orgs/{orgId}/coaches/{coachId} {
@@ -72,6 +172,11 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    match /orgs/{orgId}/workoutConsents/{uid} {
+      allow get: if own(uid) && activeMember(orgId) &&
+        get(/databases/$(database)/documents/orgs/$(orgId)/members/$(request.auth.uid)).data.role == 'member';
+      allow list, write: if false;
+    }
     match /orgs/{orgId}/workoutSessions/{sessionId} {
       allow read: if activeMember(orgId)
         && (resource.data.memberId == request.auth.uid || adminMember(orgId));
