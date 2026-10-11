@@ -38,11 +38,74 @@ class _FakeFirebaseAuthGateway implements FirebaseAuthGateway {
 }
 
 void main() {
+  test('shared sign-in uses the coach role from Firebase membership', () async {
+    final repository = FirebaseAuthRepository(_FakeFirebaseAuthGateway(
+      user: const FirebaseAuthUser(
+        userId: 'coach-1',
+        email: 'coach@example.com',
+        emailVerified: true,
+        claims: {
+          'role': 'coach',
+          'organizationId': 'org-1',
+          'branchIds': ['branch-1'],
+        },
+      ),
+    ));
+    final session = await repository.signIn(
+      email: 'coach@example.com',
+      password: 'password123',
+    );
+    expect(session.role, AppRole.coach);
+  });
+  test('Firebase Admin Web sign-in accepts only Admin or Staff membership',
+      () async {
+    for (final role in ['admin', 'staff']) {
+      final repository = FirebaseAuthRepository(_FakeFirebaseAuthGateway(
+        user: FirebaseAuthUser(
+          userId: '$role-1',
+          email: '$role@example.com',
+          emailVerified: true,
+          claims: {
+            'role': role,
+            'organizationId': 'org-1',
+            'branchIds': const <String>[],
+          },
+        ),
+      ));
+      final session = await repository.signIn(
+        role: AppRole.admin,
+        email: '$role@example.com',
+        password: 'password123',
+      );
+      expect(session.role, AppRole.admin);
+    }
+    final memberRepository = FirebaseAuthRepository(_FakeFirebaseAuthGateway(
+      user: const FirebaseAuthUser(
+        userId: 'member-1',
+        email: 'member@example.com',
+        emailVerified: true,
+        claims: {
+          'role': 'member',
+          'organizationId': 'org-1',
+          'branchIds': ['branch-1'],
+        },
+      ),
+    ));
+    await expectLater(
+      memberRepository.signIn(
+        role: AppRole.admin,
+        email: 'member@example.com',
+        password: 'password123',
+      ),
+      throwsA(isA<AuthException>()),
+    );
+  });
   test('maps a Firebase user and role claim into an AuthSession', () async {
     final gateway = _FakeFirebaseAuthGateway(
       user: const FirebaseAuthUser(
         userId: 'firebase-user-1',
         email: 'member@example.com',
+        displayName: 'New Member',
         emailVerified: true,
         claims: {
           'role': 'member',
@@ -62,6 +125,7 @@ void main() {
     expect(session.userId, 'firebase-user-1');
     expect(session.role, AppRole.member);
     expect(session.email, 'member@example.com');
+    expect(session.displayName, 'New Member');
     expect(session.branchIds, ['branch-1']);
     expect(session.needsVerification, isFalse);
   });

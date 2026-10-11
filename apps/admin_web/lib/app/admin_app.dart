@@ -46,10 +46,10 @@ class GainPathAdminWebApp extends StatelessWidget {
               theme: AppTheme.build(),
               home: _AdminAuthGate(config: config),
             );
-            if (config.isFirebase) return app;
             return AppRepositories(
-              key: ValueKey(state.session),
+              key: ValueKey((state.session?.scope, config.mode)),
               config: config,
+              session: state.session,
               child: app,
             );
           },
@@ -76,9 +76,6 @@ class _AdminAuthGate extends StatelessWidget {
           return _AdminVerificationScreen(session: state.session!);
         }
         if (AuthRolePolicy.canEnter(state, allowed: const {AppRole.admin})) {
-          if (config.isFirebase) {
-            return _FirebaseAdminIdentityReadyScreen(session: state.session!);
-          }
           return const AdminShell();
         }
         return const _AdminLoginScreen();
@@ -146,47 +143,6 @@ class _AdminVerificationScreen extends StatelessWidget {
   }
 }
 
-class _FirebaseAdminIdentityReadyScreen extends StatelessWidget {
-  const _FirebaseAdminIdentityReadyScreen({required this.session});
-  final AuthSession session;
-
-  @override
-  Widget build(BuildContext context) => Scaffold(
-        appBar: AppBar(
-          title: const Text('GainPath Admin'),
-          actions: [
-            TextButton(
-              onPressed: () => context.read<AuthBloc>().add(const LoggedOut()),
-              child: const Text('Sign out'),
-            ),
-          ],
-        ),
-        body: Center(
-          child: Card(
-            child: Padding(
-              padding: const EdgeInsets.all(28),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('Firebase administrator identity connected',
-                      style: Theme.of(context).textTheme.headlineSmall),
-                  const SizedBox(height: 12),
-                  Text(session.email),
-                  Text('Organization: ${session.organizationId}'),
-                  Text('Branches: ${session.branchIds.join(', ')}'),
-                  const SizedBox(height: 12),
-                  const Text(
-                    'Admin feature repositories are the next Firebase integration step.',
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      );
-}
-
 class _AdminLoginScreen extends StatefulWidget {
   const _AdminLoginScreen();
 
@@ -246,7 +202,7 @@ class _AdminLoginScreenState extends State<_AdminLoginScreen> {
                         ),
                         const SizedBox(height: 8),
                         const Text(
-                            'Only administrator and branch-staff roles can enter this console.'),
+                            'Only organization Admin and Staff roles can enter this console.'),
                         const SizedBox(height: 24),
                         TextField(
                           controller: _emailController,

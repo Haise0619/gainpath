@@ -2,23 +2,43 @@ import 'package:flutter/material.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:gainpath_domain/identity.dart';
+import 'package:gainpath_domain/gainpath_domain.dart'
+    show ActivityLevel, FitnessProfile;
+import 'package:gainpath_identity/gainpath_identity.dart'
+    show FitnessProfileCubit;
+import 'save_live_profile.dart';
 
 class ActivityLevelScreen extends StatefulWidget {
-  const ActivityLevelScreen({super.key});
+  const ActivityLevelScreen({super.key, this.liveProfile, this.liveCubit});
+  final FitnessProfile? liveProfile;
+  final FitnessProfileCubit? liveCubit;
 
   @override
   State<ActivityLevelScreen> createState() => _ActivityLevelScreenState();
 }
 
 class _ActivityLevelScreenState extends State<ActivityLevelScreen> {
-  late String _activity = context.read<MemberProfileRepository>().memberActivityLevel;
+  late String _activity = widget.liveProfile?.activity.label ??
+      context.read<MemberProfileRepository>().memberActivityLevel;
 
   static const _options = [
     ['Sedentary', 'Little to no exercise', Icons.event_seat_rounded],
-    ['Lightly active', 'Exercise 1–3 days a week', Icons.directions_walk_rounded],
-    ['Moderately active', 'Exercise 3–5 days a week', Icons.directions_bike_rounded],
+    [
+      'Lightly active',
+      'Exercise 1–3 days a week',
+      Icons.directions_walk_rounded
+    ],
+    [
+      'Moderately active',
+      'Exercise 3–5 days a week',
+      Icons.directions_bike_rounded
+    ],
     ['Very active', 'Exercise 6–7 days a week', Icons.directions_run_rounded],
-    ['Extremely active', 'Physical job plus daily training', Icons.bolt_rounded],
+    [
+      'Extremely active',
+      'Physical job plus daily training',
+      Icons.bolt_rounded
+    ],
   ];
 
   @override
@@ -42,7 +62,17 @@ class _ActivityLevelScreenState extends State<ActivityLevelScreen> {
               )),
           const SizedBox(height: 8),
           FilledButton(
-            onPressed: () {
+            onPressed: () async {
+              if (widget.liveCubit != null) {
+                await saveLiveProfile(
+                    context,
+                    widget.liveCubit!,
+                    widget.liveProfile!.copyWith(
+                      activity: ActivityLevel.values
+                          .firstWhere((value) => value.label == _activity),
+                    ));
+                return;
+              }
               Navigator.pop(context);
               showToast(context, 'Activity level set to $_activity.');
             },

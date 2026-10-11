@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
+import '../../../../app/unavailable_action.dart';
 import 'package:gainpath_identity/gainpath_identity.dart';
-import '../../../../navigation/auth_navigation.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
 import '../../../../navigation/feature_navigation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:gainpath_domain/identity.dart';
+import 'package:gainpath_domain/gainpath_domain.dart'
+    show AuthSession, FitnessProfile;
 import 'account_settings_screen.dart';
 import 'activity_level_screen.dart';
 import 'experience_level_screen.dart';
@@ -12,7 +14,15 @@ import 'goals_screen.dart';
 import 'physical_profile_screen.dart';
 
 class MemberProfileScreen extends StatelessWidget {
-  const MemberProfileScreen({super.key});
+  const MemberProfileScreen(
+      {super.key,
+      this.liveSession,
+      this.liveProfile,
+      this.memberSettingsBuilder});
+
+  final AuthSession? liveSession;
+  final FitnessProfile? liveProfile;
+  final WidgetBuilder? memberSettingsBuilder;
 
   @override
   Widget build(BuildContext context) {
@@ -36,34 +46,44 @@ class MemberProfileScreen extends StatelessWidget {
                             gradient: AppColors.heroGradient,
                             borderRadius: BorderRadius.circular(18),
                           ),
-                          child: const Center(
-                            child: Text('ZY',
+                          child: Center(
+                            child: Text(
+                                liveSession == null
+                                    ? 'ZY'
+                                    : liveSession!.email
+                                        .substring(0, 1)
+                                        .toUpperCase(),
                                 style: TextStyle(
-                                    fontSize: 20, fontWeight: FontWeight.w700, color: Colors.white)),
+                                    fontSize: 20,
+                                    fontWeight: FontWeight.w700,
+                                    color: Colors.white)),
                           ),
                         ),
-                        Positioned(
-                          right: -4,
-                          bottom: -4,
-                          child: Material(
-                            color: AppColors.surface,
-                            shape: const CircleBorder(),
-                            elevation: 1,
-                            child: InkWell(
-                              customBorder: const CircleBorder(),
-                              onTap: () =>
-                                  showToast(context, 'Photo upload is not part of this prototype.'),
-                              child: Container(
-                                padding: const EdgeInsets.all(5),
-                                decoration: BoxDecoration(
-                                  shape: BoxShape.circle,
-                                  border: Border.all(color: AppColors.hairline),
+                        if (liveSession == null)
+                          Positioned(
+                            right: -4,
+                            bottom: -4,
+                            child: Material(
+                              color: AppColors.surface,
+                              shape: const CircleBorder(),
+                              elevation: 1,
+                              child: InkWell(
+                                customBorder: const CircleBorder(),
+                                onTap: () => showToast(context,
+                                    'Photo upload is not part of this prototype.'),
+                                child: Container(
+                                  padding: const EdgeInsets.all(5),
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    border:
+                                        Border.all(color: AppColors.hairline),
+                                  ),
+                                  child: const Icon(Icons.camera_alt_rounded,
+                                      size: 13, color: AppColors.primary),
                                 ),
-                                child: const Icon(Icons.camera_alt_rounded, size: 13, color: AppColors.primary),
                               ),
                             ),
                           ),
-                        ),
                       ],
                     ),
                     const SizedBox(width: 14),
@@ -71,25 +91,32 @@ class MemberProfileScreen extends StatelessWidget {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(context.read<MemberProfileRepository>().memberName,
+                          Text(
+                              context
+                                  .read<MemberProfileRepository>()
+                                  .memberName,
                               style: Theme.of(context).textTheme.titleLarge),
                           const SizedBox(height: 2),
-                          Text(context.read<MemberProfileRepository>().memberEmail,
+                          Text(
+                              context
+                                  .read<MemberProfileRepository>()
+                                  .memberEmail,
                               style: Theme.of(context).textTheme.bodyMedium),
                           const SizedBox(height: 6),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 9, vertical: 4),
-                            decoration: BoxDecoration(
-                              color: AppColors.accentTint,
-                              borderRadius: BorderRadius.circular(7),
+                          if (liveSession == null)
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 9, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: AppColors.accentTint,
+                                borderRadius: BorderRadius.circular(7),
+                              ),
+                              child: const Text('Premium member',
+                                  style: TextStyle(
+                                      fontSize: 11.5,
+                                      fontWeight: FontWeight.w700,
+                                      color: AppColors.warning)),
                             ),
-                            child: const Text('Premium member',
-                                style: TextStyle(
-                                    fontSize: 11.5,
-                                    fontWeight: FontWeight.w700,
-                                    color: AppColors.warning)),
-                          ),
                         ],
                       ),
                     ),
@@ -102,10 +129,14 @@ class MemberProfileScreen extends StatelessWidget {
                   spacing: 10,
                   runSpacing: 10,
                   children: [
-                    _QuickStat(Icons.wc_rounded, context.read<MemberProfileRepository>().memberGender),
-                    _QuickStat(Icons.cake_outlined, '${context.read<MemberProfileRepository>().memberAge} yrs'),
-                    _QuickStat(Icons.height_rounded, '${context.read<MemberProfileRepository>().memberHeight} cm'),
-                    _QuickStat(Icons.monitor_weight_outlined, '${context.read<MemberProfileRepository>().memberWeight} kg'),
+                    _QuickStat(Icons.wc_rounded,
+                        context.read<MemberProfileRepository>().memberGender),
+                    _QuickStat(Icons.cake_outlined,
+                        '${context.read<MemberProfileRepository>().memberAge} yrs'),
+                    _QuickStat(Icons.height_rounded,
+                        '${context.read<MemberProfileRepository>().memberHeight} cm'),
+                    _QuickStat(Icons.monitor_weight_outlined,
+                        '${context.read<MemberProfileRepository>().memberWeight} kg'),
                   ],
                 ),
               ],
@@ -123,28 +154,58 @@ class MemberProfileScreen extends StatelessWidget {
                     'Physical profile',
                     '${context.read<MemberProfileRepository>().memberGender} · ${context.read<MemberProfileRepository>().memberAge} yrs · ${context.read<MemberProfileRepository>().memberHeight} cm · '
                         '${context.read<MemberProfileRepository>().memberWeight} kg',
-                    () => Navigator.push(context,
-                        MaterialPageRoute(builder: (_) => const PhysicalProfileScreen()))),
+                    () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                            builder: (_) => PhysicalProfileScreen(
+                                liveProfile: liveProfile,
+                                liveCubit: liveSession == null
+                                    ? null
+                                    : context.read<FitnessProfileCubit>())))),
                 const Divider(height: 1, indent: 62),
-                _row(context, Icons.school_rounded, 'Experience level',
+                _row(
+                    context,
+                    Icons.school_rounded,
+                    'Experience level',
                     context.read<MemberProfileRepository>().memberExperience,
                     () => Navigator.push(
                         context,
                         MaterialPageRoute(
-                            builder: (_) => const ExperienceLevelScreen()))),
+                            builder: (_) => ExperienceLevelScreen(
+                                liveProfile: liveProfile,
+                                liveCubit: liveSession == null
+                                    ? null
+                                    : context.read<FitnessProfileCubit>())))),
                 const Divider(height: 1, indent: 62),
-                _row(context, Icons.bolt_rounded, 'Activity level',
+                _row(
+                    context,
+                    Icons.bolt_rounded,
+                    'Activity level',
                     context.read<MemberProfileRepository>().memberActivityLevel,
-                    () => Navigator.push(context,
-                        MaterialPageRoute(builder: (_) => const ActivityLevelScreen()))),
+                    () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                            builder: (_) => ActivityLevelScreen(
+                                liveProfile: liveProfile,
+                                liveCubit: liveSession == null
+                                    ? null
+                                    : context.read<FitnessProfileCubit>())))),
                 const Divider(height: 1, indent: 62),
                 _row(
                     context,
                     Icons.flag_rounded,
                     'Fitness goals',
-                    '${context.read<MemberProfileRepository>().memberTrainingFocus.length} focus areas  ·  3 targets',
-                    () => Navigator.push(context,
-                        MaterialPageRoute(builder: (_) => const GoalsScreen()))),
+                    liveSession == null
+                        ? '${context.read<MemberProfileRepository>().memberTrainingFocus.length} focus areas  ·  3 targets'
+                        : '${context.read<MemberProfileRepository>().memberTrainingFocus.length} focus areas',
+                    () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                            builder: (_) => GoalsScreen(
+                                liveProfile: liveProfile,
+                                liveCubit: liveSession == null
+                                    ? null
+                                    : context.read<FitnessProfileCubit>())))),
               ],
             ),
           ),
@@ -154,20 +215,44 @@ class MemberProfileScreen extends StatelessWidget {
             padding: EdgeInsets.zero,
             child: Column(
               children: [
-                _row(context, Icons.card_membership_rounded, 'Membership',
-                    'Premium  ·  renews 12 Oct',
-                    () => Navigator.pushNamed(context, FeatureNavigation.membership)),
+                _row(
+                    context,
+                    Icons.card_membership_rounded,
+                    'Membership',
+                    liveSession == null
+                        ? 'Premium  ·  renews 12 Oct'
+                        : 'Being connected',
+                    () => liveSession == null
+                        ? Navigator.pushNamed(
+                            context, FeatureNavigation.membership)
+                        : showUnavailable(context)),
                 const Divider(height: 1, indent: 62),
-                _row(context, Icons.insights_rounded, 'Progress and reports',
+                _row(
+                    context,
+                    Icons.insights_rounded,
+                    'Progress and reports',
                     'Volume, form, and goals',
-                    () => Navigator.pushNamed(context, FeatureNavigation.progress)),
+                    () => liveSession == null
+                        ? Navigator.pushNamed(
+                            context, FeatureNavigation.progress)
+                        : showUnavailable(context)),
                 const Divider(height: 1, indent: 62),
-                _row(context, Icons.settings_outlined, 'Settings',
+                _row(
+                    context,
+                    Icons.settings_outlined,
+                    'Settings',
                     'Password, notifications, privacy',
-                    () => Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                            builder: (_) => const AccountSettingsScreen()))),
+                    () => liveSession == null
+                        ? Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                                builder: (_) => const AccountSettingsScreen()))
+                        : memberSettingsBuilder == null
+                            ? showUnavailable(context)
+                            : Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                    builder: memberSettingsBuilder!))),
               ],
             ),
           ),
@@ -198,7 +283,8 @@ class MemberProfileScreen extends StatelessWidget {
       ),
       title: Text(title, style: Theme.of(context).textTheme.titleMedium),
       subtitle: Text(subtitle,
-          style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontSize: 13)),
+          style:
+              Theme.of(context).textTheme.bodyMedium?.copyWith(fontSize: 13)),
       trailing: const Icon(Icons.arrow_forward_ios_rounded, size: 14),
     );
   }
@@ -218,7 +304,6 @@ Future<void> _signOut(BuildContext context) async {
   await Future.delayed(const Duration(milliseconds: 550));
   if (!context.mounted) return;
   context.read<AuthBloc>().add(const LoggedOut());
-  Navigator.pushNamedAndRemoveUntil(context, AppRoutes.roleSelect, (r) => false);
 }
 
 class _SigningOutOverlay extends StatelessWidget {
@@ -241,10 +326,12 @@ class _SigningOutOverlay extends StatelessWidget {
             const SizedBox(
               width: 28,
               height: 28,
-              child: CircularProgressIndicator(strokeWidth: 2.6, color: AppColors.primary),
+              child: CircularProgressIndicator(
+                  strokeWidth: 2.6, color: AppColors.primary),
             ),
             const SizedBox(height: 14),
-            Text('Signing out…', style: Theme.of(context).textTheme.titleMedium),
+            Text('Signing out…',
+                style: Theme.of(context).textTheme.titleMedium),
           ],
         ),
       ),
@@ -270,7 +357,9 @@ class _QuickStat extends StatelessWidget {
         children: [
           Icon(icon, size: 15, color: AppColors.inkSoft),
           const SizedBox(width: 6),
-          Text(label, style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600)),
+          Text(label,
+              style:
+                  const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600)),
         ],
       ),
     );

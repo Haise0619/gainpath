@@ -6,12 +6,14 @@ class FirebaseAuthUser {
   const FirebaseAuthUser({
     required this.userId,
     required this.email,
+    this.displayName,
     this.emailVerified = false,
     this.claims = const {},
   });
 
   final String userId;
   final String email;
+  final String? displayName;
   final bool emailVerified;
   final Map<String, Object?> claims;
 }
@@ -46,7 +48,7 @@ class FirebaseAuthRepository
     if (gateway is FirebaseAuthSessionGateway) {
       _subscription =
           (gateway as FirebaseAuthSessionGateway).userChanges.listen((user) {
-        if (_pending != 0 || _disposed || (_signedOut && user != null)) return;
+        if (_pending != 0 || _disposed || _signedOut) return;
         try {
           final session = user == null ? null : _sessionFromClaims(user);
           _changes.add(session);
@@ -93,7 +95,7 @@ class FirebaseAuthRepository
   }
 
   Future<AuthSession> _authenticate(
-      AppRole role, Future<FirebaseAuthUser> Function() action,
+      AppRole? role, Future<FirebaseAuthUser> Function() action,
       {bool register = false}) {
     final revision = ++_revision;
     _signedOut = false;
@@ -113,8 +115,13 @@ class FirebaseAuthRepository
       } catch (error) {
         if (revision == _revision && !_disposed) {
           _signedOut = true;
-          _changes.add(null);
-          await _gateway.signOut();
+          // The login BLoC owns the failure state. A null session here races
+          // with its error handler and can hide the failure from the form.
+          try {
+            await _gateway.signOut();
+          } catch (_) {
+            // Keep the original authentication error visible.
+          }
         }
         if (error is AuthException) rethrow;
         throw const AuthException('Unable to complete authentication.');
@@ -124,9 +131,7 @@ class FirebaseAuthRepository
 
   @override
   Future<AuthSession> signIn(
-          {required AppRole role,
-          required String email,
-          required String password}) =>
+          {AppRole? role, required String email, required String password}) =>
       _authenticate(
           role, () => _gateway.signIn(email: email, password: password));
 
@@ -220,6 +225,7 @@ class FirebaseAuthRepository
         organizationId: organizationId,
         branchIds: branchIds,
         email: user.email,
+        displayName: user.displayName,
         role: role,
         needsVerification: requireVerification || !user.emailVerified);
   }

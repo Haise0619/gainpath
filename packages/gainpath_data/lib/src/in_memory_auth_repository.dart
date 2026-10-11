@@ -6,6 +6,9 @@ class InMemoryAuthRepository implements AuthRepository, AuthSessionLifecycle {
   InMemoryAuthRepository({this.organizationId = 'demo-org'});
   final String organizationId;
   final _changes = StreamController<AuthSession?>.broadcast();
+  final Map<String, AppRole> _accountRoles = {
+    'coach@example.com': AppRole.coach
+  };
   AuthSession? _session;
 
   @override
@@ -31,17 +34,25 @@ class InMemoryAuthRepository implements AuthRepository, AuthSessionLifecycle {
 
   @override
   Future<AuthSession> signIn(
-          {required AppRole role,
-          required String email,
-          required String password}) async =>
-      _authenticate(role, email);
+      {AppRole? role, required String email, required String password}) async {
+    final accountRole =
+        _accountRoles[email.trim().toLowerCase()] ?? AppRole.member;
+    return _authenticate(role ?? accountRole, email);
+  }
+
   @override
   Future<AuthSession> register(
-          {required AppRole role,
-          required String email,
-          required String password,
-          required String name}) async =>
-      _authenticate(role, email, registering: true);
+      {required AppRole role,
+      required String email,
+      required String password,
+      required String name}) async {
+    if (role != AppRole.member) {
+      throw const AuthException('Only member self-registration is allowed.');
+    }
+    _accountRoles[email.trim().toLowerCase()] = AppRole.member;
+    return _authenticate(role, email, registering: true);
+  }
+
   @override
   Future<void> signOut() async {
     _session = null;
@@ -55,8 +66,11 @@ class InMemoryAuthRepository implements AuthRepository, AuthSessionLifecycle {
   Future<void> verifyEmailForDemo() async {
     final current = _session;
     if (current == null) throw StateError('No demo session to verify.');
-    _session = AuthSession(userId: current.userId, organizationId: current.organizationId,
-      email: current.email, role: current.role);
+    _session = AuthSession(
+        userId: current.userId,
+        organizationId: current.organizationId,
+        email: current.email,
+        role: current.role);
     _changes.add(_session);
   }
 }

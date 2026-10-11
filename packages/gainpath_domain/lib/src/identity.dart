@@ -6,6 +6,7 @@ class AuthSession {
     this.organizationId = 'demo-org',
     this.branchIds = const [],
     required this.email,
+    this.displayName,
     required this.role,
     this.needsVerification = false,
   });
@@ -16,6 +17,7 @@ class AuthSession {
   SessionScope get scope =>
       SessionScope(userId: userId, organizationId: organizationId);
   final String email;
+  final String? displayName;
   final AppRole role;
   final bool needsVerification;
 
@@ -26,12 +28,13 @@ class AuthSession {
       other.organizationId == organizationId &&
       _sameStrings(other.branchIds, branchIds) &&
       other.email == email &&
+      other.displayName == displayName &&
       other.role == role &&
       other.needsVerification == needsVerification;
 
   @override
   int get hashCode => Object.hash(userId, organizationId,
-      Object.hashAll(branchIds), email, role, needsVerification);
+      Object.hashAll(branchIds), email, displayName, role, needsVerification);
 }
 
 bool _sameStrings(List<String> left, List<String> right) {

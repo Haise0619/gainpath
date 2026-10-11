@@ -3,6 +3,22 @@ import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:gainpath_data/gainpath_data.dart';
 
+String firebaseAuthFailureMessage(String code) => switch (code) {
+      'invalid-credential' ||
+      'wrong-password' ||
+      'user-not-found' =>
+        'Email or password is incorrect.',
+      'email-already-in-use' => 'This email is already registered.',
+      'invalid-email' => 'Enter a valid email address.',
+      'weak-password' => 'Choose a stronger password.',
+      'network-request-failed' =>
+        'Could not reach Firebase. Check your internet connection and retry.',
+      'too-many-requests' => 'Too many attempts. Wait a while and try again.',
+      'operation-not-allowed' =>
+        'Email and password sign-in is not enabled for this Firebase project.',
+      _ => 'Unable to complete authentication. Please try again.',
+    };
+
 Map<String, Object?> membershipClaims({
   required Map<String, Object?> userData,
   required Map<String, Object?> memberData,
@@ -62,6 +78,12 @@ class FlutterFirebaseAuthGateway
       final user = credential.user!;
       _suppressedRegistrationUsers.remove(user.uid);
       return _resolveUser(user, provisionIfMissing: true);
+    } on FirebaseAuthException catch (error) {
+      throw AuthException(firebaseAuthFailureMessage(error.code));
+    } on FirebaseException catch (error) {
+      throw AuthException(error.code == 'permission-denied'
+          ? 'This account cannot access its gym membership. Contact gym staff.'
+          : 'Could not reach your account. Check your connection and retry.');
     } finally {
       _authMutationInProgress = false;
     }
@@ -89,6 +111,12 @@ class FlutterFirebaseAuthGateway
       }
       await _provision(name.trim());
       return _resolveUser(user);
+    } on FirebaseAuthException catch (error) {
+      throw AuthException(firebaseAuthFailureMessage(error.code));
+    } on FirebaseException catch (error) {
+      throw AuthException(error.code == 'permission-denied'
+          ? 'Account setup was denied. Contact gym staff.'
+          : 'Could not finish account setup. Check your connection and retry.');
     } finally {
       _authMutationInProgress = false;
     }
@@ -163,6 +191,11 @@ class FlutterFirebaseAuthGateway
     return FirebaseAuthUser(
       userId: user.uid,
       email: email,
+      displayName: memberData['displayName'] is String
+          ? memberData['displayName'] as String
+          : userData['displayName'] is String
+              ? userData['displayName'] as String
+              : null,
       emailVerified: user.emailVerified,
       claims: membershipClaims(
         userData: userData.cast<String, Object?>(),
@@ -171,11 +204,18 @@ class FlutterFirebaseAuthGateway
     );
   }
 
-  Future<void> _provision(String displayName) =>
-      _functions.httpsCallable('provisionMemberRegistration').call<void>({
+  Future<void> _provision(String displayName) async {
+    try {
+      await _functions.httpsCallable('provisionMemberRegistration').call<void>({
         'schemaVersion': 1,
         'displayName': displayName,
       });
+    } on FirebaseFunctionsException catch (error) {
+      throw AuthException(error.code == 'not-found'
+          ? 'Account setup service is not deployed. Contact the project administrator.'
+          : 'Account setup failed (${error.code}). Please retry or contact the project administrator.');
+    }
+  }
 
   String _fallbackDisplayName(User user) {
     final current = user.displayName?.trim();

@@ -9,15 +9,16 @@ import 'package:gainpath_domain/recommendation.dart';
 /// layout, same pattern used across the member-facing modules.
 Widget _networkHero(String url, {BoxFit fit = BoxFit.cover}) {
   if (url.trim().isEmpty) {
-    return const DecoratedBox(decoration: BoxDecoration(gradient: AppColors.heroGradient));
+    return const DecoratedBox(
+        decoration: BoxDecoration(gradient: AppColors.heroGradient));
   }
   return Image.network(
     url,
     fit: fit,
     loadingBuilder: (context, child, progress) =>
         progress == null ? child : Container(color: AppColors.surfaceAlt),
-    errorBuilder: (context, error, stack) =>
-        const DecoratedBox(decoration: BoxDecoration(gradient: AppColors.heroGradient)),
+    errorBuilder: (context, error, stack) => const DecoratedBox(
+        decoration: BoxDecoration(gradient: AppColors.heroGradient)),
   );
 }
 
@@ -32,18 +33,27 @@ class ExerciseTutorialsScreen extends StatefulWidget {
   const ExerciseTutorialsScreen({super.key});
 
   @override
-  State<ExerciseTutorialsScreen> createState() => _ExerciseTutorialsScreenState();
+  State<ExerciseTutorialsScreen> createState() =>
+      _ExerciseTutorialsScreenState();
 }
 
 class _ExerciseTutorialsScreenState extends State<ExerciseTutorialsScreen> {
   TutorialVideo? _editing;
   bool _creating = false;
+  late Future<List<TutorialVideo>> _tutorialsFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _tutorialsFuture = context.read<TutorialRepository>().load();
+  }
 
   void _openCreate() => setState(() => _creating = true);
   void _openEdit(TutorialVideo t) => setState(() => _editing = t);
   void _closeForm() => setState(() {
         _creating = false;
         _editing = null;
+        _tutorialsFuture = context.read<TutorialRepository>().load();
       });
 
   @override
@@ -52,76 +62,111 @@ class _ExerciseTutorialsScreenState extends State<ExerciseTutorialsScreen> {
       return _TutorialFormPage(existing: _editing, onDone: _closeForm);
     }
 
-    final active = context.read<TutorialRepository>().tutorials.where((t) => t.status == TutorialStatus.active).length;
     return Scaffold(
       backgroundColor: Colors.transparent,
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(28, 24, 28, 40),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text('$active of ${context.read<TutorialRepository>().tutorials.length} tutorials are live to members.',
-                      style: Theme.of(context).textTheme.bodyLarge),
-                ),
-                FilledButton.icon(
-                  onPressed: _openCreate,
-                  icon: const Icon(Icons.add_rounded, size: 18),
-                  label: const Text('Add tutorial'),
-                ),
-              ],
-            ),
-            const SizedBox(height: 20),
-            Panel(
-              padding: EdgeInsets.zero,
-              child: Column(
-                children: List.generate(context.read<TutorialRepository>().tutorials.length, (i) {
-                  final t = context.read<TutorialRepository>().tutorials[i];
-                  return Column(
-                    children: [
-                      if (i > 0) const Divider(height: 1, indent: 74),
-                      ListTile(
-                        onTap: () => _openEdit(t),
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 6),
-                        leading: ClipRRect(
-                          borderRadius: BorderRadius.circular(12),
-                          child: SizedBox(
-                            width: 44,
-                            height: 44,
-                            child: t.thumbnailUrl.isEmpty
-                                ? Container(
-                                    color: AppColors.ink,
-                                    child: const Icon(Icons.play_arrow_rounded, color: Colors.white),
-                                  )
-                                : _networkHero(t.thumbnailUrl),
-                          ),
-                        ),
-                        title: Text(t.title, style: Theme.of(context).textTheme.titleMedium),
-                        subtitle: Text(
-                            '${t.category}  ·  ${t.durationMin} min'
-                            '${t.coversExercise.isEmpty ? '' : '  ·  covers ${t.coversExercise}'}',
-                            style: Theme.of(context).textTheme.bodyMedium),
-                        trailing: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            statusPill(t.status.label),
-                            const SizedBox(width: 6),
-                            IconButton(
-                              icon: const Icon(Icons.edit_outlined, size: 18),
-                              onPressed: () => _openEdit(t),
-                            ),
-                          ],
+      body: FutureBuilder<List<TutorialVideo>>(
+        future: _tutorialsFuture,
+        builder: (context, snapshot) {
+          if (snapshot.hasError) {
+            return Center(
+                child: Column(mainAxisSize: MainAxisSize.min, children: [
+              const Text('Could not load the exercise catalog.'),
+              TextButton(
+                  onPressed: () => setState(() => _tutorialsFuture =
+                      context.read<TutorialRepository>().load()),
+                  child: const Text('Retry')),
+            ]));
+          }
+          if (!snapshot.hasData) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          final tutorials = snapshot.data!;
+          final catalogOnly =
+              context.read<TutorialRepository>().requiresCatalogSelection;
+          final active =
+              tutorials.where((t) => t.status == TutorialStatus.active).length;
+          return _tutorialList(context, tutorials, active, catalogOnly);
+        },
+      ),
+    );
+  }
+
+  Widget _tutorialList(BuildContext context, List<TutorialVideo> tutorials,
+      int active, bool catalogOnly) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(28, 24, 28, 40),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                    catalogOnly
+                        ? '$active of ${tutorials.length} exercises are active in the catalog.'
+                        : '$active of ${tutorials.length} tutorials are live to members.',
+                    style: Theme.of(context).textTheme.bodyLarge),
+              ),
+              FilledButton.icon(
+                onPressed: _openCreate,
+                icon: const Icon(Icons.add_rounded, size: 18),
+                label: Text(catalogOnly ? 'Add exercise' : 'Add tutorial'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+          Panel(
+            padding: EdgeInsets.zero,
+            child: Column(
+              children: List.generate(tutorials.length, (i) {
+                final t = tutorials[i];
+                return Column(
+                  children: [
+                    if (i > 0) const Divider(height: 1, indent: 74),
+                    ListTile(
+                      onTap: () => _openEdit(t),
+                      contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 18, vertical: 6),
+                      leading: ClipRRect(
+                        borderRadius: BorderRadius.circular(12),
+                        child: SizedBox(
+                          width: 44,
+                          height: 44,
+                          child: t.thumbnailUrl.isEmpty
+                              ? Container(
+                                  color: AppColors.ink,
+                                  child: const Icon(Icons.play_arrow_rounded,
+                                      color: Colors.white),
+                                )
+                              : _networkHero(t.thumbnailUrl),
                         ),
                       ),
-                    ],
-                  );
-                }),
-              ),
+                      title: Text(t.title,
+                          style: Theme.of(context).textTheme.titleMedium),
+                      subtitle: Text(
+                          catalogOnly
+                              ? '${t.category}  ·  ID ${t.id}'
+                              : '${t.category}  ·  ${t.durationMin} min'
+                                  '${t.coversExercise.isEmpty ? '' : '  ·  covers ${t.coversExercise}'}',
+                          style: Theme.of(context).textTheme.bodyMedium),
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          statusPill(t.status.label),
+                          const SizedBox(width: 6),
+                          IconButton(
+                            icon: const Icon(Icons.edit_outlined, size: 18),
+                            onPressed: () => _openEdit(t),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                );
+              }),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -147,19 +192,29 @@ class _TutorialFormPageState extends State<_TutorialFormPage> {
   static const _difficulties = ['Beginner', 'Intermediate', 'Advanced'];
 
   final _formKey = GlobalKey<FormState>();
-  late final _title = TextEditingController(text: widget.existing?.title ?? '')..addListener(_repaint);
-  late final _description = TextEditingController(text: widget.existing?.description ?? '');
-  late final _videoUrl = TextEditingController(text: widget.existing?.videoUrl ?? '');
-  late final _thumbnailUrl = TextEditingController(text: widget.existing?.thumbnailUrl ?? '')
+  late final _title = TextEditingController(text: widget.existing?.title ?? '')
     ..addListener(_repaint);
-  late final _duration = TextEditingController(text: '${widget.existing?.durationMin ?? 5}');
+  late final _description =
+      TextEditingController(text: widget.existing?.description ?? '');
+  late final _videoUrl =
+      TextEditingController(text: widget.existing?.videoUrl ?? '');
+  late final _thumbnailUrl =
+      TextEditingController(text: widget.existing?.thumbnailUrl ?? '')
+        ..addListener(_repaint);
+  late final _duration =
+      TextEditingController(text: '${widget.existing?.durationMin ?? 5}');
   late String _category = widget.existing?.category ?? _categories.first;
   late String _difficulty = widget.existing?.difficulty ?? _difficulties.first;
   late String _status = widget.existing?.status.label ?? 'Draft';
-  late String? _coversExercise =
-      widget.existing?.coversExercise.isEmpty ?? true ? null : widget.existing!.coversExercise;
+  late String? _coversExercise = widget.existing?.coversExercise.isEmpty ?? true
+      ? null
+      : widget.existing!.coversExercise;
 
   bool get _isEdit => widget.existing != null;
+  bool get _catalogOnly =>
+      context.read<TutorialRepository>().requiresCatalogSelection;
+  String? _saveError;
+  bool _saving = false;
 
   void _repaint() => setState(() {});
 
@@ -173,34 +228,43 @@ class _TutorialFormPageState extends State<_TutorialFormPage> {
     super.dispose();
   }
 
-  void _save() {
+  Future<void> _save() async {
     if (!(_formKey.currentState?.validate() ?? false)) return;
     final duration = int.tryParse(_duration.text.trim()) ?? 5;
-    if (_isEdit) {
-      widget.existing!
-        ..title = _title.text.trim()
-        ..category = _category
-        ..status = TutorialStatus.fromLabel(_status)
-        ..coversExercise = _coversExercise ?? ''
-        ..difficulty = _difficulty
-        ..durationMin = duration
-        ..videoUrl = _videoUrl.text.trim()
-        ..thumbnailUrl = _thumbnailUrl.text.trim()
-        ..description = _description.text.trim();
-    } else {
-      context.read<TutorialRepository>().tutorials.add(TutorialVideo(
-        title: _title.text.trim(),
-        category: _category,
-        status: TutorialStatus.fromLabel(_status),
-        coversExercise: _coversExercise ?? '',
-        difficulty: _difficulty,
-        durationMin: duration,
-        videoUrl: _videoUrl.text.trim(),
-        thumbnailUrl: _thumbnailUrl.text.trim(),
-        description: _description.text.trim(),
-      ));
+    final entry = TutorialVideo(
+      id: widget.existing?.id ?? '',
+      title: _title.text.trim(),
+      category: _category,
+      status: TutorialStatus.fromLabel(_status),
+      coversExercise: _catalogOnly ? '' : (_coversExercise ?? ''),
+      difficulty: _catalogOnly ? 'Beginner' : _difficulty,
+      durationMin: _catalogOnly ? 0 : duration,
+      videoUrl: _videoUrl.text.trim(),
+      thumbnailUrl: _catalogOnly ? '' : _thumbnailUrl.text.trim(),
+      description: _catalogOnly ? '' : _description.text.trim(),
+    );
+    setState(() {
+      _saving = true;
+      _saveError = null;
+    });
+    try {
+      await context.read<TutorialRepository>().save(entry);
+    } catch (error) {
+      if (mounted) {
+        setState(() => _saveError = 'Could not save exercise: $error');
+      }
+      return;
+    } finally {
+      if (mounted) setState(() => _saving = false);
     }
-    showToast(context, _isEdit ? 'Tutorial updated.' : 'Tutorial added to the library.');
+    if (!mounted) return;
+    showToast(
+        context,
+        _catalogOnly
+            ? (_isEdit ? 'Exercise updated.' : 'Exercise added to the catalog.')
+            : (_isEdit
+                ? 'Tutorial updated.'
+                : 'Tutorial added to the library.'));
     widget.onDone();
   }
 
@@ -218,9 +282,16 @@ class _TutorialFormPageState extends State<_TutorialFormPage> {
               PageCrumb(_isEdit ? 'Edit tutorial' : 'Create tutorial'),
             ]),
             const SizedBox(height: 6),
-            Text(_isEdit ? 'Edit tutorial' : 'Create tutorial', style: Theme.of(context).textTheme.headlineMedium),
+            Text(
+                _catalogOnly
+                    ? (_isEdit ? 'Edit exercise' : 'Create exercise')
+                    : (_isEdit ? 'Edit tutorial' : 'Create tutorial'),
+                style: Theme.of(context).textTheme.headlineMedium),
             const SizedBox(height: 4),
-            Text('This appears in the member-facing tutorial library once published.',
+            Text(
+                _catalogOnly
+                    ? 'Exercises use stable catalog IDs in routine blueprints.'
+                    : 'This appears in the member-facing tutorial library once published.',
                 style: Theme.of(context).textTheme.bodyLarge),
             const SizedBox(height: 22),
             LayoutBuilder(builder: (context, constraints) {
@@ -238,7 +309,8 @@ class _TutorialFormPageState extends State<_TutorialFormPage> {
                         ],
                       ),
                     )
-                  : Column(children: [form, const SizedBox(height: 20), preview]);
+                  : Column(
+                      children: [form, const SizedBox(height: 20), preview]);
             }),
           ],
         ),
@@ -252,32 +324,59 @@ class _TutorialFormPageState extends State<_TutorialFormPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Eyebrow('Video details'),
+          Eyebrow(_catalogOnly ? 'Exercise catalog entry' : 'Video details'),
           Panel(
             child: Column(
               children: [
+                if (_catalogOnly && _isEdit) ...[
+                  Align(
+                      alignment: Alignment.centerLeft,
+                      child: SelectableText(
+                          'Exercise ID: ${widget.existing!.id}')),
+                  const SizedBox(height: 12),
+                ],
                 TextFormField(
                   controller: _title,
-                  decoration: const InputDecoration(labelText: 'Title', isDense: true),
-                  validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
+                  decoration:
+                      const InputDecoration(labelText: 'Title', isDense: true),
+                  validator: (v) {
+                    final value = v?.trim() ?? '';
+                    if (value.isEmpty) return 'Required';
+                    if (_catalogOnly && value.length > 100) {
+                      return 'Use 100 characters or fewer';
+                    }
+                    return null;
+                  },
                 ),
-                const SizedBox(height: 12),
-                TextFormField(
-                  controller: _description,
-                  maxLines: 3,
-                  decoration: const InputDecoration(labelText: 'Description', isDense: true),
-                ),
-                const SizedBox(height: 12),
+                if (!_catalogOnly) const SizedBox(height: 12),
+                if (!_catalogOnly)
+                  TextFormField(
+                    controller: _description,
+                    maxLines: 3,
+                    decoration: const InputDecoration(
+                        labelText: 'Description', isDense: true),
+                  ),
+                if (!_catalogOnly) const SizedBox(height: 12),
                 TextFormField(
                   controller: _videoUrl,
-                  decoration: const InputDecoration(labelText: 'Video URL', isDense: true),
-                  validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
+                  decoration: const InputDecoration(
+                      labelText: 'Video URL', isDense: true),
+                  validator: (v) {
+                    final value = v?.trim() ?? '';
+                    if (value.isEmpty) return 'Required';
+                    if (_catalogOnly && value.length > 2048) {
+                      return 'Use 2048 characters or fewer';
+                    }
+                    return null;
+                  },
                 ),
-                const SizedBox(height: 12),
-                TextFormField(
-                  controller: _thumbnailUrl,
-                  decoration: const InputDecoration(labelText: 'Thumbnail image URL', isDense: true),
-                ),
+                if (!_catalogOnly) const SizedBox(height: 12),
+                if (!_catalogOnly)
+                  TextFormField(
+                    controller: _thumbnailUrl,
+                    decoration: const InputDecoration(
+                        labelText: 'Thumbnail image URL', isDense: true),
+                  ),
               ],
             ),
           ),
@@ -293,71 +392,122 @@ class _TutorialFormPageState extends State<_TutorialFormPage> {
                       child: DropdownButtonFormField<String>(
                         initialValue: _category,
                         isExpanded: true,
-                        decoration: const InputDecoration(labelText: 'Category', isDense: true),
-                        items: _categories.map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
-                        onChanged: (v) => setState(() => _category = v ?? _category),
+                        decoration: const InputDecoration(
+                            labelText: 'Category', isDense: true),
+                        items: _categories
+                            .map((c) =>
+                                DropdownMenuItem(value: c, child: Text(c)))
+                            .toList(),
+                        onChanged: (v) =>
+                            setState(() => _category = v ?? _category),
                       ),
                     ),
                     const SizedBox(width: 12),
-                    Expanded(
-                      child: DropdownButtonFormField<String>(
-                        initialValue: _difficulty,
-                        decoration: const InputDecoration(labelText: 'Difficulty', isDense: true),
-                        items: _difficulties.map((d) => DropdownMenuItem(value: d, child: Text(d))).toList(),
-                        onChanged: (v) => setState(() => _difficulty = v ?? _difficulty),
-                      ),
+                    if (!_catalogOnly)
+                      Expanded(
+                        child: DropdownButtonFormField<String>(
+                          initialValue: _difficulty,
+                          decoration: const InputDecoration(
+                              labelText: 'Difficulty', isDense: true),
+                          items: _difficulties
+                              .map((d) =>
+                                  DropdownMenuItem(value: d, child: Text(d)))
+                              .toList(),
+                          onChanged: (v) =>
+                              setState(() => _difficulty = v ?? _difficulty),
+                        ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 12),
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(
-                      child: TextFormField(
-                        controller: _duration,
-                        keyboardType: TextInputType.number,
-                        decoration: const InputDecoration(labelText: 'Duration (minutes)', isDense: true),
-                        validator: (v) {
-                          final n = int.tryParse(v?.trim() ?? '');
-                          return (n == null || n <= 0) ? 'Whole number > 0' : null;
-                        },
+                if (_catalogOnly) const SizedBox(height: 12),
+                if (_catalogOnly)
+                  DropdownButtonFormField<String>(
+                    initialValue: _status,
+                    decoration: const InputDecoration(
+                        labelText: 'Status', isDense: true),
+                    items: const [
+                      DropdownMenuItem(
+                          value: 'Active', child: Text('Active')),
+                      DropdownMenuItem(value: 'Draft', child: Text('Draft')),
+                    ],
+                    onChanged: (value) =>
+                        setState(() => _status = value ?? _status),
+                  ),
+                if (!_catalogOnly) const SizedBox(height: 12),
+                if (!_catalogOnly)
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: TextFormField(
+                          controller: _duration,
+                          keyboardType: TextInputType.number,
+                          decoration: const InputDecoration(
+                              labelText: 'Duration (minutes)', isDense: true),
+                          validator: (v) {
+                            final n = int.tryParse(v?.trim() ?? '');
+                            return (n == null || n <= 0)
+                                ? 'Whole number > 0'
+                                : null;
+                          },
+                        ),
                       ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: DropdownButtonFormField<String>(
-                        initialValue: _status,
-                        decoration: const InputDecoration(labelText: 'Status', isDense: true),
-                        items: const [
-                          DropdownMenuItem(value: 'Active', child: Text('Active')),
-                          DropdownMenuItem(value: 'Draft', child: Text('Draft')),
-                        ],
-                        onChanged: (v) => setState(() => _status = v ?? _status),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: DropdownButtonFormField<String>(
+                          initialValue: _status,
+                          decoration: const InputDecoration(
+                              labelText: 'Status', isDense: true),
+                          items: const [
+                            DropdownMenuItem(
+                                value: 'Active', child: Text('Active')),
+                            DropdownMenuItem(
+                                value: 'Draft', child: Text('Draft')),
+                          ],
+                          onChanged: (v) =>
+                              setState(() => _status = v ?? _status),
+                        ),
                       ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                DropdownButtonFormField<String?>(
-                  initialValue: _coversExercise,
-                  isExpanded: true,
-                  decoration: const InputDecoration(labelText: 'Covers exercise (optional)', isDense: true),
-                  items: [
-                    const DropdownMenuItem(value: null, child: Text('None')),
-                    ...context.read<RecommendationRepository>().riskExercises.map((e) => DropdownMenuItem(value: e[0], child: Text(e[0]))),
-                  ],
-                  onChanged: (v) => setState(() => _coversExercise = v),
-                ),
+                    ],
+                  ),
+                if (!_catalogOnly) const SizedBox(height: 12),
+                if (!_catalogOnly)
+                  DropdownButtonFormField<String?>(
+                    initialValue: _coversExercise,
+                    isExpanded: true,
+                    decoration: const InputDecoration(
+                        labelText: 'Covers exercise (optional)', isDense: true),
+                    items: [
+                      const DropdownMenuItem(value: null, child: Text('None')),
+                      ...context
+                          .read<RecommendationRepository>()
+                          .riskExercises
+                          .map((e) =>
+                              DropdownMenuItem(value: e[0], child: Text(e[0]))),
+                    ],
+                    onChanged: (v) => setState(() => _coversExercise = v),
+                  ),
               ],
             ),
           ),
           const SizedBox(height: 22),
+          if (_saveError != null)
+            Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: Text(_saveError!,
+                    style: const TextStyle(color: AppColors.danger))),
           Row(
             children: [
-              OutlinedButton(onPressed: widget.onDone, child: const Text('Cancel')),
+              OutlinedButton(
+                  onPressed: widget.onDone, child: const Text('Cancel')),
               const SizedBox(width: 10),
-              FilledButton(onPressed: _save, child: Text(_isEdit ? 'Save changes' : 'Create tutorial')),
+              FilledButton(
+                  onPressed: _saving ? null : _save,
+                  child: Text(_saving
+                      ? 'Saving…'
+                      : _catalogOnly
+                          ? (_isEdit ? 'Save changes' : 'Create exercise')
+                          : (_isEdit ? 'Save changes' : 'Create tutorial'))),
             ],
           ),
         ],
@@ -376,19 +526,27 @@ class _TutorialFormPageState extends State<_TutorialFormPage> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               ClipRRect(
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-                child: AspectRatio(aspectRatio: 16 / 9, child: _networkHero(_thumbnailUrl.text)),
+                borderRadius:
+                    const BorderRadius.vertical(top: Radius.circular(16)),
+                child: AspectRatio(
+                    aspectRatio: 16 / 9,
+                    child: _networkHero(_thumbnailUrl.text)),
               ),
               Padding(
                 padding: const EdgeInsets.all(14),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(_title.text.isEmpty ? 'Untitled tutorial' : _title.text,
+                    Text(
+                        _title.text.isEmpty ? 'Untitled tutorial' : _title.text,
                         style: Theme.of(context).textTheme.titleMedium),
                     const SizedBox(height: 4),
-                    Text('$_category  ·  $_difficulty  ·  ${_duration.text.isEmpty ? '0' : _duration.text} min',
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontSize: 12)),
+                    Text(
+                        '$_category  ·  $_difficulty  ·  ${_duration.text.isEmpty ? '0' : _duration.text} min',
+                        style: Theme.of(context)
+                            .textTheme
+                            .bodyMedium
+                            ?.copyWith(fontSize: 12)),
                   ],
                 ),
               ),
@@ -401,7 +559,8 @@ class _TutorialFormPageState extends State<_TutorialFormPage> {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Icon(Icons.info_outline_rounded, size: 18, color: AppColors.primary),
+              const Icon(Icons.info_outline_rounded,
+                  size: 18, color: AppColors.primary),
               const SizedBox(width: 10),
               Expanded(
                 child: Text(

@@ -1,6 +1,13 @@
 import 'dart:async';
+import '../../../../app/unavailable_action.dart';
+import '../../../../app/routing/pose_preview_route.dart';
+import '../../../../app/routing/real_squat_route.dart';
+import '../../../../app/routing/saved_squat_sessions_route.dart';
+import '../../domain/real_workout_contract.dart';
+import '../../data/published_routine.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:gainpath_identity/gainpath_identity.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
 import 'package:gainpath_domain/workout.dart';
 import 'equipment_scanner_screen.dart';
@@ -12,11 +19,20 @@ import 'live_workout_screen.dart';
 import 'widgets/workout_media.dart';
 
 class WorkoutPrepScreen extends StatelessWidget {
-  const WorkoutPrepScreen({super.key});
+  const WorkoutPrepScreen(
+      {super.key,
+      this.live = false,
+      this.publishedRoutine,
+      this.routineLoadFailed = false});
+  final bool live;
+  final PublishedRoutine? publishedRoutine;
+  final bool routineLoadFailed;
 
   @override
   Widget build(BuildContext context) {
-    final routine = context.read<WorkoutRepository>().routine;
+    final routine = live
+        ? publishedRoutine?.exercises ?? <Exercise>[]
+        : context.read<WorkoutRepository>().routine;
     final totalSets = routine.fold<int>(0, (sum, e) => sum + e.sets);
 
     return Scaffold(
@@ -28,8 +44,10 @@ class WorkoutPrepScreen extends StatelessWidget {
             backgroundColor: AppColors.primaryDark,
             foregroundColor: Colors.white,
             elevation: 0,
-            titleTextStyle:
-                Theme.of(context).textTheme.titleLarge?.copyWith(color: Colors.white, fontSize: 18),
+            titleTextStyle: Theme.of(context)
+                .textTheme
+                .titleLarge
+                ?.copyWith(color: Colors.white, fontSize: 18),
             title: const Text('Workout'),
             flexibleSpace: FlexibleSpaceBar(
               background: Stack(
@@ -56,12 +74,14 @@ class WorkoutPrepScreen extends StatelessWidget {
                         mainAxisAlignment: MainAxisAlignment.end,
                         children: [
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 10, vertical: 5),
                             decoration: BoxDecoration(
                               color: Colors.white.withValues(alpha: 0.18),
                               borderRadius: BorderRadius.circular(999),
                             ),
-                            child: const Text('TODAY\'S ROUTINE',
+                            child: Text(
+                                live ? 'AVAILABLE ROUTINE' : 'TODAY\'S ROUTINE',
                                 style: TextStyle(
                                     color: Colors.white,
                                     fontSize: 10.5,
@@ -69,15 +89,28 @@ class WorkoutPrepScreen extends StatelessWidget {
                                     letterSpacing: 1.1)),
                           ),
                           const SizedBox(height: 10),
-                          Text('Lower Body Strength',
+                          Text(
+                              live
+                                  ? publishedRoutine?.title ??
+                                      'No published routine yet'
+                                  : 'Lower Body Strength',
                               style: Theme.of(context)
                                   .textTheme
                                   .headlineMedium
-                                  ?.copyWith(color: Colors.white, fontSize: 24)),
+                                  ?.copyWith(
+                                      color: Colors.white, fontSize: 24)),
                           const SizedBox(height: 6),
                           Text(
-                            '${routine.length} exercises  ·  $totalSets sets  ·  about 45 min',
-                            style: TextStyle(fontSize: 13, color: Colors.white.withValues(alpha: 0.85)),
+                            live
+                                ? publishedRoutine == null
+                                    ? routineLoadFailed
+                                        ? 'Could not load routines. Check your connection.'
+                                        : 'Exercises, sets and duration unavailable'
+                                    : '${routine.length} exercises  ·  $totalSets sets  ·  about ${publishedRoutine!.estimatedMinutes} min'
+                                : '${routine.length} exercises  ·  $totalSets sets  ·  about 45 min',
+                            style: TextStyle(
+                                fontSize: 13,
+                                color: Colors.white.withValues(alpha: 0.85)),
                           ),
                         ],
                       ),
@@ -95,19 +128,40 @@ class WorkoutPrepScreen extends StatelessWidget {
                   icon: Icons.play_circle_fill_rounded,
                   iconColor: AppColors.primary,
                   title: 'Watch tutorial',
-                  subtitle: 'See proper form for ${routine.first.name}',
-                  image: routine.first.imageUrl,
-                  onTap: () => Navigator.push(context,
-                      MaterialPageRoute(builder: (_) => ExerciseTutorialScreen(exercise: routine.first))),
+                  subtitle: live
+                      ? 'Tutorial video is currently unavailable'
+                      : 'See proper form for ${routine.first.name}',
+                  image: live ? routineHeroImage : routine.first.imageUrl,
+                  onTap: live
+                      ? () => showUnavailable(context)
+                      : () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (_) => ExerciseTutorialScreen(
+                                  exercise: routine.first))),
                 ),
                 const SizedBox(height: 12),
                 _DetourCard(
                   icon: Icons.list_alt_rounded,
                   iconColor: AppColors.info,
                   title: 'View routine',
-                  subtitle: 'Full exercise list, sets, and rest intervals',
-                  onTap: () =>
-                      Navigator.push(context, MaterialPageRoute(builder: (_) => const RoutineScreen())),
+                  subtitle: live
+                      ? publishedRoutine == null
+                          ? 'No published routine is available yet'
+                          : 'Full exercise list and set targets'
+                      : 'Full exercise list, sets, and rest intervals',
+                  onTap: live
+                      ? publishedRoutine == null
+                          ? () => showUnavailable(context)
+                          : () => Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                  builder: (_) => RoutineScreen(
+                                      publishedRoutine: publishedRoutine)))
+                      : () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (_) => const RoutineScreen())),
                 ),
                 const SizedBox(height: 12),
                 _DetourCard(
@@ -115,28 +169,64 @@ class WorkoutPrepScreen extends StatelessWidget {
                   iconColor: AppColors.accentDark,
                   title: 'Review camera setup',
                   subtitle: 'Get the right distance and angle before you start',
-                  onTap: () => Navigator.push(
-                      context, MaterialPageRoute(builder: (_) => const CameraSetupScreen())),
+                  onTap: live
+                      ? () => showUnavailable(context)
+                      : () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (_) => const CameraSetupScreen())),
                 ),
                 const SizedBox(height: 12),
                 _DetourCard(
                   icon: Icons.qr_code_scanner_rounded,
                   iconColor: AppColors.primarySoft,
                   title: 'Scan equipment',
-                  subtitle: 'Point your camera at a machine for how-to and safety tips',
-                  onTap: () => Navigator.push(
-                      context, MaterialPageRoute(builder: (_) => const EquipmentScannerScreen())),
+                  subtitle:
+                      'Point your camera at a machine for how-to and safety tips',
+                  onTap: live
+                      ? () => showUnavailable(context)
+                      : () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (_) => const EquipmentScannerScreen())),
                 ),
                 const SizedBox(height: 28),
+                if (live)
+                  TextButton(
+                      onPressed: () {
+                        final auth = context.read<AuthBloc>();
+                        final scope = auth.state.session?.scope;
+                        if (scope == null) return;
+                        Navigator.push(
+                            context,
+                            MaterialPageRoute<void>(
+                                builder: (_) => BlocProvider.value(
+                                    value: auth,
+                                    child: SavedSquatSessionsRoute(
+                                        scope: scope))));
+                      },
+                      child: const Text('Saved squat sessions')),
+                if (const bool.fromEnvironment('GAINPATH_POSE_PREVIEW'))
+                  TextButton(
+                      onPressed: () => _startPosePreview(context),
+                      child: const Text('Try live camera preview')),
                 TextButton(
-                  onPressed: () => Navigator.push(context, MaterialPageRoute<void>(builder: (_) => const LiveWorkoutScreen())),
+                  onPressed: live
+                      ? () => showUnavailable(context)
+                      : () => Navigator.push(
+                          context,
+                          MaterialPageRoute<void>(
+                              builder: (_) => const LiveWorkoutScreen())),
                   child: const Text('Preview original workout UI (demo only)'),
                 ),
                 SizedBox(
                   width: double.infinity,
                   child: FilledButton.icon(
-                    style: FilledButton.styleFrom(minimumSize: const Size(0, 54)),
-                    onPressed: () => _startSession(context),
+                    style:
+                        FilledButton.styleFrom(minimumSize: const Size(0, 54)),
+                    onPressed: live
+                        ? () => _startRealSession(context)
+                        : () => _startSession(context),
                     icon: const Icon(Icons.bolt_rounded),
                     label: const Text('Start guided session'),
                   ),
@@ -164,6 +254,65 @@ class WorkoutPrepScreen extends StatelessWidget {
       Navigator.pushNamed(context, WorkoutNavigation.guided);
     }
   }
+
+  Future<void> _startRealSession(BuildContext context) async {
+    final candidates = publishedRoutine?.exercises
+            .where((e) => e.exerciseId == 'F3b8xIr8ynBDd3gEICKX')
+            .toList() ??
+        [];
+    if (candidates.isEmpty) {
+      showUnavailable(context);
+      return;
+    }
+    final auth = context.read<AuthBloc>();
+    final scope = auth.state.session?.scope;
+    final exercise = candidates.first;
+    if (scope == null ||
+        DevelopmentSquatBinding.resolve(
+                organizationId: scope.organizationId,
+                exerciseId: exercise.exerciseId,
+                sets: exercise.sets,
+                reps: exercise.reps) ==
+            null) {
+      showUnavailable(context);
+      return;
+    }
+    final consented = await showModalBottomSheet<bool>(
+        context: context,
+        isScrollControlled: true,
+        builder: (_) => const _ConsentSheet(realWorkout: true));
+    if (consented != true ||
+        !context.mounted ||
+        auth.state.session?.scope != scope) {
+      return;
+    }
+    Navigator.push(
+        context,
+        MaterialPageRoute<void>(
+            builder: (_) => BlocProvider.value(
+                value: auth,
+                child: RealSquatRoute(
+                    scope: scope,
+                    routineId: publishedRoutine!.id,
+                    exercise: exercise,
+                    consented: true,
+                    setupConfirmed: true))));
+  }
+
+  Future<void> _startPosePreview(BuildContext context) async {
+    final consented = await showModalBottomSheet<bool>(
+        context: context,
+        isScrollControlled: true,
+        builder: (_) => const _ConsentSheet(previewOnly: true));
+    if (consented == true && context.mounted) {
+      final auth = context.read<AuthBloc>();
+      Navigator.push(
+          context,
+          MaterialPageRoute<void>(
+              builder: (_) => BlocProvider.value(
+                  value: auth, child: const PosePreviewRoute())));
+    }
+  }
 }
 
 /// A rich, image-or-icon tappable card for the staging menu's three
@@ -175,7 +324,7 @@ class _DetourCard extends StatelessWidget {
   final String title;
   final String subtitle;
   final String? image;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
 
   const _DetourCard({
     required this.icon,
@@ -195,7 +344,8 @@ class _DetourCard extends StatelessWidget {
         children: [
           if (image != null)
             ClipRRect(
-              borderRadius: const BorderRadius.horizontal(left: Radius.circular(16)),
+              borderRadius:
+                  const BorderRadius.horizontal(left: Radius.circular(16)),
               child: SizedBox(
                 width: 78,
                 height: 78,
@@ -203,7 +353,9 @@ class _DetourCard extends StatelessWidget {
                   fit: StackFit.expand,
                   children: [
                     networkHero(image!),
-                    DecoratedBox(decoration: BoxDecoration(color: AppColors.ink.withValues(alpha: 0.28))),
+                    DecoratedBox(
+                        decoration: BoxDecoration(
+                            color: AppColors.ink.withValues(alpha: 0.28))),
                     Center(child: Icon(icon, color: Colors.white, size: 26)),
                   ],
                 ),
@@ -232,14 +384,18 @@ class _DetourCard extends StatelessWidget {
                   Text(title, style: Theme.of(context).textTheme.titleMedium),
                   const SizedBox(height: 2),
                   Text(subtitle,
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontSize: 12.5)),
+                      style: Theme.of(context)
+                          .textTheme
+                          .bodyMedium
+                          ?.copyWith(fontSize: 12.5)),
                 ],
               ),
             ),
           ),
           const Padding(
             padding: EdgeInsets.only(right: 16),
-            child: Icon(Icons.arrow_forward_ios_rounded, size: 14, color: AppColors.inkSoft),
+            child: Icon(Icons.arrow_forward_ios_rounded,
+                size: 14, color: AppColors.inkSoft),
           ),
         ],
       ),
@@ -248,7 +404,9 @@ class _DetourCard extends StatelessWidget {
 }
 
 class _ConsentSheet extends StatefulWidget {
-  const _ConsentSheet();
+  const _ConsentSheet({this.previewOnly = false, this.realWorkout = false});
+  final bool previewOnly;
+  final bool realWorkout;
 
   @override
   State<_ConsentSheet> createState() => _ConsentSheetState();
@@ -256,10 +414,12 @@ class _ConsentSheet extends StatefulWidget {
 
 class _ConsentSheetState extends State<_ConsentSheet> {
   bool _checked = false;
+  bool _setupChecked = false;
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
+    return SingleChildScrollView(
+        child: Padding(
       padding: EdgeInsets.fromLTRB(
           20, 20, 20, 20 + MediaQuery.of(context).padding.bottom),
       child: Column(
@@ -280,8 +440,10 @@ class _ConsentSheetState extends State<_ConsentSheet> {
               style: Theme.of(context).textTheme.titleLarge),
           const SizedBox(height: 12),
           Text(
-            'GainPath reads your body position from the camera to check your form '
-            'and count your reps.',
+            widget.previewOnly
+                ? 'GainPath uses your camera to display your body landmarks on this device.'
+                : 'GainPath reads your body position from the camera to check your form '
+                    'and count your reps.',
             style: Theme.of(context).textTheme.bodyLarge,
           ),
           const SizedBox(height: 14),
@@ -292,7 +454,17 @@ class _ConsentSheetState extends State<_ConsentSheet> {
               children: [
                 _point(context, 'Everything is processed on this device.'),
                 _point(context, 'No video is recorded, stored, or uploaded.'),
-                _point(context, 'Only your movement scores are saved.'),
+                _point(
+                    context,
+                    widget.previewOnly
+                        ? 'This preview does not save activity or count reps.'
+                        : 'Only your movement scores are saved.'),
+                if (widget.realWorkout)
+                  _point(context,
+                      'This session tracks only the supported squat. Results stay on this device; upload and rewards are not yet available.'),
+                if (widget.realWorkout)
+                  _point(context,
+                      'Form guidance is provisional. Use a side view with the camera upright and stationary, and keep your full body in view.'),
               ],
             ),
           ),
@@ -319,8 +491,19 @@ class _ConsentSheetState extends State<_ConsentSheet> {
             ),
           ),
           const SizedBox(height: 16),
+          if (widget.realWorkout)
+            CheckboxListTile(
+                value: _setupChecked,
+                onChanged: (value) =>
+                    setState(() => _setupChecked = value ?? false),
+                title: const Text(
+                    'My full body is visible from the side and the camera is upright and stationary.'),
+                controlAffinity: ListTileControlAffinity.leading,
+                contentPadding: EdgeInsets.zero),
           FilledButton(
-            onPressed: _checked ? () => Navigator.pop(context, true) : null,
+            onPressed: _checked && (!widget.realWorkout || _setupChecked)
+                ? () => Navigator.pop(context, true)
+                : null,
             child: const Text('Accept and start'),
           ),
           const SizedBox(height: 8),
@@ -330,7 +513,7 @@ class _ConsentSheetState extends State<_ConsentSheet> {
           ),
         ],
       ),
-    );
+    ));
   }
 
   Widget _point(BuildContext context, String text) => Padding(

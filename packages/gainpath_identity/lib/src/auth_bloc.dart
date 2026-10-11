@@ -158,6 +158,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
 
   static const termsError =
       'Agree to the Terms and Privacy Policy to continue.';
+  static const fieldsError = 'Check the highlighted fields and try again.';
   static const unknownError = 'Unable to complete authentication. Try again.';
 
   final AuthRepository _repository;
@@ -169,7 +170,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
 
   void _emitSession(AuthSession? session, Emitter<AuthState> emit) {
     if (session == null) {
-      emit(AuthState(role: state.role));
+      emit(const AuthState());
       return;
     }
     try {
@@ -221,7 +222,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       emit(state.copyWith(
         status: AuthStatus.signedOut,
         fieldErrors: errors,
-        clearMessage: true,
+        message: fieldsError,
       ));
       return;
     }
@@ -234,12 +235,6 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       return;
     }
     final role = state.role;
-    if (role == null) {
-      emit(state.copyWith(
-          status: AuthStatus.signedOut, message: 'Select a role to continue.'));
-      return;
-    }
-
     emit(state.copyWith(
       status: AuthStatus.submitting,
       fieldErrors: CredentialErrors.none,
@@ -248,7 +243,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     try {
       final session = event.registering
           ? await _repository.register(
-              role: role,
+              role: role ?? AppRole.member,
               email: event.email,
               password: event.password,
               name: event.name,
@@ -289,13 +284,12 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
   Future<void> _onLoggedOut(LoggedOut event, Emitter<AuthState> emit) async {
     final revision = ++_revision;
     _allowSessionEvents = false;
-    emit(AuthState(role: state.role));
+    emit(const AuthState());
     try {
       await _repository.signOut();
     } catch (_) {
       if (revision == _revision && !emit.isDone) {
-        emit(AuthState(
-            role: state.role,
+        emit(const AuthState(
             message: 'Unable to sign out of the provider. Try again.'));
       }
     }

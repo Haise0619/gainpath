@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 2,
+  "requestId": "upload-1",
+  "organizationId": "gainpath",
+  "memberId": "member-1",
+  "sessionId": "session-1",
+  "exerciseId": "F3b8xIr8ynBDd3gEICKX",
+  "startedAtMillis": 1790906400000,
+  "endedAtMillis": 1790907000000,
+  "repetitions": 30,
+  "formScorePercent": 85,
+  "trackedDurationMillis": 540000,
+  "rejectedDurationMillis": 60000,
+  "scoringVersion": "bodyweight-squat-side-v1",
+  "detectorVersion": "detector-v1",
+  "consentVersion": "pose-local-summary-v1",
+  "publishedRoutineId": "routine_PTe4DxLS3WZ2DsfpGTOy",
+  "provenance": "real_camera",
+  "cameraView": "side",
+  "detectorId": "contract-test-detector",
+  "consentAcknowledgementId": "consent-ack-1"
+}

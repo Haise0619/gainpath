@@ -1,31 +1,51 @@
 import 'package:flutter/material.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
+import 'package:gainpath_domain/gainpath_domain.dart';
 import '../../../../navigation/auth_navigation.dart';
 
-/// AD-M1.1 — ProfileSetupScreen. Shown once, immediately after a new Gym
-/// Member account is created, so the AI Virtual Coach and recommendation
-/// engine have a starting profile before the member reaches the app itself.
+/// Guided setup and editing for a member's private fitness profile.
+/// Firebase callers supply persistence; the prototype keeps its demo route.
 class ProfileSetupScreen extends StatefulWidget {
-  const ProfileSetupScreen({super.key});
+  const ProfileSetupScreen({super.key, this.initialProfile, this.onSave, this.onExit});
+
+  final FitnessProfile? initialProfile;
+  final Future<void> Function(FitnessProfile)? onSave;
+  final VoidCallback? onExit;
 
   @override
   State<ProfileSetupScreen> createState() => _ProfileSetupScreenState();
 }
 
-enum _Gender { female, male, unspecified }
-
 class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
-  static const _steps = ['Gender', 'Age', 'Height', 'Weight', 'Goals', 'Activity'];
+  static const _steps = ['Gender', 'Age', 'Height', 'Weight', 'Goals', 'Activity', 'Experience'];
   static const _backdrop =
       'https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?auto=format&fit=crop&w=1200&q=80';
 
   int _step = 0;
-  _Gender? _gender;
+  ProfileGender? _gender;
   double _age = 25;
   double _height = 165;
   double _weight = 65;
   final Set<String> _goals = {};
   String? _activity;
+  TrainingExperience? _experience;
+  bool _saving = false;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    final profile = widget.initialProfile;
+    if (profile != null) {
+      _gender = profile.gender;
+      _age = profile.age.toDouble();
+      _height = profile.heightCm.toDouble();
+      _weight = profile.weightKg.toDouble();
+      _goals.addAll(profile.goals.map((goal) => goal.label));
+      _activity = profile.activity.label;
+      _experience = profile.experience;
+    }
+  }
 
   static const _goalOptions = [
     ['Lose weight', Icons.trending_down_rounded],
@@ -52,13 +72,15 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
         return _goals.isNotEmpty;
       case 5:
         return _activity != null;
+      case 6:
+        return _experience != null;
       default:
         return true;
     }
   }
 
   void _next() {
-    if (!_canContinue) return;
+    if (!_canContinue || _saving) return;
     if (_step == _steps.length - 1) {
       _finish();
       return;
@@ -71,7 +93,26 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
     setState(() => _step--);
   }
 
-  void _finish() {
+  Future<void> _finish() async {
+    if (widget.onSave != null) {
+      setState(() { _saving = true; _error = null; });
+      try {
+        await widget.onSave!(FitnessProfile(
+          gender: _gender!, age: _age.round(), heightCm: _height.round(),
+          weightKg: _weight.round(), experience: _experience!,
+          activity: ActivityLevel.values.firstWhere((level) => level.label == _activity),
+          goals: FitnessGoal.values.where((goal) => _goals.contains(goal.label)).toSet(),
+        ));
+      } catch (error) {
+        if (mounted) {
+          setState(() => _error = error is FitnessProfileException
+              ? error.message : 'Could not save your profile. Please retry.');
+        }
+      } finally {
+        if (mounted) setState(() => _saving = false);
+      }
+      return;
+    }
     Navigator.pushNamedAndRemoveUntil(
       context,
       AppRoutes.member,
@@ -108,7 +149,10 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
           SafeArea(
             child: Column(
               children: [
-                _Header(step: _step, total: _steps.length, onBack: _step > 0 ? _back : null),
+                _Header(step: _step, total: _steps.length,
+                  onBack: _step > 0 && !_saving ? _back : null,
+                  onExit: widget.initialProfile != null && _saving ? null : widget.onExit,
+                  exitLabel: widget.initialProfile == null ? 'Sign out' : 'Cancel'),
                 Expanded(
                   child: AnimatedSwitcher(
                     duration: const Duration(milliseconds: 260),
@@ -132,12 +176,19 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                           Expanded(
                             child: SingleChildScrollView(
                               padding: const EdgeInsets.fromLTRB(24, 28, 24, 12),
-                              child: _stepContent(context),
+                              child: AbsorbPointer(absorbing: _saving, child: _stepContent(context)),
                             ),
+                          ),
+                          if (_error != null) Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 24),
+                            child: Semantics(liveRegion: true, child: Text(_error!,
+                              style: TextStyle(color: Theme.of(context).colorScheme.error))),
                           ),
                           _Footer(
                             isLast: _step == _steps.length - 1,
-                            enabled: _canContinue,
+                            enabled: _canContinue && !_saving,
+                            saving: _saving,
+                            editing: widget.initialProfile != null,
                             onNext: _next,
                           ),
                         ],
@@ -159,28 +210,28 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
         return _StepFrame(
           eyebrow: 'ABOUT YOU',
           title: "What's your gender?",
-          subtitle: 'This helps calibrate posture and rep-scoring baselines.',
+          subtitle: 'Choose what you are comfortable sharing in your private profile.',
           child: Column(
             children: [
               SelectableListCard(
                 icon: Icons.female_rounded,
                 label: 'Female',
-                selected: _gender == _Gender.female,
-                onTap: () => setState(() => _gender = _Gender.female),
+                selected: _gender == ProfileGender.female,
+                onTap: () => setState(() => _gender = ProfileGender.female),
               ),
               const SizedBox(height: 12),
               SelectableListCard(
                 icon: Icons.male_rounded,
                 label: 'Male',
-                selected: _gender == _Gender.male,
-                onTap: () => setState(() => _gender = _Gender.male),
+                selected: _gender == ProfileGender.male,
+                onTap: () => setState(() => _gender = ProfileGender.male),
               ),
               const SizedBox(height: 12),
               SelectableListCard(
                 icon: Icons.remove_circle_outline_rounded,
                 label: 'Prefer not to say',
-                selected: _gender == _Gender.unspecified,
-                onTap: () => setState(() => _gender = _Gender.unspecified),
+                selected: _gender == ProfileGender.unspecified,
+                onTap: () => setState(() => _gender = ProfileGender.unspecified),
               ),
             ],
           ),
@@ -189,7 +240,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
         return _StepFrame(
           eyebrow: 'ABOUT YOU',
           title: 'How old are you?',
-          subtitle: 'Used to keep training intensity and cues age-appropriate.',
+          subtitle: 'Add your current age to your fitness profile.',
           child: NumberDial(
             value: _age,
             min: 13,
@@ -204,7 +255,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
         return _StepFrame(
           eyebrow: 'PHYSICAL METRICS',
           title: "What's your height?",
-          subtitle: 'Helps the pose model set expected joint proportions.',
+          subtitle: 'Record your height in centimetres.',
           child: NumberDial(
             value: _height,
             min: 130,
@@ -219,7 +270,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
         return _StepFrame(
           eyebrow: 'PHYSICAL METRICS',
           title: "What's your weight?",
-          subtitle: 'Used for load suggestions and progress tracking, never shared publicly.',
+          subtitle: 'Record your current weight. Your profile is private.',
           child: NumberDial(
             value: _weight,
             min: 35,
@@ -234,7 +285,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
         return _StepFrame(
           eyebrow: 'MOTIVATION',
           title: 'What are you working towards?',
-          subtitle: 'Pick as many as apply. This shapes your recommended routines.',
+          subtitle: 'Pick as many as apply. You can update your goals later.',
           child: GridView.count(
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
@@ -256,7 +307,6 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
           ),
         );
       case 5:
-      default:
         return _StepFrame(
           eyebrow: 'TRAINING RHYTHM',
           title: "What's your activity level?",
@@ -280,6 +330,20 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
             }).toList(),
           ),
         );
+      default:
+        return _StepFrame(
+          eyebrow: 'TRAINING EXPERIENCE',
+          title: 'How experienced are you?',
+          subtitle: 'Choose your current level. You can change it as you progress.',
+          child: Column(children: TrainingExperience.values.map((level) => Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: SelectableListCard(
+              icon: Icons.fitness_center_rounded, label: level.label,
+              selected: _experience == level,
+              onTap: () => setState(() => _experience = level),
+            ),
+          )).toList()),
+        );
     }
   }
 }
@@ -288,7 +352,9 @@ class _Header extends StatelessWidget {
   final int step;
   final int total;
   final VoidCallback? onBack;
-  const _Header({required this.step, required this.total, this.onBack});
+  final VoidCallback? onExit;
+  final String exitLabel;
+  const _Header({required this.step, required this.total, this.onBack, this.onExit, required this.exitLabel});
 
   @override
   Widget build(BuildContext context) {
@@ -311,6 +377,11 @@ class _Header extends StatelessWidget {
                       ),
               ),
               const Spacer(),
+              if (onExit != null) TextButton(
+                onPressed: onExit,
+                style: TextButton.styleFrom(foregroundColor: Colors.white),
+                child: Text(exitLabel),
+              ),
               Text('Step ${step + 1} of $total',
                   style: TextStyle(
                       color: Colors.white.withValues(alpha: 0.85), fontSize: 12.5, fontWeight: FontWeight.w700)),
@@ -342,7 +413,10 @@ class _Footer extends StatelessWidget {
   final bool isLast;
   final bool enabled;
   final VoidCallback onNext;
-  const _Footer({required this.isLast, required this.enabled, required this.onNext});
+  final bool saving;
+  final bool editing;
+  const _Footer({required this.isLast, required this.enabled, required this.onNext,
+    required this.saving, required this.editing});
 
   @override
   Widget build(BuildContext context) {
@@ -350,7 +424,7 @@ class _Footer extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(24, 8, 24, 20),
       child: FilledButton(
         onPressed: enabled ? onNext : null,
-        child: Text(isLast ? 'Finish setup' : 'Continue'),
+        child: Text(saving ? 'Saving…' : isLast ? (editing ? 'Save changes' : 'Finish setup') : 'Continue'),
       ),
     );
   }

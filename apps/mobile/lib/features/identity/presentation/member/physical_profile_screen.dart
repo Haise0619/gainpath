@@ -2,19 +2,30 @@ import 'package:flutter/material.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:gainpath_domain/identity.dart';
+import 'package:gainpath_domain/gainpath_domain.dart'
+    show FitnessProfile, ProfileGender;
+import 'package:gainpath_identity/gainpath_identity.dart'
+    show FitnessProfileCubit;
+import 'save_live_profile.dart';
 
 class PhysicalProfileScreen extends StatefulWidget {
-  const PhysicalProfileScreen({super.key});
+  const PhysicalProfileScreen({super.key, this.liveProfile, this.liveCubit});
+  final FitnessProfile? liveProfile;
+  final FitnessProfileCubit? liveCubit;
 
   @override
   State<PhysicalProfileScreen> createState() => _PhysicalProfileScreenState();
 }
 
 class _PhysicalProfileScreenState extends State<PhysicalProfileScreen> {
-  late String _gender = context.read<MemberProfileRepository>().memberGender;
-  late double _age = context.read<MemberProfileRepository>().memberAge.toDouble();
-  late double _height = context.read<MemberProfileRepository>().memberHeight.toDouble();
-  late double _weight = context.read<MemberProfileRepository>().memberWeight.toDouble();
+  late String _gender = widget.liveProfile?.gender.label ??
+      context.read<MemberProfileRepository>().memberGender;
+  late double _age = widget.liveProfile?.age.toDouble() ??
+      context.read<MemberProfileRepository>().memberAge.toDouble();
+  late double _height = widget.liveProfile?.heightCm.toDouble() ??
+      context.read<MemberProfileRepository>().memberHeight.toDouble();
+  late double _weight = widget.liveProfile?.weightKg.toDouble() ??
+      context.read<MemberProfileRepository>().memberWeight.toDouble();
 
   static const _genders = ['Female', 'Male', 'Prefer not to say'];
 
@@ -39,7 +50,8 @@ class _PhysicalProfileScreenState extends State<PhysicalProfileScreen> {
                       child: Container(
                         padding: const EdgeInsets.symmetric(vertical: 12),
                         decoration: BoxDecoration(
-                          color: selected ? AppColors.primary : Colors.transparent,
+                          color:
+                              selected ? AppColors.primary : Colors.transparent,
                           borderRadius: BorderRadius.circular(11),
                         ),
                         child: Text(
@@ -93,7 +105,20 @@ class _PhysicalProfileScreenState extends State<PhysicalProfileScreen> {
           ),
           const SizedBox(height: 20),
           FilledButton(
-            onPressed: () {
+            onPressed: () async {
+              if (widget.liveCubit != null) {
+                await saveLiveProfile(
+                    context,
+                    widget.liveCubit!,
+                    widget.liveProfile!.copyWith(
+                      gender: ProfileGender.values
+                          .firstWhere((value) => value.label == _gender),
+                      age: _age.round(),
+                      heightCm: _height.round(),
+                      weightKg: _weight.round(),
+                    ));
+                return;
+              }
               Navigator.pop(context);
               showToast(context, 'Physical profile updated.');
             },

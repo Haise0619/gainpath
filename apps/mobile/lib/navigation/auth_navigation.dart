@@ -2,6 +2,7 @@ import 'package:gainpath_domain/gainpath_domain.dart' show AppRole;
 
 abstract final class AppRoutes {
   static const onboarding = '/';
+  static const login = '/login';
   static const roleSelect = '/roles';
   static const memberLogin = '/login/member';
   static const coachLogin = '/login/coach';
@@ -9,8 +10,8 @@ abstract final class AppRoutes {
   static const coach = '/coach';
 
   static String loginFor(AppRole role) => switch (role) {
-        AppRole.member => memberLogin,
-        AppRole.coach => coachLogin,
+        AppRole.member => login,
+        AppRole.coach => login,
         AppRole.admin =>
           throw UnsupportedError('Use the separate admin application.'),
       };

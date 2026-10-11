@@ -9,9 +9,7 @@ class _DelayedAuth implements AuthRepository {
   final started = Completer<void>();
   @override
   Future<AuthSession> signIn(
-      {required AppRole role,
-      required String email,
-      required String password}) {
+      {AppRole? role, required String email, required String password}) {
     started.complete();
     return pending.future;
   }

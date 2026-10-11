@@ -7,6 +7,7 @@ import '../enums/tutorial_status.dart';
 /// text. Fields are mutable so the admin Edit form can update a video
 /// in place.
 class TutorialVideo {
+  final String id;
   String title;
   String category;
   TutorialStatus status;
@@ -17,6 +18,7 @@ class TutorialVideo {
   String thumbnailUrl;
   String description;
   TutorialVideo({
+    this.id = '',
     required this.title,
     required this.category,
     required this.status,

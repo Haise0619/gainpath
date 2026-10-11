@@ -26,14 +26,23 @@ class InMemoryWorkoutSessionStore implements WorkoutSessionStore {
     if (records.any((record) => record.summary.scope != scope)) {
       throw StateError('Workout account mismatch.');
     }
+    for (final record in records) {
+      record.validateForLocalStorage();
+    }
     _records = List.of(records);
   }
 }
 
-class InMemoryWorkoutUploadGateway implements WorkoutUploadGateway {
+class InMemoryWorkoutUploadGateway implements DemoWorkoutUploadGateway {
   final List<WorkoutSessionSummary> uploaded = [];
   @override
   Future<WorkoutUploadReceipt> upload(WorkoutSessionSummary summary) async {
+    if (summary.provenance == WorkoutProvenance.realCamera ||
+        summary.provenance == WorkoutProvenance.recordedFixture ||
+        summary.poseMetrics != null) {
+      throw UnsupportedError(
+          'Measured workouts require real server acceptance.');
+    }
     if (!uploaded.any((item) =>
         item.scope == summary.scope && item.sessionId == summary.sessionId)) {
       uploaded.add(summary);
@@ -81,6 +90,9 @@ class WorkoutSessionRepository implements WorkoutRepository {
     if (records.any((record) => record.summary.scope != scope)) {
       throw StateError('Stored workout account mismatch.');
     }
+    for (final record in records) {
+      record.validateForLocalStorage();
+    }
   }
 
   @override
@@ -90,6 +102,7 @@ class WorkoutSessionRepository implements WorkoutRepository {
         if (summary.scope != scope) {
           throw StateError('Cannot save another account workout.');
         }
+        summary.validateForLocalStorage();
         final records = List<WorkoutSessionRecord>.of(await _store.read());
         _checkRecords(records);
         _checkActive();
@@ -129,6 +142,15 @@ class WorkoutSessionRepository implements WorkoutRepository {
           final record = records[index];
           if (record.status != WorkoutSyncStatus.pending) continue;
           _checkActive();
+          if (record.summary.provenance == WorkoutProvenance.realCamera ||
+              record.summary.provenance == WorkoutProvenance.recordedFixture ||
+              record.summary.poseMetrics != null) {
+            continue; // Measured real/fixture results stay local, even in demo composition.
+          }
+          if (!record.summary.isEligibleForRealUpload &&
+              _uploadGateway is! DemoWorkoutUploadGateway) {
+            continue; // Legacy/demo records remain local across uploader changes.
+          }
           WorkoutUploadReceipt receipt;
           try {
             receipt = await _uploadGateway.upload(record.summary);

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../../app/unavailable_action.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
 import 'booking_schedule_screen.dart';
 import '../shared/coach_profile_screen.dart';
@@ -12,7 +13,8 @@ enum _SortBy { rating, priceLow, experience }
 /// sort share one toolbar so narrowing the list to "the one coach I
 /// want" takes a couple of taps rather than scrolling the whole roster.
 class BrowseCoachesScreen extends StatefulWidget {
-  const BrowseCoachesScreen({super.key});
+  const BrowseCoachesScreen({super.key, this.live = false});
+  final bool live;
 
   @override
   State<BrowseCoachesScreen> createState() => _BrowseCoachesScreenState();
@@ -32,10 +34,16 @@ class _BrowseCoachesScreenState extends State<BrowseCoachesScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final specialties = ['All', ...{for (final c in context.read<CoachRepository>().coaches) c.specialty}];
+    final coaches =
+        widget.live ? <Coach>[] : context.read<CoachRepository>().coaches;
+    final specialties = [
+      'All',
+      ...{for (final c in coaches) c.specialty}
+    ];
 
-    var visible = context.read<CoachRepository>().coaches.where((c) {
-      final matchesSpecialty = _specialtyFilter == 'All' || c.specialty == _specialtyFilter;
+    var visible = coaches.where((c) {
+      final matchesSpecialty =
+          _specialtyFilter == 'All' || c.specialty == _specialtyFilter;
       final q = _query.trim().toLowerCase();
       final matchesQuery = q.isEmpty ||
           c.name.toLowerCase().contains(q) ||
@@ -66,16 +74,23 @@ class _BrowseCoachesScreenState extends State<BrowseCoachesScreen> {
             initialValue: _sortBy,
             onSelected: (v) => setState(() => _sortBy = v),
             itemBuilder: (ctx) => const [
-              PopupMenuItem(value: _SortBy.rating, child: Text('Highest rated')),
-              PopupMenuItem(value: _SortBy.priceLow, child: Text('Price: low to high')),
-              PopupMenuItem(value: _SortBy.experience, child: Text('Most experienced')),
+              PopupMenuItem(
+                  value: _SortBy.rating, child: Text('Highest rated')),
+              PopupMenuItem(
+                  value: _SortBy.priceLow, child: Text('Price: low to high')),
+              PopupMenuItem(
+                  value: _SortBy.experience, child: Text('Most experienced')),
             ],
           ),
           IconButton(
             icon: const Icon(Icons.event_note_rounded),
             tooltip: 'My bookings',
-            onPressed: () => Navigator.push(context,
-                MaterialPageRoute(builder: (_) => const BookingScheduleScreen())),
+            onPressed: widget.live
+                ? () => showUnavailable(context)
+                : () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                        builder: (_) => const BookingScheduleScreen())),
           ),
         ],
       ),
@@ -139,9 +154,13 @@ class _BrowseCoachesScreenState extends State<BrowseCoachesScreen> {
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          const Icon(Icons.search_off_rounded, size: 40, color: AppColors.hairline),
+                          const Icon(Icons.search_off_rounded,
+                              size: 40, color: AppColors.hairline),
                           const SizedBox(height: 14),
-                          Text('No coaches match that search.',
+                          Text(
+                              widget.live
+                                  ? 'No coaches available yet.'
+                                  : 'No coaches match that search.',
                               textAlign: TextAlign.center,
                               style: Theme.of(context).textTheme.bodyMedium),
                         ],
@@ -155,8 +174,11 @@ class _BrowseCoachesScreenState extends State<BrowseCoachesScreen> {
                               padding: const EdgeInsets.only(bottom: 10),
                               child: CoachCard(
                                 coach: c,
-                                onTap: () => Navigator.push(context,
-                                    MaterialPageRoute(builder: (_) => CoachProfileScreen(coach: c))),
+                                onTap: () => Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                        builder: (_) =>
+                                            CoachProfileScreen(coach: c))),
                               ),
                             ))
                         .toList(),

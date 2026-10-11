@@ -20,6 +20,9 @@ import 'package:gainpath_data/recommendation.dart';
 import 'package:gainpath_domain/recommendation.dart';
 import 'package:gainpath_data/workout.dart';
 import 'package:gainpath_domain/workout.dart';
+import 'package:gainpath_domain/gainpath_domain.dart' show AuthSession;
+import '../../infrastructure/firebase/firebase_exercise_catalog_repository.dart';
+import '../../infrastructure/firebase/firebase_routine_template_repository.dart';
 
 /// Composition root for data access. Swap the in-memory implementations for
 /// Firebase-backed ones here without touching any screen.
@@ -28,9 +31,11 @@ class AppRepositories extends StatefulWidget {
     super.key,
     required this.child,
     this.config = const BackendConfig(BackendMode.mock),
+    this.session,
   });
   final Widget child;
   final BackendConfig config;
+  final AuthSession? session;
 
   @override
   State<AppRepositories> createState() => _AppRepositoriesState();
@@ -42,12 +47,8 @@ class _AppRepositoriesState extends State<AppRepositories> {
   @override
   Widget build(BuildContext context) {
     widget.config.validate();
-    if (widget.config.isFirebase) {
-      throw UnsupportedError(
-        'Firebase backend adapters are not connected yet. '
-        'Run with --dart-define=BACKEND=mock until Phase 7 adapters are enabled.',
-      );
-    }
+    if (widget.config.isFirebase && widget.session == null) return widget.child;
+    final scope = widget.session?.scope;
     return MultiRepositoryProvider(
       providers: [
         RepositoryProvider<MemberProfileRepository>(
@@ -61,9 +62,15 @@ class _AppRepositoriesState extends State<AppRepositories> {
         RepositoryProvider<EquipmentRepository>(
             create: (_) => InMemoryEquipmentRepository(session: session)),
         RepositoryProvider<TutorialRepository>(
-            create: (_) => InMemoryTutorialRepository(session: session)),
+            create: (_) => widget.config.isFirebase
+                ? FirebaseExerciseCatalogRepository(scope: scope!)
+                : InMemoryTutorialRepository(session: session)),
         RepositoryProvider<RoutineTemplateRepository>(
-            create: (_) => InMemoryRoutineTemplateRepository(session: session)),
+            create: (context) => widget.config.isFirebase
+                ? FirebaseRoutineTemplateRepository(
+                    scope: scope!,
+                    exerciseCatalog: context.read<TutorialRepository>())
+                : InMemoryRoutineTemplateRepository(session: session)),
         RepositoryProvider<GamificationRepository>(
             create: (_) => InMemoryGamificationRepository(session: session)),
         RepositoryProvider<BookingRepository>(

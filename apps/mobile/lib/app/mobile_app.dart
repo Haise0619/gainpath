@@ -12,16 +12,32 @@ import 'routing/feature_routes.dart';
 import 'shells/member_shell.dart';
 import 'shells/coach_shell.dart';
 import '../features/identity/presentation/shared/login_screen.dart';
-import '../features/identity/presentation/shared/onboarding_screen.dart';
 import '../features/identity/presentation/shared/email_verification_screen.dart';
 import '../features/identity/presentation/member/profile_setup_screen.dart';
 import '../infrastructure/firebase/firebase_auth_gateway.dart';
+import '../infrastructure/firebase/firebase_fitness_profile_gateway.dart';
+import '../infrastructure/firebase/firebase_member_preferences_repository.dart';
+import '../infrastructure/firebase/firebase_password_actions.dart';
+import '../infrastructure/firebase/firebase_published_routine_repository.dart';
+import '../features/workout/data/published_routine.dart';
+import '../features/identity/presentation/member/fitness_profile_gate.dart';
+import '../features/identity/presentation/member/account_settings_screen.dart';
 
 class GainPathMobileApp extends StatelessWidget {
-  const GainPathMobileApp({super.key, this.authRepository, this.backendConfig});
+  const GainPathMobileApp(
+      {super.key,
+      this.authRepository,
+      this.backendConfig,
+      this.profileRepositoryFactory,
+      this.routineLoaderFactory,
+      this.memberSettingsBuilder});
 
   final AuthRepository? authRepository;
   final BackendConfig? backendConfig;
+  final FitnessProfileRepository Function(SessionScope)?
+      profileRepositoryFactory;
+  final Future<PublishedRoutine?> Function(SessionScope)? routineLoaderFactory;
+  final WidgetBuilder? memberSettingsBuilder;
 
   @override
   Widget build(BuildContext context) {
@@ -47,10 +63,16 @@ class GainPathMobileApp extends StatelessWidget {
           buildWhen: (previous, current) => previous.session != current.session,
           builder: (context, state) {
             final app = MaterialApp(
+              // Close the entry routes when identity changes in either backend.
+              key: ValueKey((state.session?.scope, state.session?.role)),
               title: 'GainPath',
               debugShowCheckedModeBanner: false,
               theme: AppTheme.build(),
-              home: _MobileAuthGate(config: config),
+              home: _MobileAuthGate(
+                  config: config,
+                  profileRepositoryFactory: profileRepositoryFactory,
+                  routineLoaderFactory: routineLoaderFactory,
+                  memberSettingsBuilder: memberSettingsBuilder),
               routes: AppRouteBuilders.builders,
               onGenerateRoute: buildFeatureRoute,
             );
@@ -68,14 +90,23 @@ class GainPathMobileApp extends StatelessWidget {
 }
 
 class _MobileAuthGate extends StatefulWidget {
-  const _MobileAuthGate({required this.config});
+  const _MobileAuthGate(
+      {required this.config,
+      this.profileRepositoryFactory,
+      this.routineLoaderFactory,
+      this.memberSettingsBuilder});
   final BackendConfig config;
+  final FitnessProfileRepository Function(SessionScope)?
+      profileRepositoryFactory;
+  final Future<PublishedRoutine?> Function(SessionScope)? routineLoaderFactory;
+  final WidgetBuilder? memberSettingsBuilder;
   @override
   State<_MobileAuthGate> createState() => _MobileAuthGateState();
 }
 
 class _MobileAuthGateState extends State<_MobileAuthGate> {
   bool _setupProfile = false;
+  FitnessProfileRepository? _profileRepository;
 
   @override
   Widget build(BuildContext context) {
@@ -90,6 +121,34 @@ class _MobileAuthGateState extends State<_MobileAuthGate> {
           allowed: const {AppRole.member, AppRole.coach},
         )) {
           if (widget.config.isFirebase) {
+            if (state.session!.role == AppRole.member) {
+              final scope = state.session!.scope;
+              if (_profileRepository?.scope != scope) {
+                _profileRepository =
+                    widget.profileRepositoryFactory?.call(scope) ??
+                        FirebaseFitnessProfileRepository(
+                            scope: scope,
+                            gateway: FlutterFitnessProfileGateway());
+              }
+              return FitnessProfileGate(
+                  key: ValueKey(scope),
+                  session: state.session!,
+                  repository: _profileRepository!,
+                  routineLoader: widget.routineLoaderFactory == null
+                      ? () => FirebasePublishedRoutineRepository(scope: scope)
+                          .load()
+                      : () => widget.routineLoaderFactory!(scope),
+                  memberSettingsBuilder: widget.memberSettingsBuilder ??
+                      (_) {
+                        final actions = FirebasePasswordActions(scope: scope);
+                        return AccountSettingsScreen(
+                          repository:
+                              FirebaseMemberPreferencesRepository(scope: scope),
+                          verifyCurrentPassword: actions.verifyCurrent,
+                          saveNewPassword: actions.saveNew,
+                        );
+                      });
+            }
             return _FirebaseIdentityReadyScreen(session: state.session!);
           }
           if (_setupProfile) return const ProfileSetupScreen();
@@ -118,147 +177,24 @@ class _MobileAuthGateState extends State<_MobileAuthGate> {
             onSignOut: () => context.read<AuthBloc>().add(const LoggedOut()),
           );
         }
-        return const _MobileLoginScreen();
-      },
-    );
-  }
-}
-
-class _MobileLoginScreen extends StatefulWidget {
-  const _MobileLoginScreen();
-
-  @override
-  State<_MobileLoginScreen> createState() => _MobileLoginScreenState();
-}
-
-class _MobileLoginScreenState extends State<_MobileLoginScreen> {
-  final _emailController = TextEditingController();
-  final _passwordController = TextEditingController();
-  AppRole _role = AppRole.member;
-
-  @override
-  void initState() {
-    super.initState();
-    context.read<AuthBloc>().add(const RoleSelected(AppRole.member));
-  }
-
-  @override
-  void dispose() {
-    _emailController.dispose();
-    _passwordController.dispose();
-    super.dispose();
-  }
-
-  void _selectRole(AppRole role) {
-    setState(() => _role = role);
-    context.read<AuthBloc>().add(RoleSelected(role));
-  }
-
-  void _submit() {
-    final bloc = context.read<AuthBloc>();
-    bloc.add(RoleSelected(_role));
-    bloc.add(
-      LoginSubmitted(
-        email: _emailController.text,
-        password: _passwordController.text,
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return BlocBuilder<AuthBloc, AuthState>(
-      builder: (context, state) {
-        final submitting = state.status == AuthStatus.submitting;
-        return Scaffold(
-          appBar: AppBar(title: const Text('GainPath Mobile')),
-          body: Center(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(24),
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 440),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Text(
-                      'Sign in to GainPath Mobile',
-                      style: Theme.of(context).textTheme.headlineSmall,
-                    ),
-                    const SizedBox(height: 8),
-                    const Text('Choose the role for this mobile session.'),
-                    const SizedBox(height: 20),
-                    Wrap(
-                      spacing: 8,
-                      children: [
-                        ChoiceChip(
-                          label: const Text('Gym Member'),
-                          selected: _role == AppRole.member,
-                          onSelected: (_) => _selectRole(AppRole.member),
-                        ),
-                        ChoiceChip(
-                          label: const Text('Fitness Coach'),
-                          selected: _role == AppRole.coach,
-                          onSelected: (_) => _selectRole(AppRole.coach),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 20),
-                    TextField(
-                      controller: _emailController,
-                      keyboardType: TextInputType.emailAddress,
-                      decoration: InputDecoration(
-                        labelText: 'Email',
-                        errorText: state.fieldErrors.email,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: _passwordController,
-                      obscureText: true,
-                      decoration: InputDecoration(
-                        labelText: 'Password',
-                        errorText: state.fieldErrors.password,
-                      ),
-                    ),
-                    if (state.message != null) ...[
-                      const SizedBox(height: 12),
-                      Text(
-                        state.message!,
-                        style: TextStyle(
-                            color: Theme.of(context).colorScheme.error),
-                      ),
-                    ],
-                    const SizedBox(height: 20),
-                    FilledButton(
-                      onPressed: submitting ? null : _submit,
-                      child: Text(submitting ? 'Signing in…' : 'Sign in'),
-                    ),
-                    TextButton(
-                        onPressed: submitting
-                            ? null
-                            : () => Navigator.push(
-                                context,
-                                MaterialPageRoute<void>(
-                                    builder: (_) => LoginScreen(
-                                        role: AppRole.member,
-                                        initiallyRegistering: true))),
-                        child: const Text('Create account')),
-                    TextButton(
-                        onPressed: () => showForgotPasswordSheet(context,
-                            initialEmail: _emailController.text),
-                        child: const Text('Forgot password?')),
-                    TextButton(
-                        onPressed: () => Navigator.push(
-                            context,
-                            MaterialPageRoute<void>(
-                                builder: (_) => const OnboardingScreen())),
-                        child: const Text('View introduction')),
-                  ],
-                ),
+        if (state.session?.role == AppRole.admin) {
+          return Scaffold(
+            body: Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text('Use the admin web console for this account.'),
+                  TextButton(
+                    onPressed: () =>
+                        context.read<AuthBloc>().add(const LoggedOut()),
+                    child: const Text('Sign out'),
+                  ),
+                ],
               ),
             ),
-          ),
-        );
+          );
+        }
+        return LoginScreen(prefillDemoPassword: !widget.config.isFirebase);
       },
     );
   }

@@ -1,13 +1,13 @@
-/// One prescribed exercise within a `RoutineDay` — deliberately just a
-/// name/sets/reps triple rather than a reference to `Exercise`, since an
-/// admin-authored template routinely calls for movements (leg press,
-/// lat pulldown, curls) outside the small pose-tracked library the AI
-/// coach demo covers; the two are related but not the same catalogue.
+/// One prescribed catalog exercise within a `RoutineDay`. The blueprint
+/// persists [exerciseId], sets, and reps; [exerciseName] is joined from the
+/// catalog for display and is never copied into the Firebase blueprint.
 class RoutineExerciseRef {
+  final String exerciseId;
   final String exerciseName;
   final int sets;
   final int reps;
-  const RoutineExerciseRef(this.exerciseName, this.sets, this.reps);
+  const RoutineExerciseRef(this.exerciseName, this.sets, this.reps,
+      {this.exerciseId = ''});
 }
 
 class RoutineDay {

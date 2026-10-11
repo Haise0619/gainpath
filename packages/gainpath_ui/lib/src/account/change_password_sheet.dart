@@ -11,7 +11,12 @@ import '../shared/shared.dart';
 /// [asDialog] renders the same steps inside a centered desktop `Dialog`
 /// instead of a bottom sheet, for the admin web console; member and coach
 /// (mobile) keep the sheet by leaving it unset.
-Future<void> showChangePasswordSheet(BuildContext context, {bool asDialog = false}) {
+Future<void> showChangePasswordSheet(
+  BuildContext context, {
+  bool asDialog = false,
+  Future<void> Function(String currentPassword)? verifyCurrent,
+  Future<void> Function(String newPassword)? saveNew,
+}) {
   if (asDialog) {
     return showDialog(
       context: context,
@@ -19,7 +24,8 @@ Future<void> showChangePasswordSheet(BuildContext context, {bool asDialog = fals
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 420),
-          child: const _ChangePasswordSheet(asDialog: true),
+          child: _ChangePasswordSheet(
+              asDialog: true, verifyCurrent: verifyCurrent, saveNew: saveNew),
         ),
       ),
     );
@@ -28,13 +34,17 @@ Future<void> showChangePasswordSheet(BuildContext context, {bool asDialog = fals
     context: context,
     isScrollControlled: true,
     backgroundColor: Colors.transparent,
-    builder: (_) => const _ChangePasswordSheet(),
+    builder: (_) =>
+        _ChangePasswordSheet(verifyCurrent: verifyCurrent, saveNew: saveNew),
   );
 }
 
 class _ChangePasswordSheet extends StatefulWidget {
   final bool asDialog;
-  const _ChangePasswordSheet({this.asDialog = false});
+  final Future<void> Function(String)? verifyCurrent;
+  final Future<void> Function(String)? saveNew;
+  const _ChangePasswordSheet(
+      {this.asDialog = false, this.verifyCurrent, this.saveNew});
 
   @override
   State<_ChangePasswordSheet> createState() => _ChangePasswordSheetState();
@@ -70,27 +80,51 @@ class _ChangePasswordSheetState extends State<_ChangePasswordSheet> {
       _checking = true;
       _currentError = null;
     });
-    await Future.delayed(const Duration(milliseconds: 500));
-    if (!mounted) return;
-    if (_current.text != _actualPassword) {
+    try {
+      if (widget.verifyCurrent != null) {
+        await widget.verifyCurrent!(_current.text);
+      } else {
+        await Future.delayed(const Duration(milliseconds: 500));
+        if (_current.text != _actualPassword) {
+          throw StateError('That password is incorrect. Try again.');
+        }
+      }
+    } catch (error) {
+      if (!mounted) return;
       setState(() {
         _checking = false;
-        _currentError = 'That password is incorrect. Try again.';
+        _currentError = error is StateError ? error.message : error.toString();
       });
       return;
     }
+    if (!mounted) return;
     setState(() {
       _checking = false;
       _step = 1;
     });
   }
 
-  void _save() {
+  Future<void> _save() async {
     setState(() {
       _nextError = _next.text.length < 8 ? 'Use at least 8 characters.' : null;
-      _confirmError = _confirm.text != _next.text ? 'Passwords do not match.' : null;
+      _confirmError =
+          _confirm.text != _next.text ? 'Passwords do not match.' : null;
     });
     if (_nextError != null || _confirmError != null) return;
+    if (widget.saveNew != null) {
+      setState(() => _checking = true);
+      try {
+        await widget.saveNew!(_next.text);
+      } catch (error) {
+        if (!mounted) return;
+        setState(() {
+          _checking = false;
+          _nextError = error.toString();
+        });
+        return;
+      }
+      if (!mounted) return;
+    }
     Navigator.pop(context);
     showToast(context, 'Password updated.');
   }
@@ -99,7 +133,9 @@ class _ChangePasswordSheetState extends State<_ChangePasswordSheet> {
   Widget build(BuildContext context) {
     final content = Container(
       decoration: widget.asDialog
-          ? const BoxDecoration(color: AppColors.surface, borderRadius: BorderRadius.all(Radius.circular(20)))
+          ? const BoxDecoration(
+              color: AppColors.surface,
+              borderRadius: BorderRadius.all(Radius.circular(20)))
           : const BoxDecoration(
               color: AppColors.surface,
               borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
@@ -115,20 +151,26 @@ class _ChangePasswordSheetState extends State<_ChangePasswordSheet> {
                 width: 40,
                 height: 4,
                 margin: const EdgeInsets.only(bottom: 18),
-                decoration:
-                    BoxDecoration(color: AppColors.hairline, borderRadius: BorderRadius.circular(999)),
+                decoration: BoxDecoration(
+                    color: AppColors.hairline,
+                    borderRadius: BorderRadius.circular(999)),
               ),
             ),
           Row(
             children: [
               Icon(
-                _step == 0 ? Icons.lock_outline_rounded : Icons.password_rounded,
+                _step == 0
+                    ? Icons.lock_outline_rounded
+                    : Icons.password_rounded,
                 color: AppColors.primary,
                 size: 20,
               ),
               const SizedBox(width: 8),
               Text('Step ${_step + 1} of 2',
-                  style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: AppColors.inkSoft)),
+                  style: const TextStyle(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.inkSoft)),
             ],
           ),
           const SizedBox(height: 8),
@@ -136,7 +178,8 @@ class _ChangePasswordSheetState extends State<_ChangePasswordSheet> {
             duration: const Duration(milliseconds: 240),
             transitionBuilder: (child, anim) => FadeTransition(
               opacity: anim,
-              child: SizeTransition(sizeFactor: anim, axisAlignment: -1, child: child),
+              child: SizeTransition(
+                  sizeFactor: anim, axisAlignment: -1, child: child),
             ),
             child: _step == 0 ? _currentStep(context) : _newStep(context),
           ),
@@ -147,7 +190,8 @@ class _ChangePasswordSheetState extends State<_ChangePasswordSheet> {
     if (widget.asDialog) return content;
 
     return Padding(
-      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+      padding:
+          EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
       child: SafeArea(top: false, child: content),
     );
   }
@@ -158,7 +202,11 @@ class _ChangePasswordSheetState extends State<_ChangePasswordSheet> {
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Confirm your current password', style: Theme.of(context).textTheme.headlineMedium?.copyWith(fontSize: 22)),
+        Text('Confirm your current password',
+            style: Theme.of(context)
+                .textTheme
+                .headlineMedium
+                ?.copyWith(fontSize: 22)),
         const SizedBox(height: 6),
         Text('This confirms it is really you before we let you set a new one.',
             style: Theme.of(context).textTheme.bodyLarge),
@@ -179,7 +227,10 @@ class _ChangePasswordSheetState extends State<_ChangePasswordSheet> {
           onPressed: _checking ? null : _confirmCurrent,
           child: _checking
               ? const SizedBox(
-                  width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2.4, color: Colors.white))
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(
+                      strokeWidth: 2.4, color: Colors.white))
               : const Text('Confirm'),
         ),
       ],
@@ -192,9 +243,14 @@ class _ChangePasswordSheetState extends State<_ChangePasswordSheet> {
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Set a new password', style: Theme.of(context).textTheme.headlineMedium?.copyWith(fontSize: 22)),
+        Text('Set a new password',
+            style: Theme.of(context)
+                .textTheme
+                .headlineMedium
+                ?.copyWith(fontSize: 22)),
         const SizedBox(height: 6),
-        Text('Choose something you have not used before.', style: Theme.of(context).textTheme.bodyLarge),
+        Text('Choose something you have not used before.',
+            style: Theme.of(context).textTheme.bodyLarge),
         const SizedBox(height: 18),
         TextField(
           controller: _next,
@@ -210,7 +266,8 @@ class _ChangePasswordSheetState extends State<_ChangePasswordSheet> {
         if (_next.text.isNotEmpty)
           Padding(
             padding: const EdgeInsets.only(top: 10),
-            child: PasswordStrengthMeter(strength: passwordStrengthOf(_next.text)),
+            child:
+                PasswordStrengthMeter(strength: passwordStrengthOf(_next.text)),
           ),
         const SizedBox(height: 14),
         TextField(
@@ -224,8 +281,14 @@ class _ChangePasswordSheetState extends State<_ChangePasswordSheet> {
         ),
         const SizedBox(height: 16),
         FilledButton(
-          onPressed: _save,
-          child: const Text('Save new password'),
+          onPressed: _checking ? null : _save,
+          child: _checking
+              ? const SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(
+                      strokeWidth: 2.4, color: Colors.white))
+              : const Text('Save new password'),
         ),
       ],
     );

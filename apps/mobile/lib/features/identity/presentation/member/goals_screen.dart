@@ -2,16 +2,27 @@ import 'package:flutter/material.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:gainpath_domain/identity.dart';
+import 'package:gainpath_domain/gainpath_domain.dart'
+    show FitnessGoal, FitnessProfile;
+import 'package:gainpath_identity/gainpath_identity.dart'
+    show FitnessProfileCubit;
+import 'save_live_profile.dart';
 
 class GoalsScreen extends StatefulWidget {
-  const GoalsScreen({super.key});
+  const GoalsScreen({super.key, this.liveProfile, this.liveCubit});
+  final FitnessProfile? liveProfile;
+  final FitnessProfileCubit? liveCubit;
 
   @override
   State<GoalsScreen> createState() => _GoalsScreenState();
 }
 
 class _GoalsScreenState extends State<GoalsScreen> {
-  late final Set<String> _focus = {...context.read<MemberProfileRepository>().memberTrainingFocus};
+  late final Set<String> _focus = {
+    ...?widget.liveProfile?.goals.map((goal) => goal.label),
+    if (widget.liveProfile == null)
+      ...context.read<MemberProfileRepository>().memberTrainingFocus,
+  };
   final List<List<String>> _targets = [
     ['Train 4 times per week', 'Frequency'],
     ['Reach 85% average form', 'Technique'],
@@ -34,7 +45,8 @@ class _GoalsScreenState extends State<GoalsScreen> {
       body: PageBody(
         children: [
           const Eyebrow('Training focus'),
-          Text('Pick as many as apply. This shapes your recommended routines and content.',
+          Text(
+              'Pick as many as apply. This shapes your recommended routines and content.',
               style: Theme.of(context).textTheme.bodyMedium),
           const SizedBox(height: 12),
           GridView.count(
@@ -52,53 +64,70 @@ class _GoalsScreenState extends State<GoalsScreen> {
                 icon: icon,
                 label: label,
                 selected: selected,
-                onTap: () => setState(() => selected ? _focus.remove(label) : _focus.add(label)),
+                onTap: () => setState(
+                    () => selected ? _focus.remove(label) : _focus.add(label)),
               );
             }).toList(),
           ),
-          const SizedBox(height: 24),
-          const Eyebrow('Specific targets'),
-          Text('Measurable goals, tracked against your actuals on the Progress tab.',
-              style: Theme.of(context).textTheme.bodyMedium),
-          const SizedBox(height: 12),
-          ..._targets.map((g) => Padding(
-                padding: const EdgeInsets.only(bottom: 10),
-                child: Panel(
-                  child: Row(
-                    children: [
-                      const Icon(Icons.flag_rounded,
-                          color: AppColors.primary, size: 20),
-                      const SizedBox(width: 14),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(g[0],
-                                style:
-                                    Theme.of(context).textTheme.titleMedium),
-                            Text(g[1],
-                                style: Theme.of(context).textTheme.bodyMedium),
-                          ],
+          if (widget.liveProfile == null) ...[
+            const SizedBox(height: 24),
+            const Eyebrow('Specific targets'),
+            Text(
+                'Measurable goals, tracked against your actuals on the Progress tab.',
+                style: Theme.of(context).textTheme.bodyMedium),
+            const SizedBox(height: 12),
+            ..._targets.map((g) => Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: Panel(
+                    child: Row(
+                      children: [
+                        const Icon(Icons.flag_rounded,
+                            color: AppColors.primary, size: 20),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(g[0],
+                                  style:
+                                      Theme.of(context).textTheme.titleMedium),
+                              Text(g[1],
+                                  style:
+                                      Theme.of(context).textTheme.bodyMedium),
+                            ],
+                          ),
                         ),
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.delete_outline_rounded, size: 19),
-                        onPressed: () => setState(() => _targets.remove(g)),
-                      ),
-                    ],
+                        IconButton(
+                          icon: const Icon(Icons.delete_outline_rounded,
+                              size: 19),
+                          onPressed: () => setState(() => _targets.remove(g)),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-              )),
-          OutlinedButton.icon(
-            onPressed: () => showToast(context, 'Goal added.'),
-            icon: const Icon(Icons.add_rounded, size: 20),
-            label: const Text('Add a goal'),
-          ),
+                )),
+            OutlinedButton.icon(
+              onPressed: () => showToast(context, 'Goal added.'),
+              icon: const Icon(Icons.add_rounded, size: 20),
+              label: const Text('Add a goal'),
+            ),
+          ],
           const SizedBox(height: 20),
           FilledButton(
-            onPressed: () {
+            onPressed: () async {
               if (_focus.isEmpty) {
                 showToast(context, 'Pick at least one training focus.');
+                return;
+              }
+              if (widget.liveCubit != null) {
+                await saveLiveProfile(
+                    context,
+                    widget.liveCubit!,
+                    widget.liveProfile!.copyWith(
+                      goals: FitnessGoal.values
+                          .where((goal) => _focus.contains(goal.label))
+                          .toSet(),
+                    ));
                 return;
               }
               Navigator.pop(context);

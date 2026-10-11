@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:gainpath_identity/gainpath_identity.dart';
-import '../../../../navigation/auth_navigation.dart';
 import 'package:gainpath_domain/identity.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
 import '../../../../navigation/feature_navigation.dart';
@@ -128,7 +127,6 @@ class _CoachAccountScreenState extends State<CoachAccountScreen> {
         destructive: true);
     if (ok && mounted) {
       context.read<AuthBloc>().add(const LoggedOut());
-    Navigator.pushNamedAndRemoveUntil(context, AppRoutes.roleSelect, (r) => false);
     }
   }
 

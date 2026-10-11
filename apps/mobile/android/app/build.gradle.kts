@@ -26,7 +26,7 @@ android {
         applicationId = "com.zyang.gainpath"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
-        minSdk = flutter.minSdkVersion
+        minSdk = 26 // tflite_flutter Android runtime requirement
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
@@ -43,4 +43,10 @@ android {
 
 flutter {
     source = "../.."
+}
+
+dependencies {
+    // Same artifacts already supplied by tflite_flutter 0.12.1; no runtime upgrade.
+    implementation("com.google.ai.edge.litert:litert:1.4.0")
+    implementation("com.google.ai.edge.litert:litert-gpu:1.4.0")
 }

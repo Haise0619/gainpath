@@ -2,20 +2,36 @@ import 'package:flutter/material.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:gainpath_domain/identity.dart';
+import 'package:gainpath_domain/gainpath_domain.dart'
+    show FitnessProfile, TrainingExperience;
+import 'package:gainpath_identity/gainpath_identity.dart'
+    show FitnessProfileCubit;
+import 'save_live_profile.dart';
 
 class ExperienceLevelScreen extends StatefulWidget {
-  const ExperienceLevelScreen({super.key});
+  const ExperienceLevelScreen({super.key, this.liveProfile, this.liveCubit});
+  final FitnessProfile? liveProfile;
+  final FitnessProfileCubit? liveCubit;
 
   @override
   State<ExperienceLevelScreen> createState() => _ExperienceLevelScreenState();
 }
 
 class _ExperienceLevelScreenState extends State<ExperienceLevelScreen> {
-  late String _level = context.read<MemberProfileRepository>().memberExperience;
+  late String _level = widget.liveProfile?.experience.label ??
+      context.read<MemberProfileRepository>().memberExperience;
 
   static const _options = [
-    ['Beginner', 'New to lifting, or returning after a long break', Icons.spa_outlined],
-    ['Intermediate', 'Comfortable with the main lifts', Icons.trending_up_rounded],
+    [
+      'Beginner',
+      'New to lifting, or returning after a long break',
+      Icons.spa_outlined
+    ],
+    [
+      'Intermediate',
+      'Comfortable with the main lifts',
+      Icons.trending_up_rounded
+    ],
     ['Advanced', 'Years of consistent training', Icons.military_tech_outlined],
   ];
 
@@ -40,7 +56,17 @@ class _ExperienceLevelScreenState extends State<ExperienceLevelScreen> {
               )),
           const SizedBox(height: 8),
           FilledButton(
-            onPressed: () {
+            onPressed: () async {
+              if (widget.liveCubit != null) {
+                await saveLiveProfile(
+                    context,
+                    widget.liveCubit!,
+                    widget.liveProfile!.copyWith(
+                      experience: TrainingExperience.values
+                          .firstWhere((value) => value.label == _level),
+                    ));
+                return;
+              }
               Navigator.pop(context);
               showToast(context, 'Experience level set to $_level.');
             },

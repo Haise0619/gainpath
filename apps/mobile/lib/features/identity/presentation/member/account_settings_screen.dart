@@ -1,8 +1,18 @@
 import 'package:flutter/material.dart';
+import '../../../../app/unavailable_action.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
+import 'package:gainpath_domain/gainpath_domain.dart';
 
 class AccountSettingsScreen extends StatefulWidget {
-  const AccountSettingsScreen({super.key});
+  const AccountSettingsScreen(
+      {super.key,
+      this.repository,
+      this.verifyCurrentPassword,
+      this.saveNewPassword});
+
+  final MemberPreferencesRepository? repository;
+  final Future<void> Function(String)? verifyCurrentPassword;
+  final Future<void> Function(String)? saveNewPassword;
 
   @override
   State<AccountSettingsScreen> createState() => _AccountSettingsScreenState();
@@ -12,104 +22,210 @@ class _AccountSettingsScreenState extends State<AccountSettingsScreen> {
   bool _push = true;
   bool _email = false;
   bool _voice = true;
+  bool _loading = false;
+  bool _saving = false;
+  String? _loadError;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.repository != null) _load();
+  }
+
+  Future<void> _load() async {
+    setState(() {
+      _loading = true;
+      _loadError = null;
+    });
+    try {
+      final value = await widget.repository!.load();
+      if (!mounted) return;
+      setState(() {
+        _push = value.pushNotifications;
+        _email = value.emailUpdates;
+        _voice = value.voiceCoaching;
+        _loading = false;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _loadError = error is MemberPreferencesException
+            ? error.message
+            : 'Could not load settings. Please retry.';
+      });
+    }
+  }
+
+  Future<void> _change(MemberPreferences next) async {
+    if (_saving) return;
+    setState(() => _saving = true);
+    try {
+      await widget.repository!.save(next);
+      if (!mounted) return;
+      setState(() {
+        _push = next.pushNotifications;
+        _email = next.emailUpdates;
+        _voice = next.voiceCoaching;
+        _saving = false;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _saving = false);
+      showToast(
+          context,
+          error is MemberPreferencesException
+              ? error.message
+              : 'Could not save settings. Please retry.');
+    }
+  }
+
+  MemberPreferences get _current => MemberPreferences(
+      pushNotifications: _push, emailUpdates: _email, voiceCoaching: _voice);
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Settings')),
-      body: PageBody(
-        children: [
-          const Eyebrow('Notifications'),
-          Panel(
-            padding: EdgeInsets.zero,
-            child: Column(
-              children: [
-                SwitchListTile(
-                  value: _push,
-                  onChanged: (v) => setState(() => _push = v),
-                  title: const Text('Push notifications'),
-                  subtitle: const Text('Session reminders and streak alerts'),
+      body: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : _loadError != null
+              ? Center(
+                  child: Column(mainAxisSize: MainAxisSize.min, children: [
+                  Text(_loadError!, textAlign: TextAlign.center),
+                  const SizedBox(height: 12),
+                  FilledButton(onPressed: _load, child: const Text('Retry'))
+                ]))
+              : PageBody(
+                  children: [
+                    const Eyebrow('Notifications'),
+                    if (widget.repository != null) ...[
+                      const Text(
+                          'Your choices are saved. Notification delivery and voice coaching are not active yet.'),
+                      const SizedBox(height: 12),
+                    ],
+                    Panel(
+                      padding: EdgeInsets.zero,
+                      child: Column(
+                        children: [
+                          SwitchListTile(
+                            value: _push,
+                            onChanged: _saving
+                                ? null
+                                : (v) => widget.repository == null
+                                    ? setState(() => _push = v)
+                                    : _change(_current.copyWith(
+                                        pushNotifications: v)),
+                            title: const Text('Push notifications'),
+                            subtitle: const Text(
+                                'Session reminders and streak alerts'),
+                          ),
+                          const Divider(height: 1),
+                          SwitchListTile(
+                            value: _email,
+                            onChanged: _saving
+                                ? null
+                                : (v) => widget.repository == null
+                                    ? setState(() => _email = v)
+                                    : _change(
+                                        _current.copyWith(emailUpdates: v)),
+                            title: const Text('Email updates'),
+                            subtitle: const Text('Weekly progress summary'),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 18),
+                    const Eyebrow('Workout'),
+                    Panel(
+                      padding: EdgeInsets.zero,
+                      child: SwitchListTile(
+                        value: _voice,
+                        onChanged: _saving
+                            ? null
+                            : (v) => widget.repository == null
+                                ? setState(() => _voice = v)
+                                : _change(_current.copyWith(voiceCoaching: v)),
+                        title: const Text('Voice coaching'),
+                        subtitle:
+                            const Text('Spoken cues during tracked sessions'),
+                      ),
+                    ),
+                    const SizedBox(height: 18),
+                    const Eyebrow('Security'),
+                    Panel(
+                      padding: EdgeInsets.zero,
+                      child: Column(
+                        children: [
+                          ListTile(
+                            leading: const Icon(Icons.lock_outline_rounded),
+                            title: const Text('Change password'),
+                            trailing: const Icon(
+                                Icons.arrow_forward_ios_rounded,
+                                size: 14),
+                            onTap: () {
+                              if (widget.repository != null &&
+                                  (widget.verifyCurrentPassword == null ||
+                                      widget.saveNewPassword == null)) {
+                                showUnavailable(context);
+                                return;
+                              }
+                              showChangePasswordSheet(context,
+                                  verifyCurrent: widget.verifyCurrentPassword,
+                                  saveNew: widget.saveNewPassword);
+                            },
+                          ),
+                          const Divider(height: 1),
+                          ListTile(
+                            leading: const Icon(Icons.privacy_tip_outlined),
+                            title: const Text('Privacy and data'),
+                            trailing: const Icon(
+                                Icons.arrow_forward_ios_rounded,
+                                size: 14),
+                            onTap: () => widget.repository == null
+                                ? showToast(context, 'Privacy settings.')
+                                : showUnavailable(context),
+                          ),
+                        ],
+                      ),
+                    ),
+                    if (widget.repository == null) ...[
+                      const SizedBox(height: 18),
+                      Panel(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('Deactivate account',
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .titleMedium
+                                    ?.copyWith(color: AppColors.danger)),
+                            const SizedBox(height: 6),
+                            Text(
+                              'Your account is held for 30 days before everything is permanently '
+                              'deleted. You can sign back in during that window to keep it.',
+                              style: Theme.of(context).textTheme.bodyMedium,
+                            ),
+                            const SizedBox(height: 14),
+                            OutlinedButton(
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: AppColors.danger,
+                                minimumSize: const Size(0, 44),
+                              ),
+                              onPressed: () => confirmSheet(context,
+                                  title: 'Deactivate your account?',
+                                  message:
+                                      'Access stops immediately. Everything is deleted for good after 30 days.',
+                                  confirmLabel: 'Deactivate',
+                                  destructive: true),
+                              child: const Text('Deactivate account'),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
-                const Divider(height: 1),
-                SwitchListTile(
-                  value: _email,
-                  onChanged: (v) => setState(() => _email = v),
-                  title: const Text('Email updates'),
-                  subtitle: const Text('Weekly progress summary'),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 18),
-          const Eyebrow('Workout'),
-          Panel(
-            padding: EdgeInsets.zero,
-            child: SwitchListTile(
-              value: _voice,
-              onChanged: (v) => setState(() => _voice = v),
-              title: const Text('Voice coaching'),
-              subtitle: const Text('Spoken cues during tracked sessions'),
-            ),
-          ),
-          const SizedBox(height: 18),
-          const Eyebrow('Security'),
-          Panel(
-            padding: EdgeInsets.zero,
-            child: Column(
-              children: [
-                ListTile(
-                  leading: const Icon(Icons.lock_outline_rounded),
-                  title: const Text('Change password'),
-                  trailing:
-                      const Icon(Icons.arrow_forward_ios_rounded, size: 14),
-                  onTap: () => showChangePasswordSheet(context),
-                ),
-                const Divider(height: 1),
-                ListTile(
-                  leading: const Icon(Icons.privacy_tip_outlined),
-                  title: const Text('Privacy and data'),
-                  trailing:
-                      const Icon(Icons.arrow_forward_ios_rounded, size: 14),
-                  onTap: () => showToast(context, 'Privacy settings.'),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 18),
-          Panel(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Deactivate account',
-                    style: Theme.of(context)
-                        .textTheme
-                        .titleMedium
-                        ?.copyWith(color: AppColors.danger)),
-                const SizedBox(height: 6),
-                Text(
-                  'Your account is held for 30 days before everything is permanently '
-                  'deleted. You can sign back in during that window to keep it.',
-                  style: Theme.of(context).textTheme.bodyMedium,
-                ),
-                const SizedBox(height: 14),
-                OutlinedButton(
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: AppColors.danger,
-                    minimumSize: const Size(0, 44),
-                  ),
-                  onPressed: () => confirmSheet(context,
-                      title: 'Deactivate your account?',
-                      message:
-                          'Access stops immediately. Everything is deleted for good after 30 days.',
-                      confirmLabel: 'Deactivate',
-                      destructive: true),
-                  child: const Text('Deactivate account'),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
     );
   }
 }

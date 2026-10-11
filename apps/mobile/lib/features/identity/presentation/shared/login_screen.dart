@@ -4,6 +4,7 @@ import 'package:gainpath_identity/gainpath_identity.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
 import 'package:gainpath_domain/gainpath_domain.dart' show AppRole;
+import 'onboarding_screen.dart';
 
 /// AD-M1.1 / AD-M8.1 / AD-M11.1 — Login and Recovery.
 ///
@@ -12,10 +13,16 @@ import 'package:gainpath_domain/gainpath_domain.dart' show AppRole;
 /// branded split layout, per the design direction's platform note for
 /// AD-M11.1.
 class LoginScreen extends StatefulWidget {
-  final AppRole role;
-  const LoginScreen({super.key, required this.role, this.initiallyRegistering = false, this.initialEmail = ''});
+  final AppRole? role;
+  const LoginScreen(
+      {super.key,
+      this.role,
+      this.initiallyRegistering = false,
+      this.initialEmail = '',
+      this.prefillDemoPassword = true});
   final bool initiallyRegistering;
   final String initialEmail;
+  final bool prefillDemoPassword;
 
   @override
   State<LoginScreen> createState() => _LoginScreenState();
@@ -24,8 +31,8 @@ class LoginScreen extends StatefulWidget {
 class _LoginScreenState extends State<LoginScreen> {
   late final TextEditingController _email;
   final _name = TextEditingController();
-  final _password = TextEditingController(text: 'demo1234');
-  final _confirm = TextEditingController(text: 'demo1234');
+  late final TextEditingController _password;
+  late final TextEditingController _confirm;
 
   bool _obscure = true;
   bool _obscureConfirm = true;
@@ -37,17 +44,25 @@ class _LoginScreenState extends State<LoginScreen> {
   String? _emailError;
   String? _passwordError;
   String? _confirmError;
+  String? _message;
 
   @override
   void initState() {
     super.initState();
     _registering = widget.initiallyRegistering;
     _email = TextEditingController(text: widget.initialEmail);
-    context.read<AuthBloc>().add(RoleSelected(widget.role));
+    final demoPassword = widget.prefillDemoPassword ? 'demo1234' : '';
+    _password = TextEditingController(text: demoPassword);
+    _confirm = TextEditingController(text: demoPassword);
+    if (widget.role != null) {
+      context.read<AuthBloc>().add(RoleSelected(widget.role!));
+    }
   }
 
   String get _roleLabel {
     switch (widget.role) {
+      case null:
+        return 'Member or coach';
       case AppRole.member:
         return 'Gym Member';
       case AppRole.coach:
@@ -66,16 +81,16 @@ class _LoginScreenState extends State<LoginScreen> {
     super.dispose();
   }
 
-
   void _submit() {
+    setState(() => _message = null);
     context.read<AuthBloc>().add(LoginSubmitted(
-      email: _email.text,
-      password: _password.text,
-      name: _name.text,
-      confirm: _confirm.text,
-      registering: _registering,
-      agreedTerms: _agreeTerms,
-    ));
+          email: _email.text,
+          password: _password.text,
+          name: _name.text,
+          confirm: _confirm.text,
+          registering: _registering,
+          agreedTerms: _agreeTerms,
+        ));
   }
 
   void _onAuthChanged(BuildContext context, AuthState auth) {
@@ -85,14 +100,15 @@ class _LoginScreenState extends State<LoginScreen> {
       _emailError = auth.fieldErrors.email;
       _passwordError = auth.fieldErrors.password;
       _confirmError = auth.fieldErrors.confirm;
+      _message = auth.message;
     });
-    if (auth.message != null) showToast(context, auth.message!);
     // The session-scoped application root owns authenticated navigation.
   }
 
   void _recover() {
     showForgotPasswordSheet(context,
-        initialEmail: _email.text.trim(), asDialog: kIsWeb && widget.role == AppRole.admin);
+        initialEmail: _email.text.trim(),
+        asDialog: kIsWeb && widget.role == AppRole.admin);
   }
 
   void _toggleMode() {
@@ -102,6 +118,7 @@ class _LoginScreenState extends State<LoginScreen> {
       _emailError = null;
       _passwordError = null;
       _confirmError = null;
+      _message = null;
     });
   }
 
@@ -146,7 +163,8 @@ class _LoginScreenState extends State<LoginScreen> {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.start,
-                    children: _formChildren(context, dense: true, inSheet: false),
+                    children:
+                        _formChildren(context, dense: true, inSheet: false),
                   ),
                 ),
               ),
@@ -163,7 +181,8 @@ class _LoginScreenState extends State<LoginScreen> {
               Expanded(
                 flex: 5,
                 child: Container(
-                  decoration: const BoxDecoration(gradient: AppColors.heroGradient),
+                  decoration:
+                      const BoxDecoration(gradient: AppColors.heroGradient),
                   padding: const EdgeInsets.all(56),
                   child: const _AdminBrandPanel(),
                 ),
@@ -205,7 +224,7 @@ class _LoginScreenState extends State<LoginScreen> {
             bottom: false,
             child: Column(
               children: [
-                if (widget.role == AppRole.member)
+                if (widget.role != AppRole.coach)
                   const SizedBox(height: 20)
                 else
                   Padding(
@@ -220,7 +239,8 @@ class _LoginScreenState extends State<LoginScreen> {
                             onTap: () => Navigator.pop(context),
                             child: const Padding(
                               padding: EdgeInsets.all(8),
-                              child: Icon(Icons.arrow_back_rounded, color: Colors.white, size: 20),
+                              child: Icon(Icons.arrow_back_rounded,
+                                  color: Colors.white, size: 20),
                             ),
                           ),
                         ),
@@ -238,10 +258,13 @@ class _LoginScreenState extends State<LoginScreen> {
                         decoration: BoxDecoration(
                           color: Colors.white.withValues(alpha: 0.16),
                           borderRadius: BorderRadius.circular(16),
-                          border: Border.all(color: Colors.white.withValues(alpha: 0.28)),
+                          border: Border.all(
+                              color: Colors.white.withValues(alpha: 0.28)),
                         ),
                         child: Icon(
-                          widget.role == AppRole.coach ? Icons.sports_rounded : Icons.fitness_center_rounded,
+                          widget.role == AppRole.coach
+                              ? Icons.sports_rounded
+                              : Icons.fitness_center_rounded,
                           color: AppColors.overlay,
                           size: 26,
                         ),
@@ -251,8 +274,13 @@ class _LoginScreenState extends State<LoginScreen> {
                         child: Text(
                           _registering ? 'Create account' : 'Welcome\nback',
                           maxLines: _registering ? 1 : 2,
-                          overflow: _registering ? TextOverflow.ellipsis : TextOverflow.visible,
-                          style: Theme.of(context).textTheme.displaySmall?.copyWith(
+                          overflow: _registering
+                              ? TextOverflow.ellipsis
+                              : TextOverflow.visible,
+                          style: Theme.of(context)
+                              .textTheme
+                              .displaySmall
+                              ?.copyWith(
                                 color: Colors.white,
                                 fontSize: _registering ? 21 : 26,
                                 height: 1.15,
@@ -267,11 +295,13 @@ class _LoginScreenState extends State<LoginScreen> {
                     width: double.infinity,
                     decoration: const BoxDecoration(
                       color: AppColors.bg,
-                      borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+                      borderRadius:
+                          BorderRadius.vertical(top: Radius.circular(28)),
                     ),
                     child: ListView(
                       padding: const EdgeInsets.fromLTRB(24, 24, 24, 32),
-                      children: _formChildren(context, dense: false, inSheet: true),
+                      children:
+                          _formChildren(context, dense: false, inSheet: true),
                     ),
                   ),
                 ),
@@ -283,7 +313,8 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
-  List<Widget> _formChildren(BuildContext context, {required bool dense, required bool inSheet}) {
+  List<Widget> _formChildren(BuildContext context,
+      {required bool dense, required bool inSheet}) {
     return [
       Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -294,10 +325,14 @@ class _LoginScreenState extends State<LoginScreen> {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.person_rounded, size: 15, color: AppColors.primary),
+            const Icon(Icons.person_rounded,
+                size: 15, color: AppColors.primary),
             const SizedBox(width: 6),
             Text(_roleLabel,
-                style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: AppColors.primary)),
+                style: const TextStyle(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.primary)),
           ],
         ),
       ),
@@ -349,7 +384,11 @@ class _LoginScreenState extends State<LoginScreen> {
           prefixIcon: const Icon(Icons.lock_outline_rounded, size: 20),
           errorText: _passwordError,
           suffixIcon: IconButton(
-            icon: Icon(_obscure ? Icons.visibility_off_rounded : Icons.visibility_rounded, size: 20),
+            icon: Icon(
+                _obscure
+                    ? Icons.visibility_off_rounded
+                    : Icons.visibility_rounded,
+                size: 20),
             onPressed: () => setState(() => _obscure = !_obscure),
           ),
         ),
@@ -358,7 +397,8 @@ class _LoginScreenState extends State<LoginScreen> {
         show: _registering && _password.text.isNotEmpty,
         child: Padding(
           padding: const EdgeInsets.only(top: 10),
-          child: PasswordStrengthMeter(strength: passwordStrengthOf(_password.text)),
+          child: PasswordStrengthMeter(
+              strength: passwordStrengthOf(_password.text)),
         ),
       ),
       _animatedField(
@@ -373,8 +413,13 @@ class _LoginScreenState extends State<LoginScreen> {
               prefixIcon: const Icon(Icons.lock_outline_rounded, size: 20),
               errorText: _confirmError,
               suffixIcon: IconButton(
-                icon: Icon(_obscureConfirm ? Icons.visibility_off_rounded : Icons.visibility_rounded, size: 20),
-                onPressed: () => setState(() => _obscureConfirm = !_obscureConfirm),
+                icon: Icon(
+                    _obscureConfirm
+                        ? Icons.visibility_off_rounded
+                        : Icons.visibility_rounded,
+                    size: 20),
+                onPressed: () =>
+                    setState(() => _obscureConfirm = !_obscureConfirm),
               ),
             ),
           ),
@@ -404,16 +449,23 @@ class _LoginScreenState extends State<LoginScreen> {
                     padding: const EdgeInsets.only(top: 12),
                     child: Text.rich(
                       TextSpan(
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontSize: 12.5),
+                        style: Theme.of(context)
+                            .textTheme
+                            .bodyMedium
+                            ?.copyWith(fontSize: 12.5),
                         children: const [
                           TextSpan(text: 'I agree to the '),
                           TextSpan(
                               text: 'Terms of Service',
-                              style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.w700)),
+                              style: TextStyle(
+                                  color: AppColors.primary,
+                                  fontWeight: FontWeight.w700)),
                           TextSpan(text: ' and '),
                           TextSpan(
                               text: 'Privacy Policy',
-                              style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.w700)),
+                              style: TextStyle(
+                                  color: AppColors.primary,
+                                  fontWeight: FontWeight.w700)),
                           TextSpan(text: '.'),
                         ],
                       ),
@@ -429,17 +481,27 @@ class _LoginScreenState extends State<LoginScreen> {
         const SizedBox(height: 4),
         Align(
           alignment: Alignment.centerRight,
-          child: TextButton(onPressed: _recover, child: const Text('Forgot password?')),
+          child: TextButton(
+              onPressed: _recover, child: const Text('Forgot password?')),
         ),
       ],
       const SizedBox(height: 14),
+      if (_message != null) ...[
+        Semantics(
+          liveRegion: true,
+          child: Text(_message!,
+              style: TextStyle(color: Theme.of(context).colorScheme.error)),
+        ),
+        const SizedBox(height: 12),
+      ],
       FilledButton(
         onPressed: _submitting ? null : () => _submit(),
         child: _submitting
             ? const SizedBox(
                 width: 20,
                 height: 20,
-                child: CircularProgressIndicator(strokeWidth: 2.4, color: Colors.white),
+                child: CircularProgressIndicator(
+                    strokeWidth: 2.4, color: Colors.white),
               )
             : Text(_registering ? 'Create account' : 'Sign in'),
       ),
@@ -450,7 +512,11 @@ class _LoginScreenState extends State<LoginScreen> {
             const Expanded(child: Divider()),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12),
-              child: Text('or continue with', style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontSize: 12)),
+              child: Text('or continue with',
+                  style: Theme.of(context)
+                      .textTheme
+                      .bodyMedium
+                      ?.copyWith(fontSize: 12)),
             ),
             const Expanded(child: Divider()),
           ],
@@ -461,37 +527,48 @@ class _LoginScreenState extends State<LoginScreen> {
             Expanded(
               child: _SocialButton(
                 label: 'Google',
-                onTap: () => showToast(context, 'Social sign-in is not part of this prototype.'),
+                onTap: () => showToast(
+                    context, 'Social sign-in is not part of this prototype.'),
                 child: const Text('G',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: AppColors.primary)),
+                    style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                        color: AppColors.primary)),
               ),
             ),
             const SizedBox(width: 12),
             Expanded(
               child: _SocialButton(
                 label: 'Apple',
-                onTap: () => showToast(context, 'Social sign-in is not part of this prototype.'),
-                child: const Icon(Icons.apple_rounded, size: 20, color: AppColors.ink),
+                onTap: () => showToast(
+                    context, 'Social sign-in is not part of this prototype.'),
+                child: const Icon(Icons.apple_rounded,
+                    size: 20, color: AppColors.ink),
               ),
             ),
           ],
         ),
+      ],
+      if (widget.role == null || widget.role == AppRole.member) ...[
         const SizedBox(height: 16),
         Center(
           child: TextButton(
             onPressed: _toggleMode,
-            child: Text(_registering ? 'I already have an account' : 'New here? Create an account'),
+            child: Text(_registering
+                ? 'I already have an account'
+                : 'New here? Create an account'),
           ),
         ),
       ],
-      if (widget.role == AppRole.coach) ...[
+      if (widget.role == null || widget.role == AppRole.coach) ...[
         const SizedBox(height: 20),
         Panel(
           background: AppColors.surfaceAlt,
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Icon(Icons.info_outline_rounded, size: 18, color: AppColors.inkSoft),
+              const Icon(Icons.info_outline_rounded,
+                  size: 18, color: AppColors.inkSoft),
               const SizedBox(width: 10),
               Expanded(
                 child: Text(
@@ -502,6 +579,18 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
             ],
           ),
+        ),
+      ],
+      if (widget.role == null) ...[
+        const SizedBox(height: 12),
+        TextButton(
+          onPressed: () => Navigator.push(
+            context,
+            MaterialPageRoute<void>(
+              builder: (_) => const OnboardingScreen(),
+            ),
+          ),
+          child: const Text('View introduction'),
         ),
       ],
     ];
@@ -525,7 +614,8 @@ class _SocialButton extends StatelessWidget {
   final String label;
   final Widget child;
   final VoidCallback onTap;
-  const _SocialButton({required this.label, required this.child, required this.onTap});
+  const _SocialButton(
+      {required this.label, required this.child, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -546,7 +636,9 @@ class _SocialButton extends StatelessWidget {
             children: [
               child,
               const SizedBox(width: 8),
-              Text(label, style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600)),
+              Text(label,
+                  style: const TextStyle(
+                      fontSize: 13.5, fontWeight: FontWeight.w600)),
             ],
           ),
         ),
@@ -572,7 +664,8 @@ class _AdminBrandPanel extends StatelessWidget {
             borderRadius: BorderRadius.circular(14),
             border: Border.all(color: Colors.white.withValues(alpha: 0.28)),
           ),
-          child: const Icon(Icons.accessibility_new_rounded, color: AppColors.overlay, size: 26),
+          child: const Icon(Icons.accessibility_new_rounded,
+              color: AppColors.overlay, size: 26),
         ),
         const SizedBox(height: 28),
         Text('GainPath',
@@ -603,11 +696,14 @@ class _AdminBrandPanel extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 36),
-        _bullet(context, Icons.groups_rounded, 'Provision, verify, and manage every account'),
+        _bullet(context, Icons.groups_rounded,
+            'Provision, verify, and manage every account'),
         const SizedBox(height: 14),
-        _bullet(context, Icons.insights_rounded, 'Facility dashboards and exportable reports'),
+        _bullet(context, Icons.insights_rounded,
+            'Facility dashboards and exportable reports'),
         const SizedBox(height: 14),
-        _bullet(context, Icons.auto_awesome_rounded, 'AI-surfaced coaching and content leads'),
+        _bullet(context, Icons.auto_awesome_rounded,
+            'AI-surfaced coaching and content leads'),
       ],
     );
   }
@@ -620,7 +716,10 @@ class _AdminBrandPanel extends StatelessWidget {
         const SizedBox(width: 12),
         Expanded(
           child: Text(text,
-              style: TextStyle(fontSize: 14, color: Colors.white.withValues(alpha: 0.86), height: 1.4)),
+              style: TextStyle(
+                  fontSize: 14,
+                  color: Colors.white.withValues(alpha: 0.86),
+                  height: 1.4)),
         ),
       ],
     );

@@ -35,7 +35,7 @@ class _UnverifiedAdminRepository
 
   @override
   Future<AuthSession> signIn({
-    required AppRole role,
+    AppRole? role,
     required String email,
     required String password,
   }) async =>

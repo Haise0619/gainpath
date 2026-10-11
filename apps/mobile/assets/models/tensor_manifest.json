@@ -1,0 +1,111 @@
+[
+  {
+    "asset": "pose_detection.tflite",
+    "bytes": 2959046,
+    "sha256": "9ba9dd3d42efaaba86b4ff0122b06f29c4122e756b329d89dca1e297fd8f866c",
+    "inputs": [
+      {
+        "index": 0,
+        "name": "input_1",
+        "shape": [
+          1,
+          224,
+          224,
+          3
+        ],
+        "dtype": "float32"
+      }
+    ],
+    "outputs": [
+      {
+        "index": 441,
+        "name": "Identity",
+        "shape": [
+          1,
+          2254,
+          12
+        ],
+        "dtype": "float32"
+      },
+      {
+        "index": 429,
+        "name": "Identity_1",
+        "shape": [
+          1,
+          2254,
+          1
+        ],
+        "dtype": "float32"
+      }
+    ]
+  },
+  {
+    "asset": "pose_landmark_full.tflite",
+    "bytes": 6440512,
+    "sha256": "e9a5c5cb17f736fafd4c2ec1da3b3d331d6edbe8a0d32395855aeb2cdfd64b9f",
+    "inputs": [
+      {
+        "index": 0,
+        "name": "input_1",
+        "shape": [
+          1,
+          256,
+          256,
+          3
+        ],
+        "dtype": "float32"
+      }
+    ],
+    "outputs": [
+      {
+        "index": 337,
+        "name": "Identity",
+        "shape": [
+          1,
+          195
+        ],
+        "dtype": "float32"
+      },
+      {
+        "index": 342,
+        "name": "Identity_1",
+        "shape": [
+          1,
+          1
+        ],
+        "dtype": "float32"
+      },
+      {
+        "index": 297,
+        "name": "Identity_2",
+        "shape": [
+          1,
+          256,
+          256,
+          1
+        ],
+        "dtype": "float32"
+      },
+      {
+        "index": 298,
+        "name": "Identity_3",
+        "shape": [
+          1,
+          64,
+          64,
+          39
+        ],
+        "dtype": "float32"
+      },
+      {
+        "index": 339,
+        "name": "Identity_4",
+        "shape": [
+          1,
+          117
+        ],
+        "dtype": "float32"
+      }
+    ]
+  }
+]

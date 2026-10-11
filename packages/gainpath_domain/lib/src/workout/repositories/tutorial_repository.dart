@@ -4,4 +4,12 @@ import '../entities/tutorial_video.dart';
 /// prototype; a Firebase implementation will sit behind the same interface.
 abstract class TutorialRepository {
   List<TutorialVideo> get tutorials;
+
+  Future<List<TutorialVideo>> load() async => tutorials;
+
+  Future<TutorialVideo> save(TutorialVideo tutorial) async {
+    throw UnsupportedError('This repository does not support saving exercises.');
+  }
+
+  bool get requiresCatalogSelection => false;
 }

@@ -1,4 +1,23 @@
 import 'package:gainpath_domain/gainpath_domain.dart' show SessionScope;
+import 'workout_pose_metrics.dart';
+export 'workout_pose_metrics.dart';
+
+final _measuredSummaryId = RegExp(r'^[A-Za-z0-9_-]{1,128}$');
+const _measuredSummaryFields = {
+  'sessionId',
+  'userId',
+  'organizationId',
+  'exerciseId',
+  'repetitions',
+  'accuracy',
+  'startedAt',
+  'endedAt',
+  'summarySchemaVersion',
+  'provenance',
+  'poseMetrics'
+};
+
+enum WorkoutProvenance { legacyUnknown, simulated, recordedFixture, realCamera }
 
 class WorkoutExercise {
   const WorkoutExercise({
@@ -47,6 +66,8 @@ class WorkoutSessionSummary {
     required this.accuracy,
     required this.startedAt,
     required this.endedAt,
+    this.provenance = WorkoutProvenance.simulated,
+    this.poseMetrics,
   });
 
   final String sessionId;
@@ -59,8 +80,51 @@ class WorkoutSessionSummary {
   final int accuracy;
   final DateTime startedAt;
   final DateTime endedAt;
+  final WorkoutProvenance provenance;
+  final WorkoutPoseMetrics? poseMetrics;
+  double? get formScorePercent => poseMetrics?.formScorePercent;
+  int get partialRepetitions => poseMetrics?.partialRepetitions ?? 0;
+  int get trackedDurationMicros => poseMetrics?.trackedDurationMicros ?? 0;
+  int get rejectedDurationMicros => poseMetrics?.rejectedDurationMicros ?? 0;
+
+  /// Legacy summaries retain their existing semantics. Measured summaries must
+  /// be self-consistent before local persistence; this does not enable upload.
+  void validateForLocalStorage() {
+    final metrics = poseMetrics;
+    if (metrics == null) return;
+    final elapsed = endedAt.difference(startedAt).inMicroseconds;
+    final attempts = repetitions + metrics.partialRepetitions;
+    if (!{WorkoutProvenance.realCamera, WorkoutProvenance.recordedFixture}
+            .contains(provenance) ||
+        ![sessionId, userId, organizationId, exerciseId]
+            .every(_measuredSummaryId.hasMatch) ||
+        accuracy < 0 ||
+        accuracy > 100 ||
+        repetitions < 0 ||
+        repetitions > 10000 ||
+        attempts > 10000 ||
+        elapsed < 0 ||
+        elapsed > 86400000000 ||
+        metrics.trackedDurationMicros + metrics.rejectedDurationMicros >
+            elapsed ||
+        metrics.consentedAt.isAfter(startedAt) ||
+        (metrics.trackedDurationMicros == 0 && repetitions != 0) ||
+        (attempts == 0 && metrics.formScorePercent != null) ||
+        metrics.deviations.values.any((value) => value.count > attempts) ||
+        (provenance == WorkoutProvenance.realCamera &&
+            {'simulated', 'demo', 'fixture', 'unknown'}
+                .contains(metrics.detectorId))) {
+      throw const FormatException(
+          'Inconsistent local measured workout summary.');
+    }
+  }
+
+  // Step 1 is fail-closed. A real submission DTO will carry consent and version
+  // evidence; setting a provenance label alone never enables real upload.
+  bool get isEligibleForRealUpload => false;
 
   Map<String, Object?> toJson() {
+    validateForLocalStorage();
     return {
       'sessionId': sessionId,
       'userId': userId,
@@ -70,11 +134,38 @@ class WorkoutSessionSummary {
       'accuracy': accuracy,
       'startedAt': startedAt.toIso8601String(),
       'endedAt': endedAt.toIso8601String(),
+      'summarySchemaVersion': poseMetrics == null ? 2 : 3,
+      'provenance': provenance.name,
+      if (poseMetrics != null) 'poseMetrics': poseMetrics!.toJson(),
     };
   }
 
   factory WorkoutSessionSummary.fromJson(Map<String, Object?> json) {
-    return WorkoutSessionSummary(
+    final version = json['summarySchemaVersion'];
+    if (version != null && version != 2 && version != 3) {
+      throw const FormatException('Unsupported local workout summary version.');
+    }
+    if (version == 3 &&
+        (json.length != _measuredSummaryFields.length ||
+            !_measuredSummaryFields.every(json.containsKey))) {
+      throw const FormatException(
+          'Unexpected measured workout summary fields.');
+    }
+    final rawProvenance = json['provenance'];
+    final provenance = version == null
+        ? WorkoutProvenance.legacyUnknown
+        : WorkoutProvenance.values
+            .where((p) => p.name == rawProvenance)
+            .firstOrNull;
+    if (provenance == null) {
+      throw const FormatException('Invalid workout provenance.');
+    }
+    final rawMetrics = json['poseMetrics'];
+    if (version == 3 &&
+        (rawMetrics is! Map || rawMetrics.keys.any((key) => key is! String))) {
+      throw const FormatException('Measured workout metrics are required.');
+    }
+    final summary = WorkoutSessionSummary(
       sessionId: _requiredString(json, 'sessionId'),
       userId: _requiredString(json, 'userId'),
       organizationId: _requiredString(json, 'organizationId'),
@@ -83,7 +174,14 @@ class WorkoutSessionSummary {
       accuracy: _requiredInt(json, 'accuracy'),
       startedAt: _requiredDateTime(json, 'startedAt'),
       endedAt: _requiredDateTime(json, 'endedAt'),
+      provenance: provenance,
+      poseMetrics: version == 3
+          ? WorkoutPoseMetrics.fromJson(
+              Map<String, Object?>.from(rawMetrics as Map))
+          : null,
     );
+    summary.validateForLocalStorage();
+    return summary;
   }
 
   @override
@@ -96,7 +194,9 @@ class WorkoutSessionSummary {
       other.repetitions == repetitions &&
       other.accuracy == accuracy &&
       other.startedAt == startedAt &&
-      other.endedAt == endedAt;
+      other.endedAt == endedAt &&
+      other.provenance == provenance &&
+      other.poseMetrics == poseMetrics;
 
   @override
   int get hashCode => Object.hash(
@@ -108,6 +208,8 @@ class WorkoutSessionSummary {
         accuracy,
         startedAt,
         endedAt,
+        provenance,
+        poseMetrics,
       );
 }
 
@@ -132,6 +234,19 @@ class WorkoutSessionRecord {
   final DateTime? acceptedAt;
   final String? serverReference;
 
+  void validateForLocalStorage() {
+    summary.validateForLocalStorage();
+    if ((summary.poseMetrics != null ||
+            summary.provenance == WorkoutProvenance.realCamera ||
+            summary.provenance == WorkoutProvenance.recordedFixture) &&
+        (status != WorkoutSyncStatus.pending ||
+            acceptedAt != null ||
+            serverReference != null)) {
+      throw const FormatException(
+          'Measured workout acceptance is not enabled.');
+    }
+  }
+
   WorkoutSessionRecord copyWith({
     WorkoutSyncStatus? status,
     DateTime? acceptedAt,
@@ -146,6 +261,7 @@ class WorkoutSessionRecord {
   }
 
   Map<String, Object?> toJson() {
+    validateForLocalStorage();
     return {
       'summary': summary.toJson(),
       'status': status.name,
@@ -175,14 +291,23 @@ class WorkoutSessionRecord {
         throw const FormatException('Invalid workout acceptance timestamp.');
       }
     }
-    return WorkoutSessionRecord(
-      summary: WorkoutSessionSummary.fromJson(
-        Map<String, Object?>.from(summary),
-      ),
+    final parsedSummary =
+        WorkoutSessionSummary.fromJson(Map<String, Object?>.from(summary));
+    if ((parsedSummary.poseMetrics != null ||
+            parsedSummary.provenance == WorkoutProvenance.realCamera ||
+            parsedSummary.provenance == WorkoutProvenance.recordedFixture) &&
+        (acceptedAt != null || serverReference != null)) {
+      throw const FormatException(
+          'Measured workout acceptance is not enabled.');
+    }
+    final record = WorkoutSessionRecord(
+      summary: parsedSummary,
       status: parsedStatus.first,
       acceptedAt: parsedAcceptedAt,
       serverReference: serverReference is String ? serverReference : null,
     );
+    record.validateForLocalStorage();
+    return record;
   }
 }
 
@@ -230,6 +355,10 @@ abstract interface class WorkoutUploadGateway {
   /// The server must independently validate ownership and deduplicate retries.
   Future<WorkoutUploadReceipt> upload(WorkoutSessionSummary summary);
 }
+
+/// Explicit local prototype acceptance, never a network activity uploader.
+abstract interface class DemoWorkoutUploadGateway
+    implements WorkoutUploadGateway {}
 
 int _requiredInt(Map<String, Object?> json, String key) {
   final value = json[key];
