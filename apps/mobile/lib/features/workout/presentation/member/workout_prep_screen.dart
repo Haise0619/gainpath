@@ -277,10 +277,13 @@ class WorkoutPrepScreen extends StatelessWidget {
       showUnavailable(context);
       return;
     }
+    var uploadRequested = false;
     final consented = await showModalBottomSheet<bool>(
         context: context,
         isScrollControlled: true,
-        builder: (_) => const _ConsentSheet(realWorkout: true));
+        builder: (_) => _ConsentSheet(
+            realWorkout: true,
+            onUploadChanged: (value) => uploadRequested = value));
     if (consented != true ||
         !context.mounted ||
         auth.state.session?.scope != scope) {
@@ -296,6 +299,7 @@ class WorkoutPrepScreen extends StatelessWidget {
                     routineId: publishedRoutine!.id,
                     exercise: exercise,
                     consented: true,
+                    requestServerUpload: uploadRequested,
                     setupConfirmed: true))));
   }
 
@@ -404,7 +408,11 @@ class _DetourCard extends StatelessWidget {
 }
 
 class _ConsentSheet extends StatefulWidget {
-  const _ConsentSheet({this.previewOnly = false, this.realWorkout = false});
+  const _ConsentSheet(
+      {this.previewOnly = false,
+      this.realWorkout = false,
+      this.onUploadChanged});
+  final ValueChanged<bool>? onUploadChanged;
   final bool previewOnly;
   final bool realWorkout;
 
@@ -415,6 +423,7 @@ class _ConsentSheet extends StatefulWidget {
 class _ConsentSheetState extends State<_ConsentSheet> {
   bool _checked = false;
   bool _setupChecked = false;
+  bool _uploadChecked = false;
 
   @override
   Widget build(BuildContext context) {
@@ -461,7 +470,7 @@ class _ConsentSheetState extends State<_ConsentSheet> {
                         : 'Only your movement scores are saved.'),
                 if (widget.realWorkout)
                   _point(context,
-                      'This session tracks only the supported squat. Results stay on this device; upload and rewards are not yet available.'),
+                      'This session tracks only the supported squat. Results are saved on this device. Upload is optional and awards no rewards.'),
                 if (widget.realWorkout)
                   _point(context,
                       'Form guidance is provisional. Use a side view with the camera upright and stationary, and keep your full body in view.'),
@@ -501,11 +510,25 @@ class _ConsentSheetState extends State<_ConsentSheet> {
                 controlAffinity: ListTileControlAffinity.leading,
                 contentPadding: EdgeInsets.zero),
           FilledButton(
+            // Camera consent and setup are required; server upload is optional.
             onPressed: _checked && (!widget.realWorkout || _setupChecked)
                 ? () => Navigator.pop(context, true)
                 : null,
             child: const Text('Accept and start'),
           ),
+          if (widget.realWorkout)
+            CheckboxListTile(
+                value: _uploadChecked,
+                onChanged: (value) {
+                  setState(() => _uploadChecked = value ?? false);
+                  widget.onUploadChanged?.call(_uploadChecked);
+                },
+                title: const Text(
+                    'Also allow this measured summary to be uploaded.'),
+                subtitle: const Text(
+                    'Requires server consent before capture. Only counts, score, measured time and version identifiers are sent. No video or landmarks. Acceptance remains disabled until physical model validation.'),
+                controlAffinity: ListTileControlAffinity.leading,
+                contentPadding: EdgeInsets.zero),
           const SizedBox(height: 8),
           TextButton(
             onPressed: () => Navigator.pop(context, false),

@@ -9,6 +9,10 @@ import '../../features/workout/application/real_squat_session_controller.dart';
 import '../../features/workout/data/published_routine.dart';
 import '../../features/workout/data/workout_session_repository.dart';
 import '../../features/workout/domain/real_workout_contract.dart';
+import '../../features/workout/data/real_workout_outbox_repository.dart';
+import '../../infrastructure/firebase/firebase_real_workout_gateway.dart';
+import '../di/real_workout_sync_store_factory.dart';
+import 'squat_result_sync.dart';
 import '../../features/workout/presentation/member/live_workout_screen.dart';
 import '../../features/workout/presentation/member/workout_result_screen.dart';
 import '../../infrastructure/audio/android_workout_audio.dart';
@@ -19,7 +23,7 @@ import '../../infrastructure/pose/blazepose_contract.dart';
 import '../di/workout_store_factory.dart';
 import 'pose_preview_route.dart';
 
-/// Local measured development squat. No upload gateway or server consent grant.
+/// Measured development squat. Server opt-in is optional and precedes capture.
 class RealSquatRoute extends StatefulWidget {
   const RealSquatRoute(
       {super.key,
@@ -28,11 +32,13 @@ class RealSquatRoute extends StatefulWidget {
       required this.scope,
       required this.consented,
       required this.setupConfirmed,
+      this.requestServerUpload = false,
       this.storeFactory = createWorkoutStore});
   final String routineId;
   final PublishedRoutineExercise exercise;
   final SessionScope scope;
   final bool consented, setupConfirmed;
+  final bool requestServerUpload;
   final Future<WorkoutSessionStore> Function(SessionScope) storeFactory;
   @override
   State<RealSquatRoute> createState() => _RealSquatRouteState();
@@ -44,6 +50,9 @@ class _RealSquatRouteState extends State<RealSquatRoute>
   RealSquatSessionController? _session;
   AndroidPoseCamera? _camera;
   WorkoutSessionRepository? _repository;
+  RealWorkoutOutboxRepository? _outbox;
+  WorkoutConsentAcknowledgement? _acknowledgement;
+  String? _uploadNotice;
   StreamSubscription<AuthState>? _authSubscription;
   bool _opening = false;
   bool _foreground = true;
@@ -83,6 +92,23 @@ class _RealSquatRouteState extends State<RealSquatRoute>
       }
       final store = await widget.storeFactory(widget.scope);
       if (!mounted || !authorized()) return;
+      if (widget.requestServerUpload) {
+        try {
+          final syncStore = await createRealWorkoutSyncStore(widget.scope);
+          if (!mounted || !authorized()) return;
+          _outbox = RealWorkoutOutboxRepository(
+              scope: widget.scope,
+              activeScope: () => authorized() ? widget.scope : null,
+              store: syncStore,
+              gateway: FirebaseRealWorkoutGateway(scope: widget.scope),
+              newRequestId: newWorkoutRequestId);
+          _acknowledgement = await _outbox!.acknowledgeConsent();
+        } catch (_) {/* No server grant: still permitted local capture. */}
+        if (!mounted || !authorized()) return;
+        _uploadNotice = _acknowledgement == null
+            ? 'Upload consent could not be confirmed. This session will stay local.'
+            : 'Upload consent is recorded. Model acceptance remains disabled pending physical validation.';
+      }
       _repository = WorkoutSessionRepository(
           scope: widget.scope,
           store: store,
@@ -94,6 +120,20 @@ class _RealSquatRouteState extends State<RealSquatRoute>
       final id = List.generate(
               16, (_) => random.nextInt(256).toRadixString(16).padLeft(2, '0'))
           .join();
+      if (_acknowledgement != null) {
+        try {
+          if (!await _outbox!.prepareCapture(id, _acknowledgement!)) {
+            _acknowledgement = null;
+          }
+        } catch (_) {
+          _acknowledgement = null;
+        }
+        if (_acknowledgement == null) {
+          _uploadNotice =
+              'Upload opt-in could not be saved. This session will stay local.';
+        }
+        if (!mounted || !authorized()) return;
+      }
       final c = RealSquatSessionController(
           scope: widget.scope,
           activeScope: () => authorized() ? widget.scope : null,
@@ -106,7 +146,12 @@ class _RealSquatRouteState extends State<RealSquatRoute>
           exerciseId: widget.exercise.exerciseId,
           publishedRoutineId: widget.routineId,
           detectorId: 'blazepose-tflite',
-          detectorVersion: BlazePoseModelContract.version);
+          detectorVersion: BlazePoseModelContract.version,
+          onSaved: _outbox == null
+              ? null
+              : (summary) async {
+                  await _outbox!.enqueueFromIntent(summary);
+                });
       _session = c;
       _authSubscription = auth.stream.listen((_) => c.accountChanged());
       setState(() {});
@@ -145,6 +190,7 @@ class _RealSquatRouteState extends State<RealSquatRoute>
     unawaited(_authSubscription?.cancel());
     _session?.dispose();
     _repository?.dispose();
+    _outbox?.dispose();
     _clock.stop();
     super.dispose();
   }
@@ -175,8 +221,12 @@ class _RealSquatRouteState extends State<RealSquatRoute>
         realSession: _session,
         exerciseName: widget.exercise.name,
         targetRepetitions: widget.exercise.reps,
-        resultBuilder: (summary) =>
-            ScopedSquatResult(summary: summary, auth: auth),
+        resultBuilder: (summary) => ScopedSquatResult(
+            summary: summary,
+            auth: auth,
+            syncEnabled: true,
+            acknowledgement: _acknowledgement),
+        uploadNotice: _uploadNotice,
         cameraViewport:
             PoseCameraViewport(camera: _camera!, session: _session!.preview));
   }
@@ -185,15 +235,26 @@ class _RealSquatRouteState extends State<RealSquatRoute>
 /// Result routes remain guarded after the camera route has been disposed.
 class ScopedSquatResult extends StatelessWidget {
   const ScopedSquatResult(
-      {super.key, required this.summary, required this.auth});
+      {super.key,
+      required this.summary,
+      required this.auth,
+      this.syncEnabled = false,
+      this.acknowledgement});
   final WorkoutSessionSummary summary;
   final AuthBloc auth;
+  final bool syncEnabled;
+  final WorkoutConsentAcknowledgement? acknowledgement;
   @override
   Widget build(BuildContext context) => BlocBuilder<AuthBloc, AuthState>(
       bloc: auth,
       builder: (context, state) => state.session?.scope == summary.scope &&
               AuthRolePolicy.canEnter(state, allowed: const {AppRole.member})
-          ? WorkoutResultScreen.measured(summary: summary)
+          ? syncEnabled
+              ? SquatResultSync(
+                  summary: summary,
+                  auth: auth,
+                  acknowledgement: acknowledgement)
+              : WorkoutResultScreen.measured(summary: summary)
           : const Scaffold(
               body: Center(
                   child: Text('Sign in to view this account’s result.'))));

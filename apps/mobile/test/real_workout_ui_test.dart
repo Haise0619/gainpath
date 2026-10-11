@@ -62,7 +62,8 @@ void main() {
     await tester.tap(find.byType(Checkbox).first);
     await tester.pump();
     expect(tester.widget<FilledButton>(accept).onPressed, isNull);
-    await tester.tap(find.byType(Checkbox).last);
+    expect(tester.widget<Checkbox>(find.byType(Checkbox).last).value, false);
+    await tester.tap(find.byType(Checkbox).at(1));
     await tester.pump();
     expect(tester.widget<FilledButton>(accept).onPressed, isNotNull);
     await tester.tap(find.text('Not now'));

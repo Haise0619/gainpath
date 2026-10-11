@@ -106,7 +106,9 @@ class _SavedSquatSessionsRouteState extends State<SavedSquatSessionsRoute> {
                                   context,
                                   MaterialPageRoute<void>(
                                       builder: (_) => ScopedSquatResult(
-                                          summary: summary, auth: auth)));
+                                          summary: summary,
+                                          auth: auth,
+                                          syncEnabled: true)));
                             });
                       });
                 }));

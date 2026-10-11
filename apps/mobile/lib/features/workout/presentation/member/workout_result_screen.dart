@@ -10,9 +10,10 @@ class WorkoutResultScreen extends StatefulWidget {
   final int accuracy;
   final int seconds;
   final WorkoutSessionSummary? measuredSummary;
+  final Widget? syncPanel;
 
   WorkoutResultScreen.measured(
-      {super.key, required WorkoutSessionSummary summary})
+      {super.key, required WorkoutSessionSummary summary, this.syncPanel})
       : measuredSummary = summary,
         reps = summary.repetitions,
         accuracy = summary.formScorePercent?.round() ?? 0,
@@ -23,7 +24,8 @@ class WorkoutResultScreen extends StatefulWidget {
     required this.reps,
     required this.accuracy,
     required this.seconds,
-  }) : measuredSummary = null;
+  })  : measuredSummary = null,
+        syncPanel = null;
 
   @override
   State<WorkoutResultScreen> createState() => _WorkoutResultScreenState();
@@ -238,10 +240,16 @@ class _WorkoutResultScreenState extends State<WorkoutResultScreen>
                 Text('Saved on this device',
                     style: Theme.of(context).textTheme.titleLarge),
                 const SizedBox(height: 8),
-                const Text(
-                    'Local result · not server-accepted. No rewards have been awarded.',
+                Text(
+                    widget.syncPanel == null
+                        ? 'Local result · not server-accepted. No rewards have been awarded.'
+                        : 'Your measured result is saved locally. No rewards have been awarded.',
                     textAlign: TextAlign.center),
               ])),
+          if (widget.syncPanel != null) ...[
+            const SizedBox(height: 16),
+            widget.syncPanel!
+          ],
           const SizedBox(height: 16),
           Row(children: [
             Expanded(child: StatTile('${summary.repetitions}', 'Full reps')),

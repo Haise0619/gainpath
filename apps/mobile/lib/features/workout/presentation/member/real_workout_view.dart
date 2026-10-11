@@ -14,12 +14,14 @@ class RealWorkoutView extends StatefulWidget {
       required this.viewport,
       required this.exerciseName,
       required this.targetRepetitions,
+      this.uploadNotice,
       this.resultBuilder});
   final Widget Function(WorkoutSessionSummary)? resultBuilder;
   final RealSquatSessionController session;
   final Widget viewport;
   final String exerciseName;
   final int targetRepetitions;
+  final String? uploadNotice;
   @override
   State<RealWorkoutView> createState() => _RealWorkoutViewState();
 }
@@ -38,7 +40,7 @@ class _RealWorkoutViewState extends State<RealWorkoutView> {
         final yes = await confirmSheet(context,
             title: 'End this squat session?',
             message:
-                'Save the measured result on this device. Upload and rewards are not available yet.',
+                'Save the measured result on this device. Any eligible upload is tracked separately; no rewards are awarded.',
             confirmLabel: 'Save result');
         if (!mounted) return;
         if (!yes) {
@@ -168,6 +170,9 @@ class _RealWorkoutViewState extends State<RealWorkoutView> {
                         const SizedBox(height: 8),
                         const Text('Side-view squat · provisional guidance',
                             style: TextStyle(fontSize: 12)),
+                        if (widget.uploadNotice != null)
+                          Text(widget.uploadNotice!,
+                              style: const TextStyle(fontSize: 12)),
                         if (c.errorMessage != null)
                           Padding(
                               padding: const EdgeInsets.only(top: 8),

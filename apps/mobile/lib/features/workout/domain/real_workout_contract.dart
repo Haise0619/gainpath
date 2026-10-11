@@ -44,9 +44,10 @@ class RealWorkoutSubmission {
     if (json['schemaVersion'] != 2 ||
         json['provenance'] != 'real_camera' ||
         json['cameraView'] != 'side' ||
+        json['consentVersion'] != workoutConsentVersion ||
         json['memberId'] == 'demo-user' ||
         json['organizationId'] == 'demo-org' ||
-        {'simulated', 'demo', 'fixture', 'unknown'}
+        {'simulated', 'demo', 'fixture', 'unknown', 'recorded_fixture'}
             .contains(json['detectorId'])) {
       throw const FormatException(
           'Invalid real workout identity or provenance.');
@@ -141,6 +142,12 @@ class WorkoutConsentAcknowledgement {
 
   final Map<String, Object?> _json;
   Map<String, Object?> toJson() => _json;
+  SessionScope get scope => SessionScope(
+      userId: _json['memberId'] as String,
+      organizationId: _json['organizationId'] as String);
+  String get requestId => _json['requestId'] as String;
+  String get acknowledgementId => _json['acknowledgementId'] as String;
+  int get acknowledgedAtMillis => _json['acknowledgedAtMillis'] as int;
   bool authorizes(RealWorkoutSubmission submission) =>
       _json['organizationId'] == submission.scope.organizationId &&
       _json['memberId'] == submission.scope.userId &&

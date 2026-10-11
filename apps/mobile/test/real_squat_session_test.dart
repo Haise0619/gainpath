@@ -66,7 +66,7 @@ void main() {
   late RealSquatSessionController session;
   SessionScope? active;
   var now = 0;
-  void setup() {
+  void setup({Future<void> Function(WorkoutSessionSummary)? onSaved}) {
     now = 0;
     active = scope;
     camera = Camera();
@@ -90,6 +90,7 @@ void main() {
         publishedRoutineId: 'published',
         detectorId: 'fixture',
         detectorVersion: '1',
+        onSaved: onSaved,
         provenance: WorkoutProvenance.recordedFixture);
   }
 
@@ -112,6 +113,27 @@ void main() {
     expect(session.phase, RealSquatSessionPhase.closed);
     expect(session.summary, isNull);
     expect(store.writes, 0);
+    await session.close();
+    session.dispose();
+  });
+  testWidgets(
+      'upload enqueue handoff follows durable local save and cannot undo it',
+      (tester) async {
+    var handoffs = 0;
+    setup(onSaved: (summary) async {
+      expect((await store.read()).single.summary.sessionId, summary.sessionId);
+      handoffs++;
+      throw StateError('sync metadata disk failure');
+    });
+    store.fail = false;
+    await session.start(consented: true, setupConfirmed: true);
+    now = 100000;
+    camera.receive!(PoseInput(timestampMicros: now));
+    await tester.pump();
+    expect(await session.endAndSave(), isNotNull);
+    expect(handoffs, 1);
+    expect(session.phase, RealSquatSessionPhase.saved);
+    expect(store.writes, 1);
     await session.close();
     session.dispose();
   });

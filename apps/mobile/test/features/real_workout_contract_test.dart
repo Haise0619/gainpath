@@ -36,6 +36,8 @@ void main() {
       {'rawFrames': []},
       {'landmarks': []},
       {'detectorId': 'simulated'},
+      {'detectorId': 'recorded_fixture'},
+      {'consentVersion': 'old'},
       {'consentAcknowledgementId': ''},
       {'repetitions': -1},
       {'formScorePercent': double.nan},

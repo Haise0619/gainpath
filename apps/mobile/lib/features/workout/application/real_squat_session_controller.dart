@@ -27,6 +27,7 @@ class RealSquatSessionController extends ChangeNotifier {
       required this.publishedRoutineId,
       required this.detectorId,
       required this.detectorVersion,
+      this.onSaved,
       this.provenance = WorkoutProvenance.realCamera}) {
     if (repository.scope != scope) {
       throw ArgumentError('Session repository scope mismatch');
@@ -64,6 +65,7 @@ class RealSquatSessionController extends ChangeNotifier {
       detectorId,
       detectorVersion;
   final WorkoutProvenance provenance;
+  final Future<void> Function(WorkoutSessionSummary)? onSaved;
   late final PosePreviewController preview;
   late final SquatProcessingController processing;
   RealSquatSessionPhase phase = RealSquatSessionPhase.idle;
@@ -314,6 +316,13 @@ class RealSquatSessionController extends ChangeNotifier {
       if (!_active) return null;
       final frozen = summary!;
       await repository.saveLocal(frozen);
+      if (!_active) return null;
+      try {
+        await onSaved?.call(frozen);
+      } catch (_) {
+        _error =
+            'The local result is saved. Upload queuing needs retry from saved sessions.';
+      }
       if (!_active) return null;
       phase = RealSquatSessionPhase.saved;
       return frozen;

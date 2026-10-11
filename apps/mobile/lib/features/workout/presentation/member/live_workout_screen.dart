@@ -23,11 +23,13 @@ class LiveWorkoutScreen extends StatelessWidget {
       this.cameraSession,
       this.cameraViewport,
       this.realSession,
+      this.uploadNotice,
       this.exerciseName = 'Bodyweight squat',
       this.targetRepetitions = 10,
       this.resultBuilder});
   final Widget Function(WorkoutSessionSummary)? resultBuilder;
   final RealSquatSessionController? realSession;
+  final String? uploadNotice;
   final String exerciseName;
   final int targetRepetitions;
   final PosePreviewController? cameraSession;
@@ -38,6 +40,7 @@ class LiveWorkoutScreen extends StatelessWidget {
     if (realSession != null) {
       return RealWorkoutView(
           session: realSession!,
+          uploadNotice: uploadNotice,
           viewport: cameraViewport!,
           exerciseName: exerciseName,
           targetRepetitions: targetRepetitions,
