@@ -62,3 +62,7 @@ change. Do not manufacture acceptance or bypass this boundary in unattended runs
 
 Earlier experimental documentation and unrelated workspace changes are preserved.
 The continuation heartbeat should stop once these software commits are pushed.
+
+Subsequent development deployment and the Firebase APK/physical-test handoff are
+recorded in `2026-10-12-step6-development-deployment.md`. Physical acceptance
+remains pending and the model/rule allow-list remains empty.

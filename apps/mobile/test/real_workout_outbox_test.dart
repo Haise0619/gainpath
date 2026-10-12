@@ -84,8 +84,9 @@ class ReceiptFailingStore extends MemoryRealWorkoutSyncStore {
   @override
   Future<void> write(RealWorkoutSyncState state) async {
     if (failReceipt &&
-        state.entries.any((e) => e.status == RealWorkoutSyncStatus.accepted))
+        state.entries.any((e) => e.status == RealWorkoutSyncStatus.accepted)) {
       throw StateError('receipt disk full');
+    }
     await super.write(state);
   }
 }
