@@ -50,3 +50,9 @@ jitter, partial/full cycles, reversal/loss safeguards and scoring dwell.
 This does not establish physical count/score accuracy or boundary-noise robustness.
 Requested 15 s still (zero counts), five intended full squats, then still again
 (no extra counts). No parameter, source or acceptance policy change adopted.
+
+Provided recording VID_20261013_112006.mp4 shows six visible attempts, app 3 full
+and 3 partial, ending estimated form 93%. Attempt total matches; depth labels and
+score accuracy remain unvalidated. Brief standing samples show no extra attempt,
+but no 15-second stationary check is present. Detailed video/algorithm/design
+review: docs/architecture/2026-10-13-squat-video-and-algorithm-review.md.
