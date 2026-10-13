@@ -152,21 +152,28 @@ class _MobileAuthGateState extends State<_MobileAuthGate> {
                   key: ValueKey(scope),
                   session: state.session!,
                   repository: _profileRepository!,
-                  progressRepositoryFactory: widget.progressRepositoryFactory,
-                  routineLoader: widget.routineLoaderFactory == null
-                      ? () => FirebasePublishedRoutineRepository(scope: scope)
-                          .load()
-                      : () => widget.routineLoaderFactory!(scope),
-                  memberSettingsBuilder: widget.memberSettingsBuilder ??
-                      (_) {
-                        final actions = FirebasePasswordActions(scope: scope);
-                        return AccountSettingsScreen(
-                          repository:
-                              FirebaseMemberPreferencesRepository(scope: scope),
-                          verifyCurrentPassword: actions.verifyCurrent,
-                          saveNewPassword: actions.saveNew,
-                        );
-                      });
+                  readyBuilder: (context, profile) => MemberShell(
+                        liveSession: state.session!,
+                        liveProfile: profile,
+                        progressRepositoryFactory:
+                            widget.progressRepositoryFactory,
+                        routineLoader: widget.routineLoaderFactory == null
+                            ? () =>
+                                FirebasePublishedRoutineRepository(scope: scope)
+                                    .load()
+                            : () => widget.routineLoaderFactory!(scope),
+                        memberSettingsBuilder: widget.memberSettingsBuilder ??
+                            (_) {
+                              final actions =
+                                  FirebasePasswordActions(scope: scope);
+                              return AccountSettingsScreen(
+                                repository: FirebaseMemberPreferencesRepository(
+                                    scope: scope),
+                                verifyCurrentPassword: actions.verifyCurrent,
+                                saveNewPassword: actions.saveNew,
+                              );
+                            },
+                      ));
             }
             return _FirebaseIdentityReadyScreen(session: state.session!);
           }

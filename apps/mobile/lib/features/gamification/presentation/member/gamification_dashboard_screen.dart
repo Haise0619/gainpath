@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import '../../../../app/unavailable_action.dart';
 import '../../application/gamification_bloc.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
