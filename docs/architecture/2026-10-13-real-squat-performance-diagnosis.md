@@ -130,5 +130,38 @@ install, `adb install -r`, app launch and process existence succeeded. No data
 was cleared. The CPU APK above remains available for rollback. A matched repeat
 was requested. Installation is not proof that native GPU startup or faster
 tracking succeeded in a current session; runtime reports, movement feedback and
-actual-versus-app counts remain pending. Do not enable production GPU or server
-acceptance from this diagnostic build.
+actual-versus-app counts were pending at installation. Do not enable production
+GPU or server acceptance from this diagnostic build.
+
+## GPU run observed
+
+The user reports "still some lagging but i think better than CPU". Sixteen scalar
+reports confirm `opencl_required`. The final report spans 76.906669 active seconds:
+
+| Metric | GPU final report | CPU final report |
+| --- | --- | --- |
+| Accepted delivery FPS | 22.001 | 12.517 |
+| Native inference mean (ms) | 11.815 | 56.207 |
+| Worker mean (ms) | 42.892 | 77.904 |
+| Input to delivery mean (ms) | 59.610 | 95.620 |
+| Input to first drawable CPU paint mean (ms) | 76.126 | 124.065 |
+| Recent first-paint p95 (ms) | 116.288 | 174.721 |
+| Analyzer mean (ms) | 0.093060 | 0.043985 |
+| Deliveries / first drawable paints | 1,692 / 1,281 | 1,618 / 821 |
+| Received / replaced inputs | 2,299 / 605 | 3,863 / 2,243 |
+| Stale observations / generic expiries | 0 / 0 | 0 / 37 |
+
+Evidence: local ignored `apps/mobile/build/step7-performance/gpu-metrics.jsonl`.
+These are different-duration, unlabelled movement cohorts. The lower computation
+and accepted-paint times, together with the user's impression, support GPU as
+an improved diagnostic candidate. They do not establish a matched physical
+speedup, full-body accuracy, heat/battery acceptance or graceful lifecycle checks
+in this run. Rep-count totals remain unanswered.
+
+Historical beta 1.2 trial's final disposition found no demonstrated meaningful
+motion benefit; it was rolled back. Do not repeat that parameter change as a
+presumed fix. The next isolated diagnostic should draw the same fresh refined
+inference directly, with smoothing still running in shadow, to expose how much
+of the residual visible lag depends on preview smoothing. It must keep scalar
+telemetry only and default/release drawing unchanged. Physical comparison remains
+required before adopting a responsive display policy.
