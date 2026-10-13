@@ -6,13 +6,17 @@ import '../pose/tracking_health.dart';
 import 'squat_geometry.dart';
 import 'squat_rule_set.dart';
 import 'squat_update.dart';
+import 'squat_diagnostics.dart';
 
 /// Provisional side-view squat engine. Feed refined (not already smoothed)
 /// upright, unmirrored frames, with a stationary upright camera. This is not
 /// a detector, a view classifier, or an authority to persist real activity.
 class SquatAnalyzer {
-  SquatAnalyzer({SquatRuleSet? rules, this.preferredSide})
-      : rules = rules ?? SquatRuleSet();
+  SquatAnalyzer({SquatRuleSet? rules, this.preferredSide, this.diagnostics})
+      : rules = rules ?? SquatRuleSet() {
+    diagnostics?.configure(this.rules);
+  }
+  final SquatDiagnosticRecorder? diagnostics;
   final SquatRuleSet rules;
   final SquatSide? preferredSide;
   final _filter = PoseFrameFilter();
@@ -59,7 +63,12 @@ class SquatAnalyzer {
     );
     final changed = _identity != null && _identity != identity;
     _identity = identity;
-    if (gap || changed) _invalidateCalibration();
+    if (gap || changed) {
+      _invalidateCalibration(
+          diagnosticReason: changed
+              ? SquatDiagnosticReason.geometryChanged
+              : SquatDiagnosticReason.frameGap);
+    }
     if (nowMicros - time > rules.maximumFrameGapMicros) {
       return _unavailable(time, nowMicros: nowMicros);
     }
@@ -85,7 +94,8 @@ class SquatAnalyzer {
         (time - _lostSince! >= rules.lostAfterMicros ||
             (_lastRawAngle != null &&
                 (raw.kneeAngleDegrees - _lastRawAngle!).abs() > 10))) {
-      _invalidateCalibration();
+      _invalidateCalibration(
+          diagnosticReason: SquatDiagnosticReason.recoveryDiscontinuity);
       _side = evaluatedSide;
     }
     _lostSince = null;
@@ -94,6 +104,8 @@ class SquatAnalyzer {
     _geometry = SquatGeometry.fromFrame(filtered, _side!);
     if (_geometry == null) return _unavailable(time, nowMicros: nowMicros);
     final angle = _geometry!.kneeAngleDegrees;
+    diagnostics?.observe(
+        time: time, side: _side!, filtered2d: angle, confidence: _confidence);
     _velocity =
         !recovering && _previousAngle != null && _previousAngleTime != null
             ? (angle - _previousAngle!) * 1000000 / (time - _previousAngleTime!)
@@ -123,7 +135,9 @@ class SquatAnalyzer {
         _lastCapture != null &&
         nowMicros - _lastCapture! > rules.maximumFrameGapMicros) {
       _lostSince ??= _lastCapture;
-      _invalidateCalibration();
+      _invalidateCalibration(
+          diagnosticReason: SquatDiagnosticReason.watchdogStale,
+          diagnosticTime: nowMicros);
       _health = nowMicros - _lostSince! >= rules.lostAfterMicros
           ? TrackingStatus.lost
           : TrackingStatus.degraded;
@@ -134,9 +148,10 @@ class SquatAnalyzer {
     return _snapshot(_lastCapture ?? nowMicros);
   }
 
-  void pause() {
+  void pause(
+      {SquatDiagnosticReason diagnosticReason = SquatDiagnosticReason.paused}) {
     _paused = true;
-    _invalidateCalibration();
+    _invalidateCalibration(diagnosticReason: diagnosticReason);
     _accountedUntil = null;
     _health = TrackingStatus.degraded;
     _geometry = null;
@@ -159,9 +174,11 @@ class SquatAnalyzer {
     _scoreSum = _confidence = 0;
     _geometry = null;
     _health = TrackingStatus.degraded;
+    diagnostics?.clear();
   }
 
   SquatUpdate _unavailable(int time, {required int nowMicros}) {
+    diagnostics?.unavailable(_confidence);
     _lostSince ??= time;
     _health = nowMicros - _lostSince! >= rules.lostAfterMicros
         ? TrackingStatus.lost
@@ -174,7 +191,10 @@ class SquatAnalyzer {
     _geometry = null;
     _standingSince = _depthSince = _ascendingSince = _leanSince = null;
     _filter.reset();
-    if (_health == TrackingStatus.lost) _invalidateCalibration();
+    if (_health == TrackingStatus.lost) {
+      _invalidateCalibration(
+          diagnosticReason: SquatDiagnosticReason.trackingLost);
+    }
     return _snapshot(time);
   }
 
@@ -202,7 +222,8 @@ class SquatAnalyzer {
   SquatAttempt? _advance(
       double angle, double velocity, int time, List<CueRequest> cues) {
     if (_cycleStart != null && time - _cycleStart! > rules.maximumCycleMicros) {
-      _invalidateCalibration();
+      _invalidateCalibration(
+          diagnosticReason: SquatDiagnosticReason.cycleTimeout);
       return null;
     }
     if (_phase == SquatPhase.ready) {
@@ -211,6 +232,7 @@ class SquatAnalyzer {
         _phase = SquatPhase.eccentric;
         _cycleStart = time;
         _minimumAngle = angle;
+        diagnostics?.begin(time: time, side: _side!);
       }
       return null;
     }
@@ -261,6 +283,7 @@ class SquatAnalyzer {
     }
     final duration = time - _cycleStart!;
     if (duration < rules.minimumCycleMicros) {
+      diagnostics?.abort(SquatDiagnosticReason.tooShortCycle, time);
       _clearCycle();
       return null;
     }
@@ -284,6 +307,15 @@ class SquatAnalyzer {
       _partials++;
     }
     _scoreSum += score;
+    diagnostics?.complete(
+        full: _depthReached,
+        time: time,
+        number: _reps + _partials,
+        minimumAngle: _minimumAngle,
+        trunkPenalty: trunkPenalty,
+        depthPenalty: depthPenalty,
+        score: score,
+        sessionScore: _scoreSum / (_reps + _partials));
     final result = SquatAttempt(
         number: _reps + _partials,
         complete: _depthReached,
@@ -323,7 +355,11 @@ class SquatAnalyzer {
     _maxLeanDeviation = 0;
   }
 
-  void _invalidateCalibration() {
+  void _invalidateCalibration(
+      {SquatDiagnosticReason diagnosticReason =
+          SquatDiagnosticReason.recalibration,
+      int? diagnosticTime}) {
+    diagnostics?.abort(diagnosticReason, diagnosticTime ?? _lastCapture ?? 0);
     _needsCalibration = true;
     _side = null;
     _standingSince = null;

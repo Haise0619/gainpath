@@ -12,3 +12,4 @@ export 'src/squat/squat_analyzer.dart';
 export 'src/squat/squat_geometry.dart';
 export 'src/squat/squat_rule_set.dart';
 export 'src/squat/squat_update.dart';
+export 'src/squat/squat_diagnostics.dart';

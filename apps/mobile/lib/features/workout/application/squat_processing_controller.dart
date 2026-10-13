@@ -4,6 +4,7 @@ import 'package:gainpath_domain/gainpath_domain.dart';
 import 'package:gainpath_pose/gainpath_pose.dart';
 import 'workout_audio_controller.dart';
 import '../../../infrastructure/pose/real_squat_performance.dart';
+import '../../../infrastructure/pose/squat_decision_diagnostics.dart';
 
 /// Step 3 analysis/audio boundary. The caller supplies refined camera poses;
 /// this class does not open a camera, authorize consent, save, or upload sessions.
@@ -18,7 +19,8 @@ class SquatProcessingController extends ChangeNotifier {
     required bool sideViewConfirmed,
     required bool uprightCameraConfirmed,
     SquatAnalyzer? analyzer,
-  }) : _analyzer = analyzer ?? SquatAnalyzer() {
+  }) : _analyzer = analyzer ??
+            SquatAnalyzer(diagnostics: createSquatDiagnosticRecorder()) {
     if (!sideViewConfirmed || !uprightCameraConfirmed) {
       throw ArgumentError(
           'Side-view squat analysis requires confirmed upright camera setup');
@@ -42,6 +44,13 @@ class SquatProcessingController extends ChangeNotifier {
   Timer? _watchdog;
   int? _lastCapture, _lastNow;
   Future<void>? _closing;
+  int _lastDiagnosticSequence = 0;
+  void _emitDiagnostics() {
+    if (squatDecisionDiagnosticsEnabled && activeScope() == scope) {
+      _lastDiagnosticSequence = emitSquatDecisionRecords(
+          _analyzer.diagnostics, _lastDiagnosticSequence);
+    }
+  }
 
   bool _checkScope() {
     if (_closed) return false;
@@ -68,6 +77,7 @@ class SquatProcessingController extends ChangeNotifier {
       timer.stop();
       performance!.analyzed(timer.elapsedMicroseconds);
     }
+    _emitDiagnostics();
     _lastCapture = time;
     _lastNow = now;
     _watchdog ??= Timer.periodic(
@@ -81,7 +91,9 @@ class SquatProcessingController extends ChangeNotifier {
     final now = clockMicros();
     if (_lastNow != null && now <= _lastNow!) return;
     _lastNow = now;
-    _publish(_analyzer.tick(nowMicros: now), now);
+    final next = _analyzer.tick(nowMicros: now);
+    _emitDiagnostics();
+    _publish(next, now);
   }
 
   void _publish(SquatUpdate next, int now) {
@@ -110,10 +122,12 @@ class SquatProcessingController extends ChangeNotifier {
     if (_checkScope()) audio.setVoiceEnabled(enabled);
   }
 
-  void _suspendAnalysis() {
+  void _suspendAnalysis(
+      {SquatDiagnosticReason diagnosticReason = SquatDiagnosticReason.paused}) {
     _watchdog?.cancel();
     _watchdog = null;
-    _analyzer.pause();
+    _analyzer.pause(diagnosticReason: diagnosticReason);
+    _emitDiagnostics();
     _update = null;
     if (!_disposed) notifyListeners();
   }
@@ -140,7 +154,7 @@ class SquatProcessingController extends ChangeNotifier {
     _foreground = foreground;
     audio.setForeground(foreground);
     if (!foreground) {
-      _suspendAnalysis();
+      _suspendAnalysis(diagnosticReason: SquatDiagnosticReason.backgrounded);
     } else if (!_manualPause) {
       _analyzer.resume();
       audio.resume();
@@ -156,7 +170,9 @@ class SquatProcessingController extends ChangeNotifier {
     _closed = true;
     _watchdog?.cancel();
     _watchdog = null;
-    _analyzer.pause();
+    _analyzer.pause(diagnosticReason: SquatDiagnosticReason.sessionClosed);
+    _emitDiagnostics();
+    _analyzer.diagnostics?.clear();
     _update = null;
     _closing = audio.close();
     if (!_disposed) notifyListeners();
