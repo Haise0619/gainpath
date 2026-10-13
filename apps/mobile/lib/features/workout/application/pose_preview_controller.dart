@@ -30,6 +30,8 @@ class PosePreviewController extends ChangeNotifier {
       : quality = quality ?? PoseQualityDiagnostics(clockMicros: clockMicros);
   final PoseQualityDiagnostics quality;
   final RealSquatPerformance? performance;
+  bool get _directPreview =>
+      performance != null && realSquatRefinedPreviewEnabled && !quality.enabled;
   final SessionScope scope;
   final SessionScope? Function() activeScope;
   final PoseCameraSource camera;
@@ -79,6 +81,7 @@ class PosePreviewController extends ChangeNotifier {
   }
 
   Map<String, Object> get diagnostics => {
+        'previewSource': _directPreview ? 'refined' : 'filtered',
         if (quality.enabled) 'quality': quality.countersSnapshot,
         if (quality.enabled)
           'filterConfiguration': {
@@ -190,6 +193,9 @@ class PosePreviewController extends ChangeNotifier {
                 }
                 final filterTimer = Stopwatch()..start();
                 frame = _filter.filter(pose);
+                // Isolate preview smoothing in the non-release measurement
+                // build. Keep its state running; analysis still receives pose.
+                if (_directPreview) frame = pose;
                 quality.delivered(frame!, filterTimer.elapsedMicroseconds,
                     refined: pose);
                 if (quality.lag.enabled) {

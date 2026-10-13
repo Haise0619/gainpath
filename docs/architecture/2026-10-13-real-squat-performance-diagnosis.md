@@ -165,3 +165,40 @@ inference directly, with smoothing still running in shadow, to expose how much
 of the residual visible lag depends on preview smoothing. It must keep scalar
 telemetry only and default/release drawing unchanged. Physical comparison remains
 required before adopting a responsive display policy.
+
+## Direct preview diagnostic implemented
+
+Added `GAINPATH_SQUAT_REFINED_PREVIEW` as a separate non-release diagnostic that
+also requires scalar performance mode and an injected observer. It selects the
+fresh refined result as the preview frame while continuing to update the filter
+in shadow. The original refined callback into analysis is unchanged. Existing
+ownership, timestamp freshness, projection, confidence and frame-clearing paths
+apply to this selected frame. It retains no additional coordinate history.
+The UI labels it "Direct skeleton test (may shake)". Reports include a scalar
+`previewSource` enum from the controller, restricted to refined/filtered/unknown.
+
+This is a drawing-source ablation, not a deployed production latency fix. It
+tests whether removing the preview filter materially improves the user's
+remaining visible lag, and may expose prediction jitter. No beta or scoring
+change is adopted. Default and release builds remain filtered.
+
+A red regression observed the expected direct y=.1 versus existing filtered
+y=.445013. Tests verify source selection, observer isolation, unchanged analysis
+callback confidence/timestamps and pause clearing. Review identified a mixed
+legacy-diagnostic mode that would mislabel direct coordinates as filtered. A
+second failing test reproduced this. Direct mode now declines when legacy
+quality/joint-lag/render/blank build flags or an enabled quality object are
+present; a re-review found no remaining blocker. Complete default and candidate
+suites each passed 256 tests with 15 optional skips; source analysis is clean.
+Physical direct-display response, stability and actual count accuracy remain
+pending.
+
+Direct candidate build succeeded with the previous GPU timing flags plus
+`--dart-define=GAINPATH_SQUAT_REFINED_PREVIEW=true`. Artifact:
+`apps/mobile/build/step7-performance/gainpath-firebase-gpu-direct-preview.apk`.
+SHA256: `E336B36F77291C9A12B2E6DDE38CA3BFEC702864396B386E9EFEB3C54C970A13`.
+After the user confirmed the GPU session ended and was saved/discarded,
+`adb install -r`, launch and running process verification succeeded. No app data
+was cleared; CPU and filtered GPU artifacts are preserved. User was asked to
+repeat movement and a brief still hold. Direct-source runtime, physical response,
+shaking and count totals remain pending at installation.

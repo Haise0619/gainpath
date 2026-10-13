@@ -250,7 +250,7 @@ class _RealSquatRouteState extends State<RealSquatRoute>
             acknowledgement: _acknowledgement),
         uploadNotice: _performance == null
             ? _uploadNotice
-            : 'Timing measurement build. ${_uploadNotice ?? 'Results stay local unless upload is explicitly enabled.'}',
+            : '${realSquatRefinedPreviewEnabled ? 'Direct skeleton test (may shake). ' : ''}Timing measurement build. ${_uploadNotice ?? 'Results stay local unless upload is explicitly enabled.'}',
         cameraViewport:
             PoseCameraViewport(camera: _camera!, session: _session!.preview));
   }

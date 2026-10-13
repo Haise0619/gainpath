@@ -3,6 +3,12 @@ import 'package:flutter/foundation.dart';
 
 const realSquatPerformanceEnabled =
     !kReleaseMode && bool.fromEnvironment('GAINPATH_SQUAT_PERFORMANCE');
+const realSquatRefinedPreviewEnabled = realSquatPerformanceEnabled &&
+    bool.fromEnvironment('GAINPATH_SQUAT_REFINED_PREVIEW') &&
+    !bool.fromEnvironment('GAINPATH_POSE_QUALITY_DEBUG') &&
+    !bool.fromEnvironment('GAINPATH_POSE_JOINT_LAG_DEBUG') &&
+    !bool.fromEnvironment('GAINPATH_POSE_RENDER_DEBUG') &&
+    !bool.fromEnvironment('GAINPATH_POSE_BLANK_DEBUG');
 
 class _Timing {
   _Timing(this.capacity);
@@ -111,6 +117,10 @@ class RealSquatPerformance {
       'backend': {'cpu_2_threads', 'opencl_required'}.contains(backend)
           ? backend
           : 'unknown',
+      'previewSource':
+          {'filtered', 'refined'}.contains(diagnostics['previewSource'])
+              ? diagnostics['previewSource']
+              : 'unknown',
       'activeDurationMicros': active,
       'measuredDeliveries': _deliveries,
       'deliveredFps': active == 0 ? null : _deliveries * 1000000 / active,
