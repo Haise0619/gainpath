@@ -1,4 +1,6 @@
 import 'package:flutter/widgets.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:gainpath_identity/gainpath_identity.dart';
 import 'package:gainpath_domain/gainpath_domain.dart' show SessionScope;
 import '../../features/workout/domain/published_routine_view.dart';
 import '../../features/workout/presentation/member/workout_prep_screen.dart';
@@ -6,6 +8,7 @@ import '../../navigation/workout_navigation.dart';
 import 'pose_preview_route.dart';
 import 'real_squat_route.dart';
 import 'saved_squat_sessions_route.dart';
+import 'exercise_tutorial_route.dart';
 
 /// App-owned destinations for the published workout preparation flow.
 class WorkoutPrepRoute extends StatelessWidget {
@@ -21,14 +24,24 @@ class WorkoutPrepRoute extends StatelessWidget {
   final bool routineLoadFailed;
 
   @override
-  Widget build(BuildContext context) => WorkoutPrepScreen(
-      live: live,
-      publishedRoutine: publishedRoutine,
-      routineLoadFailed: routineLoadFailed,
-      routes: const WorkoutPrepRoutes(
-          realSessionBuilder: _realSession,
-          savedSessionsBuilder: _savedSessions,
-          posePreviewBuilder: _posePreview));
+  Widget build(BuildContext context) {
+    final auth = live ? context.read<AuthBloc>() : null;
+    final scope = auth?.state.session?.scope;
+    return WorkoutPrepScreen(
+        live: live,
+        publishedRoutine: publishedRoutine,
+        routineLoadFailed: routineLoadFailed,
+        routes: WorkoutPrepRoutes(
+            realSessionBuilder: _realSession,
+            savedSessionsBuilder: _savedSessions,
+            posePreviewBuilder: _posePreview,
+            tutorialBuilder: scope == null
+                ? null
+                : (_, exercise) => BlocProvider.value(
+                    value: auth!,
+                    child: ExerciseTutorialRoute(
+                        scope: scope, exercise: exercise))));
+  }
 }
 
 Widget _realSession(BuildContext context, RealWorkoutLaunch launch) =>

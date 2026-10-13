@@ -29,9 +29,12 @@ class WorkoutPrepRoutes {
     this.realSessionBuilder,
     this.savedSessionsBuilder,
     this.posePreviewBuilder,
+    this.tutorialBuilder,
   });
 
   final Widget Function(BuildContext, RealWorkoutLaunch)? realSessionBuilder;
   final Widget Function(BuildContext, SessionScope)? savedSessionsBuilder;
   final WidgetBuilder? posePreviewBuilder;
+  final Widget Function(BuildContext, PublishedRoutineExercise)?
+      tutorialBuilder;
 }

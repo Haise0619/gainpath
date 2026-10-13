@@ -127,11 +127,24 @@ class WorkoutPrepScreen extends StatelessWidget {
                   iconColor: AppColors.primary,
                   title: 'Watch tutorial',
                   subtitle: live
-                      ? 'Tutorial video is currently unavailable'
+                      ? routine.isEmpty
+                          ? 'No published exercise is available'
+                          : 'Review the published tutorial for ${routine.first.name}'
                       : 'See proper form for ${routine.first.name}',
                   image: live ? routineHeroImage : routine.first.imageUrl,
                   onTap: live
-                      ? () => showUnavailable(context)
+                      ? () {
+                          final builder = routes.tutorialBuilder;
+                          if (routine.isEmpty || builder == null) {
+                            showUnavailable(context);
+                            return;
+                          }
+                          final row = publishedRoutine!.exercises.first;
+                          Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                  builder: (ctx) => builder(ctx, row)));
+                        }
                       : () => Navigator.push(
                           context,
                           MaterialPageRoute(
@@ -155,7 +168,8 @@ class WorkoutPrepScreen extends StatelessWidget {
                               context,
                               MaterialPageRoute(
                                   builder: (_) => RoutineScreen(
-                                      publishedRoutine: publishedRoutine)))
+                                      publishedRoutine: publishedRoutine,
+                                      tutorialBuilder: routes.tutorialBuilder)))
                       : () => Navigator.push(
                           context,
                           MaterialPageRoute(

@@ -7,8 +7,10 @@ import 'exercise_tutorial_screen.dart';
 import 'widgets/workout_media.dart';
 
 class RoutineScreen extends StatelessWidget {
-  const RoutineScreen({super.key, this.publishedRoutine});
+  const RoutineScreen({super.key, this.publishedRoutine, this.tutorialBuilder});
   final PublishedRoutine? publishedRoutine;
+  final Widget Function(BuildContext, PublishedRoutineExercise)?
+      tutorialBuilder;
 
   @override
   Widget build(BuildContext context) {
@@ -24,7 +26,7 @@ class RoutineScreen extends StatelessWidget {
           Text(
               publishedRoutine == null
                   ? '${routine.length} exercises in order. Tap one to review its form cues.'
-                  : '${routine.length} exercises in order. Exercise tutorials are currently unavailable.',
+                  : '${routine.length} exercises in order. Tap one to review its published tutorial.',
               style: Theme.of(context).textTheme.bodyLarge),
           const SizedBox(height: 16),
           ...routine.asMap().entries.map((entry) {
@@ -40,7 +42,18 @@ class RoutineScreen extends StatelessWidget {
                         MaterialPageRoute(
                             builder: (_) =>
                                 ExerciseTutorialScreen(exercise: e)))
-                    : () => showUnavailable(context),
+                    : () {
+                        final builder = tutorialBuilder;
+                        if (builder == null) {
+                          showUnavailable(context);
+                          return;
+                        }
+                        final row = publishedRoutine!.exercises[i];
+                        Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                                builder: (ctx) => builder(ctx, row)));
+                      },
                 child: Row(
                   children: [
                     Padding(
@@ -77,7 +90,9 @@ class RoutineScreen extends StatelessWidget {
                                 style: Theme.of(context).textTheme.titleMedium),
                             const SizedBox(height: 2),
                             Text(
-                                '${e.sets} sets  ·  ${e.reps} reps  ·  90s rest',
+                                publishedRoutine == null
+                                    ? '${e.sets} sets  ·  ${e.reps} reps  ·  90s rest'
+                                    : '${e.sets} sets  ·  ${e.reps} reps',
                                 style: Theme.of(context)
                                     .textTheme
                                     .bodyMedium
@@ -102,7 +117,5 @@ class RoutineScreen extends StatelessWidget {
   }
 }
 
-/// UC-2.2 — Watch Exercise Tutorial. A simulated video player: tapping
-/// play swaps the thumbnail for the same animated pose-demo used on the
-/// live tracking screen, with a real scrubber and replay so it reads and
-/// behaves like a video even though nothing is actually streamed.
+/// UC-2.2 — Published rows use an app-composed tutorial destination;
+/// mock rows retain the isolated animated demonstration.
