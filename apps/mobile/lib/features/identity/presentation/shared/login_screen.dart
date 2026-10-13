@@ -4,6 +4,7 @@ import 'package:gainpath_identity/gainpath_identity.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
 import 'package:gainpath_domain/gainpath_domain.dart' show AppRole;
+import 'package:gainpath_domain/gainpath_domain.dart' show AuthException;
 import 'onboarding_screen.dart';
 
 /// AD-M1.1 / AD-M8.1 / AD-M11.1 — Login and Recovery.
@@ -19,10 +20,12 @@ class LoginScreen extends StatefulWidget {
       this.role,
       this.initiallyRegistering = false,
       this.initialEmail = '',
+      this.onPasswordReset,
       this.prefillDemoPassword = true});
   final bool initiallyRegistering;
   final String initialEmail;
   final bool prefillDemoPassword;
+  final Future<void> Function(String)? onPasswordReset;
 
   @override
   State<LoginScreen> createState() => _LoginScreenState();
@@ -108,6 +111,15 @@ class _LoginScreenState extends State<LoginScreen> {
   void _recover() {
     showForgotPasswordSheet(context,
         initialEmail: _email.text.trim(),
+        onSend: widget.onPasswordReset == null
+            ? null
+            : (email) async {
+                try {
+                  await widget.onPasswordReset!(email);
+                } on AuthException catch (error) {
+                  throw PasswordResetFailure(error.message);
+                }
+              },
         asDialog: kIsWeb && widget.role == AppRole.admin);
   }
 

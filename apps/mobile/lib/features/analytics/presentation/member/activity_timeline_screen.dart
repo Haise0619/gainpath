@@ -4,15 +4,23 @@ import 'package:gainpath_ui/gainpath_ui.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:gainpath_domain/analytics.dart';
 import 'package:gainpath_domain/workout.dart';
+import 'widgets/local_progress_widgets.dart';
 
 /// AD-M5.2 (Activity timeline) — a weekly session-frequency column chart
 /// up top (this report's own characteristic: density over time, not
 /// trend or proportion), then the full chronological log below.
 class ActivityTimelineScreen extends StatelessWidget {
-  const ActivityTimelineScreen({super.key});
+  const ActivityTimelineScreen({super.key, this.localProgress, this.onRefresh,
+    this.onOpenWorkout});
+
+  final MemberLocalProgress? localProgress;
+  final Future<void> Function()? onRefresh;
+  final void Function(LocalWorkoutProgressRecord)? onOpenWorkout;
 
   @override
   Widget build(BuildContext context) {
+    final local = localProgress;
+    if (local != null) return _buildLocal(context, local);
     final counts = context.read<AnalyticsRepository>().sessionsPerWeek;
     final labels = context.read<AnalyticsRepository>().sessionWeekLabels;
     final data = List.generate(counts.length, (i) => _WeekCount(labels[i], counts[i]));
@@ -107,6 +115,30 @@ class ActivityTimelineScreen extends StatelessWidget {
       ),
     );
   }
+
+  Widget _buildLocal(BuildContext context, MemberLocalProgress progress) => Scaffold(
+    appBar: AppBar(title: const Text('Activity timeline'), actions: [
+      if (onRefresh != null) IconButton(tooltip: 'Refresh',
+        icon: const Icon(Icons.refresh_rounded), onPressed: onRefresh),
+    ]),
+    body: localProgressRefresh(onRefresh: onRefresh, child: PageBody(children: [
+      LocalProgressPeriod(progress: progress),
+      const SizedBox(height: 12),
+      const Eyebrow('Saved sessions per week'),
+      LocalWeeklyChart(progress: progress),
+      const SizedBox(height: 20),
+      Text('${progress.allTimeSessions} saved sessions · '
+        '${progress.allTimeRepetitions} full reps · '
+        '${progress.allTimePartialRepetitions} partial attempts',
+        style: Theme.of(context).textTheme.bodyMedium),
+      const SizedBox(height: 12),
+      const Eyebrow('Local workout history'),
+      if (progress.records.isEmpty)
+        const Panel(child: Text('No saved camera sessions yet.')),
+      ...progress.records.map((record) => LocalProgressRecordTile(
+        record: record, utcOffset: progress.utcOffset, onOpenWorkout: onOpenWorkout)),
+    ])),
+  );
 
   String _ago(DateTime d) {
     final days = DateTime.now().difference(d).inDays;

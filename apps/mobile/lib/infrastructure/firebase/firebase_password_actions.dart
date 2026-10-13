@@ -1,6 +1,26 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:gainpath_domain/gainpath_domain.dart';
 
+class FirebasePasswordResetActions {
+  FirebasePasswordResetActions({FirebaseAuth? auth})
+      : _auth = auth ?? FirebaseAuth.instance;
+  final FirebaseAuth _auth;
+  Future<void> send(String email) async {
+    try {
+      await _auth.sendPasswordResetEmail(email: email.trim());
+    } on FirebaseAuthException catch (error) {
+      // Match Firebase's enumeration-protected neutral response.
+      if (error.code == 'user-not-found') return;
+      throw AuthException(switch (error.code) {
+        'invalid-email' => 'Enter a valid email address.',
+        'network-request-failed' => 'Check your connection and retry.',
+        'too-many-requests' => 'Too many requests. Wait before trying again.',
+        _ => 'Could not request a reset email. Please try again.',
+      });
+    }
+  }
+}
+
 class FirebasePasswordActions {
   FirebasePasswordActions({required this.scope, FirebaseAuth? auth})
       : _auth = auth ?? FirebaseAuth.instance;

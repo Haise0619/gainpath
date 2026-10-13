@@ -9,6 +9,7 @@ import 'package:gainpath_ui/gainpath_ui.dart';
 import 'app.dart';
 import 'routing/app_routes.dart';
 import 'routing/feature_routes.dart';
+import '../features/analytics/domain/local_member_progress_repository.dart';
 import 'shells/member_shell.dart';
 import 'shells/coach_shell.dart';
 import '../features/identity/presentation/shared/login_screen.dart';
@@ -30,6 +31,8 @@ class GainPathMobileApp extends StatelessWidget {
       this.backendConfig,
       this.profileRepositoryFactory,
       this.routineLoaderFactory,
+      this.progressRepositoryFactory,
+      this.passwordResetSender,
       this.memberSettingsBuilder});
 
   final AuthRepository? authRepository;
@@ -37,6 +40,8 @@ class GainPathMobileApp extends StatelessWidget {
   final FitnessProfileRepository Function(SessionScope)?
       profileRepositoryFactory;
   final Future<PublishedRoutine?> Function(SessionScope)? routineLoaderFactory;
+  final LocalMemberProgressRepositoryFactory? progressRepositoryFactory;
+  final Future<void> Function(String)? passwordResetSender;
   final WidgetBuilder? memberSettingsBuilder;
 
   @override
@@ -72,9 +77,18 @@ class GainPathMobileApp extends StatelessWidget {
                   config: config,
                   profileRepositoryFactory: profileRepositoryFactory,
                   routineLoaderFactory: routineLoaderFactory,
+                  progressRepositoryFactory: progressRepositoryFactory,
+                  passwordResetSender: passwordResetSender,
                   memberSettingsBuilder: memberSettingsBuilder),
-              routes: AppRouteBuilders.builders,
-              onGenerateRoute: buildFeatureRoute,
+              routes: AppRouteBuilders.withLogin((_) => LoginScreen(
+                  prefillDemoPassword: !config.isFirebase,
+                  onPasswordReset: config.isFirebase
+                      ? passwordResetSender ??
+                          (email) => FirebasePasswordResetActions().send(email)
+                      : null)),
+              onGenerateRoute: (settings) => buildFeatureRoute(settings,
+                  firebase: config.isFirebase,
+                  progressRepositoryFactory: progressRepositoryFactory),
             );
             if (config.isFirebase) return app;
             return AppScope(
@@ -94,11 +108,15 @@ class _MobileAuthGate extends StatefulWidget {
       {required this.config,
       this.profileRepositoryFactory,
       this.routineLoaderFactory,
+      this.progressRepositoryFactory,
+      this.passwordResetSender,
       this.memberSettingsBuilder});
   final BackendConfig config;
   final FitnessProfileRepository Function(SessionScope)?
       profileRepositoryFactory;
   final Future<PublishedRoutine?> Function(SessionScope)? routineLoaderFactory;
+  final LocalMemberProgressRepositoryFactory? progressRepositoryFactory;
+  final Future<void> Function(String)? passwordResetSender;
   final WidgetBuilder? memberSettingsBuilder;
   @override
   State<_MobileAuthGate> createState() => _MobileAuthGateState();
@@ -134,6 +152,7 @@ class _MobileAuthGateState extends State<_MobileAuthGate> {
                   key: ValueKey(scope),
                   session: state.session!,
                   repository: _profileRepository!,
+                  progressRepositoryFactory: widget.progressRepositoryFactory,
                   routineLoader: widget.routineLoaderFactory == null
                       ? () => FirebasePublishedRoutineRepository(scope: scope)
                           .load()
@@ -194,7 +213,12 @@ class _MobileAuthGateState extends State<_MobileAuthGate> {
             ),
           );
         }
-        return LoginScreen(prefillDemoPassword: !widget.config.isFirebase);
+        return LoginScreen(
+            prefillDemoPassword: !widget.config.isFirebase,
+            onPasswordReset: widget.config.isFirebase
+                ? widget.passwordResetSender ??
+                    (email) => FirebasePasswordResetActions().send(email)
+                : null);
       },
     );
   }

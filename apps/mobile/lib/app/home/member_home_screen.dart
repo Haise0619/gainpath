@@ -1,4 +1,6 @@
 import 'dart:math' as math;
+import 'package:gainpath_domain/analytics.dart';
+import '../../features/analytics/presentation/member/widgets/local_progress_widgets.dart';
 import '../unavailable_action.dart';
 import '../../features/workout/data/published_routine.dart';
 import 'package:flutter/material.dart';
@@ -35,11 +37,27 @@ import 'package:gainpath_domain/gainpath_domain.dart'
 /// consulting it is usually prompted by something already on screen.
 class MemberHomeScreen extends StatefulWidget {
   const MemberHomeScreen(
-      {super.key, this.liveSession, this.liveProfile, this.publishedRoutine});
+      {super.key,
+      this.liveSession,
+      this.liveProfile,
+      this.publishedRoutine,
+      this.localProgress,
+      this.progressError,
+      this.progressWarnings = const [],
+      this.onRefreshProgress,
+      this.onOpenProgress,
+      this.onOpenHistory,
+      this.onOpenWorkout});
 
   final AuthSession? liveSession;
   final FitnessProfile? liveProfile;
   final PublishedRoutine? publishedRoutine;
+  final MemberLocalProgress? localProgress;
+  final String? progressError;
+  final List<String> progressWarnings;
+  final Future<void> Function()? onRefreshProgress;
+  final VoidCallback? onOpenProgress, onOpenHistory;
+  final void Function(LocalWorkoutProgressRecord)? onOpenWorkout;
 
   @override
   State<MemberHomeScreen> createState() => _MemberHomeScreenState();
@@ -106,8 +124,11 @@ class _MemberHomeScreenState extends State<MemberHomeScreen>
     return upcoming.isEmpty ? null : upcoming.first;
   }
 
-  void _go(Widget screen) {
-    Navigator.push(context, MaterialPageRoute(builder: (_) => screen));
+  Future<void> _go(Widget screen) async {
+    await Navigator.push(context, MaterialPageRoute(builder: (_) => screen));
+    if (mounted && widget.liveSession != null) {
+      await widget.onRefreshProgress?.call();
+    }
   }
 
   @override
@@ -132,7 +153,7 @@ class _MemberHomeScreenState extends State<MemberHomeScreen>
       ),
       body: RefreshIndicator(
         color: AppColors.primary,
-        onRefresh: live ? () async {} : _refresh,
+        onRefresh: live ? (widget.onRefreshProgress ?? () async {}) : _refresh,
         child: CustomScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
           slivers: [
@@ -176,7 +197,33 @@ class _MemberHomeScreenState extends State<MemberHomeScreen>
                           : () => _go(const WorkoutPrepScreen())),
                   const SizedBox(height: 20),
                   const Eyebrow('This week'),
-                  _RingStatsRow(live: live),
+                  _RingStatsRow(live: live, progress: widget.localProgress),
+                  if (live) ...[
+                    const SizedBox(height: 8),
+                    if (widget.localProgress != null)
+                      LocalProgressPeriod(progress: widget.localProgress!),
+                    Text(widget.progressError ??
+                        (widget.localProgress == null
+                            ? 'Loading saved camera sessions…'
+                            : 'Saved local measurements · provisional; no rewards implied.')),
+                    if (widget.progressError != null)
+                      TextButton(
+                          onPressed: widget.onRefreshProgress,
+                          child: const Text('Retry local progress')),
+                    ...widget.progressWarnings.map((warning) => Text(warning)),
+                    const SizedBox(height: 16),
+                    const Eyebrow('Recent local workouts'),
+                    if (widget.localProgress?.records.isEmpty == true)
+                      const Panel(child: Text('No saved camera sessions yet.')),
+                    ...?widget.localProgress?.records.take(3).map((record) =>
+                        LocalProgressRecordTile(
+                            record: record,
+                            utcOffset: widget.localProgress!.utcOffset,
+                            onOpenWorkout: widget.onOpenWorkout)),
+                    TextButton(
+                        onPressed: widget.onOpenHistory,
+                        child: const Text('View local workout history')),
+                  ],
                   const SizedBox(height: 20),
                   if (nextBooking != null) ...[
                     const Eyebrow('Next with a coach'),
@@ -187,7 +234,10 @@ class _MemberHomeScreenState extends State<MemberHomeScreen>
                     const SizedBox(height: 20),
                   ],
                   const Eyebrow('Quick access'),
-                  _QuickActionsGrid(onSelect: _go, enabled: !live),
+                  _QuickActionsGrid(
+                      onSelect: _go,
+                      enabled: !live,
+                      onOpenProgress: widget.onOpenProgress),
                   const SizedBox(height: 20),
                   const Eyebrow('Goal progress'),
                   _GoalPreviewCard(
@@ -677,8 +727,9 @@ class _TodayWorkoutCard extends StatelessWidget {
 }
 
 class _RingStatsRow extends StatelessWidget {
-  const _RingStatsRow({this.live = false});
+  const _RingStatsRow({this.live = false, this.progress});
   final bool live;
+  final MemberLocalProgress? progress;
 
   @override
   Widget build(BuildContext context) {
@@ -688,7 +739,8 @@ class _RingStatsRow extends StatelessWidget {
           child: _RingStat(
             value: live ? 0 : 4 / 5,
             label: 'Sessions',
-            display: live ? '—' : '4/5',
+            display:
+                live ? (progress?.weeklySessions.toString() ?? '—') : '4/5',
             color: AppColors.primary,
             icon: Icons.fitness_center_rounded,
           ),
@@ -697,8 +749,9 @@ class _RingStatsRow extends StatelessWidget {
         Expanded(
           child: _RingStat(
             value: live ? 0 : 0.84,
-            label: 'Avg form',
-            display: live ? '—' : '84%',
+            label: live ? 'Full reps' : 'Avg form',
+            display:
+                live ? (progress?.weeklyRepetitions.toString() ?? '—') : '84%',
             color: AppColors.success,
             icon: Icons.verified_rounded,
           ),
@@ -707,8 +760,12 @@ class _RingStatsRow extends StatelessWidget {
         Expanded(
           child: _RingStat(
             value: live ? 0 : 12 / 14,
-            label: 'To badge',
-            display: live ? '—' : '12/14',
+            label: live ? 'Coverage' : 'To badge',
+            display: live
+                ? (progress == null
+                    ? '—'
+                    : localProgressCoverage(progress!.weeklyCoverage))
+                : '12/14',
             color: AppColors.accent,
             icon: Icons.military_tech_rounded,
           ),
@@ -897,13 +954,15 @@ class _NextSessionCard extends StatelessWidget {
 class _QuickActionsGrid extends StatelessWidget {
   final void Function(Widget) onSelect;
   final bool enabled;
-  const _QuickActionsGrid({required this.onSelect, this.enabled = true});
+  final VoidCallback? onOpenProgress;
+  const _QuickActionsGrid(
+      {required this.onSelect, this.enabled = true, this.onOpenProgress});
 
   @override
   Widget build(BuildContext context) {
     final actions = <_QuickAction>[
       _QuickAction(Icons.insights_rounded, 'Progress', AppColors.primary,
-          () => onSelect(const ProgressDashboardScreen())),
+          onOpenProgress ?? () => onSelect(const ProgressDashboardScreen())),
       _QuickAction(Icons.emoji_events_rounded, 'Rewards', AppColors.accent,
           () => onSelect(const GamificationDashboardScreen())),
       _QuickAction(Icons.people_alt_rounded, 'Coaches', AppColors.info,
@@ -933,7 +992,10 @@ class _QuickActionsGrid extends StatelessWidget {
       mainAxisSpacing: 10,
       childAspectRatio: 0.82,
       children: actions
-          .map((a) => _QuickActionTile(action: a, enabled: enabled))
+          .map((a) => _QuickActionTile(
+              action: a,
+              enabled:
+                  enabled || (a.label == 'Progress' && onOpenProgress != null)))
           .toList(),
     );
   }

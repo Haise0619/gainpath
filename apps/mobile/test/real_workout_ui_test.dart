@@ -9,6 +9,7 @@ import 'package:gainpath_data/gainpath_data.dart';
 import 'package:gainpath_identity/gainpath_identity.dart';
 import 'package:gainpath_pose/gainpath_pose.dart';
 import 'package:gainpath_mobile/app/routing/saved_squat_sessions_route.dart';
+import 'package:gainpath_mobile/features/workout/domain/real_workout_sync.dart';
 import 'package:gainpath_mobile/features/workout/application/real_squat_session_controller.dart';
 import 'package:gainpath_mobile/features/workout/data/workout_session_repository.dart';
 import 'package:gainpath_mobile/features/workout/presentation/member/real_workout_view.dart';
@@ -164,10 +165,16 @@ void main() {
         value: auth,
         child: MaterialApp(
             home: SavedSquatSessionsRoute(
-                scope: scope, storeFactory: (_) async => store))));
+                scope: scope,
+                storeFactory: (_) async => store,
+                syncStoreFactory: (_) async =>
+                    MemoryRealWorkoutSyncStore(scope: scope)))));
     await tester.pumpAndSettle();
-    expect(find.text('0 full reps · 0 partial'), findsOneWidget);
-    await tester.tap(find.text('0 full reps · 0 partial'));
+    final history =
+        find.textContaining('0 full reps · 0 partial attempts').last;
+    await tester.ensureVisible(history);
+    expect(history, findsOneWidget);
+    await tester.tap(history);
     await tester.pumpAndSettle();
     expect(find.text('Saved on this device'), findsOneWidget);
     await tester.runAsync(() async {

@@ -18,10 +18,12 @@ class MemberProfileScreen extends StatelessWidget {
       {super.key,
       this.liveSession,
       this.liveProfile,
+      this.onOpenProgress,
       this.memberSettingsBuilder});
 
   final AuthSession? liveSession;
   final FitnessProfile? liveProfile;
+  final VoidCallback? onOpenProgress;
   final WidgetBuilder? memberSettingsBuilder;
 
   @override
@@ -231,11 +233,13 @@ class MemberProfileScreen extends StatelessWidget {
                     context,
                     Icons.insights_rounded,
                     'Progress and reports',
-                    'Volume, form, and goals',
-                    () => liveSession == null
-                        ? Navigator.pushNamed(
-                            context, FeatureNavigation.progress)
-                        : showUnavailable(context)),
+                    liveSession == null
+                        ? 'Volume, form, and goals'
+                        : 'Local sessions, repetitions and estimated form',
+                    () => onOpenProgress != null
+                        ? onOpenProgress!()
+                        : Navigator.pushNamed(
+                            context, FeatureNavigation.progress)),
                 const Divider(height: 1, indent: 62),
                 _row(
                     context,

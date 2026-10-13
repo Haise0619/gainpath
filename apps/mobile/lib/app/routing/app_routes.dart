@@ -12,6 +12,24 @@ import 'package:gainpath_domain/gainpath_domain.dart' show AppRole;
 import '../../features/identity/presentation/shared/login_screen.dart';
 
 abstract final class AppRouteBuilders {
+  static Map<String, WidgetBuilder> withLogin(WidgetBuilder loginBuilder) => {
+        ...builders,
+        for (final route in [
+          AppRoutes.login,
+          AppRoutes.roleSelect,
+          AppRoutes.memberLogin,
+          AppRoutes.coachLogin
+        ])
+          route: loginBuilder,
+        AppRoutes.member: (_) => _RoleGuard(
+            role: AppRole.member,
+            loginBuilder: loginBuilder,
+            child: const MemberShell()),
+        AppRoutes.coach: (_) => _RoleGuard(
+            role: AppRole.coach,
+            loginBuilder: loginBuilder,
+            child: const CoachShell()),
+      };
   static Map<String, WidgetBuilder> get builders => {
         WorkoutNavigation.guided: (_) => const WorkoutRoute(),
         AppRoutes.login: (_) => const LoginScreen(),
@@ -26,10 +44,12 @@ abstract final class AppRouteBuilders {
 }
 
 class _RoleGuard extends StatelessWidget {
-  const _RoleGuard({required this.role, required this.child});
+  const _RoleGuard(
+      {required this.role, required this.child, this.loginBuilder});
 
   final AppRole role;
   final Widget child;
+  final WidgetBuilder? loginBuilder;
 
   @override
   Widget build(BuildContext context) {
@@ -38,7 +58,7 @@ class _RoleGuard extends StatelessWidget {
         if (AppRoutePolicy.canEnterShell(auth: auth, requiredRole: role)) {
           return child;
         }
-        return const LoginScreen();
+        return loginBuilder?.call(context) ?? const LoginScreen();
       },
     );
   }

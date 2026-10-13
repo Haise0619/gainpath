@@ -3,13 +3,16 @@ import 'package:syncfusion_flutter_charts/charts.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:gainpath_domain/analytics.dart';
+import 'widgets/local_progress_widgets.dart';
 
 /// AD-M5.2 (Workout performance) — weekly lifted volume as a column
 /// chart, paired with a doughnut breakdown of muscle-group split. Column
 /// and doughnut are the two chart shapes that best carry this report's
 /// two questions: "how much, over time" and "what proportion, right now."
 class WorkoutPerformanceScreen extends StatelessWidget {
-  const WorkoutPerformanceScreen({super.key});
+  const WorkoutPerformanceScreen({super.key, this.localProgress});
+
+  final MemberLocalProgress? localProgress;
 
   static const _weekLabels = ['W1', 'W2', 'W3', 'W4', 'W5', 'W6', 'W7'];
   static const _sliceColors = [
@@ -21,6 +24,8 @@ class WorkoutPerformanceScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final local = localProgress;
+    if (local != null) return _buildLocal(context, local);
     final volume = context.read<AnalyticsRepository>().volumeTrend;
     final data =
         List.generate(volume.length, (i) => _WeekPoint(_weekLabels[i], volume[i]));
@@ -113,6 +118,36 @@ class WorkoutPerformanceScreen extends StatelessWidget {
       ),
     );
   }
+
+  Widget _buildLocal(BuildContext context, MemberLocalProgress progress) => Scaffold(
+    appBar: AppBar(title: const Text('Workout performance')),
+    body: PageBody(children: [
+      LocalProgressPeriod(progress: progress),
+      const SizedBox(height: 12),
+      Row(children: [
+        Expanded(child: StatTile('${progress.weeklySessions}', 'Saved sessions this week', compact: true)),
+        const SizedBox(width: 10),
+        Expanded(child: StatTile('${progress.weeklyRepetitions}', 'Full reps this week', compact: true)),
+      ]),
+      const SizedBox(height: 10),
+      Text('${progress.weeklyPartialRepetitions} partial attempts this week · '
+        'measurement coverage: ${localProgressCoverage(progress.weeklyCoverage)}',
+        style: Theme.of(context).textTheme.bodyMedium),
+      const SizedBox(height: 20),
+      const Eyebrow('Saved sessions per week'),
+      LocalWeeklyChart(progress: progress),
+      const SizedBox(height: 20),
+      const Eyebrow('Full reps per week'),
+      LocalWeeklyChart(progress: progress, repetitions: true),
+      const SizedBox(height: 12),
+      const Text('Counts include saved camera captures with zero reps. '
+        'Partial attempts remain separate from full reps.'),
+      if (progress.records.isEmpty) ...[
+        const SizedBox(height: 12),
+        const Panel(child: Text('No saved camera sessions yet.')),
+      ],
+    ]),
+  );
 }
 
 class _WeekPoint {

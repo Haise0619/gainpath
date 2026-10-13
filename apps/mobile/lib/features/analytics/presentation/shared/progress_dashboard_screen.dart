@@ -6,6 +6,7 @@ import '../member/gamification_progress_screen.dart';
 import '../member/goal_progress_screen.dart';
 import '../member/posture_accuracy_screen.dart';
 import '../member/widgets/report_preview_tile.dart';
+import '../member/widgets/local_progress_widgets.dart';
 import '../member/workout_performance_screen.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:gainpath_domain/analytics.dart';
@@ -19,7 +20,15 @@ import 'package:gainpath_domain/gamification.dart';
 /// in. Everything reveals with a short staggered fade so the page feels
 /// alive on open rather than dumping every panel at once.
 class ProgressDashboardScreen extends StatefulWidget {
-  const ProgressDashboardScreen({super.key});
+  const ProgressDashboardScreen({super.key, this.localProgress, this.onRefresh,
+    this.onOpenWorkout, this.onOpenHistory, this.onOpenPerformance, this.onOpenForm});
+
+  final MemberLocalProgress? localProgress;
+  final Future<void> Function()? onRefresh;
+  final void Function(LocalWorkoutProgressRecord)? onOpenWorkout;
+  final VoidCallback? onOpenHistory;
+  final VoidCallback? onOpenPerformance;
+  final VoidCallback? onOpenForm;
 
   @override
   State<ProgressDashboardScreen> createState() => _ProgressDashboardScreenState();
@@ -60,6 +69,8 @@ class _ProgressDashboardScreenState extends State<ProgressDashboardScreen>
 
   @override
   Widget build(BuildContext context) {
+    final local = widget.localProgress;
+    if (local != null) return _buildLocal(context, local);
     // The volume record check is computed, not asserted, so this stays
     // correct if the underlying weekly figures ever change.
     final volume = context.read<AnalyticsRepository>().volumeTrend;
@@ -201,6 +212,94 @@ class _ProgressDashboardScreenState extends State<ProgressDashboardScreen>
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildLocal(BuildContext context, MemberLocalProgress progress) {
+    final VoidCallback openPerformance = widget.onOpenPerformance ?? () => Navigator.push(context, MaterialPageRoute(
+      builder: (_) => WorkoutPerformanceScreen(localProgress: progress)));
+    final VoidCallback openForm = widget.onOpenForm ?? () => Navigator.push(context, MaterialPageRoute(
+      builder: (_) => PostureAccuracyScreen(localProgress: progress)));
+    final VoidCallback openHistory = widget.onOpenHistory ?? () => Navigator.push(context, MaterialPageRoute(
+      builder: (_) => ActivityTimelineScreen(localProgress: progress,
+        onRefresh: widget.onRefresh, onOpenWorkout: widget.onOpenWorkout)));
+    final scaled = MediaQuery.textScalerOf(context).scale(14) / 14;
+    return Scaffold(
+      appBar: AppBar(title: const Text('Your progress'), actions: [
+        if (widget.onRefresh != null) IconButton(tooltip: 'Refresh',
+          icon: const Icon(Icons.refresh_rounded), onPressed: widget.onRefresh),
+      ]),
+      body: localProgressRefresh(onRefresh: widget.onRefresh,
+        child: PageBody(children: [
+          Container(padding: const EdgeInsets.all(18),
+            decoration: BoxDecoration(gradient: AppColors.heroGradient,
+              borderRadius: BorderRadius.circular(20)),
+            child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              const Icon(Icons.insights_rounded, color: Colors.white),
+              const SizedBox(width: 14),
+              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('${progress.weeklySessions} saved camera sessions this week',
+                    style: const TextStyle(color: Colors.white, fontSize: 17,
+                      fontWeight: FontWeight.w800)),
+                  const SizedBox(height: 6),
+                  const Text('Local measurements remain provisional. A saved capture '
+                    'does not imply a completed routine.',
+                    style: TextStyle(color: Colors.white, height: 1.4)),
+                ])),
+            ])),
+          const SizedBox(height: 20),
+          const Eyebrow('This week at a glance'),
+          LocalProgressPeriod(progress: progress),
+          const SizedBox(height: 10),
+          GridView(
+            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: MediaQuery.sizeOf(context).width < 360 || scaled > 1.3 ? 1 : 2,
+              mainAxisExtent: 170 * scaled, mainAxisSpacing: 10, crossAxisSpacing: 10),
+            shrinkWrap: true, physics: const NeverScrollableScrollPhysics(),
+            children: [
+              _StatCard(icon: Icons.event_available_rounded,
+                value: '${progress.weeklySessions}', label: 'Saved sessions',
+                delta: 'Camera captures', deltaColor: AppColors.inkSoft,
+                onTap: openHistory),
+              _StatCard(icon: Icons.fitness_center_rounded,
+                value: '${progress.weeklyRepetitions}', label: 'Full reps',
+                delta: 'Measured full repetitions', deltaColor: AppColors.inkSoft,
+                onTap: openPerformance),
+              _StatCard(icon: Icons.timelapse_rounded,
+                value: '${progress.weeklyPartialRepetitions}', label: 'Partial attempts',
+                delta: 'Kept separate from full reps', deltaColor: AppColors.inkSoft,
+                onTap: openPerformance),
+              _StatCard(icon: Icons.visibility_rounded,
+                value: localProgressCoverage(progress.weeklyCoverage),
+                label: 'Measurement coverage', delta: 'Tracked / (tracked + rejected)',
+                deltaColor: AppColors.inkSoft, onTap: openForm),
+            ]),
+          const SizedBox(height: 20),
+          const Eyebrow('Deep dives'),
+          ReportPreviewTile(icon: Icons.bar_chart_rounded,
+            title: 'Workout performance', subtitle: 'Weekly saved sessions and full reps',
+            sparkData: progress.weeks.map((week) => week.repetitions.toDouble()).toList(),
+            onTap: openPerformance),
+          const SizedBox(height: 10),
+          Panel(child: ListTile(contentPadding: EdgeInsets.zero,
+            leading: const Icon(Icons.show_chart_rounded, color: AppColors.primary),
+            title: const Text('Estimated form'),
+            subtitle: Text('${progress.formSeries.length} compatible version groups'),
+            trailing: const Icon(Icons.chevron_right_rounded), onTap: openForm)),
+          const SizedBox(height: 10),
+          ReportPreviewTile(icon: Icons.history_rounded,
+            title: 'Activity timeline', subtitle: 'Saved captures and upload status',
+            sparkData: progress.weeks.map((week) => week.sessions.toDouble()).toList(),
+            onTap: openHistory),
+          const SizedBox(height: 20),
+          const Eyebrow('Recent sessions'),
+          if (progress.records.isEmpty) const Panel(
+            child: Text('No saved camera sessions yet.')),
+          ...progress.records.take(3).map((record) => LocalProgressRecordTile(
+            record: record, utcOffset: progress.utcOffset,
+            onOpenWorkout: widget.onOpenWorkout)),
+        ])),
     );
   }
 }

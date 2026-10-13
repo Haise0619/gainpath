@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:gainpath_domain/gainpath_domain.dart';
 import '../home/member_home_screen.dart';
+import '../routing/member_progress_route.dart';
+import '../di/local_member_progress_factory.dart';
+import '../../features/analytics/domain/local_member_progress_repository.dart';
 import '../../features/workout/data/published_routine.dart';
 import '../../features/workout/presentation/member/workout_prep_screen.dart';
 import '../../features/gamification/presentation/member/gamification_dashboard_screen.dart';
@@ -14,11 +17,13 @@ class MemberShell extends StatefulWidget {
       this.liveSession,
       this.liveProfile,
       this.routineLoader,
+      this.progressRepositoryFactory,
       this.memberSettingsBuilder});
 
   final AuthSession? liveSession;
   final FitnessProfile? liveProfile;
   final Future<PublishedRoutine?> Function()? routineLoader;
+  final LocalMemberProgressRepositoryFactory? progressRepositoryFactory;
   final WidgetBuilder? memberSettingsBuilder;
 
   @override
@@ -49,33 +54,53 @@ class _MemberShellState extends State<MemberShell> {
   Widget build(BuildContext context) {
     final live = widget.liveSession != null;
     if (!live) return _scaffold(_pages);
-    return FutureBuilder<PublishedRoutine?>(
-      future: _routineFuture,
-      builder: (context, snapshot) => _scaffold(<Widget>[
-        MemberHomeScreen(
-            liveSession: widget.liveSession!,
-            liveProfile: widget.liveProfile!,
-            publishedRoutine: snapshot.data),
-        WorkoutPrepScreen(
-            live: true,
-            publishedRoutine: snapshot.data,
-            routineLoadFailed: snapshot.hasError),
-        const GamificationDashboardScreen(live: true),
-        const BrowseCoachesScreen(live: true),
-        MemberProfileScreen(
-            liveSession: widget.liveSession!,
-            liveProfile: widget.liveProfile!,
-            memberSettingsBuilder: widget.memberSettingsBuilder),
-      ]),
-    );
+    return MemberProgressHost(
+        key: ValueKey(widget.liveSession!.scope),
+        scope: widget.liveSession!.scope,
+        repositoryFactory: widget.progressRepositoryFactory ??
+            createLocalMemberProgressRepository,
+        builder: (context, progressState, refresh, open, openWorkout) =>
+            FutureBuilder<PublishedRoutine?>(
+              future: _routineFuture,
+              builder: (context, snapshot) => _scaffold(<Widget>[
+                MemberHomeScreen(
+                    liveSession: widget.liveSession!,
+                    liveProfile: widget.liveProfile!,
+                    localProgress: progressState.progress,
+                    progressError: progressState.error,
+                    progressWarnings:
+                        progressState.snapshot?.warnings ?? const [],
+                    onRefreshProgress: refresh,
+                    onOpenProgress: () => open(MemberProgressView.dashboard),
+                    onOpenHistory: () => open(MemberProgressView.history),
+                    onOpenWorkout: openWorkout,
+                    publishedRoutine: snapshot.data),
+                WorkoutPrepScreen(
+                    live: true,
+                    publishedRoutine: snapshot.data,
+                    routineLoadFailed: snapshot.hasError),
+                const GamificationDashboardScreen(live: true),
+                const BrowseCoachesScreen(live: true),
+                MemberProfileScreen(
+                    liveSession: widget.liveSession!,
+                    liveProfile: widget.liveProfile!,
+                    onOpenProgress: () => open(MemberProgressView.dashboard),
+                    memberSettingsBuilder: widget.memberSettingsBuilder),
+              ], onTabChanged: (index) {
+                if (index == 0) refresh();
+              }),
+            ));
   }
 
-  Widget _scaffold(List<Widget> pages) {
+  Widget _scaffold(List<Widget> pages, {void Function(int)? onTabChanged}) {
     return Scaffold(
       body: IndexedStack(index: _index, children: pages),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _index,
-        onDestinationSelected: (i) => setState(() => _index = i),
+        onDestinationSelected: (i) {
+          setState(() => _index = i);
+          onTabChanged?.call(i);
+        },
         destinations: const [
           NavigationDestination(
               icon: Icon(Icons.home_outlined),

@@ -5,6 +5,7 @@ import 'package:gainpath_domain/identity.dart' show MemberProfileRepository;
 import 'package:gainpath_identity/gainpath_identity.dart';
 import '../../../../app/shells/member_shell.dart';
 import '../../../workout/data/published_routine.dart';
+import '../../../analytics/domain/local_member_progress_repository.dart';
 
 import 'profile_setup_screen.dart';
 
@@ -15,10 +16,12 @@ class FitnessProfileGate extends StatefulWidget {
       required this.session,
       required this.repository,
       this.routineLoader,
+      this.progressRepositoryFactory,
       this.memberSettingsBuilder});
   final AuthSession session;
   final FitnessProfileRepository repository;
   final Future<PublishedRoutine?> Function()? routineLoader;
+  final LocalMemberProgressRepositoryFactory? progressRepositoryFactory;
   final WidgetBuilder? memberSettingsBuilder;
 
   @override
@@ -73,6 +76,7 @@ class _FitnessProfileGateState extends State<FitnessProfileGate> {
                   liveSession: widget.session,
                   liveProfile: state.profile!,
                   routineLoader: widget.routineLoader,
+                  progressRepositoryFactory: widget.progressRepositoryFactory,
                   memberSettingsBuilder: widget.memberSettingsBuilder,
                 ),
               ),
