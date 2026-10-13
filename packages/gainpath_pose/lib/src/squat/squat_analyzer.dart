@@ -7,6 +7,7 @@ import 'squat_geometry.dart';
 import 'squat_rule_set.dart';
 import 'squat_update.dart';
 import 'squat_diagnostics.dart';
+import 'squat_world_geometry.dart';
 
 /// Provisional side-view squat engine. Feed refined (not already smoothed)
 /// upright, unmirrored frames, with a stationary upright camera. This is not
@@ -14,7 +15,7 @@ import 'squat_diagnostics.dart';
 class SquatAnalyzer {
   SquatAnalyzer({SquatRuleSet? rules, this.preferredSide, this.diagnostics})
       : rules = rules ?? SquatRuleSet() {
-    diagnostics?.configure(this.rules);
+    diagnostics?.configure(this.rules, filter: _filter);
   }
   final SquatDiagnosticRecorder? diagnostics;
   final SquatRuleSet rules;
@@ -105,7 +106,14 @@ class SquatAnalyzer {
     if (_geometry == null) return _unavailable(time, nowMicros: nowMicros);
     final angle = _geometry!.kneeAngleDegrees;
     diagnostics?.observe(
-        time: time, side: _side!, filtered2d: angle, confidence: _confidence);
+        time: time,
+        side: _side!,
+        filtered2d: angle,
+        confidence: _confidence,
+        comparison: diagnostics?.compareWorldAngles == true
+            ? SquatAngleComparison.fromFrames(frame, filtered, _side!,
+                minimumConfidence: rules.minimumConfidence)
+            : null);
     _velocity =
         !recovering && _previousAngle != null && _previousAngleTime != null
             ? (angle - _previousAngle!) * 1000000 / (time - _previousAngleTime!)
@@ -240,6 +248,8 @@ class SquatAnalyzer {
     if (angle <= rules.depthAngleDegrees) {
       _depthSince ??= time;
       if (time - _depthSince! >= rules.reversalMicros) _depthReached = true;
+      diagnostics?.decisionDepthDwell(time - _depthSince!,
+          confirmed: _depthReached);
     } else if (!_depthReached) {
       _depthSince = null;
     }

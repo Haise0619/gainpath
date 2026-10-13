@@ -4,9 +4,14 @@ import 'package:gainpath_pose/gainpath_pose.dart';
 
 const squatDecisionDiagnosticsEnabled =
     !kReleaseMode && bool.fromEnvironment('GAINPATH_SQUAT_DECISIONS');
+const squatWorldComparisonEnabled = squatDecisionDiagnosticsEnabled &&
+    bool.fromEnvironment('GAINPATH_SQUAT_3D_COMPARE');
 
 SquatDiagnosticRecorder? createSquatDiagnosticRecorder() =>
-    squatDecisionDiagnosticsEnabled ? SquatDiagnosticRecorder() : null;
+    squatDecisionDiagnosticsEnabled
+        ? SquatDiagnosticRecorder(
+            compareWorldAngles: squatWorldComparisonEnabled)
+        : null;
 
 /// Best-effort terminal summaries only. Telemetry failure cannot interrupt a rep.
 int emitSquatDecisionRecords(
@@ -26,4 +31,18 @@ int emitSquatDecisionRecords(
     }
   }
   return afterSequence;
+}
+
+void emitSquatComparisonSummary(SquatDiagnosticRecorder? recorder) {
+  if (!squatWorldComparisonEnabled ||
+      recorder == null ||
+      !recorder.compareWorldAngles) {
+    return;
+  }
+  try {
+    debugPrint(
+        'REAL_SQUAT_COMPARISON_SUMMARY ${jsonEncode(recorder.sessionSummary())}');
+  } catch (_) {
+    // Diagnostic reporting never blocks cleanup or durable result saving.
+  }
 }

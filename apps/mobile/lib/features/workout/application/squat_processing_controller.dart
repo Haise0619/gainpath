@@ -172,6 +172,9 @@ class SquatProcessingController extends ChangeNotifier {
     _watchdog = null;
     _analyzer.pause(diagnosticReason: SquatDiagnosticReason.sessionClosed);
     _emitDiagnostics();
+    if (squatWorldComparisonEnabled && activeScope() == scope) {
+      emitSquatComparisonSummary(_analyzer.diagnostics);
+    }
     _analyzer.diagnostics?.clear();
     _update = null;
     _closing = audio.close();

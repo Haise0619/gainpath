@@ -13,3 +13,4 @@ export 'src/squat/squat_geometry.dart';
 export 'src/squat/squat_rule_set.dart';
 export 'src/squat/squat_update.dart';
 export 'src/squat/squat_diagnostics.dart';
+export 'src/squat/squat_world_geometry.dart';

@@ -27,23 +27,23 @@ The model estimates 3D from RGB input:
 
 ## Next implementation block
 
-- [ ] Add bounded per-attempt scalar explanations in a non-release local diagnostic:
+- [x] Add bounded per-attempt scalar explanations in a non-release local diagnostic:
   evaluated side, minimum filtered 2D knee angle, longest continuous depth dwell,
   confidence/rejection summary, completion reason and separate score penalties.
   Do not emit images, landmark coordinates, user/session identities or unbounded
   angle trajectories. Keep accepted-summary/upload schemas unchanged.
-- [ ] Add 3D knee geometry from same-frame hip/knee/ankle world coordinates:
+- [x] Add 3D knee geometry from same-frame hip/knee/ankle world coordinates:
   acos(clamp(dot(H-K,A-K)/(length(H-K)*length(A-K)),-1,1)). Use all three metre
   components. Never combine normalized image x/y with image-relative z or world z.
   Missing/nonfinite/degenerate world chains return unavailable, not fabricated
   2D-as-3D values. Image visibility/presence gates are not calibrated angle-error
   estimates; report validity separately from claimed accuracy.
-- [ ] Observe 3D angles alongside the existing 2D analyzer in a diagnostic build.
+- [x] Observe 3D angles alongside the existing 2D analyzer in a diagnostic build.
   Retain baseline counting/scoring/filter/version and camera/GPU settings. Share
   timestamps and side selection. Declare smoothing units/settings explicitly;
   the same beta number on normalized image and metre coordinates need not give
   the same response. Do not infer gravity from a coordinate axis for trunk scoring.
-- [ ] Verify analytic 3D cases, translation/rotation/uniform-scale invariance,
+- [x] Verify analytic 3D cases, translation/rotation/uniform-scale invariance,
   projected-versus-world angle differences, missing/invalid data and unchanged
   baseline attempt aggregates. Run affected pure/mobile suites and analysis;
   obtain independent review, preserve/hash the comparison APK.
@@ -76,3 +76,11 @@ Angle accuracy would need an appropriate independent reference measurement.
 
 No 3D comparison implementation or new physical acceptance is claimed by this
 planning commit. It records the next coherent block and remaining completion limits.
+
+Implementation update 2026-10-13: Step 7A/7B software and diagnostic artifact are
+now verified; the checked items above refer to that later implementation. See
+[Step 7 evidence](../../architecture/2026-10-13-step7-squat-diagnostics.md) and
+[proposed physical protocol](../../architecture/2026-10-13-step7-physical-protocol.md).
+The remaining unchecked physical, rule-evaluation and trusted-acceptance items
+remain open. The approved implementation block stops before installing or testing
+the new APK on the phone.
