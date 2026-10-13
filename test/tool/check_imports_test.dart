@@ -75,6 +75,88 @@ void main() {
             .where((f) => f.contains('external package src')),
         hasLength(2));
   });
+  test('package tools may use normalized local tools, support, and lib', () {
+    owner('apps/admin_web', 'gainpath_admin_web');
+    write('apps/admin_web/tool/evaluate.dart', """
+import 'nested/../helper.dart';
+export '%2e%2e/test/support/fixture.dart';
+import '../lib/gainpath_admin_web.dart';
+export 'helper.dart' if (dart.library.io) '../test/support/nested/../fixture.dart';
+""");
+    // These dependencies are diagnostic-only even when reached through the
+    // allowed local directives above.
+    write('apps/admin_web/tool/helper.dart',
+        "import 'package:camera/camera.dart';");
+    write('apps/admin_web/test/support/fixture.dart',
+        "export 'package:gainpath_pose/gainpath_pose.dart';");
+    expect(checkArchitecture(root), isEmpty);
+  });
+  test('tool package imports never add transitive runtime dependencies', () {
+    owner('apps/admin_web', 'gainpath_admin_web');
+    owner('packages/diagnostics', 'diagnostics', deps: '  camera: any\n');
+    write('apps/admin_web/tool/evaluate.dart',
+        "import 'package:diagnostics/diagnostics.dart';");
+    expect(checkArchitecture(root), isEmpty);
+    write('apps/admin_web/lib/main.dart',
+        "import 'package:diagnostics/diagnostics.dart';");
+    expect(checkArchitecture(root).join('\n'),
+        contains('gainpath_admin_web -> diagnostics -> camera'));
+  });
+  test('tools still reject external src including conditional encoded URIs',
+      () {
+    owner('apps/mobile', 'gainpath_mobile');
+    write('apps/mobile/tool/evaluate.dart', """
+import 'package:collection/src/utils.dart';
+export 'package:gainpath_mobile/gainpath_mobile.dart'
+  if (dart.library.io) 'package:gainpath_domain/%73rc/model.dart';
+""");
+    final failures = checkArchitecture(root);
+    expect(failures, hasLength(2));
+    expect(failures.every((f) => f.contains('external package src')), isTrue);
+  });
+  test('tools reject paths outside local tool, test support, and lib', () {
+    owner('apps/mobile', 'gainpath_mobile');
+    owner('packages/other', 'other');
+    write('apps/mobile/tool/evaluate.dart', """
+import '../test/ordinary_test.dart';
+import '../integration_test/fixture.dart';
+import '../bin/main.dart';
+import '../tools/helper.dart';
+import '../test/support_extra/fixture.dart';
+import '../../../packages/other/tool/helper.dart';
+export 'helper.dart' if (dart.library.io) '../test/support/%2e%2e/ordinary_test.dart';
+export 'helper.dart' if (dart.library.io) '%2e%2e/%2e%2e/%2e%2e/tool/root_helper.dart';
+export 'helper.dart' if (dart.library.io) '../../../packages/other/test/support/fixture.dart';
+export 'helper.dart' if (dart.library.io) '%2e%2e/%2e%2e/%2e%2e/%2e%2e/outside.dart';
+""");
+    final failures = checkArchitecture(root);
+    expect(failures, hasLength(10));
+    expect(failures.every((f) => f.contains('relative directive escapes')),
+        isTrue);
+  });
+  test('lib and bin cannot hide runtime dependencies in tool or test support',
+      () {
+    owner('apps/admin_web', 'gainpath_admin_web');
+    write('apps/admin_web/tool/helper.dart',
+        "import '../test/support/fixture.dart';");
+    write('apps/admin_web/test/support/fixture.dart',
+        "import 'package:camera/camera.dart';");
+    write('apps/admin_web/lib/main.dart', """
+import '../tool/helper.dart';
+export 'gainpath_admin_web.dart' if (dart.library.io) '%2e%2e/test/support/fixture.dart';
+""");
+    write('apps/admin_web/bin/main.dart', """
+import '../lib/gainpath_admin_web.dart';
+import '%2e%2e/tool/helper.dart';
+export '../lib/gainpath_admin_web.dart' if (dart.library.io) '../test/support/fixture.dart';
+""");
+    final failures = checkArchitecture(root);
+    expect(failures, hasLength(4));
+    expect(failures.every((f) => f.contains('relative directive escapes')),
+        isTrue);
+    expect(failures.where((f) => f.contains('/lib/main.dart:')), hasLength(2));
+    expect(failures.where((f) => f.contains('/bin/main.dart:')), hasLength(2));
+  });
   test('normalizes paths before checking a feature importing its own data', () {
     owner('apps/mobile', 'gainpath_mobile');
     write('apps/mobile/lib/features/chat/presentation/view.dart',

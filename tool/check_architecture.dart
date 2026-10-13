@@ -88,6 +88,8 @@ String? _forbidden(_Package owner, String target, Set<String> apps) {
 /// alternatives. When available, pub's resolved graph supplies external edges.
 /// Dev dependencies never become runtime edges. Tests may access another
 /// package's src, but may not resurrect the legacy root package.
+/// Package tools may reference their own lib, tool, and test/support sources;
+/// these diagnostic directives never become runtime edges.
 List<String> checkArchitecture(Directory root) {
   root = root.absolute;
   final failures = <String>{};
@@ -170,7 +172,7 @@ List<String> checkArchitecture(Directory root) {
   }
 
   void scan(File file, _Package? owner,
-      {required bool isTest, required bool runtime}) {
+      {required bool isTest, required bool isTool, required bool runtime}) {
     final path = _path(file);
     final result = parseString(
         content: file.readAsStringSync(),
@@ -242,9 +244,21 @@ List<String> checkArchitecture(Directory root) {
           final normalized = file.absolute.uri
               .resolve(Uri.decodeComponent(target).replaceAll('\\', '/'))
               .normalizePath();
-          final boundary = owner == null
+          var boundary = owner == null
               ? root.absolute.uri
               : owner.directory.absolute.uri.resolve(isTest ? '' : 'lib/');
+          if (owner != null && isTool) {
+            for (final folder in ['tool/', 'test/support/']) {
+              final diagnosticBoundary =
+                  owner.directory.absolute.uri.resolve(folder);
+              if (normalized
+                  .toString()
+                  .startsWith(diagnosticBoundary.toString())) {
+                boundary = diagnosticBoundary;
+                break;
+              }
+            }
+          }
           if (!normalized.toString().startsWith(boundary.toString())) {
             reject('relative directive escapes package');
           } else {
@@ -294,7 +308,9 @@ List<String> checkArchitecture(Directory root) {
       for (final file
           in _dartFiles(Directory('${owner.directory.path}/$folder'))) {
         scan(file, owner,
-            isTest: isTest, runtime: folder == 'lib' || folder == 'bin');
+            isTest: isTest,
+            isTool: folder == 'tool',
+            runtime: folder == 'lib' || folder == 'bin');
       }
     }
     graph[owner.name] = owner.dependencies;
@@ -309,7 +325,10 @@ List<String> checkArchitecture(Directory root) {
   }
   for (final folder in ['test', 'tool']) {
     for (final file in _dartFiles(Directory('${root.path}/$folder'))) {
-      scan(file, null, isTest: folder == 'test', runtime: false);
+      scan(file, null,
+          isTest: folder == 'test',
+          isTool: folder == 'tool',
+          runtime: false);
     }
   }
   for (final owner in owners.values) {
