@@ -20,7 +20,8 @@ and scalar previewSource report enum; production/default remains filtered.
 - [x] Verify default and candidate mobile suites, source analysis, independent review.
 - [x] Build/preserve/hash separate GPU direct-preview profile artifact.
 - [x] Install after user confirmed session ended/saved/discarded.
-- [ ] Collect physical comparison of responsiveness and still shaking/count totals.
+- [x] Collect qualitative responsiveness/shaking feedback and scalar source/timings.
+- [ ] Collect actual-versus-app count totals and physical no-count standing check.
 - [x] Record evidence and commit/push. No production/accuracy acceptance claimed.
 
 Red/green evidence: candidate expected direct wrist y=.1, existing filtered
@@ -38,3 +39,14 @@ SHA256 E336B36F77291C9A12B2E6DDE38CA3BFEC702864396B386E9EFEB3C54C970A13.
 adb install -r, launch and running process verified; app data not cleared.
 User asked to repeat slow squats and a brief still hold, then report response,
 shaking and actual-versus-app counts. Current-session source/timing evidence pending.
+
+Latest observation supersedes pending runtime evidence: 55 scalar reports,
+all opencl_required/refined, no counter reset; final 272.203297 active seconds,
+21.142 deliveries/s, 78.894 ms input-to-first CPU paint mean, 117.650 ms recent p95.
+User says very responsive with some shaking, and asks whether results are affected.
+Read-only analyzer audit confirms independent smoothing and unchanged refined
+analysis input. 29 analyzer tests passed freshly, including bounded standing
+jitter, partial/full cycles, reversal/loss safeguards and scoring dwell.
+This does not establish physical count/score accuracy or boundary-noise robustness.
+Requested 15 s still (zero counts), five intended full squats, then still again
+(no extra counts). No parameter, source or acceptance policy change adopted.

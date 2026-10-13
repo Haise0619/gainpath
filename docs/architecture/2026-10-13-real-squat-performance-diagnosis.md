@@ -202,3 +202,58 @@ After the user confirmed the GPU session ended and was saved/discarded,
 was cleared; CPU and filtered GPU artifacts are preserved. User was asked to
 repeat movement and a brief still hold. Direct-source runtime, physical response,
 shaking and count totals remain pending at installation.
+
+## Direct run and effect on results
+
+User reports the skeleton is now "very responsive" with "some shakes", and asks
+whether shaking affects results. This is qualitative feedback; no jitter
+amplitude or exact physical response delay was measured. Collected 55 scalar
+reports with no counter reset, all `opencl_required` and `previewSource: refined`.
+The final report covers 272.203297 active seconds, including unlabelled time:
+
+| Metric | Direct GPU report |
+| --- | --- |
+| Accepted deliveries / FPS | 5,755 / 21.142 |
+| Native / worker means | 11.721 / 44.699 ms |
+| Input to delivery mean | 61.457 ms |
+| Input to first drawable CPU paint | 78.894 ms mean; 117.650 ms recent p95 |
+| First drawable paints | 4,106 |
+| Observer stale / upstream stale frames / generic expiries | 0 / 2 / 1 |
+
+Evidence: ignored `apps/mobile/build/step7-performance/gpu-direct-metrics.jsonl`.
+Computation times are similar to the prior filtered GPU cohort. Together with
+the reported responsiveness improvement, this supports preview smoothing as a
+substantial contributor to the earlier visible lag. It is not a controlled
+physical latency estimate or a quantitative jitter comparison.
+
+Code audit confirms `onRefined` still sends the same unsmoothed refined inference
+into `SquatProcessingController.consumeRefined` in both preview modes.
+`SquatAnalyzer` applies its own independent `PoseFrameFilter` before computing
+knee angle and trunk lean. Removing preview filtering did not remove analysis
+filtering or modify scoring. Only the evaluated side's shoulder, hip, knee and
+ankle enter current squat geometry; wrist/face shaking is not directly scored.
+
+Existing protections require valid geometry and confidence >=0.7, stable upright
+calibration for 500 ms within a 6-degree range, depth/ascent confirmation over
+150 ms, a cycle of at least 600 ms and return to standing, and trunk deviation
+lasting 300 ms before recording it. Gaps/loss/pause can invalidate progress.
+Fresh verification: all 29 analyzer tests passed, including standing jitter,
+full/partial cycles, reversals, tracking gaps and per-attempt score aggregation.
+Independent read-only review confirmed the separate analysis path and limits.
+
+Visible shaking alone does not establish a result error. Sustained or confidently
+wrong essential-joint predictions can still affect depth, standing recognition
+or trunk penalties. The existing synthetic standing-jitter test uses
+174 +/- 3 degrees, comfortably above the 160-degree ready threshold; it does
+not establish noise robustness at the 160/90/45-degree rule boundaries or real
+person accuracy. No rule/filter adjustment follows this observation.
+
+Requested next check: start a fresh side-on guided session, calibrate and stand
+still for 15 seconds (zero full and
+partial counts), perform five intended full squats, then stand still again
+(counts stop changing). Actual-versus-app totals and false counts remain pending.
+This candidate is not yet approved for production/reward acceptance.
+
+User asked whether to face the camera or use a side view. Clarified side-on,
+approximately 90 degrees, keeping shoulder/hip/knee/ankle/feet visible and the
+phone upright/fixed. No new count results have been supplied yet.
