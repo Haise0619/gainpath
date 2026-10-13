@@ -70,12 +70,65 @@ Installed successfully with `adb install -r` on the connected Xiaomi 23013RK75C
 (Android API 33), after the user confirmed the previous session ended. GainPath
 launched and a running process was verified. No app data was cleared.
 
-## Pending physical evidence
+## CPU phone observation
 
-The user has been asked to run approximately 30 seconds of side-on slow squats
-and report performed versus counted totals. No scalar timing reports were
-available in the initial read or the subsequent bounded 40-second collection;
-there is no confirmed active tracking cohort yet. The delay is **not yet fixed
-or physically quantified**. The next tuning decision must follow this CPU
-baseline; any GPU comparison should use a separate matched candidate build.
-Server workout tuples remain disabled pending physical acceptance.
+The user subsequently reported "only 3" and that the skeleton cannot follow
+their true body speed. Actual versus app totals are still ambiguous. Collected
+26 valid scalar reports from the running app, preserved locally in the ignored
+`apps/mobile/build/step7-performance/cpu-metrics.jsonl`. The last report covers
+129.263525 seconds of active tracking, including unlabelled setup/movement time.
+
+| Metric | Last cumulative report |
+| --- | --- |
+| Accepted deliveries | 1,618; 12.517 FPS |
+| Native inference mean | 56.207 ms |
+| Worker pipeline mean | 77.904 ms |
+| Input to delivery | 95.620 ms mean; 95.523 ms recent p50; 149.701 ms recent p95 |
+| Input to first drawable CPU paint | 124.065 ms mean; 119.070 ms recent p50; 174.721 ms recent p95 |
+| Squat analysis | 0.043985 ms mean; 0.111 ms recent p95 |
+| Camera input / processed / replaced frames | 3,863 / 1,618 / 2,243 |
+| Accepted drawable first paints | 821 |
+| Stale observations / detector stale frames | 0 / 0 |
+| Generic frame expiries | 37 |
+
+The latest-frame replacement count is expected backpressure, not a growing
+queue. Fewer drawable paints than deliveries can include no-person/confidence or
+crop rejection; this unlabelled run cannot isolate those causes or count visible
+tracking losses. Percentiles above use the latest 300 samples per stage.
+
+Inference and worker time dominate analyzer time. The next isolated experiment
+uses the existing experimental GPU backend with all other settings unchanged.
+Smoothing's signal delay remains a separate hypothesis, supported by historical
+observations but not measured by these timestamps. This baseline does **not**
+prove 124 ms physical camera-to-screen latency or quantify accuracy. The visible
+delay is not yet fixed. Server workout tuples remain disabled pending physical
+acceptance.
+
+## GPU comparison prepared and installed
+
+The existing GPU path is gated by non-release `GAINPATH_POSE_GPU=true` and is
+already honored by the real route. Independent read-only review found no
+integration blocker; with GPU_COMPARE and quality/render/joint/blank diagnostics
+disabled it creates no CPU shadow interpreter or coordinate diagnostic summary.
+Native execution requires OpenCL and an unchanged owner thread; failure surfaces
+rather than silently claiming a GPU result from a CPU fallback.
+
+Built the same Firebase development/profile configuration with only the GPU
+backend define added. No application algorithm/source settings changed. All
+253 mobile tests passed with the candidate flags, with 15 optional skips.
+Android profile build succeeded.
+
+```text
+flutter build apk --profile --no-pub --dart-define=BACKEND=firebase --dart-define=APP_ENV=development --dart-define=GAINPATH_SQUAT_PERFORMANCE=true --dart-define=GAINPATH_POSE_GPU=true
+```
+
+Candidate: `apps/mobile/build/step7-performance/gainpath-firebase-gpu-performance.apk`.
+SHA256: `ABFB93D5343037C3DAD7402E947FEAB5C87B097AC0D236D741403F43D188C857`.
+
+After the user explicitly confirmed the CPU session ended and authorized this
+install, `adb install -r`, app launch and process existence succeeded. No data
+was cleared. The CPU APK above remains available for rollback. A matched repeat
+was requested. Installation is not proof that native GPU startup or faster
+tracking succeeded in a current session; runtime reports, movement feedback and
+actual-versus-app counts remain pending. Do not enable production GPU or server
+acceptance from this diagnostic build.
