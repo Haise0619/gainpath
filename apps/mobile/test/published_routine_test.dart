@@ -68,6 +68,67 @@ void main() {
     expect(routine.exercises.map((e) => e.dayNumber), [2, 3]);
   });
 
+  test('maps tutorial media by published row identity with signed query intact',
+      () {
+    final routine = PublishedRoutine.fromDocument('routine-1', {
+      ...document,
+      'exercises': [
+        {
+          'exerciseId': 'first',
+          'name': 'Squat',
+          'sets': 3,
+          'reps': 8,
+          'videoUrl': ' https://media.example.test/first.mp4?token=fixture '
+        },
+        {
+          'exerciseId': 'second',
+          'name': 'Squat',
+          'sets': 2,
+          'reps': 5,
+          'videoUrl': 'https://media.example.test/second.mp4'
+        },
+      ],
+    });
+    expect((routine.exercises.first as dynamic).videoUrl,
+        'https://media.example.test/first.mp4?token=fixture');
+    expect((routine.exercises.last as dynamic).videoUrl,
+        'https://media.example.test/second.mp4');
+  });
+
+  test('legacy and unsupported media do not invalidate workout targets', () {
+    for (final media in [
+      null,
+      '',
+      42,
+      'file:///x.mp4',
+      'http://media.example.test/x.mp4',
+      'https://youtube.com/watch?v=x',
+      'https://user:secret@media.example.test/x.mp4',
+      'https://media.example.test/x.mp4#t=1',
+      'https://media.example.test/x.mp4#',
+      'https:///media.example.test/x.mp4',
+      'https:media.example.test/x.mp4',
+      r'https://media.example.test\x.mp4',
+      'https://media.example.test/a\nb.mp4',
+      'https://media.example.test/${'a' * 2048}.mp4'
+    ]) {
+      final routine = PublishedRoutine.fromDocument('routine-1', {
+        ...document,
+        'exercises': [
+          {
+            'exerciseId': 'first',
+            'name': 'Squat',
+            'sets': 3,
+            'reps': 8,
+            if (media != null) 'videoUrl': media
+          },
+        ],
+      });
+      expect((routine.exercises.single as dynamic).videoUrl, isNull);
+      expect(routine.exercises.single.reps, 8);
+    }
+  });
+
   testWidgets(
       'live workout shows published content while unavailable actions respond',
       (tester) async {

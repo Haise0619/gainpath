@@ -1,4 +1,5 @@
 import 'package:gainpath_domain/workout.dart';
+import 'tutorial_media.dart';
 
 /// Identity and target data retained from a published row, with the existing
 /// Exercise display API so member Workout components keep their layout.
@@ -13,10 +14,12 @@ class PublishedRoutineExercise extends Exercise {
     required String cue,
     required String imageUrl,
     required String muscleGroup,
+    this.videoUrl,
   }) : super(name, category, sets, reps, cue, imageUrl, muscleGroup);
 
   final String exerciseId;
   final int dayNumber;
+  final String? videoUrl;
 }
 
 /// Published organization content, never a member assignment or session.
@@ -71,6 +74,7 @@ class PublishedRoutine {
       return PublishedRoutineExercise(
         exerciseId: item['exerciseId'] as String,
         dayNumber: day,
+        videoUrl: tutorialMediaUri(item['videoUrl'])?.toString(),
         name: item['name'] as String,
         category: item['category'] is String ? item['category'] as String : '',
         sets: item['sets'] as int,

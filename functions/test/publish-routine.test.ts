@@ -58,6 +58,41 @@ function setup(role = 'staff') {
 }
 
 describe('publishRoutine', () => {
+  it('snapshots tutorial media from the exact active catalog ID and preserves retry content', async () => {
+    const store = setup();
+    store.documents.set('orgs/org-1/exerciseVideos/squat-1', {
+      exerciseName: 'Squat', muscleCategory: 'Lower body',
+      videoUrl: ' https://media.example.test/squat.mp4?token=fixture ', isActive: true,
+    });
+    await publishRoutine(store, auth(), request, () => 1000);
+    const published = store.documents.get('orgs/org-1/content/routine_blueprint-1')!;
+    expect(published.exercises).toMatchObject([{ exerciseId: 'squat-1',
+      videoUrl: 'https://media.example.test/squat.mp4?token=fixture' }]);
+    store.documents.set('orgs/org-1/exerciseVideos/squat-1', {
+      exerciseName: 'Squat', muscleCategory: 'Lower body',
+      videoUrl: 'https://media.example.test/replacement.mp4', isActive: true,
+    });
+    await publishRoutine(store, auth(), request, () => 2000);
+    expect(store.documents.get('orgs/org-1/content/routine_blueprint-1')).toEqual(published);
+  });
+
+  it.each(['', 'http://media.example.test/x.mp4', 'file:///x.mp4',
+    'https://user:secret@media.example.test/x.mp4', 'https://media.example.test/x.mp4#t=1',
+    'https://media.example.test/x.mp4#', 'https:///media.example.test/x.mp4',
+    'https:media.example.test/x.mp4', String.raw`https://media.example.test\x.mp4`,
+    'https://youtube.com/watch?v=x', 'https://media.example.test/a\nb.mp4',
+    'https://media.example.test/' + 'a'.repeat(2048) + '.mp4', null, 5])(
+    'omits unsupported optional media without blocking the workout projection: %s', async videoUrl => {
+      const store = setup();
+      store.documents.set('orgs/org-1/exerciseVideos/squat-1', {
+        exerciseName: 'Squat', muscleCategory: 'Lower body', videoUrl, isActive: true,
+      });
+      await publishRoutine(store, auth(), request);
+      const published = store.documents.get('orgs/org-1/content/routine_blueprint-1')!;
+      expect(published.exercises).toEqual([{ exerciseId: 'squat-1', name: 'Squat',
+        category: 'Lower body', muscleGroup: 'Lower body', sets: 3, reps: 8, dayNumber: 1 }]);
+    });
+
   it('publishes only a server-composed catalog projection for active staff', async () => {
     const store = setup();
     const result = await publishRoutine(store, auth(), request, () => 1000);

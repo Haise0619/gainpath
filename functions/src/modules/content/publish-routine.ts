@@ -3,6 +3,7 @@ import type { DocumentData, DocumentStore } from '../../platform/firestore/store
 import { keyOf } from '../../platform/idempotency';
 import { requireActiveMembership, requireVerifiedEmail } from '../../platform/auth-context';
 import { InputValidationError, requiredIdentifier } from '../../platform/validation';
+import { tutorialMediaUrl } from './tutorial-media';
 
 export interface PublishRoutineInputV1 {
   readonly schemaVersion: 1;
@@ -141,6 +142,7 @@ export async function publishRoutine(
     });
     const exercises = blueprint.days.flatMap(day => day.exercises.map(exercise => {
       const source = exerciseById.get(exercise.exerciseId)!;
+      const videoUrl = tutorialMediaUrl(source.videoUrl);
       return {
         exerciseId: exercise.exerciseId,
         name: (source.exerciseName as string).trim(),
@@ -149,6 +151,7 @@ export async function publishRoutine(
         sets: exercise.sets,
         reps: exercise.reps,
         dayNumber: day.dayNumber,
+        ...(videoUrl ? { videoUrl } : {}),
       };
     }));
     const publishedAtMillis = clock();

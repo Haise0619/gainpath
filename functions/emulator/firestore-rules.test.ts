@@ -184,6 +184,27 @@ it('only exposes published content to ordinary members', async () => {
   await assertFails(getDoc(doc(dbFor('member'), 'orgs/o/content/draft')));
 });
 
+it('published tutorial snapshots retain member scope without exposing staff catalog or drafts', async () => {
+  const media = { schemaVersion: 1, kind: 'routine', status: 'published',
+    exercises: [{ exerciseId: 'squat', videoUrl: 'https://media.example.test/squat.mp4' }] };
+  await env.withSecurityRulesDisabled(async context => {
+    await setDoc(doc(context.firestore(), 'orgs/o/content/tutorial'), media);
+    await setDoc(doc(context.firestore(), 'orgs/elsewhere/content/tutorial'), media);
+    await setDoc(doc(context.firestore(), 'orgs/o/content/tutorial-draft'), { ...media, status: 'draft' });
+  });
+  const member = dbFor('member');
+  const result = await assertSucceeds(getDoc(doc(member, 'orgs/o/content/tutorial')));
+  expect(result.data()?.exercises).toEqual(media.exercises);
+  await assertSucceeds(getDocs(query(collection(member, 'orgs/o/content'),
+    where('status', '==', 'published'), where('kind', '==', 'routine'))));
+  await assertFails(getDoc(doc(member, 'orgs/o/content/tutorial-draft')));
+  await assertFails(getDoc(doc(member, 'orgs/elsewhere/content/tutorial')));
+  await assertFails(getDoc(doc(member, 'orgs/o/exerciseVideos/squat')));
+  await assertFails(getDoc(doc(dbFor('member', { email_verified: false }), 'orgs/o/content/tutorial')));
+  await assertFails(getDoc(doc(dbFor('suspended'), 'orgs/o/content/tutorial')));
+  await assertFails(setDoc(doc(member, 'orgs/o/content/tutorial'), media));
+});
+
 it('allows Admin and Staff to create, list, and update exercises and routine blueprints without hard delete', async () => {
   for (const uid of ['staff', 'admin']) {
     const exercise = doc(dbFor(uid), `orgs/o/exerciseVideos/new-${uid}`);
