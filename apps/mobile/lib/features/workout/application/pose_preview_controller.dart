@@ -4,6 +4,7 @@ import 'package:gainpath_domain/gainpath_domain.dart' show SessionScope;
 import 'package:gainpath_pose/gainpath_pose.dart';
 import '../../../infrastructure/pose/pose_render_diagnostics.dart';
 import '../../../infrastructure/pose/pose_quality_diagnostics.dart';
+import '../../../infrastructure/pose/real_squat_performance.dart';
 
 abstract interface class PoseCameraSource {
   Future<void> start(void Function(PoseInput) onFrame);
@@ -24,9 +25,11 @@ class PosePreviewController extends ChangeNotifier {
       required this.clockMicros,
       this.onRefined,
       this.onGeometryInvalidated,
+      this.performance,
       PoseQualityDiagnostics? quality})
       : quality = quality ?? PoseQualityDiagnostics(clockMicros: clockMicros);
   final PoseQualityDiagnostics quality;
+  final RealSquatPerformance? performance;
   final SessionScope scope;
   final SessionScope? Function() activeScope;
   final PoseCameraSource camera;
@@ -198,6 +201,7 @@ class PosePreviewController extends ChangeNotifier {
                 }
                 displayedFrames++;
                 onRefined?.call(pose);
+                performance?.delivered(pose.capturedAtMicros);
                 _notify();
               },
               onError: (error, stack) {
@@ -214,6 +218,7 @@ class PosePreviewController extends ChangeNotifier {
                 quality.transition('pipeline_error',
                     details: {'type': error.runtimeType.toString()});
                 _activeTime.stop();
+                performance?.pause();
                 _freshnessTimer?.cancel();
                 camera.invalidate();
                 phase = PosePreviewPhase.failure;
@@ -255,6 +260,7 @@ class PosePreviewController extends ChangeNotifier {
         });
         if (!_active || revision != _revision) return;
         phase = PosePreviewPhase.tracking;
+        performance?.resume();
         _freshnessTimer?.cancel();
         _freshnessTimer =
             Timer.periodic(const Duration(milliseconds: 100), (_) {
@@ -264,6 +270,7 @@ class PosePreviewController extends ChangeNotifier {
           if (pose != null &&
               clockMicros() - pose.capturedAtMicros > _maxFrameAgeMicros) {
             if (kDebugMode) _debugExpiredOverlays++;
+            performance?.frameExpired();
             quality.count(pose.landmarks.isEmpty
                 ? 'expiredEmptyFrame'
                 : 'expiredOverlay');
@@ -284,6 +291,7 @@ class PosePreviewController extends ChangeNotifier {
         _activeTime.start();
         _notify();
       } catch (error) {
+        performance?.pause();
         _freshnessTimer?.cancel();
         _scheduler?.suspend();
         camera.invalidate();
@@ -319,6 +327,7 @@ class PosePreviewController extends ChangeNotifier {
     _filter.reset();
     _activeTime.stop();
     phase = PosePreviewPhase.paused;
+    performance?.pause();
     _notify();
     await _enqueue(() async {
       await camera.stop();
@@ -362,6 +371,7 @@ class PosePreviewController extends ChangeNotifier {
     _freshnessTimer?.cancel();
     ++_revision;
     phase = PosePreviewPhase.closed;
+    performance?.pause();
     quality.transition('lifecycle_closed');
     quality.overlayCleared('lifecycle_closed', frame);
     quality.clearCoordinates();

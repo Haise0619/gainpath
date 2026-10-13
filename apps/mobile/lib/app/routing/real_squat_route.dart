@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:math';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:gainpath_domain/gainpath_domain.dart'
@@ -20,6 +21,7 @@ import '../../infrastructure/firebase/firebase_member_preferences_repository.dar
 import '../../infrastructure/pose/android_pose_camera.dart';
 import '../../infrastructure/pose/blazepose_detector.dart';
 import '../../infrastructure/pose/blazepose_contract.dart';
+import '../../infrastructure/pose/real_squat_performance.dart';
 import '../di/workout_store_factory.dart';
 import 'pose_preview_route.dart';
 
@@ -57,9 +59,15 @@ class _RealSquatRouteState extends State<RealSquatRoute>
   bool _opening = false;
   bool _foreground = true;
   String? _error;
+  RealSquatPerformance? _performance;
+  Timer? _metrics;
   @override
   void initState() {
     super.initState();
+    if (realSquatPerformanceEnabled) {
+      _performance =
+          RealSquatPerformance(clockMicros: () => _clock.elapsedMicroseconds);
+    }
     _foreground = WidgetsBinding.instance.lifecycleState == null ||
         WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed;
     WidgetsBinding.instance.addObserver(this);
@@ -147,12 +155,24 @@ class _RealSquatRouteState extends State<RealSquatRoute>
           publishedRoutineId: widget.routineId,
           detectorId: 'blazepose-tflite',
           detectorVersion: BlazePoseModelContract.version,
+          performance: _performance,
           onSaved: _outbox == null
               ? null
               : (summary) async {
                   await _outbox!.enqueueFromIntent(summary);
                 });
       _session = c;
+      if (_performance != null) {
+        _metrics ??= Timer.periodic(const Duration(seconds: 5), (_) {
+          final current = _session;
+          if (current != null &&
+              !current.processing.isClosed &&
+              current.preview.phase.name == 'tracking') {
+            debugPrint(
+                'REAL_SQUAT_PERFORMANCE ${jsonEncode(_performance!.snapshot(current.preview.diagnostics))}');
+          }
+        });
+      }
       _authSubscription = auth.stream.listen((_) => c.accountChanged());
       setState(() {});
       await c.start(
@@ -187,6 +207,8 @@ class _RealSquatRouteState extends State<RealSquatRoute>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _metrics?.cancel();
+    _performance?.pause();
     unawaited(_authSubscription?.cancel());
     _session?.dispose();
     _repository?.dispose();
@@ -226,7 +248,9 @@ class _RealSquatRouteState extends State<RealSquatRoute>
             auth: auth,
             syncEnabled: true,
             acknowledgement: _acknowledgement),
-        uploadNotice: _uploadNotice,
+        uploadNotice: _performance == null
+            ? _uploadNotice
+            : 'Timing measurement build. ${_uploadNotice ?? 'Results stay local unless upload is explicitly enabled.'}',
         cameraViewport:
             PoseCameraViewport(camera: _camera!, session: _session!.preview));
   }

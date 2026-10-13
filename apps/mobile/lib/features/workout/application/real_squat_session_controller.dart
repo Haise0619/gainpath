@@ -9,6 +9,7 @@ import '../domain/workout_audio_port.dart';
 import 'pose_preview_controller.dart';
 import 'squat_processing_controller.dart';
 import 'workout_audio_controller.dart';
+import '../../../infrastructure/pose/real_squat_performance.dart';
 
 enum RealSquatSessionPhase { idle, active, saving, saveFailed, saved, closed }
 
@@ -28,6 +29,7 @@ class RealSquatSessionController extends ChangeNotifier {
       required this.detectorId,
       required this.detectorVersion,
       this.onSaved,
+      RealSquatPerformance? performance,
       this.provenance = WorkoutProvenance.realCamera}) {
     if (repository.scope != scope) {
       throw ArgumentError('Session repository scope mismatch');
@@ -42,6 +44,7 @@ class RealSquatSessionController extends ChangeNotifier {
         activeScope: activeScope,
         audio: WorkoutAudioController(port: audioPort),
         clockMicros: clockMicros,
+        performance: performance,
         sideViewConfirmed: true,
         uprightCameraConfirmed: true);
     preview = PosePreviewController(
@@ -51,6 +54,7 @@ class RealSquatSessionController extends ChangeNotifier {
         detectorFactory: detectorFactory,
         clockMicros: clockMicros,
         onRefined: _consume,
+        performance: performance,
         onGeometryInvalidated: _geometryInvalidated);
     processing.addListener(_analysisChanged);
     preview.addListener(_cameraChanged);

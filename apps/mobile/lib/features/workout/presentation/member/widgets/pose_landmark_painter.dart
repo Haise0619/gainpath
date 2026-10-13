@@ -4,6 +4,7 @@ import '../../../../../infrastructure/pose/blazepose_geometry.dart';
 import '../../../../../infrastructure/pose/pose_render_diagnostics.dart';
 import '../../../../../infrastructure/pose/pose_quality_diagnostics.dart';
 import '../../../../../infrastructure/pose/pose_joint_lag_diagnostics.dart';
+import '../../../../../infrastructure/pose/real_squat_performance.dart';
 
 /// BlazePose anatomical topology; indices correspond to its published 33 points.
 const poseConnections = <(int, int)>[
@@ -52,6 +53,8 @@ class PoseLandmarkPainter extends CustomPainter {
       this.blankReason,
       this.sourceFrame,
       this.lag,
+      this.performance,
+      this.performanceViewport,
       this.quality})
       : _refinedFrame = !poseRefinedSkeletonDebugEnabled || frame == null
             ? null
@@ -59,6 +62,8 @@ class PoseLandmarkPainter extends CustomPainter {
   final PoseFrame? _refinedFrame;
   final PoseJointLagDiagnostics? lag;
   final PoseQualityDiagnostics? quality;
+  final RealSquatPerformance? performance;
+  final Rect? performanceViewport;
   final PoseRenderDiagnostics? diagnostics;
   final PoseFrame? frame;
   final String? blankReason;
@@ -144,7 +149,8 @@ class PoseLandmarkPainter extends CustomPainter {
         viewportWidth: size.width,
         viewportHeight: size.height,
         mirrored: mirrored);
-    final observeBlanks = quality?.blanks.enabled == true;
+    final observePrimitives =
+        quality?.blanks.enabled == true || performance != null;
     var primitivesIssued = 0, viewportPrimitives = 0;
     // Observation uses the same outer cover/crop as the camera viewport. It
     // does not reject, move, or hide any drawing command.
@@ -152,11 +158,13 @@ class PoseLandmarkPainter extends CustomPainter {
     final scale = (viewport['coverScale'] as num?)?.toDouble() ?? 1;
     final ox = (viewport['coverOffsetX'] as num?)?.toDouble() ?? 0;
     final oy = (viewport['coverOffsetY'] as num?)?.toDouble() ?? 0;
-    final visibleRect = Rect.fromLTWH(
-            -ox / scale,
-            -oy / scale,
-            ((viewport['width'] as num?)?.toDouble() ?? size.width) / scale,
-            ((viewport['height'] as num?)?.toDouble() ?? size.height) / scale)
+    final visibleRect = (performanceViewport ??
+            Rect.fromLTWH(
+                -ox / scale,
+                -oy / scale,
+                ((viewport['width'] as num?)?.toDouble() ?? size.width) / scale,
+                ((viewport['height'] as num?)?.toDouble() ?? size.height) /
+                    scale))
         .intersect(Offset.zero & size);
     bool intersectsLine(Offset a, Offset b) {
       if (![a.dx, a.dy, b.dx, b.dy].every((v) => v.isFinite)) return false;
@@ -250,7 +258,7 @@ class PoseLandmarkPainter extends CustomPainter {
         final a = point(edge.$1), b = point(edge.$2);
         if (a != null && b != null) {
           canvas.drawLine(a, b, paint);
-          if (observeBlanks) {
+          if (observePrimitives) {
             primitivesIssued++;
             if (intersectsLine(a, b)) viewportPrimitives++;
           }
@@ -264,7 +272,7 @@ class PoseLandmarkPainter extends CustomPainter {
       final p = point(i);
       if (p != null) {
         canvas.drawCircle(p, 3, paint);
-        if (observeBlanks) {
+        if (observePrimitives) {
           primitivesIssued++;
           if (p.dx.isFinite &&
               p.dy.isFinite &&
@@ -333,6 +341,9 @@ class PoseLandmarkPainter extends CustomPainter {
           'jointLagPaintMicros', diagnosticTimer.elapsedMicroseconds);
     }
     canvas.restore();
+    if (primitivesIssued > 0 && viewportPrimitives > 0) {
+      performance?.painted(pose.capturedAtMicros);
+    }
     quality?.overlayPainted(pose,
         reason: blankReason,
         sourceFrame: sourceFrame,

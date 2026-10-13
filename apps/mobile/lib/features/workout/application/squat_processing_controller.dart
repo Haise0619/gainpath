@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:gainpath_domain/gainpath_domain.dart';
 import 'package:gainpath_pose/gainpath_pose.dart';
 import 'workout_audio_controller.dart';
+import '../../../infrastructure/pose/real_squat_performance.dart';
 
 /// Step 3 analysis/audio boundary. The caller supplies refined camera poses;
 /// this class does not open a camera, authorize consent, save, or upload sessions.
@@ -13,6 +14,7 @@ class SquatProcessingController extends ChangeNotifier {
     required this.activeScope,
     required this.audio,
     required this.clockMicros,
+    this.performance,
     required bool sideViewConfirmed,
     required bool uprightCameraConfirmed,
     SquatAnalyzer? analyzer,
@@ -27,6 +29,7 @@ class SquatProcessingController extends ChangeNotifier {
   final SessionScope? Function() activeScope;
   final WorkoutAudioController audio;
   final int Function() clockMicros;
+  final RealSquatPerformance? performance;
   final SquatAnalyzer _analyzer;
   SquatUpdate? _update;
   SquatUpdate? get update => _update;
@@ -59,7 +62,12 @@ class SquatProcessingController extends ChangeNotifier {
         (_lastNow != null && now < _lastNow!)) {
       return null;
     }
+    final timer = performance == null ? null : (Stopwatch()..start());
     final next = _analyzer.update(frame, nowMicros: now);
+    if (timer != null) {
+      timer.stop();
+      performance!.analyzed(timer.elapsedMicroseconds);
+    }
     _lastCapture = time;
     _lastNow = now;
     _watchdog ??= Timer.periodic(

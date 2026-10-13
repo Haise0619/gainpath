@@ -156,6 +156,17 @@ class PoseCameraViewport extends StatelessWidget {
           diagnostics?.viewport(frame,
               width: width, height: height, aspectCompatible: aligned);
           return LayoutBuilder(builder: (context, constraints) {
+            Rect? performanceViewport;
+            if (session.performance != null) {
+              final sx = constraints.maxWidth / width,
+                  sy = constraints.maxHeight / height;
+              final scale = sx > sy ? sx : sy;
+              performanceViewport = Rect.fromLTWH(
+                  -(constraints.maxWidth - width * scale) / 2 / scale,
+                  -(constraints.maxHeight - height * scale) / 2 / scale,
+                  constraints.maxWidth / scale,
+                  constraints.maxHeight / scale);
+            }
             if (session.quality.enabled) {
               final sx = constraints.maxWidth / width,
                   sy = constraints.maxHeight / height;
@@ -190,6 +201,8 @@ class PoseCameraViewport extends StatelessWidget {
                                         ? null
                                         : 'preview_aspect_mismatch',
                                     mirrored: camera.mirrored,
+                                    performance: session.performance,
+                                    performanceViewport: performanceViewport,
                                     quality: session.quality,
                                     diagnostics: diagnostics))))));
           });
