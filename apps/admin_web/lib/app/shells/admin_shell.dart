@@ -18,6 +18,8 @@ import '../../features/identity/presentation/admin/members_screen.dart';
 import '../../features/identity/presentation/admin/coaches_screen.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:gainpath_domain/identity.dart';
+import 'package:gainpath_domain/gainpath_domain.dart' show AuthSession;
+import '../admin_feature_availability.dart';
 import '../routing/app_routes.dart';
 
 /// A single directly-selectable sidebar destination.
@@ -51,7 +53,8 @@ class _NavGroup {
 /// ever pushes a new screen or shows a back button; the sidebar is the
 /// only way to move between areas, exactly like a real admin website.
 class AdminShell extends StatefulWidget {
-  const AdminShell({super.key});
+  const AdminShell({super.key, this.liveSession});
+  final AuthSession? liveSession;
 
   @override
   State<AdminShell> createState() => _AdminShellState();
@@ -59,6 +62,7 @@ class AdminShell extends StatefulWidget {
 
 class _AdminShellState extends State<AdminShell> {
   int _index = 0;
+  final Set<int> _visited = {0};
   final Set<String> _expanded = {'Users & Coaches'};
 
   /// Built once (not `const`) so the Dashboard's refund-alert callback can
@@ -199,6 +203,7 @@ class _AdminShellState extends State<AdminShell> {
     final owner = _groupLabelFor(flatIndex);
     setState(() {
       _index = flatIndex;
+      _visited.add(flatIndex);
       if (owner != null) _expanded.add(owner);
     });
   }
@@ -221,11 +226,10 @@ class _AdminShellState extends State<AdminShell> {
         destructive: true);
     if (ok && mounted) {
       context.read<AuthBloc>().add(const LoggedOut());
-      Navigator.pushNamedAndRemoveUntil(
-        context,
-        kIsWeb ? AppRoutes.adminLogin : AppRoutes.roleSelect,
-        (r) => false,
-      );
+      if (widget.liveSession == null) {
+        Navigator.pushNamedAndRemoveUntil(context,
+            kIsWeb ? AppRoutes.adminLogin : AppRoutes.roleSelect, (r) => false);
+      }
     }
   }
 
@@ -241,6 +245,7 @@ class _AdminShellState extends State<AdminShell> {
           return Row(
             children: [
               _Sidebar(
+                liveSession: widget.liveSession,
                 collapsed: collapsed,
                 selectedIndex: _index,
                 expandedGroups: _expanded,
@@ -252,13 +257,23 @@ class _AdminShellState extends State<AdminShell> {
                 child: Column(
                   children: [
                     _TopBar(
+                        liveSession: widget.liveSession,
                         breadcrumbs: _breadcrumbs(),
                         subtitle: current.subtitle,
                         onSignOut: _signOut),
                     Expanded(
                       child: IndexedStack(
                         index: _index,
-                        children: flatPages.map((d) => d.page).toList(),
+                        children: flatPages.asMap().entries.map((entry) {
+                          final session = widget.liveSession, d = entry.value;
+                          if (session == null) return d.page;
+                          if (!_visited.contains(entry.key))
+                            return const SizedBox.shrink();
+                          return AdminFeatureAvailability.connected
+                                  .contains(d.label)
+                              ? d.page
+                              : AdminFeatureAvailability.page(d.label, session);
+                        }).toList(),
                       ),
                     ),
                   ],
@@ -285,9 +300,11 @@ class _TopBar extends StatelessWidget {
   final List<_Crumb> breadcrumbs;
   final String subtitle;
   final VoidCallback onSignOut;
+  final AuthSession? liveSession;
   const _TopBar(
       {required this.breadcrumbs,
       required this.subtitle,
+      this.liveSession,
       required this.onSignOut});
 
   @override
@@ -332,6 +349,7 @@ class _TopBar extends StatelessWidget {
             width: 260,
             height: 40,
             child: TextField(
+              enabled: liveSession == null,
               style: const TextStyle(fontSize: 13.5),
               decoration: InputDecoration(
                 isDense: true,
@@ -357,9 +375,9 @@ class _TopBar extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 14),
-          const _NotificationButton(),
+          if (liveSession == null) const _NotificationButton(),
           const SizedBox(width: 6),
-          _ProfileMenu(onSignOut: onSignOut),
+          _ProfileMenu(onSignOut: onSignOut, liveSession: liveSession),
         ],
       ),
     );
@@ -494,7 +512,8 @@ class _NotificationButton extends StatelessWidget {
 
 class _ProfileMenu extends StatelessWidget {
   final VoidCallback onSignOut;
-  const _ProfileMenu({required this.onSignOut});
+  final AuthSession? liveSession;
+  const _ProfileMenu({required this.onSignOut, this.liveSession});
 
   @override
   Widget build(BuildContext context) {
@@ -505,8 +524,15 @@ class _ProfileMenu extends StatelessWidget {
       onSelected: (v) {
         if (v == 'signout') onSignOut();
         if (v == 'account') {
-          Navigator.push(context,
-              MaterialPageRoute(builder: (_) => const AdminSettingsScreen()));
+          Navigator.push(
+              context,
+              MaterialPageRoute(
+                  builder: (_) => liveSession == null
+                      ? const AdminSettingsScreen()
+                      : Scaffold(
+                          appBar: AppBar(title: const Text('My account')),
+                          body: AdminFeatureAvailability.page(
+                              'Dashboard', liveSession!))));
         }
       },
       itemBuilder: (context) => [
@@ -518,10 +544,15 @@ class _ProfileMenu extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(context.read<UserAccountRepository>().adminName,
+                Text(
+                    liveSession?.displayName ??
+                        liveSession?.email ??
+                        context.read<UserAccountRepository>().adminName,
                     style: const TextStyle(
                         fontWeight: FontWeight.w700, fontSize: 13)),
-                Text(context.read<UserAccountRepository>().adminEmail,
+                Text(
+                    liveSession?.email ??
+                        context.read<UserAccountRepository>().adminEmail,
                     style: const TextStyle(
                         fontSize: 11.5, color: AppColors.inkSoft)),
               ],
@@ -569,6 +600,7 @@ class _ProfileMenu extends StatelessWidget {
 }
 
 class _Sidebar extends StatelessWidget {
+  final AuthSession? liveSession;
   final bool collapsed;
   final int selectedIndex;
   final Set<String> expandedGroups;
@@ -577,6 +609,7 @@ class _Sidebar extends StatelessWidget {
   final ValueChanged<String> onToggleGroup;
 
   const _Sidebar({
+    this.liveSession,
     required this.collapsed,
     required this.selectedIndex,
     required this.expandedGroups,
@@ -726,13 +759,20 @@ class _Sidebar extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Text(context.read<UserAccountRepository>().adminName,
+                        Text(
+                            liveSession?.displayName ??
+                                liveSession?.email ??
+                                context.read<UserAccountRepository>().adminName,
                             overflow: TextOverflow.ellipsis,
                             style: Theme.of(context)
                                 .textTheme
                                 .titleMedium
                                 ?.copyWith(fontSize: 13.5)),
-                        Text(context.read<UserAccountRepository>().adminEmail,
+                        Text(
+                            liveSession?.email ??
+                                context
+                                    .read<UserAccountRepository>()
+                                    .adminEmail,
                             overflow: TextOverflow.ellipsis,
                             style: Theme.of(context)
                                 .textTheme

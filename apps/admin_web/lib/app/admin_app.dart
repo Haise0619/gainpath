@@ -9,13 +9,21 @@ import 'package:gainpath_ui/gainpath_ui.dart';
 import 'di/app_repositories.dart';
 import 'shells/admin_shell.dart';
 import '../infrastructure/firebase/firebase_auth_gateway.dart';
+import 'package:gainpath_domain/workout.dart';
 
 class GainPathAdminWebApp extends StatelessWidget {
   const GainPathAdminWebApp(
-      {super.key, this.authRepository, this.backendConfig});
+      {super.key,
+      this.authRepository,
+      this.backendConfig,
+      this.tutorialRepositoryFactory,
+      this.routineRepositoryFactory});
 
   final AuthRepository? authRepository;
   final BackendConfig? backendConfig;
+  final TutorialRepository Function(SessionScope)? tutorialRepositoryFactory;
+  final RoutineTemplateRepository Function(SessionScope, TutorialRepository)?
+      routineRepositoryFactory;
 
   @override
   Widget build(BuildContext context) {
@@ -47,9 +55,12 @@ class GainPathAdminWebApp extends StatelessWidget {
               home: _AdminAuthGate(config: config),
             );
             return AppRepositories(
-              key: ValueKey((state.session?.scope, config.mode)),
+              key: ValueKey(
+                  (state.session?.scope, state.session?.role, config.mode)),
               config: config,
               session: state.session,
+              tutorialRepositoryFactory: tutorialRepositoryFactory,
+              routineRepositoryFactory: routineRepositoryFactory,
               child: app,
             );
           },
@@ -76,7 +87,8 @@ class _AdminAuthGate extends StatelessWidget {
           return _AdminVerificationScreen(session: state.session!);
         }
         if (AuthRolePolicy.canEnter(state, allowed: const {AppRole.admin})) {
-          return const AdminShell();
+          return AdminShell(
+              liveSession: config.isFirebase ? state.session : null);
         }
         return const _AdminLoginScreen();
       },

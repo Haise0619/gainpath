@@ -20,7 +20,8 @@ import 'package:gainpath_data/recommendation.dart';
 import 'package:gainpath_domain/recommendation.dart';
 import 'package:gainpath_data/workout.dart';
 import 'package:gainpath_domain/workout.dart';
-import 'package:gainpath_domain/gainpath_domain.dart' show AuthSession;
+import 'package:gainpath_domain/gainpath_domain.dart'
+    show AuthSession, SessionScope;
 import '../../infrastructure/firebase/firebase_exercise_catalog_repository.dart';
 import '../../infrastructure/firebase/firebase_routine_template_repository.dart';
 
@@ -32,23 +33,43 @@ class AppRepositories extends StatefulWidget {
     required this.child,
     this.config = const BackendConfig(BackendMode.mock),
     this.session,
+    this.tutorialRepositoryFactory,
+    this.routineRepositoryFactory,
   });
   final Widget child;
   final BackendConfig config;
   final AuthSession? session;
+  final TutorialRepository Function(SessionScope)? tutorialRepositoryFactory;
+  final RoutineTemplateRepository Function(SessionScope, TutorialRepository)?
+      routineRepositoryFactory;
 
   @override
   State<AppRepositories> createState() => _AppRepositoriesState();
 }
 
 class _AppRepositoriesState extends State<AppRepositories> {
-  final MockDataSession session = MockDataSession();
+  late final MockDataSession session = MockDataSession();
 
   @override
   Widget build(BuildContext context) {
     widget.config.validate();
     if (widget.config.isFirebase && widget.session == null) return widget.child;
     final scope = widget.session?.scope;
+    if (widget.config.isFirebase) {
+      return MultiRepositoryProvider(providers: [
+        RepositoryProvider<TutorialRepository>(
+            create: (_) =>
+                widget.tutorialRepositoryFactory?.call(scope!) ??
+                FirebaseExerciseCatalogRepository(scope: scope!)),
+        RepositoryProvider<RoutineTemplateRepository>(
+            create: (context) =>
+                widget.routineRepositoryFactory
+                    ?.call(scope!, context.read<TutorialRepository>()) ??
+                FirebaseRoutineTemplateRepository(
+                    scope: scope!,
+                    exerciseCatalog: context.read<TutorialRepository>())),
+      ], child: widget.child);
+    }
     return MultiRepositoryProvider(
       providers: [
         RepositoryProvider<MemberProfileRepository>(
