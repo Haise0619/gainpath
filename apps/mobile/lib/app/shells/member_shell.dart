@@ -2,10 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:gainpath_domain/gainpath_domain.dart';
 import '../home/member_home_screen.dart';
 import '../routing/member_progress_route.dart';
+import '../routing/workout_prep_route.dart';
 import '../di/local_member_progress_factory.dart';
 import '../../features/analytics/domain/local_member_progress_repository.dart';
 import '../../features/workout/data/published_routine.dart';
-import '../../features/workout/presentation/member/workout_prep_screen.dart';
 import '../../features/gamification/presentation/member/gamification_dashboard_screen.dart';
 import '../../features/coaching/presentation/member/browse_coaches_screen.dart';
 import '../../features/identity/presentation/member/member_profile_screen.dart';
@@ -44,7 +44,7 @@ class _MemberShellState extends State<MemberShell> {
 
   final _pages = const [
     MemberHomeScreen(),
-    WorkoutPrepScreen(),
+    WorkoutPrepRoute(live: false),
     GamificationDashboardScreen(),
     BrowseCoachesScreen(),
     MemberProfileScreen(),
@@ -75,8 +75,7 @@ class _MemberShellState extends State<MemberShell> {
                     onOpenHistory: () => open(MemberProgressView.history),
                     onOpenWorkout: openWorkout,
                     publishedRoutine: snapshot.data),
-                WorkoutPrepScreen(
-                    live: true,
+                WorkoutPrepRoute(
                     publishedRoutine: snapshot.data,
                     routineLoadFailed: snapshot.hasError),
                 const GamificationDashboardScreen(live: true),

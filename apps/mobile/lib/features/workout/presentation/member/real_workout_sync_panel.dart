@@ -1,13 +1,13 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
-import '../../data/real_workout_outbox_repository.dart';
+import '../../domain/real_workout_sync_presentation.dart';
 import '../../domain/real_workout_sync.dart';
 
 class RealWorkoutSyncPanel extends StatefulWidget {
   const RealWorkoutSyncPanel(
       {super.key, required this.repository, required this.sessionId});
-  final RealWorkoutOutboxRepository repository;
+  final RealWorkoutSyncPresentation repository;
   final String sessionId;
   @override
   State<RealWorkoutSyncPanel> createState() => _RealWorkoutSyncPanelState();

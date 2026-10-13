@@ -1,10 +1,6 @@
 import 'dart:async';
-import '../../../../app/unavailable_action.dart';
-import '../../../../app/routing/pose_preview_route.dart';
-import '../../../../app/routing/real_squat_route.dart';
-import '../../../../app/routing/saved_squat_sessions_route.dart';
 import '../../domain/real_workout_contract.dart';
-import '../../data/published_routine.dart';
+import '../../domain/published_routine_view.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:gainpath_identity/gainpath_identity.dart';
@@ -23,10 +19,12 @@ class WorkoutPrepScreen extends StatelessWidget {
       {super.key,
       this.live = false,
       this.publishedRoutine,
-      this.routineLoadFailed = false});
+      this.routineLoadFailed = false,
+      this.routes = const WorkoutPrepRoutes()});
   final bool live;
   final PublishedRoutine? publishedRoutine;
   final bool routineLoadFailed;
+  final WorkoutPrepRoutes routes;
 
   @override
   Widget build(BuildContext context) {
@@ -197,13 +195,19 @@ class WorkoutPrepScreen extends StatelessWidget {
                         final auth = context.read<AuthBloc>();
                         final scope = auth.state.session?.scope;
                         if (scope == null) return;
+                        final destination = routes.savedSessionsBuilder;
+                        if (destination == null) {
+                          showUnavailable(context);
+                          return;
+                        }
                         Navigator.push(
                             context,
                             MaterialPageRoute<void>(
                                 builder: (_) => BlocProvider.value(
                                     value: auth,
-                                    child: SavedSquatSessionsRoute(
-                                        scope: scope))));
+                                    child: Builder(
+                                        builder: (context) =>
+                                            destination(context, scope)))));
                       },
                       child: const Text('Saved squat sessions')),
                 if (const bool.fromEnvironment('GAINPATH_POSE_PREVIEW'))
@@ -289,18 +293,25 @@ class WorkoutPrepScreen extends StatelessWidget {
         auth.state.session?.scope != scope) {
       return;
     }
+    final destination = routes.realSessionBuilder;
+    if (destination == null) {
+      showUnavailable(context);
+      return;
+    }
+    final launch = RealWorkoutLaunch(
+        scope: scope,
+        routineId: publishedRoutine!.id,
+        exercise: exercise,
+        consented: true,
+        requestServerUpload: uploadRequested,
+        setupConfirmed: true);
     Navigator.push(
         context,
         MaterialPageRoute<void>(
             builder: (_) => BlocProvider.value(
                 value: auth,
-                child: RealSquatRoute(
-                    scope: scope,
-                    routineId: publishedRoutine!.id,
-                    exercise: exercise,
-                    consented: true,
-                    requestServerUpload: uploadRequested,
-                    setupConfirmed: true))));
+                child: Builder(
+                    builder: (context) => destination(context, launch)))));
   }
 
   Future<void> _startPosePreview(BuildContext context) async {
@@ -309,12 +320,17 @@ class WorkoutPrepScreen extends StatelessWidget {
         isScrollControlled: true,
         builder: (_) => const _ConsentSheet(previewOnly: true));
     if (consented == true && context.mounted) {
+      final destination = routes.posePreviewBuilder;
+      if (destination == null) {
+        showUnavailable(context);
+        return;
+      }
       final auth = context.read<AuthBloc>();
       Navigator.push(
           context,
           MaterialPageRoute<void>(
               builder: (_) => BlocProvider.value(
-                  value: auth, child: const PosePreviewRoute())));
+                  value: auth, child: Builder(builder: destination))));
     }
   }
 }

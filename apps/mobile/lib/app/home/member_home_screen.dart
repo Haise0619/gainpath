@@ -1,14 +1,13 @@
 import 'dart:math' as math;
 import 'package:gainpath_domain/analytics.dart';
 import '../../features/analytics/presentation/member/widgets/local_progress_widgets.dart';
-import '../unavailable_action.dart';
 import '../../features/workout/data/published_routine.dart';
 import 'package:flutter/material.dart';
 import '../../features/gamification/application/gamification_bloc.dart';
 import 'package:gainpath_domain/gamification.dart';
 import 'package:gainpath_domain/coaching.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
-import '../../features/workout/presentation/member/workout_prep_screen.dart';
+import '../routing/workout_prep_route.dart';
 import '../../features/workout/presentation/member/equipment_scanner_screen.dart';
 import '../../features/analytics/presentation/member/goal_progress_screen.dart';
 import '../../features/analytics/presentation/shared/progress_dashboard_screen.dart';
@@ -191,10 +190,9 @@ class _MemberHomeScreenState extends State<MemberHomeScreen>
                       live: live,
                       publishedRoutine: widget.publishedRoutine,
                       onStart: live
-                          ? () => _go(WorkoutPrepScreen(
-                              live: true,
+                          ? () => _go(WorkoutPrepRoute(
                               publishedRoutine: widget.publishedRoutine))
-                          : () => _go(const WorkoutPrepScreen())),
+                          : () => _go(const WorkoutPrepRoute(live: false))),
                   const SizedBox(height: 20),
                   const Eyebrow('This week'),
                   _RingStatsRow(live: live, progress: widget.localProgress),

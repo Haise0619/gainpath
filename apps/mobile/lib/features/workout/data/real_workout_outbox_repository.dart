@@ -3,11 +3,13 @@ import 'package:flutter/foundation.dart';
 import 'package:gainpath_domain/gainpath_domain.dart' show SessionScope;
 import '../domain/real_workout_contract.dart';
 import '../domain/real_workout_sync.dart';
+import '../domain/real_workout_sync_presentation.dart';
 import '../domain/workout_contracts.dart';
 
 /// Separate from the legacy/demo repository. Only explicit real-camera v2
 /// requests with a prior server acknowledgement enter this durable outbox.
-class RealWorkoutOutboxRepository extends ChangeNotifier {
+class RealWorkoutOutboxRepository extends ChangeNotifier
+    implements RealWorkoutSyncPresentation {
   RealWorkoutOutboxRepository(
       {required this.scope,
       required this.activeScope,
@@ -29,13 +31,17 @@ class RealWorkoutOutboxRepository extends ChangeNotifier {
   Future<void>? _syncing;
   Future<WorkoutConsentAcknowledgement?>? _granting;
   bool get _active => !_disposed && activeScope() == scope;
+  @override
   WorkoutConsentAcknowledgement? get consent =>
       _active && !_localRevoked ? _state.consent : null;
+  @override
   List<RealWorkoutSyncEntry> get entries => _active ? _state.entries : const [];
+  @override
   bool get revocationPending =>
       _active &&
       (_state.pendingRevocation != null ||
           !_state.consentDesired && _state.pendingConsentRequestId != null);
+  @override
   bool get syncing => _syncing != null;
   String? lastErrorCode;
   void _publish(RealWorkoutSyncState state) {
@@ -139,6 +145,7 @@ class RealWorkoutOutboxRepository extends ChangeNotifier {
     }
   }
 
+  @override
   Future<void> revokeConsent() async {
     if (!_active) return;
     ++_consentEpoch;
@@ -293,6 +300,7 @@ class RealWorkoutOutboxRepository extends ChangeNotifier {
     return enqueue(summary, ack);
   }
 
+  @override
   Future<void> sync() {
     if (_syncing != null) return _syncing!;
     return _syncing = _sync().whenComplete(() {

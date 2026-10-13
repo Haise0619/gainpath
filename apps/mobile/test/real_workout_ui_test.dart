@@ -17,6 +17,7 @@ import 'real_squat_session_test.dart' as support;
 import 'squat_processing_controller_test.dart' as poses;
 import 'package:gainpath_mobile/features/workout/presentation/member/workout_prep_screen.dart';
 import 'package:gainpath_mobile/features/workout/data/published_routine.dart';
+import 'package:gainpath_mobile/navigation/workout_navigation.dart';
 
 void main() {
   setUpAll(() => GoogleFonts.config.allowRuntimeFetching = false);
@@ -68,6 +69,179 @@ void main() {
     await tester.pump();
     expect(tester.widget<FilledButton>(accept).onPressed, isNotNull);
     await tester.tap(find.text('Not now'));
+    await tester.pumpAndSettle();
+    expect(find.text('Squat practice'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox());
+    await tester.runAsync(() => auth.close());
+  });
+  testWidgets('accepted consent without route composition stays on preparation',
+      (tester) async {
+    late AuthBloc auth;
+    await tester.runAsync(() async {
+      auth = AuthBloc(
+          repository: InMemoryAuthRepository(organizationId: 'gainpath'));
+      await Future<void>.delayed(Duration.zero);
+      auth.add(const LoginSubmitted(
+          email: 'member@example.com', password: 'password123'));
+      await auth.stream.firstWhere((s) => s.status == AuthStatus.signedIn);
+    });
+    final routine = PublishedRoutine.fromDocument('published', {
+      'schemaVersion': 1,
+      'kind': 'routine',
+      'status': 'published',
+      'sourceBlueprintId': 'blueprint',
+      'title': 'Squat practice',
+      'estimatedMinutes': 10,
+      'exercises': [
+        {
+          'exerciseId': 'F3b8xIr8ynBDd3gEICKX',
+          'name': 'Squat',
+          'sets': 3,
+          'reps': 8
+        }
+      ]
+    });
+    tester.view.physicalSize = const Size(1000, 1600);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(BlocProvider.value(
+        value: auth,
+        child: MaterialApp(
+            home: WorkoutPrepScreen(live: true, publishedRoutine: routine))));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Start guided session'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(Checkbox).first);
+    await tester.tap(find.byType(Checkbox).at(1));
+    await tester.pump();
+    await tester.tap(find.text('Accept and start'));
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
+    expect(find.text('Squat practice'), findsOneWidget);
+    expect(find.text('This feature is currently unavailable.'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox());
+    await tester.runAsync(() => auth.close());
+  });
+  for (final upload in [false, true]) {
+    testWidgets(
+        'consent routes the exact published identity with upload $upload',
+        (tester) async {
+      late AuthBloc auth;
+      await tester.runAsync(() async {
+        auth = AuthBloc(
+            repository: InMemoryAuthRepository(organizationId: 'gainpath'));
+        await Future<void>.delayed(Duration.zero);
+        auth.add(const LoginSubmitted(
+            email: 'member@example.com', password: 'password123'));
+        await auth.stream.firstWhere((s) => s.status == AuthStatus.signedIn);
+      });
+      final scope = auth.state.session!.scope;
+      final routine = PublishedRoutine.fromDocument('published-identity', {
+        'schemaVersion': 1,
+        'kind': 'routine',
+        'status': 'published',
+        'sourceBlueprintId': 'blueprint',
+        'title': 'Squat practice',
+        'estimatedMinutes': 10,
+        'exercises': [
+          {'exerciseId': 'different-id', 'name': 'Squat', 'sets': 3, 'reps': 8},
+          {
+            'exerciseId': 'F3b8xIr8ynBDd3gEICKX',
+            'name': 'Squat',
+            'sets': 3,
+            'reps': 8
+          }
+        ]
+      });
+      RealWorkoutLaunch? launched;
+      AuthBloc? routeAuth;
+      tester.view.physicalSize = const Size(1000, 1600);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(BlocProvider.value(
+          value: auth,
+          child: MaterialApp(
+              home: WorkoutPrepScreen(
+                  live: true,
+                  publishedRoutine: routine,
+                  routes:
+                      WorkoutPrepRoutes(realSessionBuilder: (context, launch) {
+                    launched = launch;
+                    routeAuth = context.read<AuthBloc>();
+                    return Scaffold(body: Text(launch.routineId));
+                  })))));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Start guided session'));
+      await tester.pumpAndSettle();
+      expect(launched, isNull);
+      await tester.tap(find.byType(Checkbox).first);
+      await tester.tap(find.byType(Checkbox).at(1));
+      if (upload) await tester.tap(find.byType(Checkbox).last);
+      await tester.pump();
+      await tester.tap(find.text('Accept and start'));
+      await tester.pumpAndSettle();
+      expect(find.text('published-identity'), findsOneWidget);
+      expect(launched!.scope, scope);
+      expect(launched!.exercise, same(routine.exercises.last));
+      expect(launched!.exercise.exerciseId, 'F3b8xIr8ynBDd3gEICKX');
+      expect(launched!.consented, isTrue);
+      expect(launched!.setupConfirmed, isTrue);
+      expect(launched!.requestServerUpload, upload);
+      expect(routeAuth, same(auth));
+      await tester.pumpWidget(const SizedBox());
+      await tester.runAsync(() => auth.close());
+    });
+  }
+  testWidgets('account change while consent is open prevents measured routing',
+      (tester) async {
+    late AuthBloc auth;
+    await tester.runAsync(() async {
+      auth = AuthBloc(
+          repository: InMemoryAuthRepository(organizationId: 'gainpath'));
+      await Future<void>.delayed(Duration.zero);
+      auth.add(const LoginSubmitted(
+          email: 'member@example.com', password: 'password123'));
+      await auth.stream.firstWhere((s) => s.status == AuthStatus.signedIn);
+    });
+    final routine = PublishedRoutine.fromDocument('published', {
+      'schemaVersion': 1,
+      'kind': 'routine',
+      'status': 'published',
+      'sourceBlueprintId': 'blueprint',
+      'title': 'Squat practice',
+      'estimatedMinutes': 10,
+      'exercises': [
+        {
+          'exerciseId': 'F3b8xIr8ynBDd3gEICKX',
+          'name': 'Squat',
+          'sets': 3,
+          'reps': 8
+        }
+      ]
+    });
+    tester.view.physicalSize = const Size(1000, 1600);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(BlocProvider.value(
+        value: auth,
+        child: MaterialApp(
+            home: WorkoutPrepScreen(
+                live: true,
+                publishedRoutine: routine,
+                routes: WorkoutPrepRoutes(realSessionBuilder: (_, __) {
+                  fail('A changed account must not open a measured route.');
+                })))));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Start guided session'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(Checkbox).first);
+    await tester.tap(find.byType(Checkbox).at(1));
+    await tester.runAsync(() async {
+      auth.add(const LoggedOut());
+      await auth.stream.firstWhere((s) => s.status == AuthStatus.signedOut);
+    });
+    await tester.pump();
+    await tester.tap(find.text('Accept and start'));
     await tester.pumpAndSettle();
     expect(find.text('Squat practice'), findsOneWidget);
     await tester.pumpWidget(const SizedBox());

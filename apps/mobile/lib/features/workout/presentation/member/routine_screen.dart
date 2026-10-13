@@ -2,8 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
 import 'package:gainpath_domain/workout.dart';
-import '../../data/published_routine.dart';
-import '../../../../app/unavailable_action.dart';
+import '../../domain/published_routine_view.dart';
 import 'exercise_tutorial_screen.dart';
 import 'widgets/workout_media.dart';
 
