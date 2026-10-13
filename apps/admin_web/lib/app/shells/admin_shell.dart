@@ -267,8 +267,9 @@ class _AdminShellState extends State<AdminShell> {
                         children: flatPages.asMap().entries.map((entry) {
                           final session = widget.liveSession, d = entry.value;
                           if (session == null) return d.page;
-                          if (!_visited.contains(entry.key))
+                          if (!_visited.contains(entry.key)) {
                             return const SizedBox.shrink();
+                          }
                           return AdminFeatureAvailability.connected
                                   .contains(d.label)
                               ? d.page
