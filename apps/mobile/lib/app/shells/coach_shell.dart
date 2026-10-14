@@ -9,10 +9,15 @@ import '../../features/identity/application/coach_profile_cubit.dart';
 /// Bottom-navigation shell for the Fitness Coach role (Modules 8 to 10).
 class CoachShell extends StatefulWidget {
   const CoachShell(
-      {super.key, this.liveRepository, this.isCurrent, this.onOpenLiveEditor});
+      {super.key,
+      this.liveRepository,
+      this.isCurrent,
+      this.onOpenLiveEditor,
+      this.liveAvailabilityBuilder});
   final CoachProfileRepository? liveRepository;
   final bool Function()? isCurrent;
   final void Function(CoachProfileCubit)? onOpenLiveEditor;
+  final WidgetBuilder? liveAvailabilityBuilder;
 
   @override
   State<CoachShell> createState() => _CoachShellState();
@@ -20,6 +25,7 @@ class CoachShell extends StatefulWidget {
 
 class _CoachShellState extends State<CoachShell> {
   late int _index = widget.liveRepository == null ? 0 : 3;
+  bool _availabilityVisited = false;
 
   final _pages = const [
     CoachRosterScreen(),
@@ -37,11 +43,17 @@ class _CoachShellState extends State<CoachShell> {
               ? _pages
               : [
                   for (final title in ['Roster', 'Availability', 'Earnings'])
-                    Scaffold(
-                        appBar: AppBar(title: Text(title)),
-                        body: const Center(
-                            child: Text(
-                                'Unavailable: this workflow is not connected to Firebase yet.'))),
+                    if (title == 'Availability' &&
+                        widget.liveAvailabilityBuilder != null)
+                      _availabilityVisited
+                          ? widget.liveAvailabilityBuilder!(context)
+                          : const SizedBox.shrink()
+                    else
+                      Scaffold(
+                          appBar: AppBar(title: Text(title)),
+                          body: const Center(
+                              child: Text(
+                                  'Unavailable: this workflow is not connected to Firebase yet.'))),
                   CoachAccountScreen(
                       liveRepository: widget.liveRepository,
                       isCurrent: widget.isCurrent,
@@ -49,7 +61,10 @@ class _CoachShellState extends State<CoachShell> {
                 ]),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _index,
-        onDestinationSelected: (i) => setState(() => _index = i),
+        onDestinationSelected: (i) => setState(() {
+          _index = i;
+          if (i == 1) _availabilityVisited = true;
+        }),
         destinations: const [
           NavigationDestination(
               icon: Icon(Icons.event_note_outlined),

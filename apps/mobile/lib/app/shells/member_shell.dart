@@ -26,6 +26,7 @@ class MemberShell extends StatefulWidget {
       this.routineLoader,
       this.routineCatalogFactory,
       this.coachDirectoryFactory,
+      this.coachAvailabilityFactory,
       this.progressRepositoryFactory,
       this.memberSettingsBuilder});
 
@@ -34,6 +35,7 @@ class MemberShell extends StatefulWidget {
   final Future<PublishedRoutine?> Function()? routineLoader;
   final PublishedRoutineCatalogFactory? routineCatalogFactory;
   final CoachDirectoryFactory? coachDirectoryFactory;
+  final CoachAvailabilityFactory? coachAvailabilityFactory;
   final LocalMemberProgressRepositoryFactory? progressRepositoryFactory;
   final WidgetBuilder? memberSettingsBuilder;
 
@@ -146,7 +148,8 @@ class _MemberShellState extends State<MemberShell> {
                 const GamificationDashboardScreen(live: true),
                 _directoryVisited
                     ? buildFirebaseCoachDirectory(widget.liveSession!,
-                        factory: widget.coachDirectoryFactory)
+                        factory: widget.coachDirectoryFactory,
+                        availabilityFactory: widget.coachAvailabilityFactory)
                     : const SizedBox.shrink(),
                 MemberProfileScreen(
                     liveSession: widget.liveSession!,

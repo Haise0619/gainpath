@@ -100,10 +100,12 @@ class LiveCoachDetailView extends StatefulWidget {
       {super.key,
       required this.coachId,
       required this.repository,
-      required this.isCurrent});
+      required this.isCurrent,
+      this.onOpenSchedule});
   final String coachId;
   final CoachDirectoryRepository repository;
   final bool Function() isCurrent;
+  final VoidCallback? onOpenSchedule;
   @override
   State<LiveCoachDetailView> createState() => _LiveCoachDetailViewState();
 }
@@ -166,6 +168,10 @@ class _LiveCoachDetailViewState extends State<LiveCoachDetailView> {
                 Text(
                     '${coach.fields.yearsExperience} years experience (self-reported)'),
               const SizedBox(height: 18),
+              OutlinedButton.icon(
+                  onPressed: widget.onOpenSchedule,
+                  icon: const Icon(Icons.calendar_month_outlined),
+                  label: const Text('View schedule')),
               const Text(
                   'Directory publication does not verify certifications. Booking is unavailable.')
             ]);

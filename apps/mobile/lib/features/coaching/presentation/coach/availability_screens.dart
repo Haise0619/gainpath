@@ -3,6 +3,7 @@ import 'package:gainpath_domain/coaching.dart';
 import 'block_type_icon.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'live_coach_availability_view.dart';
 
 String _fmtTime(LocalTime t) => '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
 int _toMinutes(LocalTime t) => t.minutesSinceMidnight;
@@ -44,7 +45,10 @@ Color _blockColor(BlockType type) {
 /// whatever the coach typed and inserted a hardcoded placeholder row
 /// instead.
 class AvailabilityScreen extends StatefulWidget {
-  const AvailabilityScreen({super.key});
+  const AvailabilityScreen({super.key, this.liveRepository, this.coachId, this.isCurrent});
+  final CoachAvailabilityRepository? liveRepository;
+  final String? coachId;
+  final bool Function()? isCurrent;
 
   @override
   State<AvailabilityScreen> createState() => _AvailabilityScreenState();
@@ -81,6 +85,7 @@ class _AvailabilityScreenState extends State<AvailabilityScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (widget.liveRepository != null) return LiveCoachAvailabilityView(repository: widget.liveRepository!, coachId: widget.coachId!, isCurrent: widget.isCurrent!);
     final days = context.read<AvailabilityRepository>().workingDays;
     final blocks = [...context.read<AvailabilityRepository>().blockedSlots]..sort((a, b) => a.date.compareTo(b.date));
     final now = DateTime.now();

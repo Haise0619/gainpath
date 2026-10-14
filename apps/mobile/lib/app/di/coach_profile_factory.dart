@@ -4,9 +4,13 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:gainpath_domain/gainpath_domain.dart'
     show AuthSession, SessionScope;
 import 'package:gainpath_domain/identity.dart';
+import 'package:gainpath_domain/coaching.dart';
 import 'package:gainpath_identity/gainpath_identity.dart';
 import '../../infrastructure/firebase/firebase_coach_profile_repository.dart';
 import '../../infrastructure/firebase/firebase_coach_directory_repository.dart';
+import '../../infrastructure/firebase/firebase_coach_availability_repository.dart';
+import '../../features/coaching/presentation/coach/availability_screens.dart';
+import '../../features/coaching/presentation/shared/live_coach_schedule_view.dart';
 import '../shells/coach_shell.dart';
 import '../../features/coaching/presentation/member/browse_coaches_screen.dart';
 import '../../features/coaching/presentation/shared/live_coach_directory_views.dart';
@@ -15,6 +19,8 @@ import '../../features/identity/presentation/coach/live_coach_profile_views.dart
 typedef CoachProfileFactory = CoachProfileRepository Function(
     SessionScope, bool Function());
 typedef CoachDirectoryFactory = CoachDirectoryRepository Function(
+    SessionScope, bool Function());
+typedef CoachAvailabilityFactory = CoachAvailabilityRepository Function(
     SessionScope, bool Function());
 
 class CoachSessionHost extends StatefulWidget {
@@ -68,7 +74,8 @@ class _CoachSessionHostState extends State<CoachSessionHost> {
 }
 
 Widget buildFirebaseCoachShell(AuthSession session,
-        {CoachProfileFactory? factory}) =>
+        {CoachProfileFactory? factory,
+        CoachAvailabilityFactory? availabilityFactory}) =>
     CoachSessionHost(
         key: ValueKey(('coach', session)),
         session: session,
@@ -77,15 +84,18 @@ Widget buildFirebaseCoachShell(AuthSession session,
                 FirebaseCoachProfileRepository(
                     scope: session.scope, isCurrent: isCurrent),
             isCurrent: isCurrent,
-            onOpenLiveEditor: (controller) => Navigator.push(
-                context,
-                MaterialPageRoute(
-                    builder: (_) => CoachSessionHost(
-                        session: session,
-                        builder: (_, current) =>
-                            LiveCoachProfileEditor(controller: controller))))));
+            liveAvailabilityBuilder: (_) => AvailabilityScreen(
+                liveRepository:
+                    availabilityFactory?.call(session.scope, isCurrent) ??
+                        FirebaseCoachAvailabilityRepository(
+                            scope: session.scope, isCurrent: isCurrent),
+                coachId: session.userId,
+                isCurrent: isCurrent),
+            onOpenLiveEditor: (controller) => Navigator.push(context,
+                MaterialPageRoute(builder: (_) => CoachSessionHost(session: session, builder: (_, current) => LiveCoachProfileEditor(controller: controller))))));
 Widget buildFirebaseCoachDirectory(AuthSession session,
-        {CoachDirectoryFactory? factory}) =>
+        {CoachDirectoryFactory? factory,
+        CoachAvailabilityFactory? availabilityFactory}) =>
     CoachSessionHost(
         key: ValueKey(('directory', session)),
         session: session,
@@ -105,5 +115,19 @@ Widget buildFirebaseCoachDirectory(AuthSession session,
                           builder: (_, current) => LiveCoachDetailView(
                               coachId: id,
                               repository: repository,
+                              onOpenSchedule: () => Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                      builder: (_) => CoachSessionHost(
+                                          session: session,
+                                          builder: (_, scheduleCurrent) =>
+                                              LiveCoachScheduleView(
+                                                  coachId: id,
+                                                  repository: availabilityFactory?.call(session.scope, scheduleCurrent) ??
+                                                      FirebaseCoachAvailabilityRepository(
+                                                          scope: session.scope,
+                                                          isCurrent:
+                                                              scheduleCurrent),
+                                                  isCurrent: scheduleCurrent)))),
                               isCurrent: () => current() && isCurrent())))));
         });

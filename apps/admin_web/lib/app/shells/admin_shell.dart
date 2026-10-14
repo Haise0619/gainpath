@@ -19,6 +19,8 @@ import '../../features/identity/presentation/admin/coaches_screen.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:gainpath_domain/identity.dart';
 import 'package:gainpath_domain/gainpath_domain.dart' show AuthSession;
+import 'package:gainpath_domain/coaching.dart' show CoachAvailabilityRepository;
+import '../di/coach_availability_factory.dart';
 import '../admin_feature_availability.dart';
 import '../routing/app_routes.dart';
 
@@ -271,7 +273,20 @@ class _AdminShellState extends State<AdminShell> {
                             return const SizedBox.shrink();
                           }
                           if (d.label == 'Coaches') {
-                            return const CoachesScreen(live: true);
+                            return CoachesScreen(
+                                live: true,
+                                onOpenSchedule: (id) {
+                                  final repository = context
+                                      .read<CoachAvailabilityRepository>();
+                                  Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                          builder: (_) =>
+                                              AdminCoachScheduleRoute(
+                                                  session: session,
+                                                  repository: repository,
+                                                  coachId: id)));
+                                });
                           }
                           return AdminFeatureAvailability.connected
                                   .contains(d.label)

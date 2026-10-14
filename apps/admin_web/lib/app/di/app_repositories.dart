@@ -25,6 +25,7 @@ import 'package:gainpath_domain/gainpath_domain.dart'
 import '../../infrastructure/firebase/firebase_exercise_catalog_repository.dart';
 import '../../infrastructure/firebase/firebase_routine_template_repository.dart';
 import '../../infrastructure/firebase/firebase_coach_profile_admin_repository.dart';
+import '../../infrastructure/firebase/firebase_coach_availability_repository.dart';
 import 'package:gainpath_identity/gainpath_identity.dart';
 import 'catalog_edit_session_guard.dart';
 
@@ -39,6 +40,7 @@ class AppRepositories extends StatefulWidget {
     this.tutorialRepositoryFactory,
     this.routineRepositoryFactory,
     this.coachRepositoryFactory,
+    this.coachAvailabilityFactory,
   });
   final Widget child;
   final BackendConfig config;
@@ -48,6 +50,8 @@ class AppRepositories extends StatefulWidget {
       routineRepositoryFactory;
   final CoachProfileAdminRepository Function(SessionScope, bool Function())?
       coachRepositoryFactory;
+  final CoachAvailabilityRepository Function(SessionScope, bool Function())?
+      coachAvailabilityFactory;
 
   @override
   State<AppRepositories> createState() => _AppRepositoriesState();
@@ -57,6 +61,19 @@ class _AppRepositoriesState extends State<AppRepositories> {
   late final MockDataSession session = MockDataSession();
   CatalogEditSessionGuard? _catalogGuard;
   CatalogEditSessionGuard? _coachGuard;
+  CatalogEditSessionGuard? _availabilityGuard;
+  CoachAvailabilityRepository _createAvailability(SessionScope scope) {
+    final auth = context.read<AuthBloc>();
+    _availabilityGuard = CatalogEditSessionGuard(
+        expected: widget.session!,
+        current: () => auth.state,
+        changes: auth.stream);
+    return widget.coachAvailabilityFactory
+            ?.call(scope, _availabilityGuard!.isCurrent) ??
+        FirebaseCoachAvailabilityRepository(
+            scope: scope, isCurrent: _availabilityGuard!.isCurrent);
+  }
+
   CoachProfileAdminRepository _createCoachDirectory(SessionScope scope) {
     final auth = context.read<AuthBloc>();
     _coachGuard = CatalogEditSessionGuard(
@@ -84,6 +101,7 @@ class _AppRepositoriesState extends State<AppRepositories> {
   void dispose() {
     _catalogGuard?.dispose();
     _coachGuard?.dispose();
+    _availabilityGuard?.dispose();
     super.dispose();
   }
 
@@ -94,6 +112,8 @@ class _AppRepositoriesState extends State<AppRepositories> {
     final scope = widget.session?.scope;
     if (widget.config.isFirebase) {
       return MultiRepositoryProvider(providers: [
+        RepositoryProvider<CoachAvailabilityRepository>(
+            create: (_) => _createAvailability(scope!)),
         RepositoryProvider<CoachProfileAdminRepository>(
             create: (_) => _createCoachDirectory(scope!)),
         RepositoryProvider<TutorialRepository>(

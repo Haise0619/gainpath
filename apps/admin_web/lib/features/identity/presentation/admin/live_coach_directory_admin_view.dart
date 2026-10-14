@@ -5,8 +5,10 @@ import 'package:gainpath_ui/gainpath_ui.dart';
 import '../../application/coach_directory_admin_cubit.dart';
 
 class LiveCoachDirectoryAdminView extends StatefulWidget {
-  const LiveCoachDirectoryAdminView({super.key, required this.repository});
+  const LiveCoachDirectoryAdminView(
+      {super.key, required this.repository, this.onOpenSchedule});
   final CoachProfileAdminRepository repository;
+  final void Function(String coachId)? onOpenSchedule;
   @override
   State<LiveCoachDirectoryAdminView> createState() =>
       _LiveCoachDirectoryAdminViewState();
@@ -109,6 +111,13 @@ class _LiveCoachDirectoryAdminViewState
                           'The server also checks current account and branch eligibility at publication.'),
                       const SizedBox(height: 12),
                       Wrap(spacing: 12, children: [
+                        OutlinedButton.icon(
+                            onPressed: !state.busy &&
+                                    widget.onOpenSchedule != null
+                                ? () => widget.onOpenSchedule!(review.coachId)
+                                : null,
+                            icon: const Icon(Icons.calendar_month_outlined),
+                            label: const Text('View schedule')),
                         FilledButton(
                             onPressed: !state.busy &&
                                     !state.conflict &&

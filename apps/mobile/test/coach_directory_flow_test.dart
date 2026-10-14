@@ -12,6 +12,7 @@ import 'package:gainpath_mobile/features/workout/data/workout_session_repository
 import 'package:gainpath_mobile/features/workout/domain/real_workout_sync.dart';
 import 'coach_profile_state_test.dart' show ProfileFake;
 import 'support/fitness_profile_fake.dart';
+import 'support/coach_availability_fake.dart';
 
 PublishedCoachProfile published(String bio) => PublishedCoachProfile(
     id: 'coach',
@@ -126,7 +127,8 @@ void main() {
     await tester.pumpWidget(GainPathMobileApp(
         authRepository: auth,
         backendConfig: const BackendConfig(BackendMode.firebase),
-        coachProfileFactory: (_, current) => repo));
+        coachProfileFactory: (_, current) => repo,
+        coachAvailabilityFactory: (_, current) => AvailabilityFake()));
     await tester.pumpAndSettle();
     expect(find.text('Directory: not published'), findsOneWidget);
     await tester.tap(find.text('Edit professional profile'));
@@ -152,10 +154,7 @@ void main() {
     expect(find.text('Directory: not published'), findsOneWidget);
     await tester.tap(find.text('Availability').last);
     await tester.pumpAndSettle();
-    expect(
-        find.text(
-            'Unavailable: this workflow is not connected to Firebase yet.'),
-        findsOneWidget);
+    expect(find.text('No availability windows for this date.'), findsOneWidget);
     await auth.signOut();
     await tester.pumpAndSettle();
     expect(find.text('Saved draft'), findsNothing);
