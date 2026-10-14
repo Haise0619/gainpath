@@ -151,4 +151,44 @@ void main() {
     expect(find.text('10:00 GMT+8 – 10:30 GMT+8'), findsNothing);
     await tester.pumpWidget(const SizedBox());
   });
+  testWidgets('open window editor freezes row mutations until Update or Cancel',
+      (tester) async {
+    final repo = AvailabilityFake()
+      ..stored = [
+        window,
+        DatedCoachWindow(
+            branchId: 'main',
+            startAtMillis: 1792117800000,
+            endAtMillis: 1792119600000)
+      ];
+    await tester.pumpWidget(MaterialApp(
+        home: LiveCoachAvailabilityView(
+            repository: repo, coachId: 'coach', isCurrent: () => true)));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byTooltip('Edit window').last);
+    await tester.tap(find.byTooltip('Edit window').last);
+    await tester.pumpAndSettle();
+    for (final control in find
+        .byWidgetPredicate(
+            (w) => w is IconButton && w.tooltip == 'Remove window')
+        .evaluate()) {
+      expect((control.widget as IconButton).onPressed, isNull);
+    }
+    for (final control in find
+        .byWidgetPredicate((w) => w is IconButton && w.tooltip == 'Edit window')
+        .evaluate()) {
+      expect((control.widget as IconButton).onPressed, isNull);
+    }
+    await tester.ensureVisible(find.text('Update'));
+    await tester.tap(find.text('Update'));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    await tester.ensureVisible(find.byTooltip('Remove window').last);
+    await tester.tap(find.byTooltip('Remove window').last);
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Save day'));
+    await tester.tap(find.text('Save day'));
+    await tester.pumpAndSettle();
+    expect(repo.stored.single.toJson(), window.toJson());
+  });
 }

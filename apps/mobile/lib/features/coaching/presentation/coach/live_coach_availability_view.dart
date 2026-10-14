@@ -203,13 +203,13 @@ class _LiveCoachAvailabilityViewState extends State<LiveCoachAvailabilityView> {
                       trailing: Row(mainAxisSize: MainAxisSize.min, children: [
                         IconButton(
                             tooltip: 'Edit window',
-                            onPressed: canEdit
+                            onPressed: canEdit && !editing
                                 ? () => _window(state, index: entry.$1)
                                 : null,
                             icon: const Icon(Icons.edit_outlined)),
                         IconButton(
                             tooltip: 'Remove window',
-                            onPressed: canEdit
+                            onPressed: canEdit && !editing
                                 ? () {
                                     final next =
                                         List<DatedCoachWindow>.of(state.windows)
