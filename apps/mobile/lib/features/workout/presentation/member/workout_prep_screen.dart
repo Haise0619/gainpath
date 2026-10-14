@@ -20,10 +20,14 @@ class WorkoutPrepScreen extends StatelessWidget {
       this.live = false,
       this.publishedRoutine,
       this.routineLoadFailed = false,
+      this.routineStatusMessage,
+      this.routineCatalogControls,
       this.routes = const WorkoutPrepRoutes()});
   final bool live;
   final PublishedRoutine? publishedRoutine;
   final bool routineLoadFailed;
+  final String? routineStatusMessage;
+  final Widget? routineCatalogControls;
   final WorkoutPrepRoutes routes;
 
   @override
@@ -90,6 +94,7 @@ class WorkoutPrepScreen extends StatelessWidget {
                           Text(
                               live
                                   ? publishedRoutine?.title ??
+                                      routineStatusMessage ??
                                       'No published routine yet'
                                   : 'Lower Body Strength',
                               style: Theme.of(context)
@@ -122,6 +127,10 @@ class WorkoutPrepScreen extends StatelessWidget {
             padding: const EdgeInsets.fromLTRB(16, 20, 16, 24),
             sliver: SliverList.list(
               children: [
+                if (routineCatalogControls != null) ...[
+                  routineCatalogControls!,
+                  const SizedBox(height: 12),
+                ],
                 _DetourCard(
                   icon: Icons.play_circle_fill_rounded,
                   iconColor: AppColors.primary,

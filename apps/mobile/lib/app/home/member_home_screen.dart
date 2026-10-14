@@ -40,6 +40,8 @@ class MemberHomeScreen extends StatefulWidget {
       this.liveSession,
       this.liveProfile,
       this.publishedRoutine,
+      this.routineStatusMessage,
+      this.onStartWorkout,
       this.localProgress,
       this.progressError,
       this.progressWarnings = const [],
@@ -51,6 +53,8 @@ class MemberHomeScreen extends StatefulWidget {
   final AuthSession? liveSession;
   final FitnessProfile? liveProfile;
   final PublishedRoutine? publishedRoutine;
+  final String? routineStatusMessage;
+  final VoidCallback? onStartWorkout;
   final MemberLocalProgress? localProgress;
   final String? progressError;
   final List<String> progressWarnings;
@@ -189,9 +193,11 @@ class _MemberHomeScreenState extends State<MemberHomeScreen>
                   _TodayWorkoutCard(
                       live: live,
                       publishedRoutine: widget.publishedRoutine,
+                      routineStatusMessage: widget.routineStatusMessage,
                       onStart: live
-                          ? () => _go(WorkoutPrepRoute(
-                              publishedRoutine: widget.publishedRoutine))
+                          ? widget.onStartWorkout ??
+                              () => _go(WorkoutPrepRoute(
+                                  publishedRoutine: widget.publishedRoutine))
                           : () => _go(const WorkoutPrepRoute(live: false))),
                   const SizedBox(height: 20),
                   const Eyebrow('This week'),
@@ -617,8 +623,12 @@ class _TodayWorkoutCard extends StatelessWidget {
   final VoidCallback? onStart;
   final bool live;
   final PublishedRoutine? publishedRoutine;
+  final String? routineStatusMessage;
   const _TodayWorkoutCard(
-      {required this.onStart, this.live = false, this.publishedRoutine});
+      {required this.onStart,
+      this.live = false,
+      this.publishedRoutine,
+      this.routineStatusMessage});
 
   @override
   Widget build(BuildContext context) {
@@ -647,6 +657,7 @@ class _TodayWorkoutCard extends StatelessWidget {
                     Text(
                         live
                             ? publishedRoutine?.title ??
+                                routineStatusMessage ??
                                 'No published routine yet'
                             : 'Lower Body Strength',
                         style: Theme.of(context)

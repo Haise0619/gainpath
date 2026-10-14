@@ -1,9 +1,15 @@
 import 'package:flutter/material.dart';
+import 'dart:async';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:gainpath_identity/gainpath_identity.dart';
 import 'package:gainpath_domain/gainpath_domain.dart';
 import '../home/member_home_screen.dart';
 import '../routing/member_progress_route.dart';
 import '../routing/workout_prep_route.dart';
 import '../di/local_member_progress_factory.dart';
+import '../di/published_routine_catalog_factory.dart';
+import '../../features/workout/application/published_routine_catalog_cubit.dart';
+import '../../features/workout/presentation/member/published_routine_catalog_controls.dart';
 import '../../features/analytics/domain/local_member_progress_repository.dart';
 import '../../features/workout/data/published_routine.dart';
 import '../../features/gamification/presentation/member/gamification_dashboard_screen.dart';
@@ -17,12 +23,14 @@ class MemberShell extends StatefulWidget {
       this.liveSession,
       this.liveProfile,
       this.routineLoader,
+      this.routineCatalogFactory,
       this.progressRepositoryFactory,
       this.memberSettingsBuilder});
 
   final AuthSession? liveSession;
   final FitnessProfile? liveProfile;
   final Future<PublishedRoutine?> Function()? routineLoader;
+  final PublishedRoutineCatalogFactory? routineCatalogFactory;
   final LocalMemberProgressRepositoryFactory? progressRepositoryFactory;
   final WidgetBuilder? memberSettingsBuilder;
 
@@ -32,14 +40,57 @@ class MemberShell extends StatefulWidget {
 
 class _MemberShellState extends State<MemberShell> {
   int _index = 0;
-  Future<PublishedRoutine?>? _routineFuture;
+  PublishedRoutineCatalogCubit? _catalog;
+  AuthBloc? _auth;
+  StreamSubscription<AuthState>? _authSubscription;
 
   @override
-  void initState() {
-    super.initState();
-    if (widget.liveSession != null) {
-      _routineFuture = widget.routineLoader?.call();
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (widget.liveSession == null || _auth != null) return;
+    _auth = context.read<AuthBloc>();
+    _authSubscription = _auth!.stream.listen((state) {
+      if (state.session?.scope != widget.liveSession?.scope ||
+          !AuthRolePolicy.canEnter(state, allowed: const {AppRole.member})) {
+        _catalog?.invalidate();
+      }
+    });
+    _createCatalog();
+  }
+
+  SessionScope? _activeScope() => _auth != null &&
+          _auth!.state.session?.scope == widget.liveSession?.scope &&
+          AuthRolePolicy.canEnter(_auth!.state, allowed: const {AppRole.member})
+      ? widget.liveSession!.scope
+      : null;
+
+  void _createCatalog() {
+    final scope = widget.liveSession!.scope;
+    final repository =
+        widget.routineCatalogFactory?.call(scope, _activeScope) ??
+            SinglePublishedRoutineCatalog(
+                scope: scope, loader: widget.routineLoader ?? () async => null);
+    _catalog = PublishedRoutineCatalogCubit(
+        repository: repository, activeScope: _activeScope);
+    unawaited(_catalog!.refresh());
+  }
+
+  @override
+  void didUpdateWidget(MemberShell oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.liveSession?.scope != widget.liveSession?.scope) {
+      unawaited(_catalog?.close());
+      _catalog = null;
+      if (widget.liveSession != null && _auth != null) _createCatalog();
+      _index = 0;
     }
+  }
+
+  @override
+  void dispose() {
+    unawaited(_authSubscription?.cancel());
+    unawaited(_catalog?.close());
+    super.dispose();
   }
 
   final _pages = const [
@@ -60,9 +111,10 @@ class _MemberShellState extends State<MemberShell> {
         repositoryFactory: widget.progressRepositoryFactory ??
             createLocalMemberProgressRepository,
         builder: (context, progressState, refresh, open, openWorkout) =>
-            FutureBuilder<PublishedRoutine?>(
-              future: _routineFuture,
-              builder: (context, snapshot) => _scaffold(<Widget>[
+            BlocBuilder<PublishedRoutineCatalogCubit,
+                PublishedRoutineCatalogState>(
+              bloc: _catalog!,
+              builder: (context, catalog) => _scaffold(<Widget>[
                 MemberHomeScreen(
                     liveSession: widget.liveSession!,
                     liveProfile: widget.liveProfile!,
@@ -74,10 +126,18 @@ class _MemberShellState extends State<MemberShell> {
                     onOpenProgress: () => open(MemberProgressView.dashboard),
                     onOpenHistory: () => open(MemberProgressView.history),
                     onOpenWorkout: openWorkout,
-                    publishedRoutine: snapshot.data),
+                    publishedRoutine: catalog.selected,
+                    routineStatusMessage: _catalogLabel(catalog),
+                    onStartWorkout: () => setState(() => _index = 1)),
                 WorkoutPrepRoute(
-                    publishedRoutine: snapshot.data,
-                    routineLoadFailed: snapshot.hasError),
+                    publishedRoutine: catalog.selected,
+                    routineStatusMessage: _catalogLabel(catalog),
+                    routineLoadFailed: catalog.status == CatalogStatus.error,
+                    routineCatalogControls: PublishedRoutineCatalogControls(
+                        state: catalog,
+                        onRefresh: _catalog!.refresh,
+                        onSelect: _catalog!.select,
+                        onLoadMore: _catalog!.loadMore)),
                 const GamificationDashboardScreen(live: true),
                 const BrowseCoachesScreen(live: true),
                 MemberProfileScreen(
@@ -90,6 +150,18 @@ class _MemberShellState extends State<MemberShell> {
               }),
             ));
   }
+
+  String? _catalogLabel(PublishedRoutineCatalogState state) =>
+      state.selected != null
+          ? null
+          : switch (state.status) {
+              CatalogStatus.loading => 'Loading published routines…',
+              CatalogStatus.error ||
+              CatalogStatus.unavailable =>
+                'Routines unavailable',
+              CatalogStatus.empty => 'No published routine yet',
+              CatalogStatus.ready => 'Choose a published routine',
+            };
 
   Widget _scaffold(List<Widget> pages, {void Function(int)? onTabChanged}) {
     return Scaffold(

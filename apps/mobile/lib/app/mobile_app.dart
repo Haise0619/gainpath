@@ -12,6 +12,7 @@ import 'routing/feature_routes.dart';
 import '../features/analytics/domain/local_member_progress_repository.dart';
 import 'shells/member_shell.dart';
 import 'shells/coach_shell.dart';
+import 'di/published_routine_catalog_factory.dart';
 import '../features/identity/presentation/shared/login_screen.dart';
 import '../features/identity/presentation/shared/email_verification_screen.dart';
 import '../features/identity/presentation/member/profile_setup_screen.dart';
@@ -31,6 +32,7 @@ class GainPathMobileApp extends StatelessWidget {
       this.backendConfig,
       this.profileRepositoryFactory,
       this.routineLoaderFactory,
+      this.routineCatalogFactory,
       this.progressRepositoryFactory,
       this.passwordResetSender,
       this.memberSettingsBuilder});
@@ -40,6 +42,7 @@ class GainPathMobileApp extends StatelessWidget {
   final FitnessProfileRepository Function(SessionScope)?
       profileRepositoryFactory;
   final Future<PublishedRoutine?> Function(SessionScope)? routineLoaderFactory;
+  final PublishedRoutineCatalogFactory? routineCatalogFactory;
   final LocalMemberProgressRepositoryFactory? progressRepositoryFactory;
   final Future<void> Function(String)? passwordResetSender;
   final WidgetBuilder? memberSettingsBuilder;
@@ -77,6 +80,7 @@ class GainPathMobileApp extends StatelessWidget {
                   config: config,
                   profileRepositoryFactory: profileRepositoryFactory,
                   routineLoaderFactory: routineLoaderFactory,
+                  routineCatalogFactory: routineCatalogFactory,
                   progressRepositoryFactory: progressRepositoryFactory,
                   passwordResetSender: passwordResetSender,
                   memberSettingsBuilder: memberSettingsBuilder),
@@ -108,6 +112,7 @@ class _MobileAuthGate extends StatefulWidget {
       {required this.config,
       this.profileRepositoryFactory,
       this.routineLoaderFactory,
+      this.routineCatalogFactory,
       this.progressRepositoryFactory,
       this.passwordResetSender,
       this.memberSettingsBuilder});
@@ -115,6 +120,7 @@ class _MobileAuthGate extends StatefulWidget {
   final FitnessProfileRepository Function(SessionScope)?
       profileRepositoryFactory;
   final Future<PublishedRoutine?> Function(SessionScope)? routineLoaderFactory;
+  final PublishedRoutineCatalogFactory? routineCatalogFactory;
   final LocalMemberProgressRepositoryFactory? progressRepositoryFactory;
   final Future<void> Function(String)? passwordResetSender;
   final WidgetBuilder? memberSettingsBuilder;
@@ -157,11 +163,17 @@ class _MobileAuthGateState extends State<_MobileAuthGate> {
                         liveProfile: profile,
                         progressRepositoryFactory:
                             widget.progressRepositoryFactory,
-                        routineLoader: widget.routineLoaderFactory == null
-                            ? () =>
-                                FirebasePublishedRoutineRepository(scope: scope)
-                                    .load()
-                            : () => widget.routineLoaderFactory!(scope),
+                        routineCatalogFactory: widget.routineCatalogFactory ??
+                            (catalogScope, activeScope) =>
+                                widget.routineLoaderFactory == null
+                                    ? FirebasePublishedRoutineRepository(
+                                        scope: catalogScope,
+                                        activeScope: activeScope)
+                                    : SinglePublishedRoutineCatalog(
+                                        scope: catalogScope,
+                                        loader: () =>
+                                            widget.routineLoaderFactory!(
+                                                catalogScope)),
                         memberSettingsBuilder: widget.memberSettingsBuilder ??
                             (_) {
                               final actions =

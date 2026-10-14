@@ -17,11 +17,15 @@ class WorkoutPrepRoute extends StatelessWidget {
     this.live = true,
     this.publishedRoutine,
     this.routineLoadFailed = false,
+    this.routineStatusMessage,
+    this.routineCatalogControls,
   });
 
   final PublishedRoutine? publishedRoutine;
   final bool live;
   final bool routineLoadFailed;
+  final String? routineStatusMessage;
+  final Widget? routineCatalogControls;
 
   @override
   Widget build(BuildContext context) {
@@ -31,6 +35,8 @@ class WorkoutPrepRoute extends StatelessWidget {
         live: live,
         publishedRoutine: publishedRoutine,
         routineLoadFailed: routineLoadFailed,
+        routineStatusMessage: routineStatusMessage,
+        routineCatalogControls: routineCatalogControls,
         routes: WorkoutPrepRoutes(
             realSessionBuilder: _realSession,
             savedSessionsBuilder: _savedSessions,
