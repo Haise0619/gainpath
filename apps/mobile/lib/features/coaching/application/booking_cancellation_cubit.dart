@@ -40,8 +40,9 @@ class BookingCancellationCubit extends Cubit<BookingCancellationState> {
     if (repository == null ||
         state.busy ||
         !_current() ||
-        (state.request != null && state.request!.bookingId != bookingId))
+        (state.request != null && state.request!.bookingId != bookingId)) {
       return false;
+    }
     final request = state.request ??
         CancelBookingHoldRequest(
             organizationId: repository!.scope.organizationId,

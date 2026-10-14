@@ -54,8 +54,9 @@ class _LiveBookingListViewState extends State<LiveBookingListView> {
                   ]));
       if (confirmed != true || !mounted || !widget.isCurrent()) return;
     }
-    if (await cancellation.cancel(bookingId) && mounted)
+    if (await cancellation.cancel(bookingId) && mounted) {
       await controller.refresh();
+    }
   }
 
   @override
