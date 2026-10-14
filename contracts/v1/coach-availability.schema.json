@@ -8,6 +8,11 @@
     "windows"
   ],
   "properties": {
+    "revision": { "type": "integer", "minimum": 1, "maximum": 9007199254740990 },
+    "timeZone": { "type": "string", "minLength": 1, "maxLength": 100 },
+    "policyVersion": { "type": "string", "minLength": 1 },
+    "createdAtMillis": { "type": "integer", "minimum": 0, "maximum": 8639999996400000 },
+    "updatedAtMillis": { "type": "integer", "minimum": 0, "maximum": 8639999996400000 },
     "schemaVersion": {
       "const": 1
     },

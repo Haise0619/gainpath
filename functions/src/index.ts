@@ -4,6 +4,7 @@ initializeApp();
 
 export { createBookingHold } from './modules/coaching/create-booking-hold';
 export { saveCoachProfileCommand, setCoachDirectoryStatusCommand } from './modules/coaching/coach-profile-callables';
+export { getCoachAvailabilityCommand, saveCoachAvailabilityDayCommand } from './modules/coaching/coach-availability-callables';
 export { paymentWebhook } from './modules/commerce/payment-webhook';
 export { provisionMemberRegistration } from './modules/identity/provision-member-registration';
 export { publishRoutineCommand } from './modules/content/publish-routine-callable';
