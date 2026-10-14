@@ -41,6 +41,13 @@ it('labels expiry with its original calendar date when the appointment is tomorr
   expect(row.expiryLabel).toBe('2026-10-01 08:15 GMT+8');
   expect(row.expiryLabel.length).toBeLessThanOrEqual(80);
 });
+it.each([{ policyVersion: 'booking-v1\n' }, { timeZone: '+05:30' }])(
+  'rejects stored metadata incompatible with the Member wire contract: %j', async change => {
+    Object.assign(store.documents.get('orgs/org-1/bookings/booking-1')!, change);
+    const before = structuredClone([...store.documents]);
+    await expect(read()).rejects.toMatchObject({ code: 'failed-precondition' });
+    expect([...store.documents]).toEqual(before);
+  });
 it('keeps Member reads after branch removal and Coach reads after publication withdrawal', async () => {
   store.documents.get('orgs/org-1/members/member-1')!.branchIds = [];
   store.documents.get('orgs/org-1/coaches/coach-1')!.status = 'inactive';

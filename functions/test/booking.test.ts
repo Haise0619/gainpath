@@ -10,6 +10,14 @@ let clock: number;
 const execute = (input = command, uid = 'member-1') => createBookingHoldService(store, uid, input, eligibleCoach, () => clock);
 beforeEach(() => { store = new MemoryStore(); clock = now; Object.entries(seeds).forEach(([p, d]) => store.documents.set(p, structuredClone(d))); });
 
+it.each([{ policyVersion: '   ' }, { policyVersion: 'booking-v1\n' }, { timeZone: '+05:30' }])(
+  'rejects current policy metadata incompatible with the Member wire contract: %j', async change => {
+    Object.assign(store.documents.get('orgs/org-1/settings/booking')!, change);
+    const before = structuredClone([...store.documents]);
+    await expect(execute()).rejects.toMatchObject({ code: 'failed-precondition' });
+    expect([...store.documents]).toEqual(before);
+  });
+
 it('holds every occupied slot and returns the same receipt on retry', async () => {
   const first = await execute();
   expect(first.status).toBe('pending_hold');

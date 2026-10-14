@@ -13,6 +13,12 @@ const auth = { uid: 'member-1', token: { email_verified: true } };
 const input = { schemaVersion: 1, organizationId: 'org-1', coachId: 'coach-1', localDate: '2026-10-02', durationMinutes: 60 };
 const read = (changes = {}, time = now) => getMemberBookingOptionsService(store, auth, { ...input, ...changes }, eligibleCoach, () => time);
 beforeEach(() => { store = new MemoryStore(); Object.entries(seeds).forEach(([p, d]) => store.documents.set(p, structuredClone(d))); });
+it('rejects numeric policy timezone metadata incompatible with the Member wire contract', async () => {
+  store.documents.get('orgs/org-1/settings/booking')!.timeZone = '+05:30';
+  const before = structuredClone([...store.documents]);
+  await expect(read({ localDate: undefined })).rejects.toMatchObject({ code: 'failed-precondition' });
+  expect([...store.documents]).toEqual(before);
+});
 it('returns bounded 30/60-minute options with authoritative epochs, branches and labels without writing', async () => {
   const before = structuredClone([...store.documents]);
   const result = await read();

@@ -8,6 +8,12 @@ import type { CoachIdentityReader } from './coach-profile-service';
 
 export const validBookingId = (value: unknown): value is string => typeof value === 'string' && /^[A-Za-z0-9_-]{1,128}$/.test(value);
 export const validBookingTime = (value: unknown): value is number => Number.isSafeInteger(value) && Number(value) > 0 && Number(value) <= MAX_TIME;
+// Keep persisted/returned metadata readable by the shared pure-Dart contract.
+// Intl also accepts numeric UTC offsets on some runtimes; B3 requires IANA names.
+export const validBookingZone = (value: unknown): value is string => typeof value === 'string' && value.length <= 100
+  && /^[A-Za-z][A-Za-z0-9_+\-]*(\/[A-Za-z0-9_+\-]+)*$/.test(value);
+export const validBookingPolicyVersion = (value: unknown): value is string => typeof value === 'string'
+  && value.trim().length > 0 && value.length <= 128 && !/[\x00-\x1F\x7F]/.test(value);
 
 export async function currentBookingMembership(tx: TransactionPort, org: string, uid: string) {
   const user = await tx.get(`users/${uid}`), data = await tx.get(`orgs/${org}/members/${uid}`);
@@ -57,7 +63,7 @@ export async function coachEligibilityFailure(reader: CoachIdentityReader, uid: 
 }
 export function currentBookingPolicy(data: DocumentData | undefined) {
   const policy = bookingPolicy(data);
-  if (policy.policyVersion.length > 128 || policy.timeZone.length > 100) throw new DomainError('failed-precondition', 'Booking policy needs review.');
+  if (!validBookingPolicyVersion(policy.policyVersion) || !validBookingZone(policy.timeZone)) throw new DomainError('failed-precondition', 'Booking policy needs review.');
   return { ...policy, cap: Number(data!.maxActiveBookingsPerMemberPerDay), holdMillis: Number(data!.holdMinutes) * 60000 };
 }
 export interface BookingReservation { bookingId: string; status: 'pending_hold' | 'confirmed'; expiresAtMillis: number }

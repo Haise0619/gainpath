@@ -3,7 +3,7 @@ import { requireVerifiedEmail } from '../../platform/auth-context';
 import { DomainError } from '../../platform/errors';
 import { InputValidationError, requiredIdentifier } from '../../platform/validation';
 import { allowed, dateEpoch, dateGrid, integer, localDate, object, plusDate, SLOT } from './coach-availability-contracts';
-import { currentBookingMembership, currentBookingPolicy, requireBookingOrganization, validBookingId, validBookingTime } from './booking-validation';
+import { currentBookingMembership, currentBookingPolicy, requireBookingOrganization, validBookingId, validBookingTime, validBookingZone, validBookingPolicyVersion } from './booking-validation';
 export interface BookingCursor { startAtMillis: number; bookingId: string }
 export interface BookingQuery { organizationId: string; ownerField: 'memberId' | 'coachId'; ownerId: string; branchIds?: readonly string[]; firstStartAtMillis: number; throughStartAtMillis: number; cursor?: BookingCursor; limit: 21 }
 export interface BookingQueryReader { read(query: BookingQuery): Promise<{ path: string; data: DocumentData }[]> }
@@ -30,8 +30,7 @@ function project(row: { path: string; data: DocumentData }, q: BookingQuery): Pe
       || Number(d.createdAtMillis) > Number(d.holdExpiresAtMillis) || Number(d.holdExpiresAtMillis) > Number(d.startAtMillis)
       || Number(d.startAtMillis) < q.firstStartAtMillis || Number(d.startAtMillis) >= q.throughStartAtMillis
       || typeof d.status !== 'string' || !['pending_hold', 'confirmed', 'cancelled', 'completed', 'refunded'].includes(d.status)
-      || typeof d.timeZone !== 'string' || !d.timeZone || d.timeZone.length > 100
-      || typeof d.policyVersion !== 'string' || !d.policyVersion.trim() || d.policyVersion.length > 128) throw review();
+      || !validBookingZone(d.timeZone) || !validBookingPolicyVersion(d.policyVersion)) throw review();
     dateEpoch(d.localDate);
     if (localDate(Number(d.startAtMillis), d.timeZone) !== d.localDate || localDate(Number(d.endAtMillis) - 1, d.timeZone) !== d.localDate) throw review();
     const formatter = new Intl.DateTimeFormat('en-GB', { timeZone: d.timeZone, hour: '2-digit', minute: '2-digit', hourCycle: 'h23', timeZoneName: 'shortOffset' });
