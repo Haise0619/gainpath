@@ -7,6 +7,7 @@ import 'package:gainpath_mobile/features/identity/presentation/member/profile_se
 import 'package:gainpath_mobile/features/identity/presentation/shared/login_screen.dart';
 import 'package:gainpath_mobile/features/identity/presentation/shared/onboarding_screen.dart';
 import 'support/fitness_profile_fake.dart';
+import 'coach_profile_state_test.dart' show ProfileFake;
 
 void main() {
   setUpAll(() => GoogleFonts.config.allowRuntimeFetching = false);
@@ -150,6 +151,7 @@ void main() {
         authRepository: repository,
         backendConfig: const BackendConfig(BackendMode.firebase),
         profileRepositoryFactory: FakeProfileGateway().repository,
+        coachProfileFactory: (_, current) => ProfileFake(),
       ));
       await tester.pumpAndSettle();
       expect(find.text('Member or coach'), findsOneWidget);
@@ -160,12 +162,18 @@ void main() {
       await tester.ensureVisible(submit);
       await tester.tap(submit);
       await tester.pumpAndSettle();
-      expect(role == 'member' ? find.byType(ProfileSetupScreen)
-          : find.text('Firebase identity connected'), findsOneWidget);
+      expect(
+          role == 'member'
+              ? find.byType(ProfileSetupScreen)
+              : find.text('Directory: not published'),
+          findsOneWidget);
       expect(find.byType(LoginScreen), findsNothing);
-      if (role == 'coach') expect(find.text('$role@example.com'), findsOneWidget);
       await tester.tap(find.text('Sign out'));
       await tester.pumpAndSettle();
+      if (role == 'coach') {
+        await tester.tap(find.widgetWithText(FilledButton, 'Sign out'));
+        await tester.pumpAndSettle();
+      }
       expect(find.byType(LoginScreen), findsOneWidget);
       expect(find.text('Member or coach'), findsOneWidget);
       expect(find.text('Firebase identity connected'), findsNothing);

@@ -159,8 +159,25 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    // B1 authority follows the current account assignment, not a stale active
+    // membership left behind in another organization. Other collections retain
+    // their existing contracts.
+    function coachDirectoryMember(orgId) {
+      return activeMember(orgId)
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.organizationId == orgId
+        && get(/databases/$(database)/documents/orgs/$(orgId)/members/$(request.auth.uid)).data.organizationId == orgId;
+    }
+    function coachOwner(orgId, coachId) {
+      return own(coachId)
+        && get(/databases/$(database)/documents/orgs/$(orgId)/members/$(request.auth.uid)).data.role == 'coach';
+    }
+    match /orgs/{orgId}/coachProfiles/{coachId} {
+      allow get: if coachDirectoryMember(orgId) && (coachOwner(orgId, coachId) || adminMember(orgId));
+      allow list: if coachDirectoryMember(orgId) && adminMember(orgId);
+      allow write: if false;
+    }
     match /orgs/{orgId}/coaches/{coachId} {
-      allow read: if activeMember(orgId) && (resource.data.status == 'published' || own(coachId) || adminMember(orgId));
+      allow read: if coachDirectoryMember(orgId) && (resource.data.status == 'published' || coachOwner(orgId, coachId) || adminMember(orgId));
       allow write: if false;
     }
 

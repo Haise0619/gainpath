@@ -8,6 +8,7 @@ import '../routing/member_progress_route.dart';
 import '../routing/workout_prep_route.dart';
 import '../di/local_member_progress_factory.dart';
 import '../di/published_routine_catalog_factory.dart';
+import '../di/coach_profile_factory.dart';
 import '../../features/workout/application/published_routine_catalog_cubit.dart';
 import '../../features/workout/presentation/member/published_routine_catalog_controls.dart';
 import '../../features/analytics/domain/local_member_progress_repository.dart';
@@ -24,6 +25,7 @@ class MemberShell extends StatefulWidget {
       this.liveProfile,
       this.routineLoader,
       this.routineCatalogFactory,
+      this.coachDirectoryFactory,
       this.progressRepositoryFactory,
       this.memberSettingsBuilder});
 
@@ -31,6 +33,7 @@ class MemberShell extends StatefulWidget {
   final FitnessProfile? liveProfile;
   final Future<PublishedRoutine?> Function()? routineLoader;
   final PublishedRoutineCatalogFactory? routineCatalogFactory;
+  final CoachDirectoryFactory? coachDirectoryFactory;
   final LocalMemberProgressRepositoryFactory? progressRepositoryFactory;
   final WidgetBuilder? memberSettingsBuilder;
 
@@ -40,6 +43,7 @@ class MemberShell extends StatefulWidget {
 
 class _MemberShellState extends State<MemberShell> {
   int _index = 0;
+  bool _directoryVisited = false;
   PublishedRoutineCatalogCubit? _catalog;
   AuthBloc? _auth;
   StreamSubscription<AuthState>? _authSubscription;
@@ -83,6 +87,7 @@ class _MemberShellState extends State<MemberShell> {
       _catalog = null;
       if (widget.liveSession != null && _auth != null) _createCatalog();
       _index = 0;
+      _directoryVisited = false;
     }
   }
 
@@ -139,7 +144,10 @@ class _MemberShellState extends State<MemberShell> {
                         onSelect: _catalog!.select,
                         onLoadMore: _catalog!.loadMore)),
                 const GamificationDashboardScreen(live: true),
-                const BrowseCoachesScreen(live: true),
+                _directoryVisited
+                    ? buildFirebaseCoachDirectory(widget.liveSession!,
+                        factory: widget.coachDirectoryFactory)
+                    : const SizedBox.shrink(),
                 MemberProfileScreen(
                     liveSession: widget.liveSession!,
                     liveProfile: widget.liveProfile!,
@@ -169,7 +177,10 @@ class _MemberShellState extends State<MemberShell> {
       bottomNavigationBar: NavigationBar(
         selectedIndex: _index,
         onDestinationSelected: (i) {
-          setState(() => _index = i);
+          setState(() {
+            _index = i;
+            if (i == 3) _directoryVisited = true;
+          });
           onTabChanged?.call(i);
         },
         destinations: const [

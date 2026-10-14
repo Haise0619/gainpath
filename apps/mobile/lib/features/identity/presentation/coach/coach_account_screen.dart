@@ -5,6 +5,8 @@ import 'package:gainpath_ui/gainpath_ui.dart';
 import '../../../../navigation/feature_navigation.dart';
 import 'certifications_screen.dart';
 import 'coach_settings_screen.dart';
+import 'live_coach_profile_views.dart';
+import '../../application/coach_profile_cubit.dart';
 import 'edit_coach_profile_screen.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
@@ -17,7 +19,11 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 /// member-facing public coach page, which this screen can now open as a
 /// live preview.
 class CoachAccountScreen extends StatefulWidget {
-  const CoachAccountScreen({super.key});
+  const CoachAccountScreen(
+      {super.key, this.liveRepository, this.isCurrent, this.onOpenLiveEditor});
+  final CoachProfileRepository? liveRepository;
+  final bool Function()? isCurrent;
+  final void Function(CoachProfileCubit)? onOpenLiveEditor;
 
   @override
   State<CoachAccountScreen> createState() => _CoachAccountScreenState();
@@ -31,11 +37,24 @@ class _CoachAccountScreenState extends State<CoachAccountScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (widget.liveRepository != null) {
+      return LiveCoachAccountView(
+          repository: widget.liveRepository!,
+          isCurrent: widget.isCurrent!,
+          onSignOut: _signOut,
+          onOpenEditor: widget.onOpenLiveEditor);
+    }
     final coach = context.read<CoachRepository>().currentCoach;
-    final verifiedCerts =
-        context.read<CoachRepository>().coachCertifications.where((c) => c.status == CertificationStatus.verified).length;
-    final pendingCerts =
-        context.read<CoachRepository>().coachCertifications.where((c) => c.status == CertificationStatus.pendingReview).length;
+    final verifiedCerts = context
+        .read<CoachRepository>()
+        .coachCertifications
+        .where((c) => c.status == CertificationStatus.verified)
+        .length;
+    final pendingCerts = context
+        .read<CoachRepository>()
+        .coachCertifications
+        .where((c) => c.status == CertificationStatus.pendingReview)
+        .length;
 
     return Scaffold(
       appBar: AppBar(title: const Text('My account')),
@@ -45,11 +64,15 @@ class _CoachAccountScreenState extends State<CoachAccountScreen> {
           const SizedBox(height: 16),
           Row(
             children: [
-              Expanded(child: StatTile('${coach.rating}', 'Rating', valueColor: AppColors.accent)),
+              Expanded(
+                  child: StatTile('${coach.rating}', 'Rating',
+                      valueColor: AppColors.accent)),
               const SizedBox(width: 10),
-              Expanded(child: StatTile('${coach.sessionsCompleted}', 'Sessions')),
+              Expanded(
+                  child: StatTile('${coach.sessionsCompleted}', 'Sessions')),
               const SizedBox(width: 10),
-              Expanded(child: StatTile('${coach.yearsExperience}y', 'Experience')),
+              Expanded(
+                  child: StatTile('${coach.yearsExperience}y', 'Experience')),
             ],
           ),
           const SizedBox(height: 12),
@@ -57,7 +80,9 @@ class _CoachAccountScreenState extends State<CoachAccountScreen> {
             width: double.infinity,
             child: OutlinedButton.icon(
               style: OutlinedButton.styleFrom(minimumSize: const Size(0, 48)),
-              onPressed: () => Navigator.pushNamed(context, FeatureNavigation.coach, arguments: coach),
+              onPressed: () => Navigator.pushNamed(
+                  context, FeatureNavigation.coach,
+                  arguments: coach),
               icon: const Icon(Icons.visibility_outlined, size: 19),
               label: const Text('Preview public profile'),
             ),
@@ -90,7 +115,8 @@ class _CoachAccountScreenState extends State<CoachAccountScreen> {
                   Icons.photo_camera_rounded,
                   'Profile photo',
                   'Update your directory picture',
-                  () => showToast(context, 'Photo upload is not part of this prototype.'),
+                  () => showToast(
+                      context, 'Photo upload is not part of this prototype.'),
                 ),
               ],
             ),
@@ -130,8 +156,8 @@ class _CoachAccountScreenState extends State<CoachAccountScreen> {
     }
   }
 
-  Widget _row(BuildContext context, IconData icon, String title, String subtitle,
-      VoidCallback onTap) {
+  Widget _row(BuildContext context, IconData icon, String title,
+      String subtitle, VoidCallback onTap) {
     return ListTile(
       onTap: onTap,
       leading: Container(
@@ -145,7 +171,8 @@ class _CoachAccountScreenState extends State<CoachAccountScreen> {
       ),
       title: Text(title, style: Theme.of(context).textTheme.titleMedium),
       subtitle: Text(subtitle,
-          style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontSize: 13)),
+          style:
+              Theme.of(context).textTheme.bodyMedium?.copyWith(fontSize: 13)),
       trailing: const Icon(Icons.arrow_forward_ios_rounded, size: 14),
     );
   }
@@ -178,7 +205,10 @@ class _ProHeader extends StatelessWidget {
             children: [
               ClipRRect(
                 borderRadius: BorderRadius.circular(18),
-                child: SizedBox(width: 68, height: 68, child: networkAvatar(coach.imageUrl)),
+                child: SizedBox(
+                    width: 68,
+                    height: 68,
+                    child: networkAvatar(coach.imageUrl)),
               ),
               const SizedBox(width: 14),
               Expanded(
@@ -190,20 +220,25 @@ class _ProHeader extends StatelessWidget {
                         Flexible(
                           child: Text(coach.name,
                               style: const TextStyle(
-                                  fontSize: 19, fontWeight: FontWeight.w800, color: Colors.white)),
+                                  fontSize: 19,
+                                  fontWeight: FontWeight.w800,
+                                  color: Colors.white)),
                         ),
                         if (coach.verified) ...[
                           const SizedBox(width: 6),
-                          const Icon(Icons.verified_rounded, size: 18, color: Colors.white),
+                          const Icon(Icons.verified_rounded,
+                              size: 18, color: Colors.white),
                         ],
                       ],
                     ),
                     const SizedBox(height: 3),
                     Text(coach.specialty,
-                        style: const TextStyle(color: Colors.white70, fontSize: 13.5)),
+                        style: const TextStyle(
+                            color: Colors.white70, fontSize: 13.5)),
                     const SizedBox(height: 3),
                     Text(coach.branch,
-                        style: const TextStyle(color: Colors.white60, fontSize: 12.5)),
+                        style: const TextStyle(
+                            color: Colors.white60, fontSize: 12.5)),
                   ],
                 ),
               ),
@@ -222,15 +257,20 @@ class _ProHeader extends StatelessWidget {
                 Container(
                   width: 8,
                   height: 8,
-                  decoration: const BoxDecoration(color: AppColors.success, shape: BoxShape.circle),
+                  decoration: const BoxDecoration(
+                      color: AppColors.success, shape: BoxShape.circle),
                 ),
                 const SizedBox(width: 10),
                 const Expanded(
                   child: Text('Live in directory',
-                      style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 13.5)),
+                      style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 13.5)),
                 ),
                 Text('${coach.reviews} reviews',
-                    style: const TextStyle(color: Colors.white70, fontSize: 12.5)),
+                    style:
+                        const TextStyle(color: Colors.white70, fontSize: 12.5)),
               ],
             ),
           ),

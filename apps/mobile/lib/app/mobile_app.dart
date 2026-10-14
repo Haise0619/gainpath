@@ -13,6 +13,7 @@ import '../features/analytics/domain/local_member_progress_repository.dart';
 import 'shells/member_shell.dart';
 import 'shells/coach_shell.dart';
 import 'di/published_routine_catalog_factory.dart';
+import 'di/coach_profile_factory.dart';
 import '../features/identity/presentation/shared/login_screen.dart';
 import '../features/identity/presentation/shared/email_verification_screen.dart';
 import '../features/identity/presentation/member/profile_setup_screen.dart';
@@ -33,6 +34,8 @@ class GainPathMobileApp extends StatelessWidget {
       this.profileRepositoryFactory,
       this.routineLoaderFactory,
       this.routineCatalogFactory,
+      this.coachProfileFactory,
+      this.coachDirectoryFactory,
       this.progressRepositoryFactory,
       this.passwordResetSender,
       this.memberSettingsBuilder});
@@ -43,6 +46,8 @@ class GainPathMobileApp extends StatelessWidget {
       profileRepositoryFactory;
   final Future<PublishedRoutine?> Function(SessionScope)? routineLoaderFactory;
   final PublishedRoutineCatalogFactory? routineCatalogFactory;
+  final CoachProfileFactory? coachProfileFactory;
+  final CoachDirectoryFactory? coachDirectoryFactory;
   final LocalMemberProgressRepositoryFactory? progressRepositoryFactory;
   final Future<void> Function(String)? passwordResetSender;
   final WidgetBuilder? memberSettingsBuilder;
@@ -81,6 +86,8 @@ class GainPathMobileApp extends StatelessWidget {
                   profileRepositoryFactory: profileRepositoryFactory,
                   routineLoaderFactory: routineLoaderFactory,
                   routineCatalogFactory: routineCatalogFactory,
+                  coachProfileFactory: coachProfileFactory,
+                  coachDirectoryFactory: coachDirectoryFactory,
                   progressRepositoryFactory: progressRepositoryFactory,
                   passwordResetSender: passwordResetSender,
                   memberSettingsBuilder: memberSettingsBuilder),
@@ -113,6 +120,8 @@ class _MobileAuthGate extends StatefulWidget {
       this.profileRepositoryFactory,
       this.routineLoaderFactory,
       this.routineCatalogFactory,
+      this.coachProfileFactory,
+      this.coachDirectoryFactory,
       this.progressRepositoryFactory,
       this.passwordResetSender,
       this.memberSettingsBuilder});
@@ -121,6 +130,8 @@ class _MobileAuthGate extends StatefulWidget {
       profileRepositoryFactory;
   final Future<PublishedRoutine?> Function(SessionScope)? routineLoaderFactory;
   final PublishedRoutineCatalogFactory? routineCatalogFactory;
+  final CoachProfileFactory? coachProfileFactory;
+  final CoachDirectoryFactory? coachDirectoryFactory;
   final LocalMemberProgressRepositoryFactory? progressRepositoryFactory;
   final Future<void> Function(String)? passwordResetSender;
   final WidgetBuilder? memberSettingsBuilder;
@@ -161,6 +172,7 @@ class _MobileAuthGateState extends State<_MobileAuthGate> {
                   readyBuilder: (context, profile) => MemberShell(
                         liveSession: state.session!,
                         liveProfile: profile,
+                        coachDirectoryFactory: widget.coachDirectoryFactory,
                         progressRepositoryFactory:
                             widget.progressRepositoryFactory,
                         routineCatalogFactory: widget.routineCatalogFactory ??
@@ -187,7 +199,8 @@ class _MobileAuthGateState extends State<_MobileAuthGate> {
                             },
                       ));
             }
-            return _FirebaseIdentityReadyScreen(session: state.session!);
+            return buildFirebaseCoachShell(state.session!,
+                factory: widget.coachProfileFactory);
           }
           if (_setupProfile) return const ProfileSetupScreen();
           return state.session!.role == AppRole.coach
@@ -241,51 +254,4 @@ class _MobileAuthGateState extends State<_MobileAuthGate> {
       },
     );
   }
-}
-
-class _FirebaseIdentityReadyScreen extends StatelessWidget {
-  const _FirebaseIdentityReadyScreen({required this.session});
-  final AuthSession session;
-
-  @override
-  Widget build(BuildContext context) => Scaffold(
-        appBar: AppBar(
-          title: const Text('GainPath'),
-          actions: [
-            TextButton(
-              onPressed: () => context.read<AuthBloc>().add(const LoggedOut()),
-              child: const Text('Sign out'),
-            ),
-          ],
-        ),
-        body: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 520),
-              child: Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(24),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('Firebase identity connected',
-                          style: Theme.of(context).textTheme.headlineSmall),
-                      const SizedBox(height: 12),
-                      Text(session.email),
-                      Text('Organization: ${session.organizationId}'),
-                      Text('Branches: ${session.branchIds.join(', ')}'),
-                      const SizedBox(height: 12),
-                      const Text(
-                        'The remaining mobile features will appear after their Firebase repositories are connected.',
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ),
-      );
 }

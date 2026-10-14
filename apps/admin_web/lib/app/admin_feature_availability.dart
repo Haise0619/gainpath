@@ -4,7 +4,11 @@ import 'package:gainpath_ui/gainpath_ui.dart';
 
 /// App composition exposes only workflows with connected repositories.
 abstract final class AdminFeatureAvailability {
-  static const connected = {'Exercise Tutorials', 'Routine Templates'};
+  static const connected = {
+    'Exercise Tutorials',
+    'Routine Templates',
+    'Coaches'
+  };
   static Widget page(String feature, AuthSession session) =>
       PageBody(children: [
         Panel(
@@ -25,7 +29,7 @@ abstract final class AdminFeatureAvailability {
               'Branches: ${session.branchIds.isEmpty ? 'None assigned' : session.branchIds.join(', ')}'),
           const SizedBox(height: 12),
           Text(feature == 'Dashboard'
-              ? 'Exercise Tutorials and Routine Templates are connected. Other operational modules are unavailable.'
+              ? 'Exercise Tutorials, Routine Templates and Coach Directory are connected. Other operational modules are unavailable.'
               : 'This module is not connected to Firebase yet.'),
         ])),
       ]);

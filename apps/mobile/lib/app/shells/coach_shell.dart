@@ -1,19 +1,25 @@
 import 'package:flutter/material.dart';
+import 'package:gainpath_domain/identity.dart';
 import '../../features/coaching/presentation/coach/roster_screen.dart';
 import '../../features/coaching/presentation/coach/availability_screens.dart';
 import '../../features/analytics/presentation/coach/earnings_screen.dart';
 import '../../features/identity/presentation/coach/coach_account_screen.dart';
+import '../../features/identity/application/coach_profile_cubit.dart';
 
 /// Bottom-navigation shell for the Fitness Coach role (Modules 8 to 10).
 class CoachShell extends StatefulWidget {
-  const CoachShell({super.key});
+  const CoachShell(
+      {super.key, this.liveRepository, this.isCurrent, this.onOpenLiveEditor});
+  final CoachProfileRepository? liveRepository;
+  final bool Function()? isCurrent;
+  final void Function(CoachProfileCubit)? onOpenLiveEditor;
 
   @override
   State<CoachShell> createState() => _CoachShellState();
 }
 
 class _CoachShellState extends State<CoachShell> {
-  int _index = 0;
+  late int _index = widget.liveRepository == null ? 0 : 3;
 
   final _pages = const [
     CoachRosterScreen(),
@@ -25,7 +31,22 @@ class _CoachShellState extends State<CoachShell> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: IndexedStack(index: _index, children: _pages),
+      body: IndexedStack(
+          index: _index,
+          children: widget.liveRepository == null
+              ? _pages
+              : [
+                  for (final title in ['Roster', 'Availability', 'Earnings'])
+                    Scaffold(
+                        appBar: AppBar(title: Text(title)),
+                        body: const Center(
+                            child: Text(
+                                'Unavailable: this workflow is not connected to Firebase yet.'))),
+                  CoachAccountScreen(
+                      liveRepository: widget.liveRepository,
+                      isCurrent: widget.isCurrent,
+                      onOpenLiveEditor: widget.onOpenLiveEditor),
+                ]),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _index,
         onDestinationSelected: (i) => setState(() => _index = i),

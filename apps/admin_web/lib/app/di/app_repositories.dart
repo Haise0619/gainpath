@@ -24,6 +24,7 @@ import 'package:gainpath_domain/gainpath_domain.dart'
     show AuthSession, SessionScope;
 import '../../infrastructure/firebase/firebase_exercise_catalog_repository.dart';
 import '../../infrastructure/firebase/firebase_routine_template_repository.dart';
+import '../../infrastructure/firebase/firebase_coach_profile_admin_repository.dart';
 import 'package:gainpath_identity/gainpath_identity.dart';
 import 'catalog_edit_session_guard.dart';
 
@@ -37,6 +38,7 @@ class AppRepositories extends StatefulWidget {
     this.session,
     this.tutorialRepositoryFactory,
     this.routineRepositoryFactory,
+    this.coachRepositoryFactory,
   });
   final Widget child;
   final BackendConfig config;
@@ -44,6 +46,8 @@ class AppRepositories extends StatefulWidget {
   final TutorialRepository Function(SessionScope)? tutorialRepositoryFactory;
   final RoutineTemplateRepository Function(SessionScope, TutorialRepository)?
       routineRepositoryFactory;
+  final CoachProfileAdminRepository Function(SessionScope, bool Function())?
+      coachRepositoryFactory;
 
   @override
   State<AppRepositories> createState() => _AppRepositoriesState();
@@ -52,6 +56,17 @@ class AppRepositories extends StatefulWidget {
 class _AppRepositoriesState extends State<AppRepositories> {
   late final MockDataSession session = MockDataSession();
   CatalogEditSessionGuard? _catalogGuard;
+  CatalogEditSessionGuard? _coachGuard;
+  CoachProfileAdminRepository _createCoachDirectory(SessionScope scope) {
+    final auth = context.read<AuthBloc>();
+    _coachGuard = CatalogEditSessionGuard(
+        expected: widget.session!,
+        current: () => auth.state,
+        changes: auth.stream);
+    return widget.coachRepositoryFactory?.call(scope, _coachGuard!.isCurrent) ??
+        FirebaseCoachProfileAdminRepository(
+            scope: scope, isCurrent: _coachGuard!.isCurrent);
+  }
 
   TutorialRepository _createCatalog(SessionScope scope) {
     final factory = widget.tutorialRepositoryFactory;
@@ -68,6 +83,7 @@ class _AppRepositoriesState extends State<AppRepositories> {
   @override
   void dispose() {
     _catalogGuard?.dispose();
+    _coachGuard?.dispose();
     super.dispose();
   }
 
@@ -78,6 +94,8 @@ class _AppRepositoriesState extends State<AppRepositories> {
     final scope = widget.session?.scope;
     if (widget.config.isFirebase) {
       return MultiRepositoryProvider(providers: [
+        RepositoryProvider<CoachProfileAdminRepository>(
+            create: (_) => _createCoachDirectory(scope!)),
         RepositoryProvider<TutorialRepository>(
             create: (_) => _createCatalog(scope!)),
         RepositoryProvider<RoutineTemplateRepository>(

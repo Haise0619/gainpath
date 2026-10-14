@@ -270,6 +270,9 @@ class _AdminShellState extends State<AdminShell> {
                           if (!_visited.contains(entry.key)) {
                             return const SizedBox.shrink();
                           }
+                          if (d.label == 'Coaches') {
+                            return const CoachesScreen(live: true);
+                          }
                           return AdminFeatureAvailability.connected
                                   .contains(d.label)
                               ? d.page

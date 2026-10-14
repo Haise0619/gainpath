@@ -18,6 +18,7 @@ import 'package:gainpath_mobile/features/identity/presentation/shared/login_scre
 import 'package:google_fonts/google_fonts.dart';
 
 import 'support/fitness_profile_fake.dart';
+import 'coach_directory_flow_test.dart' show DirectoryFake;
 
 Future<void> tap(WidgetTester tester, String text) async {
   final target = find.text(text);
@@ -46,6 +47,8 @@ void main() {
       backendConfig: const BackendConfig(BackendMode.firebase),
       profileRepositoryFactory: profiles.repository,
       routineLoaderFactory: (_) async => null,
+      coachDirectoryFactory: (scope, current) =>
+          DirectoryFake(scope)..profile = null,
       memberSettingsBuilder: settingsBuilder,
     ));
     await tester.pumpAndSettle();
@@ -237,7 +240,9 @@ void main() {
     expect(find.text('YOUR POINTS'), findsOneWidget);
     await tap(tester, 'Coaches');
     expect(find.byType(BrowseCoachesScreen), findsOneWidget);
-    expect(find.text('No coaches available yet.'), findsOneWidget);
+    expect(
+        find.text('No published Coaches are available for this organization.'),
+        findsOneWidget);
     await tester.pumpWidget(const SizedBox());
     await auth.dispose();
   });

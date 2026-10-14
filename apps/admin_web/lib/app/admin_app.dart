@@ -10,6 +10,7 @@ import 'di/app_repositories.dart';
 import 'shells/admin_shell.dart';
 import '../infrastructure/firebase/firebase_auth_gateway.dart';
 import 'package:gainpath_domain/workout.dart';
+import 'package:gainpath_domain/identity.dart' show CoachProfileAdminRepository;
 
 class GainPathAdminWebApp extends StatelessWidget {
   const GainPathAdminWebApp(
@@ -17,13 +18,16 @@ class GainPathAdminWebApp extends StatelessWidget {
       this.authRepository,
       this.backendConfig,
       this.tutorialRepositoryFactory,
-      this.routineRepositoryFactory});
+      this.routineRepositoryFactory,
+      this.coachRepositoryFactory});
 
   final AuthRepository? authRepository;
   final BackendConfig? backendConfig;
   final TutorialRepository Function(SessionScope)? tutorialRepositoryFactory;
   final RoutineTemplateRepository Function(SessionScope, TutorialRepository)?
       routineRepositoryFactory;
+  final CoachProfileAdminRepository Function(SessionScope, bool Function())?
+      coachRepositoryFactory;
 
   @override
   Widget build(BuildContext context) {
@@ -60,6 +64,7 @@ class GainPathAdminWebApp extends StatelessWidget {
               session: state.session,
               tutorialRepositoryFactory: tutorialRepositoryFactory,
               routineRepositoryFactory: routineRepositoryFactory,
+              coachRepositoryFactory: coachRepositoryFactory,
               child: app,
             );
           },

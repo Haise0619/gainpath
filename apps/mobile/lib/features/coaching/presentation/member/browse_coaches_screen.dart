@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
 import 'booking_schedule_screen.dart';
 import '../shared/coach_profile_screen.dart';
+import '../shared/live_coach_directory_views.dart';
 import 'widgets/coach_card.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:gainpath_domain/identity.dart';
@@ -12,8 +13,16 @@ enum _SortBy { rating, priceLow, experience }
 /// sort share one toolbar so narrowing the list to "the one coach I
 /// want" takes a couple of taps rather than scrolling the whole roster.
 class BrowseCoachesScreen extends StatefulWidget {
-  const BrowseCoachesScreen({super.key, this.live = false});
+  const BrowseCoachesScreen(
+      {super.key,
+      this.live = false,
+      this.liveRepository,
+      this.isCurrent,
+      this.onOpenPublished});
   final bool live;
+  final CoachDirectoryRepository? liveRepository;
+  final bool Function()? isCurrent;
+  final void Function(String)? onOpenPublished;
 
   @override
   State<BrowseCoachesScreen> createState() => _BrowseCoachesScreenState();
@@ -33,6 +42,12 @@ class _BrowseCoachesScreenState extends State<BrowseCoachesScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (widget.live && widget.liveRepository != null) {
+      return LiveCoachDirectoryView(
+          repository: widget.liveRepository!,
+          isCurrent: widget.isCurrent!,
+          onOpen: widget.onOpenPublished!);
+    }
     final coaches =
         widget.live ? <Coach>[] : context.read<CoachRepository>().coaches;
     final specialties = [
