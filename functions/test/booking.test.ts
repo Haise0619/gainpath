@@ -161,3 +161,14 @@ it('rechecks actor scope after Auth lookup and rejects stale intent outside the 
   store.documents.get('users/member-1')!.organizationId = 'org-1';
   await expect(execute({ ...command, startAtMillis: Date.parse('2026-11-01T02:00:00Z') })).rejects.toMatchObject({ code: 'invalid-argument' });
 });
+it.each([
+  { status: ['confirmed'] }, { status: ['pending_hold'] },
+  { status: ['confirmed'], expiresAtMillis: now }, { status: ['pending_hold'], expiresAtMillis: now },
+])('rejects array lock status without changing any data: %j', async malformed => {
+  store.documents.set(`orgs/org-1/slotLocks/${keyOf('coach-1', start)}`, {
+    schemaVersion: 1, coachId: 'coach-1', branchId: 'branch-1', bookingId: 'other', ...malformed,
+  });
+  const before = structuredClone([...store.documents]);
+  await expect(execute()).rejects.toMatchObject({ code: 'failed-precondition' });
+  expect([...store.documents]).toEqual(before);
+});

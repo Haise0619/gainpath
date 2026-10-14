@@ -84,7 +84,7 @@ export async function bookingDaySnapshot(tx: TransactionPort, org: string, coach
     const lock = await tx.get(`${root}/slotLocks/${keyOf(coachId, slot)}`);
     if (!lock) continue;
     if (lock.schemaVersion !== 1 || lock.coachId !== coachId || !validBookingId(lock.bookingId) || !validBookingId(lock.branchId)
-      || !['confirmed', 'pending_hold'].includes(String(lock.status))
+      || (lock.status !== 'confirmed' && lock.status !== 'pending_hold')
       || (lock.status === 'pending_hold' && (!validBookingTime(lock.expiresAtMillis) || lock.expiresAtMillis > slot))) throw new DomainError('failed-precondition', 'Reservation lock needs authorized review.');
     if (lock.status === 'confirmed' || Number(lock.expiresAtMillis) > now) {
       if (day.windows.find(w => w.startAtMillis <= slot && w.endAtMillis >= slot + SLOT)?.branchId !== lock.branchId) throw new DomainError('failed-precondition', 'Stored schedule and reservation disagree.');

@@ -111,3 +111,14 @@ it('matches the strict request/response schemas', async () => {
   expect(response(await read())).toBe(true); expect(response(await read({ localDate: undefined }))).toBe(true);
   expect(response({ ...await read(), receipt: 'private' })).toBe(false);
 });
+it.each([
+  { status: ['confirmed'] }, { status: ['pending_hold'] },
+  { status: ['confirmed'], expiresAtMillis: now }, { status: ['pending_hold'], expiresAtMillis: now },
+])('rejects array lock status without exposing options or changing data: %j', async malformed => {
+  store.documents.set(`orgs/org-1/slotLocks/${keyOf('coach-1', start)}`, {
+    schemaVersion: 1, coachId: 'coach-1', branchId: 'branch-1', bookingId: 'other', ...malformed,
+  });
+  const before = structuredClone([...store.documents]);
+  await expect(read()).rejects.toMatchObject({ code: 'failed-precondition' });
+  expect([...store.documents]).toEqual(before);
+});
