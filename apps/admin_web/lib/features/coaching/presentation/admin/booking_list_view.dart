@@ -74,6 +74,10 @@ class _AdminBookingListViewState extends State<AdminBookingListView> {
                                 const Text(
                                     'Timezone differs from current policy; review original times.'),
                               Text('Hold expiry: ${record.expiryLabel}'),
+                              if (record.resolution != null)
+                                Text(record.resolution == 'hold_expired'
+                                    ? 'Closed by server hold expiry.'
+                                    : 'Closed by Member cancellation.'),
                               Text(
                                   'Coach: ${record.coachId} · Member: ${record.memberId}'),
                               Text(

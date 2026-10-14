@@ -226,6 +226,6 @@ class BookingListCubit extends Cubit<BookingListState> {
 String bookingStatusLabel(PersistedBookingRecord record, int serverNowMillis) =>
     record.status == BookingStatus.pendingHold
         ? serverNowMillis >= record.holdExpiresAtMillis
-            ? 'Pending hold — time elapsed; expiry processing unavailable.'
+            ? 'Pending hold — time elapsed; awaiting server expiry.'
             : 'Pending hold — not a paid reservation.'
         : record.rawStatus;

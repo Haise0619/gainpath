@@ -1,7 +1,14 @@
 import 'core.dart';
 import 'coaching/booking_wire_validation.dart';
 
-enum BookingStatus { pendingHold, confirmed, cancelled, completed, refunded }
+enum BookingStatus {
+  pendingHold,
+  confirmed,
+  cancelled,
+  expired,
+  completed,
+  refunded
+}
 
 class CreateBookingHoldRequest {
   CreateBookingHoldRequest({

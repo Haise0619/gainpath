@@ -52,7 +52,10 @@ class BookingTransport {
 }
 
 class FirebaseBookingRepository
-    implements BookingRemoteDataSource, MemberBookingOptionsRepository {
+    implements
+        BookingRemoteDataSource,
+        MemberBookingOptionsRepository,
+        BookingCancellationRepository {
   FirebaseBookingRepository(
       {required this.scope,
       required bool Function() isCurrent,
@@ -74,6 +77,23 @@ class FirebaseBookingRepository
     final ready = await _readiness.ensureReady(check: _transport.check);
     _transport.check();
     if (!ready) throw const BookingException('app-check-unavailable');
+  }
+
+  @override
+  Future<CancelBookingHoldResult> cancelHold(
+      CancelBookingHoldRequest request) async {
+    _transport.check();
+    if (request.organizationId != scope.organizationId) {
+      throw const BookingException('permission-denied');
+    }
+    await _ready();
+    try {
+      return CancelBookingHoldResult.fromJson(
+          await _transport.call('cancelBookingHoldCommand', request.toJson()),
+          request: request);
+    } on FormatException {
+      throw const BookingException('invalid-response');
+    }
   }
 
   @override

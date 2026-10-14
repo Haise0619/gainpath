@@ -74,7 +74,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(
         find.text(
-            'Pending hold — time elapsed; expiry processing unavailable.'),
+            'Pending hold — time elapsed; awaiting server expiry.'),
         findsOneWidget);
     expect(
         find.textContaining('Coach: coach · Member: member'), findsOneWidget);

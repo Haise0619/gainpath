@@ -161,6 +161,7 @@ BookingStatus _status(dynamic value) => switch (value) {
       'pending_hold' => BookingStatus.pendingHold,
       'confirmed' => BookingStatus.confirmed,
       'cancelled' => BookingStatus.cancelled,
+      'expired' => BookingStatus.expired,
       'completed' => BookingStatus.completed,
       'refunded' => BookingStatus.refunded,
       _ => invalidBookingData(),
@@ -169,6 +170,7 @@ String _rawStatus(BookingStatus value) => switch (value) {
       BookingStatus.pendingHold => 'pending_hold',
       BookingStatus.confirmed => 'confirmed',
       BookingStatus.cancelled => 'cancelled',
+      BookingStatus.expired => 'expired',
       BookingStatus.completed => 'completed',
       BookingStatus.refunded => 'refunded',
     };
@@ -191,6 +193,8 @@ class PersistedBookingRecord {
       required this.timeZone,
       required this.policyVersion,
       required this.createdAtMillis,
+      this.resolvedAtMillis,
+      this.resolution,
       required this.startLabel,
       required this.endLabel,
       required this.expiryLabel}) {
@@ -217,6 +221,20 @@ class PersistedBookingRecord {
     bookingText(startLabel, max: 80);
     bookingText(endLabel, max: 80);
     bookingText(expiryLabel, max: 80);
+    if (resolvedAtMillis != null ||
+        resolution != null ||
+        status == BookingStatus.expired) {
+      bookingInt(resolvedAtMillis);
+      if (resolvedAtMillis! < createdAtMillis ||
+          (status == BookingStatus.cancelled
+              ? resolution != 'member_cancelled' ||
+                  resolvedAtMillis! >= holdExpiresAtMillis
+              : status != BookingStatus.expired ||
+                  resolution != 'hold_expired' ||
+                  resolvedAtMillis! < holdExpiresAtMillis)) {
+        invalidBookingData();
+      }
+    }
   }
   final String bookingId,
       organizationId,
@@ -236,6 +254,8 @@ class PersistedBookingRecord {
       holdExpiresAtMillis,
       createdAtMillis;
   final BookingStatus status;
+  final int? resolvedAtMillis;
+  final String? resolution;
   int get schemaVersion => 1;
   String get rawStatus => _rawStatus(status);
   DateTime get startAt =>
@@ -265,7 +285,15 @@ class PersistedBookingRecord {
       'startLabel',
       'endLabel',
       'expiryLabel'
+    ], [
+      'resolvedAtMillis',
+      'resolution'
     ]);
+    if ((data.containsKey('resolvedAtMillis') &&
+            data['resolvedAtMillis'] == null) ||
+        (data.containsKey('resolution') && data['resolution'] is! String)) {
+      invalidBookingData();
+    }
     bookingVersion(data['schemaVersion']);
     return PersistedBookingRecord(
         bookingId: _bookingIdValue(data['bookingId']),
@@ -283,6 +311,10 @@ class PersistedBookingRecord {
         timeZone: bookingTimeZone(data['timeZone']),
         policyVersion: bookingText(data['policyVersion'], max: 128),
         createdAtMillis: bookingInt(data['createdAtMillis']),
+        resolvedAtMillis: data.containsKey('resolvedAtMillis')
+            ? bookingInt(data['resolvedAtMillis'])
+            : null,
+        resolution: data['resolution'],
         startLabel: bookingText(data['startLabel'], max: 80),
         endLabel: bookingText(data['endLabel'], max: 80),
         expiryLabel: bookingText(data['expiryLabel'], max: 80));
@@ -304,6 +336,8 @@ class PersistedBookingRecord {
         'timeZone': timeZone,
         'policyVersion': policyVersion,
         'createdAtMillis': createdAtMillis,
+        if (resolvedAtMillis != null) 'resolvedAtMillis': resolvedAtMillis,
+        if (resolution != null) 'resolution': resolution,
         'startLabel': startLabel,
         'endLabel': endLabel,
         'expiryLabel': expiryLabel

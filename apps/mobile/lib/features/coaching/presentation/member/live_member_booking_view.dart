@@ -153,11 +153,11 @@ class _LiveMemberBookingViewState extends State<LiveMemberBookingView> {
                         ],
                         if (state.hold != null) ...[
                           Text('Booking ${state.hold!.bookingId}'),
-                          const Text('Pending hold — not a paid reservation.'),
+                          const Text('Original creation receipt — pending hold, not a paid reservation.'),
                           Text(
                               'Hold expiry (UTC): ${state.hold!.holdExpiresAt.toUtc().toIso8601String()}'),
                           const Text(
-                              'Refresh My bookings for the server status and elapsed-expiry context.'),
+                              'This receipt does not renew the hold. Refresh My bookings for its current server status, cancellation or expiry.'),
                           FilledButton(
                               onPressed: widget.onOpenBookings,
                               child: const Text('View persisted bookings')),

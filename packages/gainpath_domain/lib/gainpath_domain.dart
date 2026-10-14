@@ -1,5 +1,6 @@
 export 'src/coaching.dart';
 export 'src/coaching/booking_read_contracts.dart';
+export 'src/coaching/booking_lifecycle_contracts.dart';
 export 'src/fitness_profile.dart';
 export 'src/member_preferences.dart';
 export 'src/core.dart';
