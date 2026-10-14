@@ -182,10 +182,29 @@ service cloud.firestore {
     }
 
     match /orgs/{orgId}/bookings/{bookingId} {
-      allow read: if activeMember(orgId)
-        && (resource.data.memberId == request.auth.uid
-          || resource.data.coachId == request.auth.uid
-          || staffBranch(orgId, resource.data.branchId));
+      // Booking scope is deliberately local: other product Rules retain their
+      // existing behavior. Stale memberships and coincidental owner UIDs do
+      // not grant access after a current account assignment changes.
+      function currentBookingReader() {
+        return activeMember(orgId)
+          && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.organizationId == orgId
+          && get(/databases/$(database)/documents/orgs/$(orgId)/members/$(request.auth.uid)).data.organizationId == orgId
+          && get(/databases/$(database)/documents/orgs/$(orgId)).data.status == 'active';
+      }
+      function currentBookingBranch() {
+        let member = get(/databases/$(database)/documents/orgs/$(orgId)/members/$(request.auth.uid)).data;
+        return member.branchIds is list && member.branchIds.size() <= 8
+          && resource.data.branchId in member.branchIds
+          && get(/databases/$(database)/documents/orgs/$(orgId)/branches/$(resource.data.branchId)).data.status == 'active';
+      }
+      function bookingRole() {
+        return get(/databases/$(database)/documents/orgs/$(orgId)/members/$(request.auth.uid)).data.role;
+      }
+      allow read: if currentBookingReader()
+        && ((bookingRole() == 'member' && resource.data.memberId == request.auth.uid)
+          || (bookingRole() == 'coach' && resource.data.coachId == request.auth.uid && currentBookingBranch())
+          || bookingRole() == 'admin'
+          || (bookingRole() == 'staff' && currentBookingBranch()));
       allow write: if false;
     }
 

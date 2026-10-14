@@ -16,6 +16,9 @@ beforeEach(async () => {
   await env.withSecurityRulesDisabled(async context => {
     const db = context.firestore();
     const documents = {
+      'orgs/o': { status: 'active' },
+      'orgs/o/branches/a': { status: 'active' },
+      'orgs/o/branches/b': { status: 'active' },
       'orgs/o/members/member': { role: 'member', status: 'active', branchIds: ['a'], displayName: 'Member' },
       'orgs/o/members/other': { role: 'member', status: 'active', branchIds: ['b'] },
       'orgs/o/members/staff': { role: 'staff', status: 'active', branchIds: ['a'] },
@@ -36,7 +39,9 @@ beforeEach(async () => {
         days: [{ dayNumber: 1, exercises: [{ exerciseId: 'squat', sets: 3, reps: 8 }] }] },
       'system/paymentIngress/events/event': { status: 'received' },
     };
-    await Promise.all(Object.entries(documents).map(([path, data]) => setDoc(doc(db, path), data)));
+    await Promise.all(Object.entries(documents).map(([path, data]) => setDoc(doc(db, path),
+      path.startsWith('orgs/o/members/') ? { ...data, organizationId: 'o' } : data)));
+    await Promise.all(['member', 'other', 'staff', 'admin', 'coach', 'suspended'].map(uid => setDoc(doc(db, `users/${uid}`), { organizationId: 'o' })));
   });
 });
 const dbFor = (uid: string, claims: Record<string, unknown> = {}) =>
@@ -255,4 +260,38 @@ it('requires query constraints rather than filtering forbidden results', async (
   await assertFails(getDocs(collection(dbFor('member'), 'orgs/o/bookings')));
   const staff = query(collection(dbFor('staff'), 'orgs/o/bookings'), where('branchId', '==', 'a'));
   expect((await assertSucceeds(getDocs(staff))).size).toBe(1);
+});
+
+it('booking-only reads reject leftover membership after current organization drift', async () => {
+  for (const uid of ['member', 'coach', 'staff', 'admin']) {
+    await env.withSecurityRulesDisabled(async context => { await updateDoc(doc(context.firestore(), `users/${uid}`), { organizationId: 'elsewhere' }); });
+    await assertFails(getDoc(doc(dbFor(uid), 'orgs/o/bookings/own')));
+  }
+});
+it('booking-only reads require membership organization and active organization', async () => {
+  await env.withSecurityRulesDisabled(async context => { await updateDoc(doc(context.firestore(), 'orgs/o/members/member'), { organizationId: 'elsewhere' }); });
+  await assertFails(getDoc(doc(dbFor('member'), 'orgs/o/bookings/own')));
+  await env.withSecurityRulesDisabled(async context => { await updateDoc(doc(context.firestore(), 'orgs/o'), { status: 'inactive' }); });
+  for (const uid of ['coach', 'staff', 'admin']) await assertFails(getDoc(doc(dbFor(uid), 'orgs/o/bookings/own')));
+});
+it('booking-only reads require canonical owner role and active Coach/Staff branch assignment', async () => {
+  await assertSucceeds(getDoc(doc(dbFor('coach'), 'orgs/o/bookings/own')));
+  await assertFails(getDoc(doc(dbFor('coach'), 'orgs/o/bookings/other')));
+  await env.withSecurityRulesDisabled(async context => { await updateDoc(doc(context.firestore(), 'orgs/o/members/member'), { role: 'coach', branchIds: [] }); });
+  await assertFails(getDoc(doc(dbFor('member'), 'orgs/o/bookings/own')));
+  await env.withSecurityRulesDisabled(async context => { await updateDoc(doc(context.firestore(), 'orgs/o/branches/a'), { status: 'inactive' }); });
+  for (const uid of ['coach', 'staff']) await assertFails(getDoc(doc(dbFor(uid), 'orgs/o/bookings/own')));
+  await assertSucceeds(getDoc(doc(dbFor('admin'), 'orgs/o/bookings/own')));
+});
+it('booking-only owner reads remain for branchless Member and withdrawn Coach, while writes stay denied', async () => {
+  await env.withSecurityRulesDisabled(async context => {
+    await updateDoc(doc(context.firestore(), 'orgs/o/members/member'), { branchIds: [] });
+    await setDoc(doc(context.firestore(), 'orgs/o/coaches/coach'), { status: 'inactive' });
+  });
+  for (const uid of ['member', 'coach', 'admin']) {
+    const ref = doc(dbFor(uid), 'orgs/o/bookings/own'); await assertSucceeds(getDoc(ref));
+    await assertFails(updateDoc(ref, { status: 'confirmed' })); await assertFails(deleteDoc(ref));
+  }
+  await env.withSecurityRulesDisabled(async context => { await updateDoc(doc(context.firestore(), 'orgs/o/members/coach'), { branchIds: [] }); });
+  await assertFails(getDoc(doc(dbFor('coach'), 'orgs/o/bookings/own')));
 });

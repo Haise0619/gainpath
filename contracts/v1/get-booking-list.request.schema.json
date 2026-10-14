@@ -1,0 +1,20 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://gainpath.local/contracts/v1/get-booking-list.request.schema.json",
+  "title": "Scoped booking list request v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "organizationId"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "organizationId": { "$ref": "#/definitions/id" },
+    "coachId": { "$ref": "#/definitions/id" },
+    "firstLocalDate": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" },
+    "dayCount": { "type": "integer", "minimum": 1, "maximum": 31 },
+    "cursor": {
+      "type": "object", "additionalProperties": false, "required": ["startAtMillis", "bookingId"],
+      "properties": { "startAtMillis": { "type": "integer", "minimum": 1, "maximum": 8639999996400000, "multipleOf": 1800000 }, "bookingId": { "$ref": "#/definitions/id" } }
+    }
+  },
+  "definitions": { "id": { "type": "string", "pattern": "^[A-Za-z0-9_-]{1,128}$" } }
+}
