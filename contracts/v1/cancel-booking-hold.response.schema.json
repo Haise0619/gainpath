@@ -1,0 +1,96 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://gainpath.local/contracts/v1/cancel-booking-hold.response.schema.json",
+  "title": "Cancel pending booking hold response v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "requestId",
+    "bookingId",
+    "status",
+    "outcome"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "requestId": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{1,128}$"
+    },
+    "bookingId": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{1,128}$"
+    },
+    "status": {
+      "enum": [
+        "cancelled",
+        "expired"
+      ]
+    },
+    "outcome": {
+      "enum": [
+        "cancelled",
+        "expired",
+        "already_closed"
+      ]
+    },
+    "resolvedAtMillis": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 8639999996400000
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "outcome": {
+            "enum": [
+              "cancelled",
+              "expired"
+            ]
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "resolvedAtMillis"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "outcome": {
+            "const": "cancelled"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "status": {
+            "const": "cancelled"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "outcome": {
+            "const": "expired"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "status": {
+            "const": "expired"
+          }
+        }
+      }
+    }
+  ]
+}

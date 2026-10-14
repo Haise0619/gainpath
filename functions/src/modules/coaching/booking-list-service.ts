@@ -3,36 +3,26 @@ import { requireVerifiedEmail } from '../../platform/auth-context';
 import { DomainError } from '../../platform/errors';
 import { InputValidationError, requiredIdentifier } from '../../platform/validation';
 import { allowed, dateEpoch, dateGrid, integer, localDate, object, plusDate, SLOT } from './coach-availability-contracts';
-import { currentBookingMembership, currentBookingPolicy, requireBookingOrganization, validBookingId, validBookingTime, validBookingZone, validBookingPolicyVersion } from './booking-validation';
+import { storedBooking, type BookingResolution } from './booking-record';
+import { currentBookingMembership, currentBookingPolicy, requireBookingOrganization } from './booking-validation';
 export interface BookingCursor { startAtMillis: number; bookingId: string }
 export interface BookingQuery { organizationId: string; ownerField: 'memberId' | 'coachId'; ownerId: string; branchIds?: readonly string[]; firstStartAtMillis: number; throughStartAtMillis: number; cursor?: BookingCursor; limit: 21 }
 export interface BookingQueryReader { read(query: BookingQuery): Promise<{ path: string; data: DocumentData }[]> }
 export interface PersistedBookingRecord {
   schemaVersion: 1; bookingId: string; organizationId: string; memberId: string; coachId: string; branchId: string; requestId: string;
-  startAtMillis: number; endAtMillis: number; durationMinutes: 30 | 60; status: 'pending_hold' | 'confirmed' | 'cancelled' | 'completed' | 'refunded';
+  startAtMillis: number; endAtMillis: number; durationMinutes: 30 | 60; status: 'pending_hold' | 'confirmed' | 'cancelled' | 'expired' | 'completed' | 'refunded';
   holdExpiresAtMillis: number; localDate: string; timeZone: string; policyVersion: string; createdAtMillis: number;
+  resolvedAtMillis?: number; resolution?: BookingResolution;
   startLabel: string; endLabel: string; expiryLabel: string;
 }
 export interface BookingPage { schemaVersion: 1; serverNowMillis: number; timeZone: string; firstLocalDate: string; throughLocalDate: string; records: PersistedBookingRecord[]; nextCursor?: BookingCursor }
-const storedFields = ['schemaVersion', 'bookingId', 'organizationId', 'memberId', 'coachId', 'branchId', 'requestId', 'startAtMillis', 'endAtMillis', 'durationMinutes', 'status', 'holdExpiresAtMillis', 'localDate', 'timeZone', 'policyVersion', 'createdAtMillis', 'createdBy'] as const;
 const review = () => new DomainError('failed-precondition', 'Stored bookings need authorized review.');
 function after(a: BookingCursor, b: BookingCursor) { return a.startAtMillis > b.startAtMillis || (a.startAtMillis === b.startAtMillis && a.bookingId > b.bookingId); }
 function project(row: { path: string; data: DocumentData }, q: BookingQuery): PersistedBookingRecord {
-  const d = row.data;
   try {
-    allowed(d, storedFields);
-    if (d.schemaVersion !== 1 || !validBookingId(d.bookingId) || row.path !== `orgs/${q.organizationId}/bookings/${d.bookingId}` || d.organizationId !== q.organizationId
-      || d[q.ownerField] !== q.ownerId || (q.branchIds && !q.branchIds.includes(String(d.branchId)))
-      || !['organizationId', 'memberId', 'coachId', 'branchId', 'requestId', 'createdBy'].every(k => validBookingId(d[k]))
-      || !['startAtMillis', 'endAtMillis', 'holdExpiresAtMillis', 'createdAtMillis'].every(k => validBookingTime(d[k]))
-      || (d.durationMinutes !== 30 && d.durationMinutes !== 60)
-      || Number(d.startAtMillis) % SLOT || Number(d.endAtMillis) - Number(d.startAtMillis) !== Number(d.durationMinutes) * 60000
-      || Number(d.createdAtMillis) > Number(d.holdExpiresAtMillis) || Number(d.holdExpiresAtMillis) > Number(d.startAtMillis)
-      || Number(d.startAtMillis) < q.firstStartAtMillis || Number(d.startAtMillis) >= q.throughStartAtMillis
-      || typeof d.status !== 'string' || !['pending_hold', 'confirmed', 'cancelled', 'completed', 'refunded'].includes(d.status)
-      || !validBookingZone(d.timeZone) || !validBookingPolicyVersion(d.policyVersion)) throw review();
-    dateEpoch(d.localDate);
-    if (localDate(Number(d.startAtMillis), d.timeZone) !== d.localDate || localDate(Number(d.endAtMillis) - 1, d.timeZone) !== d.localDate) throw review();
+    const d = storedBooking(row.data, q.organizationId, String(row.data.bookingId));
+    if (row.path !== `orgs/${q.organizationId}/bookings/${d.bookingId}` || d[q.ownerField] !== q.ownerId
+      || (q.branchIds && !q.branchIds.includes(d.branchId)) || d.startAtMillis < q.firstStartAtMillis || d.startAtMillis >= q.throughStartAtMillis) throw review();
     const formatter = new Intl.DateTimeFormat('en-GB', { timeZone: d.timeZone, hour: '2-digit', minute: '2-digit', hourCycle: 'h23', timeZoneName: 'shortOffset' });
     const { createdBy: _private, ...publicData } = d;
     return { ...publicData, startLabel: formatter.format(Number(d.startAtMillis)), endLabel: formatter.format(Number(d.endAtMillis)),

@@ -131,13 +131,42 @@ async function main() {
     await assert.rejects(missingHeader.call('getMemberBookingOptionsCommand', optionsInput), e => e.code === 'functions/unauthenticated');
     await assert.rejects(missingHeader.call('createBookingHold', { ...request, requestId: 'missing-header',
       startAtMillis: selected.startAtMillis + 3600000 }), e => e.code === 'functions/unauthenticated');
+    const cancelInput = { schemaVersion: 1, organizationId, bookingId: hold.bookingId, requestId: 'cancel-hold' };
+    if (process.argv.includes('--b4')) {
+      await assert.rejects(missingHeader.call('cancelBookingHoldCommand', cancelInput), e => e.code === 'functions/unauthenticated');
+      await assert.rejects(members[1 - winnerIndex].call('cancelBookingHoldCommand', cancelInput), e => e.code === 'functions/permission-denied');
+      await assert.rejects(coach.call('cancelBookingHoldCommand', cancelInput), e => e.code === 'functions/permission-denied');
+      await assert.rejects(admin.call('cancelBookingHoldCommand', cancelInput), e => e.code === 'functions/permission-denied');
+      await assert.rejects(cross.call('cancelBookingHoldCommand', cancelInput), e => e.code === 'functions/permission-denied');
+    }
     assert.deepEqual(await protectedSnapshot(), before);
+    if (process.argv.includes('--b4')) {
+      const cancelled = await winner.call('cancelBookingHoldCommand', cancelInput);
+      assert.equal(cancelled.status, 'cancelled');
+      assert.deepEqual(await winner.call('cancelBookingHoldCommand', cancelInput), cancelled);
+      for (const [actor, input] of [[winner, listInput], [coach, listInput], [admin, { ...listInput, coachId }]]) {
+        const page = await actor.call('getBookingListCommand', input);
+        assert.equal(page.records[0].bookingId, hold.bookingId); assert.equal(page.records[0].status, 'cancelled');
+      }
+      assert.equal((await winner.call('getMemberBookingOptionsCommand', optionsInput)).options.length, 3);
+      const next = await winner.call('createBookingHold', { ...request, requestId: 'replacement-after-cancel' });
+      // Real Firestore batch adapter with a deterministic server clock; NOT a
+      // claim that Cloud Scheduler/IAM has been exercised by this local smoke.
+      const { runBookingExpiryBatch } = require('../lib/modules/coaching/booking-expiry-worker');
+      const expired = await runBookingExpiryBatch(db, () => next.holdExpiresAtMillis);
+      assert.equal(expired.processed, 1); assert.equal(expired.retry, 0);
+      assert.equal((await db.doc(`${root}/bookings/${next.bookingId}`).get()).data().status, 'expired');
+      for (const [actor, input] of [[winner, listInput], [coach, listInput], [admin, { ...listInput, coachId }]]) {
+        assert.equal((await actor.call('getBookingListCommand', input)).records.find(r => r.bookingId === next.bookingId).status, 'expired');
+      }
+      console.log('B4 SDK emulator smoke passed: owner cancellation/replay, role and missing-header denial, three-role terminal visibility, replacement hold and real Firestore expiry batch. Scheduler triggering and cryptographic App Check remain unverified.');
+    }
     // Withdrawal blocks new options, not authorized persisted visibility/replay.
     await admin.call('setCoachDirectoryStatusCommand', { schemaVersion: 1, organizationId, coachId,
       requestId: 'profile-deactivate', action: 'deactivate', expectedPublicRevision: 1 });
     await assert.rejects(winner.call('getMemberBookingOptionsCommand', optionsInput), e => e.code === 'functions/failed-precondition');
     assert.deepEqual(await winner.call('createBookingHold', request), hold);
-    assert.equal((await coach.call('getBookingListCommand', listInput)).records[0].bookingId, hold.bookingId);
+    assert.ok((await coach.call('getBookingListCommand', listInput)).records.some(r => r.bookingId === hold.bookingId));
     for (const name of ['workoutSessions', 'workoutConsents']) assert.ok((await db.collection(`${root}/${name}`).get()).empty);
     console.log('B3 SDK emulator smoke passed: trusted profile/publication and B2 schedule → eligible options → one concurrent pending hold → persisted same ID/status/expiry across Member/Coach/Admin; replay, scoped denial, two locks, missing-App-Check-header zero writes. Synthetic transport only; no cryptographic attestation.');
   } finally {
