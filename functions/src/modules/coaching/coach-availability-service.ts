@@ -70,10 +70,11 @@ export async function saveCoachAvailabilityDayService(store: DocumentStore, auth
   const requestId = requiredIdentifier(input.requestId, 'requestId'), date = String(input.localDate); dateEpoch(date);
   const expected = integer(input.expectedRevision, 0, Number.MAX_SAFE_INTEGER - 1), expectedBranches = branchIds(input.expectedCoachBranchIds);
   if (typeof input.expectedPolicyVersion !== 'string' || typeof input.expectedTimeZone !== 'string') throw new InputValidationError('Original scheduling policy is required.');
+  const expectedPolicyVersion = input.expectedPolicyVersion, expectedTimeZone = input.expectedTimeZone;
   const root = `orgs/${org}`, path = `${root}/coachAvailability/${uid}/days/${date}`;
   // Canonical inputs and expectations live outside the retryable callback.
-  const submitted = normalizeWindows(input.windows, date, input.expectedTimeZone, expectedBranches);
-  const fingerprint = keyOf(org, date, expected, input.expectedPolicyVersion, input.expectedTimeZone, expectedBranches, submitted);
+  const submitted = normalizeWindows(input.windows, date, expectedTimeZone, expectedBranches);
+  const fingerprint = keyOf(org, date, expected, expectedPolicyVersion, expectedTimeZone, expectedBranches, submitted);
   const receiptPath = `${root}/commandReceipts/${keyOf('saveCoachAvailabilityDay', uid, requestId)}`;
   return store.transact(async tx => {
     const actor = await membership(tx, org, uid);
@@ -88,7 +89,7 @@ export async function saveCoachAvailabilityDayService(store: DocumentStore, auth
       return receipt.result as AvailabilitySaveResult;
     }
     const policy = bookingPolicy(await tx.get(`${root}/settings/booking`)), now = clock(), today = localDate(now, policy.timeZone);
-    if (policy.policyVersion !== input.expectedPolicyVersion || policy.timeZone !== input.expectedTimeZone) throw new DomainError('aborted', 'Scheduling policy changed. Discard and reload.');
+    if (policy.policyVersion !== expectedPolicyVersion || policy.timeZone !== expectedTimeZone) throw new DomainError('aborted', 'Scheduling policy changed. Discard and reload.');
     if (date <= today || date > plusDate(today, 30)) throw new InputValidationError('Only tomorrow through 30 days ahead can be edited.');
     const current = await tx.get(path), baseline = storedDay(current, date, policy.timeZone, actor.branchIds);
     if (baseline.reviewRequired) throw new DomainError('failed-precondition', 'Legacy schedule requires authorized review.');

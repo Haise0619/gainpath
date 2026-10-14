@@ -6,6 +6,7 @@ import { keyOf } from '../src/platform/idempotency';
 import { createBookingHoldService } from '../src/modules/coaching/booking-service';
 import { readFileSync } from 'node:fs';
 import Ajv from 'ajv';
+import type { DocumentStore } from '../src/platform/firestore/store';
 
 import { org, root, now, date, start, auth, windows, seeds, read, save } from './coach-availability.fixture';
 function setup() { const store = new MemoryStore(); Object.entries(seeds()).forEach(([p, v]) => store.documents.set(p, v)); return store; }
@@ -90,4 +91,18 @@ it('allows organization Admin read without branch assignments and matches the op
   await saveCoachAvailabilityDayService(store, auth('coach'), save(), () => now);
   expect(validate(store.documents.get(path))).toBe(true);
   expect(validate({ ...store.documents.get(path), privateNote: 'not permitted' })).toBe(false);
+});
+it('pins policy expectations outside transaction retries and enforces the inclusive horizon/window cap', async () => {
+  const store = setup(), original = save();
+  const changedInput: DocumentStore = { transact: work => store.transact(tx => work({ ...tx, get: async p => {
+    if (p === 'users/coach') original.expectedPolicyVersion = 'changed';
+    const value = await tx.get(p); return p.endsWith('/settings/booking') ? { ...value, policyVersion: 'changed' } : value;
+  } })) };
+  await expect(saveCoachAvailabilityDayService(changedInput, auth('coach'), original, () => now)).rejects.toMatchObject({ code: 'aborted' });
+  const limit = Date.parse('2026-11-14T02:00:00Z');
+  await saveCoachAvailabilityDayService(store, auth('coach'), { ...save('horizon'), localDate: '2026-11-14', windows: [{ branchId: 'main', startAtMillis: limit, endAtMillis: limit + 1800000 }] }, () => now);
+  const midnight = Date.parse('2026-10-15T16:00:00Z');
+  const many = Array.from({ length: 16 }, (_, i) => ({ branchId: 'main', startAtMillis: midnight + i * 3600000, endAtMillis: midnight + i * 3600000 + 1800000 }));
+  await saveCoachAvailabilityDayService(store, auth('coach'), save('sixteen', 0, many), () => now);
+  await expect(saveCoachAvailabilityDayService(store, auth('coach'), save('seventeen', 1, [...many, { branchId: 'main', startAtMillis: midnight + 16 * 3600000, endAtMillis: midnight + 16 * 3600000 + 1800000 }]), () => now)).rejects.toBeDefined();
 });
