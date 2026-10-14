@@ -18,9 +18,11 @@ import '../../features/identity/presentation/admin/members_screen.dart';
 import '../../features/identity/presentation/admin/coaches_screen.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:gainpath_domain/identity.dart';
-import 'package:gainpath_domain/gainpath_domain.dart' show AuthSession;
+import 'package:gainpath_domain/gainpath_domain.dart'
+    show AuthSession, BookingListRepository;
 import 'package:gainpath_domain/coaching.dart' show CoachAvailabilityRepository;
 import '../di/coach_availability_factory.dart';
+import '../di/booking_factory.dart';
 import '../admin_feature_availability.dart';
 import '../routing/app_routes.dart';
 
@@ -275,6 +277,17 @@ class _AdminShellState extends State<AdminShell> {
                           if (d.label == 'Coaches') {
                             return CoachesScreen(
                                 live: true,
+                                onOpenBookings: (id) {
+                                  final repository =
+                                      context.read<BookingListRepository>();
+                                  Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                          builder: (_) => AdminBookingListRoute(
+                                              session: session,
+                                              repository: repository,
+                                              coachId: id)));
+                                },
                                 onOpenSchedule: (id) {
                                   final repository = context
                                       .read<CoachAvailabilityRepository>();

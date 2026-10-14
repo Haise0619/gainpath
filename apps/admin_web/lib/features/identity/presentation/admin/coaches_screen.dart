@@ -21,9 +21,11 @@ Widget _networkHero(String url, {BoxFit fit = BoxFit.cover}) {
 /// work out of, so this reads as branch sections of roster cards rather
 /// than the dense searchable table Members uses.
 class CoachesScreen extends StatefulWidget {
-  const CoachesScreen({super.key, this.live = false, this.onOpenSchedule});
+  const CoachesScreen(
+      {super.key, this.live = false, this.onOpenSchedule, this.onOpenBookings});
   final bool live;
   final void Function(String coachId)? onOpenSchedule;
+  final void Function(String coachId)? onOpenBookings;
 
   @override
   State<CoachesScreen> createState() => _CoachesScreenState();
@@ -50,7 +52,8 @@ class _CoachesScreenState extends State<CoachesScreen> {
     if (widget.live) {
       return LiveCoachDirectoryAdminView(
           repository: context.read<CoachProfileAdminRepository>(),
-          onOpenSchedule: widget.onOpenSchedule);
+          onOpenSchedule: widget.onOpenSchedule,
+          onOpenBookings: widget.onOpenBookings);
     }
     final coaches = _coaches;
     final pendingCount =

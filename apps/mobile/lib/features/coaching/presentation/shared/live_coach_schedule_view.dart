@@ -7,10 +7,12 @@ class LiveCoachScheduleView extends StatefulWidget {
       {super.key,
       required this.repository,
       required this.coachId,
-      required this.isCurrent});
+      required this.isCurrent,
+      this.onOpenBooking});
   final CoachAvailabilityRepository repository;
   final String coachId;
   final bool Function() isCurrent;
+  final VoidCallback? onOpenBooking;
   @override
   State<LiveCoachScheduleView> createState() => _LiveCoachScheduleViewState();
 }
@@ -54,7 +56,13 @@ class _LiveCoachScheduleViewState extends State<LiveCoachScheduleView> {
                 .substring(0, 10);
             return PageBody(children: [
               Text('Organization time: ${data.timeZone}'),
-              const Text('Coach schedule; booking unavailable.'),
+              Text(widget.onOpenBooking == null
+                  ? 'Coach schedule; booking unavailable.'
+                  : 'Availability windows do not guarantee an open time. Check current booking options.'),
+              if (widget.onOpenBooking != null)
+                FilledButton(
+                    onPressed: widget.onOpenBooking,
+                    child: const Text('Choose time')),
               Row(children: [
                 TextButton(
                     onPressed: first == data.todayLocalDate

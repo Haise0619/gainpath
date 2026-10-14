@@ -4,9 +4,11 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 
 import '../../firebase_options.dart';
+import 'firebase_app_check_readiness.dart';
 
 Future<void> initializeGainPathFirebase() async {
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  await FirebaseAppCheckReadiness.instance.initialize();
   const useEmulators = bool.fromEnvironment('USE_FIREBASE_EMULATORS');
   if (!useEmulators) return;
   const host = String.fromEnvironment(

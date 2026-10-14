@@ -9,6 +9,7 @@ import '../routing/workout_prep_route.dart';
 import '../di/local_member_progress_factory.dart';
 import '../di/published_routine_catalog_factory.dart';
 import '../di/coach_profile_factory.dart';
+import '../di/booking_factory.dart';
 import '../../features/workout/application/published_routine_catalog_cubit.dart';
 import '../../features/workout/presentation/member/published_routine_catalog_controls.dart';
 import '../../features/analytics/domain/local_member_progress_repository.dart';
@@ -27,6 +28,8 @@ class MemberShell extends StatefulWidget {
       this.routineCatalogFactory,
       this.coachDirectoryFactory,
       this.coachAvailabilityFactory,
+      this.bookingFactory,
+      this.bookingListFactory,
       this.progressRepositoryFactory,
       this.memberSettingsBuilder});
 
@@ -36,6 +39,8 @@ class MemberShell extends StatefulWidget {
   final PublishedRoutineCatalogFactory? routineCatalogFactory;
   final CoachDirectoryFactory? coachDirectoryFactory;
   final CoachAvailabilityFactory? coachAvailabilityFactory;
+  final BookingServicesFactory? bookingFactory;
+  final BookingListFactory? bookingListFactory;
   final LocalMemberProgressRepositoryFactory? progressRepositoryFactory;
   final WidgetBuilder? memberSettingsBuilder;
 
@@ -149,6 +154,8 @@ class _MemberShellState extends State<MemberShell> {
                 _directoryVisited
                     ? buildFirebaseCoachDirectory(widget.liveSession!,
                         factory: widget.coachDirectoryFactory,
+                        bookingFactory: widget.bookingFactory,
+                        bookingListFactory: widget.bookingListFactory,
                         availabilityFactory: widget.coachAvailabilityFactory)
                     : const SizedBox.shrink(),
                 MemberProfileScreen(

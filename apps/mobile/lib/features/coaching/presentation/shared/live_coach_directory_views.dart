@@ -9,10 +9,12 @@ class LiveCoachDirectoryView extends StatefulWidget {
       {super.key,
       required this.repository,
       required this.isCurrent,
-      required this.onOpen});
+      required this.onOpen,
+      this.onOpenBookings});
   final CoachDirectoryRepository repository;
   final bool Function() isCurrent;
   final void Function(String) onOpen;
+  final VoidCallback? onOpenBookings;
   @override
   State<LiveCoachDirectoryView> createState() => _LiveCoachDirectoryViewState();
 }
@@ -40,6 +42,10 @@ class _LiveCoachDirectoryViewState extends State<LiveCoachDirectoryView> {
                 .contains(q));
         return Scaffold(
             appBar: AppBar(title: const Text('Coaches'), actions: [
+              if (widget.onOpenBookings != null)
+                TextButton(
+                    onPressed: widget.onOpenBookings,
+                    child: const Text('My bookings')),
               IconButton(
                   tooltip: 'Refresh Coaches',
                   onPressed: state.loading ? null : controller.refresh,
@@ -89,8 +95,9 @@ class _LiveCoachDirectoryViewState extends State<LiveCoachDirectoryView> {
                     onPressed: state.loadingMore ? null : controller.loadMore,
                     child: Text(
                         state.loadingMore ? 'Loading…' : 'Load more Coaches')),
-              const Text(
-                  'Booking is unavailable until availability and booking integration are completed.'),
+              Text(widget.onOpenBookings == null
+                  ? 'Booking is unavailable until availability and booking integration are completed.'
+                  : 'Choose a published Coach to request a pending hold. My bookings remains available for existing records.'),
             ]));
       });
 }
@@ -101,11 +108,13 @@ class LiveCoachDetailView extends StatefulWidget {
       required this.coachId,
       required this.repository,
       required this.isCurrent,
-      this.onOpenSchedule});
+      this.onOpenSchedule,
+      this.onOpenBooking});
   final String coachId;
   final CoachDirectoryRepository repository;
   final bool Function() isCurrent;
   final VoidCallback? onOpenSchedule;
+  final VoidCallback? onOpenBooking;
   @override
   State<LiveCoachDetailView> createState() => _LiveCoachDetailViewState();
 }
@@ -172,8 +181,13 @@ class _LiveCoachDetailViewState extends State<LiveCoachDetailView> {
                   onPressed: widget.onOpenSchedule,
                   icon: const Icon(Icons.calendar_month_outlined),
                   label: const Text('View schedule')),
-              const Text(
-                  'Directory publication does not verify certifications. Booking is unavailable.')
+              if (widget.onOpenBooking != null)
+                FilledButton(
+                    onPressed: widget.onOpenBooking,
+                    child: const Text('Choose time')),
+              Text(widget.onOpenBooking == null
+                  ? 'Directory publication does not verify certifications. Booking is unavailable.'
+                  : 'Directory publication does not verify certifications.')
             ]);
           }));
 }

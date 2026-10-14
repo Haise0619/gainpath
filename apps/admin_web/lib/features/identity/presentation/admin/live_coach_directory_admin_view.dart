@@ -6,9 +6,13 @@ import '../../application/coach_directory_admin_cubit.dart';
 
 class LiveCoachDirectoryAdminView extends StatefulWidget {
   const LiveCoachDirectoryAdminView(
-      {super.key, required this.repository, this.onOpenSchedule});
+      {super.key,
+      required this.repository,
+      this.onOpenSchedule,
+      this.onOpenBookings});
   final CoachProfileAdminRepository repository;
   final void Function(String coachId)? onOpenSchedule;
+  final void Function(String coachId)? onOpenBookings;
   @override
   State<LiveCoachDirectoryAdminView> createState() =>
       _LiveCoachDirectoryAdminViewState();
@@ -111,6 +115,12 @@ class _LiveCoachDirectoryAdminViewState
                           'The server also checks current account and branch eligibility at publication.'),
                       const SizedBox(height: 12),
                       Wrap(spacing: 12, children: [
+                        OutlinedButton(
+                            onPressed: !state.busy &&
+                                    widget.onOpenBookings != null
+                                ? () => widget.onOpenBookings!(review.coachId)
+                                : null,
+                            child: const Text('View bookings')),
                         OutlinedButton.icon(
                             onPressed: !state.busy &&
                                     widget.onOpenSchedule != null

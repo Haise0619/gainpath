@@ -13,11 +13,13 @@ class CoachShell extends StatefulWidget {
       this.liveRepository,
       this.isCurrent,
       this.onOpenLiveEditor,
-      this.liveAvailabilityBuilder});
+      this.liveAvailabilityBuilder,
+      this.liveRosterBuilder});
   final CoachProfileRepository? liveRepository;
   final bool Function()? isCurrent;
   final void Function(CoachProfileCubit)? onOpenLiveEditor;
   final WidgetBuilder? liveAvailabilityBuilder;
+  final WidgetBuilder? liveRosterBuilder;
 
   @override
   State<CoachShell> createState() => _CoachShellState();
@@ -26,6 +28,7 @@ class CoachShell extends StatefulWidget {
 class _CoachShellState extends State<CoachShell> {
   late int _index = widget.liveRepository == null ? 0 : 3;
   bool _availabilityVisited = false;
+  bool _rosterVisited = false;
 
   final _pages = const [
     CoachRosterScreen(),
@@ -43,7 +46,11 @@ class _CoachShellState extends State<CoachShell> {
               ? _pages
               : [
                   for (final title in ['Roster', 'Availability', 'Earnings'])
-                    if (title == 'Availability' &&
+                    if (title == 'Roster' && widget.liveRosterBuilder != null)
+                      _rosterVisited
+                          ? widget.liveRosterBuilder!(context)
+                          : const SizedBox.shrink()
+                    else if (title == 'Availability' &&
                         widget.liveAvailabilityBuilder != null)
                       _availabilityVisited
                           ? widget.liveAvailabilityBuilder!(context)
@@ -64,6 +71,7 @@ class _CoachShellState extends State<CoachShell> {
         onDestinationSelected: (i) => setState(() {
           _index = i;
           if (i == 1) _availabilityVisited = true;
+          if (i == 0) _rosterVisited = true;
         }),
         destinations: const [
           NavigationDestination(

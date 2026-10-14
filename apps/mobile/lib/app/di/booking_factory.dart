@@ -1,0 +1,62 @@
+import 'package:flutter/material.dart';
+import 'package:gainpath_data/gainpath_data.dart' show RemoteBookingRepository;
+import 'package:gainpath_domain/gainpath_domain.dart';
+import '../../infrastructure/firebase/firebase_booking_repository.dart';
+import '../../features/coaching/presentation/member/live_member_booking_view.dart';
+import '../../features/coaching/presentation/shared/live_booking_list_view.dart';
+import 'coach_profile_factory.dart';
+
+typedef BookingServices = ({
+  MemberBookingOptionsRepository options,
+  BookingRepository writer
+});
+typedef BookingServicesFactory = BookingServices Function(
+    SessionScope, bool Function());
+typedef BookingListFactory = BookingListRepository Function(
+    AuthSession, bool Function());
+
+BookingServices _services(SessionScope scope, bool Function() current) {
+  final source = FirebaseBookingRepository(scope: scope, isCurrent: current);
+  return (options: source, writer: RemoteBookingRepository(source));
+}
+
+BookingListRepository createBookingList(AuthSession session,
+        bool Function() current, BookingListFactory? factory) =>
+    factory?.call(session, current) ??
+    FirebaseBookingListRepository(
+        scope: session.scope,
+        role: session.role,
+        branchIds: session.branchIds,
+        isCurrent: current);
+
+void openBookingList(BuildContext context, AuthSession session,
+    {BookingListFactory? factory}) {
+  Navigator.push(
+      context,
+      MaterialPageRoute(
+          builder: (_) => CoachSessionHost(
+              session: session,
+              builder: (_, current) => LiveBookingListView(
+                  repository: createBookingList(session, current, factory),
+                  isCurrent: current))));
+}
+
+void openMemberBooking(
+    BuildContext context, AuthSession session, String coachId,
+    {BookingServicesFactory? factory, BookingListFactory? listFactory}) {
+  Navigator.push(
+      context,
+      MaterialPageRoute(
+          builder: (_) => CoachSessionHost(
+              session: session,
+              builder: (routeContext, current) {
+                final services = (factory ?? _services)(session.scope, current);
+                return LiveMemberBookingView(
+                    options: services.options,
+                    writer: services.writer,
+                    coachId: coachId,
+                    isCurrent: current,
+                    onOpenBookings: () => openBookingList(routeContext, session,
+                        factory: listFactory));
+              })));
+}

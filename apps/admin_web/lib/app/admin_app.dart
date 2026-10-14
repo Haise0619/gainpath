@@ -21,7 +21,8 @@ class GainPathAdminWebApp extends StatelessWidget {
       this.tutorialRepositoryFactory,
       this.routineRepositoryFactory,
       this.coachRepositoryFactory,
-      this.coachAvailabilityFactory});
+      this.coachAvailabilityFactory,
+      this.bookingListFactory});
 
   final AuthRepository? authRepository;
   final BackendConfig? backendConfig;
@@ -32,6 +33,8 @@ class GainPathAdminWebApp extends StatelessWidget {
       coachRepositoryFactory;
   final CoachAvailabilityRepository Function(SessionScope, bool Function())?
       coachAvailabilityFactory;
+  final BookingListRepository Function(SessionScope, bool Function())?
+      bookingListFactory;
 
   @override
   Widget build(BuildContext context) {
@@ -70,6 +73,7 @@ class GainPathAdminWebApp extends StatelessWidget {
               routineRepositoryFactory: routineRepositoryFactory,
               coachRepositoryFactory: coachRepositoryFactory,
               coachAvailabilityFactory: coachAvailabilityFactory,
+              bookingListFactory: bookingListFactory,
               child: app,
             );
           },

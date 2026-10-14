@@ -14,6 +14,7 @@ import 'shells/member_shell.dart';
 import 'shells/coach_shell.dart';
 import 'di/published_routine_catalog_factory.dart';
 import 'di/coach_profile_factory.dart';
+import 'di/booking_factory.dart';
 import '../features/identity/presentation/shared/login_screen.dart';
 import '../features/identity/presentation/shared/email_verification_screen.dart';
 import '../features/identity/presentation/member/profile_setup_screen.dart';
@@ -37,6 +38,8 @@ class GainPathMobileApp extends StatelessWidget {
       this.coachProfileFactory,
       this.coachDirectoryFactory,
       this.coachAvailabilityFactory,
+      this.bookingFactory,
+      this.bookingListFactory,
       this.progressRepositoryFactory,
       this.passwordResetSender,
       this.memberSettingsBuilder});
@@ -50,6 +53,8 @@ class GainPathMobileApp extends StatelessWidget {
   final CoachProfileFactory? coachProfileFactory;
   final CoachDirectoryFactory? coachDirectoryFactory;
   final CoachAvailabilityFactory? coachAvailabilityFactory;
+  final BookingServicesFactory? bookingFactory;
+  final BookingListFactory? bookingListFactory;
   final LocalMemberProgressRepositoryFactory? progressRepositoryFactory;
   final Future<void> Function(String)? passwordResetSender;
   final WidgetBuilder? memberSettingsBuilder;
@@ -91,6 +96,8 @@ class GainPathMobileApp extends StatelessWidget {
                   coachProfileFactory: coachProfileFactory,
                   coachDirectoryFactory: coachDirectoryFactory,
                   coachAvailabilityFactory: coachAvailabilityFactory,
+                  bookingFactory: bookingFactory,
+                  bookingListFactory: bookingListFactory,
                   progressRepositoryFactory: progressRepositoryFactory,
                   passwordResetSender: passwordResetSender,
                   memberSettingsBuilder: memberSettingsBuilder),
@@ -126,6 +133,8 @@ class _MobileAuthGate extends StatefulWidget {
       this.coachProfileFactory,
       this.coachDirectoryFactory,
       this.coachAvailabilityFactory,
+      this.bookingFactory,
+      this.bookingListFactory,
       this.progressRepositoryFactory,
       this.passwordResetSender,
       this.memberSettingsBuilder});
@@ -137,6 +146,8 @@ class _MobileAuthGate extends StatefulWidget {
   final CoachProfileFactory? coachProfileFactory;
   final CoachDirectoryFactory? coachDirectoryFactory;
   final CoachAvailabilityFactory? coachAvailabilityFactory;
+  final BookingServicesFactory? bookingFactory;
+  final BookingListFactory? bookingListFactory;
   final LocalMemberProgressRepositoryFactory? progressRepositoryFactory;
   final Future<void> Function(String)? passwordResetSender;
   final WidgetBuilder? memberSettingsBuilder;
@@ -178,6 +189,8 @@ class _MobileAuthGateState extends State<_MobileAuthGate> {
                         liveSession: state.session!,
                         liveProfile: profile,
                         coachDirectoryFactory: widget.coachDirectoryFactory,
+                        bookingFactory: widget.bookingFactory,
+                        bookingListFactory: widget.bookingListFactory,
                         coachAvailabilityFactory:
                             widget.coachAvailabilityFactory,
                         progressRepositoryFactory:
@@ -208,6 +221,7 @@ class _MobileAuthGateState extends State<_MobileAuthGate> {
             }
             return buildFirebaseCoachShell(state.session!,
                 factory: widget.coachProfileFactory,
+                bookingListFactory: widget.bookingListFactory,
                 availabilityFactory: widget.coachAvailabilityFactory);
           }
           if (_setupProfile) return const ProfileSetupScreen();

@@ -21,7 +21,8 @@ import 'package:gainpath_domain/recommendation.dart';
 import 'package:gainpath_data/workout.dart';
 import 'package:gainpath_domain/workout.dart';
 import 'package:gainpath_domain/gainpath_domain.dart'
-    show AuthSession, SessionScope;
+    show AuthSession, SessionScope, BookingListRepository;
+import '../../infrastructure/firebase/firebase_booking_list_repository.dart';
 import '../../infrastructure/firebase/firebase_exercise_catalog_repository.dart';
 import '../../infrastructure/firebase/firebase_routine_template_repository.dart';
 import '../../infrastructure/firebase/firebase_coach_profile_admin_repository.dart';
@@ -41,6 +42,7 @@ class AppRepositories extends StatefulWidget {
     this.routineRepositoryFactory,
     this.coachRepositoryFactory,
     this.coachAvailabilityFactory,
+    this.bookingListFactory,
   });
   final Widget child;
   final BackendConfig config;
@@ -52,6 +54,8 @@ class AppRepositories extends StatefulWidget {
       coachRepositoryFactory;
   final CoachAvailabilityRepository Function(SessionScope, bool Function())?
       coachAvailabilityFactory;
+  final BookingListRepository Function(SessionScope, bool Function())?
+      bookingListFactory;
 
   @override
   State<AppRepositories> createState() => _AppRepositoriesState();
@@ -62,6 +66,18 @@ class _AppRepositoriesState extends State<AppRepositories> {
   CatalogEditSessionGuard? _catalogGuard;
   CatalogEditSessionGuard? _coachGuard;
   CatalogEditSessionGuard? _availabilityGuard;
+  CatalogEditSessionGuard? _bookingGuard;
+  BookingListRepository _createBookingList(SessionScope scope) {
+    final auth = context.read<AuthBloc>();
+    _bookingGuard = CatalogEditSessionGuard(
+        expected: widget.session!,
+        current: () => auth.state,
+        changes: auth.stream);
+    return widget.bookingListFactory?.call(scope, _bookingGuard!.isCurrent) ??
+        FirebaseBookingListRepository(
+            scope: scope, isCurrent: _bookingGuard!.isCurrent);
+  }
+
   CoachAvailabilityRepository _createAvailability(SessionScope scope) {
     final auth = context.read<AuthBloc>();
     _availabilityGuard = CatalogEditSessionGuard(
@@ -102,6 +118,7 @@ class _AppRepositoriesState extends State<AppRepositories> {
     _catalogGuard?.dispose();
     _coachGuard?.dispose();
     _availabilityGuard?.dispose();
+    _bookingGuard?.dispose();
     super.dispose();
   }
 
@@ -112,6 +129,8 @@ class _AppRepositoriesState extends State<AppRepositories> {
     final scope = widget.session?.scope;
     if (widget.config.isFirebase) {
       return MultiRepositoryProvider(providers: [
+        RepositoryProvider<BookingListRepository>(
+            create: (_) => _createBookingList(scope!)),
         RepositoryProvider<CoachAvailabilityRepository>(
             create: (_) => _createAvailability(scope!)),
         RepositoryProvider<CoachProfileAdminRepository>(

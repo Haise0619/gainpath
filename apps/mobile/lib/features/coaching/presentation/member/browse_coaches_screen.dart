@@ -18,11 +18,13 @@ class BrowseCoachesScreen extends StatefulWidget {
       this.live = false,
       this.liveRepository,
       this.isCurrent,
-      this.onOpenPublished});
+      this.onOpenPublished,
+      this.onOpenBookings});
   final bool live;
   final CoachDirectoryRepository? liveRepository;
   final bool Function()? isCurrent;
   final void Function(String)? onOpenPublished;
+  final VoidCallback? onOpenBookings;
 
   @override
   State<BrowseCoachesScreen> createState() => _BrowseCoachesScreenState();
@@ -46,6 +48,7 @@ class _BrowseCoachesScreenState extends State<BrowseCoachesScreen> {
       return LiveCoachDirectoryView(
           repository: widget.liveRepository!,
           isCurrent: widget.isCurrent!,
+          onOpenBookings: widget.onOpenBookings,
           onOpen: widget.onOpenPublished!);
     }
     final coaches =
