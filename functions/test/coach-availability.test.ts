@@ -1,3 +1,4 @@
+import { eligibleCoach } from './booking-fixture';
 import { expect, it } from 'vitest';
 import { MemoryStore } from './memory-store';
 import { getCoachAvailabilityService, saveCoachAvailabilityDayService } from '../src/modules/coaching/coach-availability-service';
@@ -70,7 +71,7 @@ it.each(['confirmed', 'pending_hold', 'unknown', 'malformed', 'orphan'])('preser
 });
 it('allows removal past valid hold expiry and retains the existing booking consumer', async () => {
   const store = setup(); await saveCoachAvailabilityDayService(store, auth('coach'), save(), () => now);
-  const hold = await createBookingHoldService(store, 'member', { schemaVersion: 1, organizationId: org, requestId: 'hold', memberId: 'member', coachId: 'coach', branchId: 'main', startAtMillis: start, durationMinutes: 60 }, () => now);
+  const hold = await createBookingHoldService(store, 'member', { schemaVersion: 1, organizationId: org, requestId: 'hold', memberId: 'member', coachId: 'coach', branchId: 'main', startAtMillis: start, durationMinutes: 60 }, eligibleCoach, () => now);
   const protectedBefore = [...store.documents].filter(([p]) => /\/(bookings|slotLocks|jobs)\//.test(p));
   await saveCoachAvailabilityDayService(store, auth('coach'), save('expired', 1, []), () => hold.holdExpiresAtMillis);
   expect([...store.documents].filter(([p]) => /\/(bookings|slotLocks|jobs)\//.test(p))).toEqual(protectedBefore);

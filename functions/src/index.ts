@@ -3,6 +3,7 @@ import { initializeApp } from 'firebase-admin/app';
 initializeApp();
 
 export { createBookingHold } from './modules/coaching/create-booking-hold';
+export { getMemberBookingOptionsCommand } from './modules/coaching/member-booking-options-callable';
 export { saveCoachProfileCommand, setCoachDirectoryStatusCommand } from './modules/coaching/coach-profile-callables';
 export { getCoachAvailabilityCommand, saveCoachAvailabilityDayCommand } from './modules/coaching/coach-availability-callables';
 export { paymentWebhook } from './modules/commerce/payment-webhook';

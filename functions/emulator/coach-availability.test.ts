@@ -1,3 +1,4 @@
+import { eligibleCoach } from '../test/booking-fixture';
 import { readFileSync } from 'node:fs';
 import { initializeApp, deleteApp, type App } from 'firebase-admin/app';
 import { getFirestore, type Firestore } from 'firebase-admin/firestore';
@@ -42,7 +43,7 @@ it('serializes concurrent immutable-baseline edits with one winner', async () =>
 it('serializes concurrent hold/removal so incompatible schedule and reservation cannot both win', async () => {
   await saveCoachAvailabilityDayService(store(), auth('coach'), save(), () => now);
   const result = await Promise.allSettled([
-    createBookingHoldService(store(), 'member', { schemaVersion: 1, requestId: 'hold', organizationId: org, branchId: 'main', coachId: 'coach', memberId: 'member', startAtMillis: start, durationMinutes: 60 }, () => now),
+    createBookingHoldService(store(), 'member', { schemaVersion: 1, requestId: 'hold', organizationId: org, branchId: 'main', coachId: 'coach', memberId: 'member', startAtMillis: start, durationMinutes: 60 }, eligibleCoach, () => now),
     saveCoachAvailabilityDayService(store(), auth('coach'), save('remove', 1, []), () => now),
   ]);
   expect(result.filter(r => r.status === 'fulfilled')).toHaveLength(1);
