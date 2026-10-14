@@ -215,6 +215,9 @@ class _TutorialFormPageState extends State<_TutorialFormPage> {
       context.read<TutorialRepository>().requiresCatalogSelection;
   String? _saveError;
   bool _saving = false;
+  bool _reloadRequired = false;
+  late final _editBaseline = widget.existing?.editBaseline;
+  late final _editId = widget.existing?.id ?? '';
 
   void _repaint() => setState(() {});
 
@@ -229,10 +232,12 @@ class _TutorialFormPageState extends State<_TutorialFormPage> {
   }
 
   Future<void> _save() async {
+    if (_saving || _reloadRequired) return;
     if (!(_formKey.currentState?.validate() ?? false)) return;
     final duration = int.tryParse(_duration.text.trim()) ?? 5;
     final entry = TutorialVideo(
-      id: widget.existing?.id ?? '',
+      id: _editId,
+      editBaseline: _editBaseline,
       title: _title.text.trim(),
       category: _category,
       status: TutorialStatus.fromLabel(_status),
@@ -251,7 +256,15 @@ class _TutorialFormPageState extends State<_TutorialFormPage> {
       await context.read<TutorialRepository>().save(entry);
     } catch (error) {
       if (mounted) {
-        setState(() => _saveError = 'Could not save exercise: $error');
+        setState(() {
+          _reloadRequired = error is TutorialEditConflict ||
+              error is TutorialEditAuthorizationChanged;
+          _saveError = error is TutorialEditConflict
+              ? const TutorialEditConflict().toString()
+              : error is TutorialEditAuthorizationChanged
+                  ? const TutorialEditAuthorizationChanged().toString()
+                  : 'Could not save exercise. Please try again.';
+        });
       }
       return;
     } finally {
@@ -416,7 +429,7 @@ class _TutorialFormPageState extends State<_TutorialFormPage> {
                           onChanged: (v) =>
                               setState(() => _difficulty = v ?? _difficulty),
                         ),
-                    ),
+                      ),
                   ],
                 ),
                 if (_catalogOnly) const SizedBox(height: 12),
@@ -426,8 +439,7 @@ class _TutorialFormPageState extends State<_TutorialFormPage> {
                     decoration: const InputDecoration(
                         labelText: 'Status', isDense: true),
                     items: const [
-                      DropdownMenuItem(
-                          value: 'Active', child: Text('Active')),
+                      DropdownMenuItem(value: 'Active', child: Text('Active')),
                       DropdownMenuItem(value: 'Draft', child: Text('Draft')),
                     ],
                     onChanged: (value) =>
@@ -502,7 +514,7 @@ class _TutorialFormPageState extends State<_TutorialFormPage> {
                   onPressed: widget.onDone, child: const Text('Cancel')),
               const SizedBox(width: 10),
               FilledButton(
-                  onPressed: _saving ? null : _save,
+                  onPressed: _saving || _reloadRequired ? null : _save,
                   child: Text(_saving
                       ? 'Saving…'
                       : _catalogOnly
@@ -510,6 +522,10 @@ class _TutorialFormPageState extends State<_TutorialFormPage> {
                           : (_isEdit ? 'Save changes' : 'Create tutorial'))),
             ],
           ),
+          if (_reloadRequired)
+            TextButton(
+                onPressed: widget.onDone,
+                child: const Text('Discard edits and reload catalog')),
         ],
       ),
     );

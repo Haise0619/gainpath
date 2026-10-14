@@ -55,8 +55,7 @@ class GainPathAdminWebApp extends StatelessWidget {
               home: _AdminAuthGate(config: config),
             );
             return AppRepositories(
-              key: ValueKey(
-                  (state.session?.scope, state.session?.role, config.mode)),
+              key: ValueKey((state.session, config.mode)),
               config: config,
               session: state.session,
               tutorialRepositoryFactory: tutorialRepositoryFactory,

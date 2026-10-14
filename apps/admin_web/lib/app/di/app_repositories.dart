@@ -24,6 +24,8 @@ import 'package:gainpath_domain/gainpath_domain.dart'
     show AuthSession, SessionScope;
 import '../../infrastructure/firebase/firebase_exercise_catalog_repository.dart';
 import '../../infrastructure/firebase/firebase_routine_template_repository.dart';
+import 'package:gainpath_identity/gainpath_identity.dart';
+import 'catalog_edit_session_guard.dart';
 
 /// Composition root for data access. Swap the in-memory implementations for
 /// Firebase-backed ones here without touching any screen.
@@ -49,6 +51,25 @@ class AppRepositories extends StatefulWidget {
 
 class _AppRepositoriesState extends State<AppRepositories> {
   late final MockDataSession session = MockDataSession();
+  CatalogEditSessionGuard? _catalogGuard;
+
+  TutorialRepository _createCatalog(SessionScope scope) {
+    final factory = widget.tutorialRepositoryFactory;
+    if (factory != null) return factory(scope);
+    final auth = context.read<AuthBloc>();
+    _catalogGuard = CatalogEditSessionGuard(
+        expected: widget.session!,
+        current: () => auth.state,
+        changes: auth.stream);
+    return FirebaseExerciseCatalogRepository(
+        scope: scope, isSessionCurrent: _catalogGuard!.isCurrent);
+  }
+
+  @override
+  void dispose() {
+    _catalogGuard?.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -58,9 +79,7 @@ class _AppRepositoriesState extends State<AppRepositories> {
     if (widget.config.isFirebase) {
       return MultiRepositoryProvider(providers: [
         RepositoryProvider<TutorialRepository>(
-            create: (_) =>
-                widget.tutorialRepositoryFactory?.call(scope!) ??
-                FirebaseExerciseCatalogRepository(scope: scope!)),
+            create: (_) => _createCatalog(scope!)),
         RepositoryProvider<RoutineTemplateRepository>(
             create: (context) =>
                 widget.routineRepositoryFactory

@@ -1,5 +1,10 @@
 import '../enums/tutorial_status.dart';
 
+/// Opaque immutable edit token supplied by a repository, never authored by UI.
+abstract class TutorialEditBaseline {
+  const TutorialEditBaseline();
+}
+
 /// AD-M11.4 — one video in the Exercise Tutorial Library.
 /// [coversExercise] names which `riskExercises` entry (if any) this
 /// tutorial actually addresses, empty string if none — that link is
@@ -8,6 +13,7 @@ import '../enums/tutorial_status.dart';
 /// in place.
 class TutorialVideo {
   final String id;
+  final TutorialEditBaseline? editBaseline;
   String title;
   String category;
   TutorialStatus status;
@@ -19,6 +25,7 @@ class TutorialVideo {
   String description;
   TutorialVideo({
     this.id = '',
+    this.editBaseline,
     required this.title,
     required this.category,
     required this.status,
