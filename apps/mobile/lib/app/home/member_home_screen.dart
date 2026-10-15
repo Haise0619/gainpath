@@ -75,6 +75,7 @@ class MemberHomeScreen extends StatefulWidget {
 class _MemberHomeScreenState extends State<MemberHomeScreen>
     with SingleTickerProviderStateMixin {
   bool _dismissedBroadcast = false;
+  final _homeScroll = ScrollController();
 
   late final AnimationController _claimController;
   late final Animation<double> _claimScale;
@@ -97,6 +98,7 @@ class _MemberHomeScreenState extends State<MemberHomeScreen>
 
   @override
   void dispose() {
+    _homeScroll.dispose();
     _claimController.dispose();
     super.dispose();
   }
@@ -120,6 +122,14 @@ class _MemberHomeScreenState extends State<MemberHomeScreen>
       if (widget.onRefreshAnnouncements != null)
         widget.onRefreshAnnouncements!(),
     ]);
+  }
+
+  Future<void> _openAnnouncements() async {
+    if (_homeScroll.hasClients) {
+      await _homeScroll.animateTo(0,
+          duration: const Duration(milliseconds: 250), curve: Curves.easeOut);
+    }
+    if (mounted) await widget.onRefreshAnnouncements?.call();
   }
 
   String get _greeting {
@@ -173,6 +183,7 @@ class _MemberHomeScreenState extends State<MemberHomeScreen>
         color: AppColors.primary,
         onRefresh: live ? _refreshLive : _refresh,
         child: CustomScrollView(
+          controller: _homeScroll,
           physics: const AlwaysScrollableScrollPhysics(),
           slivers: [
             _HeroHeader(
@@ -180,6 +191,9 @@ class _MemberHomeScreenState extends State<MemberHomeScreen>
                 firstName: firstName,
                 points: gamification?.points,
                 live: live,
+                onOpenAnnouncements: live && widget.announcements != null
+                    ? _openAnnouncements
+                    : null,
                 avatarText: live
                     ? (firstName.isEmpty
                         ? '?'
@@ -292,12 +306,14 @@ class _HeroHeader extends StatelessWidget {
   final int? points;
   final bool live;
   final String avatarText;
+  final VoidCallback? onOpenAnnouncements;
 
   const _HeroHeader(
       {required this.greeting,
       required this.firstName,
       required this.points,
       required this.live,
+      this.onOpenAnnouncements,
       this.avatarText = 'ZY'});
 
   @override
@@ -315,11 +331,13 @@ class _HeroHeader extends StatelessWidget {
       title: const Text('GainPath'),
       actions: [
         IconButton(
-          tooltip: 'Notifications',
+          tooltip:
+              onOpenAnnouncements != null ? 'Announcements' : 'Notifications',
           icon: const Icon(Icons.notifications_none_rounded),
-          onPressed: () => live
-              ? showUnavailable(context)
-              : showToast(context, 'No new notifications.'),
+          onPressed: onOpenAnnouncements ??
+              () => live
+                  ? showUnavailable(context)
+                  : showToast(context, 'No new notifications.'),
         ),
         const SizedBox(width: 4),
       ],
