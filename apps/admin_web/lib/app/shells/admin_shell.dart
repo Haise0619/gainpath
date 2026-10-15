@@ -133,7 +133,7 @@ class _AdminShellState extends State<AdminShell> {
           Icons.smart_toy_rounded,
           'AI Chatbot Disclaimer',
           'The safety notice shown before first use',
-          const ChatbotDisclaimerScreen()),
+          ChatbotDisclaimerScreen(live: widget.liveSession != null)),
     ]),
     _NavPage(Icons.bar_chart_outlined, Icons.bar_chart_rounded, 'Reports',
         'Sales, branch performance, and analytics', const ReportsScreen()),

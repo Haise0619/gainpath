@@ -30,6 +30,7 @@ import '../../infrastructure/firebase/firebase_coach_availability_repository.dar
 import 'package:gainpath_identity/gainpath_identity.dart';
 import 'catalog_edit_session_guard.dart';
 import '../../infrastructure/firebase/firebase_announcement_repository.dart';
+import '../../infrastructure/firebase/firebase_chatbot_disclaimer_repository.dart';
 import '../../infrastructure/firebase/firebase_equipment_repository.dart';
 import '../../infrastructure/local/equipment_image_picker.dart';
 
@@ -72,6 +73,17 @@ class _AppRepositoriesState extends State<AppRepositories> {
   CatalogEditSessionGuard? _availabilityGuard;
   CatalogEditSessionGuard? _bookingGuard;
   CatalogEditSessionGuard? _announcementGuard;
+  CatalogEditSessionGuard? _disclaimerGuard;
+  ChatbotDisclaimerRepository _createDisclaimer(SessionScope scope) {
+    final auth = context.read<AuthBloc>();
+    _disclaimerGuard = CatalogEditSessionGuard(
+        expected: widget.session!,
+        current: () => auth.state,
+        changes: auth.stream);
+    return FirebaseChatbotDisclaimerRepository(
+        scope: scope, isCurrent: _disclaimerGuard!.isCurrent);
+  }
+
   CatalogEditSessionGuard? _equipmentGuard;
   EquipmentRepository _createEquipment(SessionScope scope) {
     final auth = context.read<AuthBloc>();
@@ -162,6 +174,7 @@ class _AppRepositoriesState extends State<AppRepositories> {
     _availabilityGuard?.dispose();
     _bookingGuard?.dispose();
     _announcementGuard?.dispose();
+    _disclaimerGuard?.dispose();
     _equipmentGuard?.dispose();
     super.dispose();
   }
@@ -173,6 +186,8 @@ class _AppRepositoriesState extends State<AppRepositories> {
     final scope = widget.session?.scope;
     if (widget.config.isFirebase) {
       return MultiRepositoryProvider(providers: [
+        RepositoryProvider<ChatbotDisclaimerRepository>(
+            create: (_) => _createDisclaimer(scope!)),
         RepositoryProvider<EquipmentImagePicker>(
             create: (_) => LocalEquipmentImagePicker()),
         RepositoryProvider<EquipmentRepository>(

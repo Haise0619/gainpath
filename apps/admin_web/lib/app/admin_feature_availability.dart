@@ -9,6 +9,7 @@ abstract final class AdminFeatureAvailability {
     'Routine Templates',
     'Coaches',
     'Announcements',
+    'AI Chatbot Disclaimer',
     'Equipment Catalog'
   };
   static Widget page(String feature, AuthSession session) =>
