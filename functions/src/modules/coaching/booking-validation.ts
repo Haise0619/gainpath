@@ -1,6 +1,7 @@
 import { requireActiveMembership, requireBranchAccess } from '../../platform/auth-context';
 import { DomainError } from '../../platform/errors';
 import type { DocumentData, TransactionPort } from '../../platform/firestore/store';
+import { readAll } from '../../platform/firestore/store';
 import { keyOf } from '../../platform/idempotency';
 import type { CreateBookingHoldInput } from '../../platform/validation';
 import { branchIds, bookingPolicy, dateGrid, localDate, MAX_TIME, plusDate, SLOT, storedDay } from './coach-availability-contracts';
@@ -86,8 +87,9 @@ export async function bookingDaySnapshot(tx: TransactionPort, org: string, coach
   const dayPath = `${root}/bookingDays/${keyOf(memberId, date)}`;
   const reservations = activeBookingReservations(await tx.get(dayPath), memberId, date, policy.timeZone, now);
   const blocked = new Set<number>();
-  for (const slot of grid.slots) {
-    const lock = await tx.get(`${root}/slotLocks/${keyOf(coachId, slot)}`);
+  const locks = await readAll(tx, grid.slots.map(slot => `${root}/slotLocks/${keyOf(coachId, slot)}`));
+  for (const [i, slot] of grid.slots.entries()) {
+    const lock = locks[i];
     if (!lock) continue;
     if (lock.schemaVersion !== 1 || lock.coachId !== coachId || !validBookingId(lock.bookingId) || !validBookingId(lock.branchId)
       || (lock.status !== 'confirmed' && lock.status !== 'pending_hold')

@@ -1,5 +1,6 @@
 import { requireActiveMembership, requireVerifiedEmail } from '../../platform/auth-context';
 import type { DocumentStore, TransactionPort } from '../../platform/firestore/store';
+import { readAll } from '../../platform/firestore/store';
 import { DomainError } from '../../platform/errors';
 import { keyOf } from '../../platform/idempotency';
 import { InputValidationError, requiredIdentifier } from '../../platform/validation';
@@ -53,12 +54,14 @@ export async function getCoachAvailabilityService(store: DocumentStore, auth: Au
     }
     if (!visible.length) throw new DomainError('permission-denied', 'No permitted Coach branches are available.');
     const days: AvailabilityDayResult[] = [];
-    for (let i = 0; i < count && plusDate(first, i) <= through; i++) {
-      const date = plusDate(first, i), stored = storedDay(await tx.get(`${root}/coachAvailability/${coachId}/days/${date}`), date, policy.timeZone, coach.branchIds);
+    const dates = Array.from({ length: count }, (_, i) => plusDate(first, i)).filter(date => date <= through);
+    const records = await readAll(tx, dates.map(date => `${root}/coachAvailability/${coachId}/days/${date}`));
+    for (const [i, date] of dates.entries()) {
+      const stored = storedDay(records[i], date, policy.timeZone, coach.branchIds);
       const day: AvailabilityDayResult = { localDate: date, windows: stored.windows.filter(w => visible.includes(w.branchId)) };
       const grid = dateGrid(date, policy.timeZone), visibleEndpoints = new Set(day.windows.flatMap(w => [w.startAtMillis, w.endAtMillis]));
       day.displayTimes = grid.boundaries.filter(b => visibleEndpoints.has(b.atMillis));
-      if (actor.role !== 'member') Object.assign(day, { revision: stored.revision, reviewRequired: stored.reviewRequired, editable: actor.role === 'coach' && date > today && !stored.reviewRequired, boundaries: actor.role === 'coach' ? dateGrid(date, policy.timeZone).boundaries : [] });
+      if (actor.role !== 'member') Object.assign(day, { revision: stored.revision, reviewRequired: stored.reviewRequired, editable: actor.role === 'coach' && date > today && !stored.reviewRequired, boundaries: actor.role === 'coach' ? grid.boundaries : [] });
       days.push(day);
     }
     return { schemaVersion: 1, coachId, serverNowMillis: now, todayLocalDate: today, timeZone: policy.timeZone, assignedBranchIds: visible, days,
@@ -96,8 +99,10 @@ export async function saveCoachAvailabilityDayService(store: DocumentStore, auth
     if (baseline.revision !== expected) throw new DomainError('aborted', 'The schedule changed. Discard and reload.');
     if (JSON.stringify(baseline.windows) === JSON.stringify(submitted)) throw new InputValidationError('Change at least one scheduling window.');
     const coverage = (list: AvailabilityWindow[], slot: number) => list.find(w => w.startAtMillis <= slot && w.endAtMillis >= slot + SLOT)?.branchId;
-    for (const slot of dateGrid(date, policy.timeZone).slots) {
-      const lock = await tx.get(`${root}/slotLocks/${keyOf(uid, slot)}`); if (!lock) continue;
+    const slots = dateGrid(date, policy.timeZone).slots;
+    const locks = await readAll(tx, slots.map(slot => `${root}/slotLocks/${keyOf(uid, slot)}`));
+    for (const [i, slot] of slots.entries()) {
+      const lock = locks[i]; if (!lock) continue;
       const validId = (value: unknown) => typeof value === 'string' && /^[A-Za-z0-9_-]{1,128}$/.test(value);
       if (lock.schemaVersion !== 1 || lock.coachId !== uid || !validId(lock.branchId) || !validId(lock.bookingId) || (lock.status !== 'confirmed' && lock.status !== 'pending_hold')
         || (lock.status === 'pending_hold' && (!Number.isSafeInteger(lock.expiresAtMillis) || Number(lock.expiresAtMillis) < 1 || Number(lock.expiresAtMillis) > slot))) throw new DomainError('failed-precondition', 'A reservation lock requires authorized review.');
