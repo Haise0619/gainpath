@@ -99,7 +99,7 @@ export async function saveCoachAvailabilityDayService(store: DocumentStore, auth
     for (const slot of dateGrid(date, policy.timeZone).slots) {
       const lock = await tx.get(`${root}/slotLocks/${keyOf(uid, slot)}`); if (!lock) continue;
       const validId = (value: unknown) => typeof value === 'string' && /^[A-Za-z0-9_-]{1,128}$/.test(value);
-      if (lock.schemaVersion !== 1 || lock.coachId !== uid || !validId(lock.branchId) || !validId(lock.bookingId) || !['confirmed', 'pending_hold'].includes(String(lock.status))
+      if (lock.schemaVersion !== 1 || lock.coachId !== uid || !validId(lock.branchId) || !validId(lock.bookingId) || (lock.status !== 'confirmed' && lock.status !== 'pending_hold')
         || (lock.status === 'pending_hold' && (!Number.isSafeInteger(lock.expiresAtMillis) || Number(lock.expiresAtMillis) < 1 || Number(lock.expiresAtMillis) > slot))) throw new DomainError('failed-precondition', 'A reservation lock requires authorized review.');
       if (lock.status === 'confirmed' || Number(lock.expiresAtMillis) > now) {
         if (coverage(baseline.windows, slot) !== lock.branchId) throw new DomainError('failed-precondition', 'Stored schedule and reservation disagree.');

@@ -76,6 +76,17 @@ it('allows removal past valid hold expiry and retains the existing booking consu
   await saveCoachAvailabilityDayService(store, auth('coach'), save('expired', 1, []), () => hold.holdExpiresAtMillis);
   expect([...store.documents].filter(([p]) => /\/(bookings|slotLocks|jobs)\//.test(p))).toEqual(protectedBefore);
 });
+it.each([['confirmed'], ['pending_hold'], [], {}, null, undefined, 42].map(status => ({ status })))('rejects nonliteral lock status $status without changing any stored state', async ({ status }) => {
+  const store = setup(); await saveCoachAvailabilityDayService(store, auth('coach'), save(), () => now);
+  const lock: Record<string, unknown> = { schemaVersion: 1, coachId: 'coach', branchId: 'main', bookingId: 'b' };
+  if (status !== undefined) lock.status = status;
+  // Missing expiry exposes the old String(status) bypass: neither strict
+  // status branch protects these malformed array-shaped reservations.
+  store.documents.set(`${root}/slotLocks/${keyOf('coach', start)}`, lock);
+  const before = structuredClone([...store.documents]);
+  await expect(saveCoachAvailabilityDayService(store, auth('coach'), save('remove-malformed', 1, []), () => now)).rejects.toMatchObject({ code: 'failed-precondition' });
+  expect([...store.documents]).toEqual(before);
+});
 it('generates UTC boundaries for rollover and DST without inventing wall times', () => {
   expect(localDate(now, 'Asia/Kuala_Lumpur')).toBe('2026-10-15');
   expect(dateGrid('2026-03-08', 'America/New_York').slots).toHaveLength(46);

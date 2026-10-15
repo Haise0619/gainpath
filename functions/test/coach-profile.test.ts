@@ -89,3 +89,38 @@ it('rejects unknown/private author fields and invalid experience with safe error
     await expect(saveCoachProfile(setup(), auth('coach'), save('bad', 0, patch))).rejects.toBeInstanceOf(InputValidationError);
   }
 });
+
+it.each([
+  ['private', 'createdAtMillis'], ['private', 'updatedAtMillis'],
+  ['public', 'createdAtMillis'], ['public', 'updatedAtMillis'], ['public', 'publishedAtMillis'],
+])('rejects malformed %s %s without changing documents or receipts', async (kind, field) => {
+  for (const invalid of [-1, 1.5, '100', null, undefined, Number.MAX_SAFE_INTEGER + 1]) {
+    const store = setup();
+    const data: Record<string, unknown> = { ...fields, schemaVersion: 1, revision: 1, createdAtMillis: 100, updatedAtMillis: 100,
+      ...(kind === 'public' ? { sourceRevision: 1, status: 'published', branchIds: ['main'], publishedAtMillis: 100 } : {}) };
+    if (invalid === undefined) delete data[field]; else data[field] = invalid;
+    store.documents.set(`${root}/${kind === 'public' ? 'coaches' : 'coachProfiles'}/coach`, data);
+    const before = structuredClone([...store.documents]);
+    const operation = kind === 'private'
+      ? saveCoachProfile(store, auth('coach'), save(`edit-${field}`, 1, { bio: 'Edited' }), () => 200)
+      : setCoachDirectoryStatus(store, auth('admin'), deactivate(`deactivate-${field}`), identity, () => 200);
+    await expect(operation).rejects.toMatchObject({ code: 'failed-precondition', message: 'The profile needs an authorized schema review.' });
+    expect([...store.documents]).toEqual(before);
+  }
+});
+it('rejects publication of a negative-timestamp draft without creating a projection or receipt', async () => {
+  const store = setup();
+  store.documents.set(`${root}/coachProfiles/coach`, { ...fields, schemaVersion: 1, revision: 1, createdAtMillis: -1, updatedAtMillis: 100 });
+  const before = structuredClone([...store.documents]);
+  await expect(setCoachDirectoryStatus(store, auth('admin'), publish('fresh-publication'), identity, () => 200)).rejects.toMatchObject({ code: 'failed-precondition' });
+  expect([...store.documents]).toEqual(before);
+});
+it.each([0, 100])('retains Dart-compatible timestamp %s for own edit and public deactivation', async timestamp => {
+  const store = setup();
+  store.documents.set(`${root}/coachProfiles/coach`, { ...fields, schemaVersion: 1, revision: 1, createdAtMillis: timestamp, updatedAtMillis: timestamp });
+  await saveCoachProfile(store, auth('coach'), save('valid-edit', 1, { bio: 'Edited' }), () => 200);
+  expect(store.documents.get(`${root}/coachProfiles/coach`)).toMatchObject({ createdAtMillis: timestamp, updatedAtMillis: 200, revision: 2 });
+  store.documents.set(`${root}/coaches/coach`, { ...fields, schemaVersion: 1, revision: 1, sourceRevision: 1, status: 'published', branchIds: ['main'], createdAtMillis: timestamp, updatedAtMillis: timestamp, publishedAtMillis: timestamp });
+  await setCoachDirectoryStatus(store, auth('admin'), deactivate('valid-deactivate'), identity, () => 200);
+  expect(store.documents.get(`${root}/coaches/coach`)).toMatchObject({ createdAtMillis: timestamp, updatedAtMillis: 200, publishedAtMillis: timestamp, status: 'inactive', revision: 2 });
+});

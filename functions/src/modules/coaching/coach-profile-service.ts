@@ -48,11 +48,12 @@ function professional(raw: DocumentData): DocumentData {
 function stored(data: DocumentData | undefined, isPublic = false): DocumentData | undefined {
   if (!data) return undefined;
   if (data.schemaVersion !== 1 || !Number.isSafeInteger(data.revision) || Number(data.revision) < 1
-    || !Number.isSafeInteger(data.createdAtMillis) || !Number.isSafeInteger(data.updatedAtMillis)) throw new DomainError('failed-precondition', 'The profile needs an authorized schema review.');
+    || !Number.isSafeInteger(data.createdAtMillis) || Number(data.createdAtMillis) < 0
+    || !Number.isSafeInteger(data.updatedAtMillis) || Number(data.updatedAtMillis) < 0) throw new DomainError('failed-precondition', 'The profile needs an authorized schema review.');
   try {
     professional(data);
     if (isPublic && (Object.keys(data).some(k => !publicKeys.includes(k)) || !['published', 'inactive'].includes(String(data.status))
-      || !Number.isSafeInteger(data.sourceRevision) || Number(data.sourceRevision) < 1 || !Number.isSafeInteger(data.publishedAtMillis))) throw Error();
+      || !Number.isSafeInteger(data.sourceRevision) || Number(data.sourceRevision) < 1 || !Number.isSafeInteger(data.publishedAtMillis) || Number(data.publishedAtMillis) < 0)) throw Error();
     if (isPublic) branches(data.branchIds);
   } catch { throw new DomainError('failed-precondition', 'The profile needs an authorized schema review.'); }
   return data;
