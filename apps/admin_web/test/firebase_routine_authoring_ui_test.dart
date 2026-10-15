@@ -147,6 +147,9 @@ void main() {
     await tester.pumpAndSettle();
     expect(routines.entries.single.days.single.exercises.single.exerciseId,
         'squat-1');
+    expect(
+        find.text('Blueprint saved. Publish it to update the Member catalog.'),
+        findsOneWidget);
     await tester.tap(find.text('Strength A'));
     await tester.pumpAndSettle();
     final publish = find.text('Publish');
@@ -155,6 +158,10 @@ void main() {
     await tester.tap(publish);
     await tester.pumpAndSettle();
     expect(routines.publishedId, routines.entries.single.id);
+    expect(
+        find.text(
+            'Routine published. Members can pull to refresh Home or refresh Workout.'),
+        findsOneWidget);
   });
 
   testWidgets(

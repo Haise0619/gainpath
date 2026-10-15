@@ -106,8 +106,32 @@ void main() {
     await tester.pumpAndSettle();
     final home = tester.widget<MemberHomeScreen>(find.byType(MemberHomeScreen));
     expect(home.publishedRoutine!.id, 'b');
+    // A Member already on Home must see a republished snapshot without logout
+    // or first visiting Workout. Exercise IDs/targets and local records stay put.
+    catalog.records = [
+      routine('a', 'Routine A'),
+      routine('b', 'Republished B')
+    ];
+    await tester.drag(
+        find.descendant(
+            of: find.byType(MemberHomeScreen),
+            matching: find.byType(CustomScrollView)),
+        const Offset(0, 500));
+    await tester.pumpAndSettle();
+    expect(
+        tester
+            .widget<MemberHomeScreen>(find.byType(MemberHomeScreen))
+            .publishedRoutine!
+            .title,
+        'Republished B');
     home.onStartWorkout!();
     await tester.pumpAndSettle();
+    expect(
+        tester
+            .widget<WorkoutPrepScreen>(find.byType(WorkoutPrepScreen))
+            .publishedRoutine!
+            .title,
+        'Republished B');
     catalog.records = [routine('a', 'Routine A'), routine('b', 'Updated B')];
     await tester.ensureVisible(find.byTooltip('Refresh routines'));
     await tester.tap(find.byTooltip('Refresh routines'));

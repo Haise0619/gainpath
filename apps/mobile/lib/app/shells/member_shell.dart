@@ -135,6 +135,7 @@ class _MemberShellState extends State<MemberShell> {
                     progressWarnings:
                         progressState.snapshot?.warnings ?? const [],
                     onRefreshProgress: refresh,
+                    onRefreshRoutines: _catalog!.refresh,
                     onOpenProgress: () => open(MemberProgressView.dashboard),
                     onOpenHistory: () => open(MemberProgressView.history),
                     onOpenWorkout: openWorkout,

@@ -46,6 +46,7 @@ class MemberHomeScreen extends StatefulWidget {
       this.progressError,
       this.progressWarnings = const [],
       this.onRefreshProgress,
+      this.onRefreshRoutines,
       this.onOpenProgress,
       this.onOpenHistory,
       this.onOpenWorkout});
@@ -59,6 +60,7 @@ class MemberHomeScreen extends StatefulWidget {
   final String? progressError;
   final List<String> progressWarnings;
   final Future<void> Function()? onRefreshProgress;
+  final Future<void> Function()? onRefreshRoutines;
   final VoidCallback? onOpenProgress, onOpenHistory;
   final void Function(LocalWorkoutProgressRecord)? onOpenWorkout;
 
@@ -105,6 +107,13 @@ class _MemberHomeScreenState extends State<MemberHomeScreen>
   Future<void> _refresh() async {
     await Future.delayed(const Duration(milliseconds: 900));
     if (mounted) showToast(context, 'Up to date.');
+  }
+
+  Future<void> _refreshLive() async {
+    await Future.wait<void>([
+      if (widget.onRefreshProgress != null) widget.onRefreshProgress!(),
+      if (widget.onRefreshRoutines != null) widget.onRefreshRoutines!(),
+    ]);
   }
 
   String get _greeting {
@@ -156,7 +165,7 @@ class _MemberHomeScreenState extends State<MemberHomeScreen>
       ),
       body: RefreshIndicator(
         color: AppColors.primary,
-        onRefresh: live ? (widget.onRefreshProgress ?? () async {}) : _refresh,
+        onRefresh: live ? _refreshLive : _refresh,
         child: CustomScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
           slivers: [

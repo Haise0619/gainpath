@@ -58,10 +58,18 @@ class _RoutineTemplatesScreenState extends State<RoutineTemplatesScreen> {
 
   Future<void> _publish(RoutineBlueprint blueprint) async {
     if (_publishingId != null) return;
+    final firebaseCatalog =
+        context.read<TutorialRepository>().requiresCatalogSelection;
     setState(() => _publishingId = blueprint.id);
     try {
       await context.read<RoutineTemplateRepository>().publish(blueprint.id);
-      if (mounted) showToast(context, 'Routine published to members.');
+      if (mounted) {
+        showToast(
+            context,
+            firebaseCatalog
+                ? 'Routine published. Members can pull to refresh Home or refresh Workout.'
+                : 'Routine published to members.');
+      }
     } catch (_) {
       if (mounted) {
         showToast(context,
@@ -606,7 +614,13 @@ class _TemplateFormPageState extends State<_TemplateFormPage> {
       if (mounted) setState(() => _saving = false);
     }
     if (!mounted) return;
-    showToast(context, _isEdit ? 'Template updated.' : 'Template created.');
+    showToast(
+        context,
+        _usesCatalog
+            ? 'Blueprint saved. Publish it to update the Member catalog.'
+            : _isEdit
+                ? 'Template updated.'
+                : 'Template created.');
     widget.onDone();
   }
 
@@ -953,7 +967,7 @@ class _TemplateFormPageState extends State<_TemplateFormPage> {
               Expanded(
                 child: Text(
                   _usesCatalog
-                      ? 'Publishing makes this routine available as a catalog item. It does not assign a workout or record member activity.'
+                      ? 'Saving changes this blueprint only. Publish again after routine or catalog edits, then refresh Home or Workout in the Member app. Publication does not assign a workout or record activity.'
                       : 'Coaches see this in their routine picker as soon as it is saved — members already following an assigned routine are unaffected until reassigned.',
                   style: Theme.of(context).textTheme.bodyMedium,
                 ),
