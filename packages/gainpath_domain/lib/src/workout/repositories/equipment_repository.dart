@@ -2,6 +2,56 @@ import '../entities/gym_equipment.dart';
 
 /// Data access contract for the workout feature. Implemented in-memory for the
 /// prototype; a Firebase implementation will sit behind the same interface.
-abstract class EquipmentRepository {
+class EquipmentPage {
+  EquipmentPage(Iterable<GymEquipment> items, {this.nextCursor})
+      : items = List.unmodifiable(items);
+  final List<GymEquipment> items;
+  final String? nextCursor;
+}
+
+abstract interface class EquipmentReader {
+  Future<EquipmentPage> loadEquipment({String? afterId});
+}
+
+class EquipmentConflict implements Exception {
+  const EquipmentConflict();
+}
+
+class EquipmentSessionChanged implements Exception {
+  const EquipmentSessionChanged();
+}
+
+abstract class EquipmentRepository implements EquipmentReader {
   List<GymEquipment> get gymEquipment;
+  bool get isLive => false;
+  @override
+  Future<EquipmentPage> loadEquipment({String? afterId}) async =>
+      EquipmentPage(afterId == null ? gymEquipment : []);
+  Future<GymEquipment> saveEquipment(GymEquipment equipment) async {
+    equipment.validate();
+    final index = gymEquipment.indexWhere((e) => e.id == equipment.id);
+    if (equipment.id.isNotEmpty &&
+        (index < 0 || gymEquipment[index].revision != equipment.revision)) {
+      throw const EquipmentConflict();
+    }
+    final saved = GymEquipment(
+        id: equipment.id.isEmpty
+            ? 'eq${DateTime.now().microsecondsSinceEpoch}'
+            : equipment.id,
+        name: equipment.name.trim(),
+        category: equipment.category.trim(),
+        muscleGroup: equipment.muscleGroup.trim(),
+        description: equipment.description.trim(),
+        imageUrl: equipment.imageUrl.trim(),
+        howToUse: equipment.howToUse.map((s) => s.trim()).toList(),
+        safetyTips: equipment.safetyTips.map((s) => s.trim()).toList(),
+        isActive: equipment.isActive,
+        revision: equipment.revision + 1);
+    if (index < 0) {
+      gymEquipment.add(saved);
+    } else {
+      gymEquipment[index] = saved;
+    }
+    return saved;
+  }
 }

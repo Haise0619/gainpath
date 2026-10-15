@@ -51,6 +51,7 @@ class MemberHomeScreen extends StatefulWidget {
       this.onRefreshAnnouncements,
       this.onOpenProgress,
       this.onOpenHistory,
+      this.onOpenEquipment,
       this.onOpenWorkout});
 
   final AuthSession? liveSession;
@@ -66,6 +67,7 @@ class MemberHomeScreen extends StatefulWidget {
   final Widget? announcements;
   final Future<void> Function()? onRefreshAnnouncements;
   final VoidCallback? onOpenProgress, onOpenHistory;
+  final VoidCallback? onOpenEquipment;
   final void Function(LocalWorkoutProgressRecord)? onOpenWorkout;
 
   @override
@@ -273,6 +275,7 @@ class _MemberHomeScreenState extends State<MemberHomeScreen>
                   _QuickActionsGrid(
                       onSelect: _go,
                       enabled: !live,
+                      onOpenEquipment: widget.onOpenEquipment,
                       onOpenProgress: widget.onOpenProgress),
                   const SizedBox(height: 20),
                   const Eyebrow('Goal progress'),
@@ -1000,8 +1003,12 @@ class _QuickActionsGrid extends StatelessWidget {
   final void Function(Widget) onSelect;
   final bool enabled;
   final VoidCallback? onOpenProgress;
+  final VoidCallback? onOpenEquipment;
   const _QuickActionsGrid(
-      {required this.onSelect, this.enabled = true, this.onOpenProgress});
+      {required this.onSelect,
+      this.enabled = true,
+      this.onOpenProgress,
+      this.onOpenEquipment});
 
   @override
   Widget build(BuildContext context) {
@@ -1024,9 +1031,9 @@ class _QuickActionsGrid extends StatelessWidget {
           () => onSelect(const SavedAdviceScreen())),
       _QuickAction(
           Icons.qr_code_scanner_rounded,
-          'Scan gear',
+          onOpenEquipment != null ? 'Equipment' : 'Scan gear',
           AppColors.primarySoft,
-          () => onSelect(const EquipmentScannerScreen())),
+          onOpenEquipment ?? () => onSelect(const EquipmentScannerScreen())),
     ];
 
     return GridView.count(
@@ -1039,8 +1046,9 @@ class _QuickActionsGrid extends StatelessWidget {
       children: actions
           .map((a) => _QuickActionTile(
               action: a,
-              enabled:
-                  enabled || (a.label == 'Progress' && onOpenProgress != null)))
+              enabled: enabled ||
+                  (a.label == 'Progress' && onOpenProgress != null) ||
+                  (a.label == 'Equipment' && onOpenEquipment != null)))
           .toList(),
     );
   }

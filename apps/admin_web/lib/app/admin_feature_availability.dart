@@ -8,7 +8,8 @@ abstract final class AdminFeatureAvailability {
     'Exercise Tutorials',
     'Routine Templates',
     'Coaches',
-    'Announcements'
+    'Announcements',
+    'Equipment Catalog'
   };
   static Widget page(String feature, AuthSession session) =>
       PageBody(children: [

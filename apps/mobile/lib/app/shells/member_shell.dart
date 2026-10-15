@@ -10,6 +10,7 @@ import '../routing/member_progress_route.dart';
 import '../routing/workout_prep_route.dart';
 import '../di/local_member_progress_factory.dart';
 import '../di/published_routine_catalog_factory.dart';
+import '../di/equipment_catalog_factory.dart';
 import '../di/coach_profile_factory.dart';
 import '../di/booking_factory.dart';
 import '../../features/workout/application/published_routine_catalog_cubit.dart';
@@ -29,6 +30,7 @@ class MemberShell extends StatefulWidget {
       this.routineLoader,
       this.routineCatalogFactory,
       this.announcementReaderFactory,
+      this.equipmentReaderFactory,
       this.coachDirectoryFactory,
       this.coachAvailabilityFactory,
       this.bookingFactory,
@@ -42,6 +44,7 @@ class MemberShell extends StatefulWidget {
   final PublishedRoutineCatalogFactory? routineCatalogFactory;
   final AnnouncementReader Function(SessionScope, SessionScope? Function())?
       announcementReaderFactory;
+  final EquipmentReaderFactory? equipmentReaderFactory;
   final CoachDirectoryFactory? coachDirectoryFactory;
   final CoachAvailabilityFactory? coachAvailabilityFactory;
   final BookingServicesFactory? bookingFactory;
@@ -154,6 +157,12 @@ class _MemberShellState extends State<MemberShell> {
                         _announcementKey.currentState?.refresh(),
                     onOpenProgress: () => open(MemberProgressView.dashboard),
                     onOpenHistory: () => open(MemberProgressView.history),
+                    onOpenEquipment: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                            builder: (_) => buildMemberEquipmentCatalog(
+                                widget.liveSession!,
+                                factory: widget.equipmentReaderFactory))),
                     onOpenWorkout: openWorkout,
                     publishedRoutine: catalog.selected,
                     routineStatusMessage: _catalogLabel(catalog),

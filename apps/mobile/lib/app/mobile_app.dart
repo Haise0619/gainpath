@@ -15,6 +15,7 @@ import '../features/analytics/domain/local_member_progress_repository.dart';
 import 'shells/member_shell.dart';
 import 'shells/coach_shell.dart';
 import 'di/published_routine_catalog_factory.dart';
+import 'di/equipment_catalog_factory.dart';
 import 'di/coach_profile_factory.dart';
 import 'di/booking_factory.dart';
 import '../features/identity/presentation/shared/login_screen.dart';
@@ -38,6 +39,7 @@ class GainPathMobileApp extends StatelessWidget {
       this.routineLoaderFactory,
       this.routineCatalogFactory,
       this.announcementReaderFactory,
+      this.equipmentReaderFactory,
       this.coachProfileFactory,
       this.coachDirectoryFactory,
       this.coachAvailabilityFactory,
@@ -55,6 +57,7 @@ class GainPathMobileApp extends StatelessWidget {
   final PublishedRoutineCatalogFactory? routineCatalogFactory;
   final AnnouncementReader Function(SessionScope, SessionScope? Function())?
       announcementReaderFactory;
+  final EquipmentReaderFactory? equipmentReaderFactory;
   final CoachProfileFactory? coachProfileFactory;
   final CoachDirectoryFactory? coachDirectoryFactory;
   final CoachAvailabilityFactory? coachAvailabilityFactory;
@@ -99,6 +102,7 @@ class GainPathMobileApp extends StatelessWidget {
                   routineLoaderFactory: routineLoaderFactory,
                   routineCatalogFactory: routineCatalogFactory,
                   announcementReaderFactory: announcementReaderFactory,
+                  equipmentReaderFactory: equipmentReaderFactory,
                   coachProfileFactory: coachProfileFactory,
                   coachDirectoryFactory: coachDirectoryFactory,
                   coachAvailabilityFactory: coachAvailabilityFactory,
@@ -137,6 +141,7 @@ class _MobileAuthGate extends StatefulWidget {
       this.routineLoaderFactory,
       this.routineCatalogFactory,
       this.announcementReaderFactory,
+      this.equipmentReaderFactory,
       this.coachProfileFactory,
       this.coachDirectoryFactory,
       this.coachAvailabilityFactory,
@@ -152,6 +157,7 @@ class _MobileAuthGate extends StatefulWidget {
   final PublishedRoutineCatalogFactory? routineCatalogFactory;
   final AnnouncementReader Function(SessionScope, SessionScope? Function())?
       announcementReaderFactory;
+  final EquipmentReaderFactory? equipmentReaderFactory;
   final CoachProfileFactory? coachProfileFactory;
   final CoachDirectoryFactory? coachDirectoryFactory;
   final CoachAvailabilityFactory? coachAvailabilityFactory;
@@ -204,6 +210,7 @@ class _MobileAuthGateState extends State<_MobileAuthGate> {
                   readyBuilder: (context, profile) => MemberShell(
                         liveSession: state.session!,
                         liveProfile: profile,
+                        equipmentReaderFactory: widget.equipmentReaderFactory,
                         announcementReaderFactory:
                             widget.announcementReaderFactory ??
                                 (scope, active) => FirebaseAnnouncementReader(

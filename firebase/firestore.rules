@@ -142,6 +142,51 @@ service cloud.firestore {
       allow list, delete: if false;
     }
 
+    match /orgs/{orgId}/gymEquipment/{equipmentId} {
+      function currentEquipmentOrganization() {
+        return activeMember(orgId)
+          && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.organizationId == orgId
+          && get(/databases/$(database)/documents/orgs/$(orgId)/members/$(request.auth.uid)).data.organizationId == orgId;
+      }
+      function validStep(s) {
+        return s is string && s.size() > 0 && s.size() <= 400;
+      }
+      function validSteps(s) {
+        return s is list && s.size() <= 10
+          && (s.size() < 1 || validStep(s[0])) && (s.size() < 2 || validStep(s[1]))
+          && (s.size() < 3 || validStep(s[2])) && (s.size() < 4 || validStep(s[3]))
+          && (s.size() < 5 || validStep(s[4])) && (s.size() < 6 || validStep(s[5]))
+          && (s.size() < 7 || validStep(s[6])) && (s.size() < 8 || validStep(s[7]))
+          && (s.size() < 9 || validStep(s[8])) && (s.size() < 10 || validStep(s[9]));
+      }
+      function validEquipment() {
+        let d = request.resource.data;
+        return d.keys().hasAll(['schemaVersion', 'name', 'category', 'muscleGroup', 'description',
+            'imageUrl', 'howToUse', 'safetyTips', 'isActive', 'revision', 'createdAt', 'updatedAt', 'createdBy', 'updatedBy'])
+          && d.keys().hasOnly(['schemaVersion', 'name', 'category', 'muscleGroup', 'description',
+            'imageUrl', 'howToUse', 'safetyTips', 'isActive', 'revision', 'createdAt', 'updatedAt', 'createdBy', 'updatedBy'])
+          && d.schemaVersion == 1 && d.revision is int && d.revision > 0 && d.isActive is bool
+          && d.name is string && d.name.size() > 0 && d.name.size() <= 100
+          && d.category is string && d.category.size() > 0 && d.category.size() <= 80
+          && d.muscleGroup is string && d.muscleGroup.size() > 0 && d.muscleGroup.size() <= 80
+          && d.description is string && d.description.size() > 0 && d.description.size() <= 2000
+          && d.imageUrl is string && d.imageUrl.size() <= 2048
+          && (d.imageUrl == '' || d.imageUrl.matches('https://[^\\s]+'))
+          && validSteps(d.howToUse) && validSteps(d.safetyTips)
+          && d.createdAt is timestamp && d.createdBy is string
+          && d.updatedAt == request.time && d.updatedBy == request.auth.uid;
+      }
+      allow read: if currentEquipmentOrganization() && (resource.data.isActive == true || contentAuthor(orgId));
+      allow create: if currentEquipmentOrganization() && contentAuthor(orgId) && validEquipment()
+        && request.resource.data.revision == 1 && request.resource.data.createdAt == request.time
+        && request.resource.data.createdBy == request.auth.uid;
+      allow update: if currentEquipmentOrganization() && contentAuthor(orgId) && validEquipment()
+        && request.resource.data.revision == resource.data.revision + 1
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.createdBy == resource.data.createdBy;
+      allow delete: if false;
+    }
+
     match /orgs/{orgId}/announcements/{announcementId} {
       function currentOrganization() {
         return activeMember(orgId)
