@@ -29,6 +29,7 @@ import '../../infrastructure/firebase/firebase_coach_profile_admin_repository.da
 import '../../infrastructure/firebase/firebase_coach_availability_repository.dart';
 import 'package:gainpath_identity/gainpath_identity.dart';
 import 'catalog_edit_session_guard.dart';
+import '../../infrastructure/firebase/firebase_announcement_repository.dart';
 
 /// Composition root for data access. Swap the in-memory implementations for
 /// Firebase-backed ones here without touching any screen.
@@ -68,6 +69,17 @@ class _AppRepositoriesState extends State<AppRepositories> {
   CatalogEditSessionGuard? _coachGuard;
   CatalogEditSessionGuard? _availabilityGuard;
   CatalogEditSessionGuard? _bookingGuard;
+  CatalogEditSessionGuard? _announcementGuard;
+  ContentRepository _createAnnouncements(SessionScope scope) {
+    final auth = context.read<AuthBloc>();
+    _announcementGuard = CatalogEditSessionGuard(
+        expected: widget.session!,
+        current: () => auth.state,
+        changes: auth.stream);
+    return FirebaseAnnouncementRepository(
+        scope: scope, isCurrent: _announcementGuard!.isCurrent);
+  }
+
   BookingListRepository _createBookingList(SessionScope scope) {
     final auth = context.read<AuthBloc>();
     _bookingGuard = CatalogEditSessionGuard(
@@ -136,6 +148,7 @@ class _AppRepositoriesState extends State<AppRepositories> {
     _coachGuard?.dispose();
     _availabilityGuard?.dispose();
     _bookingGuard?.dispose();
+    _announcementGuard?.dispose();
     super.dispose();
   }
 
@@ -146,6 +159,8 @@ class _AppRepositoriesState extends State<AppRepositories> {
     final scope = widget.session?.scope;
     if (widget.config.isFirebase) {
       return MultiRepositoryProvider(providers: [
+        RepositoryProvider<ContentRepository>(
+            create: (_) => _createAnnouncements(scope!)),
         RepositoryProvider<BookingListRepository>(
             create: (_) => _createBookingList(scope!)),
         RepositoryProvider<CoachAvailabilityRepository>(

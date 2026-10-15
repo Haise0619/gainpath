@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:gainpath_identity/gainpath_identity.dart';
 import 'package:gainpath_domain/gainpath_domain.dart';
+import 'package:gainpath_domain/content.dart';
+import '../../features/content/presentation/member/member_announcements.dart';
 import '../home/member_home_screen.dart';
 import '../routing/member_progress_route.dart';
 import '../routing/workout_prep_route.dart';
@@ -26,6 +28,7 @@ class MemberShell extends StatefulWidget {
       this.liveProfile,
       this.routineLoader,
       this.routineCatalogFactory,
+      this.announcementReaderFactory,
       this.coachDirectoryFactory,
       this.coachAvailabilityFactory,
       this.bookingFactory,
@@ -37,6 +40,8 @@ class MemberShell extends StatefulWidget {
   final FitnessProfile? liveProfile;
   final Future<PublishedRoutine?> Function()? routineLoader;
   final PublishedRoutineCatalogFactory? routineCatalogFactory;
+  final AnnouncementReader Function(SessionScope, SessionScope? Function())?
+      announcementReaderFactory;
   final CoachDirectoryFactory? coachDirectoryFactory;
   final CoachAvailabilityFactory? coachAvailabilityFactory;
   final BookingServicesFactory? bookingFactory;
@@ -52,6 +57,8 @@ class _MemberShellState extends State<MemberShell> {
   int _index = 0;
   bool _directoryVisited = false;
   PublishedRoutineCatalogCubit? _catalog;
+  AnnouncementReader? _announcements;
+  final _announcementKey = GlobalKey<MemberAnnouncementsState>();
   AuthBloc? _auth;
   StreamSubscription<AuthState>? _authSubscription;
 
@@ -77,6 +84,8 @@ class _MemberShellState extends State<MemberShell> {
 
   void _createCatalog() {
     final scope = widget.liveSession!.scope;
+    _announcements =
+        widget.announcementReaderFactory?.call(scope, _activeScope);
     final repository =
         widget.routineCatalogFactory?.call(scope, _activeScope) ??
             SinglePublishedRoutineCatalog(
@@ -92,6 +101,7 @@ class _MemberShellState extends State<MemberShell> {
     if (oldWidget.liveSession?.scope != widget.liveSession?.scope) {
       unawaited(_catalog?.close());
       _catalog = null;
+      _announcements = null;
       if (widget.liveSession != null && _auth != null) _createCatalog();
       _index = 0;
       _directoryVisited = false;
@@ -136,6 +146,12 @@ class _MemberShellState extends State<MemberShell> {
                         progressState.snapshot?.warnings ?? const [],
                     onRefreshProgress: refresh,
                     onRefreshRoutines: _catalog!.refresh,
+                    announcements: _announcements == null
+                        ? null
+                        : MemberAnnouncements(
+                            key: _announcementKey, reader: _announcements!),
+                    onRefreshAnnouncements: () async =>
+                        _announcementKey.currentState?.refresh(),
                     onOpenProgress: () => open(MemberProgressView.dashboard),
                     onOpenHistory: () => open(MemberProgressView.history),
                     onOpenWorkout: openWorkout,

@@ -142,6 +142,43 @@ service cloud.firestore {
       allow list, delete: if false;
     }
 
+    match /orgs/{orgId}/announcements/{announcementId} {
+      function currentOrganization() {
+        return activeMember(orgId)
+          && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.organizationId == orgId
+          && get(/databases/$(database)/documents/orgs/$(orgId)/members/$(request.auth.uid)).data.organizationId == orgId;
+      }
+      function validAnnouncement() {
+        let d = request.resource.data;
+        return d.keys().hasAll(['schemaVersion', 'title', 'body', 'status', 'revision',
+            'validFrom', 'validTo', 'createdAt', 'updatedAt', 'createdBy', 'updatedBy', 'publishedAt'])
+          && d.keys().hasOnly(['schemaVersion', 'title', 'body', 'status', 'revision',
+            'validFrom', 'validTo', 'createdAt', 'updatedAt', 'createdBy', 'updatedBy', 'publishedAt'])
+          && d.schemaVersion == 1
+          && d.title is string && d.title.size() > 0 && d.title.size() <= 120
+          && d.body is string && d.body.size() > 0 && d.body.size() <= 4000
+          && d.status in ['draft', 'published', 'inactive']
+          && d.revision is int && d.revision > 0
+          && d.validFrom is timestamp && d.validTo is timestamp && d.validTo > d.validFrom
+          && d.createdAt is timestamp && d.createdBy is string
+          && d.updatedAt == request.time && d.updatedBy == request.auth.uid
+          && (d.publishedAt == null || d.publishedAt is timestamp)
+          && (d.status != 'published' || d.publishedAt is timestamp);
+      }
+      allow read: if currentOrganization() && (resource.data.status == 'published' || contentAuthor(orgId));
+      allow create: if contentAuthor(orgId) && validAnnouncement()
+        && request.resource.data.revision == 1
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.createdBy == request.auth.uid
+        && (request.resource.data.publishedAt == null || request.resource.data.publishedAt == request.time);
+      allow update: if contentAuthor(orgId) && validAnnouncement()
+        && request.resource.data.revision == resource.data.revision + 1
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.createdBy == resource.data.createdBy
+        && (request.resource.data.publishedAt == resource.data.publishedAt || request.resource.data.publishedAt == request.time);
+      allow delete: if false;
+    }
+
     match /orgs/{orgId}/content/{documentId} {
       allow read: if activeMember(orgId) && (resource.data.status == 'published' || adminMember(orgId));
       allow write: if false;

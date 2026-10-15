@@ -47,6 +47,8 @@ class MemberHomeScreen extends StatefulWidget {
       this.progressWarnings = const [],
       this.onRefreshProgress,
       this.onRefreshRoutines,
+      this.announcements,
+      this.onRefreshAnnouncements,
       this.onOpenProgress,
       this.onOpenHistory,
       this.onOpenWorkout});
@@ -61,6 +63,8 @@ class MemberHomeScreen extends StatefulWidget {
   final List<String> progressWarnings;
   final Future<void> Function()? onRefreshProgress;
   final Future<void> Function()? onRefreshRoutines;
+  final Widget? announcements;
+  final Future<void> Function()? onRefreshAnnouncements;
   final VoidCallback? onOpenProgress, onOpenHistory;
   final void Function(LocalWorkoutProgressRecord)? onOpenWorkout;
 
@@ -113,6 +117,8 @@ class _MemberHomeScreenState extends State<MemberHomeScreen>
     await Future.wait<void>([
       if (widget.onRefreshProgress != null) widget.onRefreshProgress!(),
       if (widget.onRefreshRoutines != null) widget.onRefreshRoutines!(),
+      if (widget.onRefreshAnnouncements != null)
+        widget.onRefreshAnnouncements!(),
     ]);
   }
 
@@ -183,7 +189,10 @@ class _MemberHomeScreenState extends State<MemberHomeScreen>
               padding: const EdgeInsets.fromLTRB(16, 18, 16, 96),
               sliver: SliverList.list(
                 children: [
-                  if (!_dismissedBroadcast) ...[
+                  if (widget.announcements != null) ...[
+                    widget.announcements!,
+                    const SizedBox(height: 14),
+                  ] else if (!_dismissedBroadcast) ...[
                     _BroadcastBanner(
                         live: live,
                         onDismiss: () =>
