@@ -11,16 +11,23 @@ class _PreferencesRepository implements MemberPreferencesRepository {
   MemberPreferences value = const MemberPreferences();
   bool failLoad = false;
   bool failSave = false;
+  MemberPreferences? readBackOverride;
+  int writes = 0;
+  bool failReadBack = false;
 
   @override
   Future<MemberPreferences> load() async {
     if (failLoad) throw const MemberPreferencesException('Load failed.');
-    return value;
+    if (writes > 0 && failReadBack) {
+      throw const MemberPreferencesException('Read-back failed.');
+    }
+    return writes > 0 ? readBackOverride ?? value : value;
   }
 
   @override
   Future<void> save(MemberPreferences preferences) async {
     if (failSave) throw const MemberPreferencesException('Save failed.');
+    writes++;
     value = preferences;
   }
 }
@@ -43,6 +50,55 @@ void main() {
     ));
     await tester.pumpAndSettle();
   }
+
+  testWidgets('unverified save blocks more choices until an explicit reload',
+      (tester) async {
+    final repository = _PreferencesRepository()..failReadBack = true;
+    await mount(tester, repository);
+    await tester.tap(find.widgetWithText(SwitchListTile, 'Push notifications'));
+    await tester.pumpAndSettle();
+    expect(
+        tester
+            .widget<SwitchListTile>(
+                find.widgetWithText(SwitchListTile, 'Push notifications'))
+            .value,
+        isFalse);
+    expect(
+        tester
+            .widget<SwitchListTile>(
+                find.widgetWithText(SwitchListTile, 'Email updates'))
+            .onChanged,
+        isNull);
+    repository.failReadBack = false;
+    await tester.tap(find.text('Reload settings'));
+    await tester.pumpAndSettle();
+    expect(
+        tester
+            .widget<SwitchListTile>(
+                find.widgetWithText(SwitchListTile, 'Push notifications'))
+            .value,
+        isTrue);
+  });
+
+  testWidgets('saved switches display authoritative read-back', (tester) async {
+    final repository = _PreferencesRepository()
+      ..readBackOverride = const MemberPreferences(emailUpdates: true);
+    await mount(tester, repository);
+    await tester.tap(find.widgetWithText(SwitchListTile, 'Push notifications'));
+    await tester.pumpAndSettle();
+    expect(
+        tester
+            .widget<SwitchListTile>(
+                find.widgetWithText(SwitchListTile, 'Push notifications'))
+            .value,
+        isFalse);
+    expect(
+        tester
+            .widget<SwitchListTile>(
+                find.widgetWithText(SwitchListTile, 'Email updates'))
+            .value,
+        isTrue);
+  });
 
   testWidgets(
       'preferences persist across screen recreation and failed writes do not change values',

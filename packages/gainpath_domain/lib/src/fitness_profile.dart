@@ -52,6 +52,7 @@ class FitnessProfile {
     required this.experience,
     required this.activity,
     required Set<FitnessGoal> goals,
+    this.editBaseline,
   }) : goals = Set.unmodifiable(goals) {
     if (age < 13 ||
         age > 80 ||
@@ -73,6 +74,9 @@ class FitnessProfile {
   final ActivityLevel activity;
   final Set<FitnessGoal> goals;
 
+  /// Opaque repository provenance; never serialized as a profile field.
+  final Object? editBaseline;
+
   FitnessProfile copyWith({
     ProfileGender? gender,
     int? age,
@@ -90,6 +94,7 @@ class FitnessProfile {
         experience: experience ?? this.experience,
         activity: activity ?? this.activity,
         goals: goals ?? this.goals,
+        editBaseline: editBaseline,
       );
 }
 
@@ -101,8 +106,9 @@ abstract interface class FitnessProfileRepository {
 }
 
 class FitnessProfileException implements Exception {
-  const FitnessProfileException(this.message);
+  const FitnessProfileException(this.message, {this.reloadRequired = false});
   final String message;
+  final bool reloadRequired;
   @override
   String toString() => message;
 }

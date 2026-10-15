@@ -13,6 +13,22 @@ Future<void> saveLiveProfile(
     if (context.mounted) Navigator.pop(context);
   } catch (error) {
     if (context.mounted) {
+      if (error is FitnessProfileException && error.reloadRequired) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('${error.message} Reload discards this form.'),
+          action: SnackBarAction(
+              label: 'Reload',
+              onPressed: () async {
+                await cubit.load();
+                if (context.mounted &&
+                    {FitnessProfileStatus.ready, FitnessProfileStatus.missing}
+                        .contains(cubit.state.status)) {
+                  Navigator.pop(context);
+                }
+              }),
+        ));
+        return;
+      }
       showToast(
           context,
           error is FitnessProfileException

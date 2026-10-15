@@ -132,8 +132,8 @@ void main() {
     expect(find.text('Could not load profile.'), findsOneWidget);
     expect(find.byType(ProfileSetupScreen), findsNothing);
     final scope = (await auth.restoreSession())!.scope;
-    await profiles.repository(scope).save(sampleProfile());
     profiles.failRead = false;
+    await profiles.repository(scope).save(sampleProfile());
     await tap(tester, 'Retry');
     await tap(tester, 'Profile');
     expect(find.text('65 kg'), findsWidgets);
@@ -142,6 +142,34 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('65 kg'), findsWidgets);
     expect(profiles.writes, 1);
+    await tester.pumpWidget(const SizedBox());
+    await auth.dispose();
+  });
+
+  testWidgets(
+      'setup keeps answers after unverified save and explicitly reloads the saved profile',
+      (tester) async {
+    final auth = InMemoryAuthRepository();
+    final profiles = FakeProfileGateway();
+    await mount(tester, auth, profiles);
+    await signIn(tester, 'one@example.com');
+    await tap(tester, 'Prefer not to say');
+    for (var i = 0; i < 4; i++) {
+      await tap(tester, 'Continue');
+    }
+    await tap(tester, 'Build muscle');
+    await tap(tester, 'Continue');
+    await tap(tester, 'Lightly active');
+    await tap(tester, 'Continue');
+    await tap(tester, 'Beginner');
+    profiles.afterWrite = () => profiles.failRead = true;
+    await tap(tester, 'Finish setup');
+    expect(find.byType(ProfileSetupScreen), findsOneWidget);
+    expect(find.text('How experienced are you?'), findsOneWidget);
+    expect(find.text('Reload saved profile'), findsOneWidget);
+    profiles.failRead = false;
+    await tap(tester, 'Reload saved profile');
+    expect(find.byType(MemberShell), findsOneWidget);
     await tester.pumpWidget(const SizedBox());
     await auth.dispose();
   });

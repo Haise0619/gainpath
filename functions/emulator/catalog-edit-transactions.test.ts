@@ -43,10 +43,10 @@ async function preparedEdit() {
     save: (betweenReadAndWrite?: () => Promise<void>) => runTransaction(db, async tx => {
       attempts++;
       const currentAssignment = (await tx.get(assignment)).data();
+      if (!isDeepStrictEqual(currentAssignment, assigned)) throw new Error('authorization-changed');
       const currentMember = (await tx.get(member)).data();
+      if (!isDeepStrictEqual(currentMember, membership)) throw new Error('authorization-changed');
       const current = (await tx.get(exercise)).data();
-      if (!isDeepStrictEqual(currentAssignment, assigned) ||
-          !isDeepStrictEqual(currentMember, membership)) throw new Error('authorization-changed');
       if (!isDeepStrictEqual(current, original)) throw new Error('edit-conflict');
       if (attempts === 1 && betweenReadAndWrite) await betweenReadAndWrite();
       tx.update(exercise, { exerciseName: 'Edited', updatedAt: serverTimestamp() });
@@ -100,13 +100,18 @@ it('assignment org switch is rejected while old membership is still active', asy
   await env.withSecurityRulesDisabled(context => updateDoc(
     doc(context.firestore(), 'users/admin'), { organizationId: 'other' }));
   await expect(edit.save()).rejects.toThrow('authorization-changed');
-  expect((await getDoc(edit.exercise)).data()!.exerciseName).toBe('Squat');
+  await env.withSecurityRulesDisabled(async context => {
+    expect((await getDoc(doc(context.firestore(), 'orgs/o/exerciseVideos/exercise'))).data()!.exerciseName).toBe('Squat');
+  });
 });
-it('assignment change between reads and commit retries and fails closed', async () => {
+it('assignment change between reads and commit fails closed at Rules or retry', async () => {
   const edit = await preparedEdit();
   await expect(edit.save(() => env.withSecurityRulesDisabled(context => updateDoc(
     doc(context.firestore(), 'users/admin'), { organizationId: 'other' }))))
-    .rejects.toThrow('authorization-changed');
-  expect(edit.attempts).toBeGreaterThan(1);
-  expect((await getDoc(edit.exercise)).data()!.exerciseName).toBe('Squat');
+    .rejects.toThrow(/authorization-changed|PERMISSION_DENIED|permission-denied/);
+  // Canonical assignment is now checked by Rules as well as the callback.
+  // Rules may reject the first commit before the SDK needs to retry it.
+  await env.withSecurityRulesDisabled(async context => {
+    expect((await getDoc(doc(context.firestore(), 'orgs/o/exerciseVideos/exercise'))).data()!.exerciseName).toBe('Squat');
+  });
 });

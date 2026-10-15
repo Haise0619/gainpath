@@ -24,6 +24,8 @@ class _AccountSettingsScreenState extends State<AccountSettingsScreen> {
   bool _loading = false;
   bool _saving = false;
   String? _loadError;
+  MemberPreferences? _loadedPreferences;
+  bool _reloadRequired = false;
 
   @override
   void initState() {
@@ -43,6 +45,8 @@ class _AccountSettingsScreenState extends State<AccountSettingsScreen> {
         _push = value.pushNotifications;
         _email = value.emailUpdates;
         _voice = value.voiceCoaching;
+        _loadedPreferences = value;
+        _reloadRequired = false;
         _loading = false;
       });
     } catch (error) {
@@ -57,20 +61,34 @@ class _AccountSettingsScreenState extends State<AccountSettingsScreen> {
   }
 
   Future<void> _change(MemberPreferences next) async {
-    if (_saving) return;
+    if (_saving || _reloadRequired) return;
     setState(() => _saving = true);
     try {
       await widget.repository!.save(next);
       if (!mounted) return;
+      MemberPreferences confirmed;
+      try {
+        confirmed = await widget.repository!.load();
+      } catch (_) {
+        throw const MemberPreferencesException(
+            'The save could not be verified. Reload settings before trying again.',
+            reloadRequired: true);
+      }
+      if (!mounted) return;
       setState(() {
-        _push = next.pushNotifications;
-        _email = next.emailUpdates;
-        _voice = next.voiceCoaching;
+        _push = confirmed.pushNotifications;
+        _email = confirmed.emailUpdates;
+        _voice = confirmed.voiceCoaching;
+        _loadedPreferences = confirmed;
         _saving = false;
       });
     } catch (error) {
       if (!mounted) return;
-      setState(() => _saving = false);
+      setState(() {
+        _saving = false;
+        _reloadRequired =
+            error is MemberPreferencesException && error.reloadRequired;
+      });
       showToast(
           context,
           error is MemberPreferencesException
@@ -80,7 +98,10 @@ class _AccountSettingsScreenState extends State<AccountSettingsScreen> {
   }
 
   MemberPreferences get _current => MemberPreferences(
-      pushNotifications: _push, emailUpdates: _email, voiceCoaching: _voice);
+      pushNotifications: _push,
+      emailUpdates: _email,
+      voiceCoaching: _voice,
+      editBaseline: _loadedPreferences?.editBaseline);
 
   @override
   Widget build(BuildContext context) {
@@ -97,6 +118,13 @@ class _AccountSettingsScreenState extends State<AccountSettingsScreen> {
                 ]))
               : PageBody(
                   children: [
+                    if (_reloadRequired) ...[
+                      const Text(
+                          'Reload saved settings before making another change.'),
+                      TextButton(
+                          onPressed: _load,
+                          child: const Text('Reload settings')),
+                    ],
                     const Eyebrow('Notifications'),
                     if (widget.repository != null) ...[
                       const Text(
@@ -109,7 +137,7 @@ class _AccountSettingsScreenState extends State<AccountSettingsScreen> {
                         children: [
                           SwitchListTile(
                             value: _push,
-                            onChanged: _saving
+                            onChanged: _saving || _reloadRequired
                                 ? null
                                 : (v) => widget.repository == null
                                     ? setState(() => _push = v)
@@ -122,7 +150,7 @@ class _AccountSettingsScreenState extends State<AccountSettingsScreen> {
                           const Divider(height: 1),
                           SwitchListTile(
                             value: _email,
-                            onChanged: _saving
+                            onChanged: _saving || _reloadRequired
                                 ? null
                                 : (v) => widget.repository == null
                                     ? setState(() => _email = v)
@@ -140,7 +168,7 @@ class _AccountSettingsScreenState extends State<AccountSettingsScreen> {
                       padding: EdgeInsets.zero,
                       child: SwitchListTile(
                         value: _voice,
-                        onChanged: _saving
+                        onChanged: _saving || _reloadRequired
                             ? null
                             : (v) => widget.repository == null
                                 ? setState(() => _voice = v)

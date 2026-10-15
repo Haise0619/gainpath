@@ -20,6 +20,8 @@ service cloud.firestore {
 
     function contentAuthor(orgId) {
       return activeMember(orgId)
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.organizationId == orgId
+        && get(/databases/$(database)/documents/orgs/$(orgId)/members/$(request.auth.uid)).data.organizationId == orgId
         && get(/databases/$(database)/documents/orgs/$(orgId)/members/$(request.auth.uid)).data.role in ['admin', 'staff'];
     }
 
@@ -88,6 +90,8 @@ service cloud.firestore {
     match /orgs/{orgId}/profiles/{uid} {
       function profileOwner() {
         return own(uid) && activeMember(orgId)
+          && get(/databases/$(database)/documents/users/$(uid)).data.organizationId == orgId
+          && get(/databases/$(database)/documents/orgs/$(orgId)/members/$(uid)).data.organizationId == orgId
           && get(/databases/$(database)/documents/orgs/$(orgId)/members/$(uid)).data.role == 'member';
       }
       function validProfile() {
@@ -117,6 +121,8 @@ service cloud.firestore {
     match /orgs/{orgId}/preferences/{uid} {
       function preferenceOwner() {
         return own(uid) && activeMember(orgId)
+          && get(/databases/$(database)/documents/users/$(uid)).data.organizationId == orgId
+          && get(/databases/$(database)/documents/orgs/$(orgId)/members/$(uid)).data.organizationId == orgId
           && get(/databases/$(database)/documents/orgs/$(orgId)/members/$(uid)).data.role == 'member';
       }
       function validPreferences() {

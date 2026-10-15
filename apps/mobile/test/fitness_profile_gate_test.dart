@@ -39,7 +39,7 @@ void main() {
     expect(find.text('one@example.com: 65/65'), findsOneWidget);
 
     profiles.pendingWrite = Completer<void>();
-    final save = cubit!.save(sampleProfile().copyWith(weightKg: 66));
+    final save = cubit!.save(cubit!.state.profile!.copyWith(weightKg: 66));
     await tester.pump();
     expect(find.text('one@example.com: 65/65'), findsOneWidget);
     profiles.pendingWrite!.complete();

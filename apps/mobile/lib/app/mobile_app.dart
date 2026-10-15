@@ -174,12 +174,19 @@ class _MobileAuthGateState extends State<_MobileAuthGate> {
           if (widget.config.isFirebase) {
             if (state.session!.role == AppRole.member) {
               final scope = state.session!.scope;
+              final auth = context.read<AuthBloc>();
+              bool isCurrentMember() =>
+                  mounted &&
+                  auth.state.session?.scope == scope &&
+                  AuthRolePolicy.canEnter(auth.state,
+                      allowed: const {AppRole.member});
               if (_profileRepository?.scope != scope) {
                 _profileRepository =
                     widget.profileRepositoryFactory?.call(scope) ??
                         FirebaseFitnessProfileRepository(
                             scope: scope,
-                            gateway: FlutterFitnessProfileGateway());
+                            gateway: FlutterFitnessProfileGateway(
+                                isSessionCurrent: isCurrentMember));
               }
               return FitnessProfileGate(
                   key: ValueKey(scope),
@@ -212,7 +219,8 @@ class _MobileAuthGateState extends State<_MobileAuthGate> {
                                   FirebasePasswordActions(scope: scope);
                               return AccountSettingsScreen(
                                 repository: FirebaseMemberPreferencesRepository(
-                                    scope: scope),
+                                    scope: scope,
+                                    isSessionCurrent: isCurrentMember),
                                 verifyCurrentPassword: actions.verifyCurrent,
                                 saveNewPassword: actions.saveNew,
                               );

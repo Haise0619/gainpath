@@ -6,11 +6,12 @@ import '../../../../navigation/auth_navigation.dart';
 /// Guided setup and editing for a member's private fitness profile.
 /// Firebase callers supply persistence; the prototype keeps its demo route.
 class ProfileSetupScreen extends StatefulWidget {
-  const ProfileSetupScreen({super.key, this.initialProfile, this.onSave, this.onExit});
+  const ProfileSetupScreen({super.key, this.initialProfile, this.onSave, this.onExit, this.onReload});
 
   final FitnessProfile? initialProfile;
   final Future<void> Function(FitnessProfile)? onSave;
   final VoidCallback? onExit;
+  final Future<void> Function()? onReload;
 
   @override
   State<ProfileSetupScreen> createState() => _ProfileSetupScreenState();
@@ -31,6 +32,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
   TrainingExperience? _experience;
   bool _saving = false;
   String? _error;
+  bool _reloadRequired = false;
 
   @override
   void initState() {
@@ -80,7 +82,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
   }
 
   void _next() {
-    if (!_canContinue || _saving) return;
+    if (!_canContinue || _saving || _reloadRequired) return;
     if (_step == _steps.length - 1) {
       _finish();
       return;
@@ -98,6 +100,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
       setState(() { _saving = true; _error = null; });
       try {
         await widget.onSave!(FitnessProfile(
+          editBaseline: widget.initialProfile?.editBaseline,
           gender: _gender!, age: _age.round(), heightCm: _height.round(),
           weightKg: _weight.round(), experience: _experience!,
           activity: ActivityLevel.values.firstWhere((level) => level.label == _activity),
@@ -105,8 +108,11 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
         ));
       } catch (error) {
         if (mounted) {
-          setState(() => _error = error is FitnessProfileException
-              ? error.message : 'Could not save your profile. Please retry.');
+          setState(() {
+            _error = error is FitnessProfileException
+                ? error.message : 'Could not save your profile. Please retry.';
+            _reloadRequired = error is FitnessProfileException && error.reloadRequired;
+          });
         }
       } finally {
         if (mounted) setState(() => _saving = false);
@@ -184,9 +190,14 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                             child: Semantics(liveRegion: true, child: Text(_error!,
                               style: TextStyle(color: Theme.of(context).colorScheme.error))),
                           ),
+                          if (_reloadRequired && widget.onReload != null) ...[
+                            const Text('Reload discards this form.'),
+                            TextButton(onPressed: widget.onReload,
+                                child: const Text('Reload saved profile')),
+                          ],
                           _Footer(
                             isLast: _step == _steps.length - 1,
-                            enabled: _canContinue && !_saving,
+                            enabled: _canContinue && !_saving && !_reloadRequired,
                             saving: _saving,
                             editing: widget.initialProfile != null,
                             onNext: _next,

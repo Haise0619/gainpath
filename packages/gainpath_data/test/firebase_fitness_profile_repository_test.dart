@@ -8,8 +8,12 @@ class MemoryGateway implements FitnessProfileGateway {
   Future<Map<String, Object?>?> read(SessionScope scope) async =>
       records[scope];
   @override
-  Future<void> write(SessionScope scope, Map<String, Object?> data) async {
-    records[scope] = {...data};
+  Future<void> write(SessionScope scope, Map<String, Object?> data,
+      {required Map<String, Object?>? expectedSnapshot}) async {
+    if (!sameMemberDocumentValue(records[scope], expectedSnapshot)) {
+      throw const FitnessProfileException('Conflict.', reloadRequired: true);
+    }
+    records[scope] = {...?records[scope], ...data};
   }
 }
 
@@ -83,5 +87,29 @@ void main() {
               gateway: MemoryGateway(),
             ),
         throwsArgumentError);
+  });
+
+  test('an unbaselined profile cannot overwrite a record or create before load',
+      () async {
+    final gateway = MemoryGateway();
+    final repository =
+        FirebaseFitnessProfileRepository(scope: scope, gateway: gateway);
+    final value = FitnessProfile(
+        gender: ProfileGender.unspecified,
+        age: 25,
+        heightCm: 165,
+        weightKg: 65,
+        experience: TrainingExperience.beginner,
+        activity: ActivityLevel.lightlyActive,
+        goals: {FitnessGoal.generalFitness});
+    await expectLater(
+        repository.save(value), throwsA(isA<FitnessProfileException>()));
+    expect(gateway.records, isEmpty);
+    expect(await repository.load(), isNull);
+    await repository.save(value);
+    await repository.load();
+    await expectLater(repository.save(value.copyWith(weightKg: 66)),
+        throwsA(isA<FitnessProfileException>()));
+    expect(gateway.records[scope]!['weightKg'], 65);
   });
 }

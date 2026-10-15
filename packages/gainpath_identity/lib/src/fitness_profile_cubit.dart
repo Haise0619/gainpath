@@ -16,6 +16,7 @@ class FitnessProfileCubit extends Cubit<FitnessProfileState> {
 
   final FitnessProfileRepository repository;
   int _generation = 0;
+  bool _reloadRequired = false;
 
   Future<void> load() async {
     if (isClosed || state.status == FitnessProfileStatus.saving) return;
@@ -24,6 +25,7 @@ class FitnessProfileCubit extends Cubit<FitnessProfileState> {
     try {
       final profile = await repository.load();
       if (isClosed || generation != _generation) return;
+      _reloadRequired = false;
       emit(FitnessProfileState(
           profile == null
               ? FitnessProfileStatus.missing
@@ -39,6 +41,11 @@ class FitnessProfileCubit extends Cubit<FitnessProfileState> {
   }
 
   Future<void> save(FitnessProfile profile) async {
+    if (_reloadRequired) {
+      throw const FitnessProfileException(
+          'Reload your profile before saving this form.',
+          reloadRequired: true);
+    }
     if (isClosed ||
         !{FitnessProfileStatus.missing, FitnessProfileStatus.ready}
             .contains(state.status)) {
@@ -51,10 +58,23 @@ class FitnessProfileCubit extends Cubit<FitnessProfileState> {
         profile: previous.profile));
     try {
       await repository.save(profile);
+      if (isClosed) return;
+      FitnessProfile? confirmed;
+      try {
+        confirmed = await repository.load();
+        if (confirmed == null) throw const FormatException();
+      } catch (_) {
+        throw const FitnessProfileException(
+            'The save could not be verified. Reload before trying again; your answers are still here.',
+            reloadRequired: true);
+      }
       if (!isClosed) {
-        emit(FitnessProfileState(FitnessProfileStatus.ready, profile: profile));
+        emit(FitnessProfileState(FitnessProfileStatus.ready,
+            profile: confirmed));
       }
     } catch (error) {
+      _reloadRequired =
+          error is FitnessProfileException && error.reloadRequired;
       if (!isClosed) emit(previous);
       throw error is FitnessProfileException
           ? error

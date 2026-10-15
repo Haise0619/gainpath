@@ -22,8 +22,12 @@ class ProfileRepositoryFake implements FitnessProfileRepository {
   Completer<void>? pendingSave;
   bool fail = false;
   int writes = 0;
+  FitnessProfile? readBackOverride;
+  bool failReadBack = false;
   @override
   Future<FitnessProfile?> load() async {
+    if (writes > 0 && failReadBack) throw Exception('read-back');
+    if (writes > 0 && readBackOverride != null) return readBackOverride;
     if (fail) throw Exception('network');
     return pendingLoad == null ? value : pendingLoad!.future;
   }
@@ -38,6 +42,35 @@ class ProfileRepositoryFake implements FitnessProfileRepository {
 }
 
 void main() {
+  test('save displays authoritative read-back rather than submitted values',
+      () async {
+    final repository = ProfileRepositoryFake()
+      ..value = profile()
+      ..readBackOverride = profile(weight: 71);
+    final cubit = FitnessProfileCubit(repository);
+    await cubit.load();
+    await cubit.save(profile(weight: 70));
+    expect(cubit.state.profile!.weightKg, 71);
+    await cubit.close();
+  });
+
+  test('failed read-back does not claim a submitted profile was saved',
+      () async {
+    final repository = ProfileRepositoryFake()..value = profile();
+    final cubit = FitnessProfileCubit(repository);
+    await cubit.load();
+    repository.failReadBack = true;
+    await expectLater(cubit.save(profile(weight: 70)),
+        throwsA(isA<FitnessProfileException>()));
+    expect(cubit.state.profile!.weightKg, 65);
+    await expectLater(cubit.save(profile(weight: 72)),
+        throwsA(isA<FitnessProfileException>()));
+    expect(repository.writes, 1);
+    repository.failReadBack = false;
+    await cubit.load();
+    expect(cubit.state.profile!.weightKg, 70);
+    await cubit.close();
+  });
   test('missing profile opens setup; a saved profile reloads on a new session',
       () async {
     final repository = ProfileRepositoryFake();

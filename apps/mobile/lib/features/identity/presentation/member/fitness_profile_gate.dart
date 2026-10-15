@@ -54,6 +54,7 @@ class _FitnessProfileGateState extends State<FitnessProfileGate> {
             return ProfileSetupScreen(
               initialProfile: state.profile,
               onExit: _signOut,
+              onReload: _cubit.load,
               onSave: (profile) async {
                 await _cubit.save(profile);
               },

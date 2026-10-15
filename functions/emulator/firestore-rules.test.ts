@@ -158,6 +158,31 @@ it('validates fitness profile fields and forbids privilege injection', async () 
   await assertFails(updateDoc(own, { role: 'coach', updatedAt: serverTimestamp() }));
 });
 
+it('denies private Member records after canonical reassignment despite the old active membership', async () => {
+  const db = dbFor('member');
+  const profile = doc(db, 'orgs/o/profiles/member');
+  const preferences = doc(db, 'orgs/o/preferences/member');
+  await assertSucceeds(setDoc(profile, fitnessProfile()));
+  await assertSucceeds(setDoc(preferences, memberPreferences()));
+  await env.withSecurityRulesDisabled(async context => {
+    await updateDoc(doc(context.firestore(), 'users/member'), { organizationId: 'elsewhere' });
+  });
+  for (const reference of [profile, preferences]) await assertFails(getDoc(reference));
+  await assertFails(setDoc(profile, fitnessProfile()));
+  await assertFails(setDoc(preferences, memberPreferences()));
+});
+
+it('denies private Member records when membership organization is malformed', async () => {
+  const db = dbFor('member');
+  await env.withSecurityRulesDisabled(async context => {
+    await updateDoc(doc(context.firestore(), 'orgs/o/members/member'), { organizationId: 'elsewhere' });
+  });
+  await assertFails(getDoc(doc(db, 'orgs/o/profiles/member')));
+  await assertFails(setDoc(doc(db, 'orgs/o/profiles/member'), fitnessProfile()));
+  await assertFails(getDoc(doc(db, 'orgs/o/preferences/member')));
+  await assertFails(setDoc(doc(db, 'orgs/o/preferences/member'), memberPreferences()));
+});
+
 it('allows an owner and rejects another member, unauthenticated and cross-organization reads', async () => {
   await assertSucceeds(getDoc(doc(dbFor('member'), 'orgs/o/bookings/own')));
   await assertFails(getDoc(doc(dbFor('other'), 'orgs/o/bookings/own')));
