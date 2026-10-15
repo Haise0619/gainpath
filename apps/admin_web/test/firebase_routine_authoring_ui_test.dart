@@ -145,6 +145,9 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Add exercise'));
     await tester.pumpAndSettle();
+    expect(find.text('CATALOG PREVIEW'), findsOneWidget);
+    expect(find.textContaining('Active exercises can be added to routine templates.'), findsOneWidget);
+    expect(find.textContaining('visible in the member tutorial library immediately'), findsNothing);
     await tester.enterText(find.byType(TextFormField).first, 'Goblet Squat');
     await tester.enterText(
         find.byType(TextFormField).at(1), 'https://example.test/squat');

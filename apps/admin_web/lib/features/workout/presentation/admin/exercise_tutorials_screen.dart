@@ -535,7 +535,7 @@ class _TutorialFormPageState extends State<_TutorialFormPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Eyebrow('Member preview'),
+        Eyebrow(_catalogOnly ? 'Catalog preview' : 'Member preview'),
         Panel(
           padding: EdgeInsets.zero,
           child: Column(
@@ -558,7 +558,9 @@ class _TutorialFormPageState extends State<_TutorialFormPage> {
                         style: Theme.of(context).textTheme.titleMedium),
                     const SizedBox(height: 4),
                     Text(
-                        '$_category  ·  $_difficulty  ·  ${_duration.text.isEmpty ? '0' : _duration.text} min',
+                        _catalogOnly
+                            ? _category
+                            : '$_category  ·  $_difficulty  ·  ${_duration.text.isEmpty ? '0' : _duration.text} min',
                         style: Theme.of(context)
                             .textTheme
                             .bodyMedium
@@ -580,7 +582,9 @@ class _TutorialFormPageState extends State<_TutorialFormPage> {
               const SizedBox(width: 10),
               Expanded(
                 child: Text(
-                  'Set status to Active to make this visible in the member tutorial library immediately.',
+                  _catalogOnly
+                      ? 'Active exercises can be added to routine templates. Save and publish the routine, then refresh it in the Member app to update the published snapshot.'
+                      : 'Set status to Active to make this visible in the member tutorial library immediately.',
                   style: Theme.of(context).textTheme.bodyMedium,
                 ),
               ),
