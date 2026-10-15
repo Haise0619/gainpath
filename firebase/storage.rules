@@ -29,6 +29,25 @@ service firebase.storage {
         && request.resource.contentType.matches('image/.*|application/pdf');
     }
 
+    // Equipment photos only. Existing member/content contracts remain unchanged.
+    match /orgs/{orgId}/equipmentImages/{uploaderUid}/{imageId} {
+      function currentEquipmentMember() {
+        return request.auth != null
+          && request.auth.token.email_verified == true
+          && firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.organizationId == orgId
+          && firestore.get(/databases/(default)/documents/orgs/$(orgId)/members/$(request.auth.uid)).data.organizationId == orgId
+          && firestore.get(/databases/(default)/documents/orgs/$(orgId)/members/$(request.auth.uid)).data.status == 'active';
+      }
+      allow get: if currentEquipmentMember();
+      allow create: if currentEquipmentMember()
+        && resource == null
+        && request.auth.uid == uploaderUid
+        && firestore.get(/databases/(default)/documents/orgs/$(orgId)/members/$(request.auth.uid)).data.role in ['admin', 'staff']
+        && request.resource.size > 0 && request.resource.size <= 5 * 1024 * 1024
+        && request.resource.contentType in ['image/jpeg', 'image/png', 'image/webp'];
+      allow update, delete, list: if false;
+    }
+
     match /orgs/{orgId}/content/{filePath=**} {
       allow read: if activeMember(orgId);
       // Publication and media validation belong to trusted content commands.

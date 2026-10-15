@@ -266,6 +266,9 @@ class _EquipmentFormDialog extends StatefulWidget {
 
 class _EquipmentFormDialogState extends State<_EquipmentFormDialog> {
   bool _saving = false, _reloadRequired = false;
+  bool _picking = false;
+  EquipmentImage? _selectedImage;
+  bool get _busy => _saving || _picking;
   String? _error;
   final _formKey = GlobalKey<FormState>();
   late final _name = TextEditingController(text: widget.existing?.name ?? '');
@@ -284,6 +287,26 @@ class _EquipmentFormDialogState extends State<_EquipmentFormDialog> {
 
   bool get _isEdit => widget.existing != null;
 
+  Future<void> _chooseImage() async {
+    if (_busy || _reloadRequired) return;
+    setState(() {
+      _picking = true;
+      _error = null;
+    });
+    try {
+      final image = await context.read<EquipmentImagePicker>().pick();
+      if (mounted && image != null) setState(() => _selectedImage = image);
+    } on FormatException catch (e) {
+      if (mounted) setState(() => _error = e.message);
+    } catch (_) {
+      if (mounted) {
+        setState(() => _error = 'Could not select an image. Please try again.');
+      }
+    } finally {
+      if (mounted) setState(() => _picking = false);
+    }
+  }
+
   @override
   void dispose() {
     _name.dispose();
@@ -295,7 +318,7 @@ class _EquipmentFormDialogState extends State<_EquipmentFormDialog> {
   }
 
   Future<void> _save() async {
-    if (_saving || _reloadRequired) return;
+    if (_busy || _reloadRequired) return;
     if (!(_formKey.currentState?.validate() ?? false)) return;
     final repository = context.read<EquipmentRepository>();
     final entry = widget.existing?.copyWith() ??
@@ -325,8 +348,13 @@ class _EquipmentFormDialogState extends State<_EquipmentFormDialog> {
     }
     setState(() => _saving = true);
     try {
-      await repository.saveEquipment(entry);
+      await repository.saveEquipment(entry, image: _selectedImage);
       if (mounted) Navigator.pop(context, true);
+    } on EquipmentImageUploadFailed {
+      if (mounted) {
+        setState(() => _error =
+            'Image upload failed. Equipment was not saved. Check your connection and authorization, then retry.');
+      }
     } on EquipmentConflict {
       if (mounted) {
         setState(() {
@@ -383,7 +411,7 @@ class _EquipmentFormDialogState extends State<_EquipmentFormDialog> {
                   Expanded(
                     child: TextFormField(
                       controller: _name,
-                      enabled: !_saving && !_reloadRequired,
+                      enabled: !_busy && !_reloadRequired,
                       decoration: const InputDecoration(
                           labelText: 'Name', isDense: true),
                       validator: (v) =>
@@ -394,7 +422,7 @@ class _EquipmentFormDialogState extends State<_EquipmentFormDialog> {
                   Expanded(
                     child: TextFormField(
                       controller: _category,
-                      enabled: !_saving && !_reloadRequired,
+                      enabled: !_busy && !_reloadRequired,
                       decoration: const InputDecoration(
                           labelText: 'Category', isDense: true),
                       validator: (v) =>
@@ -410,7 +438,7 @@ class _EquipmentFormDialogState extends State<_EquipmentFormDialog> {
                   Expanded(
                     child: TextFormField(
                       controller: _muscleGroup,
-                      enabled: !_saving && !_reloadRequired,
+                      enabled: !_busy && !_reloadRequired,
                       decoration: const InputDecoration(
                           labelText: 'Muscle group', isDense: true),
                       validator: (v) =>
@@ -419,20 +447,58 @@ class _EquipmentFormDialogState extends State<_EquipmentFormDialog> {
                   ),
                   const SizedBox(width: 12),
                   Expanded(
-                    child: TextFormField(
-                      controller: _imageUrl,
-                      enabled: !_saving && !_reloadRequired,
-                      decoration: const InputDecoration(
-                          labelText: 'Image URL', isDense: true),
-                      validator: (v) => null,
-                    ),
+                    child: context.read<EquipmentRepository>().isLive
+                        ? Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                                const Text('Equipment image'),
+                                const SizedBox(height: 8),
+                                if (_selectedImage != null ||
+                                    _imageUrl.text.isNotEmpty)
+                                  SizedBox(
+                                      height: 100,
+                                      width: 160,
+                                      child: _selectedImage == null
+                                          ? _networkHero(_imageUrl.text)
+                                          : Image.memory(_selectedImage!.bytes,
+                                              fit: BoxFit.contain,
+                                              errorBuilder: (_, __, ___) =>
+                                                  const Icon(Icons
+                                                      .broken_image_outlined))),
+                                OutlinedButton.icon(
+                                    onPressed: _busy || _reloadRequired
+                                        ? null
+                                        : _chooseImage,
+                                    icon:
+                                        const Icon(Icons.upload_file_outlined),
+                                    label: Text(_picking
+                                        ? 'Opening…'
+                                        : 'Choose image')),
+                                const Text(
+                                    'JPG, PNG or WebP · up to 5 MB. Uploaded when you save.'),
+                                if (_selectedImage != null)
+                                  TextButton(
+                                      onPressed: _busy
+                                          ? null
+                                          : () => setState(
+                                              () => _selectedImage = null),
+                                      child:
+                                          const Text('Discard selected image')),
+                              ])
+                        : TextFormField(
+                            controller: _imageUrl,
+                            enabled: !_busy && !_reloadRequired,
+                            decoration: const InputDecoration(
+                                labelText: 'Image URL', isDense: true),
+                            validator: (v) => null,
+                          ),
                   ),
                 ],
               ),
               const SizedBox(height: 12),
               TextFormField(
                 controller: _description,
-                enabled: !_saving && !_reloadRequired,
+                enabled: !_busy && !_reloadRequired,
                 maxLines: 2,
                 decoration: const InputDecoration(
                     labelText: 'Description', isDense: true),
@@ -441,7 +507,7 @@ class _EquipmentFormDialogState extends State<_EquipmentFormDialog> {
               ),
               const SizedBox(height: 14),
               IgnorePointer(
-                  ignoring: _saving || _reloadRequired,
+                  ignoring: _busy || _reloadRequired,
                   child: EditableStringList(
                     label: 'How to use',
                     items: _howToUse,
@@ -449,7 +515,7 @@ class _EquipmentFormDialogState extends State<_EquipmentFormDialog> {
                   )),
               const SizedBox(height: 14),
               IgnorePointer(
-                  ignoring: _saving || _reloadRequired,
+                  ignoring: _busy || _reloadRequired,
                   child: EditableStringList(
                     label: 'Safety tips',
                     items: _safetyTips,
@@ -460,16 +526,17 @@ class _EquipmentFormDialogState extends State<_EquipmentFormDialog> {
                 children: [
                   Expanded(
                     child: OutlinedButton(
-                        onPressed:
-                            _saving ? null : () => Navigator.pop(context),
+                        onPressed: _busy ? null : () => Navigator.pop(context),
                         child: const Text('Cancel')),
                   ),
                   const SizedBox(width: 10),
                   Expanded(
                     child: FilledButton(
-                        onPressed: _saving || _reloadRequired ? null : _save,
+                        onPressed: _busy || _reloadRequired ? null : _save,
                         child: Text(_saving
-                            ? 'Saving…'
+                            ? (_selectedImage == null
+                                ? 'Saving…'
+                                : 'Uploading and saving…')
                             : _isEdit
                                 ? 'Save changes'
                                 : 'Add equipment')),

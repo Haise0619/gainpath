@@ -10,6 +10,27 @@ import 'package:gainpath_domain/workout.dart';
 import 'package:gainpath_domain/gainpath_domain.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'dart:typed_data';
+import 'dart:convert';
+
+class _Picker implements EquipmentImagePicker {
+  @override
+  Future<EquipmentImage?> pick() async => EquipmentImage(base64Decode(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a/eUAAAAASUVORK5CYII='));
+}
+
+class _Images implements EquipmentImageStore {
+  int uploads = 0;
+  bool fail = false;
+  void Function()? duringUpload;
+  @override
+  Future<String> upload(EquipmentImage image) async {
+    uploads++;
+    if (fail) throw const EquipmentImageUploadFailed();
+    duringUpload?.call();
+    return 'https://example.test/equipment-image.png';
+  }
+}
 
 class _Auth extends Fake implements FirebaseAuth {
   @override
@@ -216,14 +237,51 @@ void main() {
     await expectLater(
         repo.loadEquipment(), throwsA(isA<EquipmentSessionChanged>()));
   });
+  test(
+      'image upload saves its URL only after authorization; stale edits remain rejected',
+      () async {
+    final images = _Images();
+    repo = FirebaseEquipmentRepository(
+        scope: SessionScope(userId: 'admin', organizationId: 'o'),
+        isCurrent: () => current,
+        firestore: db,
+        auth: _Auth(),
+        imageStore: images);
+    final image = EquipmentImage(
+        Uint8List.fromList([137, 80, 78, 71, 13, 10, 26, 10, 1]));
+    final created = await repo.saveEquipment(equipment(), image: image);
+    expect(images.uploads, 1);
+    expect(created.imageUrl, 'https://example.test/equipment-image.png');
+    db.records['orgs/o/gymEquipment/created']!['name'] = 'Concurrent edit';
+    await expectLater(repo.saveEquipment(created, image: image),
+        throwsA(isA<EquipmentConflict>()));
+    expect(images.uploads, 1);
+    final fresh = (await repo.loadEquipment()).items.single;
+    images.duringUpload = () => current = false;
+    await expectLater(repo.saveEquipment(fresh, image: image),
+        throwsA(isA<EquipmentSessionChanged>()));
+    expect(
+        db.records['orgs/o/gymEquipment/created']!['name'], 'Concurrent edit');
+    expect(db.records['orgs/o/gymEquipment/created']!['revision'], 1);
+  });
   testWidgets(
       'existing Admin UI creates, edits, activates, deactivates and reloads persisted equipment',
       (tester) async {
     tester.view.physicalSize = const Size(1500, 1800);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
-    await tester.pumpWidget(RepositoryProvider<EquipmentRepository>.value(
-        value: repo,
+    final images = _Images();
+    repo = FirebaseEquipmentRepository(
+        scope: SessionScope(userId: 'admin', organizationId: 'o'),
+        isCurrent: () => current,
+        firestore: db,
+        auth: _Auth(),
+        imageStore: images);
+    await tester.pumpWidget(MultiRepositoryProvider(
+        providers: [
+          RepositoryProvider<EquipmentRepository>.value(value: repo),
+          RepositoryProvider<EquipmentImagePicker>.value(value: _Picker()),
+        ],
         child: MaterialApp(
             theme: AppTheme.build(), home: const EquipmentCatalogScreen())));
     await tester.pumpAndSettle();
@@ -234,10 +292,21 @@ void main() {
     await tester.enterText(find.byType(TextFormField).at(1), 'Legs');
     await tester.enterText(find.byType(TextFormField).at(2), 'Legs');
     await tester.enterText(
-        find.byType(TextFormField).at(4), 'Fixture description');
+        find.byType(TextFormField).at(3), 'Fixture description');
+    await tester.tap(find.text('Choose image'));
+    await tester.pumpAndSettle();
+    expect(find.text('Discard selected image'), findsOneWidget);
+    images.fail = true;
+    await tester.tap(find.widgetWithText(FilledButton, 'Add equipment'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Image upload failed.'), findsOneWidget);
+    expect(db.records.containsKey('orgs/o/gymEquipment/created'), false);
+    images.fail = false;
     await tester.tap(find.widgetWithText(FilledButton, 'Add equipment'));
     await tester.pumpAndSettle();
     expect(db.records['orgs/o/gymEquipment/created']!['isActive'], false);
+    expect(db.records['orgs/o/gymEquipment/created']!['imageUrl'],
+        'https://example.test/equipment-image.png');
     await tester.tap(find.byIcon(Icons.edit_outlined));
     await tester.pumpAndSettle();
     await tester.enterText(

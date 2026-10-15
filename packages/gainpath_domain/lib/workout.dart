@@ -1,5 +1,6 @@
 export 'src/workout/entities/exercise.dart';
 export 'src/workout/entities/gym_equipment.dart';
+export 'src/workout/entities/equipment_image.dart';
 export 'src/workout/entities/routine_blueprint.dart';
 export 'src/workout/entities/tutorial_video.dart';
 export 'src/workout/entities/workout_record.dart';

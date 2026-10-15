@@ -2,19 +2,23 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:gainpath_domain/workout.dart';
 import 'package:gainpath_domain/gainpath_domain.dart' show SessionScope;
+import 'firebase_equipment_image_store.dart';
 
 class FirebaseEquipmentRepository extends EquipmentRepository {
   FirebaseEquipmentRepository(
       {required this.scope,
       required this.isCurrent,
       FirebaseFirestore? firestore,
-      FirebaseAuth? auth})
+      FirebaseAuth? auth,
+      EquipmentImageStore? imageStore})
       : _db = firestore ?? FirebaseFirestore.instance,
-        _auth = auth ?? FirebaseAuth.instance;
+        _auth = auth ?? FirebaseAuth.instance,
+        _imageStore = imageStore ?? FirebaseEquipmentImageStore(scope: scope);
   final SessionScope scope;
   final bool Function() isCurrent;
   final FirebaseFirestore _db;
   final FirebaseAuth _auth;
+  final EquipmentImageStore _imageStore;
   final Object _lifetime = Object();
   bool _invalidated = false;
   @override
@@ -75,7 +79,8 @@ class FirebaseEquipmentRepository extends EquipmentRepository {
   }
 
   @override
-  Future<GymEquipment> saveEquipment(GymEquipment equipment) async {
+  Future<GymEquipment> saveEquipment(GymEquipment equipment,
+      {EquipmentImage? image}) async {
     equipment.validate();
     _check();
     final original = equipment.editBaseline;
@@ -88,14 +93,36 @@ class FirebaseEquipmentRepository extends EquipmentRepository {
     }
     final baseline = original is _Baseline ? original : null;
     final ref = create ? _records.doc() : _records.doc(equipment.id);
+    var imageUrl = equipment.imageUrl.trim();
+    if (image != null) {
+      final user =
+          (await _user.get(const GetOptions(source: Source.server))).data();
+      final member =
+          (await _member.get(const GetOptions(source: Source.server))).data();
+      _author(user, member);
+      if (baseline != null) {
+        if (!_same(user, baseline.user) || !_same(member, baseline.member)) {
+          throw const EquipmentSessionChanged();
+        }
+        final document =
+            (await ref.get(const GetOptions(source: Source.server))).data();
+        if (!_same(document, baseline.document)) {
+          throw const EquipmentConflict();
+        }
+      }
+      _check();
+      imageUrl = await _imageStore.upload(image);
+      _check();
+    }
     final fields = <String, dynamic>{
       'name': equipment.name.trim(),
       'category': equipment.category.trim(),
       'muscleGroup': equipment.muscleGroup.trim(),
       'description': equipment.description.trim(),
-      'imageUrl': equipment.imageUrl.trim(),
+      'imageUrl': imageUrl,
       'isActive': equipment.isActive,
-      'howToUse': equipment.howToUse.map((s) => s.trim()).toList(growable: false),
+      'howToUse':
+          equipment.howToUse.map((s) => s.trim()).toList(growable: false),
       'safetyTips':
           equipment.safetyTips.map((s) => s.trim()).toList(growable: false),
     };

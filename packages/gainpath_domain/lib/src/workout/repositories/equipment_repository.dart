@@ -1,4 +1,5 @@
 import '../entities/gym_equipment.dart';
+import '../entities/equipment_image.dart';
 
 /// Data access contract for the workout feature. Implemented in-memory for the
 /// prototype; a Firebase implementation will sit behind the same interface.
@@ -27,7 +28,11 @@ abstract class EquipmentRepository implements EquipmentReader {
   @override
   Future<EquipmentPage> loadEquipment({String? afterId}) async =>
       EquipmentPage(afterId == null ? gymEquipment : []);
-  Future<GymEquipment> saveEquipment(GymEquipment equipment) async {
+  Future<GymEquipment> saveEquipment(GymEquipment equipment,
+      {EquipmentImage? image}) async {
+    if (image != null) {
+      throw UnsupportedError('Image upload requires Firebase mode.');
+    }
     equipment.validate();
     final index = gymEquipment.indexWhere((e) => e.id == equipment.id);
     if (equipment.id.isNotEmpty &&

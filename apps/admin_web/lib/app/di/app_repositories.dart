@@ -31,6 +31,7 @@ import 'package:gainpath_identity/gainpath_identity.dart';
 import 'catalog_edit_session_guard.dart';
 import '../../infrastructure/firebase/firebase_announcement_repository.dart';
 import '../../infrastructure/firebase/firebase_equipment_repository.dart';
+import '../../infrastructure/local/equipment_image_picker.dart';
 
 /// Composition root for data access. Swap the in-memory implementations for
 /// Firebase-backed ones here without touching any screen.
@@ -172,6 +173,8 @@ class _AppRepositoriesState extends State<AppRepositories> {
     final scope = widget.session?.scope;
     if (widget.config.isFirebase) {
       return MultiRepositoryProvider(providers: [
+        RepositoryProvider<EquipmentImagePicker>(
+            create: (_) => LocalEquipmentImagePicker()),
         RepositoryProvider<EquipmentRepository>(
             create: (_) => _createEquipment(scope!)),
         RepositoryProvider<ContentRepository>(
