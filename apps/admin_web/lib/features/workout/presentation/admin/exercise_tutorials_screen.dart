@@ -258,12 +258,15 @@ class _TutorialFormPageState extends State<_TutorialFormPage> {
       if (mounted) {
         setState(() {
           _reloadRequired = error is TutorialEditConflict ||
-              error is TutorialEditAuthorizationChanged;
+              error is TutorialEditAuthorizationChanged ||
+              _catalogOnly;
           _saveError = error is TutorialEditConflict
               ? const TutorialEditConflict().toString()
               : error is TutorialEditAuthorizationChanged
                   ? const TutorialEditAuthorizationChanged().toString()
-                  : 'Could not save exercise. Please try again.';
+                  : _catalogOnly
+                      ? const TutorialCatalogSaveFailed().toString()
+                      : 'Could not save exercise. Please try again.';
         });
       }
       return;

@@ -7,6 +7,7 @@ abstract interface class ExerciseCatalogStore {
   Future<Map<String, Map<String, dynamic>>> load();
   Future<Map<String, dynamic>?> readMembership();
   Future<Map<String, dynamic>?> readAssignment();
+  Future<Map<String, dynamic>?> readExercise(String id);
   Future<String> create(Map<String, Object?> fields);
   Future<void> transaction(
       Future<void> Function(ExerciseCatalogTransaction) action);
@@ -51,6 +52,10 @@ class FirestoreExerciseCatalogStore implements ExerciseCatalogStore {
   @override
   Future<Map<String, dynamic>?> readAssignment() async =>
       (await _assignment.get(const GetOptions(source: Source.server))).data();
+  @override
+  Future<Map<String, dynamic>?> readExercise(String id) async =>
+      (await _catalog.doc(id).get(const GetOptions(source: Source.server)))
+          .data();
   @override
   Future<String> create(Map<String, Object?> fields) async {
     final reference = _catalog.doc();

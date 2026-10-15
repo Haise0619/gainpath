@@ -103,7 +103,20 @@ void main() {
     await save(tester);
     expect(
         find.textContaining('private-media-credential-sentinel'), findsNothing);
-    expect(find.text('Could not save exercise. Please try again.'),
+    expect(find.text(const TutorialCatalogSaveFailed().toString()),
         findsOneWidget);
+  });
+  testWidgets('unverified Catalog write disables retry until reload',
+      (tester) async {
+    final catalog = await open(tester);
+    catalog.failure = const TutorialCatalogSaveFailed();
+    await save(tester);
+    expect(
+        tester
+            .widget<FilledButton>(
+                find.widgetWithText(FilledButton, 'Save changes'))
+            .onPressed,
+        isNull);
+    expect(find.text('Discard edits and reload catalog'), findsOneWidget);
   });
 }

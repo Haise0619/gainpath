@@ -122,7 +122,7 @@ class FirebaseExerciseCatalogRepository implements TutorialRepository {
       _requireCurrentUser();
       final id = await _store.create(data);
       _requireCurrentUser();
-      return _fromDocument(id, data);
+      return _readBack(id);
     }
     final baseline = tutorial.editBaseline;
     if (baseline is! _CatalogBaseline ||
@@ -157,8 +157,15 @@ class FirebaseExerciseCatalogRepository implements TutorialRepository {
       if (patch.isNotEmpty) transaction.update(tutorial.id, patch);
     });
     _requireCurrentUser();
+    return _readBack(tutorial.id);
+  }
+
+  Future<TutorialVideo> _readBack(String id) async {
+    final persisted = await _store.readExercise(id);
+    _requireCurrentUser();
+    if (persisted == null) throw const TutorialCatalogSaveFailed();
     // Successful form closes. Another edit must explicitly reload a baseline.
-    return _fromDocument(tutorial.id, {...baseline.document, ...patch});
+    return _fromDocument(id, persisted);
   }
 
   void _requireAuthor(Map<String, dynamic>? membership) {

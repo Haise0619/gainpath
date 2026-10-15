@@ -17,7 +17,8 @@ class TutorialEditAuthorizationChanged implements Exception {
 class TutorialCatalogSaveFailed implements Exception {
   const TutorialCatalogSaveFailed();
   @override
-  String toString() => 'Could not save exercise. Please try again.';
+  String toString() =>
+      'Could not verify the exercise save. Reload the catalog before retrying.';
 }
 
 /// Data access contract for the workout feature. Implemented in-memory for the

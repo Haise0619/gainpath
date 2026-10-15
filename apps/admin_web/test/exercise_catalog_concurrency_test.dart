@@ -31,6 +31,7 @@ class MemoryStore implements ExerciseCatalogStore, ExerciseCatalogTransaction {
   int creates = 0;
   Object? failure;
   Object? loadFailure;
+  bool failReadBack = false;
   @override
   Future<Map<String, Map<String, dynamic>>> load() async {
     if (loadFailure != null) throw loadFailure!;
@@ -45,6 +46,9 @@ class MemoryStore implements ExerciseCatalogStore, ExerciseCatalogTransaction {
       assignment == null ? null : Map.of(assignment!);
   @override
   Future<Map<String, dynamic>?> readExercise(String id) async {
+    if (failReadBack && (patch != null || creates > 0)) {
+      throw StateError('private-media-credential-sentinel');
+    }
     final value = record == null ? null : Map<String, dynamic>.of(record!);
     afterRead?.call();
     return value;
@@ -240,6 +244,22 @@ void main() {
     expect(saved.id, 'created');
     expect(store.creates, 1);
     expect(store.record!['schemaVersion'], 1);
+  });
+  test('edit requires authoritative read-back before success', () async {
+    final original = (await repository.load()).single;
+    store.failReadBack = true;
+    await expectLater(repository.save(edited(original)),
+        throwsA(isA<TutorialCatalogSaveFailed>()));
+    expect(store.record!['exerciseName'], 'Edited');
+  });
+  test('unverified create requires reload rather than reporting success',
+      () async {
+    store.failReadBack = true;
+    await expectLater(
+        repository.save(TutorialVideo(
+            title: 'New', category: 'Core', status: TutorialStatus.draft)),
+        throwsA(isA<TutorialCatalogSaveFailed>()));
+    expect(store.creates, 1);
   });
   test('repository transport failure contains no raw media detail', () async {
     final original = (await repository.load()).single;
