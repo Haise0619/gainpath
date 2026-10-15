@@ -6,7 +6,9 @@ import { afterAll, beforeAll, beforeEach, expect, it } from 'vitest';
 let env: RulesTestEnvironment;
 beforeAll(async () => {
   if (!process.env.FIRESTORE_EMULATOR_HOST) throw new Error('Isolated emulator required.');
-  env = await initializeTestEnvironment({projectId: 'demo-gainpath', firestore: {rules: readFileSync('../firebase/firestore.rules', 'utf8')}});
+  env = await initializeTestEnvironment({projectId: 'demo-gainpath', firestore: {
+    rules: readFileSync(process.env.GAINPATH_ANNOUNCEMENT_RULES_FILE ?? '../firebase/firestore.rules', 'utf8'),
+  }});
 });
 afterAll(async () => { await env?.cleanup(); });
 beforeEach(async () => {
@@ -51,6 +53,7 @@ it('denies foreign org, unverified, Member/Coach writes and stale canonical assi
   await env.withSecurityRulesDisabled(c => updateDoc(doc(c.firestore(), 'users/admin'), {organizationId: 'other'}));
   await assertFails(getDoc(doc(admin, path)));
   await assertFails(updateDoc(doc(admin, path), {body: 'Forbidden', revision: 2, updatedAt: serverTimestamp()}));
+  await assertFails(setDoc(doc(admin, 'orgs/o/announcements/after-reassignment'), draft()));
 });
 
 it('keeps Staff content authority; rejects stale revisions, invalid dates and immutable-field changes', async () => {

@@ -166,12 +166,12 @@ service cloud.firestore {
           && (d.status != 'published' || d.publishedAt is timestamp);
       }
       allow read: if currentOrganization() && (resource.data.status == 'published' || contentAuthor(orgId));
-      allow create: if contentAuthor(orgId) && validAnnouncement()
+      allow create: if currentOrganization() && contentAuthor(orgId) && validAnnouncement()
         && request.resource.data.revision == 1
         && request.resource.data.createdAt == request.time
         && request.resource.data.createdBy == request.auth.uid
         && (request.resource.data.publishedAt == null || request.resource.data.publishedAt == request.time);
-      allow update: if contentAuthor(orgId) && validAnnouncement()
+      allow update: if currentOrganization() && contentAuthor(orgId) && validAnnouncement()
         && request.resource.data.revision == resource.data.revision + 1
         && request.resource.data.createdAt == resource.data.createdAt
         && request.resource.data.createdBy == resource.data.createdBy
