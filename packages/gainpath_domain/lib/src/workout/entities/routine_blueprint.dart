@@ -16,6 +16,10 @@ class RoutineDay {
   const RoutineDay(this.dayNumber, this.exercises);
 }
 
+/// Opaque, nonserialized original server snapshot for one editing session.
+/// Only its owning repository can validate it; it is never a Firestore field.
+abstract class RoutineEditBaseline {}
+
 /// AD-M11.4 — an admin-authored `RoutineBlueprint` a coach or member can
 /// be assigned. [assignedMembers] is illustrative — no assignment flow
 /// is modelled yet — kept purely to give the admin catalogue a sense of
@@ -24,6 +28,7 @@ class RoutineDay {
 /// simpler than mutating the nested day/exercise structure in place.
 class RoutineBlueprint {
   final String id;
+  final RoutineEditBaseline? editBaseline;
   String name;
   String level;
   final int assignedMembers;
@@ -35,6 +40,7 @@ class RoutineBlueprint {
   String imageUrl;
   RoutineBlueprint({
     required this.id,
+    this.editBaseline,
     required this.name,
     required this.level,
     required this.assignedMembers,

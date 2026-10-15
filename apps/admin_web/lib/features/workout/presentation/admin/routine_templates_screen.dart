@@ -57,12 +57,16 @@ class _RoutineTemplatesScreenState extends State<RoutineTemplatesScreen> {
       });
 
   Future<void> _publish(RoutineBlueprint blueprint) async {
+    if (_publishingId != null) return;
     setState(() => _publishingId = blueprint.id);
     try {
       await context.read<RoutineTemplateRepository>().publish(blueprint.id);
       if (mounted) showToast(context, 'Routine published to members.');
-    } catch (error) {
-      if (mounted) showToast(context, 'Routine could not be published: $error');
+    } catch (_) {
+      if (mounted) {
+        showToast(context,
+            'Publication was not verified. Reload and check the Member catalog before retrying.');
+      }
     } finally {
       if (mounted) setState(() => _publishingId = null);
     }
@@ -404,6 +408,7 @@ class _TemplateFormPageState extends State<_TemplateFormPage> {
   List<TutorialVideo> _catalog = const [];
   bool _catalogLoading = false;
   bool _saving = false;
+  bool _reloadRequired = false;
   bool get _usesCatalog =>
       context.read<TutorialRepository>().requiresCatalogSelection;
 
@@ -418,7 +423,11 @@ class _TemplateFormPageState extends State<_TemplateFormPage> {
   }
 
   Future<void> _loadCatalog() async {
-    setState(() => _catalogLoading = true);
+    if (_saving || _reloadRequired) return;
+    setState(() {
+      _catalogLoading = true;
+      _error = null;
+    });
     try {
       final entries = await context.read<TutorialRepository>().load();
       if (mounted) {
@@ -426,9 +435,10 @@ class _TemplateFormPageState extends State<_TemplateFormPage> {
             .where((entry) => entry.status == TutorialStatus.active)
             .toList());
       }
-    } catch (error) {
+    } catch (_) {
       if (mounted) {
-        setState(() => _error = 'Could not load the exercise catalog: $error');
+        setState(() => _error =
+            'Could not load the exercise catalog. Reload exercises to retry.');
       }
     } finally {
       if (mounted) setState(() => _catalogLoading = false);
@@ -469,6 +479,7 @@ class _TemplateFormPageState extends State<_TemplateFormPage> {
   }
 
   Future<void> _save() async {
+    if (_saving || _reloadRequired || _catalogLoading) return;
     if (_name.text.trim().isEmpty) {
       setState(() => _error = 'Give the template a name.');
       return;
@@ -534,10 +545,16 @@ class _TemplateFormPageState extends State<_TemplateFormPage> {
       days.add(RoutineDay(i + 1, exercises));
     }
     final sessionDuration = duration ?? 45;
+    if (_usesCatalog &&
+        days.fold<int>(0, (sum, day) => sum + day.exercises.length) > 50) {
+      setState(() => _error = 'A routine can contain at most 50 exercises.');
+      return;
+    }
 
     final blueprint = RoutineBlueprint(
       id: widget.existing?.id ??
           (_usesCatalog ? '' : 'rt${DateTime.now().millisecondsSinceEpoch}'),
+      editBaseline: widget.existing?.editBaseline,
       name: _name.text.trim(),
       level: _level,
       assignedMembers: 0,
@@ -554,8 +571,36 @@ class _TemplateFormPageState extends State<_TemplateFormPage> {
     });
     try {
       await context.read<RoutineTemplateRepository>().save(blueprint);
-    } catch (error) {
-      if (mounted) setState(() => _error = 'Could not save routine: $error');
+    } on RoutineEditConflict {
+      if (mounted) {
+        setState(() {
+          _reloadRequired = true;
+          _error = 'This routine changed. Discard and reload before saving.';
+        });
+      }
+      return;
+    } on RoutineEditAuthorizationChanged {
+      if (mounted) {
+        setState(() {
+          _reloadRequired = true;
+          _error = 'Your authorization changed. Sign in again.';
+        });
+      }
+      return;
+    } on FormatException {
+      if (mounted) {
+        setState(() => _error =
+            'Check the routine fields and active catalog exercises before saving.');
+      }
+      return;
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _reloadRequired = true;
+          _error =
+              'Could not verify the save. Discard and reload before retrying.';
+        });
+      }
       return;
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -724,14 +769,27 @@ class _TemplateFormPageState extends State<_TemplateFormPage> {
                 style:
                     const TextStyle(fontSize: 12.5, color: AppColors.danger)),
           ),
+        if (_usesCatalog &&
+            _catalog.isEmpty &&
+            !_catalogLoading &&
+            !_reloadRequired)
+          TextButton(
+              onPressed: _loadCatalog, child: const Text('Reload exercises')),
+        if (_reloadRequired)
+          TextButton(
+              onPressed: widget.onDone,
+              child: const Text('Discard and reload')),
         const SizedBox(height: 8),
         Row(
           children: [
             OutlinedButton(
-                onPressed: widget.onDone, child: const Text('Cancel')),
+                onPressed: _saving ? null : widget.onDone,
+                child: const Text('Cancel')),
             const SizedBox(width: 10),
             FilledButton(
-                onPressed: _saving || _catalogLoading ? null : _save,
+                onPressed: _saving || _catalogLoading || _reloadRequired
+                    ? null
+                    : _save,
                 child: Text(_saving
                     ? 'Saving…'
                     : _isEdit

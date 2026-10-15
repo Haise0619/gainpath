@@ -64,6 +64,7 @@ class AppRepositories extends StatefulWidget {
 class _AppRepositoriesState extends State<AppRepositories> {
   late final MockDataSession session = MockDataSession();
   CatalogEditSessionGuard? _catalogGuard;
+  CatalogEditSessionGuard? _routineGuard;
   CatalogEditSessionGuard? _coachGuard;
   CatalogEditSessionGuard? _availabilityGuard;
   CatalogEditSessionGuard? _bookingGuard;
@@ -113,9 +114,25 @@ class _AppRepositoriesState extends State<AppRepositories> {
         scope: scope, isSessionCurrent: _catalogGuard!.isCurrent);
   }
 
+  RoutineTemplateRepository _createRoutines(
+      SessionScope scope, TutorialRepository catalog) {
+    final factory = widget.routineRepositoryFactory;
+    if (factory != null) return factory(scope, catalog);
+    final auth = context.read<AuthBloc>();
+    _routineGuard = CatalogEditSessionGuard(
+        expected: widget.session!,
+        current: () => auth.state,
+        changes: auth.stream);
+    return FirebaseRoutineTemplateRepository(
+        scope: scope,
+        exerciseCatalog: catalog,
+        isSessionCurrent: _routineGuard!.isCurrent);
+  }
+
   @override
   void dispose() {
     _catalogGuard?.dispose();
+    _routineGuard?.dispose();
     _coachGuard?.dispose();
     _availabilityGuard?.dispose();
     _bookingGuard?.dispose();
@@ -139,11 +156,7 @@ class _AppRepositoriesState extends State<AppRepositories> {
             create: (_) => _createCatalog(scope!)),
         RepositoryProvider<RoutineTemplateRepository>(
             create: (context) =>
-                widget.routineRepositoryFactory
-                    ?.call(scope!, context.read<TutorialRepository>()) ??
-                FirebaseRoutineTemplateRepository(
-                    scope: scope!,
-                    exerciseCatalog: context.read<TutorialRepository>())),
+                _createRoutines(scope!, context.read<TutorialRepository>())),
       ], child: widget.child);
     }
     return MultiRepositoryProvider(
