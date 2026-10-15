@@ -11,6 +11,20 @@ class FlutterFirebaseAuthGateway
   final FirebaseAuth _auth;
   final FirebaseFirestore _firestore;
 
+  Future<void> sendPasswordResetEmail(String email) async {
+    try {
+      await _auth.sendPasswordResetEmail(email: email.trim());
+    } on FirebaseAuthException catch (error) {
+      if (error.code == 'user-not-found') return;
+      throw AuthException(switch (error.code) {
+        'invalid-email' => 'Enter a valid email address.',
+        'network-request-failed' => 'Check your connection and retry.',
+        'too-many-requests' => 'Too many requests. Wait before trying again.',
+        _ => 'Could not request a reset email. Please try again.',
+      });
+    }
+  }
+
   @override
   Stream<FirebaseAuthUser?> get userChanges =>
       _auth.authStateChanges().asyncMap(_resolveNullableUser);

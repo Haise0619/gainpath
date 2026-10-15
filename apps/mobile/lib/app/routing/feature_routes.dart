@@ -18,31 +18,44 @@ Route<dynamic>? buildFeatureRoute(RouteSettings settings,
     {bool firebase = false,
     LocalMemberProgressRepositoryFactory? progressRepositoryFactory}) {
   final args = settings.arguments;
-  final Widget? destination = switch (settings.name) {
-    FeatureNavigation.equipment when args is GymEquipment =>
-      EquipmentDetailScreen(equipment: args),
-    FeatureNavigation.coach when args is Coach =>
-      CoachProfileScreen(coach: args),
-    FeatureNavigation.membership => const MembershipDashboardScreen(),
-    FeatureNavigation.progress => firebase
-        ? Builder(builder: (context) {
-            final session = context.read<AuthBloc>().state.session;
-            if (session?.role != AppRole.member) {
-              return const Scaffold(
-                  body: Center(
-                      child: Text(
-                          'Member progress is unavailable for this account.')));
-            }
-            return MemberProgressRoute(
-                scope: session!.scope,
-                repositoryFactory: progressRepositoryFactory ??
-                    createLocalMemberProgressRepository);
-          })
-        : const ProgressDashboardScreen(),
-    FeatureNavigation.checkout when args is CheckoutArguments =>
-      BillplzCheckoutScreen(amount: args.amount, description: args.description),
-    _ => null,
-  };
+  final legacyOnly = const {
+    FeatureNavigation.equipment,
+    FeatureNavigation.coach,
+    FeatureNavigation.membership,
+    FeatureNavigation.checkout,
+  }.contains(settings.name);
+  // Connected Coach/booking views use scoped application route builders.
+  // These named destinations belong to the preserved prototype contracts.
+  final Widget? destination = firebase && legacyOnly
+      ? const Scaffold(
+          body: Center(
+              child: Text('This workflow is not connected to Firebase yet.')))
+      : switch (settings.name) {
+          FeatureNavigation.equipment when args is GymEquipment =>
+            EquipmentDetailScreen(equipment: args),
+          FeatureNavigation.coach when args is Coach =>
+            CoachProfileScreen(coach: args),
+          FeatureNavigation.membership => const MembershipDashboardScreen(),
+          FeatureNavigation.progress => firebase
+              ? Builder(builder: (context) {
+                  final session = context.read<AuthBloc>().state.session;
+                  if (session?.role != AppRole.member) {
+                    return const Scaffold(
+                        body: Center(
+                            child: Text(
+                                'Member progress is unavailable for this account.')));
+                  }
+                  return MemberProgressRoute(
+                      scope: session!.scope,
+                      repositoryFactory: progressRepositoryFactory ??
+                          createLocalMemberProgressRepository);
+                })
+              : const ProgressDashboardScreen(),
+          FeatureNavigation.checkout when args is CheckoutArguments =>
+            BillplzCheckoutScreen(
+                amount: args.amount, description: args.description),
+          _ => null,
+        };
   if (destination == null) return null;
   return MaterialPageRoute<dynamic>(
       settings: settings,

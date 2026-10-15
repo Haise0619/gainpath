@@ -22,10 +22,12 @@ class GainPathAdminWebApp extends StatelessWidget {
       this.routineRepositoryFactory,
       this.coachRepositoryFactory,
       this.coachAvailabilityFactory,
-      this.bookingListFactory});
+      this.bookingListFactory,
+      this.passwordResetSender});
 
   final AuthRepository? authRepository;
   final BackendConfig? backendConfig;
+  final Future<void> Function(String)? passwordResetSender;
   final TutorialRepository Function(SessionScope)? tutorialRepositoryFactory;
   final RoutineTemplateRepository Function(SessionScope, TutorialRepository)?
       routineRepositoryFactory;
@@ -63,7 +65,13 @@ class GainPathAdminWebApp extends StatelessWidget {
               title: 'GainPath Admin Console',
               debugShowCheckedModeBanner: false,
               theme: AppTheme.build(),
-              home: _AdminAuthGate(config: config),
+              home: _AdminAuthGate(
+                  config: config,
+                  passwordResetSender: config.isFirebase
+                      ? passwordResetSender ??
+                          (email) => FlutterFirebaseAuthGateway()
+                              .sendPasswordResetEmail(email)
+                      : null),
             );
             return AppRepositories(
               key: ValueKey((state.session, config.mode)),
@@ -84,8 +92,9 @@ class GainPathAdminWebApp extends StatelessWidget {
 }
 
 class _AdminAuthGate extends StatelessWidget {
-  const _AdminAuthGate({required this.config});
+  const _AdminAuthGate({required this.config, this.passwordResetSender});
   final BackendConfig config;
+  final Future<void> Function(String)? passwordResetSender;
 
   @override
   Widget build(BuildContext context) {
@@ -103,7 +112,7 @@ class _AdminAuthGate extends StatelessWidget {
           return AdminShell(
               liveSession: config.isFirebase ? state.session : null);
         }
-        return const _AdminLoginScreen();
+        return _AdminLoginScreen(onPasswordReset: passwordResetSender);
       },
     );
   }
@@ -169,7 +178,8 @@ class _AdminVerificationScreen extends StatelessWidget {
 }
 
 class _AdminLoginScreen extends StatefulWidget {
-  const _AdminLoginScreen();
+  const _AdminLoginScreen({this.onPasswordReset});
+  final Future<void> Function(String)? onPasswordReset;
 
   @override
   State<_AdminLoginScreen> createState() => _AdminLoginScreenState();
@@ -262,6 +272,16 @@ class _AdminLoginScreenState extends State<_AdminLoginScreen> {
                         TextButton(
                             onPressed: () => showForgotPasswordSheet(context,
                                 initialEmail: _emailController.text,
+                                onSend: widget.onPasswordReset == null
+                                    ? null
+                                    : (email) async {
+                                        try {
+                                          await widget.onPasswordReset!(email);
+                                        } on AuthException catch (error) {
+                                          throw PasswordResetFailure(
+                                              error.message);
+                                        }
+                                      },
                                 asDialog: true),
                             child: const Text('Forgot password?')),
                       ],

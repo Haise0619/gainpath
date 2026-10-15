@@ -100,7 +100,7 @@ class _LiveCoachAccountViewState extends State<LiveCoachAccountView> {
                       label: const Text('Edit professional profile')),
                   const SizedBox(height: 16),
                   const Text(
-                      'Certifications, booking, availability and earnings are unavailable.'),
+                      'Availability and pending bookings are available in their tabs. Certifications and earnings are unavailable.'),
                 ],
                 const SizedBox(height: 20),
                 OutlinedButton.icon(
