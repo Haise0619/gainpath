@@ -13,6 +13,9 @@ Widget _networkHero(String url, {BoxFit fit = BoxFit.cover}) {
   return Image.network(
     url,
     fit: fit,
+    // Saved download URLs may not permit canvas/XHR reads across origins.
+    // Native HTML image display works without changing bucket CORS or access.
+    webHtmlElementStrategy: WebHtmlElementStrategy.prefer,
     loadingBuilder: (context, child, progress) =>
         progress == null ? child : Container(color: AppColors.surfaceAlt),
     errorBuilder: (context, error, stack) => const DecoratedBox(
