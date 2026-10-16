@@ -29,6 +29,24 @@ service firebase.storage {
         && request.resource.contentType.matches('image/.*|application/pdf');
     }
 
+    // FR-1.7: private immutable Member photo objects; clearing removes only the reference.
+    match /orgs/{orgId}/memberProfilePhotos/{ownerUid}/{imageId} {
+      function memberPhotoOwner() {
+        return request.auth != null && request.auth.uid == ownerUid
+          && request.auth.token.email_verified == true
+          && firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.organizationId == orgId
+          && firestore.get(/databases/(default)/documents/orgs/$(orgId)/members/$(request.auth.uid)).data.organizationId == orgId
+          && firestore.get(/databases/(default)/documents/orgs/$(orgId)/members/$(request.auth.uid)).data.status == 'active'
+          && firestore.get(/databases/(default)/documents/orgs/$(orgId)/members/$(request.auth.uid)).data.role == 'member';
+      }
+      allow get: if memberPhotoOwner();
+      allow create: if memberPhotoOwner() && resource == null
+        && imageId.matches('[a-f0-9]{32}')
+        && request.resource.size > 0 && request.resource.size <= 5 * 1024 * 1024
+        && request.resource.contentType in ['image/jpeg', 'image/png', 'image/webp'];
+      allow update, delete, list: if false;
+    }
+
     // Private Admin profile photos only. Existing Storage permissions stay unchanged.
     match /orgs/{orgId}/profilePhotos/{ownerUid}/{imageId} {
       function profilePhotoOwner() {

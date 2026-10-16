@@ -67,6 +67,29 @@ service cloud.firestore {
       return signedIn() && request.auth.uid == uid;
     }
 
+    // FR-1.7: private Member photo reference in the existing identity document.
+    match /users/{uid} {
+      function memberPhotoOwner() {
+        let orgId = resource.data.organizationId;
+        let member = get(/databases/$(database)/documents/orgs/$(orgId)/members/$(uid)).data;
+        return request.auth != null && request.auth.uid == uid
+          && request.auth.token.email_verified == true
+          && member.organizationId == orgId && member.role == 'member' && member.status == 'active';
+      }
+      function validMemberPhotoReference() {
+        let orgId = resource.data.organizationId;
+        let photo = request.resource.data.memberPhotoPath;
+        let parts = photo.split('/');
+        return photo is string && (photo == '' || (parts.size() == 5
+          && parts[0] == 'orgs' && parts[1] == orgId && parts[2] == 'memberProfilePhotos'
+          && parts[3] == uid && parts[4].matches('[a-f0-9]{32}')));
+      }
+      allow update: if memberPhotoOwner()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['memberPhotoPath', 'updatedAtMillis'])
+        && validMemberPhotoReference()
+        && request.resource.data.updatedAtMillis is int && request.resource.data.updatedAtMillis > 0;
+    }
+
     match /users/{uid} {
       allow read: if own(uid);
       allow create: if false;

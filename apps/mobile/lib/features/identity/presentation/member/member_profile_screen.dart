@@ -7,6 +7,7 @@ import 'package:gainpath_domain/identity.dart';
 import 'package:gainpath_domain/gainpath_domain.dart'
     show AuthSession, FitnessProfile;
 import 'account_settings_screen.dart';
+import 'member_profile_photo.dart';
 import 'activity_level_screen.dart';
 import 'experience_level_screen.dart';
 import 'goals_screen.dart';
@@ -37,56 +38,8 @@ class MemberProfileScreen extends StatelessWidget {
               children: [
                 Row(
                   children: [
-                    Stack(
-                      clipBehavior: Clip.none,
-                      children: [
-                        Container(
-                          width: 60,
-                          height: 60,
-                          decoration: BoxDecoration(
-                            gradient: AppColors.heroGradient,
-                            borderRadius: BorderRadius.circular(18),
-                          ),
-                          child: Center(
-                            child: Text(
-                                liveSession == null
-                                    ? 'ZY'
-                                    : liveSession!.email
-                                        .substring(0, 1)
-                                        .toUpperCase(),
-                                style: TextStyle(
-                                    fontSize: 20,
-                                    fontWeight: FontWeight.w700,
-                                    color: Colors.white)),
-                          ),
-                        ),
-                        if (liveSession == null)
-                          Positioned(
-                            right: -4,
-                            bottom: -4,
-                            child: Material(
-                              color: AppColors.surface,
-                              shape: const CircleBorder(),
-                              elevation: 1,
-                              child: InkWell(
-                                customBorder: const CircleBorder(),
-                                onTap: () => showToast(context,
-                                    'Photo upload is not part of this prototype.'),
-                                child: Container(
-                                  padding: const EdgeInsets.all(5),
-                                  decoration: BoxDecoration(
-                                    shape: BoxShape.circle,
-                                    border:
-                                        Border.all(color: AppColors.hairline),
-                                  ),
-                                  child: const Icon(Icons.camera_alt_rounded,
-                                      size: 13, color: AppColors.primary),
-                                ),
-                              ),
-                            ),
-                          ),
-                      ],
-                    ),
+                    MemberProfilePhoto(
+                        key: ValueKey(liveSession), session: liveSession),
                     const SizedBox(width: 14),
                     Expanded(
                       child: Column(
