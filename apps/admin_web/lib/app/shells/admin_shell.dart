@@ -83,8 +83,12 @@ class _AdminShellState extends State<AdminShell> {
             onOpenRefunds: () => _select(_indexOfLabel('Refunds')))),
     _NavGroup(
         Icons.people_outline_rounded, Icons.people_rounded, 'Users & Coaches', [
-      _NavPage(Icons.groups_outlined, Icons.groups_rounded, 'Members',
-          'Search, filter, and manage member accounts', const MembersScreen()),
+      _NavPage(
+          Icons.groups_outlined,
+          Icons.groups_rounded,
+          'Members',
+          'Search, filter, and view member accounts',
+          MembersScreen(live: widget.liveSession != null)),
       _NavPage(
           Icons.sports_outlined,
           Icons.sports_rounded,

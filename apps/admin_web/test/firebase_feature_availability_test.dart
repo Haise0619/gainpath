@@ -15,6 +15,19 @@ class _EmptyPhotoAccount extends Fake implements AdminAccountContactRepository {
   Future<Uint8List?> loadCurrentPhoto() async => null;
 }
 
+class _Members implements AdminMemberDirectoryRepository {
+  @override
+  Future<AdminMemberPage> loadPage(
+          {String query = '', String status = 'All', String? afterId}) async =>
+      AdminMemberPage(const [
+        AdminMemberRecord(
+            id: 'member',
+            name: 'Connected Member',
+            email: 'member@example.test',
+            status: 'active')
+      ]);
+}
+
 const _session = AuthSession(
   userId: 'live-admin',
   organizationId: 'connected-org',
@@ -156,6 +169,7 @@ void main() {
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
     await tester.pumpWidget(GainPathAdminWebApp(
+      memberDirectoryFactory: (_, __) => _Members(),
       accountContactFactory: (_, __) => _EmptyPhotoAccount(),
       authRepository: _SignedInAuthRepository(),
       backendConfig: const BackendConfig(BackendMode.firebase),
@@ -166,7 +180,12 @@ void main() {
     expect(find.text(_session.displayName!), findsWidgets);
     expect(find.text('GainPath, Kulim'), findsNothing);
     expect(find.text('Recent activity'), findsNothing);
-    for (final feature in ['Members', 'Refunds', 'Reports']) {
+    await tester.tap(find.text('Members').first);
+    await tester.pumpAndSettle();
+    expect(find.text('Connected Member'), findsOneWidget);
+    expect(find.text('Members unavailable'), findsNothing);
+    expect(find.text('Suspend account'), findsNothing);
+    for (final feature in ['Refunds', 'Reports']) {
       await tester.tap(find.text(feature).first);
       await tester.pumpAndSettle();
       expect(find.text('$feature unavailable'), findsOneWidget);

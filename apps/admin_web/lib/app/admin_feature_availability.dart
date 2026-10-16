@@ -5,6 +5,7 @@ import 'package:gainpath_ui/gainpath_ui.dart';
 /// App composition exposes only workflows with connected repositories.
 abstract final class AdminFeatureAvailability {
   static const connected = {
+    'Members',
     'Exercise Tutorials',
     'Routine Templates',
     'Coaches',

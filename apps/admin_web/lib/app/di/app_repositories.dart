@@ -36,6 +36,7 @@ import '../../infrastructure/firebase/firebase_admin_account_contact_repository.
 import '../../infrastructure/firebase/firebase_equipment_repository.dart';
 import '../../infrastructure/local/equipment_image_picker.dart';
 import '../../infrastructure/local/account_photo_picker.dart';
+import '../../infrastructure/firebase/firebase_admin_member_directory_repository.dart';
 
 /// Composition root for data access. Swap the in-memory implementations for
 /// Firebase-backed ones here without touching any screen.
@@ -51,6 +52,7 @@ class AppRepositories extends StatefulWidget {
     this.coachAvailabilityFactory,
     this.bookingListFactory,
     this.accountContactFactory,
+    this.memberDirectoryFactory,
   });
   final Widget child;
   final BackendConfig config;
@@ -66,6 +68,8 @@ class AppRepositories extends StatefulWidget {
       bookingListFactory;
   final AdminAccountContactRepository Function(SessionScope, bool Function())?
       accountContactFactory;
+  final AdminMemberDirectoryRepository Function(SessionScope, bool Function())?
+      memberDirectoryFactory;
 
   @override
   State<AppRepositories> createState() => _AppRepositoriesState();
@@ -82,6 +86,19 @@ class _AppRepositoriesState extends State<AppRepositories> {
   CatalogEditSessionGuard? _disclaimerGuard;
   CatalogEditSessionGuard? _complianceGuard;
   CatalogEditSessionGuard? _accountContactGuard;
+  CatalogEditSessionGuard? _memberDirectoryGuard;
+  AdminMemberDirectoryRepository _createMemberDirectory(SessionScope scope) {
+    final auth = context.read<AuthBloc>();
+    _memberDirectoryGuard = CatalogEditSessionGuard(
+        expected: widget.session!,
+        current: () => auth.state,
+        changes: auth.stream);
+    return widget.memberDirectoryFactory
+            ?.call(scope, _memberDirectoryGuard!.isCurrent) ??
+        FirebaseAdminMemberDirectoryRepository(
+            scope: scope, isCurrent: _memberDirectoryGuard!.isCurrent);
+  }
+
   AdminAccountContactRepository _createAccountContact(SessionScope scope) {
     final auth = context.read<AuthBloc>();
     _accountContactGuard = CatalogEditSessionGuard(
@@ -207,6 +224,7 @@ class _AppRepositoriesState extends State<AppRepositories> {
     _disclaimerGuard?.dispose();
     _complianceGuard?.dispose();
     _accountContactGuard?.dispose();
+    _memberDirectoryGuard?.dispose();
     _equipmentGuard?.dispose();
     super.dispose();
   }
@@ -218,6 +236,8 @@ class _AppRepositoriesState extends State<AppRepositories> {
     final scope = widget.session?.scope;
     if (widget.config.isFirebase) {
       return MultiRepositoryProvider(providers: [
+        RepositoryProvider<AdminMemberDirectoryRepository>(
+            create: (_) => _createMemberDirectory(scope!)),
         RepositoryProvider<AccountPhotoPicker>(
             create: (_) => LocalAccountPhotoPicker()),
         RepositoryProvider<AdminAccountContactRepository>(
