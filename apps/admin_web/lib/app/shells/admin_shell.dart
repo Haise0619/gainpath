@@ -129,8 +129,10 @@ class _AdminShellState extends State<AdminShell> {
           Icons.card_giftcard_outlined,
           Icons.card_giftcard_rounded,
           'Reward Catalog',
-          'Points-shop inventory and stock',
-          const RewardCatalogScreen()),
+          widget.liveSession != null
+              ? 'Author and archive reward metadata drafts'
+              : 'Points-shop inventory and stock',
+          RewardCatalogScreen(live: widget.liveSession != null)),
       _NavPage(Icons.campaign_outlined, Icons.campaign_rounded, 'Announcements',
           'Broadcast messages to every member', const AnnouncementsScreen()),
       _NavPage(

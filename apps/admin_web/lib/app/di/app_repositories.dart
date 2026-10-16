@@ -37,6 +37,7 @@ import '../../infrastructure/firebase/firebase_equipment_repository.dart';
 import '../../infrastructure/local/equipment_image_picker.dart';
 import '../../infrastructure/local/account_photo_picker.dart';
 import '../../infrastructure/firebase/firebase_admin_member_directory_repository.dart';
+import '../../infrastructure/firebase/firebase_reward_catalog_repository.dart';
 
 /// Composition root for data access. Swap the in-memory implementations for
 /// Firebase-backed ones here without touching any screen.
@@ -53,6 +54,7 @@ class AppRepositories extends StatefulWidget {
     this.bookingListFactory,
     this.accountContactFactory,
     this.memberDirectoryFactory,
+    this.rewardCatalogFactory,
   });
   final Widget child;
   final BackendConfig config;
@@ -70,6 +72,8 @@ class AppRepositories extends StatefulWidget {
       accountContactFactory;
   final AdminMemberDirectoryRepository Function(SessionScope, bool Function())?
       memberDirectoryFactory;
+  final RewardCatalogRepository Function(SessionScope, bool Function())?
+      rewardCatalogFactory;
 
   @override
   State<AppRepositories> createState() => _AppRepositoriesState();
@@ -87,6 +91,18 @@ class _AppRepositoriesState extends State<AppRepositories> {
   CatalogEditSessionGuard? _complianceGuard;
   CatalogEditSessionGuard? _accountContactGuard;
   CatalogEditSessionGuard? _memberDirectoryGuard;
+  CatalogEditSessionGuard? _rewardGuard;
+  RewardCatalogRepository _createRewardCatalog(SessionScope scope) {
+    final auth = context.read<AuthBloc>();
+    _rewardGuard = CatalogEditSessionGuard(
+        expected: widget.session!,
+        current: () => auth.state,
+        changes: auth.stream);
+    return widget.rewardCatalogFactory?.call(scope, _rewardGuard!.isCurrent) ??
+        FirebaseRewardCatalogRepository(
+            scope: scope, isCurrent: _rewardGuard!.isCurrent);
+  }
+
   AdminMemberDirectoryRepository _createMemberDirectory(SessionScope scope) {
     final auth = context.read<AuthBloc>();
     _memberDirectoryGuard = CatalogEditSessionGuard(
@@ -225,6 +241,7 @@ class _AppRepositoriesState extends State<AppRepositories> {
     _complianceGuard?.dispose();
     _accountContactGuard?.dispose();
     _memberDirectoryGuard?.dispose();
+    _rewardGuard?.dispose();
     _equipmentGuard?.dispose();
     super.dispose();
   }
@@ -236,6 +253,8 @@ class _AppRepositoriesState extends State<AppRepositories> {
     final scope = widget.session?.scope;
     if (widget.config.isFirebase) {
       return MultiRepositoryProvider(providers: [
+        RepositoryProvider<RewardCatalogRepository>(
+            create: (_) => _createRewardCatalog(scope!)),
         RepositoryProvider<AdminMemberDirectoryRepository>(
             create: (_) => _createMemberDirectory(scope!)),
         RepositoryProvider<AccountPhotoPicker>(

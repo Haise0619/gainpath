@@ -6,6 +6,7 @@ import 'package:gainpath_ui/gainpath_ui.dart';
 abstract final class AdminFeatureAvailability {
   static const connected = {
     'Members',
+    'Reward Catalog',
     'Exercise Tutorials',
     'Routine Templates',
     'Coaches',

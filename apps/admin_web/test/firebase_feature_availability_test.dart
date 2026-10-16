@@ -7,12 +7,19 @@ import 'package:gainpath_admin_web/app/di/app_repositories.dart';
 import 'package:gainpath_data/gainpath_data.dart';
 import 'package:gainpath_domain/gainpath_domain.dart';
 import 'package:gainpath_domain/identity.dart';
+import 'package:gainpath_domain/gamification.dart';
 import 'package:gainpath_domain/workout.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 class _EmptyPhotoAccount extends Fake implements AdminAccountContactRepository {
   @override
   Future<Uint8List?> loadCurrentPhoto() async => null;
+}
+
+class _Rewards extends Fake implements RewardCatalogRepository {
+  @override
+  Future<RewardCatalogPage> loadPage({String? afterId}) async =>
+      RewardCatalogPage([]);
 }
 
 class _Members implements AdminMemberDirectoryRepository {
@@ -173,6 +180,7 @@ void main() {
     addTearDown(tester.view.reset);
     await tester.pumpWidget(GainPathAdminWebApp(
       memberDirectoryFactory: (_, __) => _Members(),
+      rewardCatalogFactory: (_, __) => _Rewards(),
       accountContactFactory: (_, __) => _EmptyPhotoAccount(),
       authRepository: _SignedInAuthRepository(),
       backendConfig: const BackendConfig(BackendMode.firebase),
@@ -199,7 +207,8 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Reward Catalog').first);
     await tester.pumpAndSettle();
-    expect(find.text('Reward Catalog unavailable'), findsOneWidget);
+    expect(find.text('No reward drafts yet. Add a draft to get started.'),
+        findsOneWidget);
     expect(find.text('Add reward'), findsNothing);
     await tester.pumpWidget(const SizedBox());
   });
