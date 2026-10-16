@@ -7,7 +7,7 @@ let env: RulesTestEnvironment;
 const path = 'orgs/o/chatbotDisclaimer/config';
 beforeAll(async () => {
   if (!process.env.FIRESTORE_EMULATOR_HOST) throw new Error('Isolated emulator required');
-  env = await initializeTestEnvironment({ projectId: 'demo-gainpath', firestore: { rules: readFileSync('../firebase/firestore.rules', 'utf8') } });
+  env = await initializeTestEnvironment({ projectId: 'demo-gainpath', firestore: { rules: readFileSync(process.env.GAINPATH_DISCLAIMER_RULES_FILE ?? '../firebase/firestore.rules', 'utf8') } });
 });
 afterAll(async () => { await env?.cleanup(); });
 beforeEach(async () => {

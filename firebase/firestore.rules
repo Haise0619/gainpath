@@ -226,6 +226,14 @@ service cloud.firestore {
 
     // Authoring only: no member acknowledgement or chatbot access is granted.
     match /orgs/{orgId}/chatbotDisclaimer/config {
+      function disclaimerAuthor() {
+        return request.auth != null
+          && request.auth.token.email_verified == true
+          && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.organizationId == orgId
+          && get(/databases/$(database)/documents/orgs/$(orgId)/members/$(request.auth.uid)).data.organizationId == orgId
+          && get(/databases/$(database)/documents/orgs/$(orgId)/members/$(request.auth.uid)).data.status == 'active'
+          && get(/databases/$(database)/documents/orgs/$(orgId)/members/$(request.auth.uid)).data.role in ['admin', 'staff'];
+      }
       function validDisclaimer() {
         let d = request.resource.data;
         return d.keys().hasAll(['schemaVersion', 'text', 'isActive', 'revision', 'createdAt', 'createdBy', 'updatedAt', 'updatedBy'])
@@ -242,18 +250,18 @@ service cloud.firestore {
         return !exists(/databases/$(database)/documents/orgs/$(orgId)/chatbotDisclaimer/config/versions/$(revision))
           && getAfter(/databases/$(database)/documents/orgs/$(orgId)/chatbotDisclaimer/config/versions/$(revision)).data == request.resource.data;
       }
-      allow read: if contentAuthor(orgId);
-      allow create: if contentAuthor(orgId) && validDisclaimer() && pairedVersion()
+      allow read: if disclaimerAuthor();
+      allow create: if disclaimerAuthor() && validDisclaimer() && pairedVersion()
         && request.resource.data.revision == 1 && request.resource.data.isActive == false
         && request.resource.data.createdAt == request.time && request.resource.data.createdBy == request.auth.uid;
-      allow update: if contentAuthor(orgId) && validDisclaimer() && pairedVersion()
+      allow update: if disclaimerAuthor() && validDisclaimer() && pairedVersion()
         && request.resource.data.revision == resource.data.revision + 1
         && request.resource.data.createdAt == resource.data.createdAt
         && request.resource.data.createdBy == resource.data.createdBy;
       allow delete: if false;
       match /versions/{version} {
-        allow read: if contentAuthor(orgId);
-        allow create: if contentAuthor(orgId)
+        allow read: if disclaimerAuthor();
+        allow create: if disclaimerAuthor()
           && version == string(request.resource.data.revision)
           && getAfter(/databases/$(database)/documents/orgs/$(orgId)/chatbotDisclaimer/config).data == request.resource.data
           && (!exists(/databases/$(database)/documents/orgs/$(orgId)/chatbotDisclaimer/config)
