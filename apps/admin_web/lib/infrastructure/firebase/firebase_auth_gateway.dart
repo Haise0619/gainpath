@@ -99,6 +99,10 @@ class FlutterFirebaseAuthGateway
     return FirebaseAuthUser(
       userId: user.uid,
       email: email,
+      displayName: userData['displayName'] is String &&
+              (userData['displayName'] as String).trim().isNotEmpty
+          ? (userData['displayName'] as String).trim()
+          : null,
       emailVerified: user.emailVerified,
       claims: {
         'organizationId': organizationId,

@@ -32,6 +32,7 @@ import 'catalog_edit_session_guard.dart';
 import '../../infrastructure/firebase/firebase_announcement_repository.dart';
 import '../../infrastructure/firebase/firebase_chatbot_disclaimer_repository.dart';
 import '../../infrastructure/firebase/firebase_compliance_document_repository.dart';
+import '../../infrastructure/firebase/firebase_admin_account_contact_repository.dart';
 import '../../infrastructure/firebase/firebase_equipment_repository.dart';
 import '../../infrastructure/local/equipment_image_picker.dart';
 
@@ -76,6 +77,17 @@ class _AppRepositoriesState extends State<AppRepositories> {
   CatalogEditSessionGuard? _announcementGuard;
   CatalogEditSessionGuard? _disclaimerGuard;
   CatalogEditSessionGuard? _complianceGuard;
+  CatalogEditSessionGuard? _accountContactGuard;
+  AdminAccountContactRepository _createAccountContact(SessionScope scope) {
+    final auth = context.read<AuthBloc>();
+    _accountContactGuard = CatalogEditSessionGuard(
+        expected: widget.session!,
+        current: () => auth.state,
+        changes: auth.stream);
+    return FirebaseAdminAccountContactRepository(
+        scope: scope, isCurrent: _accountContactGuard!.isCurrent);
+  }
+
   ComplianceDocumentRepository _createCompliance(SessionScope scope) {
     final auth = context.read<AuthBloc>();
     _complianceGuard = CatalogEditSessionGuard(
@@ -188,6 +200,7 @@ class _AppRepositoriesState extends State<AppRepositories> {
     _announcementGuard?.dispose();
     _disclaimerGuard?.dispose();
     _complianceGuard?.dispose();
+    _accountContactGuard?.dispose();
     _equipmentGuard?.dispose();
     super.dispose();
   }
@@ -199,6 +212,8 @@ class _AppRepositoriesState extends State<AppRepositories> {
     final scope = widget.session?.scope;
     if (widget.config.isFirebase) {
       return MultiRepositoryProvider(providers: [
+        RepositoryProvider<AdminAccountContactRepository>(
+            create: (_) => _createAccountContact(scope!)),
         RepositoryProvider<ComplianceDocumentRepository>(
             create: (_) => _createCompliance(scope!)),
         RepositoryProvider<ChatbotDisclaimerRepository>(

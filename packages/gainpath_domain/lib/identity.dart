@@ -9,3 +9,4 @@ export 'src/identity/enums/certification_status.dart';
 export 'src/identity/repositories/coach_repository.dart';
 export 'src/identity/repositories/member_profile_repository.dart';
 export 'src/identity/repositories/user_account_repository.dart';
+export 'src/identity/repositories/admin_account_contact_repository.dart';

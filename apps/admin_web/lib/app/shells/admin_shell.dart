@@ -559,12 +559,13 @@ class _ProfileMenu extends StatelessWidget {
           Navigator.push(
               context,
               MaterialPageRoute(
-                  builder: (_) => liveSession == null
-                      ? const AdminSettingsScreen()
-                      : Scaffold(
-                          appBar: AppBar(title: const Text('My account')),
-                          body: AdminFeatureAvailability.page(
-                              'Dashboard', liveSession!))));
+                  builder: (_) => AdminSettingsScreen(
+                      liveSession: liveSession,
+                      onSaved: liveSession == null
+                          ? null
+                          : () => context
+                              .read<AuthBloc>()
+                              .add(const AuthRestoreRequested()))));
         }
       },
       itemBuilder: (context) => [
