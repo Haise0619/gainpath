@@ -238,6 +238,7 @@ class _MobileAuthGateState extends State<_MobileAuthGate> {
                               final actions =
                                   FirebasePasswordActions(scope: scope);
                               return AccountSettingsScreen(
+                                contactSession: state.session!,
                                 repository: FirebaseMemberPreferencesRepository(
                                     scope: scope,
                                     isSessionCurrent: isCurrentMember),

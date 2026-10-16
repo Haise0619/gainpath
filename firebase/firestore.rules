@@ -68,6 +68,23 @@ service cloud.firestore {
     }
 
     // FR-1.7: private Member photo reference in the existing identity document.
+    // FR-1.5 / UC-1.6: optional own Member contact details only.
+    match /users/{uid} {
+      function memberContactOwner() {
+        let orgId = resource.data.organizationId;
+        let member = get(/databases/$(database)/documents/orgs/$(orgId)/members/$(uid)).data;
+        return request.auth != null && request.auth.uid == uid
+          && request.auth.token.email_verified == true
+          && member.organizationId == orgId && member.role == 'member' && member.status == 'active';
+      }
+      allow update: if memberContactOwner()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['contactDetails', 'updatedAtMillis'])
+        && request.resource.data.contactDetails is string
+        && request.resource.data.contactDetails.size() <= 200
+        && request.resource.data.contactDetails.matches('[^\\x00-\\x1f\\x7f]*')
+        && request.resource.data.updatedAtMillis is int && request.resource.data.updatedAtMillis > 0;
+    }
+
     match /users/{uid} {
       function memberPhotoOwner() {
         let orgId = resource.data.organizationId;

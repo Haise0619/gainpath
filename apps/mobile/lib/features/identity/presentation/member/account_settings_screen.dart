@@ -1,15 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
 import 'package:gainpath_domain/gainpath_domain.dart';
+import 'package:gainpath_domain/identity.dart';
+import 'member_contact_details_panel.dart';
 
 class AccountSettingsScreen extends StatefulWidget {
   const AccountSettingsScreen(
       {super.key,
       this.repository,
+      this.contactSession,
+      this.contactRepository,
       this.verifyCurrentPassword,
       this.saveNewPassword});
 
   final MemberPreferencesRepository? repository;
+  final AuthSession? contactSession;
+  final MemberContactDetailsRepository? contactRepository;
   final Future<void> Function(String)? verifyCurrentPassword;
   final Future<void> Function(String)? saveNewPassword;
 
@@ -118,6 +124,16 @@ class _AccountSettingsScreenState extends State<AccountSettingsScreen> {
                 ]))
               : PageBody(
                   children: [
+                    if (widget.contactSession != null ||
+                        widget.contactRepository != null ||
+                        widget.repository == null) ...[
+                      const Eyebrow('Account'),
+                      MemberContactDetailsPanel(
+                          key: ValueKey(widget.contactSession),
+                          session: widget.contactSession,
+                          repository: widget.contactRepository),
+                      const SizedBox(height: 18),
+                    ],
                     if (_reloadRequired) ...[
                       const Text(
                           'Reload saved settings before making another change.'),
