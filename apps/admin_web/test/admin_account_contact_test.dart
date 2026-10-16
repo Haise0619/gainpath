@@ -55,6 +55,7 @@ Future<AccountPhoto> _fixturePhoto() async {
   picture.dispose();
   return AccountPhoto(bytes);
 }
+
 late AccountPhoto _sharedPhoto;
 
 class _Auth extends Fake implements FirebaseAuth {
@@ -237,6 +238,40 @@ void main() {
         firestore: db,
         auth: _Auth());
   });
+  test(
+      'notification choices save and reload without changing contact or assignment',
+      () async {
+    final original = await repo.load();
+    expect(original.notificationPreferences, isNull);
+    final saved = await repo.saveNotificationPreferences(original,
+        pushAlerts: true, emailAlerts: false, weeklyDigest: true);
+    expect(saved.notificationPreferences,
+        {'pushAlerts': true, 'emailAlerts': false, 'weeklyDigest': true});
+    expect(
+        db.patch!.keys.toSet(), {'notificationPreferences', 'updatedAtMillis'});
+    expect((await repo.load()).notificationPreferences,
+        saved.notificationPreferences);
+    final cleared = await repo.saveNotificationPreferences(saved,
+        pushAlerts: false, emailAlerts: false, weeklyDigest: false);
+    expect(
+        cleared.notificationPreferences!.values.every((v) => v == false), true);
+    expect(db.records['users/admin']!['organizationId'], 'o');
+    final stale = await repo.load();
+    db.records['users/admin']!['displayName'] = 'Concurrent edit';
+    await expectLater(
+        repo.saveNotificationPreferences(stale,
+            pushAlerts: true, emailAlerts: true, weeklyDigest: true),
+        throwsA(isA<AdminAccountContactConflict>()));
+  });
+  test('notification saves reject role drift and expired sessions', () async {
+    final original = await repo.load();
+    db.records['orgs/o/members/admin']!['role'] = 'coach';
+    await expectLater(
+        repo.saveNotificationPreferences(original,
+            pushAlerts: true, emailAlerts: false, weeklyDigest: false),
+        throwsA(isA<AdminAccountContactSessionChanged>()));
+    expect(db.patch, isNull);
+  });
   test('Admin authentication resolves the saved canonical account name',
       () async {
     db.records['users/admin']!['displayName'] = 'Existing Administrator';
@@ -244,6 +279,46 @@ void main() {
     final user = await gateway.signIn(
         email: 'admin@example.test', password: 'local-test');
     expect(user.displayName, 'Existing Administrator');
+  });
+  test(
+      'notification retry and foreign baselines cannot rebase over another edit',
+      () async {
+    final original = await repo.load();
+    db.retry = () => db.records['users/admin']!['notificationPreferences'] = {
+          'pushAlerts': false,
+          'emailAlerts': true,
+          'weeklyDigest': true
+        };
+    await expectLater(
+        repo.saveNotificationPreferences(original,
+            pushAlerts: true, emailAlerts: false, weeklyDigest: false),
+        throwsA(isA<AdminAccountContactConflict>()));
+    expect(db.patch, isNull);
+    final other = FirebaseAdminAccountContactRepository(
+        scope: session.scope,
+        isCurrent: () => true,
+        firestore: db,
+        auth: _Auth());
+    await expectLater(
+        other.saveNotificationPreferences(original,
+            pushAlerts: true, emailAlerts: false, weeklyDigest: false),
+        throwsA(isA<AdminAccountContactConflict>()));
+    current = false;
+    await expectLater(
+        repo.saveNotificationPreferences(original,
+            pushAlerts: true, emailAlerts: false, weeklyDigest: false),
+        throwsA(isA<AdminAccountContactSessionChanged>()));
+    current = true;
+    await expectLater(
+        repo.load(), throwsA(isA<AdminAccountContactSessionChanged>()));
+  });
+  test(
+      'malformed stored notification choices fail rather than inventing defaults',
+      () async {
+    db.records['users/admin']!['notificationPreferences'] = {
+      'pushAlerts': 'bad'
+    };
+    await expectLater(repo.load(), throwsFormatException);
   });
   test(
       'create/read/update/clear only own name and timestamp, preserving assignment and unrelated data',
@@ -353,8 +428,24 @@ void main() {
         'admin@example.test');
     for (final control
         in tester.widgetList<SwitchListTile>(find.byType(SwitchListTile))) {
-      expect(control.onChanged, isNull);
+      expect(control.onChanged, isNotNull);
     }
+    await tester.tap(find.text('Push alerts'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Save notification preferences'));
+    await tester.tap(find.text('Save notification preferences'));
+    await tester.pumpAndSettle();
+    expect(db.records['users/admin']!['notificationPreferences'],
+        {'pushAlerts': true, 'emailAlerts': false, 'weeklyDigest': false});
+    await tester.tap(find.byTooltip('Reload account'));
+    await tester.pumpAndSettle();
+    expect(
+        tester
+            .widgetList<SwitchListTile>(find.byType(SwitchListTile))
+            .first
+            .value,
+        true);
+    await tester.ensureVisible(find.byType(TextField).first);
     await tester.enterText(find.byType(TextField).first, 'New Admin Name');
     await tester.tap(find.text('Save modifications'));
     await tester.pumpAndSettle();

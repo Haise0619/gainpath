@@ -58,6 +58,9 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
       if (!mounted) return;
       setState(() {
         _original = value;
+        _push = value.notificationPreferences?['pushAlerts'] ?? false;
+        _email = value.notificationPreferences?['emailAlerts'] ?? false;
+        _weeklyDigest = value.notificationPreferences?['weeklyDigest'] ?? false;
         _name.text = value.displayName;
         _workEmail.text = value.email;
         _blocked = false;
@@ -181,6 +184,38 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
           _blocked = true;
           _error =
               'Save could not be verified. Reload to check your saved name.';
+        });
+      }
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  Future<void> _saveNotifications() async {
+    if (_original == null || _loading || _saving || _blocked || _picking) {
+      return;
+    }
+    setState(() {
+      _saving = true;
+      _error = null;
+    });
+    try {
+      final saved = await context
+          .read<AdminAccountContactRepository>()
+          .saveNotificationPreferences(_original!,
+              pushAlerts: _push,
+              emailAlerts: _email,
+              weeklyDigest: _weeklyDigest);
+      if (!mounted) return;
+      setState(() => _original = saved);
+      showToast(
+          context, 'Notification preferences saved. Delivery is unavailable.');
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _blocked = true;
+          _error =
+              'Preferences could not be verified. Reload your account before saving again.';
         });
       }
     } finally {
@@ -323,41 +358,59 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
                     const Padding(
                         padding: EdgeInsets.only(bottom: 8),
                         child: Text(
-                            'Notification preferences and delivery are not connected yet.')),
+                            'Save your choices here. Notification delivery is unavailable.')),
                   Panel(
                     padding: EdgeInsets.zero,
                     child: Column(
                       children: [
                         SwitchListTile(
-                          value: _live ? false : _push,
-                          onChanged:
-                              _live ? null : (v) => setState(() => _push = v),
+                          value: _push,
+                          onChanged: _live && (_loading || _saving || _blocked)
+                              ? null
+                              : (v) => setState(() => _push = v),
                           title: const Text('Push alerts'),
-                          subtitle: const Text(
-                              'Refund requests, pending verifications'),
+                          subtitle: Text(_live
+                              ? 'Stored preference only'
+                              : 'Refund requests, pending verifications'),
                         ),
                         const Divider(height: 1),
                         SwitchListTile(
-                          value: _live ? false : _email,
-                          onChanged:
-                              _live ? null : (v) => setState(() => _email = v),
+                          value: _email,
+                          onChanged: _live && (_loading || _saving || _blocked)
+                              ? null
+                              : (v) => setState(() => _email = v),
                           title: const Text('Email alerts'),
-                          subtitle:
-                              const Text('Same events, sent to your inbox'),
+                          subtitle: Text(_live
+                              ? 'Stored preference only'
+                              : 'Same events, sent to your inbox'),
                         ),
                         const Divider(height: 1),
                         SwitchListTile(
-                          value: _live ? false : _weeklyDigest,
-                          onChanged: _live
+                          value: _weeklyDigest,
+                          onChanged: _live && (_loading || _saving || _blocked)
                               ? null
                               : (v) => setState(() => _weeklyDigest = v),
                           title: const Text('Weekly digest'),
-                          subtitle: const Text('Facility summary every Monday'),
+                          subtitle: Text(_live
+                              ? 'Stored preference only'
+                              : 'Facility summary every Monday'),
                         ),
                       ],
                     ),
                   ),
                   const SizedBox(height: 18),
+                  if (_live) ...[
+                    Text(_original?.notificationPreferences == null
+                        ? 'No notification choices saved yet.'
+                        : 'Your saved choices are stored privately.'),
+                    const SizedBox(height: 8),
+                    OutlinedButton(
+                        onPressed: _loading || _saving || _blocked || _picking
+                            ? null
+                            : _saveNotifications,
+                        child: const Text('Save notification preferences')),
+                    const SizedBox(height: 18),
+                  ],
                   const Eyebrow('Security'),
                   Panel(
                     padding: EdgeInsets.zero,

@@ -72,7 +72,19 @@ class FirebaseAdminAccountContactRepository
         (user!['displayName'] != null && user['displayName'] is! String)) {
       throw const FormatException('Account contact details are unavailable.');
     }
+    final preferences = user['notificationPreferences'];
+    if (preferences != null &&
+        (preferences is! Map ||
+            preferences.length != 3 ||
+            !['pushAlerts', 'emailAlerts', 'weeklyDigest']
+                .every((key) => preferences[key] is bool))) {
+      throw const FormatException('Notification preferences are unavailable.');
+    }
     return AdminAccountContact(
+        notificationPreferences: preferences == null
+            ? null
+            : Map<String, bool>.unmodifiable(
+                Map<String, bool>.from(preferences as Map)),
         displayName: (user['displayName'] as String?) ?? '',
         avatarPath:
             user['avatarPath'] is String ? user['avatarPath'] as String : '',
@@ -159,6 +171,63 @@ class FirebaseAdminAccountContactRepository
     final saved = await load();
     if (saved.displayName != displayName ||
         (avatarPath != null && saved.avatarPath != avatarPath)) {
+      throw const AdminAccountContactConflict();
+    }
+    return saved;
+  }
+
+  @override
+  Future<AdminAccountContact> saveNotificationPreferences(
+      AdminAccountContact original,
+      {required bool pushAlerts,
+      required bool emailAlerts,
+      required bool weeklyDigest}) async {
+    _check();
+    final baseline = original.editBaseline;
+    if (baseline is! _Baseline || !identical(baseline.lifetime, _lifetime)) {
+      throw const AdminAccountContactConflict();
+    }
+    final preferences = {
+      'pushAlerts': pushAlerts,
+      'emailAlerts': emailAlerts,
+      'weeklyDigest': weeklyDigest
+    };
+    Object? failure;
+    try {
+      await _db.runTransaction<void>((tx) async {
+        if (failure != null) throw StateError('Preference save aborted.');
+        try {
+          _check();
+          final user = (await tx.get(_user)).data();
+          final member = (await tx.get(_member)).data();
+          _author(user, member);
+          if (_auth.currentUser?.email != baseline.email ||
+              !_same(member, baseline.member)) {
+            throw const AdminAccountContactSessionChanged();
+          }
+          if (!_same(user, baseline.user)) {
+            throw const AdminAccountContactConflict();
+          }
+          _check();
+          tx.update(_user, {
+            'notificationPreferences': preferences,
+            'updatedAtMillis': DateTime.now().millisecondsSinceEpoch
+          });
+        } on AdminAccountContactConflict catch (e) {
+          failure = e;
+          throw StateError('Preference save aborted.');
+        } on AdminAccountContactSessionChanged catch (e) {
+          _invalidated = true;
+          failure = e;
+          throw StateError('Preference save aborted.');
+        }
+      });
+    } catch (_) {
+      if (failure != null) throw failure!;
+      rethrow;
+    }
+    final saved = await load();
+    if (!_same(saved.notificationPreferences, preferences)) {
       throw const AdminAccountContactConflict();
     }
     return saved;

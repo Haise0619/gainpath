@@ -76,6 +76,26 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    // Private Admin notification choices only; this does not authorize delivery.
+    match /users/{uid} {
+      function adminNotificationOwner() {
+        let orgId = resource.data.organizationId;
+        let member = get(/databases/$(database)/documents/orgs/$(orgId)/members/$(uid)).data;
+        return request.auth != null && request.auth.uid == uid
+          && request.auth.token.email_verified == true
+          && member.organizationId == orgId && member.role == 'admin' && member.status == 'active';
+      }
+      allow update: if adminNotificationOwner()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['notificationPreferences', 'updatedAtMillis'])
+        && request.resource.data.notificationPreferences is map
+        && request.resource.data.notificationPreferences.keys().hasAll(['pushAlerts', 'emailAlerts', 'weeklyDigest'])
+        && request.resource.data.notificationPreferences.keys().hasOnly(['pushAlerts', 'emailAlerts', 'weeklyDigest'])
+        && request.resource.data.notificationPreferences.pushAlerts is bool
+        && request.resource.data.notificationPreferences.emailAlerts is bool
+        && request.resource.data.notificationPreferences.weeklyDigest is bool
+        && request.resource.data.updatedAtMillis is int && request.resource.data.updatedAtMillis > 0;
+    }
+
     // Facility display-name metadata only; operational organization fields stay immutable.
     match /orgs/{orgId} {
       function facilityNameAuthor() {

@@ -11,6 +11,11 @@ abstract class AdminAccountContactRepository {
       bool removePhoto = false});
   Future<Uint8List?> readPhoto(AdminAccountContact account);
   Future<Uint8List?> loadCurrentPhoto();
+  Future<AdminAccountContact> saveNotificationPreferences(
+      AdminAccountContact original,
+      {required bool pushAlerts,
+      required bool emailAlerts,
+      required bool weeklyDigest});
 }
 
 abstract class AdminAccountContactBaseline {}
@@ -20,9 +25,13 @@ class AdminAccountContact {
       {required this.displayName,
       required this.email,
       this.avatarPath = '',
+      this.notificationPreferences,
       required this.editBaseline});
   final String displayName, email;
   final String avatarPath;
+
+  /// Null means no choices have been saved. This does not enable delivery.
+  final Map<String, bool>? notificationPreferences;
   final AdminAccountContactBaseline editBaseline;
 }
 
