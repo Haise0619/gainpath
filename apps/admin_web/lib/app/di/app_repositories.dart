@@ -35,6 +35,7 @@ import '../../infrastructure/firebase/firebase_compliance_document_repository.da
 import '../../infrastructure/firebase/firebase_admin_account_contact_repository.dart';
 import '../../infrastructure/firebase/firebase_equipment_repository.dart';
 import '../../infrastructure/local/equipment_image_picker.dart';
+import '../../infrastructure/local/account_photo_picker.dart';
 
 /// Composition root for data access. Swap the in-memory implementations for
 /// Firebase-backed ones here without touching any screen.
@@ -49,6 +50,7 @@ class AppRepositories extends StatefulWidget {
     this.coachRepositoryFactory,
     this.coachAvailabilityFactory,
     this.bookingListFactory,
+    this.accountContactFactory,
   });
   final Widget child;
   final BackendConfig config;
@@ -62,6 +64,8 @@ class AppRepositories extends StatefulWidget {
       coachAvailabilityFactory;
   final BookingListRepository Function(SessionScope, bool Function())?
       bookingListFactory;
+  final AdminAccountContactRepository Function(SessionScope, bool Function())?
+      accountContactFactory;
 
   @override
   State<AppRepositories> createState() => _AppRepositoriesState();
@@ -84,8 +88,10 @@ class _AppRepositoriesState extends State<AppRepositories> {
         expected: widget.session!,
         current: () => auth.state,
         changes: auth.stream);
-    return FirebaseAdminAccountContactRepository(
-        scope: scope, isCurrent: _accountContactGuard!.isCurrent);
+    return widget.accountContactFactory
+            ?.call(scope, _accountContactGuard!.isCurrent) ??
+        FirebaseAdminAccountContactRepository(
+            scope: scope, isCurrent: _accountContactGuard!.isCurrent);
   }
 
   ComplianceDocumentRepository _createCompliance(SessionScope scope) {
@@ -212,6 +218,8 @@ class _AppRepositoriesState extends State<AppRepositories> {
     final scope = widget.session?.scope;
     if (widget.config.isFirebase) {
       return MultiRepositoryProvider(providers: [
+        RepositoryProvider<AccountPhotoPicker>(
+            create: (_) => LocalAccountPhotoPicker()),
         RepositoryProvider<AdminAccountContactRepository>(
             create: (_) => _createAccountContact(scope!)),
         RepositoryProvider<ComplianceDocumentRepository>(

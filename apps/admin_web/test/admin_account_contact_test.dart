@@ -1,5 +1,7 @@
 // ignore_for_file: subtype_of_sealed_class
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'dart:typed_data';
+import 'dart:ui' as ui;
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -12,6 +14,48 @@ import 'package:gainpath_domain/identity.dart';
 import 'package:gainpath_domain/gainpath_domain.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
 import 'package:google_fonts/google_fonts.dart';
+
+class _PhotoStore implements AccountPhotoStore {
+  int uploads = 0, reads = 0;
+  bool failUpload = false;
+  final images = <String, Uint8List>{};
+  @override
+  Future<String> upload(AccountPhoto photo) async {
+    uploads++;
+    if (failUpload) throw const AccountPhotoUnavailable();
+    final path =
+        'orgs/o/profilePhotos/admin/${uploads.toRadixString(16).padLeft(32, '0')}';
+    images[path] = photo.bytes;
+    return path;
+  }
+
+  @override
+  Future<Uint8List> read(String path) async {
+    reads++;
+    return images[path]!;
+  }
+}
+
+class _PhotoPicker implements AccountPhotoPicker {
+  _PhotoPicker(this.photo);
+  final AccountPhoto photo;
+  @override
+  Future<AccountPhoto?> pick() async => photo;
+}
+
+Future<AccountPhoto> _fixturePhoto() async {
+  final recorder = ui.PictureRecorder();
+  ui.Canvas(recorder).drawColor(const ui.Color(0xff8844cc), ui.BlendMode.src);
+  final picture = recorder.endRecording();
+  final image = await picture.toImage(2, 2);
+  final bytes = (await image.toByteData(format: ui.ImageByteFormat.png))!
+      .buffer
+      .asUint8List();
+  image.dispose();
+  picture.dispose();
+  return AccountPhoto(bytes);
+}
+late AccountPhoto _sharedPhoto;
 
 class _Auth extends Fake implements FirebaseAuth {
   @override
@@ -171,7 +215,10 @@ class _Tx extends Fake implements Transaction {
 }
 
 void main() {
-  setUpAll(() => GoogleFonts.config.allowRuntimeFetching = false);
+  setUpAll(() async {
+    GoogleFonts.config.allowRuntimeFetching = false;
+    _sharedPhoto = await _fixturePhoto();
+  });
   late _Db db;
   late FirebaseAdminAccountContactRepository repo;
   var current = true;
@@ -372,6 +419,94 @@ void main() {
         findsOneWidget);
     expect(find.text('Account name saved.'), findsNothing);
     expect(db.records['users/admin']!['displayName'], 'Another editor');
+  });
+  test(
+      'photo upload, replacement, authenticated read and removal preserve immutable old objects',
+      () async {
+    final store = _PhotoStore(), photo = _sharedPhoto;
+    final account = FirebaseAdminAccountContactRepository(
+        scope: session.scope,
+        isCurrent: () => current,
+        firestore: db,
+        auth: _Auth(),
+        photoStore: store);
+    final saved =
+        await account.save(await account.load(), displayName: '', photo: photo);
+    expect(saved.avatarPath,
+        'orgs/o/profilePhotos/admin/00000000000000000000000000000001');
+    expect(await account.readPhoto(saved), photo.bytes);
+    final replaced = await account.save(saved, displayName: '', photo: photo);
+    expect(replaced.avatarPath,
+        'orgs/o/profilePhotos/admin/00000000000000000000000000000002');
+    expect(store.images.length, 2);
+    final removed =
+        await account.save(replaced, displayName: '', removePhoto: true);
+    expect(removed.avatarPath, '');
+    expect(await account.readPhoto(removed), isNull);
+    expect(store.images.length, 2);
+  });
+  test(
+      'stale photo edits reject before upload; upload failures never claim a persisted attachment',
+      () async {
+    final store = _PhotoStore(), photo = _sharedPhoto;
+    final account = FirebaseAdminAccountContactRepository(
+        scope: session.scope,
+        isCurrent: () => current,
+        firestore: db,
+        auth: _Auth(),
+        photoStore: store);
+    final original = await account.load();
+    db.records['users/admin']!['displayName'] = 'Changed';
+    await expectLater(account.save(original, displayName: '', photo: photo),
+        throwsA(isA<AdminAccountContactConflict>()));
+    expect(store.uploads, 0);
+    store.failUpload = true;
+    await expectLater(
+        account.save(await account.load(),
+            displayName: 'Changed', photo: photo),
+        throwsA(isA<AccountPhotoUnavailable>()));
+    expect(db.records['users/admin']!.containsKey('avatarPath'), false);
+  });
+  testWidgets(
+      'photo selection uploads only on Save, reloads real bytes and removes the reference',
+      (tester) async {
+    final store = _PhotoStore(), photo = _sharedPhoto;
+    final account = FirebaseAdminAccountContactRepository(
+        scope: session.scope,
+        isCurrent: () => current,
+        firestore: db,
+        auth: _Auth(),
+        photoStore: store);
+    tester.view.physicalSize = const Size(1200, 1800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(MultiRepositoryProvider(
+        providers: [
+          RepositoryProvider<AdminAccountContactRepository>.value(
+              value: account),
+          RepositoryProvider<AccountPhotoPicker>.value(
+              value: _PhotoPicker(photo)),
+        ],
+        child: MaterialApp(
+            theme: AppTheme.build(),
+            home: AdminSettingsScreen(liveSession: session))));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Choose photo'));
+    await tester.pumpAndSettle();
+    expect(store.uploads, 0);
+    expect(find.textContaining('New photo selected.'), findsOneWidget);
+    await tester.tap(find.text('Save modifications'));
+    await tester.pumpAndSettle();
+    expect(store.uploads, 1);
+    await tester.tap(find.byTooltip('Reload account'));
+    await tester.pumpAndSettle();
+    expect(find.text('Your saved private photo.'), findsOneWidget);
+    await tester.tap(find.text('Remove photo'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Save modifications'));
+    await tester.pumpAndSettle();
+    expect(db.records['users/admin']!['avatarPath'], '');
+    expect(find.text('No profile photo saved.'), findsOneWidget);
   });
   testWidgets(
       'mock account controls preserve entered text during notification changes',

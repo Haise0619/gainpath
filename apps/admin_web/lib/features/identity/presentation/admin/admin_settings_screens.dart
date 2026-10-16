@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'dart:async';
+import 'dart:typed_data';
 import 'package:gainpath_ui/gainpath_ui.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:gainpath_domain/identity.dart';
@@ -23,6 +25,11 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
   AdminAccountContact? _original;
   bool _started = false, _loading = false, _saving = false, _blocked = false;
   String? _error;
+  AccountPhoto? _selectedPhoto;
+  Uint8List? _savedPhoto;
+  bool _removePhoto = false, _picking = false, _loadingPhoto = false;
+  String? _photoError;
+  int _photoGeneration = 0;
   bool get _live => widget.liveSession != null;
 
   @override
@@ -54,7 +61,10 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
         _name.text = value.displayName;
         _workEmail.text = value.email;
         _blocked = false;
+        _selectedPhoto = null;
+        _removePhoto = false;
       });
+      unawaited(_loadPhoto(value));
     } catch (_) {
       if (mounted) {
         setState(() =>
@@ -65,25 +75,89 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
     }
   }
 
+  Future<void> _loadPhoto(AdminAccountContact value) async {
+    final generation = ++_photoGeneration;
+    setState(() {
+      _savedPhoto = null;
+      _loadingPhoto = true;
+      _photoError = null;
+    });
+    try {
+      final bytes =
+          await context.read<AdminAccountContactRepository>().readPhoto(value);
+      if (mounted && generation == _photoGeneration) {
+        setState(() => _savedPhoto = bytes);
+      }
+    } catch (_) {
+      if (mounted && generation == _photoGeneration) {
+        setState(() => _photoError =
+            'Your saved photo could not be loaded. Reload to retry.');
+      }
+    } finally {
+      if (mounted && generation == _photoGeneration) {
+        setState(() => _loadingPhoto = false);
+      }
+    }
+  }
+
+  Future<void> _pickPhoto() async {
+    setState(() {
+      _picking = true;
+      _photoError = null;
+    });
+    try {
+      final photo = await context.read<AccountPhotoPicker>().pick();
+      if (mounted && photo != null) {
+        setState(() {
+          _selectedPhoto = photo;
+          _removePhoto = false;
+        });
+      }
+    } on FormatException catch (e) {
+      if (mounted) setState(() => _photoError = e.message);
+    } catch (_) {
+      if (mounted) {
+        setState(() =>
+            _photoError = 'Could not open the photo. Choose another image.');
+      }
+    } finally {
+      if (mounted) setState(() => _picking = false);
+    }
+  }
+
   Future<void> _save() async {
-    if (_original == null || _loading || _saving || _blocked) return;
+    if (_original == null || _loading || _saving || _picking || _blocked) {
+      return;
+    }
     setState(() {
       _saving = true;
       _error = null;
     });
+    final photoChanged = _selectedPhoto != null || _removePhoto;
     try {
-      final saved = await context
-          .read<AdminAccountContactRepository>()
-          .save(_original!, displayName: _name.text);
+      final saved = await context.read<AdminAccountContactRepository>().save(
+          _original!,
+          displayName: _name.text,
+          photo: _selectedPhoto,
+          removePhoto: _removePhoto);
       if (!mounted) return;
       setState(() {
         _original = saved;
         _name.text = saved.displayName;
+        _selectedPhoto = null;
+        _removePhoto = false;
       });
-      showToast(context, 'Account name saved.');
+      unawaited(_loadPhoto(saved));
+      showToast(context,
+          photoChanged ? 'Account photo saved.' : 'Account name saved.');
       if (widget.onSaved != null) {
         if (Navigator.of(context).canPop()) Navigator.pop(context);
         widget.onSaved!();
+      }
+    } on AccountPhotoUnavailable {
+      if (mounted) {
+        setState(() => _error =
+            'The photo could not be uploaded. Check access and try again.');
       }
     } on FormatException catch (e) {
       if (mounted) setState(() => _error = e.message);
@@ -116,6 +190,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
 
   @override
   void dispose() {
+    _photoGeneration++;
     _name.dispose();
     _workEmail.dispose();
     super.dispose();
@@ -124,6 +199,65 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
   bool _push = true;
   bool _email = true;
   bool _weeklyDigest = false;
+
+  Widget _photoEditor() {
+    final bytes = _removePhoto ? null : _selectedPhoto?.bytes ?? _savedPhoto;
+    final disabled = _loading || _saving || _picking || _blocked;
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      const Eyebrow('Profile photo'),
+      Panel(
+          child:
+              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        CircleAvatar(
+            radius: 48,
+            backgroundColor: AppColors.primaryTint,
+            child: bytes == null
+                ? const Icon(Icons.person_rounded,
+                    size: 40, color: AppColors.primary)
+                : ClipOval(
+                    child: Image.memory(bytes,
+                        width: 96,
+                        height: 96,
+                        fit: BoxFit.cover,
+                        cacheWidth: 192,
+                        errorBuilder: (_, __, ___) =>
+                            const Icon(Icons.person_rounded, size: 40)))),
+        const SizedBox(height: 12),
+        if (_loadingPhoto && _selectedPhoto == null && !_removePhoto)
+          const LinearProgressIndicator(),
+        Text(_removePhoto
+            ? 'Photo will be removed when you save.'
+            : _selectedPhoto != null
+                ? 'New photo selected. Save modifications to upload it.'
+                : _original?.avatarPath.isNotEmpty == true
+                    ? 'Your saved private photo.'
+                    : 'No profile photo saved.'),
+        const SizedBox(height: 8),
+        const Text(
+            'JPG, PNG or WebP · up to 5 MB · visible only to your account.'),
+        if (_photoError != null)
+          Text(_photoError!, style: const TextStyle(color: AppColors.danger)),
+        const SizedBox(height: 12),
+        Wrap(spacing: 12, runSpacing: 8, children: [
+          OutlinedButton(
+              onPressed: disabled ? null : _pickPhoto,
+              child: Text(_picking ? 'Choosing…' : 'Choose photo')),
+          if (!_removePhoto &&
+              (_selectedPhoto != null ||
+                  _original?.avatarPath.isNotEmpty == true))
+            TextButton(
+                onPressed: disabled
+                    ? null
+                    : () => setState(() {
+                          _selectedPhoto = null;
+                          _removePhoto = true;
+                        }),
+                child: const Text('Remove photo')),
+        ]),
+      ])),
+      const SizedBox(height: 18),
+    ]);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -154,6 +288,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
                         padding: const EdgeInsets.only(bottom: 12),
                         child: Text(_error!,
                             style: const TextStyle(color: AppColors.danger))),
+                  if (_live) _photoEditor(),
                   Panel(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -244,7 +379,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
                   const SizedBox(height: 20),
                   FilledButton(
                     onPressed: _live
-                        ? _loading || _saving || _blocked
+                        ? _loading || _saving || _picking || _blocked
                             ? null
                             : _save
                         : () {

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'dart:typed_data';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gainpath_admin_web/app/admin_app.dart';
@@ -8,6 +9,11 @@ import 'package:gainpath_domain/gainpath_domain.dart';
 import 'package:gainpath_domain/identity.dart';
 import 'package:gainpath_domain/workout.dart';
 import 'package:google_fonts/google_fonts.dart';
+
+class _EmptyPhotoAccount extends Fake implements AdminAccountContactRepository {
+  @override
+  Future<Uint8List?> loadCurrentPhoto() async => null;
+}
 
 const _session = AuthSession(
   userId: 'live-admin',
@@ -95,6 +101,7 @@ void main() {
     final catalog = _Catalog(), blueprints = _Blueprints();
     final scopes = <SessionScope>[];
     await tester.pumpWidget(GainPathAdminWebApp(
+        accountContactFactory: (_, __) => _EmptyPhotoAccount(),
         authRepository: _SignedInAuthRepository(),
         backendConfig: const BackendConfig(BackendMode.firebase),
         tutorialRepositoryFactory: (scope) {
@@ -149,6 +156,7 @@ void main() {
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
     await tester.pumpWidget(GainPathAdminWebApp(
+      accountContactFactory: (_, __) => _EmptyPhotoAccount(),
       authRepository: _SignedInAuthRepository(),
       backendConfig: const BackendConfig(BackendMode.firebase),
     ));

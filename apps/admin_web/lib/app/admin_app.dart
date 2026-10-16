@@ -11,6 +11,8 @@ import 'shells/admin_shell.dart';
 import '../infrastructure/firebase/firebase_auth_gateway.dart';
 import 'package:gainpath_domain/workout.dart';
 import 'package:gainpath_domain/identity.dart' show CoachProfileAdminRepository;
+import 'package:gainpath_domain/identity.dart'
+    show AdminAccountContactRepository;
 import 'package:gainpath_domain/coaching.dart' show CoachAvailabilityRepository;
 
 class GainPathAdminWebApp extends StatelessWidget {
@@ -23,6 +25,7 @@ class GainPathAdminWebApp extends StatelessWidget {
       this.coachRepositoryFactory,
       this.coachAvailabilityFactory,
       this.bookingListFactory,
+      this.accountContactFactory,
       this.passwordResetSender});
 
   final AuthRepository? authRepository;
@@ -37,6 +40,8 @@ class GainPathAdminWebApp extends StatelessWidget {
       coachAvailabilityFactory;
   final BookingListRepository Function(SessionScope, bool Function())?
       bookingListFactory;
+  final AdminAccountContactRepository Function(SessionScope, bool Function())?
+      accountContactFactory;
 
   @override
   Widget build(BuildContext context) {
@@ -82,6 +87,7 @@ class GainPathAdminWebApp extends StatelessWidget {
               coachRepositoryFactory: coachRepositoryFactory,
               coachAvailabilityFactory: coachAvailabilityFactory,
               bookingListFactory: bookingListFactory,
+              accountContactFactory: accountContactFactory,
               child: app,
             );
           },

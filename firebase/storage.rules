@@ -29,6 +29,25 @@ service firebase.storage {
         && request.resource.contentType.matches('image/.*|application/pdf');
     }
 
+    // Private Admin profile photos only. Existing Storage permissions stay unchanged.
+    match /orgs/{orgId}/profilePhotos/{ownerUid}/{imageId} {
+      function profilePhotoOwner() {
+        return request.auth != null
+          && request.auth.uid == ownerUid
+          && request.auth.token.email_verified == true
+          && firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.organizationId == orgId
+          && firestore.get(/databases/(default)/documents/orgs/$(orgId)/members/$(request.auth.uid)).data.organizationId == orgId
+          && firestore.get(/databases/(default)/documents/orgs/$(orgId)/members/$(request.auth.uid)).data.status == 'active'
+          && firestore.get(/databases/(default)/documents/orgs/$(orgId)/members/$(request.auth.uid)).data.role == 'admin';
+      }
+      allow get: if profilePhotoOwner();
+      allow create: if profilePhotoOwner() && resource == null
+        && imageId.matches('[a-f0-9]{32}')
+        && request.resource.size > 0 && request.resource.size <= 5 * 1024 * 1024
+        && request.resource.contentType in ['image/jpeg', 'image/png', 'image/webp'];
+      allow update, delete, list: if false;
+    }
+
     // Equipment photos only. Existing member/content contracts remain unchanged.
     match /orgs/{orgId}/equipmentImages/{uploaderUid}/{imageId} {
       function currentEquipmentMember() {

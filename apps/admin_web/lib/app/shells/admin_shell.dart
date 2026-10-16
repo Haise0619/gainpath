@@ -5,6 +5,7 @@ import 'package:gainpath_ui/gainpath_ui.dart';
 import '../../features/analytics/presentation/admin/admin_dashboard_screens.dart';
 import '../../features/recommendation/presentation/admin/admin_recommendation_screens.dart';
 import '../../features/identity/presentation/admin/admin_settings_screens.dart';
+import '../../features/identity/presentation/admin/admin_account_avatar.dart';
 import '../../features/workout/presentation/admin/exercise_tutorials_screen.dart';
 import '../../features/workout/presentation/admin/routine_templates_screen.dart';
 import '../../features/workout/presentation/admin/equipment_catalog_screen.dart';
@@ -617,15 +618,11 @@ class _ProfileMenu extends StatelessWidget {
       ],
       child: Row(
         mainAxisSize: MainAxisSize.min,
-        children: const [
-          CircleAvatar(
-            radius: 17,
-            backgroundColor: AppColors.primaryTint,
-            child:
-                Icon(Icons.person_rounded, size: 18, color: AppColors.primary),
-          ),
-          SizedBox(width: 6),
-          Icon(Icons.expand_more_rounded, size: 18, color: AppColors.inkSoft),
+        children: [
+          AdminAccountAvatar(live: liveSession != null),
+          const SizedBox(width: 6),
+          const Icon(Icons.expand_more_rounded,
+              size: 18, color: AppColors.inkSoft),
         ],
       ),
     );
@@ -779,12 +776,7 @@ class _Sidebar extends StatelessWidget {
                   ? MainAxisAlignment.center
                   : MainAxisAlignment.start,
               children: [
-                const CircleAvatar(
-                  radius: 17,
-                  backgroundColor: AppColors.primaryTint,
-                  child: Icon(Icons.person_rounded,
-                      size: 18, color: AppColors.primary),
-                ),
+                AdminAccountAvatar(live: liveSession != null),
                 if (!collapsed) ...[
                   const SizedBox(width: 10),
                   Expanded(
