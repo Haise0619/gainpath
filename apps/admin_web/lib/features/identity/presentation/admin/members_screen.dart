@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:gainpath_domain/identity.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
 import 'user_action_dialogs.dart';
+import 'member_details_dialog.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 const _pageSize = 24;
@@ -399,15 +400,17 @@ class _TableHeader extends StatelessWidget {
 class _MemberRow extends StatelessWidget {
   final String name, email, statusLabel;
   final VoidCallback? onManage;
+  final bool readOnly;
   _MemberRow({required UserAccount user, this.onManage})
       : name = user.name,
         email = user.email,
-        statusLabel = user.status.label;
-  _MemberRow.member(AdminMemberRecord member)
+        statusLabel = user.status.label,
+        readOnly = false;
+  _MemberRow.member(AdminMemberRecord member, {this.onManage})
       : name = member.name,
         email = member.email,
         statusLabel = member.statusLabel,
-        onManage = null;
+        readOnly = true;
 
   @override
   Widget build(BuildContext context) {
@@ -454,7 +457,12 @@ class _MemberRow extends StatelessWidget {
                 child: onManage == null
                     ? const SizedBox.shrink()
                     : IconButton(
-                        icon: const Icon(Icons.more_vert_rounded, size: 18),
+                        tooltip: readOnly ? 'View details for $name' : null,
+                        icon: Icon(
+                            readOnly
+                                ? Icons.visibility_outlined
+                                : Icons.more_vert_rounded,
+                            size: 18),
                         onPressed: onManage,
                         padding: EdgeInsets.zero,
                       ),
@@ -637,7 +645,13 @@ class _LiveMembersViewState extends State<_LiveMembersView> {
                                     ? 'No members match that search.'
                                     : 'No members found.')),
                       for (final item in _items) ...[
-                        _MemberRow.member(item),
+                        _MemberRow.member(item,
+                            onManage: () => showDialog<void>(
+                                context: context,
+                                builder: (_) => MemberDetailsDialog(
+                                    memberId: item.id,
+                                    repository: context.read<
+                                        AdminMemberDirectoryRepository>()))),
                         const Divider(height: 1),
                       ],
                     ])),

@@ -17,6 +17,61 @@ class FirebaseAdminMemberDirectoryRepository
   final FirebaseFirestore _db;
   final FirebaseAuth _auth;
   bool _invalidated = false;
+  @override
+  Future<AdminMemberDetails> loadDetails(String memberId) async {
+    _check();
+    if (memberId.isEmpty || memberId.length > 128 || memberId.contains('/')) {
+      throw const FormatException('Invalid member identifier.');
+    }
+    await _admin().timeout(const Duration(seconds: 20));
+    final snapshot = await _db
+        .doc('orgs/${scope.organizationId}/members/$memberId')
+        .get(const GetOptions(source: Source.server))
+        .timeout(const Duration(seconds: 20));
+    await _admin().timeout(const Duration(seconds: 20));
+    final data = snapshot.exists ? snapshot.data() : null;
+    if (data == null ||
+        data['organizationId'] != scope.organizationId ||
+        data['role'] != 'member') {
+      throw StateError('Member record is unavailable.');
+    }
+    final status = data['status'];
+    final branches = data['branchIds'];
+    if (status is! String ||
+        status.isEmpty ||
+        status.length > 40 ||
+        (branches != null &&
+            (branches is! List ||
+                branches.any((e) => e is! String || e.isEmpty)))) {
+      throw StateError('Member record is invalid.');
+    }
+    int? millis(String field) {
+      final value = data[field];
+      if (value == null) return null;
+      if (value is! int || value < 0 || value > 8640000000000000) {
+        throw StateError('Member date is invalid.');
+      }
+      return value;
+    }
+
+    final name = data['displayName'] is String
+        ? (data['displayName'] as String).trim()
+        : '';
+    final email =
+        data['email'] is String ? (data['email'] as String).trim() : '';
+    _check();
+    return AdminMemberDetails(
+        member: AdminMemberRecord(
+            id: memberId,
+            name: name.isEmpty ? (email.isEmpty ? memberId : email) : name,
+            email: email,
+            status: status),
+        organizationId: scope.organizationId,
+        branchIds: branches == null ? [] : List<String>.from(branches as List),
+        createdAtMillis: millis('createdAtMillis'),
+        updatedAtMillis: millis('updatedAtMillis'));
+  }
+
   void _check() {
     if (_invalidated ||
         !isCurrent() ||

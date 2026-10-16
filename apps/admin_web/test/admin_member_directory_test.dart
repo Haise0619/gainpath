@@ -35,6 +35,7 @@ class _Db extends Fake implements FirebaseFirestore {
   };
   int listReads = 0;
   void Function()? afterList;
+  void Function(String)? afterGet;
   @override
   DocumentReference<Map<String, dynamic>> doc(String path) => _Ref(this, path);
   @override
@@ -60,7 +61,11 @@ class _Ref extends Fake implements DocumentReference<Map<String, dynamic>> {
   Future<DocumentSnapshot<Map<String, dynamic>>> get(
       [GetOptions? options]) async {
     expect(options?.source, Source.server);
-    return _Doc(path.split('/').last, db.records[path]);
+    final value = db.records[path];
+    final result =
+        _Doc(path.split('/').last, value == null ? null : Map.of(value));
+    db.afterGet?.call(path);
+    return result;
   }
 }
 
@@ -142,6 +147,23 @@ class _Query extends Fake implements CollectionReference<Map<String, dynamic>> {
 }
 
 class _Directory implements AdminMemberDirectoryRepository {
+  String detailName = 'Actual member';
+  bool failDetails = false;
+  int detailReads = 0;
+  @override
+  Future<AdminMemberDetails> loadDetails(String memberId) async {
+    detailReads++;
+    if (failDetails) throw StateError('private details failure');
+    return AdminMemberDetails(
+        member: AdminMemberRecord(
+            id: memberId,
+            name: detailName,
+            email: 'member@example.test',
+            status: 'active'),
+        organizationId: 'o',
+        branchIds: ['main']);
+  }
+
   final requests = <(String, String, String?)>[];
   bool fail = false;
   Completer<AdminMemberPage>? pending;
@@ -199,6 +221,44 @@ void main() {
         'b');
     expect((await repo.loadPage(status: 'Active')).items.single.id, 'a');
     expect((await repo.loadPage(query: 'absent')).items, isEmpty);
+  });
+  test('detail reads a fresh membership and preserves absent optional fields',
+      () async {
+    db.member('a', name: 'Original');
+    db.records['orgs/o/members/a']!['branchIds'] = ['main'];
+    db.records['orgs/o/members/a']!['createdAtMillis'] = 12345;
+    expect((await repo.loadDetails('a')).member.name, 'Original');
+    db.records['orgs/o/members/a']!['displayName'] = 'Changed';
+    final details = await repo.loadDetails('a');
+    expect(details.member.name, 'Changed');
+    expect(details.branchIds, ['main']);
+    expect(details.createdAtMillis, 12345);
+    expect(details.updatedAtMillis, isNull);
+    expect(db.listReads, 0);
+  });
+  test('detail rejects missing, foreign-org and non-Member records', () async {
+    await expectLater(repo.loadDetails('missing'), throwsStateError);
+    await expectLater(repo.loadDetails('admin'), throwsStateError);
+    db.member('a');
+    db.records['orgs/o/members/a']!['organizationId'] = 'foreign';
+    await expectLater(repo.loadDetails('a'), throwsStateError);
+    await expectLater(repo.loadDetails('a/b'), throwsFormatException);
+  });
+  test('detail refuses a demoted Admin before reading another membership',
+      () async {
+    db.member('a');
+    db.records['orgs/o/members/admin']!['role'] = 'coach';
+    await expectLater(repo.loadDetails('a'), throwsStateError);
+  });
+  test('detail discards its result if canonical permissions drift during read',
+      () async {
+    db.member('a');
+    db.afterGet = (path) {
+      if (path == 'orgs/o/members/a') {
+        db.records['users/admin'] = {'organizationId': 'foreign'};
+      }
+    };
+    await expectLater(repo.loadDetails('a'), throwsStateError);
   });
   test('cursor pagination neither repeats nor drops members', () async {
     for (var i = 0; i < 27; i++) {
@@ -350,5 +410,46 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Suspend account'), findsOneWidget);
     expect(find.text('Reset password'), findsOneWidget);
+  });
+  testWidgets(
+      'detail dialog loads and refreshes fresh records then returns to directory',
+      (tester) async {
+    final port = _Directory();
+    await screen(tester, port);
+    await tester.tap(find.byTooltip('View details for Actual member'));
+    await tester.pumpAndSettle();
+    expect(find.text('Member details'), findsOneWidget);
+    expect(find.text('Member ID'), findsOneWidget);
+    expect(find.text('Organization'), findsOneWidget);
+    expect(find.text('Not recorded'), findsNWidgets(2));
+    expect(port.detailReads, 1);
+    port.detailName = 'Reloaded member';
+    await tester.tap(find.text('Refresh details'));
+    await tester.pumpAndSettle();
+    expect(find.text('Reloaded member'), findsOneWidget);
+    expect(port.detailReads, 2);
+    expect(find.text('Suspend account'), findsNothing);
+    await tester.tap(find.text('Close'));
+    await tester.pumpAndSettle();
+    expect(find.text('Member details'), findsNothing);
+    expect(find.text('Actual member'), findsOneWidget);
+  });
+  testWidgets(
+      'failed detail refresh hides stale data and supports a sanitized retry',
+      (tester) async {
+    final port = _Directory();
+    await screen(tester, port);
+    await tester.tap(find.byTooltip('View details for Actual member'));
+    await tester.pumpAndSettle();
+    port.failDetails = true;
+    await tester.tap(find.text('Refresh details'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Could not load this member.'), findsOneWidget);
+    expect(find.byType(SelectableText), findsNothing);
+    expect(find.text('private details failure'), findsNothing);
+    port.failDetails = false;
+    await tester.tap(find.text('Retry'));
+    await tester.pumpAndSettle();
+    expect(find.text('Member ID'), findsOneWidget);
   });
 }

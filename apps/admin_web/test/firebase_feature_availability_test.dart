@@ -17,6 +17,9 @@ class _EmptyPhotoAccount extends Fake implements AdminAccountContactRepository {
 
 class _Members implements AdminMemberDirectoryRepository {
   @override
+  Future<AdminMemberDetails> loadDetails(String memberId) async =>
+      throw UnimplementedError();
+  @override
   Future<AdminMemberPage> loadPage(
           {String query = '', String status = 'All', String? afterId}) async =>
       AdminMemberPage(const [

@@ -40,3 +40,11 @@ it('directory access grants neither lifecycle writes nor another user private da
   await assertFails(updateDoc(doc(db,`${root}/member`),{role:'admin'}));
   await assertFails(getDoc(doc(db,'users/member')));
 });
+it('Admin reads a single member detail while other roles and organizations cannot',async()=>{
+  const target=doc(client('admin'),`${root}/member`);
+  expect((await assertSucceeds(getDoc(target))).data()?.role).toBe('member');
+  await assertFails(getDoc(doc(client('coach'),`${root}/member`)));
+  await assertFails(getDoc(doc(client('admin',false),`${root}/member`)));
+  await assertFails(getDoc(doc(env.unauthenticatedContext().firestore(),`${root}/member`)));
+  await assertFails(getDoc(doc(client('admin'),'orgs/another-org/members/member')));
+});

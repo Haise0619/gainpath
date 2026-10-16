@@ -17,8 +17,23 @@ class AdminMemberPage {
   final String? nextCursor;
 }
 
+class AdminMemberDetails {
+  AdminMemberDetails(
+      {required this.member,
+      required this.organizationId,
+      required List<String> branchIds,
+      this.createdAtMillis,
+      this.updatedAtMillis})
+      : branchIds = List.unmodifiable(branchIds);
+  final AdminMemberRecord member;
+  final String organizationId;
+  final List<String> branchIds;
+  final int? createdAtMillis, updatedAtMillis;
+}
+
 /// Read-only organization membership directory. No account lifecycle authority.
 abstract interface class AdminMemberDirectoryRepository {
+  Future<AdminMemberDetails> loadDetails(String memberId);
   Future<AdminMemberPage> loadPage(
       {String query = '', String status = 'All', String? afterId});
 }
