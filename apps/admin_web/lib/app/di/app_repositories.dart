@@ -31,6 +31,7 @@ import 'package:gainpath_identity/gainpath_identity.dart';
 import 'catalog_edit_session_guard.dart';
 import '../../infrastructure/firebase/firebase_announcement_repository.dart';
 import '../../infrastructure/firebase/firebase_chatbot_disclaimer_repository.dart';
+import '../../infrastructure/firebase/firebase_compliance_document_repository.dart';
 import '../../infrastructure/firebase/firebase_equipment_repository.dart';
 import '../../infrastructure/local/equipment_image_picker.dart';
 
@@ -74,6 +75,17 @@ class _AppRepositoriesState extends State<AppRepositories> {
   CatalogEditSessionGuard? _bookingGuard;
   CatalogEditSessionGuard? _announcementGuard;
   CatalogEditSessionGuard? _disclaimerGuard;
+  CatalogEditSessionGuard? _complianceGuard;
+  ComplianceDocumentRepository _createCompliance(SessionScope scope) {
+    final auth = context.read<AuthBloc>();
+    _complianceGuard = CatalogEditSessionGuard(
+        expected: widget.session!,
+        current: () => auth.state,
+        changes: auth.stream);
+    return FirebaseComplianceDocumentRepository(
+        scope: scope, isCurrent: _complianceGuard!.isCurrent);
+  }
+
   ChatbotDisclaimerRepository _createDisclaimer(SessionScope scope) {
     final auth = context.read<AuthBloc>();
     _disclaimerGuard = CatalogEditSessionGuard(
@@ -175,6 +187,7 @@ class _AppRepositoriesState extends State<AppRepositories> {
     _bookingGuard?.dispose();
     _announcementGuard?.dispose();
     _disclaimerGuard?.dispose();
+    _complianceGuard?.dispose();
     _equipmentGuard?.dispose();
     super.dispose();
   }
@@ -186,6 +199,8 @@ class _AppRepositoriesState extends State<AppRepositories> {
     final scope = widget.session?.scope;
     if (widget.config.isFirebase) {
       return MultiRepositoryProvider(providers: [
+        RepositoryProvider<ComplianceDocumentRepository>(
+            create: (_) => _createCompliance(scope!)),
         RepositoryProvider<ChatbotDisclaimerRepository>(
             create: (_) => _createDisclaimer(scope!)),
         RepositoryProvider<EquipmentImagePicker>(

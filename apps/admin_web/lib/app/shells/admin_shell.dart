@@ -142,7 +142,7 @@ class _AdminShellState extends State<AdminShell> {
         Icons.tune_rounded,
         'System Settings',
         'General, reward conversion, legal & compliance',
-        const SystemSettingsScreen()),
+        SystemSettingsScreen(live: widget.liveSession != null)),
   ];
 
   List<_NavPage> get _flatPages {
