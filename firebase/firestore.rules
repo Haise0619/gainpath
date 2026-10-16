@@ -63,6 +63,37 @@ service cloud.firestore {
         && branchIds.hasAny(get(/databases/$(database)/documents/orgs/$(orgId)/members/$(request.auth.uid)).data.branchIds));
     }
 
+    // FR-1.5 / UC-1.6: Member name changes keep existing identity copies consistent.
+    function validMemberDisplayNamePair(orgId, uid) {
+      let beforeUser = get(/databases/$(database)/documents/users/$(uid)).data;
+      let beforeMember = get(/databases/$(database)/documents/orgs/$(orgId)/members/$(uid)).data;
+      let afterUser = getAfter(/databases/$(database)/documents/users/$(uid)).data;
+      let afterMember = getAfter(/databases/$(database)/documents/orgs/$(orgId)/members/$(uid)).data;
+      return request.auth != null && request.auth.uid == uid
+        && request.auth.token.email_verified == true
+        && beforeUser.organizationId == orgId && beforeMember.organizationId == orgId
+        && beforeMember.role == 'member' && beforeMember.status == 'active'
+        && afterUser.diff(beforeUser).affectedKeys().hasOnly(['displayName', 'updatedAtMillis'])
+        && afterMember.diff(beforeMember).affectedKeys().hasOnly(['displayName', 'updatedAtMillis'])
+        && afterUser.displayName is string && afterUser.displayName.size() > 0 && afterUser.displayName.size() <= 120
+        && afterUser.displayName.matches('[\\s\\S]*[^\\s][\\s\\S]*')
+        && afterUser.displayName.matches('[^\\x00-\\x1f\\x7f]+')
+        && afterUser.displayName == afterMember.displayName
+        && afterUser.updatedAtMillis is int && afterUser.updatedAtMillis > 0
+        && afterUser.updatedAtMillis == afterMember.updatedAtMillis;
+    }
+    function memberDisplayNameUserGuard(uid) {
+      let orgId = resource.data.organizationId;
+      return !request.resource.data.diff(resource.data).affectedKeys().hasAny(['displayName'])
+        || get(/databases/$(database)/documents/orgs/$(orgId)/members/$(uid)).data.role != 'member'
+        || validMemberDisplayNamePair(orgId, uid);
+    }
+    function memberDisplayNameMembershipGuard(orgId, uid) {
+      return !request.resource.data.diff(resource.data).affectedKeys().hasAny(['displayName'])
+        || resource.data.role != 'member'
+        || validMemberDisplayNamePair(orgId, uid);
+    }
+
     function own(uid) {
       return signedIn() && request.auth.uid == uid;
     }
@@ -112,7 +143,8 @@ service cloud.firestore {
       allow create: if false;
       allow update: if own(uid)
         && request.resource.data.diff(resource.data).affectedKeys()
-          .hasOnly(['displayName', 'avatarPath', 'updatedAtMillis']);
+          .hasOnly(['displayName', 'avatarPath', 'updatedAtMillis'])
+        && memberDisplayNameUserGuard(uid);
       allow delete: if false;
     }
 
@@ -164,7 +196,8 @@ service cloud.firestore {
         || (activeMember(orgId) && staffProfile(orgId, resource.data.branchIds));
       allow update: if activeMember(orgId) && own(uid)
         && request.resource.data.diff(resource.data).affectedKeys()
-          .hasOnly(['displayName', 'goals', 'updatedAtMillis']);
+          .hasOnly(['displayName', 'goals', 'updatedAtMillis'])
+          && memberDisplayNameMembershipGuard(orgId, uid);
       allow create, delete: if false;
     }
 

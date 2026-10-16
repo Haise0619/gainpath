@@ -5,7 +5,7 @@ import 'package:gainpath_domain/gainpath_domain.dart';
 import 'package:gainpath_domain/identity.dart';
 
 class FirebaseMemberContactDetailsRepository
-    implements MemberContactDetailsRepository {
+    implements MemberContactDetailsRepository, MemberDisplayNameRepository {
   FirebaseMemberContactDetailsRepository(
       {required this.scope,
       required this.isCurrent,
@@ -70,7 +70,31 @@ class FirebaseMemberContactDetailsRepository
           'Your saved contact details could not be read.');
     }
     return MemberContactDetails(
-        value: value, editBaseline: _Baseline(_lifetime, user, member!));
+        value: value,
+        displayName: _displayName(user, member!),
+        editBaseline: _Baseline(_lifetime, user, member));
+  }
+
+  String _displayName(Map user, Map member) => member['displayName'] is String
+      ? member['displayName'] as String
+      : user['displayName'] is String
+          ? user['displayName'] as String
+          : '';
+
+  @override
+  Future<MemberContactDetails> saveDisplayName(
+      MemberContactDetails original, String value) async {
+    _check();
+    if (RegExp(r'[\x00-\x1f\x7f]').hasMatch(value)) {
+      throw const MemberContactDetailsException(
+          'Use a display name without line breaks or control characters.');
+    }
+    value = value.trim();
+    if (value.isEmpty || value.runes.length > 120) {
+      throw const MemberContactDetailsException(
+          'Use a display name of 1–120 characters.');
+    }
+    return _saveField(original, value, updateName: true);
   }
 
   @override
@@ -86,10 +110,19 @@ class FirebaseMemberContactDetailsRepository
     if (value.runes.length > 200) {
       throw const MemberContactDetailsException('Use up to 200 characters.');
     }
+    return _saveField(original, value, updateName: false);
+  }
+
+  Future<MemberContactDetails> _saveField(
+      MemberContactDetails original, String value,
+      {required bool updateName}) async {
     final baseline = original.editBaseline;
     if (baseline is! _Baseline ||
         !identical(baseline.lifetime, _lifetime) ||
-        original.value != (baseline.user['contactDetails'] ?? '')) {
+        original.value != (baseline.user['contactDetails'] ?? '') ||
+        (updateName &&
+            original.displayName !=
+                _displayName(baseline.user, baseline.member))) {
       throw const MemberContactDetailsException(
           'Reload contact details before saving.',
           reloadRequired: true);
@@ -114,10 +147,12 @@ class FirebaseMemberContactDetailsRepository
                 'Your account changed elsewhere. Reload before saving.',
                 reloadRequired: true);
           }
-          tx.update(_user, {
-            'contactDetails': value,
+          final patch = {
+            updateName ? 'displayName' : 'contactDetails': value,
             'updatedAtMillis': DateTime.now().millisecondsSinceEpoch
-          });
+          };
+          tx.update(_user, patch);
+          if (updateName) tx.update(_member, patch);
         } on MemberContactDetailsException catch (e) {
           failure = e;
           throw StateError('Contact save aborted.');
@@ -129,7 +164,11 @@ class FirebaseMemberContactDetailsRepository
       rethrow;
     }
     final saved = await load();
-    if (saved.value != value) {
+    final savedBaseline = saved.editBaseline as _Baseline;
+    if (updateName
+        ? (savedBaseline.user['displayName'] != value ||
+            savedBaseline.member['displayName'] != value)
+        : saved.value != value) {
       throw const MemberContactDetailsException(
           'Save was not confirmed. Reload contact details.',
           reloadRequired: true);

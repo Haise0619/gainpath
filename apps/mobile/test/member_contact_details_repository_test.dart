@@ -78,9 +78,15 @@ class _Tx extends Fake implements Transaction {
       _Snapshot<T>(db.docs[ref.path] as T?);
   @override
   Transaction update(DocumentReference ref, Map<Object, Object?> patch) {
+    final previous = commit;
     commit = () {
+      previous?.call();
       expect(
-          patch.keys, unorderedEquals(['contactDetails', 'updatedAtMillis']));
+          patch.keys,
+          unorderedEquals([
+            patch.containsKey('displayName') ? 'displayName' : 'contactDetails',
+            'updatedAtMillis'
+          ]));
       db.docs[ref.path]!.addAll(patch.cast<String, dynamic>());
       db.writes++;
     };
@@ -118,6 +124,57 @@ void main() {
         isCurrent: () => current,
         firestore: db,
         auth: auth);
+  });
+  test(
+      'display name saves both existing identity names and preserves contacts and private photo',
+      () async {
+    db.docs['users/m']!['contactDetails'] = 'Preserve contact';
+    db.docs['users/m']!['memberPhotoPath'] = 'Preserve private photo';
+    db.docs['orgs/o/members/m']!['displayName'] = 'Authoritative member name';
+    final original = await repo.load();
+    expect(original.displayName, 'Authoritative member name');
+    final saved = await repo.saveDisplayName(original, '  New Member Name  ');
+    expect(saved.displayName, 'New Member Name');
+    expect((await repo.load()).displayName, 'New Member Name');
+    expect(db.docs['users/m']!['displayName'], 'New Member Name');
+    expect(db.docs['orgs/o/members/m']!['displayName'], 'New Member Name');
+    expect(db.docs['users/m']!['updatedAtMillis'],
+        db.docs['orgs/o/members/m']!['updatedAtMillis']);
+    expect(db.docs['users/m']!['contactDetails'], 'Preserve contact');
+    expect(db.docs['users/m']!['memberPhotoPath'], 'Preserve private photo');
+    expect(db.writes, 2);
+  });
+  test(
+      'display name rejects stale and forged baselines plus blank, control and oversize values',
+      () async {
+    final original = await repo.load();
+    for (final value in ['', '   ', 'line\nbreak', 'x' * 121]) {
+      await expectLater(repo.saveDisplayName(original, value),
+          throwsA(isA<MemberContactDetailsException>()));
+    }
+    final other = FirebaseMemberContactDetailsRepository(
+        scope: repo.scope, isCurrent: () => true, firestore: db, auth: auth);
+    await expectLater(repo.saveDisplayName(await other.load(), 'New'),
+        throwsA(isA<MemberContactDetailsException>()));
+    db.beforeTransaction =
+        () => db.docs['users/m']!['displayName'] = 'Concurrent';
+    db.retryAfterFailure = true;
+    await expectLater(repo.saveDisplayName(original, 'New'),
+        throwsA(isA<MemberContactDetailsException>()));
+    expect(db.writes, 0);
+  });
+  test(
+      'display name membership or session drift never commits either identity field',
+      () async {
+    final original = await repo.load();
+    db.beforeTransaction =
+        () => db.docs['orgs/o/members/m']!['status'] = 'suspended';
+    await expectLater(repo.saveDisplayName(original, 'New'),
+        throwsA(isA<MemberContactDetailsException>()));
+    expect(db.writes, 0);
+    current = false;
+    await expectLater(repo.saveDisplayName(original, 'New'),
+        throwsA(isA<MemberContactDetailsException>()));
   });
   test(
       'optional contact details save, reopen, replace and clear without touching photo or other fields',
