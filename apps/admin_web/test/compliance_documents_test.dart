@@ -295,8 +295,8 @@ void main() {
         true);
     await tester.tap(find.text('General'));
     await tester.pumpAndSettle();
-    expect(find.text('General preferences are not connected to Firebase yet.'),
-        findsOneWidget);
+    expect(find.text('Save facility name'), findsOneWidget);
+    expect(find.byType(Switch), findsNothing);
     await tester.tap(find.text('Reward conversion'));
     await tester.pumpAndSettle();
     expect(find.text('Reward conversion is not connected to Firebase yet.'),

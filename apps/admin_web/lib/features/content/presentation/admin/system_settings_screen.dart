@@ -4,7 +4,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:gainpath_domain/content.dart';
 
 /// AD-M11.6 — System Settings. Mock mode retains all prototype tabs.
-/// Firebase mode supports compliance drafts only; publication and member
+/// Firebase mode supports facility names and compliance drafts; publication and member
 /// consent remain separate from ordinary text authoring.
 ///
 /// Lives directly in the sidebar as an in-place content pane — the
@@ -51,7 +51,7 @@ class _SystemSettingsScreenState extends State<SystemSettingsScreen>
             padding: const EdgeInsets.symmetric(horizontal: 28),
             child: Text(
                 widget.live
-                    ? 'Organization compliance drafts. Publication and consent changes are unavailable.'
+                    ? 'Organization name and compliance drafts. Operational policies are managed separately.'
                     : 'Platform-wide configuration that applies to every member and coach.',
                 style: Theme.of(context).textTheme.bodyLarge),
           ),
@@ -82,13 +82,7 @@ class _SystemSettingsScreenState extends State<SystemSettingsScreen>
             child: TabBarView(
               controller: _tabs,
               children: [
-                widget.live
-                    ? const PageBody(children: [
-                        Panel(
-                            child: Text(
-                                'General preferences are not connected to Firebase yet.'))
-                      ])
-                    : const _GeneralPreferencesTab(),
+                _GeneralPreferencesTab(live: widget.live),
                 widget.live
                     ? const PageBody(children: [
                         Panel(
@@ -178,16 +172,97 @@ class _SettingsTabLayout extends StatelessWidget {
 }
 
 class _GeneralPreferencesTab extends StatefulWidget {
-  const _GeneralPreferencesTab();
+  const _GeneralPreferencesTab({this.live = false});
+  final bool live;
 
   @override
   State<_GeneralPreferencesTab> createState() => _GeneralPreferencesTabState();
 }
 
 class _GeneralPreferencesTabState extends State<_GeneralPreferencesTab> {
-  late final _name = TextEditingController(text: 'GainPath, Kulim');
+  late final _name =
+      TextEditingController(text: widget.live ? '' : 'GainPath, Kulim');
   String _timezone = 'Asia/Kuala_Lumpur (GMT+8)';
   bool _maintenance = false;
+  FacilityNameSnapshot? _original;
+  bool _loading = false, _saving = false, _blocked = false;
+  String? _error;
+  @override
+  void initState() {
+    super.initState();
+    if (widget.live) _load();
+  }
+
+  Future<void> _load() async {
+    setState(() {
+      _loading = true;
+      _blocked = false;
+      _error = null;
+      _original = null;
+      _name.clear();
+    });
+    try {
+      final value = await context.read<FacilitySettingsRepository>().load();
+      if (!mounted) return;
+      setState(() {
+        _original = value;
+        _name.text = value.displayName;
+      });
+    } catch (_) {
+      if (mounted) {
+        setState(() => _error =
+            'Could not load the facility name. Check your Admin access and reload.');
+      }
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _save() async {
+    if (_original == null || _loading || _saving || _blocked) return;
+    FocusScope.of(context).unfocus();
+    setState(() {
+      _saving = true;
+      _error = null;
+    });
+    try {
+      final saved = await context
+          .read<FacilitySettingsRepository>()
+          .save(_original!, displayName: _name.text);
+      if (!mounted) return;
+      setState(() {
+        _original = saved;
+        _name.text = saved.displayName;
+      });
+      showToast(context, 'Facility name saved.');
+    } on FormatException catch (e) {
+      if (mounted) setState(() => _error = e.message);
+    } on FacilitySettingsConflict {
+      if (mounted) {
+        setState(() {
+          _blocked = true;
+          _error = 'Facility settings changed. Reload before saving again.';
+        });
+      }
+    } on FacilitySettingsSessionChanged {
+      if (mounted) {
+        setState(() {
+          _blocked = true;
+          _error = 'Account or permissions changed. Sign in again.';
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _blocked = true;
+          _error =
+              'Save could not be verified. Reload to check the current facility name.';
+        });
+      }
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
 
   @override
   void dispose() {
@@ -204,37 +279,53 @@ class _GeneralPreferencesTabState extends State<_GeneralPreferencesTab> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Eyebrow('Facility'),
+            if (_loading) const LinearProgressIndicator(),
+            if (_error != null)
+              Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: Text(_error!,
+                      style: const TextStyle(color: AppColors.danger))),
             Panel(
               child: Column(
                 children: [
                   _SettingsRow(
                     label: 'Facility name',
-                    description:
-                        'Shown across the console and member-facing receipts.',
+                    description: widget.live
+                        ? 'Organization display name.'
+                        : 'Shown across the console and member-facing receipts.',
                     control: TextField(
+                        enabled: !widget.live ||
+                            (!_loading && !_saving && _original != null),
+                        maxLength: widget.live ? 120 : null,
                         controller: _name,
                         onChanged: (_) => setState(() {}),
-                        decoration: const InputDecoration(isDense: true)),
+                        decoration: InputDecoration(
+                            isDense: true,
+                            labelText: widget.live ? 'Facility name' : null)),
                   ),
                   const Divider(height: 1),
                   _SettingsRow(
                     label: 'Timezone',
-                    description: 'Used for all scheduling and reporting.',
-                    control: DropdownButtonFormField<String>(
-                      initialValue: _timezone,
-                      isExpanded: true,
-                      decoration: const InputDecoration(isDense: true),
-                      items: const [
-                        DropdownMenuItem(
-                            value: 'Asia/Kuala_Lumpur (GMT+8)',
-                            child: Text('Asia/Kuala_Lumpur (GMT+8)')),
-                        DropdownMenuItem(
-                            value: 'Asia/Singapore (GMT+8)',
-                            child: Text('Asia/Singapore (GMT+8)')),
-                      ],
-                      onChanged: (v) =>
-                          setState(() => _timezone = v ?? _timezone),
-                    ),
+                    description: widget.live
+                        ? 'Booking configuration is managed separately.'
+                        : 'Used for all scheduling and reporting.',
+                    control: widget.live
+                        ? const Text('Unchanged · not editable here')
+                        : DropdownButtonFormField<String>(
+                            initialValue: _timezone,
+                            isExpanded: true,
+                            decoration: const InputDecoration(isDense: true),
+                            items: const [
+                              DropdownMenuItem(
+                                  value: 'Asia/Kuala_Lumpur (GMT+8)',
+                                  child: Text('Asia/Kuala_Lumpur (GMT+8)')),
+                              DropdownMenuItem(
+                                  value: 'Asia/Singapore (GMT+8)',
+                                  child: Text('Asia/Singapore (GMT+8)')),
+                            ],
+                            onChanged: (v) =>
+                                setState(() => _timezone = v ?? _timezone),
+                          ),
                   ),
                 ],
               ),
@@ -244,40 +335,70 @@ class _GeneralPreferencesTabState extends State<_GeneralPreferencesTab> {
             Panel(
               child: _SettingsRow(
                 label: 'Maintenance mode',
-                description:
-                    'Shows a banner and blocks new bookings platform-wide.',
-                control: Align(
-                  alignment: Alignment.centerLeft,
-                  child: Switch(
-                      value: _maintenance,
-                      onChanged: (v) => setState(() => _maintenance = v)),
-                ),
+                description: widget.live
+                    ? 'Operational availability is managed separately.'
+                    : 'Shows a banner and blocks new bookings platform-wide.',
+                control: widget.live
+                    ? const Text('Not editable here')
+                    : Align(
+                        alignment: Alignment.centerLeft,
+                        child: Switch(
+                            value: _maintenance,
+                            onChanged: (v) => setState(() => _maintenance = v)),
+                      ),
               ),
             ),
             const SizedBox(height: 24),
-            FilledButton(
-              onPressed: () => showToast(context, 'Preferences deployed.'),
-              child: const Text('Deploy changes'),
-            ),
+            if (widget.live)
+              Wrap(spacing: 12, runSpacing: 8, children: [
+                FilledButton(
+                    onPressed:
+                        _loading || _saving || _blocked || _original == null
+                            ? null
+                            : _save,
+                    child: Text(_saving ? 'Saving…' : 'Save facility name')),
+                OutlinedButton(
+                    onPressed: _loading || _saving ? null : _load,
+                    child: const Text('Reload facility name')),
+              ])
+            else
+              FilledButton(
+                onPressed: () => showToast(context, 'Preferences deployed.'),
+                child: const Text('Deploy changes'),
+              ),
           ],
         ),
         rail: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Eyebrow('Current status'),
+            Eyebrow(widget.live ? 'Saved settings' : 'Current status'),
             Panel(
               child: Column(
                 children: [
-                  DetailRow('Facility', _name.text.isEmpty ? '—' : _name.text),
+                  DetailRow(
+                      'Facility',
+                      widget.live
+                          ? (_original?.displayName ?? 'Unavailable')
+                          : _name.text.isEmpty
+                              ? '—'
+                              : _name.text),
                   const Divider(height: 20),
-                  DetailRow('Timezone', _timezone),
-                  const Divider(height: 20),
-                  DetailRow('Bookings', _maintenance ? 'Blocked' : 'Open'),
+                  if (widget.live)
+                    DetailRow('Organization',
+                        _original?.organizationId ?? 'Unavailable')
+                  else ...[
+                    DetailRow('Timezone', _timezone),
+                    const Divider(height: 20),
+                    DetailRow('Bookings', _maintenance ? 'Blocked' : 'Open'),
+                  ],
                 ],
               ),
             ),
             const SizedBox(height: 14),
-            if (_maintenance)
+            if (widget.live)
+              const Panel(
+                  child: Text('Only the facility display name is saved here.'))
+            else if (_maintenance)
               Panel(
                 background: AppColors.dangerTint,
                 child: Row(

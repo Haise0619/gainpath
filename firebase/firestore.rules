@@ -76,6 +76,27 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    // Facility display-name metadata only; operational organization fields stay immutable.
+    match /orgs/{orgId} {
+      function facilityNameAuthor() {
+        return request.auth != null && request.auth.token.email_verified == true
+          && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.organizationId == orgId
+          && get(/databases/$(database)/documents/orgs/$(orgId)/members/$(request.auth.uid)).data.organizationId == orgId
+          && get(/databases/$(database)/documents/orgs/$(orgId)/members/$(request.auth.uid)).data.status == 'active'
+          && get(/databases/$(database)/documents/orgs/$(orgId)/members/$(request.auth.uid)).data.role == 'admin'
+          && resource.data.organizationId == orgId && resource.data.status == 'active';
+      }
+      allow get: if facilityNameAuthor();
+      allow update: if facilityNameAuthor()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName', 'updatedAtMillis'])
+        && request.resource.data.displayName is string
+        && request.resource.data.displayName.size() > 0 && request.resource.data.displayName.size() <= 120
+        && request.resource.data.displayName.matches('[\\s\\S]*[^\\s][\\s\\S]*')
+        && request.resource.data.displayName.matches('[^\\x00-\\x1f\\x7f]+')
+        && request.resource.data.updatedAtMillis is int && request.resource.data.updatedAtMillis > 0;
+      allow list, create, delete: if false;
+    }
+
     match /orgs/{orgId}/members/{uid} {
       // A signed-in account may read only its own assignment before email
       // verification so the client can show the verification gate.
