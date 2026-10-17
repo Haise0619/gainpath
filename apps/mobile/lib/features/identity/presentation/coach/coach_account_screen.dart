@@ -9,6 +9,7 @@ import 'live_coach_profile_views.dart';
 import '../../application/coach_profile_cubit.dart';
 import 'edit_coach_profile_screen.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import '../../../../infrastructure/firebase/firebase_coach_account_repository.dart';
 
 /// AD-M8.3 — Coach Account & Profile Management hub. Deliberately framed
 /// as a *professional identity* screen, not a personal one: where the
@@ -20,7 +21,12 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 /// live preview.
 class CoachAccountScreen extends StatefulWidget {
   const CoachAccountScreen(
-      {super.key, this.liveRepository, this.isCurrent, this.onOpenLiveEditor});
+      {super.key,
+      this.liveRepository,
+      this.isCurrent,
+      this.onOpenLiveEditor,
+      this.accountRepository});
+  final FirebaseCoachAccountRepository? accountRepository;
   final CoachProfileRepository? liveRepository;
   final bool Function()? isCurrent;
   final void Function(CoachProfileCubit)? onOpenLiveEditor;
@@ -39,6 +45,7 @@ class _CoachAccountScreenState extends State<CoachAccountScreen> {
   Widget build(BuildContext context) {
     if (widget.liveRepository != null) {
       return LiveCoachAccountView(
+          accountRepository: widget.accountRepository,
           repository: widget.liveRepository!,
           isCurrent: widget.isCurrent!,
           onSignOut: _signOut,

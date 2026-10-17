@@ -3,14 +3,18 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:gainpath_domain/identity.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
 import '../../application/coach_directory_admin_cubit.dart';
+import 'coach_certification_review_panel.dart';
+import 'coach_review_discard_guard.dart';
 
 class LiveCoachDirectoryAdminView extends StatefulWidget {
   const LiveCoachDirectoryAdminView(
       {super.key,
       required this.repository,
+      this.discardGuard,
       this.onOpenSchedule,
       this.onOpenBookings});
   final CoachProfileAdminRepository repository;
+  final CoachReviewDiscardGuard? discardGuard;
   final void Function(String coachId)? onOpenSchedule;
   final void Function(String coachId)? onOpenBookings;
   @override
@@ -20,6 +24,11 @@ class LiveCoachDirectoryAdminView extends StatefulWidget {
 
 class _LiveCoachDirectoryAdminViewState
     extends State<LiveCoachDirectoryAdminView> {
+  late final discardGuard = widget.discardGuard ?? CoachReviewDiscardGuard();
+  Future<void> guarded(VoidCallback action) async {
+    if (await discardGuard.canLeave() && mounted) action();
+  }
+
   late final controller = CoachDirectoryAdminCubit(widget.repository)
     ..refresh();
   @override
@@ -49,7 +58,8 @@ class _LiveCoachDirectoryAdminViewState
                             fontSize: 22, fontWeight: FontWeight.bold))),
                 IconButton(
                     tooltip: 'Refresh Coaches',
-                    onPressed: state.busy ? null : controller.refresh,
+                    onPressed:
+                        state.busy ? null : () => guarded(controller.refresh),
                     icon: const Icon(Icons.refresh))
               ]),
               const Text(
@@ -68,7 +78,8 @@ class _LiveCoachDirectoryAdminViewState
                       trailing: TextButton(
                           onPressed: state.busy
                               ? null
-                              : () => controller.review(entry.key),
+                              : () =>
+                                  guarded(() => controller.review(entry.key)),
                           child: const Text('Review'))),
                 if (state.draftCursor != null)
                   TextButton(
@@ -114,18 +125,25 @@ class _LiveCoachDirectoryAdminViewState
                       const Text(
                           'The server also checks current account and branch eligibility at publication.'),
                       const SizedBox(height: 12),
+                      CoachCertificationReviewPanel(
+                          key: ValueKey(review.coachId),
+                          coachId: review.coachId,
+                          discardGuard: discardGuard,
+                          repository: widget.repository),
                       Wrap(spacing: 12, children: [
                         OutlinedButton(
-                            onPressed: !state.busy &&
-                                    widget.onOpenBookings != null
-                                ? () => widget.onOpenBookings!(review.coachId)
-                                : null,
+                            onPressed:
+                                !state.busy && widget.onOpenBookings != null
+                                    ? () => guarded(() =>
+                                        widget.onOpenBookings!(review.coachId))
+                                    : null,
                             child: const Text('View bookings')),
                         OutlinedButton.icon(
-                            onPressed: !state.busy &&
-                                    widget.onOpenSchedule != null
-                                ? () => widget.onOpenSchedule!(review.coachId)
-                                : null,
+                            onPressed:
+                                !state.busy && widget.onOpenSchedule != null
+                                    ? () => guarded(() =>
+                                        widget.onOpenSchedule!(review.coachId))
+                                    : null,
                             icon: const Icon(Icons.calendar_month_outlined),
                             label: const Text('View schedule')),
                         FilledButton(
@@ -147,7 +165,8 @@ class _LiveCoachDirectoryAdminViewState
                         TextButton(
                             onPressed: state.busy
                                 ? null
-                                : () => controller.review(review.coachId),
+                                : () => guarded(
+                                    () => controller.review(review.coachId)),
                             child: const Text('Discard and reload review')),
                       ]),
                     ])),

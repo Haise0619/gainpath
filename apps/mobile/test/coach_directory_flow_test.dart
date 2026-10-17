@@ -104,7 +104,10 @@ void main() {
           role: baseline.role,
           branchIds: verification ? baseline.branchIds : ['other'],
           needsVerification: verification));
-      await tester.pumpAndSettle();
+      // Verification uses an indeterminate progress animation while refreshing.
+      // A bounded pump still verifies that private editor state is disposed.
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
       expect(find.byType(LiveCoachProfileEditor), findsNothing);
       expect(
           find.byWidgetPredicate((w) =>

@@ -8,5 +8,6 @@ class MainActivity : FlutterActivity() {
         super.configureFlutterEngine(flutterEngine)
         flutterEngine.plugins.add(BlazePoseGpuPlugin())
         flutterEngine.plugins.add(WorkoutAudioPlugin())
+        flutterEngine.plugins.add(PrivatePdfPlugin())
     }
 }

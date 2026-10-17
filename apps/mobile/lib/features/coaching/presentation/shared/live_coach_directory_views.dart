@@ -1,3 +1,6 @@
+import 'dart:typed_data';
+import 'dart:convert';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:gainpath_domain/identity.dart';
@@ -73,7 +76,11 @@ class _LiveCoachDirectoryViewState extends State<LiveCoachDirectoryView> {
                     child: Panel(
                         onTap: () => widget.onOpen(coach.id),
                         child: Row(children: [
-                          const Icon(Icons.person_outline, size: 40),
+                          _PublishedCoachPhoto(
+                              coach: coach,
+                              repository: widget.repository,
+                              isCurrent: widget.isCurrent,
+                              size: 40),
                           const SizedBox(width: 12),
                           Expanded(
                               child: Column(
@@ -84,6 +91,9 @@ class _LiveCoachDirectoryViewState extends State<LiveCoachDirectoryView> {
                                         .textTheme
                                         .titleMedium),
                                 Text(coach.fields.specialty),
+                                Text(_consultationFee(coach)),
+                                if (coach.certificationVerified)
+                                  const Text('Certification verified'),
                                 Text('Branches: ${coach.branchIds.join(', ')}'),
                                 Text(
                                     coach.fields.specializationTags.join(' · '))
@@ -159,8 +169,11 @@ class _LiveCoachDetailViewState extends State<LiveCoachDetailView> {
                       gradient: AppColors.heroGradient,
                       borderRadius: BorderRadius.circular(20)),
                   child: Column(children: [
-                    const Icon(Icons.person_outline,
-                        color: Colors.white, size: 64),
+                    _PublishedCoachPhoto(
+                        coach: coach,
+                        repository: widget.repository,
+                        isCurrent: widget.isCurrent,
+                        size: 64),
                     Text(coach.fields.displayName,
                         style:
                             const TextStyle(color: Colors.white, fontSize: 22)),
@@ -171,6 +184,9 @@ class _LiveCoachDetailViewState extends State<LiveCoachDetailView> {
               const Eyebrow('About'),
               Panel(child: Text(coach.fields.bio)),
               const SizedBox(height: 18),
+              Text(_consultationFee(coach)),
+              if (coach.certificationVerified)
+                const Text('Certification verified'),
               Text(coach.fields.specializationTags.join(' · ')),
               Text('Branches: ${coach.branchIds.join(', ')}'),
               if (coach.fields.yearsExperience != null)
@@ -186,8 +202,101 @@ class _LiveCoachDetailViewState extends State<LiveCoachDetailView> {
                     onPressed: widget.onOpenBooking,
                     child: const Text('Choose time')),
               Text(widget.onOpenBooking == null
-                  ? 'Directory publication does not verify certifications. Booking is unavailable.'
-                  : 'Directory publication does not verify certifications.')
+                  ? 'Booking is unavailable.'
+                  : 'Consultation fees are profile information; existing booking prices are unchanged.')
             ]);
           }));
+}
+
+String _consultationFee(PublishedCoachProfile coach) {
+  final minor = coach.fields.consultationFeeMinor;
+  return minor == null
+      ? 'Consultation fee not provided'
+      : 'Consultation fee: MYR ${(minor / 100).toStringAsFixed(2)}';
+}
+
+class _PublishedCoachPhoto extends StatefulWidget {
+  const _PublishedCoachPhoto(
+      {required this.coach,
+      required this.repository,
+      required this.isCurrent,
+      required this.size});
+  final PublishedCoachProfile coach;
+  final CoachDirectoryRepository repository;
+  final bool Function() isCurrent;
+  final double size;
+  @override
+  State<_PublishedCoachPhoto> createState() => _PublishedCoachPhotoState();
+}
+
+class _PublishedCoachPhotoState extends State<_PublishedCoachPhoto> {
+  Future<Uint8List?>? bytes;
+  @override
+  void initState() {
+    super.initState();
+    load();
+  }
+
+  @override
+  void didUpdateWidget(covariant _PublishedCoachPhoto oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.coach != widget.coach) load();
+  }
+
+  void load() {
+    final coach = widget.coach;
+    final path = coach.fields.photoPath;
+    final prefix =
+        'orgs/${widget.repository.scope.organizationId}/coachProfilePhotos/${coach.id}/';
+    bytes = widget.isCurrent() &&
+            coach.isPublished &&
+            coach.certificationVerified &&
+            path != null &&
+            path.startsWith(prefix)
+        ? _readPhoto(path)
+        : null;
+  }
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+      width: widget.size,
+      height: widget.size,
+      child: FutureBuilder<Uint8List?>(
+          future: bytes,
+          builder: (context, snapshot) {
+            final data = snapshot.data;
+            if (!widget.isCurrent() ||
+                !widget.coach.certificationVerified ||
+                data == null)
+              return Icon(Icons.person_outline, size: widget.size);
+            return ClipOval(
+                child: Image.memory(data,
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, __, ___) =>
+                        Icon(Icons.person_outline, size: widget.size)));
+          }));
+}
+
+extension on _PublishedCoachPhotoState {
+  Future<Uint8List?> _readPhoto(String path) async {
+    if (!widget.isCurrent()) return null;
+    final result = await FirebaseFunctions.instance
+        .httpsCallable('getCoachPublishedPhotoCommand')
+        .call({
+      'schemaVersion': 1,
+      'organizationId': widget.repository.scope.organizationId,
+      'coachId': widget.coach.id,
+    });
+    if (!widget.isCurrent()) return null;
+    final data = Map<String, dynamic>.from(result.data as Map);
+    final encoded = data['bytesBase64'];
+    if (data['schemaVersion'] != 1 ||
+        data['photoPath'] != path ||
+        encoded is! String ||
+        encoded.length > 7 * 1024 * 1024 ||
+        !['image/jpeg', 'image/png', 'image/webp']
+            .contains(data['contentType'])) return null;
+    final bytes = base64Decode(encoded);
+    return bytes.length <= 5 * 1024 * 1024 ? bytes : null;
+  }
 }

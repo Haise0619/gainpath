@@ -17,6 +17,7 @@ import '../../features/analytics/presentation/admin/reports_screen.dart';
 import '../../features/content/presentation/admin/system_settings_screen.dart';
 import '../../features/identity/presentation/admin/members_screen.dart';
 import '../../features/identity/presentation/admin/coaches_screen.dart';
+import '../../features/identity/presentation/admin/coach_review_discard_guard.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:gainpath_domain/identity.dart';
 import 'package:gainpath_domain/gainpath_domain.dart'
@@ -66,6 +67,7 @@ class AdminShell extends StatefulWidget {
 }
 
 class _AdminShellState extends State<AdminShell> {
+  final _coachReviewGuard = CoachReviewDiscardGuard();
   int _index = 0;
   final Set<int> _visited = {0};
   final Set<String> _expanded = {'Users & Coaches'};
@@ -209,8 +211,10 @@ class _AdminShellState extends State<AdminShell> {
     return crumbs;
   }
 
-  void _select(int flatIndex) {
+  void _select(int flatIndex) async {
     if (flatIndex < 0) return;
+    if (flatIndex != _index && !await _coachReviewGuard.canLeave()) return;
+    if (!mounted) return;
     final owner = _groupLabelFor(flatIndex);
     setState(() {
       _index = flatIndex;
@@ -230,6 +234,7 @@ class _AdminShellState extends State<AdminShell> {
   }
 
   Future<void> _signOut() async {
+    if (!await _coachReviewGuard.canLeave() || !mounted) return;
     final ok = await confirmDialog(context,
         title: 'Sign out of the console?',
         message: 'You will need to sign in again next time.',
@@ -283,6 +288,7 @@ class _AdminShellState extends State<AdminShell> {
                           }
                           if (d.label == 'Coaches') {
                             return CoachesScreen(
+                                discardGuard: _coachReviewGuard,
                                 live: true,
                                 onOpenBookings: (id) {
                                   final repository =

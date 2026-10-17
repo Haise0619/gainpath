@@ -5,6 +5,7 @@ import '../../features/coaching/presentation/coach/availability_screens.dart';
 import '../../features/analytics/presentation/coach/earnings_screen.dart';
 import '../../features/identity/presentation/coach/coach_account_screen.dart';
 import '../../features/identity/application/coach_profile_cubit.dart';
+import '../../infrastructure/firebase/firebase_coach_account_repository.dart';
 
 /// Bottom-navigation shell for the Fitness Coach role (Modules 8 to 10).
 class CoachShell extends StatefulWidget {
@@ -14,7 +15,9 @@ class CoachShell extends StatefulWidget {
       this.isCurrent,
       this.onOpenLiveEditor,
       this.liveAvailabilityBuilder,
-      this.liveRosterBuilder});
+      this.liveRosterBuilder,
+      this.accountRepository});
+  final FirebaseCoachAccountRepository? accountRepository;
   final CoachProfileRepository? liveRepository;
   final bool Function()? isCurrent;
   final void Function(CoachProfileCubit)? onOpenLiveEditor;
@@ -62,6 +65,7 @@ class _CoachShellState extends State<CoachShell> {
                               child: Text(
                                   'Unavailable: this workflow is not connected to Firebase yet.'))),
                   CoachAccountScreen(
+                      accountRepository: widget.accountRepository,
                       liveRepository: widget.liveRepository,
                       isCurrent: widget.isCurrent,
                       onOpenLiveEditor: widget.onOpenLiveEditor),

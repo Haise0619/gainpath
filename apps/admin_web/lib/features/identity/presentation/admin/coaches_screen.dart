@@ -3,6 +3,7 @@ import 'package:gainpath_domain/identity.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
 import 'user_action_dialogs.dart';
 import 'live_coach_directory_admin_view.dart';
+import 'coach_review_discard_guard.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 Widget _networkHero(String url, {BoxFit fit = BoxFit.cover}) {
@@ -22,7 +23,12 @@ Widget _networkHero(String url, {BoxFit fit = BoxFit.cover}) {
 /// than the dense searchable table Members uses.
 class CoachesScreen extends StatefulWidget {
   const CoachesScreen(
-      {super.key, this.live = false, this.onOpenSchedule, this.onOpenBookings});
+      {super.key,
+      this.live = false,
+      this.onOpenSchedule,
+      this.onOpenBookings,
+      this.discardGuard});
+  final CoachReviewDiscardGuard? discardGuard;
   final bool live;
   final void Function(String coachId)? onOpenSchedule;
   final void Function(String coachId)? onOpenBookings;
@@ -51,6 +57,7 @@ class _CoachesScreenState extends State<CoachesScreen> {
   Widget build(BuildContext context) {
     if (widget.live) {
       return LiveCoachDirectoryAdminView(
+          discardGuard: widget.discardGuard,
           repository: context.read<CoachProfileAdminRepository>(),
           onOpenSchedule: widget.onOpenSchedule,
           onOpenBookings: widget.onOpenBookings);
