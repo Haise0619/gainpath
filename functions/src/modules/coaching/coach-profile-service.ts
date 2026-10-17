@@ -1,3 +1,4 @@
+import { credentialGateEnabled } from './coach-management-common';
 import { requireActiveMembership, requireVerifiedEmail } from '../../platform/auth-context';
 import { DomainError } from '../../platform/errors';
 import type { DocumentData, DocumentStore, TransactionPort } from '../../platform/firestore/store';
@@ -7,8 +8,8 @@ import { InputValidationError, requiredIdentifier } from '../../platform/validat
 type Auth = { uid: string; token: Record<string, unknown> } | undefined;
 export type CoachIdentityReader = (uid: string) => Promise<{ exists: boolean; disabled: boolean; emailVerified: boolean }>;
 export interface CoachCommandResult { schemaVersion: 1; requestId: string; coachId: string; revision: number; outcome: 'saved' | 'published' | 'inactive' }
-const editable = ['displayName', 'specialty', 'bio', 'specializationTags', 'yearsExperience'] as const;
-const publicKeys = [...editable, 'schemaVersion', 'revision', 'sourceRevision', 'status', 'branchIds', 'createdAtMillis', 'updatedAtMillis', 'publishedAtMillis'];
+const editable = ['displayName', 'specialty', 'bio', 'specializationTags', 'yearsExperience', 'consultationFeeMinor', 'photoPath'] as const;
+const publicKeys = [...editable, 'schemaVersion', 'revision', 'sourceRevision', 'status', 'branchIds', 'createdAtMillis', 'updatedAtMillis', 'publishedAtMillis', 'certificationVerified', 'approvedCertificationCount'];
 function object(value: unknown): DocumentData {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new InputValidationError('A command object is required.');
   return value as DocumentData;
@@ -43,6 +44,14 @@ function professional(raw: DocumentData): DocumentData {
   if (raw.yearsExperience !== null && (!Number.isSafeInteger(raw.yearsExperience) || Number(raw.yearsExperience) < 0 || Number(raw.yearsExperience) > 60)) throw new InputValidationError('Experience must be null or an integer from 0 to 60.');
   result.specializationTags = tags;
   result.yearsExperience = raw.yearsExperience;
+  if (Object.hasOwn(raw, 'consultationFeeMinor')) {
+    if (raw.consultationFeeMinor !== null && (!Number.isSafeInteger(raw.consultationFeeMinor) || Number(raw.consultationFeeMinor) < 0 || Number(raw.consultationFeeMinor) > 1000000)) throw new InputValidationError('Fee must be null or integer MYR minor units from 0 to 1000000 (input guard).');
+    result.consultationFeeMinor = raw.consultationFeeMinor;
+  }
+  if (Object.hasOwn(raw, 'photoPath')) {
+    if (raw.photoPath !== null && (typeof raw.photoPath !== 'string' || !/^orgs\/[^/]+\/coachProfilePhotos\/[^/]+\/[a-f0-9]{32}$/.test(raw.photoPath))) throw new InputValidationError('Invalid photo path.');
+    result.photoPath = raw.photoPath;
+  }
   return result;
 }
 function stored(data: DocumentData | undefined, isPublic = false): DocumentData | undefined {
@@ -89,6 +98,7 @@ export async function saveCoachProfile(store: DocumentStore, auth: Auth, raw: un
   const expected = revision(data.expectedRevision), patch = object(data.patch);
   keys(patch, editable);
   if (!Object.keys(patch).length) throw new InputValidationError('Change at least one professional field.');
+  if (patch.photoPath !== undefined && patch.photoPath !== null && (typeof patch.photoPath !== 'string' || (!patch.photoPath.startsWith(`orgs/${org}/coachProfilePhotos/${uid}/`) || !/^[a-f0-9]{32}$/.test(patch.photoPath.slice(`orgs/${org}/coachProfilePhotos/${uid}/`.length))))) throw new InputValidationError('Photo must belong to this Coach.');
   const canonicalPatch = Object.fromEntries(editable.filter(k => Object.hasOwn(patch, k)).map(k => [k, patch[k]]));
   const fingerprint = keyOf(org, expected, canonicalPatch), receiptPath = `orgs/${org}/commandReceipts/${keyOf('saveCoachProfile', uid, requestId)}`;
   return store.transact(async tx => {
@@ -97,7 +107,7 @@ export async function saveCoachProfile(store: DocumentStore, auth: Auth, raw: un
     const replayed = replay(await tx.get(receiptPath), fingerprint); if (replayed) return replayed;
     const path = `orgs/${org}/coachProfiles/${uid}`, current = stored(await tx.get(path));
     compare(current, expected);
-    if (!current && editable.some(k => !Object.hasOwn(patch, k))) throw new InputValidationError('A complete professional profile is required.');
+    if (!current && editable.filter(k => k !== 'consultationFeeMinor' && k !== 'photoPath').some(k => !Object.hasOwn(patch, k))) throw new InputValidationError('A complete professional profile is required.');
     const validated = professional({ ...current, ...canonicalPatch });
     const changed = Object.fromEntries(Object.keys(canonicalPatch).map(k => [k, validated[k]]));
     if (current && Object.keys(changed).every(k => JSON.stringify(changed[k]) === JSON.stringify(current[k]))) throw new InputValidationError('Change at least one professional field.');
@@ -132,7 +142,7 @@ export async function setCoachDirectoryStatus(store: DocumentStore, auth: Auth, 
     const path = `orgs/${org}/coaches/${coachId}`, current = stored(await tx.get(path), true);
     if (!publishing && !current) throw new DomainError('not-found', 'Public Coach profile not found.');
     compare(current, expectedPublic);
-    let fields: DocumentData | undefined, ids: string[] = [];
+    let fields: DocumentData | undefined, ids: string[] = [], credentialState: DocumentData | undefined;
     if (publishing) {
       const targetMember = await authority(tx, org, coachId, 'coach');
       ids = branches(targetMember.branchIds); await activeBranches(tx, org, ids);
@@ -140,10 +150,12 @@ export async function setCoachDirectoryStatus(store: DocumentStore, auth: Auth, 
       const source = stored(await tx.get(`orgs/${org}/coachProfiles/${coachId}`));
       if (!source) throw new DomainError('not-found', 'Coach professional profile not found.');
       compare(source, expectedSource!); fields = professional(source);
+      credentialState = await tx.get(`orgs/${org}/coachProfiles/${coachId}/certificationState/current`);
+      if (credentialGateEnabled() && (credentialState?.certificationVerified !== true || !Number.isSafeInteger(credentialState.approvedCount) || Number(credentialState.approvedCount) < 1 || Number(credentialState.approvedCount) > 100)) throw new DomainError('failed-precondition', 'An approved certification is required for publication.');
     } else if (!current) throw new DomainError('not-found', 'Public Coach profile not found.');
     const now = clock(), noop = !publishing && current?.status === 'inactive', next = noop ? expectedPublic : expectedPublic + 1;
     const result: CoachCommandResult = { schemaVersion: 1, requestId, coachId, revision: next, outcome: publishing ? 'published' : 'inactive' };
-    if (publishing) tx.set(path, { ...fields, schemaVersion: 1, revision: next, sourceRevision: expectedSource, status: 'published', branchIds: ids, createdAtMillis: current?.createdAtMillis ?? now, updatedAtMillis: now, publishedAtMillis: now });
+    if (publishing) tx.set(path, { ...fields, certificationVerified: credentialState?.certificationVerified === true, approvedCertificationCount: credentialState?.approvedCount ?? 0, schemaVersion: 1, revision: next, sourceRevision: expectedSource, status: 'published', branchIds: ids, createdAtMillis: current?.createdAtMillis ?? now, updatedAtMillis: now, publishedAtMillis: now });
     else if (!noop) tx.set(path, { ...current, status: 'inactive', revision: next, updatedAtMillis: now });
     tx.create(receiptPath, { schemaVersion: 1, command: 'setCoachDirectoryStatus', actorId: uid, fingerprint, createdAtMillis: now, result });
     return result;

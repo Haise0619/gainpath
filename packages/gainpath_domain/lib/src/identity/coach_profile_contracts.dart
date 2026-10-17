@@ -6,7 +6,9 @@ const _editable = {
   'specialty',
   'bio',
   'specializationTags',
-  'yearsExperience'
+  'yearsExperience',
+  'consultationFeeMinor',
+  'photoPath'
 };
 bool _id(String value) => RegExp(r'^[A-Za-z0-9_-]{1,128}$').hasMatch(value);
 int _number(Map<String, dynamic> data, String key, {int minimum = 0}) {
@@ -25,13 +27,20 @@ class CoachProfessionalFields {
       required String specialty,
       required String bio,
       required List<String> specializationTags,
-      required this.yearsExperience})
+      required this.yearsExperience,
+      this.consultationFeeMinor,
+      this.photoPath})
       : displayName = displayName.trim(),
         specialty = specialty.trim(),
         bio = bio.trim(),
         specializationTags =
             List.unmodifiable(specializationTags.map((t) => t.trim())) {
-    if (this.displayName.isEmpty ||
+    if ((consultationFeeMinor != null &&
+            (consultationFeeMinor! < 0 || consultationFeeMinor! > 1000000)) ||
+        (photoPath != null &&
+            !RegExp(r'^orgs/[A-Za-z0-9_-]{1,128}/coachProfilePhotos/[A-Za-z0-9_-]{1,128}/[a-f0-9]{32}$')
+                .hasMatch(photoPath!)) ||
+        this.displayName.isEmpty ||
         this.displayName.length > 80 ||
         this.specialty.isEmpty ||
         this.specialty.length > 80 ||
@@ -50,8 +59,13 @@ class CoachProfessionalFields {
   final String displayName, specialty, bio;
   final List<String> specializationTags;
   final int? yearsExperience;
+  final int? consultationFeeMinor;
+  final String? photoPath;
   factory CoachProfessionalFields.fromJson(Map<String, dynamic> data) {
-    if (data['displayName'] is! String ||
+    if ((data['consultationFeeMinor'] != null &&
+            data['consultationFeeMinor'] is! int) ||
+        (data['photoPath'] != null && data['photoPath'] is! String) ||
+        data['displayName'] is! String ||
         data['specialty'] is! String ||
         data['bio'] is! String ||
         data['specializationTags'] is! List ||
@@ -65,14 +79,18 @@ class CoachProfessionalFields {
         specialty: data['specialty'],
         bio: data['bio'],
         specializationTags: List<String>.from(data['specializationTags']),
-        yearsExperience: data['yearsExperience']);
+        yearsExperience: data['yearsExperience'],
+        consultationFeeMinor: data['consultationFeeMinor'],
+        photoPath: data['photoPath']);
   }
   Map<String, dynamic> toJson() => {
         'displayName': displayName,
         'specialty': specialty,
         'bio': bio,
         'specializationTags': specializationTags,
-        'yearsExperience': yearsExperience
+        'yearsExperience': yearsExperience,
+        'consultationFeeMinor': consultationFeeMinor,
+        'photoPath': photoPath
       };
 }
 
@@ -127,9 +145,13 @@ class PublishedCoachProfile {
       required List<String> branchIds,
       required this.createdAtMillis,
       required this.updatedAtMillis,
-      required this.publishedAtMillis})
+      required this.publishedAtMillis,
+      this.certificationVerified = false,
+      this.approvedCertificationCount = 0})
       : branchIds = List.unmodifiable(branchIds);
   final String id, status;
+  final bool certificationVerified;
+  final int approvedCertificationCount;
   final CoachProfessionalFields fields;
   final List<String> branchIds;
   final int revision,
@@ -148,10 +170,17 @@ class PublishedCoachProfile {
       'branchIds',
       'createdAtMillis',
       'updatedAtMillis',
-      'publishedAtMillis'
+      'publishedAtMillis',
+      'certificationVerified',
+      'approvedCertificationCount'
     };
     final branches = data['branchIds'];
-    if (!_id(id) ||
+    if ((data['certificationVerified'] != null &&
+            data['certificationVerified'] is! bool) ||
+        (data['approvedCertificationCount'] != null &&
+            (data['approvedCertificationCount'] is! int ||
+                data['approvedCertificationCount'] < 0)) ||
+        !_id(id) ||
         data['schemaVersion'] != 1 ||
         data.keys.any((k) => !_editable.contains(k) && !meta.contains(k)) ||
         !['published', 'inactive'].contains(data['status']) ||
@@ -171,7 +200,10 @@ class PublishedCoachProfile {
         branchIds: List<String>.from(branches),
         createdAtMillis: _number(data, 'createdAtMillis'),
         updatedAtMillis: _number(data, 'updatedAtMillis'),
-        publishedAtMillis: _number(data, 'publishedAtMillis'));
+        publishedAtMillis: _number(data, 'publishedAtMillis'),
+        certificationVerified: data['certificationVerified'] == true &&
+            (data['approvedCertificationCount'] ?? 0) > 0,
+        approvedCertificationCount: data['approvedCertificationCount'] ?? 0);
   }
 }
 

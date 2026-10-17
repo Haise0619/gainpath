@@ -657,5 +657,25 @@ service cloud.firestore {
     match /system/{document=**} {
       allow read, write: if false;
     }
+    // Module 8: immutable private credentials, audit history and server-owned summary.
+    function module8CredentialReader(orgId, coachId) {
+      return coachDirectoryMember(orgId)
+        && (coachOwner(orgId, coachId) || adminMember(orgId));
+    }
+    match /orgs/{orgId}/coachProfiles/{coachId}/certifications/{certificationId} {
+      allow get: if module8CredentialReader(orgId, coachId);
+      allow list: if module8CredentialReader(orgId, coachId) && request.query.limit != null && request.query.limit <= 100;
+      allow write: if false;
+      match /history/{revisionId} {
+        allow get: if module8CredentialReader(orgId, coachId);
+        allow list: if module8CredentialReader(orgId, coachId) && request.query.limit != null && request.query.limit <= 20;
+        allow write: if false;
+      }
+    }
+    match /orgs/{orgId}/coachProfiles/{coachId}/certificationState/{stateId} {
+      allow get: if stateId == 'current' && module8CredentialReader(orgId, coachId);
+      allow list, write: if false;
+    }
+
   }
 }

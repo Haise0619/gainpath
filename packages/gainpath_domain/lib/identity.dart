@@ -1,5 +1,6 @@
 export 'src/identity/entities/branch.dart';
 export 'src/identity/coach_profile_contracts.dart';
+export 'src/identity/coach_account_contracts.dart';
 export 'src/identity/entities/coach.dart';
 export 'src/identity/entities/coach_certification.dart';
 export 'src/identity/entities/coach_review.dart';

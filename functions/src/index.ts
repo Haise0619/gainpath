@@ -14,3 +14,6 @@ export { provisionMemberRegistration } from './modules/identity/provision-member
 export { getMemberAccountLifecycleCommand, requestMemberDeactivationCommand, cancelMemberDeactivationCommand } from './modules/identity/member-account-lifecycle-callables';
 export { publishRoutineCommand } from './modules/content/publish-routine-callable';
 export { acknowledgeWorkoutConsentCommand, revokeWorkoutConsentCommand, submitWorkoutSessionCommand } from './modules/workouts/workout-callables';
+
+export { submitCoachCertificationCommand, archiveCoachCertificationCommand, reviewCoachCertificationCommand, getCoachCertificationsCommand, getCoachAccountSettingsCommand, saveCoachAccountSettingsCommand } from './modules/coaching/coach-management-callables';
+export { getCoachPublishedPhotoCommand } from './modules/coaching/coach-management-callables';

@@ -110,5 +110,36 @@ service firebase.storage {
       // Publication and media validation belong to trusted content commands.
       allow write: if false;
     }
+    // Module 8: two-document authority; Members use the checked photo callable.
+    function module8StorageMember(orgId) {
+      return request.auth != null && request.auth.token.email_verified == true
+        && firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.organizationId == orgId
+        && firestore.get(/databases/(default)/documents/orgs/$(orgId)/members/$(request.auth.uid)).data.organizationId == orgId
+        && firestore.get(/databases/(default)/documents/orgs/$(orgId)/members/$(request.auth.uid)).data.status == 'active';
+    }
+    function module8StorageOwner(orgId, ownerUid) {
+      return module8StorageMember(orgId) && request.auth.uid == ownerUid
+        && firestore.get(/databases/(default)/documents/orgs/$(orgId)/members/$(request.auth.uid)).data.role == 'coach';
+    }
+    function module8StorageReader(orgId, ownerUid) {
+      return module8StorageMember(orgId)
+        && ((request.auth.uid == ownerUid && firestore.get(/databases/(default)/documents/orgs/$(orgId)/members/$(request.auth.uid)).data.role == 'coach')
+          || firestore.get(/databases/(default)/documents/orgs/$(orgId)/members/$(request.auth.uid)).data.role == 'admin');
+    }
+    match /orgs/{orgId}/coachCertifications/{ownerUid}/{objectId} {
+      allow get: if module8StorageReader(orgId, ownerUid);
+      allow create: if module8StorageOwner(orgId, ownerUid) && resource == null
+        && objectId.matches('[a-f0-9]{32}') && request.resource.size > 0 && request.resource.size <= 5 * 1024 * 1024
+        && request.resource.contentType in ['application/pdf', 'image/jpeg', 'image/png'];
+      allow update, delete, list: if false;
+    }
+    match /orgs/{orgId}/coachProfilePhotos/{ownerUid}/{objectId} {
+      allow get: if module8StorageReader(orgId, ownerUid);
+      allow create: if module8StorageOwner(orgId, ownerUid) && resource == null
+        && objectId.matches('[a-f0-9]{32}') && request.resource.size > 0 && request.resource.size <= 5 * 1024 * 1024
+        && request.resource.contentType in ['image/jpeg', 'image/png', 'image/webp'];
+      allow update, delete, list: if false;
+    }
+
   }
 }
