@@ -64,8 +64,20 @@ preferences, numeric target/history and photo, then deactivated it. Old-token
 access, pending private access and early reactivation were denied; the saved data
 was retained. This fixture was verified through trusted administrative setup,
 so these checks do not establish real email delivery or owner UI acceptance.
-The server permits restoration from 19:49:59 Kuala Lumpur time on 2026-10-17;
-the delayed reactivation/read-back check remains pending.
+The server permitted restoration after its security wait. Live backend checks
+completed on 2026-10-17: reactivation was confirmed at revision 2; the exact saved
+profile, preferences, goal and revision history matched; the original photo bytes
+were readable again; replaying the old deactivation request was harmless; and the
+old session remained denied for both Firestore and Storage. The disposable account
+is retained in active state. No canonical account was used or data deleted.
+
+The live check found a restored-photo Storage denial. The scoped repair uses
+explicit whole-number numeric validation in the Member lifecycle helper, retaining
+the same bounds, chronology and session barrier. The exact candidate passed 20
+focused authorization tests, including epoch timestamps and fractional-value
+denial, before selective activation and successful live photo-byte read-back.
+Firestore Rules and unrelated Storage policies were preserved. No APK rebuild was
+needed. These are backend checks; owner manual app acceptance remains pending.
 
 - For manual UI acceptance, use only an approved disposable Member. In Settings, request
   deactivation, read the warning and confirm its current password. Access should

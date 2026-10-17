@@ -34,16 +34,17 @@ service firebase.storage {
       return !('accountLifecycle' in user) || (user.accountLifecycle is map
         && user.accountLifecycle.schemaVersion == 1
         && user.accountLifecycle.state == 'active'
-        && user.accountLifecycle.revision is int && user.accountLifecycle.revision >= 1
-        && user.accountLifecycle.requestedAtMillis is int && user.accountLifecycle.requestedAtMillis > 0
-        && user.accountLifecycle.sessionNotBeforeSeconds is int
-        && user.accountLifecycle.sessionNotBeforeSeconds == int(user.accountLifecycle.requestedAtMillis / 1000) + 1
+        && user.accountLifecycle.revision is number && user.accountLifecycle.revision == math.floor(user.accountLifecycle.revision) && user.accountLifecycle.revision >= 1
+        && user.accountLifecycle.requestedAtMillis is number && user.accountLifecycle.requestedAtMillis == math.floor(user.accountLifecycle.requestedAtMillis) && user.accountLifecycle.requestedAtMillis > 0
+        && user.accountLifecycle.sessionNotBeforeSeconds is number && user.accountLifecycle.sessionNotBeforeSeconds == math.floor(user.accountLifecycle.sessionNotBeforeSeconds)
+        && user.accountLifecycle.sessionNotBeforeSeconds == math.floor(user.accountLifecycle.requestedAtMillis / 1000) + 1
         && user.accountLifecycle.revocationPending == false
-        && user.accountLifecycle.sessionRevokedAtMillis is int
+        && user.accountLifecycle.sessionRevokedAtMillis is number && user.accountLifecycle.sessionRevokedAtMillis == math.floor(user.accountLifecycle.sessionRevokedAtMillis)
         && user.accountLifecycle.sessionRevokedAtMillis >= user.accountLifecycle.requestedAtMillis
-        && user.accountLifecycle.reactivatedAtMillis is int
+        && user.accountLifecycle.reactivatedAtMillis is number && user.accountLifecycle.reactivatedAtMillis == math.floor(user.accountLifecycle.reactivatedAtMillis)
         && user.accountLifecycle.reactivatedAtMillis >= user.accountLifecycle.sessionRevokedAtMillis
-        && request.auth.token.auth_time is int
+        && request.auth.token.auth_time is number
+        && request.auth.token.auth_time == math.floor(request.auth.token.auth_time)
         && request.auth.token.auth_time >= user.accountLifecycle.sessionNotBeforeSeconds);
     }
 

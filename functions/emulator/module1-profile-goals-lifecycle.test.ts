@@ -141,6 +141,17 @@ it('Storage denies pending and stale sessions while retaining existing immutable
  await lifecycle('active');await assertFails(getMetadata(ref(ctx(100).storage(bucket),path)));
  await assertSucceeds(getMetadata(ref(ctx(200).storage(bucket),path)));
 });
+it('Storage accepts restored sessions with epoch-sized whole timestamps and rejects fractional lifecycle facts',async()=>{
+ const path='orgs/o/memberProfilePhotos/member/'+ 'b'.repeat(32),bucket='gs://demo-gainpath.appspot.com';
+ const restored={schemaVersion:1,state:'active',revision:2,requestedAtMillis:1792233899954,sessionNotBeforeSeconds:1792233900,revocationPending:false,sessionRevokedAtMillis:1792233899999,reactivatedAtMillis:1792237900000};
+ const storage=env.authenticatedContext('member',{email_verified:true,auth_time:1792238000}).storage(bucket);
+ await env.withSecurityRulesDisabled(async c=>{await uploadBytes(ref(c.storage(bucket),path),new Uint8Array([1]),{contentType:'image/png'});await updateDoc(doc(c.firestore(),'users/member'),{accountLifecycle:restored});});
+ await assertSucceeds(getMetadata(ref(storage,path)));
+ for(const field of ['revision','requestedAtMillis','sessionNotBeforeSeconds','sessionRevokedAtMillis','reactivatedAtMillis']){
+  await env.withSecurityRulesDisabled(async c=>updateDoc(doc(c.firestore(),'users/member'),{accountLifecycle:{...restored,[field]:restored[field as keyof typeof restored] as number + 0.5}}));
+  await assertFails(getMetadata(ref(storage,path)));
+ }
+});
 it('missing identity remains readable for authenticated provisioning recovery; other identities remain private',async()=>{
  await assertSucceeds(getDoc(doc(db('new'),'users/new')));
  await assertFails(getDoc(doc(db('new'),'users/member')));

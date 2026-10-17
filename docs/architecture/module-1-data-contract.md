@@ -208,3 +208,14 @@ use the configured production provider rather than this development APK.
 Live owner save/reopen acceptance remains pending. Firebase CLI also reported a
 non-blocking build-image cleanup failure after successful Function deployment;
 no broad registry cleanup or policy change was performed.
+
+The owner subsequently approved disposable-account lifecycle UAT. Live checks
+confirmed deactivation, old-token denial, retained records, the security wait,
+reactivation, exact profile/preferences/goal-history/photo read-back and harmless
+request replay. A restored-photo Storage compatibility issue was repaired by
+validating lifecycle/authentication numbers as whole values using `math.floor`,
+rather than relying on strict integer runtime tags. Fractional values remain
+denied. The repair changed only the Member Storage lifecycle helper, passed 20
+focused authorization cases and was verified against the exact live photo bytes.
+No canonical account, personal-record migration, purge or new APK was involved.
+This backend evidence does not replace owner manual UI acceptance.
