@@ -95,8 +95,9 @@ gets a new ID. Archive changes `status:active` to `archived`; it never deletes
 historical meaning or claims completion. Archived records cannot be edited.
 Concurrent revision changes reject stale edits. Create forms retain one allocated
 ID across retries, preventing duplicate creation after an uncertain response.
-Current goal reads request at most 21 records (20 displayed plus an overflow
-indicator); history reads, when introduced, must also page at most 21 records.
+Current goal reads/display are capped at 21 records, with an explicit bound
+notice and Add disabled at that bound; history reads, when introduced, must also
+page at most 21 records. Paging beyond that current-target bound is not offered.
 
 No goal is marked achieved, no actual measurement is fabricated, and no completion
 percentage is displayed. Future Module 5 comparisons must select a trusted
