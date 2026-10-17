@@ -57,11 +57,17 @@ password and lifecycle cases. Do not deactivate the existing canonical accounts.
 
 ## Separate approval gate within this checklist: live lifecycle — UC-1.5
 
-Do not perform this on the canonical Member/Admin/Coach accounts. The following
-non-destructive plan awaits explicit approval for a disposable test identity;
-automated lifecycle/security tests already passed without changing real accounts.
+Do not perform this on the canonical Member/Admin/Coach accounts. The owner
+approved this disposable-account plan on 2026-10-17. Live backend checks created
+one clearly labelled disposable Member, saved and reopened its profile,
+preferences, numeric target/history and photo, then deactivated it. Old-token
+access, pending private access and early reactivation were denied; the saved data
+was retained. This fixture was verified through trusted administrative setup,
+so these checks do not establish real email delivery or owner UI acceptance.
+The server permits restoration from 19:49:59 Kuala Lumpur time on 2026-10-17;
+the delayed reactivation/read-back check remains pending.
 
-- After approval, use only that disposable Member. In Settings, request
+- For manual UI acceptance, use only an approved disposable Member. In Settings, request
   deactivation, read the warning and confirm its current password. Access should
   stop and the app should sign out. Login should open only Account recovery,
   showing a 30-day deadline and paused access.
