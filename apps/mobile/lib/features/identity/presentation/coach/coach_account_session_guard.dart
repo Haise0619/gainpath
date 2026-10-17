@@ -16,6 +16,8 @@ class CoachAccountSessionGuard extends StatelessWidget {
           repository.check();
           return child;
         } catch (_) {
+          PaintingBinding.instance.imageCache.clear();
+          PaintingBinding.instance.imageCache.clearLiveImages();
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (context.mounted &&
                 ModalRoute.of(context)?.isCurrent == true &&

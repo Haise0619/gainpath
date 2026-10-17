@@ -54,7 +54,11 @@ class _CoachSessionHostState extends State<CoachSessionHost> {
     if (_auth != null) return;
     _auth = context.read<AuthBloc>();
     _subscription = _auth!.stream.listen((state) {
-      if (!_matches(state)) _invalidated = true;
+      if (!_matches(state)) {
+        _invalidated = true;
+        PaintingBinding.instance.imageCache.clear();
+        PaintingBinding.instance.imageCache.clearLiveImages();
+      }
     });
     _child = widget.builder(context, _current);
   }

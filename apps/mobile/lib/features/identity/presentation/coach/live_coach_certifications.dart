@@ -143,6 +143,7 @@ class _LiveCoachCertificationsState extends State<LiveCoachCertifications> {
                           for (final page in pages)
                             Image.memory(page, fit: BoxFit.contain),
                         ])))));
+        for (final page in pages) { await MemoryImage(page).evict(); }
         pages.clear();
       });
   @override
