@@ -196,3 +196,15 @@ Deployment evidence and exact live Rules rollback snapshots are kept in the
 ignored `build/non-core-crud-sprint/module-1-activation/` directory. Repository
 Rules contain unrelated pre-existing drift and must never be deployed wholesale.
 Owner manual acceptance and automatic purge remain separate completion gates.
+
+On 2026-10-17 the exact candidate Rules and three lifecycle callables were
+activated and read back; the existing 14 Function revisions were unchanged.
+The single integrated Firebase APK was installed with matching signing identity
+and byte-identical private data before launch. Its existing development App Check
+registration passed an actual debug-token exchange, without changing attestation
+enforcement or creating another token registration. Production distribution must
+use the configured production provider rather than this development APK.
+[Firebase debug-provider contract](https://firebase.google.com/docs/app-check/android/debug-provider).
+Live owner save/reopen acceptance remains pending. Firebase CLI also reported a
+non-blocking build-image cleanup failure after successful Function deployment;
+no broad registry cleanup or policy change was performed.
