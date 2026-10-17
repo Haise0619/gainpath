@@ -29,6 +29,24 @@ service firebase.storage {
         && request.resource.contentType.matches('image/.*|application/pdf');
     }
 
+    function memberSessionActive(uid) {
+      let user = firestore.get(/databases/(default)/documents/users/$(uid)).data;
+      return !('accountLifecycle' in user) || (user.accountLifecycle is map
+        && user.accountLifecycle.schemaVersion == 1
+        && user.accountLifecycle.state == 'active'
+        && user.accountLifecycle.revision is int && user.accountLifecycle.revision >= 1
+        && user.accountLifecycle.requestedAtMillis is int && user.accountLifecycle.requestedAtMillis > 0
+        && user.accountLifecycle.sessionNotBeforeSeconds is int
+        && user.accountLifecycle.sessionNotBeforeSeconds == int(user.accountLifecycle.requestedAtMillis / 1000) + 1
+        && user.accountLifecycle.revocationPending == false
+        && user.accountLifecycle.sessionRevokedAtMillis is int
+        && user.accountLifecycle.sessionRevokedAtMillis >= user.accountLifecycle.requestedAtMillis
+        && user.accountLifecycle.reactivatedAtMillis is int
+        && user.accountLifecycle.reactivatedAtMillis >= user.accountLifecycle.sessionRevokedAtMillis
+        && request.auth.token.auth_time is int
+        && request.auth.token.auth_time >= user.accountLifecycle.sessionNotBeforeSeconds);
+    }
+
     // FR-1.7: private immutable Member photo objects; clearing removes only the reference.
     match /orgs/{orgId}/memberProfilePhotos/{ownerUid}/{imageId} {
       function memberPhotoOwner() {
@@ -37,7 +55,8 @@ service firebase.storage {
           && firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.organizationId == orgId
           && firestore.get(/databases/(default)/documents/orgs/$(orgId)/members/$(request.auth.uid)).data.organizationId == orgId
           && firestore.get(/databases/(default)/documents/orgs/$(orgId)/members/$(request.auth.uid)).data.status == 'active'
-          && firestore.get(/databases/(default)/documents/orgs/$(orgId)/members/$(request.auth.uid)).data.role == 'member';
+          && firestore.get(/databases/(default)/documents/orgs/$(orgId)/members/$(request.auth.uid)).data.role == 'member'
+          && memberSessionActive(ownerUid);
       }
       allow get: if memberPhotoOwner();
       allow create: if memberPhotoOwner() && resource == null

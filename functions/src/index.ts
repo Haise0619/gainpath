@@ -11,5 +11,6 @@ export { saveCoachProfileCommand, setCoachDirectoryStatusCommand } from './modul
 export { getCoachAvailabilityCommand, saveCoachAvailabilityDayCommand } from './modules/coaching/coach-availability-callables';
 export { paymentWebhook } from './modules/commerce/payment-webhook';
 export { provisionMemberRegistration } from './modules/identity/provision-member-registration';
+export { getMemberAccountLifecycleCommand, requestMemberDeactivationCommand, cancelMemberDeactivationCommand } from './modules/identity/member-account-lifecycle-callables';
 export { publishRoutineCommand } from './modules/content/publish-routine-callable';
 export { acknowledgeWorkoutConsentCommand, revokeWorkoutConsentCommand, submitWorkoutSessionCommand } from './modules/workouts/workout-callables';

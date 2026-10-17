@@ -94,6 +94,49 @@ service cloud.firestore {
         || validMemberDisplayNamePair(orgId, uid);
     }
 
+    // Module 1 lifecycle metadata is server-owned. Legacy accounts have no barrier.
+    function memberSessionCurrent(uid) {
+      let user = get(/databases/$(database)/documents/users/$(uid)).data;
+      return !('accountLifecycle' in user) || (user.accountLifecycle is map
+        && user.accountLifecycle.schemaVersion == 1
+        && user.accountLifecycle.state in ['active', 'pendingDeletion']
+        && user.accountLifecycle.revision is int && user.accountLifecycle.revision >= 1
+        && user.accountLifecycle.requestedAtMillis is int && user.accountLifecycle.requestedAtMillis > 0
+        && user.accountLifecycle.sessionNotBeforeSeconds is int
+        && user.accountLifecycle.sessionNotBeforeSeconds == int(user.accountLifecycle.requestedAtMillis / 1000) + 1
+        && request.auth.token.auth_time is int
+        && request.auth.token.auth_time >= user.accountLifecycle.sessionNotBeforeSeconds);
+    }
+    function memberAccountActive(uid) {
+      let user = get(/databases/$(database)/documents/users/$(uid)).data;
+      return memberSessionCurrent(uid)
+        && (!('accountLifecycle' in user) || (user.accountLifecycle.state == 'active'
+          && user.accountLifecycle.revocationPending == false
+          && user.accountLifecycle.sessionRevokedAtMillis is int
+          && user.accountLifecycle.sessionRevokedAtMillis >= user.accountLifecycle.requestedAtMillis
+          && user.accountLifecycle.reactivatedAtMillis is int
+          && user.accountLifecycle.reactivatedAtMillis >= user.accountLifecycle.sessionRevokedAtMillis));
+    }
+    function module1Owner(orgId, uid) {
+      let user = get(/databases/$(database)/documents/users/$(uid)).data;
+      let member = get(/databases/$(database)/documents/orgs/$(orgId)/members/$(uid)).data;
+      return own(uid) && request.auth.token.email_verified == true
+        && user.organizationId == orgId && member.organizationId == orgId
+        && member.role == 'member' && member.status == 'active'
+        && memberAccountActive(uid);
+    }
+    // A fresh pending-deletion login may inspect its identity assignment only.
+    function ownIdentityReadable(uid) {
+      return own(uid) && (!exists(/databases/$(database)/documents/users/$(uid)) || memberSessionCurrent(uid));
+    }
+    function ownIdentityWritable(uid) {
+      let user = get(/databases/$(database)/documents/users/$(uid)).data;
+      let member = get(/databases/$(database)/documents/orgs/$(user.organizationId)/members/$(uid)).data;
+      return own(uid) && (member.role != 'member'
+        || (member.status == 'active' && member.organizationId == user.organizationId
+          && memberAccountActive(uid)));
+    }
+
     function own(uid) {
       return signedIn() && request.auth.uid == uid;
     }
@@ -106,10 +149,11 @@ service cloud.firestore {
         let member = get(/databases/$(database)/documents/orgs/$(orgId)/members/$(uid)).data;
         return request.auth != null && request.auth.uid == uid
           && request.auth.token.email_verified == true
-          && member.organizationId == orgId && member.role == 'member' && member.status == 'active';
+          && member.organizationId == orgId && member.role == 'member' && member.status == 'active'
+          && memberAccountActive(uid);
       }
-      allow update: if memberContactOwner()
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['contactDetails', 'updatedAtMillis'])
+      allow update: if request.resource.data.diff(resource.data).affectedKeys().hasOnly(['contactDetails', 'updatedAtMillis'])
+        && memberContactOwner()
         && request.resource.data.contactDetails is string
         && request.resource.data.contactDetails.size() <= 200
         && request.resource.data.contactDetails.matches('[^\\x00-\\x1f\\x7f]*')
@@ -122,7 +166,8 @@ service cloud.firestore {
         let member = get(/databases/$(database)/documents/orgs/$(orgId)/members/$(uid)).data;
         return request.auth != null && request.auth.uid == uid
           && request.auth.token.email_verified == true
-          && member.organizationId == orgId && member.role == 'member' && member.status == 'active';
+          && member.organizationId == orgId && member.role == 'member' && member.status == 'active'
+          && memberAccountActive(uid);
       }
       function validMemberPhotoReference() {
         let orgId = resource.data.organizationId;
@@ -132,16 +177,16 @@ service cloud.firestore {
           && parts[0] == 'orgs' && parts[1] == orgId && parts[2] == 'memberProfilePhotos'
           && parts[3] == uid && parts[4].matches('[a-f0-9]{32}')));
       }
-      allow update: if memberPhotoOwner()
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['memberPhotoPath', 'updatedAtMillis'])
+      allow update: if request.resource.data.diff(resource.data).affectedKeys().hasOnly(['memberPhotoPath', 'updatedAtMillis'])
+        && memberPhotoOwner()
         && validMemberPhotoReference()
         && request.resource.data.updatedAtMillis is int && request.resource.data.updatedAtMillis > 0;
     }
 
     match /users/{uid} {
-      allow read: if own(uid);
+      allow read: if ownIdentityReadable(uid);
       allow create: if false;
-      allow update: if own(uid)
+      allow update: if ownIdentityWritable(uid)
         && request.resource.data.diff(resource.data).affectedKeys()
           .hasOnly(['displayName', 'avatarPath', 'updatedAtMillis'])
         && memberDisplayNameUserGuard(uid);
@@ -192,9 +237,9 @@ service cloud.firestore {
     match /orgs/{orgId}/members/{uid} {
       // A signed-in account may read only its own assignment before email
       // verification so the client can show the verification gate.
-      allow read: if own(uid)
+      allow read: if ownIdentityReadable(uid)
         || (activeMember(orgId) && staffProfile(orgId, resource.data.branchIds));
-      allow update: if activeMember(orgId) && own(uid)
+      allow update: if activeMember(orgId) && ownIdentityWritable(uid)
         && request.resource.data.diff(resource.data).affectedKeys()
           .hasOnly(['displayName', 'goals', 'updatedAtMillis'])
           && memberDisplayNameMembershipGuard(orgId, uid);
@@ -202,21 +247,17 @@ service cloud.firestore {
     }
 
     match /orgs/{orgId}/profiles/{uid} {
-      function profileOwner() {
-        return own(uid) && activeMember(orgId)
-          && get(/databases/$(database)/documents/users/$(uid)).data.organizationId == orgId
-          && get(/databases/$(database)/documents/orgs/$(orgId)/members/$(uid)).data.organizationId == orgId
-          && get(/databases/$(database)/documents/orgs/$(orgId)/members/$(uid)).data.role == 'member';
-      }
       function validProfile() {
         let d = request.resource.data;
-        return d.keys().hasAll(['schemaVersion', 'gender', 'age', 'heightCm', 'weightKg',
+        return d.keys().hasAll(['schemaVersion', 'gender', 'heightCm', 'weightKg',
             'experience', 'activity', 'goals', 'updatedAt'])
-          && d.keys().hasOnly(['schemaVersion', 'gender', 'age', 'heightCm', 'weightKg',
-            'experience', 'activity', 'goals', 'updatedAt'])
-          && d.schemaVersion is int && d.schemaVersion == 1
+          && d.keys().hasOnly(['schemaVersion', 'gender', 'age', 'ageBracket', 'heightCm', 'weightKg',
+            'experience', 'activity', 'goals', 'updatedAt', 'createdAt', 'profileCompletedAt'])
+          && ((d.schemaVersion == 1 && 'age' in d && !('ageBracket' in d)
+              && d.age is int && d.age >= 13 && d.age <= 80)
+            || (d.schemaVersion == 2 && !('age' in d)
+              && d.ageBracket in ['teens', 'youngAdult', 'adult', 'midAdult', 'matureAdult', 'olderAdult', 'senior']))
           && d.gender in ['female', 'male', 'unspecified']
-          && d.age is int && d.age >= 13 && d.age <= 80
           && d.heightCm is int && d.heightCm >= 130 && d.heightCm <= 210
           && d.weightKg is int && d.weightKg >= 35 && d.weightKg <= 160
           && d.experience in ['beginner', 'intermediate', 'advanced']
@@ -227,17 +268,71 @@ service cloud.firestore {
             'increaseFlexibility', 'generalFitness', 'reduceStress'])
           && d.updatedAt == request.time;
       }
-      allow get: if profileOwner();
-      allow create, update: if profileOwner() && validProfile();
+      allow get: if module1Owner(orgId, uid);
+      allow create: if module1Owner(orgId, uid) && validProfile()
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.profileCompletedAt == request.time;
+      allow update: if module1Owner(orgId, uid) && validProfile()
+        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['createdAt', 'profileCompletedAt'])
+        && (resource.data.schemaVersion == 1 || request.resource.data.schemaVersion == 2);
       allow list, delete: if false;
+    }
+
+    // UC-1.11 numeric targets: immutable units/periods and atomic revision snapshots.
+    match /orgs/{orgId}/profiles/{uid}/goals/{goalId} {
+      function validGoal() {
+        let d = request.resource.data;
+        return goalId.matches('[A-Za-z0-9_-]{1,128}')
+          && d.keys().hasAll(['schemaVersion', 'category', 'targetValue', 'unit', 'evaluationPeriod',
+            'status', 'revision', 'createdAt', 'updatedAt'])
+          && d.keys().hasOnly(['schemaVersion', 'category', 'targetValue', 'unit', 'evaluationPeriod',
+            'status', 'revision', 'createdAt', 'updatedAt'])
+          && d.schemaVersion == 1 && d.revision is int && d.revision >= 1
+          && d.status in ['active', 'archived'] && d.createdAt is timestamp
+          && d.updatedAt == request.time
+          && ((d.category == 'bodyWeight' && d.unit == 'kg' && d.evaluationPeriod == 'latestMeasurement'
+              && d.targetValue is number && d.targetValue >= 35 && d.targetValue <= 160
+              && d.targetValue * 10 == int(d.targetValue * 10))
+            || (d.category == 'repetitions' && d.unit == 'repetitions' && d.evaluationPeriod == 'perSession'
+              && d.targetValue is int && d.targetValue >= 1 && d.targetValue <= 1000)
+            || (d.category == 'trainingFrequency' && d.unit == 'sessions' && d.evaluationPeriod == 'calendarWeek'
+              && d.targetValue is int && d.targetValue >= 1 && d.targetValue <= 14));
+      }
+      function revisionPair() {
+        let revision = string(request.resource.data.revision);
+        return !exists(/databases/$(database)/documents/orgs/$(orgId)/profiles/$(uid)/goals/$(goalId)/revisions/$(revision))
+          && getAfter(/databases/$(database)/documents/orgs/$(orgId)/profiles/$(uid)/goals/$(goalId)/revisions/$(revision)).data == request.resource.data;
+      }
+      allow get: if module1Owner(orgId, uid);
+      allow list: if module1Owner(orgId, uid) && request.query.limit <= 21;
+      allow create: if module1Owner(orgId, uid) && validGoal() && revisionPair()
+        && request.resource.data.status == 'active' && request.resource.data.revision == 1
+        && request.resource.data.createdAt == request.time;
+      allow update: if module1Owner(orgId, uid) && validGoal() && revisionPair()
+        && resource.data.status == 'active' && request.resource.data.revision == resource.data.revision + 1
+        && request.resource.data.createdAt == resource.data.createdAt
+        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['schemaVersion', 'category', 'unit', 'evaluationPeriod'])
+        && (request.resource.data.targetValue != resource.data.targetValue || request.resource.data.status != resource.data.status);
+      allow delete: if false;
+      match /revisions/{revision} {
+        allow get: if module1Owner(orgId, uid);
+        allow list: if module1Owner(orgId, uid) && request.query.limit <= 21;
+        allow create: if module1Owner(orgId, uid)
+          && revision == string(request.resource.data.revision)
+          && getAfter(/databases/$(database)/documents/orgs/$(orgId)/profiles/$(uid)/goals/$(goalId)).data == request.resource.data
+          && (!exists(/databases/$(database)/documents/orgs/$(orgId)/profiles/$(uid)/goals/$(goalId))
+            || get(/databases/$(database)/documents/orgs/$(orgId)/profiles/$(uid)/goals/$(goalId)).data.revision + 1 == request.resource.data.revision);
+        allow update, delete: if false;
+      }
+    }
+
+    match /orgs/{orgId}/memberLifecycleCommands/{uid}/{document=**} {
+      allow read, write: if false;
     }
 
     match /orgs/{orgId}/preferences/{uid} {
       function preferenceOwner() {
-        return own(uid) && activeMember(orgId)
-          && get(/databases/$(database)/documents/users/$(uid)).data.organizationId == orgId
-          && get(/databases/$(database)/documents/orgs/$(orgId)/members/$(uid)).data.organizationId == orgId
-          && get(/databases/$(database)/documents/orgs/$(orgId)/members/$(uid)).data.role == 'member';
+        return module1Owner(orgId, uid);
       }
       function validPreferences() {
         let d = request.resource.data;
