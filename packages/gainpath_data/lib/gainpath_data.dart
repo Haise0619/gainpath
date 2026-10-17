@@ -1,5 +1,6 @@
 export 'src/auth_repository.dart';
 export 'src/firebase_fitness_profile_repository.dart';
+export 'src/firebase_numeric_fitness_goal_repository.dart';
 export 'src/firebase_member_photo_repository.dart';
 export 'src/member_document_snapshot.dart';
 export 'src/auth_repository_factory.dart';

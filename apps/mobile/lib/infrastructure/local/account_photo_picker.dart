@@ -35,6 +35,7 @@ class LocalAccountPhotoPicker implements AccountPhotoPicker {
     final image = AccountPhoto(await file.readAsBytes());
     final buffer = await ui.ImmutableBuffer.fromUint8List(image.bytes);
     ui.Codec? codec;
+    bool resized = false;
     try {
       // ImageDescriptor.width/height are unsupported for encoded images on Web.
       // This callback supplies the intrinsic dimensions on both Web and native.
@@ -44,10 +45,31 @@ class LocalAccountPhotoPicker implements AccountPhotoPicker {
           throw const FormatException(
               'Choose an image smaller than 24 megapixels.');
         }
-        return const ui.TargetImageSize(width: 256);
+        final longest = width > height ? width : height;
+        if (longest <= 512) {
+          return ui.TargetImageSize(width: width, height: height);
+        }
+        resized = true;
+        final scale = 512 / longest;
+        return ui.TargetImageSize(
+            width: (width * scale).round().clamp(1, 512),
+            height: (height * scale).round().clamp(1, 512));
       });
       final frame = await codec.getNextFrame();
-      frame.image.dispose();
+      try {
+        if (resized) {
+          final bytes =
+              await frame.image.toByteData(format: ui.ImageByteFormat.png);
+          if (bytes == null) {
+            throw const FormatException(
+                'This image could not be resized. Choose another image.');
+          }
+          return AccountPhoto(bytes.buffer
+              .asUint8List(bytes.offsetInBytes, bytes.lengthInBytes));
+        }
+      } finally {
+        frame.image.dispose();
+      }
     } on FormatException {
       rethrow;
     } catch (_) {

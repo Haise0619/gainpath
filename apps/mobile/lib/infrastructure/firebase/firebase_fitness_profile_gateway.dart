@@ -57,6 +57,13 @@ class FlutterFitnessProfileGateway implements FitnessProfileGateway {
       final document = _document(scope);
       final original = freezeMemberDocument(expectedSnapshot);
       final patch = freezeMemberDocument(data)!;
+      final fields = <String, Object?>{
+        for (final entry in patch.entries)
+          entry.key:
+              original != null && entry.key == 'age' && entry.value == null
+                  ? FieldValue.delete()
+                  : entry.value,
+      };
       // The original form snapshot and intended patch never advance on retry.
       await _firestore.runTransaction<void>((transaction) async {
         _checkSession(scope);
@@ -68,11 +75,15 @@ class FlutterFitnessProfileGateway implements FitnessProfileGateway {
               reloadRequired: true);
         }
         if (original == null) {
-          transaction.set(
-              document, {...patch, 'updatedAt': FieldValue.serverTimestamp()});
+          transaction.set(document, {
+            ...fields,
+            'createdAt': FieldValue.serverTimestamp(),
+            'profileCompletedAt': FieldValue.serverTimestamp(),
+            'updatedAt': FieldValue.serverTimestamp(),
+          });
         } else if (patch.isNotEmpty) {
           transaction.update(
-              document, {...patch, 'updatedAt': FieldValue.serverTimestamp()});
+              document, {...fields, 'updatedAt': FieldValue.serverTimestamp()});
         }
       }, timeout: const Duration(seconds: 20));
       _checkSession(scope);

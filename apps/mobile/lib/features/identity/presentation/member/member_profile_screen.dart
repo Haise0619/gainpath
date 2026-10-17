@@ -28,6 +28,9 @@ class MemberProfileScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final ageLabel = liveSession == null
+        ? '${context.read<MemberProfileRepository>().memberAge} yrs'
+        : liveProfile!.ageLabel;
     return Scaffold(
       appBar: AppBar(title: const Text('Profile')),
       body: PageBody(
@@ -85,8 +88,7 @@ class MemberProfileScreen extends StatelessWidget {
                   children: [
                     _QuickStat(Icons.wc_rounded,
                         context.read<MemberProfileRepository>().memberGender),
-                    _QuickStat(Icons.cake_outlined,
-                        '${context.read<MemberProfileRepository>().memberAge} yrs'),
+                    _QuickStat(Icons.cake_outlined, ageLabel),
                     _QuickStat(Icons.height_rounded,
                         '${context.read<MemberProfileRepository>().memberHeight} cm'),
                     _QuickStat(Icons.monitor_weight_outlined,
@@ -106,7 +108,7 @@ class MemberProfileScreen extends StatelessWidget {
                     context,
                     Icons.badge_outlined,
                     'Physical profile',
-                    '${context.read<MemberProfileRepository>().memberGender} · ${context.read<MemberProfileRepository>().memberAge} yrs · ${context.read<MemberProfileRepository>().memberHeight} cm · '
+                    '${context.read<MemberProfileRepository>().memberGender} · $ageLabel · ${context.read<MemberProfileRepository>().memberHeight} cm · '
                         '${context.read<MemberProfileRepository>().memberWeight} kg',
                     () => Navigator.push(
                         context,
@@ -246,53 +248,9 @@ class MemberProfileScreen extends StatelessWidget {
   }
 }
 
-/// AD-M1.2 — Gym Member logout is the one deliberate exception in this
-/// system that skips a confirmation dialog: it is immediate and
-/// irreversible once tapped. The brief in-progress overlay stands in for
-/// background session-listener teardown, so the transition still reads as
-/// deliberate rather than an instant jarring cut.
+/// Logout immediately invalidates account-scoped UI operations and listeners.
 Future<void> _signOut(BuildContext context) async {
-  showDialog(
-    context: context,
-    barrierDismissible: false,
-    builder: (_) => const _SigningOutOverlay(),
-  );
-  await Future.delayed(const Duration(milliseconds: 550));
-  if (!context.mounted) return;
   context.read<AuthBloc>().add(const LoggedOut());
-}
-
-class _SigningOutOverlay extends StatelessWidget {
-  const _SigningOutOverlay();
-
-  @override
-  Widget build(BuildContext context) {
-    return Dialog(
-      backgroundColor: Colors.transparent,
-      elevation: 0,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 24),
-        decoration: BoxDecoration(
-          color: AppColors.surface,
-          borderRadius: BorderRadius.circular(20),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const SizedBox(
-              width: 28,
-              height: 28,
-              child: CircularProgressIndicator(
-                  strokeWidth: 2.6, color: AppColors.primary),
-            ),
-            const SizedBox(height: 14),
-            Text('Signing out…',
-                style: Theme.of(context).textTheme.titleMedium),
-          ],
-        ),
-      ),
-    );
-  }
 }
 
 class _QuickStat extends StatelessWidget {

@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:gainpath_domain/gainpath_domain.dart';
 import 'package:gainpath_mobile/infrastructure/firebase/firebase_auth_gateway.dart';
 
 void main() {
@@ -57,7 +58,36 @@ void main() {
           'branchIds': ['main'],
         },
       ),
-      throwsStateError,
+      throwsA(isA<AuthException>()
+          .having((e) => e.message, 'message', contains('suspended'))),
     );
+  });
+  test('pending deletion resolves only consistent member recovery scope', () {
+    final user = <String, Object?>{
+      'organizationId': 'gainpath',
+      'accountLifecycle': {'state': 'pendingDeletion'}
+    };
+    final member = <String, Object?>{
+      'organizationId': 'gainpath',
+      'role': 'member',
+      'status': 'pendingDeletion',
+      'branchIds': ['main']
+    };
+    expect(
+        membershipClaims(
+            userData: user, memberData: member)['accountLifecycleState'],
+        'pendingDeletion');
+    expect(
+        () => membershipClaims(
+            userData: user, memberData: {...member, 'status': 'active'}),
+        throwsA(isA<AuthException>()));
+    expect(
+        () => membershipClaims(
+            userData: user, memberData: {...member, 'role': 'coach'}),
+        throwsA(isA<AuthException>()));
+    expect(
+        () => membershipClaims(
+            userData: {...user, 'accountLifecycle': 'bad'}, memberData: member),
+        throwsA(isA<AuthException>()));
   });
 }

@@ -23,16 +23,30 @@ class FitnessProfileGate extends StatefulWidget {
 }
 
 class _FitnessProfileGateState extends State<FitnessProfileGate> {
-  late final FitnessProfileCubit _cubit;
+  late FitnessProfileCubit _cubit;
 
   @override
   void initState() {
     super.initState();
+    _createCubit();
+  }
+
+  void _createCubit() {
     if (widget.repository.scope != widget.session.scope) {
       throw ArgumentError(
           'Profile repository must belong to the signed-in account.');
     }
     _cubit = FitnessProfileCubit(widget.repository)..load();
+  }
+
+  @override
+  void didUpdateWidget(FitnessProfileGate oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!identical(oldWidget.repository, widget.repository) ||
+        !identical(oldWidget.session, widget.session)) {
+      _cubit.close();
+      _createCubit();
+    }
   }
 
   @override
@@ -115,7 +129,7 @@ class _LiveMemberProfileRepository implements MemberProfileRepository {
   @override
   String get memberGender => profile.gender.label;
   @override
-  int get memberAge => profile.age;
+  int? get memberAge => profile.age;
   @override
   int get memberHeight => profile.heightCm;
   @override

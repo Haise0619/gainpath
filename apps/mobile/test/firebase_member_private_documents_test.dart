@@ -151,6 +151,42 @@ void main() {
           scope: scope, firestore: db, auth: _Auth());
 
   test(
+      'new profile timestamps creation and completion without inventing old events',
+      () async {
+    final db = _Firestore();
+    final source = repository(db);
+    await source.load();
+    await source.save(profile());
+    expect(db.writes.single['createdAt'], isA<FieldValue>());
+    expect(db.writes.single['profileCompletedAt'], isA<FieldValue>());
+    final original = (await source.load())!;
+    await source.save(original.copyWith(weightKg: 66));
+    expect(db.writes.last.containsKey('createdAt'), isFalse);
+    expect(db.writes.last.containsKey('profileCompletedAt'), isFalse);
+    db.documents[profilePath]!.remove('createdAt');
+    db.documents[profilePath]!.remove('profileCompletedAt');
+    final legacy = (await source.load())!;
+    await source.save(legacy.copyWith(weightKg: 67));
+    expect(db.documents[profilePath]!.containsKey('createdAt'), isFalse);
+    expect(
+        db.documents[profilePath]!.containsKey('profileCompletedAt'), isFalse);
+  });
+
+  test('user-selected legacy age upgrade sends a Firestore delete marker',
+      () async {
+    final db = _Firestore();
+    final source = repository(db);
+    await source.load();
+    await source.save(profile());
+    final original = (await source.load())!;
+    await source.save(original.copyWith(ageBracket: AgeBracket.adult));
+    expect(db.writes.last['age'], isA<FieldValue>());
+    expect(db.writes.last['ageBracket'], 'adult');
+    expect(db.writes.last['schemaVersion'], 2);
+    expect(db.writes.last.containsKey('createdAt'), isFalse);
+  });
+
+  test(
       'stale personal form cannot overwrite another session, even after a newer load',
       () async {
     final db = _Firestore();

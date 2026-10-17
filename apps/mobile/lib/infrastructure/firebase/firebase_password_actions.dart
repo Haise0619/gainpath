@@ -6,11 +6,17 @@ class FirebasePasswordResetActions {
       : _auth = auth ?? FirebaseAuth.instance;
   final FirebaseAuth _auth;
   Future<void> send(String email) async {
+    final emailError = const CredentialsPolicy()
+        .validate(email: email, password: 'unused')
+        .email;
+    if (emailError != null) throw AuthException(emailError);
     try {
       await _auth.sendPasswordResetEmail(email: email.trim());
     } on FirebaseAuthException catch (error) {
       // Match Firebase's enumeration-protected neutral response.
-      if (error.code == 'user-not-found') return;
+      if (error.code == 'user-not-found' || error.code == 'user-disabled') {
+        return;
+      }
       throw AuthException(switch (error.code) {
         'invalid-email' => 'Enter a valid email address.',
         'network-request-failed' => 'Check your connection and retry.',

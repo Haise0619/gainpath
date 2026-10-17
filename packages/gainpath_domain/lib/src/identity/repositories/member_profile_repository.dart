@@ -5,7 +5,7 @@ abstract class MemberProfileRepository {
   String get memberEmail;
   String get memberTier;
   String get memberGender;
-  int get memberAge;
+  int? get memberAge;
   String get memberExperience;
   String get memberActivityLevel;
   int get memberHeight;

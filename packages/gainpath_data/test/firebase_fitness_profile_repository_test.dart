@@ -14,11 +14,59 @@ class MemoryGateway implements FitnessProfileGateway {
       throw const FitnessProfileException('Conflict.', reloadRequired: true);
     }
     records[scope] = {...?records[scope], ...data};
+    if (data.containsKey('age') && data['age'] == null)
+      records[scope]!.remove('age');
   }
 }
 
 void main() {
   final scope = SessionScope(userId: 'a', organizationId: 'org');
+  test('age-bracket profile round trips without inventing an exact age',
+      () async {
+    final gateway = MemoryGateway();
+    final repo =
+        FirebaseFitnessProfileRepository(scope: scope, gateway: gateway);
+    await repo.load();
+    await repo.save(FitnessProfile(
+        gender: ProfileGender.unspecified,
+        ageBracket: AgeBracket.adult,
+        heightCm: 165,
+        weightKg: 65,
+        experience: TrainingExperience.beginner,
+        activity: ActivityLevel.lightlyActive,
+        goals: {FitnessGoal.generalFitness}));
+    expect(gateway.records[scope]!['schemaVersion'], 2);
+    expect(gateway.records[scope]!.containsKey('age'), isFalse);
+    final saved = (await repo.load())!;
+    expect(saved.age, isNull);
+    expect(saved.ageBracket, AgeBracket.adult);
+    expect(saved.ageLabel, '25–34 yrs');
+  });
+  test('legacy exact age stays unchanged until an explicit age-bracket edit',
+      () async {
+    final gateway = MemoryGateway();
+    final repo =
+        FirebaseFitnessProfileRepository(scope: scope, gateway: gateway);
+    await repo.load();
+    await repo.save(FitnessProfile(
+        gender: ProfileGender.unspecified,
+        age: 25,
+        heightCm: 165,
+        weightKg: 65,
+        experience: TrainingExperience.beginner,
+        activity: ActivityLevel.lightlyActive,
+        goals: {FitnessGoal.generalFitness}));
+    await repo.save(
+        (await repo.load())!.copyWith(experience: TrainingExperience.advanced));
+    expect(gateway.records[scope]!['schemaVersion'], 1);
+    expect(gateway.records[scope]!['age'], 25);
+    expect(gateway.records[scope]!.containsKey('ageBracket'), isFalse);
+    await repo
+        .save((await repo.load())!.copyWith(ageBracket: AgeBracket.midAdult));
+    expect(gateway.records[scope]!['schemaVersion'], 2);
+    expect(gateway.records[scope]!.containsKey('age'), isFalse);
+    expect((await repo.load())!.ageBracket, AgeBracket.midAdult);
+  });
   test('round trips editable fields and isolates accounts and organizations',
       () async {
     final gateway = MemoryGateway();

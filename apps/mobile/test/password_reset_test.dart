@@ -24,6 +24,17 @@ class ResetAuth implements FirebaseAuth {
 
 void main() {
   setUpAll(() => GoogleFonts.config.allowRuntimeFetching = false);
+  test('reset rejects malformed email before invoking the provider', () async {
+    final auth = ResetAuth();
+    await expectLater(
+        FirebasePasswordResetActions(auth: auth).send('not-email'),
+        throwsA(isA<AuthException>()));
+    expect(auth.emails, isEmpty);
+  });
+  test('disabled account reset remains enumeration safe', () async {
+    final auth = ResetAuth()..failure = 'user-disabled';
+    await FirebasePasswordResetActions(auth: auth).send('disabled@example.com');
+  });
   test('reset action calls actual Firebase SDK operation with trimmed email',
       () async {
     final auth = ResetAuth();

@@ -85,6 +85,7 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   void _submit() {
+    if (_submitting) return;
     setState(() => _message = null);
     context.read<AuthBloc>().add(LoginSubmitted(
           email: _email.text,
@@ -97,6 +98,13 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   void _onAuthChanged(BuildContext context, AuthState auth) {
+    if (_submitting &&
+        auth.status == AuthStatus.signedOut &&
+        auth.message != null &&
+        auth.fieldErrors.isValid) {
+      _password.clear();
+      _confirm.clear();
+    }
     setState(() {
       _submitting = auth.status == AuthStatus.submitting;
       _nameError = auth.fieldErrors.name;

@@ -9,6 +9,7 @@ class AuthSession {
     this.displayName,
     required this.role,
     this.needsVerification = false,
+    this.accountLifecycleState = 'active',
   });
 
   final String userId;
@@ -21,6 +22,9 @@ class AuthSession {
   final AppRole role;
   final bool needsVerification;
 
+  /// Pending deletion retains a narrow authenticated recovery session only.
+  final String accountLifecycleState;
+
   @override
   bool operator ==(Object other) =>
       other is AuthSession &&
@@ -30,11 +34,19 @@ class AuthSession {
       other.email == email &&
       other.displayName == displayName &&
       other.role == role &&
-      other.needsVerification == needsVerification;
+      other.needsVerification == needsVerification &&
+      other.accountLifecycleState == accountLifecycleState;
 
   @override
-  int get hashCode => Object.hash(userId, organizationId,
-      Object.hashAll(branchIds), email, displayName, role, needsVerification);
+  int get hashCode => Object.hash(
+      userId,
+      organizationId,
+      Object.hashAll(branchIds),
+      email,
+      displayName,
+      role,
+      needsVerification,
+      accountLifecycleState);
 }
 
 bool _sameStrings(List<String> left, List<String> right) {

@@ -7,6 +7,7 @@ export 'src/identity/entities/user_account.dart';
 export 'src/identity/entities/account_photo.dart';
 export 'src/identity/repositories/member_photo_repository.dart';
 export 'src/identity/repositories/member_contact_details_repository.dart';
+export 'src/identity/repositories/member_account_lifecycle_repository.dart';
 export 'src/identity/enums/account_status.dart';
 export 'src/identity/enums/certification_status.dart';
 export 'src/identity/repositories/coach_repository.dart';

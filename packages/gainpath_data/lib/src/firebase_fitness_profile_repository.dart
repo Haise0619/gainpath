@@ -33,14 +33,22 @@ class FirebaseFitnessProfileRepository implements FitnessProfileRepository {
     _knownMissing = data == null;
     if (data == null) return null;
     try {
-      if (data['schemaVersion'] != 1) throw const FormatException();
+      final version = data['schemaVersion'];
+      if (version != 1 && version != 2) throw const FormatException();
+      if (version == 1 && data.containsKey('ageBracket'))
+        throw const FormatException();
+      if (version == 2 && data.containsKey('age'))
+        throw const FormatException();
       final rawGoals = (data['goals'] as List).cast<String>();
       if (rawGoals.toSet().length != rawGoals.length) {
         throw const FormatException();
       }
       return FitnessProfile(
         gender: ProfileGender.values.byName(data['gender'] as String),
-        age: data['age'] as int,
+        age: version == 1 ? data['age'] as int : null,
+        ageBracket: version == 2
+            ? AgeBracket.values.byName(data['ageBracket'] as String)
+            : null,
         heightCm: data['heightCm'] as int,
         weightKg: data['weightKg'] as int,
         experience:
@@ -70,21 +78,28 @@ class FirebaseFitnessProfileRepository implements FitnessProfileRepository {
           reloadRequired: true);
     }
     final fields = <String, Object?>{
-      'schemaVersion': 1,
+      'schemaVersion': profile.ageBracket == null ? 1 : 2,
       'gender': profile.gender.name,
-      'age': profile.age,
+      if (profile.age != null) 'age': profile.age,
+      if (profile.ageBracket != null) 'ageBracket': profile.ageBracket!.name,
       'heightCm': profile.heightCm,
       'weightKg': profile.weightKg,
       'experience': profile.experience.name,
       'activity': profile.activity.name,
       'goals': profile.goals.map((goal) => goal.name).toList()..sort(),
     };
+    if (original?['schemaVersion'] == 2 && profile.ageBracket == null) {
+      throw const FitnessProfileException(
+          'Use an age bracket for this profile.');
+    }
     final patch = freezeMemberDocument({
       for (final field in fields.entries)
         if (original == null ||
-            (field.key != 'schemaVersion' &&
-                !sameMemberDocumentValue(field.value, original[field.key])))
+            !sameMemberDocumentValue(field.value, original[field.key]))
           field.key: field.value,
+      // A null age is an explicit delete marker only for a user-chosen upgrade.
+      if (original?.containsKey('age') == true && profile.ageBracket != null)
+        'age': null,
     })!;
     await gateway.write(scope, patch, expectedSnapshot: original);
     _knownMissing = false;

@@ -10,6 +10,7 @@ import 'package:gainpath_ui/gainpath_ui.dart';
 import '../../../../infrastructure/firebase/firebase_member_photo_gateway.dart';
 import '../../../../infrastructure/firebase/firebase_member_photo_store.dart';
 import '../../../../infrastructure/local/account_photo_picker.dart';
+import 'module1_edit_guard.dart';
 
 /// Existing Profile avatar/camera, with a private own-account editor.
 class MemberProfilePhoto extends StatefulWidget {
@@ -26,10 +27,12 @@ class _MemberProfilePhotoState extends State<MemberProfilePhoto> {
   MemberPhotoRepository? _repository;
   AuthBloc? _auth;
   StreamSubscription<AuthState>? _subscription;
+  BuildContext? _editorContext;
   MemberPhoto? _original;
   Uint8List? _bytes;
   String? _error;
   bool _loading = false, _invalidated = false, _initialized = false;
+  bool _initializationFailed = false;
   bool get _live => widget.session != null || widget.repository != null;
   bool _current() {
     if (widget.session != null &&
@@ -50,6 +53,8 @@ class _MemberProfilePhotoState extends State<MemberProfilePhoto> {
       _auth = context.read<AuthBloc>();
       _subscription = _auth!.stream.listen((_) {
         if (!_current() && mounted) {
+          final editor = _editorContext;
+          if (editor != null && editor.mounted) Navigator.of(editor).pop();
           setState(() {
             _bytes = null;
             _original = null;
@@ -61,17 +66,31 @@ class _MemberProfilePhotoState extends State<MemberProfilePhoto> {
     _repository = widget.repository;
     if (widget.session != null && _repository == null) {
       final scope = widget.session!.scope;
-      _repository = FirebaseMemberPhotoRepository(
-          scope: scope,
-          isCurrent: _current,
-          gateway: FlutterMemberPhotoGateway(scope: scope, isCurrent: _current),
-          photos: FirebaseAccountPhotoStore(scope: scope, isCurrent: _current));
+      try {
+        _repository = FirebaseMemberPhotoRepository(
+            scope: scope,
+            isCurrent: _current,
+            gateway:
+                FlutterMemberPhotoGateway(scope: scope, isCurrent: _current),
+            photos:
+                FirebaseAccountPhotoStore(scope: scope, isCurrent: _current));
+      } catch (_) {
+        _initializationFailed = true;
+        _error = 'Photo unavailable. Restart the app and sign in again.';
+      }
     }
-    if (_live) unawaited(_load());
+    if (_live && _repository != null) unawaited(_load());
   }
 
   Future<void> _load() async {
     if (!_current()) return;
+    if (_repository == null) {
+      setState(() {
+        _error = 'Photo unavailable. Restart the app and sign in again.';
+        _loading = false;
+      });
+      return;
+    }
     setState(() {
       _loading = true;
       _original = null;
@@ -100,7 +119,7 @@ class _MemberProfilePhotoState extends State<MemberProfilePhoto> {
   }
 
   Future<void> _edit() async {
-    if (!_current() || _loading) return;
+    if (!_current() || _loading || _initializationFailed) return;
     if (_live) {
       await _load();
       if (!_current() || _original == null) return;
@@ -108,12 +127,16 @@ class _MemberProfilePhotoState extends State<MemberProfilePhoto> {
     final changed = await showDialog<_PhotoEditResult>(
         context: context,
         barrierDismissible: false,
-        builder: (_) => _MemberPhotoEditor(
-            original: _original,
-            bytes: _bytes,
-            repository: _repository,
-            picker: widget.picker ?? LocalAccountPhotoPicker(),
-            isCurrent: _current));
+        builder: (dialogContext) {
+          _editorContext = dialogContext;
+          return _MemberPhotoEditor(
+              original: _original,
+              bytes: _bytes,
+              repository: _repository,
+              picker: widget.picker ?? LocalAccountPhotoPicker(),
+              isCurrent: _current);
+        });
+    _editorContext = null;
     if (!_current() || changed == null) return;
     if (_live) {
       await _load();
@@ -166,13 +189,21 @@ class _MemberProfilePhotoState extends State<MemberProfilePhoto> {
                   child: IconButton(
                       tooltip: 'Edit profile picture',
                       visualDensity: VisualDensity.compact,
-                      onPressed: _loading || _invalidated ? null : _edit,
+                      onPressed:
+                          _loading || _invalidated || _initializationFailed
+                              ? null
+                              : _edit,
                       icon: const Icon(Icons.camera_alt_rounded,
                           size: 16, color: AppColors.primary)))),
         ]),
         if (_loading)
           const SizedBox(width: 60, child: LinearProgressIndicator()),
         if (_error != null)
+          SizedBox(
+              width: 100,
+              child:
+                  Text(_error!, style: Theme.of(context).textTheme.bodySmall)),
+        if (_error != null && !_initializationFailed)
           SizedBox(
               width: 76,
               child: TextButton(
@@ -207,7 +238,21 @@ class _MemberPhotoEditorState extends State<_MemberPhotoEditor> {
   bool _remove = false, _busy = false, _reloadRequired = false;
   String? _error;
   Uint8List? get _preview => _remove ? null : _selected?.bytes ?? widget.bytes;
+  bool get _dirty => !_reloadRequired && (_selected != null || _remove);
+  Future<void> _close() async {
+    if (_busy) return;
+    if (_dirty) {
+      final discard = await confirmSheet(context,
+          title: 'Discard unsaved picture?',
+          message: 'Your selected picture has not been saved.',
+          confirmLabel: 'Discard changes');
+      if (!discard || !mounted) return;
+    }
+    if (mounted) Navigator.pop(context);
+  }
+
   Future<void> _pick() async {
+    if (_busy || _reloadRequired || !widget.isCurrent()) return;
     setState(() {
       _busy = true;
       _error = null;
@@ -234,6 +279,7 @@ class _MemberPhotoEditorState extends State<_MemberPhotoEditor> {
   }
 
   Future<void> _save() async {
+    if (_busy || _reloadRequired) return;
     if (!widget.isCurrent()) {
       setState(() {
         _error = 'Your session changed. Close and sign in again.';
@@ -273,8 +319,9 @@ class _MemberPhotoEditorState extends State<_MemberPhotoEditor> {
   }
 
   @override
-  Widget build(BuildContext context) => PopScope(
-      canPop: !_busy,
+  Widget build(BuildContext context) => Module1EditGuard(
+      dirty: _dirty,
+      busy: _busy,
       child: AlertDialog(
         title: const Text('Profile picture'),
         content: SizedBox(
@@ -300,8 +347,11 @@ class _MemberPhotoEditorState extends State<_MemberPhotoEditor> {
                   icon: const Icon(Icons.photo_library_outlined),
                   label: const Text('Choose image')),
               TextButton(
-                  onPressed: _busy || _reloadRequired || _remove ||
-                      (_preview == null && (widget.original?.path.isEmpty ?? true))
+                  onPressed: _busy ||
+                          _reloadRequired ||
+                          _remove ||
+                          (_preview == null &&
+                              (widget.original?.path.isEmpty ?? true))
                       ? null
                       : () => setState(() {
                             _selected = null;
@@ -317,8 +367,7 @@ class _MemberPhotoEditorState extends State<_MemberPhotoEditor> {
             ])),
         actions: [
           TextButton(
-              onPressed: _busy ? null : () => Navigator.pop(context),
-              child: const Text('Close')),
+              onPressed: _busy ? null : _close, child: const Text('Close')),
           FilledButton(
               onPressed:
                   _busy || _reloadRequired || (_selected == null && !_remove)

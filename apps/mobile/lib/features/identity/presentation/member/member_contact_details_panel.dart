@@ -6,13 +6,19 @@ import 'package:gainpath_domain/identity.dart';
 import 'package:gainpath_identity/gainpath_identity.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
 import '../../../../infrastructure/firebase/firebase_member_contact_details_repository.dart';
+import 'module1_edit_guard.dart';
 
 class MemberContactDetailsPanel extends StatefulWidget {
   const MemberContactDetailsPanel(
-      {super.key, this.session, this.repository, this.onDisplayNameSaved});
+      {super.key,
+      this.session,
+      this.repository,
+      this.onDisplayNameSaved,
+      this.onDirtyChanged});
   final AuthSession? session;
   final MemberContactDetailsRepository? repository;
   final ValueChanged<String>? onDisplayNameSaved;
+  final ValueChanged<bool>? onDirtyChanged;
   @override
   State<MemberContactDetailsPanel> createState() =>
       _MemberContactDetailsPanelState();
@@ -30,6 +36,16 @@ class _MemberContactDetailsPanelState extends State<MemberContactDetailsPanel> {
       _invalidated = false,
       _reloadRequired = false;
   String? _error, _status;
+  String _mockContact = '', _mockName = '';
+  bool get _dirty =>
+      !_invalidated &&
+      (_text.text != (_original?.value ?? _mockContact) ||
+          _name.text != (_original?.displayName ?? _mockName));
+  void _changed() {
+    setState(() => _status = null);
+    widget.onDirtyChanged?.call(_dirty);
+  }
+
   bool _current() {
     if (widget.session != null &&
         (_auth?.state.session != widget.session ||
@@ -56,6 +72,7 @@ class _MemberContactDetailsPanelState extends State<MemberContactDetailsPanel> {
             _error = 'Your session changed. Sign in again.';
             _status = null;
           });
+          widget.onDirtyChanged?.call(false);
         }
       });
     }
@@ -83,6 +100,7 @@ class _MemberContactDetailsPanelState extends State<MemberContactDetailsPanel> {
         _name.text = saved.displayName;
         _reloadRequired = false;
       });
+      widget.onDirtyChanged?.call(_dirty);
     } catch (e) {
       if (_current()) {
         setState(() {
@@ -119,10 +137,12 @@ class _MemberContactDetailsPanelState extends State<MemberContactDetailsPanel> {
       setState(() {
         _original = saved;
         _text.text = saved?.value ?? value.trim();
+        _mockContact = _text.text;
         _status = _repository == null
             ? 'Saved in Mock Mode.'
             : 'Contact details saved.';
       });
+      widget.onDirtyChanged?.call(_dirty);
     } catch (e) {
       if (_current()) {
         setState(() {
@@ -168,9 +188,11 @@ class _MemberContactDetailsPanelState extends State<MemberContactDetailsPanel> {
       setState(() {
         _original = saved;
         _name.text = confirmed;
+        _mockName = confirmed;
         _status =
             _repository == null ? 'Saved in Mock Mode.' : 'Display name saved.';
       });
+      widget.onDirtyChanged?.call(_dirty);
       if (widget.onDisplayNameSaved != null) {
         widget.onDisplayNameSaved!(confirmed);
       } else if (_auth != null) {
@@ -205,7 +227,10 @@ class _MemberContactDetailsPanelState extends State<MemberContactDetailsPanel> {
   }
 
   @override
-  Widget build(BuildContext context) => Panel(
+  Widget build(BuildContext context) => Module1EditGuard(
+      dirty: _dirty,
+      busy: _busy,
+      child: Panel(
           child:
               Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         if (_repository == null ||
@@ -220,7 +245,7 @@ class _MemberContactDetailsPanelState extends State<MemberContactDetailsPanel> {
                   labelText: 'Display name',
                   helperText: 'Used on your profile and Home greeting.',
                   helperMaxLines: 2),
-              onChanged: (_) => setState(() => _status = null)),
+              onChanged: (_) => _changed()),
           FilledButton(
               onPressed: _busy ||
                       _reloadRequired ||
@@ -248,9 +273,12 @@ class _MemberContactDetailsPanelState extends State<MemberContactDetailsPanel> {
                     tooltip: 'Clear contact details',
                     onPressed: _busy || _reloadRequired || _invalidated
                         ? null
-                        : () => setState(_text.clear),
+                        : () {
+                            _text.clear();
+                            _changed();
+                          },
                     icon: const Icon(Icons.clear))),
-            onChanged: (_) => setState(() => _status = null)),
+            onChanged: (_) => _changed()),
         if (_busy) const LinearProgressIndicator(),
         if (_error != null)
           Text(_error!,
@@ -269,5 +297,5 @@ class _MemberContactDetailsPanelState extends State<MemberContactDetailsPanel> {
                 ? null
                 : _save,
             child: const Text('Save contact details')),
-      ]));
+      ])));
 }

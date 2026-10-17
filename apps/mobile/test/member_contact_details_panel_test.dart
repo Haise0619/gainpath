@@ -65,6 +65,41 @@ class _AuthRepository extends Fake
 
 void main() {
   testWidgets(
+      'route back protects unsaved contact and dirty callback clears after save',
+      (tester) async {
+    final repo = _Repository();
+    final dirty = <bool>[];
+    await tester.pumpWidget(MaterialApp(
+        home: Builder(
+            builder: (context) => Scaffold(
+                body: TextButton(
+                    child: const Text('Open contact'),
+                    onPressed: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                            builder: (_) => Scaffold(
+                                appBar: AppBar(title: const Text('Contact')),
+                                body: MemberContactDetailsPanel(
+                                    repository: repo,
+                                    onDirtyChanged: dirty.add)))))))));
+    await tester.tap(find.text('Open contact'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), 'Changed contact');
+    await tester.pump();
+    expect(dirty.last, true);
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    expect(find.text('Discard unsaved changes?'), findsOneWidget);
+    await tester.tap(find.text('Not now'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Save contact details'));
+    await tester.pumpAndSettle();
+    expect(dirty.last, false);
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    expect(find.text('Open contact'), findsOneWidget);
+  });
+  testWidgets(
       'confirmed name save returns to existing Home with refreshed authoritative session',
       (tester) async {
     final repo = _NamedRepository();

@@ -41,12 +41,30 @@ enum FitnessGoal {
   final String label;
 }
 
+/// Age ranges for new inputs; existing exact ages remain legacy user facts.
+enum AgeBracket {
+  teens('13–17', 13, 17),
+  youngAdult('18–24', 18, 24),
+  adult('25–34', 25, 34),
+  midAdult('35–44', 35, 44),
+  matureAdult('45–54', 45, 54),
+  olderAdult('55–64', 55, 64),
+  senior('65–80', 65, 80);
+
+  const AgeBracket(this.label, this.minimum, this.maximum);
+  final String label;
+  final int minimum, maximum;
+  static AgeBracket fromAge(int age) => values
+      .firstWhere((value) => age >= value.minimum && age <= value.maximum);
+}
+
 /// Private fitness preferences. Authorization and membership fields belong to
 /// the account assignment, never to this user-editable record.
 class FitnessProfile {
   FitnessProfile({
     required this.gender,
-    required this.age,
+    this.age,
+    this.ageBracket,
     required this.heightCm,
     required this.weightKg,
     required this.experience,
@@ -54,8 +72,8 @@ class FitnessProfile {
     required Set<FitnessGoal> goals,
     this.editBaseline,
   }) : goals = Set.unmodifiable(goals) {
-    if (age < 13 ||
-        age > 80 ||
+    if ((age == null) == (ageBracket == null) ||
+        (age != null && (age! < 13 || age! > 80)) ||
         heightCm < 130 ||
         heightCm > 210 ||
         weightKg < 35 ||
@@ -67,7 +85,10 @@ class FitnessProfile {
   }
 
   final ProfileGender gender;
-  final int age;
+  final int? age;
+  final AgeBracket? ageBracket;
+  String get ageLabel => age == null ? '${ageBracket!.label} yrs' : '$age yrs';
+  AgeBracket get effectiveAgeBracket => ageBracket ?? AgeBracket.fromAge(age!);
   final int heightCm;
   final int weightKg;
   final TrainingExperience experience;
@@ -80,6 +101,7 @@ class FitnessProfile {
   FitnessProfile copyWith({
     ProfileGender? gender,
     int? age,
+    AgeBracket? ageBracket,
     int? heightCm,
     int? weightKg,
     TrainingExperience? experience,
@@ -88,7 +110,8 @@ class FitnessProfile {
   }) =>
       FitnessProfile(
         gender: gender ?? this.gender,
-        age: age ?? this.age,
+        age: ageBracket != null ? null : age ?? this.age,
+        ageBracket: age != null ? null : ageBracket ?? this.ageBracket,
         heightCm: heightCm ?? this.heightCm,
         weightKg: weightKg ?? this.weightKg,
         experience: experience ?? this.experience,

@@ -35,6 +35,9 @@ class FakeProfileGateway implements FitnessProfileGateway {
           reloadRequired: true);
     }
     records[scope] = {...?records[scope], ...data};
+    if (data.containsKey('age') && data['age'] == null) {
+      records[scope]!.remove('age');
+    }
     afterWrite?.call();
   }
 }

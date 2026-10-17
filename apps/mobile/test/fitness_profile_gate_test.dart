@@ -16,6 +16,35 @@ void main() {
   const second = AuthSession(
       userId: 'two', email: 'two@example.com', role: AppRole.member);
 
+  testWidgets(
+      'same member repository replacement closes the old profile lifetime',
+      (tester) async {
+    final profiles = FakeProfileGateway();
+    await profiles.repository(first.scope).save(sampleProfile());
+    final oldRepository = profiles.repository(first.scope);
+    final newRepository = profiles.repository(first.scope);
+    FitnessProfileCubit? current;
+    Future<void> mount(FitnessProfileRepository repository) async {
+      await tester.pumpWidget(MaterialApp(
+          home: FitnessProfileGate(
+        session: first,
+        repository: repository,
+        readyBuilder: (context, profile) {
+          current = context.read<FitnessProfileCubit>();
+          return const SizedBox();
+        },
+      )));
+      await tester.pumpAndSettle();
+    }
+
+    await mount(oldRepository);
+    final oldCubit = current!;
+    await mount(newRepository);
+    expect(oldCubit.isClosed, isTrue);
+    expect(identical(current!.repository, newRepository), isTrue);
+    await tester.pumpWidget(const SizedBox());
+  });
+
   testWidgets('ready content edits through the account-owned profile providers',
       (tester) async {
     final profiles = FakeProfileGateway();

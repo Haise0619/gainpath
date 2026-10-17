@@ -40,6 +40,12 @@ abstract interface class FirebaseAuthSessionGateway {
   Future<FirebaseAuthUser?> restoreUser();
 }
 
+/// A reload failed before authoritative identity/membership could be checked.
+/// An existing gated session can retry without creating another account.
+class FirebaseAuthRefreshUnavailable extends AuthException {
+  const FirebaseAuthRefreshUnavailable(super.message);
+}
+
 /// Serializes provider mutations and invalidates results immediately on logout.
 class FirebaseAuthRepository
     implements AuthRepository, AuthSessionLifecycle, AuthVerificationActions {
@@ -51,6 +57,7 @@ class FirebaseAuthRepository
         if (_pending != 0 || _disposed || _signedOut) return;
         try {
           final session = user == null ? null : _sessionFromClaims(user);
+          _currentSession = session;
           _changes.add(session);
         } catch (error) {
           _changes.add(null);
@@ -73,6 +80,8 @@ class FirebaseAuthRepository
   int _pending = 0;
   bool _signedOut = false;
   bool _disposed = false;
+  AuthSession? _currentSession;
+  DateTime? _lastVerificationSentAt;
 
   @override
   Stream<AuthSession?> get sessionChanges => _changes.stream;
@@ -106,8 +115,17 @@ class FirebaseAuthRepository
         _check(revision);
         final session = _sessionFromClaims(user,
             requestedRole: role, requireVerification: register);
+        if (_currentSession?.userId != session.userId) {
+          _lastVerificationSentAt = null;
+        }
+        _currentSession = session;
         if (register) {
-          await _gateway.sendEmailVerification();
+          try {
+            await _sendVerification();
+          } catch (_) {
+            // Account creation and provisioning have succeeded. Keep the
+            // pending session so delivery can be retried without registration.
+          }
           _check(revision);
         }
         _changes.add(session);
@@ -115,6 +133,7 @@ class FirebaseAuthRepository
       } catch (error) {
         if (revision == _revision && !_disposed) {
           _signedOut = true;
+          _currentSession = null;
           // The login BLoC owns the failure state. A null session here races
           // with its error handler and can hide the failure from the form.
           try {
@@ -162,14 +181,34 @@ class FirebaseAuthRepository
             await (gateway as FirebaseAuthSessionGateway).restoreUser();
         _check(revision);
         final session = user == null ? null : _sessionFromClaims(user);
+        final previous = _currentSession;
+        if (previous != null &&
+            previous.needsVerification &&
+            previous == session) {
+          // No protected data is mounted yet. Preserve the pending screen so
+          // an explicit verification check can display its inline feedback.
+          return previous;
+        }
+        _currentSession = session;
         _signedOut = session == null;
         _changes.add(session);
         return session;
       } catch (error) {
+        if (error is FirebaseAuthRefreshUnavailable &&
+            revision == _revision &&
+            !_disposed &&
+            _currentSession != null) {
+          rethrow;
+        }
         if (revision == _revision && !_disposed) {
           _signedOut = true;
+          _currentSession = null;
           _changes.add(null);
-          await _gateway.signOut();
+          try {
+            await _gateway.signOut();
+          } catch (_) {
+            // Preserve the actionable original session-restoration failure.
+          }
         }
         rethrow;
       }
@@ -180,13 +219,42 @@ class FirebaseAuthRepository
   Future<void> signOut() {
     ++_revision;
     _signedOut = true;
+    _currentSession = null;
+    _lastVerificationSentAt = null;
     if (!_disposed) _changes.add(null);
     return _serialize(_gateway.signOut);
   }
 
   @override
-  Future<void> resendEmailVerification() =>
-      _serialize(_gateway.sendEmailVerification);
+  Future<void> resendEmailVerification() {
+    final revision = _revision;
+    return _serialize(() async {
+      _check(revision);
+      await _sendVerification();
+      _check(revision);
+    });
+  }
+
+  Future<void> _sendVerification() async {
+    final session = _currentSession;
+    if (_signedOut ||
+        session == null ||
+        session.accountLifecycleState != 'active') {
+      throw const AuthException(
+          'Sign in again to request a verification link.');
+    }
+    if (!session.needsVerification) {
+      throw const AuthException('Your email is already verified.');
+    }
+    final lastSent = _lastVerificationSentAt;
+    if (lastSent != null &&
+        DateTime.now().difference(lastSent).inSeconds < 30) {
+      throw const AuthException(
+          'Wait 30 seconds before requesting another link.');
+    }
+    await _gateway.sendEmailVerification();
+    _lastVerificationSentAt = DateTime.now();
+  }
 
   AuthSession _sessionFromClaims(FirebaseAuthUser user,
       {AppRole? requestedRole, bool requireVerification = false}) {
@@ -220,6 +288,19 @@ class FirebaseAuthRepository
         branchIds.isEmpty) {
       throw const AuthException('This account has no valid branch assignment.');
     }
+    final lifecycle = user.claims['accountLifecycleState'] ?? 'active';
+    final membershipStatus = user.claims['status'];
+    if (lifecycle != 'active' &&
+        !(role == AppRole.member && lifecycle == 'pendingDeletion')) {
+      throw const AuthException(
+          'This account is unavailable. Contact gym staff.');
+    }
+    if (membershipStatus != null &&
+        membershipStatus !=
+            (lifecycle == 'pendingDeletion' ? 'pendingDeletion' : 'active')) {
+      throw const AuthException(
+          'This account has an unavailable or inconsistent membership. Contact gym staff.');
+    }
     return AuthSession(
         userId: user.userId,
         organizationId: organizationId,
@@ -227,6 +308,7 @@ class FirebaseAuthRepository
         email: user.email,
         displayName: user.displayName,
         role: role,
+        accountLifecycleState: lifecycle as String,
         needsVerification: requireVerification || !user.emailVerified);
   }
 

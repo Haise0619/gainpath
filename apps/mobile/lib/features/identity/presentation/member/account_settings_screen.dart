@@ -3,6 +3,9 @@ import 'package:gainpath_ui/gainpath_ui.dart';
 import 'package:gainpath_domain/gainpath_domain.dart';
 import 'package:gainpath_domain/identity.dart';
 import 'member_contact_details_panel.dart';
+import 'member_deactivation_dialog.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:gainpath_identity/gainpath_identity.dart';
 
 class AccountSettingsScreen extends StatefulWidget {
   const AccountSettingsScreen(
@@ -10,12 +13,16 @@ class AccountSettingsScreen extends StatefulWidget {
       this.repository,
       this.contactSession,
       this.contactRepository,
+      this.lifecycleRepository,
+      this.onAccountDeactivated,
       this.verifyCurrentPassword,
       this.saveNewPassword});
 
   final MemberPreferencesRepository? repository;
   final AuthSession? contactSession;
   final MemberContactDetailsRepository? contactRepository;
+  final MemberAccountLifecycleRepository? lifecycleRepository;
+  final VoidCallback? onAccountDeactivated;
   final Future<void> Function(String)? verifyCurrentPassword;
   final Future<void> Function(String)? saveNewPassword;
 
@@ -108,6 +115,21 @@ class _AccountSettingsScreenState extends State<AccountSettingsScreen> {
       emailUpdates: _email,
       voiceCoaching: _voice,
       editBaseline: _loadedPreferences?.editBaseline);
+
+  Future<void> _deactivate() async {
+    final repository = widget.lifecycleRepository;
+    if (repository == null) return;
+    final confirmed = await showDialog<bool>(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => MemberDeactivationDialog(repository: repository));
+    if (!mounted || confirmed != true) return;
+    if (widget.onAccountDeactivated != null) {
+      widget.onAccountDeactivated!();
+    } else {
+      context.read<AuthBloc>().add(const LoggedOut());
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -232,7 +254,8 @@ class _AccountSettingsScreenState extends State<AccountSettingsScreen> {
                         ],
                       ),
                     ),
-                    if (widget.repository == null) ...[
+                    if (widget.repository == null ||
+                        widget.lifecycleRepository != null) ...[
                       const SizedBox(height: 18),
                       Panel(
                         child: Column(
@@ -245,8 +268,9 @@ class _AccountSettingsScreenState extends State<AccountSettingsScreen> {
                                     ?.copyWith(color: AppColors.danger)),
                             const SizedBox(height: 6),
                             Text(
-                              'Your account is held for 30 days before everything is permanently '
-                              'deleted. You can sign back in during that window to keep it.',
+                              widget.lifecycleRepository == null
+                                  ? 'Your account is held for 30 days before deletion. You can sign back in during that window to keep it.'
+                                  : 'Account access stops immediately. You can recover within 30 days after a 65-minute security wait. Automatic permanent deletion is not enabled.',
                               style: Theme.of(context).textTheme.bodyMedium,
                             ),
                             const SizedBox(height: 14),
@@ -255,12 +279,14 @@ class _AccountSettingsScreenState extends State<AccountSettingsScreen> {
                                 foregroundColor: AppColors.danger,
                                 minimumSize: const Size(0, 44),
                               ),
-                              onPressed: () => confirmSheet(context,
-                                  title: 'Deactivate your account?',
-                                  message:
-                                      'Access stops immediately. Everything is deleted for good after 30 days.',
-                                  confirmLabel: 'Deactivate',
-                                  destructive: true),
+                              onPressed: widget.lifecycleRepository != null
+                                  ? _deactivate
+                                  : () => confirmSheet(context,
+                                      title: 'Deactivate your account?',
+                                      message:
+                                          'Access stops immediately. Everything is deleted for good after 30 days.',
+                                      confirmLabel: 'Deactivate',
+                                      destructive: true),
                               child: const Text('Deactivate account'),
                             ),
                           ],

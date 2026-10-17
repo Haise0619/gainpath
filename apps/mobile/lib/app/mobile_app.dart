@@ -4,6 +4,8 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:gainpath_data/gainpath_data.dart';
 import 'package:gainpath_domain/gainpath_domain.dart';
 import 'package:gainpath_domain/content.dart';
+import 'package:gainpath_domain/identity.dart'
+    show MemberAccountLifecycleRepository;
 import '../infrastructure/firebase/firebase_announcement_reader.dart';
 import 'package:gainpath_identity/gainpath_identity.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
@@ -25,6 +27,8 @@ import '../infrastructure/firebase/firebase_auth_gateway.dart';
 import '../infrastructure/firebase/firebase_fitness_profile_gateway.dart';
 import '../infrastructure/firebase/firebase_member_preferences_repository.dart';
 import '../infrastructure/firebase/firebase_password_actions.dart';
+import '../infrastructure/firebase/firebase_member_account_lifecycle_repository.dart';
+import '../features/identity/presentation/member/member_account_recovery_screen.dart';
 import '../infrastructure/firebase/firebase_published_routine_repository.dart';
 import '../features/workout/data/published_routine.dart';
 import '../features/identity/presentation/member/fitness_profile_gate.dart';
@@ -47,6 +51,7 @@ class GainPathMobileApp extends StatelessWidget {
       this.bookingListFactory,
       this.progressRepositoryFactory,
       this.passwordResetSender,
+      this.accountLifecycleFactory,
       this.memberSettingsBuilder});
 
   final AuthRepository? authRepository;
@@ -65,6 +70,8 @@ class GainPathMobileApp extends StatelessWidget {
   final BookingListFactory? bookingListFactory;
   final LocalMemberProgressRepositoryFactory? progressRepositoryFactory;
   final Future<void> Function(String)? passwordResetSender;
+  final MemberAccountLifecycleRepository Function(AuthSession, bool Function())?
+      accountLifecycleFactory;
   final WidgetBuilder? memberSettingsBuilder;
 
   @override
@@ -88,11 +95,12 @@ class GainPathMobileApp extends StatelessWidget {
         create: (context) =>
             AuthBloc(repository: context.read<AuthRepository>()),
         child: BlocBuilder<AuthBloc, AuthState>(
-          buildWhen: (previous, current) => previous.session != current.session,
+          buildWhen: (previous, current) =>
+              !identical(previous.session, current.session),
           builder: (context, state) {
             final app = MaterialApp(
               // Close the entry routes when identity changes in either backend.
-              key: ValueKey((state.session?.scope, state.session?.role)),
+              key: ObjectKey(state.session),
               title: 'GainPath',
               debugShowCheckedModeBanner: false,
               theme: AppTheme.build(),
@@ -110,6 +118,7 @@ class GainPathMobileApp extends StatelessWidget {
                   bookingListFactory: bookingListFactory,
                   progressRepositoryFactory: progressRepositoryFactory,
                   passwordResetSender: passwordResetSender,
+                  accountLifecycleFactory: accountLifecycleFactory,
                   memberSettingsBuilder: memberSettingsBuilder),
               routes: AppRouteBuilders.withLogin((_) => LoginScreen(
                   prefillDemoPassword: !config.isFirebase,
@@ -149,6 +158,7 @@ class _MobileAuthGate extends StatefulWidget {
       this.bookingListFactory,
       this.progressRepositoryFactory,
       this.passwordResetSender,
+      this.accountLifecycleFactory,
       this.memberSettingsBuilder});
   final BackendConfig config;
   final FitnessProfileRepository Function(SessionScope)?
@@ -165,6 +175,8 @@ class _MobileAuthGate extends StatefulWidget {
   final BookingListFactory? bookingListFactory;
   final LocalMemberProgressRepositoryFactory? progressRepositoryFactory;
   final Future<void> Function(String)? passwordResetSender;
+  final MemberAccountLifecycleRepository Function(AuthSession, bool Function())?
+      accountLifecycleFactory;
   final WidgetBuilder? memberSettingsBuilder;
   @override
   State<_MobileAuthGate> createState() => _MobileAuthGateState();
@@ -173,6 +185,9 @@ class _MobileAuthGate extends StatefulWidget {
 class _MobileAuthGateState extends State<_MobileAuthGate> {
   bool _setupProfile = false;
   FitnessProfileRepository? _profileRepository;
+  AuthSession? _profileSession;
+  AuthSession? _recoverySession;
+  MemberAccountLifecycleRepository? _recoveryRepository;
 
   @override
   Widget build(BuildContext context) {
@@ -182,20 +197,55 @@ class _MobileAuthGateState extends State<_MobileAuthGate> {
           return const Scaffold(
               body: Center(child: CircularProgressIndicator()));
         }
+        if (state.status == AuthStatus.pendingDeletion &&
+            state.session?.role == AppRole.member) {
+          final captured = state.session!;
+          final auth = context.read<AuthBloc>();
+          var invalidated = false;
+          bool isCurrent() {
+            if (invalidated) return false;
+            final valid = mounted &&
+                identical(auth.state.session, captured) &&
+                auth.state.status == AuthStatus.pendingDeletion;
+            if (!valid) invalidated = true;
+            return valid;
+          }
+
+          if (!identical(_recoverySession, captured)) {
+            _recoverySession = captured;
+            _recoveryRepository =
+                widget.accountLifecycleFactory?.call(captured, isCurrent) ??
+                    FirebaseMemberAccountLifecycleRepository(
+                        scope: captured.scope, isCurrent: isCurrent);
+          }
+          return MemberAccountRecoveryScreen(
+            repository: _recoveryRepository!,
+            onSignedOut: () => auth.add(const LoggedOut()),
+            onRestored: () => auth.add(const AuthRestoreRequested()),
+          );
+        }
         if (AuthRolePolicy.canEnter(
           state,
           allowed: const {AppRole.member, AppRole.coach},
         )) {
           if (widget.config.isFirebase) {
             if (state.session!.role == AppRole.member) {
-              final scope = state.session!.scope;
+              final capturedSession = state.session!;
+              final scope = capturedSession.scope;
               final auth = context.read<AuthBloc>();
-              bool isCurrentMember() =>
-                  mounted &&
-                  auth.state.session?.scope == scope &&
-                  AuthRolePolicy.canEnter(auth.state,
-                      allowed: const {AppRole.member});
-              if (_profileRepository?.scope != scope) {
+              var sessionInvalidated = false;
+              bool isCurrentMember() {
+                if (sessionInvalidated) return false;
+                final current = mounted &&
+                    identical(auth.state.session, capturedSession) &&
+                    AuthRolePolicy.canEnter(auth.state,
+                        allowed: const {AppRole.member});
+                if (!current) sessionInvalidated = true;
+                return current;
+              }
+
+              if (!identical(_profileSession, capturedSession)) {
+                _profileSession = capturedSession;
                 _profileRepository =
                     widget.profileRepositoryFactory?.call(scope) ??
                         FirebaseFitnessProfileRepository(
@@ -204,8 +254,8 @@ class _MobileAuthGateState extends State<_MobileAuthGate> {
                                 isSessionCurrent: isCurrentMember));
               }
               return FitnessProfileGate(
-                  key: ValueKey(scope),
-                  session: state.session!,
+                  key: ObjectKey(_profileRepository),
+                  session: capturedSession,
                   repository: _profileRepository!,
                   readyBuilder: (context, profile) => MemberShell(
                         liveSession: state.session!,
@@ -244,6 +294,15 @@ class _MobileAuthGateState extends State<_MobileAuthGate> {
                                     isSessionCurrent: isCurrentMember),
                                 verifyCurrentPassword: actions.verifyCurrent,
                                 saveNewPassword: actions.saveNew,
+                                lifecycleRepository: widget
+                                        .accountLifecycleFactory
+                                        ?.call(
+                                            capturedSession, isCurrentMember) ??
+                                    FirebaseMemberAccountLifecycleRepository(
+                                        scope: scope,
+                                        isCurrent: isCurrentMember),
+                                onAccountDeactivated: () =>
+                                    auth.add(const LoggedOut()),
                               );
                             },
                       ));
@@ -268,9 +327,15 @@ class _MobileAuthGateState extends State<_MobileAuthGate> {
                     await repository.verifyEmailForDemo();
                   }
                 : repository is AuthSessionLifecycle
-                    ? () async => context
-                        .read<AuthBloc>()
-                        .add(const AuthRestoreRequested())
+                    ? () async {
+                        final session =
+                            await (repository as AuthSessionLifecycle)
+                                .restoreSession();
+                        if (session == null || session.needsVerification) {
+                          throw const AuthException(
+                              'Your email is not verified yet. Open the latest verification link, then try again.');
+                        }
+                      }
                     : null,
             onResend: repository is AuthVerificationActions
                 ? (repository as AuthVerificationActions)

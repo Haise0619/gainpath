@@ -8,6 +8,7 @@ class _FakeFirebaseAuthGateway implements FirebaseAuthGateway {
   FirebaseAuthUser user;
   int signOutCalls = 0;
   int verificationCalls = 0;
+  bool verificationFails = false;
 
   @override
   Future<FirebaseAuthUser> signIn({
@@ -29,6 +30,7 @@ class _FakeFirebaseAuthGateway implements FirebaseAuthGateway {
   @override
   Future<void> sendEmailVerification() async {
     verificationCalls++;
+    if (verificationFails) throw const AuthException('Connection unavailable.');
   }
 
   @override
@@ -38,6 +40,98 @@ class _FakeFirebaseAuthGateway implements FirebaseAuthGateway {
 }
 
 void main() {
+  test(
+      'inactive or inconsistent membership claims cannot become active sessions',
+      () async {
+    for (final status in ['suspended', 'disabled', 'pendingDeletion']) {
+      final repository = FirebaseAuthRepository(_FakeFirebaseAuthGateway(
+          user: FirebaseAuthUser(
+              userId: 'member',
+              email: 'member@example.com',
+              claims: {
+            'role': 'member',
+            'organizationId': 'gainpath',
+            'branchIds': ['main'],
+            'status': status,
+          })));
+      await expectLater(
+          repository.signIn(
+              email: 'member@example.com', password: 'password123'),
+          throwsA(isA<AuthException>()));
+      await repository.dispose();
+    }
+  });
+  test('pending deletion retains scoped recovery session without active access',
+      () async {
+    final repository = FirebaseAuthRepository(_FakeFirebaseAuthGateway(
+        user: const FirebaseAuthUser(
+            userId: 'member',
+            email: 'member@example.com',
+            emailVerified: true,
+            claims: {
+          'role': 'member',
+          'organizationId': 'gainpath',
+          'branchIds': ['main'],
+          'accountLifecycleState': 'pendingDeletion'
+        })));
+    final session = await repository.signIn(
+        email: 'member@example.com', password: 'password123');
+    expect(session.accountLifecycleState, 'pendingDeletion');
+    await repository.dispose();
+  });
+  test('verification delivery failure preserves the created pending account',
+      () async {
+    final gateway = _FakeFirebaseAuthGateway(
+        user: const FirebaseAuthUser(
+      userId: 'new-user',
+      email: 'new@example.com',
+      claims: {
+        'role': 'member',
+        'organizationId': 'gainpath',
+        'branchIds': ['main']
+      },
+    ))
+      ..verificationFails = true;
+    final repository = FirebaseAuthRepository(gateway);
+    final session = await repository.register(
+        role: AppRole.member,
+        email: 'new@example.com',
+        password: 'password123',
+        name: 'New Member');
+    expect(session.needsVerification, isTrue);
+    expect(gateway.signOutCalls, 0);
+    gateway.verificationFails = false;
+    await repository.resendEmailVerification();
+    expect(gateway.verificationCalls, 2);
+    await repository.dispose();
+  });
+
+  test('verification resend is throttled and forbidden after logout', () async {
+    final gateway = _FakeFirebaseAuthGateway(
+        user: const FirebaseAuthUser(
+      userId: 'new-user',
+      email: 'new@example.com',
+      claims: {
+        'role': 'member',
+        'organizationId': 'gainpath',
+        'branchIds': ['main']
+      },
+    ));
+    final repository = FirebaseAuthRepository(gateway);
+    await repository.register(
+        role: AppRole.member,
+        email: 'new@example.com',
+        password: 'password123',
+        name: 'New Member');
+    await expectLater(
+        repository.resendEmailVerification(), throwsA(isA<AuthException>()));
+    expect(gateway.verificationCalls, 1);
+    await repository.signOut();
+    await expectLater(
+        repository.resendEmailVerification(), throwsA(isA<AuthException>()));
+    expect(gateway.verificationCalls, 1);
+    await repository.dispose();
+  });
   test('shared sign-in uses the coach role from Firebase membership', () async {
     final repository = FirebaseAuthRepository(_FakeFirebaseAuthGateway(
       user: const FirebaseAuthUser(

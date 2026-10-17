@@ -2,17 +2,25 @@ import 'package:flutter/material.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:gainpath_domain/identity.dart';
-import 'package:gainpath_domain/gainpath_domain.dart'
-    show FitnessGoal, FitnessProfile;
+import 'package:gainpath_domain/gainpath_domain.dart';
 import 'package:gainpath_identity/gainpath_identity.dart'
     show FitnessProfileCubit;
 import 'save_live_profile.dart';
+import 'numeric_fitness_targets.dart';
 
 class GoalsScreen extends StatefulWidget {
-  const GoalsScreen({super.key, this.liveProfile, this.liveCubit});
+  const GoalsScreen(
+      {super.key,
+      this.liveProfile,
+      this.liveCubit,
+      this.goalRepository,
+      this.liveSession,
+      this.isSessionCurrent});
   final FitnessProfile? liveProfile;
   final FitnessProfileCubit? liveCubit;
-
+  final NumericFitnessGoalRepository? goalRepository;
+  final AuthSession? liveSession;
+  final bool Function()? isSessionCurrent;
   @override
   State<GoalsScreen> createState() => _GoalsScreenState();
 }
@@ -23,11 +31,12 @@ class _GoalsScreenState extends State<GoalsScreen> {
     if (widget.liveProfile == null)
       ...context.read<MemberProfileRepository>().memberTrainingFocus,
   };
-  final List<List<String>> _targets = [
-    ['Train 4 times per week', 'Frequency'],
-    ['Reach 85% average form', 'Technique'],
-    ['Squat 70kg for 8 reps', 'Strength'],
-  ];
+  late final Set<String> _initialFocus = {..._focus};
+  bool _saving = false;
+  bool _allowPop = false;
+  bool get _dirty =>
+      _focus.length != _initialFocus.length ||
+      !_focus.containsAll(_initialFocus);
 
   static const _focusOptions = [
     ['Lose weight', Icons.trending_down_rounded],
@@ -38,105 +47,115 @@ class _GoalsScreenState extends State<GoalsScreen> {
     ['Reduce stress', Icons.spa_rounded],
   ];
 
+  Future<void> _back(bool didPop) async {
+    if (didPop || _saving) return;
+    final discard = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+                title: const Text('Discard training-focus changes?'),
+                content: const Text(
+                    'Numeric targets already saved will stay saved.'),
+                actions: [
+                  TextButton(
+                      onPressed: () => Navigator.pop(context, false),
+                      child: const Text('Keep editing')),
+                  FilledButton(
+                      onPressed: () => Navigator.pop(context, true),
+                      child: const Text('Discard'))
+                ]));
+    if (discard == true && mounted) {
+      setState(() => _allowPop = true);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) Navigator.pop(context);
+      });
+    }
+  }
+
   @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Fitness goals')),
-      body: PageBody(
-        children: [
+  Widget build(BuildContext context) => PopScope(
+      canPop: !_saving && (!_dirty || _allowPop),
+      onPopInvokedWithResult: (didPop, _) => _back(didPop),
+      child: Scaffold(
+        appBar: AppBar(title: const Text('Fitness goals')),
+        body: PageBody(children: [
           const Eyebrow('Training focus'),
           Text(
               'Pick as many as apply. This shapes your recommended routines and content.',
               style: Theme.of(context).textTheme.bodyMedium),
           const SizedBox(height: 12),
           GridView.count(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            crossAxisCount: 2,
-            crossAxisSpacing: 10,
-            mainAxisSpacing: 10,
-            childAspectRatio: 1.7,
-            children: _focusOptions.map((g) {
-              final label = g[0] as String;
-              final icon = g[1] as IconData;
-              final selected = _focus.contains(label);
-              return ToggleChip(
-                icon: icon,
-                label: label,
-                selected: selected,
-                onTap: () => setState(
-                    () => selected ? _focus.remove(label) : _focus.add(label)),
-              );
-            }).toList(),
-          ),
-          if (widget.liveProfile == null) ...[
-            const SizedBox(height: 24),
-            const Eyebrow('Specific targets'),
-            Text(
-                'Measurable goals, tracked against your actuals on the Progress tab.',
-                style: Theme.of(context).textTheme.bodyMedium),
-            const SizedBox(height: 12),
-            ..._targets.map((g) => Padding(
-                  padding: const EdgeInsets.only(bottom: 10),
-                  child: Panel(
-                    child: Row(
-                      children: [
-                        const Icon(Icons.flag_rounded,
-                            color: AppColors.primary, size: 20),
-                        const SizedBox(width: 14),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(g[0],
-                                  style:
-                                      Theme.of(context).textTheme.titleMedium),
-                              Text(g[1],
-                                  style:
-                                      Theme.of(context).textTheme.bodyMedium),
-                            ],
-                          ),
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.delete_outline_rounded,
-                              size: 19),
-                          onPressed: () => setState(() => _targets.remove(g)),
-                        ),
-                      ],
-                    ),
-                  ),
-                )),
-            OutlinedButton.icon(
-              onPressed: () => showToast(context, 'Goal added.'),
-              icon: const Icon(Icons.add_rounded, size: 20),
-              label: const Text('Add a goal'),
-            ),
-          ],
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              crossAxisCount: 2,
+              crossAxisSpacing: 10,
+              mainAxisSpacing: 10,
+              childAspectRatio: 1.7,
+              children: _focusOptions.map((g) {
+                final label = g[0] as String;
+                final selected = _focus.contains(label);
+                return ToggleChip(
+                    icon: g[1] as IconData,
+                    label: label,
+                    selected: selected,
+                    onTap: () {
+                      if (!_saving) {
+                        setState(() => selected
+                            ? _focus.remove(label)
+                            : _focus.add(label));
+                      }
+                    });
+              }).toList()),
           const SizedBox(height: 20),
           FilledButton(
-            onPressed: () async {
-              if (_focus.isEmpty) {
-                showToast(context, 'Pick at least one training focus.');
-                return;
-              }
-              if (widget.liveCubit != null) {
-                await saveLiveProfile(
-                    context,
-                    widget.liveCubit!,
-                    widget.liveProfile!.copyWith(
-                      goals: FitnessGoal.values
-                          .where((goal) => _focus.contains(goal.label))
-                          .toSet(),
-                    ));
-                return;
-              }
-              Navigator.pop(context);
-              showToast(context, 'Fitness goals updated.');
-            },
-            child: const Text('Save changes'),
-          ),
-        ],
-      ),
-    );
-  }
+              onPressed: _saving
+                  ? null
+                  : () async {
+                      if (_focus.isEmpty) {
+                        showToast(context, 'Pick at least one training focus.');
+                        return;
+                      }
+                      if (widget.liveCubit != null) {
+                        setState(() {
+                          _saving = true;
+                          _allowPop = true;
+                        });
+                        await saveLiveProfile(
+                            context,
+                            widget.liveCubit!,
+                            widget.liveProfile!.copyWith(
+                                goals: FitnessGoal.values
+                                    .where(
+                                        (goal) => _focus.contains(goal.label))
+                                    .toSet()));
+                        if (mounted) {
+                          setState(() {
+                            _saving = false;
+                            _allowPop = false;
+                          });
+                        }
+                        return;
+                      }
+                      final mockFocus = context
+                          .read<MemberProfileRepository>()
+                          .memberTrainingFocus;
+                      mockFocus
+                        ..clear()
+                        ..addAll(_focus);
+                      setState(() => _allowPop = true);
+                      WidgetsBinding.instance.addPostFrameCallback((_) {
+                        if (mounted) {
+                          Navigator.pop(context);
+                          showToast(context, 'Preview training focus updated.');
+                        }
+                      });
+                    },
+              child: Text(_saving ? 'Saving…' : 'Save changes')),
+          const SizedBox(height: 24),
+          NumericFitnessTargets(
+              live: widget.liveProfile != null,
+              session: widget.liveSession,
+              repository: widget.goalRepository,
+              isSessionCurrent: widget.isSessionCurrent),
+        ]),
+      ));
 }

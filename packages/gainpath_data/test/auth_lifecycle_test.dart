@@ -18,10 +18,18 @@ class _Gateway implements FirebaseAuthGateway, FirebaseAuthSessionGateway {
   Completer<FirebaseAuthUser>? login;
   final started = Completer<void>();
   FirebaseAuthUser? current = _user;
+  bool offline = false;
   @override
   Stream<FirebaseAuthUser?> get userChanges => controller.stream;
   @override
-  Future<FirebaseAuthUser?> restoreUser() async => current;
+  Future<FirebaseAuthUser?> restoreUser() async {
+    if (offline) {
+      throw const FirebaseAuthRefreshUnavailable(
+          'Check your connection and retry.');
+    }
+    return current;
+  }
+
   @override
   Future<FirebaseAuthUser> signIn(
       {required String email, required String password}) async {
@@ -45,6 +53,47 @@ class _Gateway implements FirebaseAuthGateway, FirebaseAuthSessionGateway {
 }
 
 void main() {
+  test(
+      'still-unverified reload preserves the pending UI for inline retry feedback',
+      () async {
+    final gateway = _Gateway()
+      ..current = const FirebaseAuthUser(
+          userId: 'firebase-user',
+          email: 'member@example.com',
+          claims: {
+            'role': 'member',
+            'organizationId': 'org-1',
+            'branchIds': ['branch-1']
+          });
+    final repository = FirebaseAuthRepository(gateway);
+    final first = await repository.restoreSession();
+    final next = await repository.restoreSession();
+    expect(identical(first, next), isTrue);
+    await repository.dispose();
+    await gateway.controller.close();
+  });
+  test('offline verification refresh preserves pending session for retry',
+      () async {
+    final gateway = _Gateway()
+      ..current = const FirebaseAuthUser(
+          userId: 'firebase-user',
+          email: 'member@example.com',
+          claims: {
+            'role': 'member',
+            'organizationId': 'org-1',
+            'branchIds': ['branch-1']
+          });
+    final repository = FirebaseAuthRepository(gateway);
+    expect((await repository.restoreSession())!.needsVerification, isTrue);
+    gateway.offline = true;
+    await expectLater(
+        repository.restoreSession(), throwsA(isA<AuthException>()));
+    expect(gateway.current, isNotNull);
+    gateway.offline = false;
+    expect((await repository.restoreSession())!.needsVerification, isTrue);
+    await repository.dispose();
+    await gateway.controller.close();
+  });
   test('logout cancels in-flight provider login and leaves provider signed out',
       () async {
     final gateway = _Gateway()..login = Completer<FirebaseAuthUser>();

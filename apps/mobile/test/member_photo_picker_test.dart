@@ -36,4 +36,30 @@ void main() {
         throwsA(isA<FormatException>().having((e) => e.message, 'message',
             'This image could not be opened. Choose another JPG, PNG or WebP.')));
   });
+  test(
+      'large landscape and portrait photos resize within 512 without distorting aspect ratio',
+      () async {
+    for (final size in [(1024, 256), (256, 1024)]) {
+      final recorder = ui.PictureRecorder();
+      ui.Canvas(recorder)
+          .drawColor(const ui.Color(0xff8844cc), ui.BlendMode.src);
+      final picture = recorder.endRecording();
+      final source = await picture.toImage(size.$1, size.$2);
+      final bytes = (await source.toByteData(format: ui.ImageByteFormat.png))!
+          .buffer
+          .asUint8List();
+      source.dispose();
+      picture.dispose();
+      final image = await LocalAccountPhotoPicker(
+              selectFile: () async => XFile.fromData(bytes, name: 'large.png'))
+          .pick();
+      final codec = await ui.instantiateImageCodec(image!.bytes);
+      final frame = await codec.getNextFrame();
+      expect(frame.image.width, size.$1 ~/ 2);
+      expect(frame.image.height, size.$2 ~/ 2);
+      expect(image.contentType, 'image/png');
+      frame.image.dispose();
+      codec.dispose();
+    }
+  });
 }

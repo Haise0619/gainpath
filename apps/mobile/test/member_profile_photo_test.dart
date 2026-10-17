@@ -25,9 +25,10 @@ class _Repository implements MemberPhotoRepository {
   Future<MemberPhoto> load() async => current;
   @override
   Future<Uint8List?> readPhoto(MemberPhoto original) async {
-    if(unreadable)throw const AccountPhotoUnavailable();
+    if (unreadable) throw const AccountPhotoUnavailable();
     return bytes;
   }
+
   @override
   Future<MemberPhoto> save(MemberPhoto original,
       {AccountPhoto? photo, bool remove = false}) async {
@@ -44,6 +45,26 @@ class _Repository implements MemberPhotoRepository {
 }
 
 void main() {
+  testWidgets('closing an unsaved photo asks before discarding',
+      (tester) async {
+    final repo = _Repository();
+    await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+            body: MemberProfilePhoto(repository: repo, picker: _Picker()))));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Edit profile picture'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Choose image'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Close'));
+    await tester.pumpAndSettle();
+    expect(find.text('Discard unsaved picture?'), findsOneWidget);
+    expect(repo.current.path, isEmpty);
+    await tester.tap(find.text('Discard changes'));
+    await tester.pumpAndSettle();
+    expect(find.text('Save picture'), findsNothing);
+    expect(repo.current.path, isEmpty);
+  });
   testWidgets(
       'existing camera opens editor; save, reopen and clear update avatar',
       (tester) async {
@@ -69,24 +90,47 @@ void main() {
     expect(repo.current.path, isEmpty);
     expect(find.byType(Image), findsNothing);
   });
-  testWidgets('unreadable saved object can be cleared from its reference',(tester)async{
-    final repo=_Repository()..current=MemberPhoto(path:'missing-owned-photo',editBaseline:Object())..unreadable=true;
-    await tester.pumpWidget(MaterialApp(home:Scaffold(body:MemberProfilePhoto(repository:repo,picker:_Picker()))));await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('Edit profile picture'));await tester.pumpAndSettle();
-    await tester.tap(find.text('Remove picture'));await tester.pumpAndSettle();
-    await tester.tap(find.text('Save picture'));await tester.pumpAndSettle();
-    expect(repo.current.path,isEmpty);
+  testWidgets('unreadable saved object can be cleared from its reference',
+      (tester) async {
+    final repo = _Repository()
+      ..current =
+          MemberPhoto(path: 'missing-owned-photo', editBaseline: Object())
+      ..unreadable = true;
+    await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+            body: MemberProfilePhoto(repository: repo, picker: _Picker()))));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Edit profile picture'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Remove picture'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Save picture'));
+    await tester.pumpAndSettle();
+    expect(repo.current.path, isEmpty);
   });
-  testWidgets('reopening after a concurrent edit loads a fresh baseline',(tester)async{
-    final repo=_Repository();
-    await tester.pumpWidget(MaterialApp(home:Scaffold(body:MemberProfilePhoto(repository:repo,picker:_Picker()))));await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('Edit profile picture'));await tester.pumpAndSettle();
-    repo.current=MemberPhoto(path:'',editBaseline:Object());
-    await tester.tap(find.text('Choose image'));await tester.pumpAndSettle();await tester.tap(find.text('Save picture'));await tester.pumpAndSettle();
-    await tester.tap(find.text('Close'));await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('Edit profile picture'));await tester.pumpAndSettle();
-    await tester.tap(find.text('Choose image'));await tester.pumpAndSettle();await tester.tap(find.text('Save picture'));await tester.pumpAndSettle();
-    expect(repo.current.path,'owned-photo');
+  testWidgets('reopening after a concurrent edit loads a fresh baseline',
+      (tester) async {
+    final repo = _Repository();
+    await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+            body: MemberProfilePhoto(repository: repo, picker: _Picker()))));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Edit profile picture'));
+    await tester.pumpAndSettle();
+    repo.current = MemberPhoto(path: '', editBaseline: Object());
+    await tester.tap(find.text('Choose image'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Save picture'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Close'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Edit profile picture'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Choose image'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Save picture'));
+    await tester.pumpAndSettle();
+    expect(repo.current.path, 'owned-photo');
   });
   testWidgets(
       'invalid selection shows error; uncertain save requires reopening',

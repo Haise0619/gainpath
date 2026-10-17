@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gainpath_data/gainpath_data.dart';
+import 'package:gainpath_domain/gainpath_domain.dart' show AgeBracket;
 import 'package:gainpath_mobile/main.dart';
 import 'package:gainpath_mobile/features/identity/presentation/member/profile_setup_screen.dart';
 import 'package:gainpath_mobile/features/identity/presentation/member/physical_profile_screen.dart';
@@ -14,6 +15,7 @@ import 'package:gainpath_mobile/features/coaching/presentation/member/browse_coa
 import 'package:gainpath_mobile/features/identity/presentation/member/experience_level_screen.dart';
 import 'package:gainpath_mobile/features/identity/presentation/member/activity_level_screen.dart';
 import 'package:gainpath_mobile/features/identity/presentation/member/goals_screen.dart';
+import 'package:gainpath_mobile/features/identity/presentation/member/numeric_fitness_targets.dart';
 import 'package:gainpath_mobile/features/identity/presentation/shared/login_screen.dart';
 import 'package:google_fonts/google_fonts.dart';
 
@@ -31,6 +33,23 @@ Future<void> signIn(WidgetTester tester, String email) async {
   await tester.enterText(find.byType(TextField).at(0), email);
   await tester.enterText(find.byType(TextField).at(1), 'password123');
   await tap(tester, 'Sign in');
+}
+
+Future<void> confirmInitialMetrics(WidgetTester tester) async {
+  await tap(tester, 'Continue');
+  expect(
+      tester
+          .widget<FilledButton>(find.widgetWithText(FilledButton, 'Continue'))
+          .onPressed,
+      isNull);
+  await tester.tap(find.byType(DropdownButtonFormField<AgeBracket>));
+  await tester.pumpAndSettle();
+  await tap(tester, '25–34 years');
+  await tap(tester, 'Continue');
+  await tap(tester, 'This is my height');
+  await tap(tester, 'Continue');
+  await tap(tester, 'This is my weight');
+  await tap(tester, 'Continue');
 }
 
 void main() {
@@ -68,9 +87,7 @@ void main() {
             .onPressed,
         isNull);
     await tap(tester, 'Prefer not to say');
-    for (var i = 0; i < 4; i++) {
-      await tap(tester, 'Continue');
-    }
+    await confirmInitialMetrics(tester);
     await tap(tester, 'Build muscle');
     await tap(tester, 'Continue');
     await tap(tester, 'Lightly active');
@@ -154,9 +171,7 @@ void main() {
     await mount(tester, auth, profiles);
     await signIn(tester, 'one@example.com');
     await tap(tester, 'Prefer not to say');
-    for (var i = 0; i < 4; i++) {
-      await tap(tester, 'Continue');
-    }
+    await confirmInitialMetrics(tester);
     await tap(tester, 'Build muscle');
     await tap(tester, 'Continue');
     await tap(tester, 'Lightly active');
@@ -198,7 +213,7 @@ void main() {
     expect(find.text('Very active'), findsOneWidget);
     await tap(tester, 'Fitness goals');
     expect(find.byType(GoalsScreen), findsOneWidget);
-    expect(find.text('Specific targets'), findsNothing);
+    expect(find.byType(NumericFitnessTargets), findsOneWidget);
     await tap(tester, 'Reduce stress');
     await tap(tester, 'Save changes');
     expect(profiles.records[account.scope]!['experience'], 'advanced');
