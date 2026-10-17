@@ -90,3 +90,16 @@ it('published photo proxy rejects private listings, unsafe paths and caller supp
  await expect(getCoachPublishedPhoto(store,auth('member'),command,download)).rejects.toMatchObject({code:'failed-precondition'});
  await expect(getCoachPublishedPhoto(store,auth('member'),{...command,photoPath:'arbitrary'},download)).rejects.toThrow();
 });
+it('photo proxy enforces lifecycle session barrier after reactivation and fails closed on malformed lifecycle', async()=>{
+ const store=setup(), path=`orgs/o/coachProfilePhotos/coach/${id}`,command={...base,coachId:'coach'};
+ store.documents.set('orgs/o/coaches/coach',{status:'published',certificationVerified:true,approvedCertificationCount:1,revision:1,photoPath:path});
+ const lifecycle={schemaVersion:1,state:'active',revision:2,requestedAtMillis:10000,updatedAtMillis:20000,sessionNotBeforeSeconds:11,lastRequestId:'requestid',revocationPending:false,reactivatedAtMillis:20000,policy:'grace30Days',retentionEndsAtMillis:10000+30*86400000,revocationLeaseUntilMillis:0,revocationAttemptId:null,sessionRevokedAtMillis:12000};
+ const user=store.documents.get('users/member')!; store.documents.get('users/member')!.accountLifecycle=lifecycle;
+ const download=async()=>({contentType:'image/png',bytesBase64:'bytes'});
+ const session=(auth_time:number)=>({uid:'member',token:{email_verified:true,auth_time}});
+ await expect(getCoachPublishedPhoto(store,session(10),command,download)).rejects.toMatchObject({code:'permission-denied'});
+ expect(await getCoachPublishedPhoto(store,session(11),command,download)).toMatchObject({bytesBase64:'bytes'});
+ for(const malformed of [null,[],{}, {...lifecycle,revocationPending:true},{...lifecycle,state:'pendingDeletion'},{...lifecycle,sessionNotBeforeSeconds:0},{...lifecycle,sessionRevokedAtMillis:null}]){store.documents.get('users/member')!.accountLifecycle=malformed; await expect(getCoachPublishedPhoto(store,session(11),command,download)).rejects.toMatchObject({code:'permission-denied'});}
+ store.documents.get('users/member')!.accountLifecycle=lifecycle;
+ await expect(getCoachPublishedPhoto(store,session(11),command,async()=>{store.documents.get('users/member')!.accountLifecycle={...lifecycle,revocationPending:true};return download();})).rejects.toMatchObject({code:'permission-denied'});
+});
