@@ -78,7 +78,7 @@ class GainPathMobileApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final config = backendConfig ?? BackendConfig.fromEnvironment();
+    final config = backendConfig ?? const BackendConfig(BackendMode.firebase);
     config.validate();
     return RepositoryProvider<AuthRepository>(
       create: (_) =>

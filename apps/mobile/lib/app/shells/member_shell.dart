@@ -1,9 +1,12 @@
+import '../../features/workout/presentation/member/equipment_scanner_screen.dart';
 import 'package:flutter/material.dart';
 import 'dart:async';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:gainpath_identity/gainpath_identity.dart';
 import 'package:gainpath_domain/gainpath_domain.dart';
 import 'package:gainpath_domain/content.dart';
+import '../../features/analytics/application/member_progress_cubit.dart';
+import 'package:gainpath_domain/analytics.dart';
 import '../../features/content/presentation/member/member_announcements.dart';
 import '../home/member_home_screen.dart';
 import '../routing/member_progress_route.dart';
@@ -118,81 +121,111 @@ class _MemberShellState extends State<MemberShell> {
     super.dispose();
   }
 
-  final _pages = const [
-    MemberHomeScreen(),
-    WorkoutPrepRoute(live: false),
-    GamificationDashboardScreen(),
-    BrowseCoachesScreen(),
-    MemberProfileScreen(),
-  ];
-
   @override
   Widget build(BuildContext context) {
-    final live = widget.liveSession != null;
-    if (!live) return _scaffold(_pages);
+    if (widget.liveSession == null) return _scaffold(_buildPages());
     return MemberProgressHost(
-        key: ValueKey(widget.liveSession!.scope),
-        scope: widget.liveSession!.scope,
-        repositoryFactory: widget.progressRepositoryFactory ??
-            createLocalMemberProgressRepository,
-        builder: (context, progressState, refresh, open, openWorkout) =>
-            BlocBuilder<PublishedRoutineCatalogCubit,
-                PublishedRoutineCatalogState>(
-              bloc: _catalog!,
-              builder: (context, catalog) => _scaffold(<Widget>[
-                MemberHomeScreen(
-                    liveSession: widget.liveSession!,
-                    liveProfile: widget.liveProfile!,
-                    localProgress: progressState.progress,
-                    progressError: progressState.error,
-                    progressWarnings:
-                        progressState.snapshot?.warnings ?? const [],
-                    onRefreshProgress: refresh,
-                    onRefreshRoutines: _catalog!.refresh,
-                    announcements: _announcements == null
-                        ? null
-                        : MemberAnnouncements(
-                            key: _announcementKey, reader: _announcements!),
-                    onRefreshAnnouncements: () async =>
-                        _announcementKey.currentState?.refresh(),
-                    onOpenProgress: () => open(MemberProgressView.dashboard),
-                    onOpenHistory: () => open(MemberProgressView.history),
-                    onOpenEquipment: () => Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                            builder: (_) => buildMemberEquipmentCatalog(
-                                widget.liveSession!,
-                                factory: widget.equipmentReaderFactory))),
-                    onOpenWorkout: openWorkout,
-                    publishedRoutine: catalog.selected,
-                    routineStatusMessage: _catalogLabel(catalog),
-                    onStartWorkout: () => setState(() => _index = 1)),
-                WorkoutPrepRoute(
-                    publishedRoutine: catalog.selected,
-                    routineStatusMessage: _catalogLabel(catalog),
-                    routineLoadFailed: catalog.status == CatalogStatus.error,
-                    routineCatalogControls: PublishedRoutineCatalogControls(
-                        state: catalog,
-                        onRefresh: _catalog!.refresh,
-                        onSelect: _catalog!.select,
-                        onLoadMore: _catalog!.loadMore)),
-                const GamificationDashboardScreen(live: true),
-                _directoryVisited
-                    ? buildFirebaseCoachDirectory(widget.liveSession!,
-                        factory: widget.coachDirectoryFactory,
-                        bookingFactory: widget.bookingFactory,
-                        bookingListFactory: widget.bookingListFactory,
-                        availabilityFactory: widget.coachAvailabilityFactory)
-                    : const SizedBox.shrink(),
-                MemberProfileScreen(
-                    liveSession: widget.liveSession!,
-                    liveProfile: widget.liveProfile!,
-                    onOpenProgress: () => open(MemberProgressView.dashboard),
-                    memberSettingsBuilder: widget.memberSettingsBuilder),
-              ], onTabChanged: (index) {
+      key: ValueKey(widget.liveSession!.scope),
+      scope: widget.liveSession!.scope,
+      repositoryFactory: widget.progressRepositoryFactory ??
+          createLocalMemberProgressRepository,
+      builder: (context, progress, refresh, open, openWorkout) => BlocBuilder<
+              PublishedRoutineCatalogCubit, PublishedRoutineCatalogState>(
+          bloc: _catalog!,
+          builder: (context, catalog) => _scaffold(
+                  _buildPages(
+                      progress: progress,
+                      refresh: refresh,
+                      open: open,
+                      openWorkout: openWorkout,
+                      catalog: catalog), onTabChanged: (index) {
                 if (index == 0) refresh();
+              })),
+    );
+  }
+
+  // A single presentation tree. Data hosts above supply scoped state/actions.
+  List<Widget> _buildPages(
+      {MemberProgressState? progress,
+      Future<void> Function()? refresh,
+      void Function(MemberProgressView)? open,
+      void Function(LocalWorkoutProgressRecord)? openWorkout,
+      PublishedRoutineCatalogState? catalog}) {
+    final session = widget.liveSession;
+    final connected = session != null;
+    return [
+      MemberHomeScreen(
+          liveSession: session,
+          liveProfile: widget.liveProfile,
+          localProgress: progress?.progress,
+          progressError: progress?.error,
+          progressWarnings: progress?.snapshot?.warnings ?? const [],
+          onRefreshProgress: refresh,
+          onRefreshRoutines: _catalog?.refresh,
+          announcements: _announcements == null
+              ? null
+              : MemberAnnouncements(
+                  key: _announcementKey, reader: _announcements!),
+          onRefreshAnnouncements: connected
+              ? () async => _announcementKey.currentState?.refresh()
+              : null,
+          onOpenProgress:
+              open == null ? null : () => open(MemberProgressView.dashboard),
+          onOpenHistory:
+              open == null ? null : () => open(MemberProgressView.history),
+          onOpenEquipment: session == null
+              ? null
+              : () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                      builder: (_) => EquipmentScannerScreen(connected: true, onBrowse: () => Navigator.push(context, MaterialPageRoute(builder: (_) => buildMemberEquipmentCatalog(session, factory: widget.equipmentReaderFactory)))))),
+          onOpenCoaches: () => setState(() {
+                _index = 3;
+                _directoryVisited = true;
               }),
-            ));
+          onOpenBookings: session == null
+              ? null
+              : () => openBookingList(context, session,
+                  factory: widget.bookingListFactory),
+          onOpenWorkout: openWorkout,
+          publishedRoutine: catalog?.selected,
+          routineStatusMessage: catalog == null ? null : _catalogLabel(catalog),
+          onStartWorkout: () => setState(() => _index = 1)),
+      WorkoutPrepRoute(
+          live: connected,
+          publishedRoutine: catalog?.selected,
+          routineStatusMessage: catalog == null ? null : _catalogLabel(catalog),
+          routineLoadFailed: catalog?.status == CatalogStatus.error,
+          routineCatalogControls: catalog == null
+              ? null
+              : PublishedRoutineCatalogControls(
+                  state: catalog,
+                  onRefresh: _catalog!.refresh,
+                  onSelect: _catalog!.select,
+                  onLoadMore: _catalog!.loadMore),
+          onOpenEquipment: session == null
+              ? null
+              : () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                      builder: (_) => EquipmentScannerScreen(connected: true, onBrowse: () => Navigator.push(context, MaterialPageRoute(builder: (_) => buildMemberEquipmentCatalog(session, factory: widget.equipmentReaderFactory))))))),
+      GamificationDashboardScreen(live: connected),
+      session == null
+          ? const BrowseCoachesScreen()
+          : _directoryVisited
+              ? buildFirebaseCoachDirectory(session,
+                  factory: widget.coachDirectoryFactory,
+                  bookingFactory: widget.bookingFactory,
+                  bookingListFactory: widget.bookingListFactory,
+                  availabilityFactory: widget.coachAvailabilityFactory)
+              : const SizedBox.shrink(),
+      MemberProfileScreen(
+          liveSession: session,
+          liveProfile: widget.liveProfile,
+          onOpenProgress:
+              open == null ? null : () => open(MemberProgressView.dashboard),
+          memberSettingsBuilder: widget.memberSettingsBuilder),
+    ];
   }
 
   String? _catalogLabel(PublishedRoutineCatalogState state) =>

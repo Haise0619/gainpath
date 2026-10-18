@@ -5,11 +5,18 @@ import 'package:gainpath_domain/gamification.dart';
 import 'widgets/game_media.dart';
 
 class BadgesScreen extends StatelessWidget {
-  const BadgesScreen({super.key});
+  const BadgesScreen({super.key, this.connected = false});
+  final bool connected;
 
   @override
   Widget build(BuildContext context) {
-    final unlocked = context.read<GamificationRepository>().badges.where((b) => b.unlocked).length;
+    final badges = connected
+        ? List.generate(
+            4,
+            (_) =>
+                const AchievementBadge('-', '-', false, '', progressLabel: '-'))
+        : context.read<GamificationRepository>().badges;
+    final unlocked = badges.where((b) => b.unlocked).length;
     return Scaffold(
       appBar: AppBar(title: const Text('Badges')),
       body: Column(
@@ -20,9 +27,13 @@ class BadgesScreen extends StatelessWidget {
               background: AppColors.primaryTint,
               child: Row(
                 children: [
-                  const Icon(Icons.military_tech_rounded, color: AppColors.primary),
+                  const Icon(Icons.military_tech_rounded,
+                      color: AppColors.primary),
                   const SizedBox(width: 12),
-                  Text('$unlocked of ${context.read<GamificationRepository>().badges.length} badges unlocked',
+                  Text(
+                      connected
+                          ? '- badges unlocked'
+                          : '$unlocked of ${badges.length} badges unlocked',
                       style: Theme.of(context).textTheme.titleMedium),
                 ],
               ),
@@ -35,7 +46,9 @@ class BadgesScreen extends StatelessWidget {
               crossAxisSpacing: 12,
               mainAxisSpacing: 12,
               childAspectRatio: 0.92,
-              children: context.read<GamificationRepository>().badges.map((b) => _BadgeCard(badge: b)).toList(),
+              children: badges
+                  .map((b) => _BadgeCard(badge: b, connected: connected))
+                  .toList(),
             ),
           ),
         ],
@@ -45,13 +58,18 @@ class BadgesScreen extends StatelessWidget {
 }
 
 class _BadgeCard extends StatelessWidget {
+  final bool connected;
   final AchievementBadge badge;
-  const _BadgeCard({required this.badge});
+  const _BadgeCard({required this.badge, this.connected = false});
 
   @override
   Widget build(BuildContext context) {
     return Panel(
-      onTap: () => badge.unlocked ? _showDetail(context) : showToast(context, 'Keep training to unlock this.'),
+      onTap: connected
+          ? () => showUnavailable(context)
+          : () => badge.unlocked
+              ? _showDetail(context)
+              : showToast(context, 'Keep training to unlock this.'),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -70,25 +88,30 @@ class _BadgeCard extends StatelessWidget {
                   padding: const EdgeInsets.all(8),
                   child: Opacity(
                     opacity: badge.unlocked ? 1 : 0.35,
-                    child: gameHero(badge.imageUrl, fit: BoxFit.contain),
+                    child: connected
+                        ? const Icon(Icons.military_tech_outlined,
+                            color: AppColors.inkSoft)
+                        : gameHero(badge.imageUrl, fit: BoxFit.contain),
                   ),
                 ),
                 if (!badge.unlocked)
-                  const Icon(Icons.lock_outline_rounded, size: 16, color: AppColors.inkSoft),
+                  const Icon(Icons.lock_outline_rounded,
+                      size: 16, color: AppColors.inkSoft),
               ],
             ),
           ),
           const Spacer(),
           Text(badge.name,
-              style: Theme.of(context)
-                  .textTheme
-                  .titleMedium
-                  ?.copyWith(color: badge.unlocked ? AppColors.ink : AppColors.inkSoft)),
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  color: badge.unlocked ? AppColors.ink : AppColors.inkSoft)),
           const SizedBox(height: 3),
           Text(badge.description,
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontSize: 12)),
+              style: Theme.of(context)
+                  .textTheme
+                  .bodyMedium
+                  ?.copyWith(fontSize: 12)),
           if (!badge.unlocked && badge.progressValue != null) ...[
             const SizedBox(height: 8),
             ClipRRect(
@@ -102,7 +125,10 @@ class _BadgeCard extends StatelessWidget {
             ),
             const SizedBox(height: 4),
             Text(badge.progressLabel ?? '',
-                style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w700, color: AppColors.inkSoft)),
+                style: const TextStyle(
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.inkSoft)),
           ],
         ],
       ),
@@ -113,32 +139,41 @@ class _BadgeCard extends StatelessWidget {
     showModalBottomSheet(
       context: context,
       backgroundColor: AppColors.surface,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
       builder: (ctx) => Padding(
-        padding: EdgeInsets.fromLTRB(24, 24, 24, 24 + MediaQuery.of(ctx).padding.bottom),
+        padding: EdgeInsets.fromLTRB(
+            24, 24, 24, 24 + MediaQuery.of(ctx).padding.bottom),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             Container(
               width: 72,
               height: 72,
-              decoration: BoxDecoration(gradient: AppColors.heroGradient, shape: BoxShape.circle),
+              decoration: BoxDecoration(
+                  gradient: AppColors.heroGradient, shape: BoxShape.circle),
               child: Padding(
                 padding: const EdgeInsets.all(14),
-                child: gameHero(badge.imageUrl, fit: BoxFit.contain),
+                child: connected
+                    ? const Icon(Icons.military_tech_outlined,
+                        color: AppColors.inkSoft)
+                    : gameHero(badge.imageUrl, fit: BoxFit.contain),
               ),
             ),
             const SizedBox(height: 16),
             Text(badge.name, style: Theme.of(ctx).textTheme.titleLarge),
             const SizedBox(height: 6),
-            Text(badge.description, textAlign: TextAlign.center, style: Theme.of(ctx).textTheme.bodyLarge),
+            Text(badge.description,
+                textAlign: TextAlign.center,
+                style: Theme.of(ctx).textTheme.bodyLarge),
             const SizedBox(height: 14),
             statusPill('Unlocked'),
             const SizedBox(height: 20),
             SizedBox(
               width: double.infinity,
               child: OutlinedButton.icon(
-                onPressed: () => showToast(ctx, 'Opening your device share sheet.'),
+                onPressed: () =>
+                    showToast(ctx, 'Opening your device share sheet.'),
                 icon: const Icon(Icons.ios_share_rounded, size: 18),
                 label: const Text('Share badge'),
               ),

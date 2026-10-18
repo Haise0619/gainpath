@@ -22,12 +22,14 @@ class WorkoutPrepScreen extends StatelessWidget {
       this.routineLoadFailed = false,
       this.routineStatusMessage,
       this.routineCatalogControls,
+      this.onOpenEquipment,
       this.routes = const WorkoutPrepRoutes()});
   final bool live;
   final PublishedRoutine? publishedRoutine;
   final bool routineLoadFailed;
   final String? routineStatusMessage;
   final Widget? routineCatalogControls;
+  final VoidCallback? onOpenEquipment;
   final WorkoutPrepRoutes routes;
 
   @override
@@ -55,7 +57,9 @@ class WorkoutPrepScreen extends StatelessWidget {
               background: Stack(
                 fit: StackFit.expand,
                 children: [
-                  networkHero(routineHeroImage),
+                  networkHero(live
+                      ? (routine.isEmpty ? '' : routine.first.imageUrl)
+                      : routineHeroImage),
                   DecoratedBox(
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
@@ -140,7 +144,7 @@ class WorkoutPrepScreen extends StatelessWidget {
                           ? 'No published exercise is available'
                           : 'Review the published tutorial for ${routine.first.name}'
                       : 'See proper form for ${routine.first.name}',
-                  image: live ? routineHeroImage : routine.first.imageUrl,
+                  image: routine.isEmpty ? '' : routine.first.imageUrl,
                   onTap: live
                       ? () {
                           final builder = routes.tutorialBuilder;
@@ -190,12 +194,10 @@ class WorkoutPrepScreen extends StatelessWidget {
                   iconColor: AppColors.accentDark,
                   title: 'Review camera setup',
                   subtitle: 'Get the right distance and angle before you start',
-                  onTap: live
-                      ? () => showUnavailable(context)
-                      : () => Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                              builder: (_) => const CameraSetupScreen())),
+                  onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                          builder: (_) => const CameraSetupScreen())),
                 ),
                 const SizedBox(height: 12),
                 _DetourCard(
@@ -205,7 +207,7 @@ class WorkoutPrepScreen extends StatelessWidget {
                   subtitle:
                       'Point your camera at a machine for how-to and safety tips',
                   onTap: live
-                      ? () => showUnavailable(context)
+                      ? onOpenEquipment ?? () => showUnavailable(context)
                       : () => Navigator.push(
                           context,
                           MaterialPageRoute(
@@ -239,12 +241,12 @@ class WorkoutPrepScreen extends StatelessWidget {
                       child: const Text('Try live camera preview')),
                 TextButton(
                   onPressed: live
-                      ? () => showUnavailable(context)
+                      ? () => _startRealSession(context)
                       : () => Navigator.push(
                           context,
                           MaterialPageRoute<void>(
                               builder: (_) => const LiveWorkoutScreen())),
-                  child: const Text('Preview original workout UI (demo only)'),
+                  child: const Text('Workout session'),
                 ),
                 SizedBox(
                   width: double.infinity,

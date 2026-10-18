@@ -12,7 +12,9 @@ class RefundRequestScreen extends StatefulWidget {
   /// When opened from a specific transaction row (e.g. Billing History),
   /// that transaction is pre-selected if it is still eligible.
   final String? preselectedTransactionId;
-  const RefundRequestScreen({super.key, this.preselectedTransactionId});
+  const RefundRequestScreen(
+      {super.key, this.preselectedTransactionId, this.connected = false});
+  final bool connected;
 
   @override
   State<RefundRequestScreen> createState() => _RefundRequestScreenState();
@@ -34,16 +36,18 @@ class _RefundRequestScreenState extends State<RefundRequestScreen> {
   void initState() {
     super.initState();
     final preselected = widget.preselectedTransactionId;
-    if (preselected != null) {
-      final match = context.read<MembershipRepository>().transactions.where((t) => t.id == preselected);
+    if (!widget.connected && preselected != null) {
+      final match = context
+          .read<MembershipRepository>()
+          .transactions
+          .where((t) => t.id == preselected);
       if (match.isNotEmpty && _isEligible(match.first)) {
         _transactionId = preselected;
       }
     }
   }
 
-  bool _isEligible(Transaction t) =>
-      const RefundPolicy().isEligible(t.date);
+  bool _isEligible(Transaction t) => const RefundPolicy().isEligible(t.date);
 
   @override
   void dispose() {
@@ -53,7 +57,10 @@ class _RefundRequestScreenState extends State<RefundRequestScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final eligible = context.read<MembershipRepository>().transactions.where(_isEligible).toList();
+    final transactions = widget.connected
+        ? [Transaction('-', '-', 0, DateTime(1970), TransactionStatus.pending)]
+        : context.read<MembershipRepository>().transactions;
+    final eligible = transactions.where(_isEligible).toList();
 
     return Scaffold(
       appBar: AppBar(title: const Text('Request a refund')),
@@ -69,8 +76,9 @@ class _RefundRequestScreenState extends State<RefundRequestScreen> {
                 const SizedBox(width: 10),
                 Expanded(
                   child: Text(
-                    'Refunds can be requested within ${RefundPolicy.defaultWindowDays} days of a charge. '
-                    'Staff review each request before any money is returned.',
+                    widget.connected
+                        ? 'Refund service and eligibility unavailable. -'
+                        : 'Refunds can be requested within ${RefundPolicy.defaultWindowDays} days of a charge. Staff review each request before any money is returned.',
                     style: Theme.of(context).textTheme.bodyMedium,
                   ),
                 ),
@@ -79,13 +87,14 @@ class _RefundRequestScreenState extends State<RefundRequestScreen> {
           ),
           const SizedBox(height: 18),
           const Eyebrow('Which charge?'),
-          if (eligible.isEmpty)
+          if (eligible.isEmpty && !widget.connected)
             Panel(
               background: AppColors.dangerTint,
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: const [
-                  Icon(Icons.info_outline_rounded, size: 18, color: AppColors.danger),
+                  Icon(Icons.info_outline_rounded,
+                      size: 18, color: AppColors.danger),
                   SizedBox(width: 10),
                   Expanded(
                     child: Text(
@@ -97,14 +106,15 @@ class _RefundRequestScreenState extends State<RefundRequestScreen> {
               ),
             )
           else
-            ...context.read<MembershipRepository>().transactions.map((t) {
-              final ok = _isEligible(t);
+            ...transactions.map((t) {
+              final ok = !widget.connected && _isEligible(t);
               final selected = _transactionId == t.id;
               final daysAgo = DateTime.now().difference(t.date).inDays;
               return Padding(
                 padding: const EdgeInsets.only(bottom: 10),
                 child: Panel(
-                  onTap: ok ? () => setState(() => _transactionId = t.id) : null,
+                  onTap:
+                      ok ? () => setState(() => _transactionId = t.id) : null,
                   background: selected ? AppColors.primaryTint : null,
                   child: Opacity(
                     opacity: ok ? 1 : 0.5,
@@ -115,24 +125,36 @@ class _RefundRequestScreenState extends State<RefundRequestScreen> {
                                 ? Icons.radio_button_checked_rounded
                                 : Icons.radio_button_unchecked_rounded,
                             size: 20,
-                            color: selected ? AppColors.primary : AppColors.hairline),
+                            color: selected
+                                ? AppColors.primary
+                                : AppColors.hairline),
                         const SizedBox(width: 12),
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(t.type, style: Theme.of(context).textTheme.titleMedium),
+                              Text(t.type,
+                                  style:
+                                      Theme.of(context).textTheme.titleMedium),
                               Text(
-                                  ok
-                                      ? '${t.id}  ·  $daysAgo days ago'
-                                      : '${t.id}  ·  Outside the ${RefundPolicy.defaultWindowDays}-day window',
+                                  widget.connected
+                                      ? '-'
+                                      : ok
+                                          ? '${t.id}  ·  $daysAgo days ago'
+                                          : '${t.id}  ·  Outside the ${RefundPolicy.defaultWindowDays}-day window',
                                   style: ok
                                       ? Theme.of(context).textTheme.bodyMedium
-                                      : Theme.of(context).textTheme.bodyMedium?.copyWith(color: AppColors.danger)),
+                                      : Theme.of(context)
+                                          .textTheme
+                                          .bodyMedium
+                                          ?.copyWith(color: AppColors.danger)),
                             ],
                           ),
                         ),
-                        Text('RM ${t.amount.toStringAsFixed(2)}',
+                        Text(
+                            widget.connected
+                                ? '-'
+                                : 'RM ${t.amount.toStringAsFixed(2)}',
                             style: const TextStyle(
                                 fontSize: 14.5, fontWeight: FontWeight.w700)),
                       ],
@@ -149,14 +171,14 @@ class _RefundRequestScreenState extends State<RefundRequestScreen> {
               groupValue: _reason,
               onChanged: (v) => setState(() => _reason = v),
               child: Column(
-              children: _reasons
-                  .map((r) => RadioListTile<String>(
-                        value: r,
-                        title: Text(r,
-                            style: const TextStyle(fontSize: 14.5)),
-                        dense: true,
-                      ))
-                  .toList(),
+                children: _reasons
+                    .map((r) => RadioListTile<String>(
+                          value: r,
+                          title:
+                              Text(r, style: const TextStyle(fontSize: 14.5)),
+                          dense: true,
+                        ))
+                    .toList(),
               ),
             ),
           ),
@@ -164,25 +186,28 @@ class _RefundRequestScreenState extends State<RefundRequestScreen> {
           TextField(
             controller: _notes,
             maxLines: 4,
-            decoration:
-                const InputDecoration(hintText: 'Add any details that would help'),
+            decoration: const InputDecoration(
+                hintText: 'Add any details that would help'),
           ),
           const SizedBox(height: 18),
           FilledButton(
-            onPressed: (_transactionId == null || _reason == null)
-                ? null
-                : () {
-                    final bloc = context.read<MembershipBloc>();
-                    bloc.add(RefundRequested(
-                        transactionId: _transactionId!, reason: _reason!, notes: _notes.text.trim()));
-                    if (bloc.state.error != null) {
-                      showToast(context, bloc.state.error!);
-                      return;
-                    }
-                    Navigator.pop(context);
-                    showToast(context,
-                        'Request submitted. We will email you once it is reviewed.');
-                  },
+            onPressed:
+                (widget.connected || _transactionId == null || _reason == null)
+                    ? null
+                    : () {
+                        final bloc = context.read<MembershipBloc>();
+                        bloc.add(RefundRequested(
+                            transactionId: _transactionId!,
+                            reason: _reason!,
+                            notes: _notes.text.trim()));
+                        if (bloc.state.error != null) {
+                          showToast(context, bloc.state.error!);
+                          return;
+                        }
+                        Navigator.pop(context);
+                        showToast(context,
+                            'Request submitted. We will email you once it is reviewed.');
+                      },
             child: const Text('Submit request'),
           ),
         ],

@@ -9,7 +9,8 @@ import 'package:gainpath_domain/membership.dart';
 /// current plan rather than a fixed sample, so this stays correct however
 /// many tiers exist or whichever one is active.
 class RenewScreen extends StatelessWidget {
-  const RenewScreen({super.key});
+  const RenewScreen({super.key, this.connected = false});
+  final bool connected;
 
   MembershipPlan _plan(BuildContext context) {
     final repo = context.read<MembershipRepository>();
@@ -18,8 +19,18 @@ class RenewScreen extends StatelessWidget {
 
   String get _newExpiry {
     const months = [
-      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec'
     ];
     final d = DateTime.now().add(const Duration(days: 30));
     return '${d.day} ${months[d.month - 1]} ${d.year}';
@@ -27,7 +38,8 @@ class RenewScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final plan = _plan(context);
+    final plan =
+        connected ? const MembershipPlan('-', '-', 0, '-', []) : _plan(context);
     return Scaffold(
       appBar: AppBar(title: const Text('Renew membership')),
       body: PageBody(
@@ -37,11 +49,12 @@ class RenewScreen extends StatelessWidget {
               children: [
                 DetailRow('Plan', plan.name),
                 const Divider(height: 20),
-                const DetailRow('Period', '1 month'),
+                DetailRow('Period', connected ? '-' : '1 month'),
                 const Divider(height: 20),
-                DetailRow('New expiry', _newExpiry),
+                DetailRow('New expiry', connected ? '-' : _newExpiry),
                 const Divider(height: 20),
-                DetailRow('Total', 'RM ${plan.price.toStringAsFixed(2)}'),
+                DetailRow('Total',
+                    connected ? '-' : 'RM ${plan.price.toStringAsFixed(2)}'),
               ],
             ),
           ),
@@ -56,8 +69,9 @@ class RenewScreen extends StatelessWidget {
                 const SizedBox(width: 10),
                 Expanded(
                   child: Text(
-                    'Payment is handled on the provider\'s secure page. GainPath never '
-                    'sees or stores your card details.',
+                    connected
+                        ? 'Payment service unavailable. No payment will be collected.'
+                        : 'Payment is handled on the provider\'s secure page. GainPath never sees or stores your card details.',
                     style: Theme.of(context).textTheme.bodyMedium,
                   ),
                 ),
@@ -70,16 +84,20 @@ class RenewScreen extends StatelessWidget {
               final success = await Navigator.push<bool>(
                 context,
                 MaterialPageRoute(
-                  builder: (_) =>
-                      BillplzCheckoutScreen(amount: plan.price, description: '${plan.name} renewal'),
+                  builder: (_) => BillplzCheckoutScreen(
+                      connected: connected,
+                      amount: plan.price,
+                      description: '${plan.name} renewal'),
                 ),
               );
-              if (success != true || !context.mounted) return;
+              if (connected || success != true || !context.mounted) return;
               context.read<MembershipBloc>().add(MembershipRenewed(plan.price));
               Navigator.pop(context);
               showToast(context, 'Membership renewed until $_newExpiry.');
             },
-            child: Text('Pay RM ${plan.price.toStringAsFixed(2)}'),
+            child: Text(connected
+                ? 'View checkout'
+                : 'Pay RM ${plan.price.toStringAsFixed(2)}'),
           ),
         ],
       ),

@@ -38,6 +38,8 @@ void openBookingList(BuildContext context, AuthSession session,
               session: session,
               builder: (_, current) => LiveBookingListView(
                   repository: createBookingList(session, current, factory),
+                  coachId:
+                      session.role == AppRole.coach ? session.userId : null,
                   cancellation: session.role == AppRole.member
                       ? FirebaseBookingRepository(
                           scope: session.scope, isCurrent: current)

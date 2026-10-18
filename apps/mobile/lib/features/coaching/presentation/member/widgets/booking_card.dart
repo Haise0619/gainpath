@@ -11,6 +11,9 @@ import 'package:gainpath_domain/identity.dart';
 /// Cancelled surfaces the reason and a way to book that coach again.
 class BookingCard extends StatelessWidget {
   final Booking booking;
+  final bool live;
+  final String? statusLabel;
+  final Widget? details;
   final VoidCallback? onReschedule;
   final VoidCallback? onCancel;
   final VoidCallback? onMessage;
@@ -20,6 +23,9 @@ class BookingCard extends StatelessWidget {
   const BookingCard({
     super.key,
     required this.booking,
+    this.live = false,
+    this.statusLabel,
+    this.details,
     this.onReschedule,
     this.onCancel,
     this.onMessage,
@@ -36,7 +42,7 @@ class BookingCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final coach = _coach(context);
+    final coach = live ? null : _coach(context);
     return Panel(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -59,29 +65,37 @@ class BookingCard extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(booking.coachName, style: Theme.of(context).textTheme.titleMedium),
+                    Text(booking.coachName,
+                        style: Theme.of(context).textTheme.titleMedium),
                     const SizedBox(height: 2),
                     Text('${_formatDate(booking.start)}  ·  ${booking.branch}',
                         style: Theme.of(context).textTheme.bodyMedium),
                   ],
                 ),
               ),
-              statusPill(booking.status.label),
+              statusPill(statusLabel ?? booking.status.label),
             ],
           ),
-          if (booking.status == BookingStatus.cancelled && booking.cancellationReason != null) ...[
+          if (booking.status == BookingStatus.cancelled &&
+              booking.cancellationReason != null) ...[
             const SizedBox(height: 12),
             Container(
               padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(color: AppColors.dangerTint, borderRadius: BorderRadius.circular(10)),
+              decoration: BoxDecoration(
+                  color: AppColors.dangerTint,
+                  borderRadius: BorderRadius.circular(10)),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Icon(Icons.info_outline_rounded, size: 16, color: AppColors.danger),
+                  const Icon(Icons.info_outline_rounded,
+                      size: 16, color: AppColors.danger),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Text(booking.cancellationReason!,
-                        style: const TextStyle(fontSize: 13.5, height: 1.4, color: AppColors.danger)),
+                        style: const TextStyle(
+                            fontSize: 13.5,
+                            height: 1.4,
+                            color: AppColors.danger)),
                   ),
                 ],
               ),
@@ -91,14 +105,18 @@ class BookingCard extends StatelessWidget {
             const SizedBox(height: 12),
             Container(
               padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(color: AppColors.surfaceAlt, borderRadius: BorderRadius.circular(10)),
+              decoration: BoxDecoration(
+                  color: AppColors.surfaceAlt,
+                  borderRadius: BorderRadius.circular(10)),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Icon(Icons.sticky_note_2_outlined, size: 16, color: AppColors.inkSoft),
+                  const Icon(Icons.sticky_note_2_outlined,
+                      size: 16, color: AppColors.inkSoft),
                   const SizedBox(width: 10),
                   Expanded(
-                    child: Text(booking.notes!, style: const TextStyle(fontSize: 13.5, height: 1.4)),
+                    child: Text(booking.notes!,
+                        style: const TextStyle(fontSize: 13.5, height: 1.4)),
                   ),
                 ],
               ),
@@ -108,12 +126,15 @@ class BookingCard extends StatelessWidget {
             const SizedBox(height: 10),
             Row(
               children: [
-                const Icon(Icons.star_rounded, size: 16, color: AppColors.accent),
+                const Icon(Icons.star_rounded,
+                    size: 16, color: AppColors.accent),
                 const SizedBox(width: 6),
-                Text('You reviewed this session', style: Theme.of(context).textTheme.bodyMedium),
+                Text('You reviewed this session',
+                    style: Theme.of(context).textTheme.bodyMedium),
               ],
             ),
           ],
+          if (details != null) details!,
           const SizedBox(height: 12),
           _actions(context),
         ],
@@ -141,7 +162,8 @@ class BookingCard extends StatelessWidget {
             Expanded(
               child: OutlinedButton(
                 style: OutlinedButton.styleFrom(
-                    minimumSize: const Size(0, 42), foregroundColor: AppColors.danger),
+                    minimumSize: const Size(0, 42),
+                    foregroundColor: AppColors.danger),
                 onPressed: onCancel,
                 child: const FittedBox(
                   fit: BoxFit.scaleDown,
@@ -202,8 +224,18 @@ class BookingCard extends StatelessWidget {
 
   String _formatDate(DateTime d) {
     const months = [
-      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec'
     ];
     final h = d.hour.toString().padLeft(2, '0');
     final m = d.minute.toString().padLeft(2, '0');

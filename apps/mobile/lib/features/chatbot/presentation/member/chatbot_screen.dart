@@ -18,18 +18,20 @@ Widget _networkHero(String url, {BoxFit fit = BoxFit.cover}) {
     fit: fit,
     loadingBuilder: (context, child, progress) =>
         progress == null ? child : Container(color: AppColors.surfaceAlt),
-    errorBuilder: (context, error, stack) =>
-        const DecoratedBox(decoration: BoxDecoration(gradient: AppColors.heroGradient)),
+    errorBuilder: (context, error, stack) => const DecoratedBox(
+        decoration: BoxDecoration(gradient: AppColors.heroGradient)),
   );
 }
 
 /// AD-M6.1 — Consult AI Fitness Coach. Provides a [ChatBloc] scoped to this
 /// screen; the view below renders [ChatState] and dispatches events.
 class ChatbotScreen extends StatelessWidget {
-  const ChatbotScreen({super.key});
+  const ChatbotScreen({super.key, this.connected = false});
+  final bool connected;
 
   @override
   Widget build(BuildContext context) {
+    if (connected) return const _ChatbotView(connected: true);
     return BlocProvider(
       create: (context) => ChatBloc(
         chat: context.read<ChatRepository>(),
@@ -42,7 +44,8 @@ class ChatbotScreen extends StatelessWidget {
 }
 
 class _ChatbotView extends StatefulWidget {
-  const _ChatbotView();
+  const _ChatbotView({this.connected = false});
+  final bool connected;
 
   @override
   State<_ChatbotView> createState() => _ChatbotViewState();
@@ -61,7 +64,8 @@ class _ChatbotViewState extends State<_ChatbotView> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _showFirstOpenDisclaimer());
+    WidgetsBinding.instance
+        .addPostFrameCallback((_) => _showFirstOpenDisclaimer());
   }
 
   @override
@@ -72,12 +76,16 @@ class _ChatbotViewState extends State<_ChatbotView> {
   }
 
   Future<void> _showFirstOpenDisclaimer() async {
-    if (_disclaimerShown) return;
+    if (_disclaimerShown || widget.connected) return;
     _disclaimerShown = true;
     await showChatbotAboutSheet(context, dismissible: false);
   }
 
   void _send() {
+    if (widget.connected) {
+      showUnavailable(context);
+      return;
+    }
     final text = _controller.text.trim();
     if (text.isEmpty) return;
     _controller.clear();
@@ -95,138 +103,176 @@ class _ChatbotViewState extends State<_ChatbotView> {
 
   @override
   Widget build(BuildContext context) {
+    if (widget.connected) return _buildChat(context, const ChatState());
     return BlocConsumer<ChatBloc, ChatState>(
-      listenWhen: (a, b) => a.messages.length != b.messages.length || a.isReplying != b.isReplying,
+      listenWhen: (a, b) =>
+          a.messages.length != b.messages.length ||
+          a.isReplying != b.isReplying,
       listener: (_, __) => _jump(),
-      builder: (context, chat) {
-        final bloc = context.read<ChatBloc>();
-        return Scaffold(
-          appBar: AppBar(
-            title: const Text('AI coach'),
-            actions: [
-              IconButton(
-                icon: const Icon(Icons.help_outline_rounded),
-                tooltip: 'About this assistant',
-                onPressed: () => showChatbotAboutSheet(context),
-              ),
-              IconButton(
-                icon: const Icon(Icons.auto_awesome_rounded),
-                tooltip: 'Progress audit',
-                onPressed: () => bloc.add(const ProgressAuditRequested()),
-              ),
-              IconButton(
-                icon: const Icon(Icons.bookmark_border_rounded),
-                tooltip: 'Saved advice',
-                onPressed: () =>
-                    Navigator.push(context, MaterialPageRoute(builder: (_) => const SavedAdviceScreen())),
-              ),
-              IconButton(
-                icon: const Icon(Icons.delete_outline_rounded),
-                tooltip: 'Clear chat',
-                onPressed: () async {
-                  final ok = await confirmSheet(context,
-                      title: 'Clear this conversation?',
-                      message: 'Messages disappear from this screen. Anything you bookmarked stays saved.',
-                      confirmLabel: 'Clear',
-                      destructive: true);
-                  if (ok) bloc.add(const HistoryCleared());
-                },
-              ),
-            ],
+      builder: _buildChat,
+    );
+  }
+
+  Widget _buildChat(BuildContext context, ChatState chat) {
+    final bloc = widget.connected ? null : context.read<ChatBloc>();
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('AI coach'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.help_outline_rounded),
+            tooltip: 'About this assistant',
+            onPressed: widget.connected
+                ? () => showUnavailable(context)
+                : () => showChatbotAboutSheet(context),
           ),
-          body: Column(
-            children: [
-              Expanded(
-                child: chat.messages.isEmpty
-                    ? Center(
-                        child: Padding(
-                          padding: const EdgeInsets.all(32),
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
+          IconButton(
+            icon: const Icon(Icons.auto_awesome_rounded),
+            tooltip: 'Progress audit',
+            onPressed: widget.connected
+                ? () => showUnavailable(context)
+                : () => bloc?.add(const ProgressAuditRequested()),
+          ),
+          IconButton(
+            icon: const Icon(Icons.bookmark_border_rounded),
+            tooltip: 'Saved advice',
+            onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                    builder: (_) =>
+                        SavedAdviceScreen(connected: widget.connected))),
+          ),
+          IconButton(
+            icon: const Icon(Icons.delete_outline_rounded),
+            tooltip: 'Clear chat',
+            onPressed: () async {
+              final ok = await confirmSheet(context,
+                  title: 'Clear this conversation?',
+                  message:
+                      'Messages disappear from this screen. Anything you bookmarked stays saved.',
+                  confirmLabel: 'Clear',
+                  destructive: true);
+              if (ok) bloc?.add(const HistoryCleared());
+            },
+          ),
+        ],
+      ),
+      body: Column(
+        children: [
+          Expanded(
+            child: chat.messages.isEmpty
+                ? Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(32),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.chat_bubble_outline_rounded,
+                              size: 40, color: AppColors.hairline),
+                          const SizedBox(height: 14),
+                          Text(
+                              widget.connected
+                                  ? 'AI coach unavailable. Conversation: -'
+                                  : 'Ask about form, programming, or nutrition.',
+                              textAlign: TextAlign.center,
+                              style: Theme.of(context).textTheme.bodyMedium),
+                          const SizedBox(height: 20),
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            alignment: WrapAlignment.center,
                             children: [
-                              const Icon(Icons.chat_bubble_outline_rounded, size: 40, color: AppColors.hairline),
-                              const SizedBox(height: 14),
-                              Text('Ask about form, programming, or nutrition.',
-                                  textAlign: TextAlign.center, style: Theme.of(context).textTheme.bodyMedium),
-                              const SizedBox(height: 20),
-                              Wrap(
-                                spacing: 8,
-                                runSpacing: 8,
-                                alignment: WrapAlignment.center,
-                                children: [
-                                  ..._demoPrompts.map((q) => ActionChip(
-                                        label: Text(q),
-                                        avatar: const Icon(Icons.auto_awesome_rounded, size: 15, color: AppColors.accent),
-                                        backgroundColor: AppColors.accentTint,
-                                        side: BorderSide.none,
-                                        labelStyle: const TextStyle(
-                                            color: AppColors.accentDark, fontWeight: FontWeight.w600, fontSize: 12.5),
-                                        onPressed: () => bloc.add(MessageSent(q)),
-                                      )),
-                                  ...context.read<ChatRepository>().faqPrompts.map((p) => ActionChip(
+                              ..._demoPrompts.map((q) => ActionChip(
+                                    label: Text(q),
+                                    avatar: const Icon(
+                                        Icons.auto_awesome_rounded,
+                                        size: 15,
+                                        color: AppColors.accent),
+                                    backgroundColor: AppColors.accentTint,
+                                    side: BorderSide.none,
+                                    labelStyle: const TextStyle(
+                                        color: AppColors.accentDark,
+                                        fontWeight: FontWeight.w600,
+                                        fontSize: 12.5),
+                                    onPressed: widget.connected
+                                        ? () => showUnavailable(context)
+                                        : () => bloc?.add(MessageSent(q)),
+                                  )),
+                              ...?(widget.connected
+                                      ? null
+                                      : context
+                                          .read<ChatRepository>()
+                                          .faqPrompts)
+                                  ?.map((p) => ActionChip(
                                         label: Text(p.question),
                                         backgroundColor: AppColors.primaryTint,
                                         side: BorderSide.none,
                                         labelStyle: const TextStyle(
-                                            color: AppColors.primary, fontWeight: FontWeight.w600, fontSize: 12.5),
-                                        onPressed: () => bloc.add(PromptSent(p)),
+                                            color: AppColors.primary,
+                                            fontWeight: FontWeight.w600,
+                                            fontSize: 12.5),
+                                        onPressed: () =>
+                                            bloc?.add(PromptSent(p)),
                                       )),
-                                ],
-                              ),
                             ],
                           ),
-                        ),
-                      )
-                    : ListView.builder(
-                        controller: _scroll,
-                        padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
-                        itemCount: chat.messages.length + (chat.isReplying ? 1 : 0),
-                        itemBuilder: (ctx, i) {
-                          if (i == chat.messages.length) {
-                            return const _Bubble(text: 'Thinking...', fromUser: false);
-                          }
-                          final m = chat.messages[i];
-                          return _Bubble(
-                            text: m.text,
-                            fromUser: m.fromUser,
-                            attachment: m.attachment,
-                            isBookmarked: chat.isBookmarked(m),
-                            onToggleBookmark: m.fromUser ? null : () => bloc.add(AdviceBookmarkToggled(m.text)),
-                          );
-                        },
-                      ),
-              ),
-              Container(
-                padding: EdgeInsets.fromLTRB(12, 10, 12, 10 + MediaQuery.of(context).padding.bottom),
-                decoration: const BoxDecoration(
-                  color: AppColors.surface,
-                  border: Border(top: BorderSide(color: AppColors.hairline)),
-                ),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: TextField(
-                        controller: _controller,
-                        textInputAction: TextInputAction.send,
-                        onSubmitted: (_) => _send(),
-                        decoration: const InputDecoration(
-                          hintText: 'Ask a question',
-                          contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 13),
-                        ),
+                        ],
                       ),
                     ),
-                    const SizedBox(width: 8),
-                    IconButton.filled(
-                      onPressed: _send,
-                      icon: const Icon(Icons.arrow_upward_rounded),
-                    ),
-                  ],
-                ),
-              ),
-            ],
+                  )
+                : ListView.builder(
+                    controller: _scroll,
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+                    itemCount: chat.messages.length + (chat.isReplying ? 1 : 0),
+                    itemBuilder: (ctx, i) {
+                      if (i == chat.messages.length) {
+                        return const _Bubble(
+                            text: 'Thinking...', fromUser: false);
+                      }
+                      final m = chat.messages[i];
+                      return _Bubble(
+                        text: m.text,
+                        fromUser: m.fromUser,
+                        attachment: m.attachment,
+                        isBookmarked: chat.isBookmarked(m),
+                        onToggleBookmark: m.fromUser
+                            ? null
+                            : () => bloc?.add(AdviceBookmarkToggled(m.text)),
+                      );
+                    },
+                  ),
           ),
-        );
-      },
+          Container(
+            padding: EdgeInsets.fromLTRB(
+                12, 10, 12, 10 + MediaQuery.of(context).padding.bottom),
+            decoration: const BoxDecoration(
+              color: AppColors.surface,
+              border: Border(top: BorderSide(color: AppColors.hairline)),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _controller,
+                    textInputAction: TextInputAction.send,
+                    onSubmitted: (_) => _send(),
+                    decoration: const InputDecoration(
+                      hintText: 'Ask a question',
+                      contentPadding:
+                          EdgeInsets.symmetric(horizontal: 16, vertical: 13),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                IconButton.filled(
+                  onPressed: _send,
+                  icon: const Icon(Icons.arrow_upward_rounded),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -265,9 +311,7 @@ class _Bubble extends StatelessWidget {
                 bottomLeft: Radius.circular(fromUser ? 16 : 4),
                 bottomRight: Radius.circular(fromUser ? 4 : 16),
               ),
-              border: fromUser
-                  ? null
-                  : Border.all(color: AppColors.hairline),
+              border: fromUser ? null : Border.all(color: AppColors.hairline),
             ),
             child: Text(text,
                 style: TextStyle(
@@ -279,9 +323,16 @@ class _Bubble extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.only(top: 8),
               child: switch (attachment!) {
-                EquipmentAttachment(:final equipment) => _EquipmentCard(equipment: equipment),
-                ProgressChartAttachment(:final title, :final unit, :final values, :final delta) =>
-                  _ChartCard(title: title, unit: unit, values: values, delta: delta),
+                EquipmentAttachment(:final equipment) =>
+                  _EquipmentCard(equipment: equipment),
+                ProgressChartAttachment(
+                  :final title,
+                  :final unit,
+                  :final values,
+                  :final delta
+                ) =>
+                  _ChartCard(
+                      title: title, unit: unit, values: values, delta: delta),
               },
             ),
           if (onToggleBookmark != null)
@@ -342,37 +393,46 @@ class _EquipmentCard extends StatelessWidget {
       width: 250,
       child: Panel(
         padding: EdgeInsets.zero,
-        onTap: () => Navigator.pushNamed(context, FeatureNavigation.equipment, arguments: equipment),
+        onTap: () => Navigator.pushNamed(context, FeatureNavigation.equipment,
+            arguments: equipment),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             ClipRRect(
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-              child: AspectRatio(aspectRatio: 16 / 9, child: _networkHero(equipment.imageUrl)),
+              borderRadius:
+                  const BorderRadius.vertical(top: Radius.circular(16)),
+              child: AspectRatio(
+                  aspectRatio: 16 / 9, child: _networkHero(equipment.imageUrl)),
             ),
             Padding(
               padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(equipment.name, style: Theme.of(context).textTheme.titleMedium),
+                  Text(equipment.name,
+                      style: Theme.of(context).textTheme.titleMedium),
                   const SizedBox(height: 2),
                   Text(equipment.muscleGroup,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontSize: 12)),
+                      style: Theme.of(context)
+                          .textTheme
+                          .bodyMedium
+                          ?.copyWith(fontSize: 12)),
                   if (equipment.howToUse.isNotEmpty) ...[
                     const SizedBox(height: 8),
                     Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Icon(Icons.check_circle_outline_rounded, size: 15, color: AppColors.primary),
+                        const Icon(Icons.check_circle_outline_rounded,
+                            size: 15, color: AppColors.primary),
                         const SizedBox(width: 6),
                         Expanded(
                           child: Text(equipment.howToUse.first,
                               maxLines: 2,
                               overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(fontSize: 12.5, height: 1.35)),
+                              style: const TextStyle(
+                                  fontSize: 12.5, height: 1.35)),
                         ),
                       ],
                     ),
@@ -381,9 +441,13 @@ class _EquipmentCard extends StatelessWidget {
                   const Row(
                     children: [
                       Text('View full guide',
-                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.primary)),
+                          style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.primary)),
                       SizedBox(width: 4),
-                      Icon(Icons.arrow_forward_rounded, size: 13, color: AppColors.primary),
+                      Icon(Icons.arrow_forward_rounded,
+                          size: 13, color: AppColors.primary),
                     ],
                   ),
                 ],
@@ -403,11 +467,16 @@ class _ChartCard extends StatelessWidget {
   final String unit;
   final List<int> values;
   final String delta;
-  const _ChartCard({required this.title, required this.unit, required this.values, required this.delta});
+  const _ChartCard(
+      {required this.title,
+      required this.unit,
+      required this.values,
+      required this.delta});
 
   @override
   Widget build(BuildContext context) {
-    final points = List.generate(values.length, (i) => _Point('S${i + 1}', values[i]));
+    final points =
+        List.generate(values.length, (i) => _Point('S${i + 1}', values[i]));
     final positive = !delta.trim().startsWith('-');
     return SizedBox(
       width: 260,
@@ -418,19 +487,26 @@ class _ChartCard extends StatelessWidget {
             Row(
               children: [
                 Expanded(
-                  child: Text(title, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontSize: 13.5)),
+                  child: Text(title,
+                      style: Theme.of(context)
+                          .textTheme
+                          .titleMedium
+                          ?.copyWith(fontSize: 13.5)),
                 ),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
                   decoration: BoxDecoration(
-                    color: positive ? AppColors.successTint : AppColors.dangerTint,
+                    color:
+                        positive ? AppColors.successTint : AppColors.dangerTint,
                     borderRadius: BorderRadius.circular(999),
                   ),
                   child: Text(delta,
                       style: TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.w700,
-                          color: positive ? AppColors.success : AppColors.danger)),
+                          color:
+                              positive ? AppColors.success : AppColors.danger)),
                 ),
               ],
             ),
@@ -445,11 +521,15 @@ class _ChartCard extends StatelessWidget {
                   labelStyle: TextStyle(fontSize: 9, color: AppColors.inkSoft),
                 ),
                 primaryYAxis: const NumericAxis(
-                  majorGridLines: MajorGridLines(width: 0.6, color: AppColors.hairline),
+                  majorGridLines:
+                      MajorGridLines(width: 0.6, color: AppColors.hairline),
                   axisLine: AxisLine(width: 0),
                   labelStyle: TextStyle(fontSize: 9, color: AppColors.inkSoft),
                 ),
-                tooltipBehavior: TooltipBehavior(enable: true, header: '', format: 'point.x  ·  point.y $unit'),
+                tooltipBehavior: TooltipBehavior(
+                    enable: true,
+                    header: '',
+                    format: 'point.x  ·  point.y $unit'),
                 series: <CartesianSeries<_Point, String>>[
                   SplineSeries<_Point, String>(
                     dataSource: points,
@@ -457,7 +537,8 @@ class _ChartCard extends StatelessWidget {
                     yValueMapper: (d, _) => d.value,
                     color: AppColors.primary,
                     width: 2.2,
-                    markerSettings: const MarkerSettings(isVisible: true, height: 5, width: 5),
+                    markerSettings: const MarkerSettings(
+                        isVisible: true, height: 5, width: 5),
                   ),
                 ],
               ),

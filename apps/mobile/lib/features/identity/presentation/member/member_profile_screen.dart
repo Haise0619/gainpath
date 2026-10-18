@@ -12,6 +12,8 @@ import 'activity_level_screen.dart';
 import 'experience_level_screen.dart';
 import 'goals_screen.dart';
 import 'physical_profile_screen.dart';
+import '../../../membership/presentation/shared/membership_dashboard_screen.dart';
+import '../../../analytics/presentation/member/body_metrics_screen.dart';
 
 class MemberProfileScreen extends StatelessWidget {
   const MemberProfileScreen(
@@ -28,9 +30,23 @@ class MemberProfileScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final ageLabel = liveSession == null
-        ? '${context.read<MemberProfileRepository>().memberAge} yrs'
-        : liveProfile!.ageLabel;
+    final live = liveSession != null;
+    final mock = live ? null : context.read<MemberProfileRepository>();
+    final ageLabel =
+        live ? liveProfile?.ageLabel ?? '-' : '${mock!.memberAge} yrs';
+    final name = live ? liveSession!.displayName ?? '-' : mock!.memberName;
+    final email = live ? liveSession!.email : mock!.memberEmail;
+    final gender = live ? liveProfile?.gender.label ?? '-' : mock!.memberGender;
+    final height = live
+        ? (liveProfile == null ? '-' : '${liveProfile!.heightCm} cm')
+        : '${mock!.memberHeight} cm';
+    final weight = live
+        ? (liveProfile == null ? '-' : '${liveProfile!.weightKg} kg')
+        : '${mock!.memberWeight} kg';
+    final experience =
+        live ? liveProfile?.experience.label ?? '-' : mock!.memberExperience;
+    final activity =
+        live ? liveProfile?.activity.label ?? '-' : mock!.memberActivityLevel;
     return Scaffold(
       appBar: AppBar(title: const Text('Profile')),
       body: PageBody(
@@ -48,32 +64,25 @@ class MemberProfileScreen extends StatelessWidget {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
-                              context
-                                  .read<MemberProfileRepository>()
-                                  .memberName,
+                          Text(name,
                               style: Theme.of(context).textTheme.titleLarge),
                           const SizedBox(height: 2),
-                          Text(
-                              context
-                                  .read<MemberProfileRepository>()
-                                  .memberEmail,
+                          Text(email,
                               style: Theme.of(context).textTheme.bodyMedium),
                           const SizedBox(height: 6),
-                          if (liveSession == null)
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 9, vertical: 4),
-                              decoration: BoxDecoration(
-                                color: AppColors.accentTint,
-                                borderRadius: BorderRadius.circular(7),
-                              ),
-                              child: const Text('Premium member',
-                                  style: TextStyle(
-                                      fontSize: 11.5,
-                                      fontWeight: FontWeight.w700,
-                                      color: AppColors.warning)),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 9, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: AppColors.accentTint,
+                              borderRadius: BorderRadius.circular(7),
                             ),
+                            child: Text(live ? '- member' : 'Premium member',
+                                style: const TextStyle(
+                                    fontSize: 11.5,
+                                    fontWeight: FontWeight.w700,
+                                    color: AppColors.warning)),
+                          ),
                         ],
                       ),
                     ),
@@ -86,13 +95,10 @@ class MemberProfileScreen extends StatelessWidget {
                   spacing: 10,
                   runSpacing: 10,
                   children: [
-                    _QuickStat(Icons.wc_rounded,
-                        context.read<MemberProfileRepository>().memberGender),
+                    _QuickStat(Icons.wc_rounded, gender),
                     _QuickStat(Icons.cake_outlined, ageLabel),
-                    _QuickStat(Icons.height_rounded,
-                        '${context.read<MemberProfileRepository>().memberHeight} cm'),
-                    _QuickStat(Icons.monitor_weight_outlined,
-                        '${context.read<MemberProfileRepository>().memberWeight} kg'),
+                    _QuickStat(Icons.height_rounded, height),
+                    _QuickStat(Icons.monitor_weight_outlined, weight),
                   ],
                 ),
               ],
@@ -108,8 +114,7 @@ class MemberProfileScreen extends StatelessWidget {
                     context,
                     Icons.badge_outlined,
                     'Physical profile',
-                    '${context.read<MemberProfileRepository>().memberGender} · $ageLabel · ${context.read<MemberProfileRepository>().memberHeight} cm · '
-                        '${context.read<MemberProfileRepository>().memberWeight} kg',
+                    '$gender · $ageLabel · $height · $weight',
                     () => Navigator.push(
                         context,
                         MaterialPageRoute(
@@ -118,12 +123,26 @@ class MemberProfileScreen extends StatelessWidget {
                                 liveCubit: liveSession == null
                                     ? null
                                     : context.read<FitnessProfileCubit>())))),
+                if (live)
+                  _row(
+                      context,
+                      Icons.monitor_weight_outlined,
+                      'Body metrics',
+                      '$height · $weight',
+                      () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (_) => BodyMetricsScreen(
+                                  live: true,
+                                  weightKg: liveProfile?.weightKg.toDouble(),
+                                  heightCm:
+                                      liveProfile?.heightCm.toDouble())))),
                 const Divider(height: 1, indent: 62),
                 _row(
                     context,
                     Icons.school_rounded,
                     'Experience level',
-                    context.read<MemberProfileRepository>().memberExperience,
+                    experience,
                     () => Navigator.push(
                         context,
                         MaterialPageRoute(
@@ -137,7 +156,7 @@ class MemberProfileScreen extends StatelessWidget {
                     context,
                     Icons.bolt_rounded,
                     'Activity level',
-                    context.read<MemberProfileRepository>().memberActivityLevel,
+                    activity,
                     () => Navigator.push(
                         context,
                         MaterialPageRoute(
@@ -153,7 +172,9 @@ class MemberProfileScreen extends StatelessWidget {
                     'Fitness goals',
                     liveSession == null
                         ? '${context.read<MemberProfileRepository>().memberTrainingFocus.length} focus areas  ·  3 targets'
-                        : '${context.read<MemberProfileRepository>().memberTrainingFocus.length} focus areas',
+                        : liveProfile == null
+                            ? '-'
+                            : '${liveProfile!.goals.length} focus areas',
                     () => Navigator.push(
                         context,
                         MaterialPageRoute(
@@ -175,13 +196,15 @@ class MemberProfileScreen extends StatelessWidget {
                     context,
                     Icons.card_membership_rounded,
                     'Membership',
-                    liveSession == null
-                        ? 'Premium  ·  renews 12 Oct'
-                        : 'Being connected',
+                    liveSession == null ? 'Premium  ·  renews 12 Oct' : '-',
                     () => liveSession == null
                         ? Navigator.pushNamed(
                             context, FeatureNavigation.membership)
-                        : showUnavailable(context)),
+                        : Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                                builder: (_) => const MembershipDashboardScreen(
+                                    connected: true)))),
                 const Divider(height: 1, indent: 62),
                 _row(
                     context,

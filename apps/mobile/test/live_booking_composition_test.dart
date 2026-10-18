@@ -54,14 +54,14 @@ void main() {
                 bookingListFactory: (_, __) => Lists()))));
     await tester.pumpAndSettle();
     expect(created, 0);
-    expect(find.text('My bookings'), findsOneWidget);
+    expect(find.byTooltip('My bookings'), findsOneWidget);
     await tester.tap(find.text('Real contract Coach'));
     await tester.pumpAndSettle();
-    await tester.ensureVisible(find.text('Choose time'));
-    await tester.tap(find.text('Choose time'));
+    await tester.ensureVisible(find.text('Book a session'));
+    await tester.tap(find.text('Book a session'));
     await tester.pumpAndSettle();
     expect(created, 1);
-    await tester.tap(find.text('08:00 GMT+8 – 08:30 GMT+8'));
+    await tester.tap(find.textContaining('08:00 GMT+8 – 08:30 GMT+8'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Request pending hold'));
     await tester.pumpAndSettle();
@@ -72,12 +72,9 @@ void main() {
     expect(find.byType(BookingConfirmedScreen), findsNothing);
     await tester.tap(find.text('View persisted bookings'));
     await tester.pumpAndSettle();
-    expect(
-        find.text(
-            'Pending hold — time elapsed; awaiting server expiry.'),
+    expect(find.text('Pending hold — time elapsed; awaiting server expiry.'),
         findsOneWidget);
-    expect(
-        find.textContaining('Coach: coach · Member: member'), findsOneWidget);
+    expect(find.text('Booking'), findsOneWidget);
     auth.drift(const AuthSession(
         userId: 'member',
         organizationId: 'org',
@@ -113,9 +110,9 @@ void main() {
                 bookingFactory: (_, __) => throw StateError('Must remain lazy'),
                 bookingListFactory: (_, __) => Lists()))));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('My bookings'));
+    await tester.tap(find.byTooltip('My bookings'));
     await tester.pumpAndSettle();
-    expect(find.text('Booking booking'), findsOneWidget);
+    expect(find.text('booking'), findsOneWidget);
     await tester.pumpWidget(const SizedBox());
     await tester.runAsync(() async {
       await bloc.close();

@@ -21,8 +21,6 @@ Route<dynamic>? buildFeatureRoute(RouteSettings settings,
   final legacyOnly = const {
     FeatureNavigation.equipment,
     FeatureNavigation.coach,
-    FeatureNavigation.membership,
-    FeatureNavigation.checkout,
   }.contains(settings.name);
   // Connected Coach/booking views use scoped application route builders.
   // These named destinations belong to the preserved prototype contracts.
@@ -35,7 +33,8 @@ Route<dynamic>? buildFeatureRoute(RouteSettings settings,
             EquipmentDetailScreen(equipment: args),
           FeatureNavigation.coach when args is Coach =>
             CoachProfileScreen(coach: args),
-          FeatureNavigation.membership => const MembershipDashboardScreen(),
+          FeatureNavigation.membership =>
+            MembershipDashboardScreen(connected: firebase),
           FeatureNavigation.progress => firebase
               ? Builder(builder: (context) {
                   final session = context.read<AuthBloc>().state.session;
@@ -53,6 +52,7 @@ Route<dynamic>? buildFeatureRoute(RouteSettings settings,
               : const ProgressDashboardScreen(),
           FeatureNavigation.checkout when args is CheckoutArguments =>
             BillplzCheckoutScreen(
+                connected: firebase,
                 amount: args.amount, description: args.description),
           _ => null,
         };

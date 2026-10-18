@@ -22,7 +22,18 @@ const _cancelReasons = [
 /// profile) is reflected immediately without any local copy to keep in
 /// sync.
 class BookingScheduleScreen extends StatefulWidget {
-  const BookingScheduleScreen({super.key});
+  const BookingScheduleScreen(
+      {super.key,
+      this.persistedBookings,
+      this.statusLabels = const {},
+      this.details = const {},
+      this.onCancelHold,
+      this.header});
+  final List<Booking>? persistedBookings;
+  final Map<String, String> statusLabels;
+  final Map<String, Widget> details;
+  final void Function(String)? onCancelHold;
+  final Widget? header;
 
   @override
   State<BookingScheduleScreen> createState() => _BookingScheduleScreenState();
@@ -38,15 +49,30 @@ class _BookingScheduleScreenState extends State<BookingScheduleScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final bookings = context.watch<BookingBloc>().state;
-    final upcoming = bookings.memberUpcoming;
-    final completed = bookings.memberCompleted;
-    final cancelled = bookings.memberCancelled;
+    final bookings = widget.persistedBookings == null
+        ? context.watch<BookingBloc>().state
+        : null;
+    final upcoming = widget.persistedBookings
+            ?.where((b) =>
+                b.status == BookingStatus.pending ||
+                b.status == BookingStatus.confirmed)
+            .toList() ??
+        bookings!.memberUpcoming;
+    final completed = widget.persistedBookings
+            ?.where((b) => b.status == BookingStatus.completed)
+            .toList() ??
+        bookings!.memberCompleted;
+    final cancelled = widget.persistedBookings
+            ?.where((b) => b.status == BookingStatus.cancelled)
+            .toList() ??
+        bookings!.memberCancelled;
+    final live = widget.persistedBookings != null;
 
     return Scaffold(
       appBar: AppBar(title: const Text('My bookings')),
       body: PageBody(
         children: [
+          if (widget.header != null) widget.header!,
           const Eyebrow('Upcoming'),
           if (upcoming.isEmpty)
             _emptyRow(context, 'Nothing booked yet.')
@@ -55,9 +81,17 @@ class _BookingScheduleScreenState extends State<BookingScheduleScreen> {
                   padding: const EdgeInsets.only(bottom: 10),
                   child: BookingCard(
                     booking: b,
-                    onReschedule: () => _reschedule(b),
-                    onCancel: () => _cancel(b),
-                    onMessage: () => _message(b),
+                    live: live,
+                    statusLabel: widget.statusLabels[b.id],
+                    details: widget.details[b.id],
+                    onReschedule: live ? null : () => _reschedule(b),
+                    onCancel: live
+                        ? (widget.onCancelHold == null ||
+                                widget.statusLabels[b.id] != 'Pending hold'
+                            ? null
+                            : () => widget.onCancelHold!(b.id))
+                        : () => _cancel(b),
+                    onMessage: live ? null : () => _message(b),
                   ),
                 )),
           const SizedBox(height: 14),
@@ -69,8 +103,11 @@ class _BookingScheduleScreenState extends State<BookingScheduleScreen> {
                   padding: const EdgeInsets.only(bottom: 10),
                   child: BookingCard(
                     booking: b,
-                    onMessage: () => _message(b),
-                    onRate: () => _rate(b),
+                    live: live,
+                    statusLabel: widget.statusLabels[b.id],
+                    details: widget.details[b.id],
+                    onMessage: live ? null : () => _message(b),
+                    onRate: live ? null : () => _rate(b),
                   ),
                 )),
           const SizedBox(height: 14),
@@ -82,7 +119,10 @@ class _BookingScheduleScreenState extends State<BookingScheduleScreen> {
                   padding: const EdgeInsets.only(bottom: 10),
                   child: BookingCard(
                     booking: b,
-                    onBookAgain: () => _bookAgain(b),
+                    live: live,
+                    statusLabel: widget.statusLabels[b.id],
+                    details: widget.details[b.id],
+                    onBookAgain: live ? null : () => _bookAgain(b),
                   ),
                 )),
         ],
@@ -100,16 +140,19 @@ class _BookingScheduleScreenState extends State<BookingScheduleScreen> {
   void _bookAgain(Booking b) {
     final coach = _coachById(b.coachId);
     if (coach == null) return;
-    Navigator.push(context, MaterialPageRoute(builder: (_) => CoachProfileScreen(coach: coach)));
+    Navigator.push(context,
+        MaterialPageRoute(builder: (_) => CoachProfileScreen(coach: coach)));
   }
 
   Future<void> _reschedule(Booking b) async {
-    await Navigator.push(context, MaterialPageRoute(builder: (_) => RescheduleScreen(booking: b)));
+    await Navigator.push(context,
+        MaterialPageRoute(builder: (_) => RescheduleScreen(booking: b)));
     if (mounted) setState(() {});
   }
 
   void _message(Booking b) {
-    Navigator.push(context, MaterialPageRoute(builder: (_) => MessageCoachScreen(booking: b)));
+    Navigator.push(context,
+        MaterialPageRoute(builder: (_) => MessageCoachScreen(booking: b)));
   }
 
   Future<void> _cancel(Booking b) async {
@@ -123,13 +166,14 @@ class _BookingScheduleScreenState extends State<BookingScheduleScreen> {
       ),
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setSheet) => Padding(
-          padding:
-              EdgeInsets.fromLTRB(20, 20, 20, 20 + MediaQuery.of(ctx).viewInsets.bottom),
+          padding: EdgeInsets.fromLTRB(
+              20, 20, 20, 20 + MediaQuery.of(ctx).viewInsets.bottom),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('Cancel this session?', style: Theme.of(ctx).textTheme.titleLarge),
+              Text('Cancel this session?',
+                  style: Theme.of(ctx).textTheme.titleLarge),
               const SizedBox(height: 6),
               Text(
                 'Cancelling frees the slot for other members. You can cancel up to 12 hours '
@@ -147,7 +191,8 @@ class _BookingScheduleScreenState extends State<BookingScheduleScreen> {
                             value: r,
                             contentPadding: EdgeInsets.zero,
                             dense: true,
-                            title: Text(r, style: const TextStyle(fontSize: 14.5)),
+                            title:
+                                Text(r, style: const TextStyle(fontSize: 14.5)),
                           ))
                       .toList(),
                 ),
@@ -157,7 +202,8 @@ class _BookingScheduleScreenState extends State<BookingScheduleScreen> {
                 children: [
                   Expanded(
                     child: FilledButton(
-                      style: FilledButton.styleFrom(backgroundColor: AppColors.danger),
+                      style: FilledButton.styleFrom(
+                          backgroundColor: AppColors.danger),
                       onPressed: () => Navigator.pop(ctx, true),
                       child: const FittedBox(
                         fit: BoxFit.scaleDown,
@@ -183,8 +229,8 @@ class _BookingScheduleScreenState extends State<BookingScheduleScreen> {
       ),
     );
     if (confirmed != true || !mounted) return;
-    context.read<BookingBloc>().add(
-        BookingCancelled(b.id, 'Member requested — ${reason ?? _cancelReasons.first}.'));
+    context.read<BookingBloc>().add(BookingCancelled(
+        b.id, 'Member requested — ${reason ?? _cancelReasons.first}.'));
     if (mounted) showToast(context, 'Session cancelled.');
   }
 
@@ -200,22 +246,26 @@ class _BookingScheduleScreenState extends State<BookingScheduleScreen> {
       ),
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setSheet) => Padding(
-          padding:
-              EdgeInsets.fromLTRB(20, 20, 20, 20 + MediaQuery.of(ctx).viewInsets.bottom),
+          padding: EdgeInsets.fromLTRB(
+              20, 20, 20, 20 + MediaQuery.of(ctx).viewInsets.bottom),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('Rate your session', style: Theme.of(ctx).textTheme.titleLarge),
+              Text('Rate your session',
+                  style: Theme.of(ctx).textTheme.titleLarge),
               const SizedBox(height: 6),
-              Text('with ${b.coachName}', style: Theme.of(ctx).textTheme.bodyMedium),
+              Text('with ${b.coachName}',
+                  style: Theme.of(ctx).textTheme.bodyMedium),
               const SizedBox(height: 18),
               Row(
                 children: List.generate(5, (i) {
                   return IconButton(
                     onPressed: () => setSheet(() => stars = i + 1),
                     icon: Icon(
-                      i < stars ? Icons.star_rounded : Icons.star_outline_rounded,
+                      i < stars
+                          ? Icons.star_rounded
+                          : Icons.star_outline_rounded,
                       size: 34,
                       color: AppColors.accent,
                     ),
@@ -226,7 +276,8 @@ class _BookingScheduleScreenState extends State<BookingScheduleScreen> {
               TextField(
                 controller: controller,
                 maxLines: 3,
-                decoration: const InputDecoration(hintText: 'Anything you want to add?'),
+                decoration: const InputDecoration(
+                    hintText: 'Anything you want to add?'),
               ),
               const SizedBox(height: 14),
               SizedBox(

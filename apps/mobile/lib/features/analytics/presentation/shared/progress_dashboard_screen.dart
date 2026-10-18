@@ -20,8 +20,14 @@ import 'package:gainpath_domain/gamification.dart';
 /// in. Everything reveals with a short staggered fade so the page feels
 /// alive on open rather than dumping every panel at once.
 class ProgressDashboardScreen extends StatefulWidget {
-  const ProgressDashboardScreen({super.key, this.localProgress, this.onRefresh,
-    this.onOpenWorkout, this.onOpenHistory, this.onOpenPerformance, this.onOpenForm});
+  const ProgressDashboardScreen(
+      {super.key,
+      this.localProgress,
+      this.onRefresh,
+      this.onOpenWorkout,
+      this.onOpenHistory,
+      this.onOpenPerformance,
+      this.onOpenForm});
 
   final MemberLocalProgress? localProgress;
   final Future<void> Function()? onRefresh;
@@ -31,7 +37,8 @@ class ProgressDashboardScreen extends StatefulWidget {
   final VoidCallback? onOpenForm;
 
   @override
-  State<ProgressDashboardScreen> createState() => _ProgressDashboardScreenState();
+  State<ProgressDashboardScreen> createState() =>
+      _ProgressDashboardScreenState();
 }
 
 class _ProgressDashboardScreenState extends State<ProgressDashboardScreen>
@@ -61,7 +68,8 @@ class _ProgressDashboardScreenState extends State<ProgressDashboardScreen>
     return FadeTransition(
       opacity: animation,
       child: SlideTransition(
-        position: animation.drive(Tween(begin: const Offset(0, 0.06), end: Offset.zero)),
+        position: animation
+            .drive(Tween(begin: const Offset(0, 0.06), end: Offset.zero)),
         child: child,
       ),
     );
@@ -70,72 +78,122 @@ class _ProgressDashboardScreenState extends State<ProgressDashboardScreen>
   @override
   Widget build(BuildContext context) {
     final local = widget.localProgress;
-    if (local != null) return _buildLocal(context, local);
+    final scale = MediaQuery.textScalerOf(context).scale(14) / 14;
+    final columns =
+        MediaQuery.sizeOf(context).width < 360 || scale > 1.3 ? 1 : 2;
+
     // The volume record check is computed, not asserted, so this stays
     // correct if the underlying weekly figures ever change.
-    final volume = context.read<AnalyticsRepository>().volumeTrend;
-    final isRecordWeek = volume.last >= volume.reduce((a, b) => a > b ? a : b);
+    final volume = local == null
+        ? context.read<AnalyticsRepository>().volumeTrend
+        : <int>[];
+    final isRecordWeek = volume.isNotEmpty &&
+        volume.last >= volume.reduce((a, b) => a > b ? a : b);
+    final openPerformance = widget.onOpenPerformance ??
+        () => Navigator.push(
+            context,
+            MaterialPageRoute(
+                builder: (_) =>
+                    WorkoutPerformanceScreen(localProgress: local)));
+    final openForm = widget.onOpenForm ??
+        () => Navigator.push(
+            context,
+            MaterialPageRoute(
+                builder: (_) => PostureAccuracyScreen(localProgress: local)));
+    final openHistory = widget.onOpenHistory ??
+        () => Navigator.push(
+            context,
+            MaterialPageRoute(
+                builder: (_) => ActivityTimelineScreen(
+                    localProgress: local,
+                    onRefresh: widget.onRefresh,
+                    onOpenWorkout: widget.onOpenWorkout)));
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Your progress')),
+      appBar: AppBar(title: const Text('Your progress'), actions: [
+        if (widget.onRefresh != null)
+          IconButton(
+              tooltip: 'Refresh',
+              onPressed: widget.onRefresh,
+              icon: const Icon(Icons.refresh_rounded))
+      ]),
       body: PageBody(
         children: [
           _reveal(
             _HighlightCard(
               isRecordWeek: isRecordWeek,
-              volumeThisWeek: volume.last,
-              streak: context.read<GamificationRepository>().streak,
-              longestStreak: context.read<GamificationRepository>().longestStreak,
+              volumeThisWeek: volume.isEmpty ? 0 : volume.last,
+              headlineOverride: local == null
+                  ? null
+                  : '${local.weeklySessions} saved camera sessions this week',
+              detailOverride: local == null
+                  ? null
+                  : 'Local measurements remain provisional. A saved capture does not imply a completed routine.',
+              streak: local == null
+                  ? context.read<GamificationRepository>().streak
+                  : 0,
+              longestStreak: local == null
+                  ? context.read<GamificationRepository>().longestStreak
+                  : 0,
             ),
             0.0,
             0.6,
           ),
           const SizedBox(height: 20),
-          const Eyebrow('This month at a glance'),
+          Eyebrow(local == null
+              ? 'This month at a glance'
+              : 'This week at a glance'),
           _reveal(
-            GridView.count(
-              crossAxisCount: 2,
+            GridView(
+              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: columns,
+                  mainAxisExtent: 190 * scale,
+                  mainAxisSpacing: 10,
+                  crossAxisSpacing: 10),
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
-              mainAxisSpacing: 10,
-              crossAxisSpacing: 10,
-              childAspectRatio: 1.2,
               children: [
                 _StatCard(
                   icon: Icons.event_available_rounded,
-                  value: '18',
-                  label: 'Sessions',
-                  delta: '+3 vs last month',
+                  value: local == null ? '18' : '${local.weeklySessions}',
+                  label: local == null ? 'Sessions' : 'Saved sessions',
+                  delta: local == null
+                      ? '+3 vs last month'
+                      : 'Camera captures this week',
                   deltaColor: AppColors.success,
-                  onTap: () => Navigator.push(context,
-                      MaterialPageRoute(builder: (_) => const ActivityTimelineScreen())),
+                  onTap: openHistory,
                 ),
                 _StatCard(
                   icon: Icons.verified_rounded,
-                  value: '84%',
+                  value: local == null ? '84%' : '-',
                   label: 'Avg Form',
-                  delta: '+5 pts trend',
+                  delta: local == null ? '+5 pts trend' : '-',
                   deltaColor: AppColors.success,
-                  onTap: () => Navigator.push(context,
-                      MaterialPageRoute(builder: (_) => const PostureAccuracyScreen())),
+                  onTap: openForm,
                 ),
                 _StatCard(
                   icon: Icons.fitness_center_rounded,
-                  value: '3,400',
+                  value: local == null ? '3,400' : '-',
                   label: 'kg Volume',
-                  delta: '+13% this week',
+                  delta: local == null ? '+13% this week' : '-',
                   deltaColor: AppColors.success,
-                  onTap: () => Navigator.push(context,
-                      MaterialPageRoute(builder: (_) => const WorkoutPerformanceScreen())),
+                  onTap: openPerformance,
                 ),
                 _StatCard(
                   icon: Icons.local_fire_department_rounded,
-                  value: '${context.read<GamificationRepository>().streak}',
+                  value: local == null
+                      ? '${context.read<GamificationRepository>().streak}'
+                      : '-',
                   label: 'Day Streak',
-                  delta: 'Best ${context.read<GamificationRepository>().longestStreak} days',
+                  delta: local == null
+                      ? 'Best ${context.read<GamificationRepository>().longestStreak} days'
+                      : '-',
                   deltaColor: AppColors.accentDark,
-                  onTap: () => Navigator.push(context,
-                      MaterialPageRoute(builder: (_) => const GamificationProgressScreen())),
+                  onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                          builder: (_) =>
+                              GamificationProgressScreen(live: local != null))),
                 ),
               ],
             ),
@@ -151,155 +209,150 @@ class _ProgressDashboardScreenState extends State<ProgressDashboardScreen>
                   icon: Icons.bar_chart_rounded,
                   title: 'Workout performance',
                   subtitle: 'Volume and muscle group split',
-                  sparkData: context.read<AnalyticsRepository>().volumeTrend.map((v) => v.toDouble()).toList(),
-                  onTap: () => Navigator.push(context,
-                      MaterialPageRoute(builder: (_) => const WorkoutPerformanceScreen())),
+                  sparkData: local == null
+                      ? context
+                          .read<AnalyticsRepository>()
+                          .volumeTrend
+                          .map((v) => v.toDouble())
+                          .toList()
+                      : const [],
+                  onTap: openPerformance,
                 ),
                 const SizedBox(height: 10),
                 ReportPreviewTile(
                   icon: Icons.show_chart_rounded,
                   title: 'Posture accuracy',
                   subtitle: 'How your form is changing',
-                  sparkData: context.read<AnalyticsRepository>().postureTrend.map((v) => v.toDouble()).toList(),
+                  sparkData: local == null
+                      ? context
+                          .read<AnalyticsRepository>()
+                          .postureTrend
+                          .map((v) => v.toDouble())
+                          .toList()
+                      : const [],
                   sparkColor: AppColors.success,
-                  onTap: () => Navigator.push(context,
-                      MaterialPageRoute(builder: (_) => const PostureAccuracyScreen())),
+                  onTap: openForm,
                 ),
                 const SizedBox(height: 10),
                 ReportPreviewTile(
                   icon: Icons.history_rounded,
                   title: 'Activity timeline',
                   subtitle: 'Everything you have logged',
-                  sparkData: context.read<AnalyticsRepository>().sessionsPerWeek.map((v) => v.toDouble()).toList(),
+                  sparkData: local == null
+                      ? context
+                          .read<AnalyticsRepository>()
+                          .sessionsPerWeek
+                          .map((v) => v.toDouble())
+                          .toList()
+                      : const [],
                   sparkColor: AppColors.primarySoft,
-                  onTap: () => Navigator.push(context,
-                      MaterialPageRoute(builder: (_) => const ActivityTimelineScreen())),
+                  onTap: openHistory,
                 ),
                 const SizedBox(height: 10),
                 ReportPreviewTile(
                   icon: Icons.flag_rounded,
                   title: 'Goal progress',
                   subtitle: 'How you are tracking against your targets',
-                  sparkData: const [75, 99, 86],
+                  sparkData: local == null ? const [75, 99, 86] : const [],
                   sparkColor: AppColors.info,
-                  onTap: () => Navigator.push(context,
-                      MaterialPageRoute(builder: (_) => const GoalProgressScreen())),
+                  onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                          builder: (_) =>
+                              GoalProgressScreen(live: local != null))),
                 ),
                 const SizedBox(height: 10),
                 ReportPreviewTile(
                   icon: Icons.emoji_events_rounded,
                   title: 'Points & streak',
                   subtitle: 'Your gamification momentum',
-                  sparkData: context.read<AnalyticsRepository>().pointsHistory.map((v) => v.toDouble()).toList(),
+                  sparkData: local == null
+                      ? context
+                          .read<AnalyticsRepository>()
+                          .pointsHistory
+                          .map((v) => v.toDouble())
+                          .toList()
+                      : const [],
                   sparkColor: AppColors.accentDark,
-                  onTap: () => Navigator.push(context,
-                      MaterialPageRoute(builder: (_) => const GamificationProgressScreen())),
+                  onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                          builder: (_) =>
+                              GamificationProgressScreen(live: local != null))),
                 ),
                 const SizedBox(height: 10),
                 ReportPreviewTile(
                   icon: Icons.monitor_weight_rounded,
                   title: 'Body metrics',
                   subtitle: 'Weight trend and BMI',
-                  sparkData: context.read<AnalyticsRepository>().weightHistory.map((e) => e.weightKg).toList(),
+                  sparkData: local == null
+                      ? context
+                          .read<AnalyticsRepository>()
+                          .weightHistory
+                          .map((e) => e.weightKg)
+                          .toList()
+                      : const [],
                   sparkColor: AppColors.primaryDark,
-                  onTap: () => Navigator.push(context,
-                      MaterialPageRoute(builder: (_) => const BodyMetricsScreen())),
+                  onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                          builder: (_) =>
+                              BodyMetricsScreen(live: local != null))),
                 ),
               ],
             ),
             0.25,
             1.0,
           ),
+          if (local != null) ...[
+            const SizedBox(height: 20),
+            const Eyebrow('Measured camera activity'),
+            LocalProgressPeriod(progress: local),
+            const SizedBox(height: 10),
+            GridView(
+                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: columns,
+                    mainAxisExtent: 190 * scale,
+                    mainAxisSpacing: 10,
+                    crossAxisSpacing: 10),
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                children: [
+                  _StatCard(
+                      icon: Icons.fitness_center_rounded,
+                      value: '${local.weeklyRepetitions}',
+                      label: 'Full reps',
+                      delta: 'Measured full repetitions',
+                      deltaColor: AppColors.inkSoft,
+                      onTap: openPerformance),
+                  _StatCard(
+                      icon: Icons.timelapse_rounded,
+                      value: '${local.weeklyPartialRepetitions}',
+                      label: 'Partial attempts',
+                      delta: 'Separate from full reps',
+                      deltaColor: AppColors.inkSoft,
+                      onTap: openPerformance),
+                  _StatCard(
+                      icon: Icons.visibility_rounded,
+                      value: local.weeklyCoverage == null
+                          ? '-'
+                          : localProgressCoverage(local.weeklyCoverage),
+                      label: 'Measurement coverage',
+                      delta: 'Tracked / (tracked + rejected)',
+                      deltaColor: AppColors.inkSoft,
+                      onTap: openForm),
+                ]),
+            const SizedBox(height: 20),
+            const Eyebrow('Recent sessions'),
+            if (local.records.isEmpty)
+              const Panel(child: Text('No saved camera sessions yet.')),
+            ...local.records.take(3).map((record) => LocalProgressRecordTile(
+                record: record,
+                utcOffset: local.utcOffset,
+                onOpenWorkout: widget.onOpenWorkout)),
+          ],
         ],
       ),
-    );
-  }
-
-  Widget _buildLocal(BuildContext context, MemberLocalProgress progress) {
-    final VoidCallback openPerformance = widget.onOpenPerformance ?? () => Navigator.push(context, MaterialPageRoute(
-      builder: (_) => WorkoutPerformanceScreen(localProgress: progress)));
-    final VoidCallback openForm = widget.onOpenForm ?? () => Navigator.push(context, MaterialPageRoute(
-      builder: (_) => PostureAccuracyScreen(localProgress: progress)));
-    final VoidCallback openHistory = widget.onOpenHistory ?? () => Navigator.push(context, MaterialPageRoute(
-      builder: (_) => ActivityTimelineScreen(localProgress: progress,
-        onRefresh: widget.onRefresh, onOpenWorkout: widget.onOpenWorkout)));
-    final scaled = MediaQuery.textScalerOf(context).scale(14) / 14;
-    return Scaffold(
-      appBar: AppBar(title: const Text('Your progress'), actions: [
-        if (widget.onRefresh != null) IconButton(tooltip: 'Refresh',
-          icon: const Icon(Icons.refresh_rounded), onPressed: widget.onRefresh),
-      ]),
-      body: localProgressRefresh(onRefresh: widget.onRefresh,
-        child: PageBody(children: [
-          Container(padding: const EdgeInsets.all(18),
-            decoration: BoxDecoration(gradient: AppColors.heroGradient,
-              borderRadius: BorderRadius.circular(20)),
-            child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              const Icon(Icons.insights_rounded, color: Colors.white),
-              const SizedBox(width: 14),
-              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('${progress.weeklySessions} saved camera sessions this week',
-                    style: const TextStyle(color: Colors.white, fontSize: 17,
-                      fontWeight: FontWeight.w800)),
-                  const SizedBox(height: 6),
-                  const Text('Local measurements remain provisional. A saved capture '
-                    'does not imply a completed routine.',
-                    style: TextStyle(color: Colors.white, height: 1.4)),
-                ])),
-            ])),
-          const SizedBox(height: 20),
-          const Eyebrow('This week at a glance'),
-          LocalProgressPeriod(progress: progress),
-          const SizedBox(height: 10),
-          GridView(
-            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: MediaQuery.sizeOf(context).width < 360 || scaled > 1.3 ? 1 : 2,
-              mainAxisExtent: 170 * scaled, mainAxisSpacing: 10, crossAxisSpacing: 10),
-            shrinkWrap: true, physics: const NeverScrollableScrollPhysics(),
-            children: [
-              _StatCard(icon: Icons.event_available_rounded,
-                value: '${progress.weeklySessions}', label: 'Saved sessions',
-                delta: 'Camera captures', deltaColor: AppColors.inkSoft,
-                onTap: openHistory),
-              _StatCard(icon: Icons.fitness_center_rounded,
-                value: '${progress.weeklyRepetitions}', label: 'Full reps',
-                delta: 'Measured full repetitions', deltaColor: AppColors.inkSoft,
-                onTap: openPerformance),
-              _StatCard(icon: Icons.timelapse_rounded,
-                value: '${progress.weeklyPartialRepetitions}', label: 'Partial attempts',
-                delta: 'Kept separate from full reps', deltaColor: AppColors.inkSoft,
-                onTap: openPerformance),
-              _StatCard(icon: Icons.visibility_rounded,
-                value: localProgressCoverage(progress.weeklyCoverage),
-                label: 'Measurement coverage', delta: 'Tracked / (tracked + rejected)',
-                deltaColor: AppColors.inkSoft, onTap: openForm),
-            ]),
-          const SizedBox(height: 20),
-          const Eyebrow('Deep dives'),
-          ReportPreviewTile(icon: Icons.bar_chart_rounded,
-            title: 'Workout performance', subtitle: 'Weekly saved sessions and full reps',
-            sparkData: progress.weeks.map((week) => week.repetitions.toDouble()).toList(),
-            onTap: openPerformance),
-          const SizedBox(height: 10),
-          Panel(child: ListTile(contentPadding: EdgeInsets.zero,
-            leading: const Icon(Icons.show_chart_rounded, color: AppColors.primary),
-            title: const Text('Estimated form'),
-            subtitle: Text('${progress.formSeries.length} compatible version groups'),
-            trailing: const Icon(Icons.chevron_right_rounded), onTap: openForm)),
-          const SizedBox(height: 10),
-          ReportPreviewTile(icon: Icons.history_rounded,
-            title: 'Activity timeline', subtitle: 'Saved captures and upload status',
-            sparkData: progress.weeks.map((week) => week.sessions.toDouble()).toList(),
-            onTap: openHistory),
-          const SizedBox(height: 20),
-          const Eyebrow('Recent sessions'),
-          if (progress.records.isEmpty) const Panel(
-            child: Text('No saved camera sessions yet.')),
-          ...progress.records.take(3).map((record) => LocalProgressRecordTile(
-            record: record, utcOffset: progress.utcOffset,
-            onOpenWorkout: widget.onOpenWorkout)),
-        ])),
     );
   }
 }
@@ -307,12 +360,15 @@ class _ProgressDashboardScreenState extends State<ProgressDashboardScreen>
 /// The one thing on this page most worth knowing right now, computed from
 /// the same series the reports below chart — not a decorative banner.
 class _HighlightCard extends StatelessWidget {
+  final String? headlineOverride, detailOverride;
   final bool isRecordWeek;
   final int volumeThisWeek;
   final int streak;
   final int longestStreak;
 
   const _HighlightCard({
+    this.headlineOverride,
+    this.detailOverride,
     required this.isRecordWeek,
     required this.volumeThisWeek,
     required this.streak,
@@ -332,7 +388,8 @@ class _HighlightCard extends StatelessWidget {
       icon = Icons.military_tech_rounded;
     } else if (daysToPersonalBest > 0) {
       headline = '$daysToPersonalBest days from your best streak';
-      detail = 'You are on a $streak-day streak, chasing your personal best of $longestStreak days.';
+      detail =
+          'You are on a $streak-day streak, chasing your personal best of $longestStreak days.';
       icon = Icons.local_fire_department_rounded;
     } else {
       headline = 'You matched your longest streak';
@@ -369,14 +426,14 @@ class _HighlightCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(headline,
+                Text(headlineOverride ?? headline,
                     style: const TextStyle(
                         color: Colors.white,
                         fontSize: 16.5,
                         fontWeight: FontWeight.w800,
                         letterSpacing: -0.2)),
                 const SizedBox(height: 5),
-                Text(detail,
+                Text(detailOverride ?? detail,
                     style: TextStyle(
                         color: Colors.white.withValues(alpha: 0.88),
                         fontSize: 12.5,
@@ -442,7 +499,8 @@ class _StatCard extends StatelessWidget {
                   ),
                   child: Icon(icon, size: 16, color: AppColors.primary),
                 ),
-                const Icon(Icons.chevron_right_rounded, size: 16, color: AppColors.inkSoft),
+                const Icon(Icons.chevron_right_rounded,
+                    size: 16, color: AppColors.inkSoft),
               ],
             ),
             Text(value,
@@ -455,7 +513,8 @@ class _StatCard extends StatelessWidget {
             ),
             Text(
               delta,
-              style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: deltaColor),
+              style: TextStyle(
+                  fontSize: 11, fontWeight: FontWeight.w700, color: deltaColor),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),

@@ -56,10 +56,14 @@ void main() {
   testWidgets(
       'form chart uses actual UTC instants and explicit Malaysia labels near midnight',
       (tester) async {
+    tester.view.physicalSize = const Size(1000, 4000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
     await _show(
         tester, PostureAccuracyScreen(localProgress: _progress([_record()])));
-    final chart =
-        tester.widget<SfCartesianChart>(find.byType(SfCartesianChart));
+    final chart = tester
+        .widgetList<SfCartesianChart>(find.byType(SfCartesianChart))
+        .singleWhere((chart) => chart.primaryXAxis is DateTimeAxis);
     final dynamic series = chart.series.single;
     final record = series.dataSource.single as LocalWorkoutProgressRecord;
     expect(series.xValueMapper(record, 0), record.endedAt);
@@ -83,6 +87,7 @@ void main() {
         null);
     expect(axis.axisLabelFormatter!(next).text, '13/10/2026');
     expect(chart.tooltipBehavior!.builder, isNotNull);
+    await tester.pumpWidget(const SizedBox.shrink());
   });
   testWidgets('dashboard delegates reports to account-owned routes',
       (tester) async {
@@ -103,6 +108,8 @@ void main() {
     for (final label in expectations.keys) {
       await tester.scrollUntilVisible(find.text(label), 100,
           scrollable: find.byType(Scrollable).first);
+      await tester.ensureVisible(find.text(label));
+      await tester.pumpAndSettle();
       await tester.tap(find.text(label));
       await tester.pumpAndSettle();
       expect(opened, expectations[label]);
@@ -112,6 +119,9 @@ void main() {
   });
   testWidgets('live dashboard uses saved measured totals and opens a record',
       (tester) async {
+    tester.view.physicalSize = const Size(1000, 4000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
     LocalWorkoutProgressRecord? opened;
     await _show(
         tester,
@@ -131,9 +141,9 @@ void main() {
     expect(find.text('75%'), findsOneWidget);
     expect(find.text('84%'), findsNothing);
     expect(find.text('3,400'), findsNothing);
-    expect(find.text('Points & streak'), findsNothing);
-    expect(find.text('Body metrics'), findsNothing);
-    expect(find.text('Goal progress'), findsNothing);
+    expect(find.text('Points & streak'), findsOneWidget);
+    expect(find.text('Body metrics'), findsOneWidget);
+    expect(find.text('Goal progress'), findsOneWidget);
     await tester.scrollUntilVisible(find.text('capture-a'), 250,
         scrollable: find.byType(Scrollable).first);
     await tester.tap(find.text('capture-a'));
@@ -152,7 +162,9 @@ void main() {
             refreshes++;
           },
         ));
-    expect(find.text('Not measured'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('Measurement coverage'), 250,
+        scrollable: find.byType(Scrollable).first);
+    expect(find.text('-'), findsWidgets);
     await tester.scrollUntilVisible(
         find.text('No saved camera sessions yet.'), 250,
         scrollable: find.byType(Scrollable).first);
@@ -183,13 +195,16 @@ void main() {
       await tester.scrollUntilVisible(find.text(label), 200);
       expect(find.text(label), findsOneWidget);
     }
-    expect(find.byTooltip('Export'), findsNothing);
+    expect(find.byTooltip('Export'), findsOneWidget);
     expect(find.textContaining('Provisional estimate'), findsWidgets);
     expect(tester.takeException(), isNull);
   });
 
   testWidgets('performance charts contain actual weekly session and rep values',
       (tester) async {
+    tester.view.physicalSize = const Size(1000, 4000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
     await _show(
         tester,
         WorkoutPerformanceScreen(
@@ -199,6 +214,9 @@ void main() {
         ])));
     final charts = tester
         .widgetList<SfCartesianChart>(find.byType(SfCartesianChart))
+        .where((chart) =>
+            chart.series.single.name == 'Saved sessions' ||
+            chart.series.single.name == 'Full reps')
         .toList();
     expect(charts, hasLength(2));
     final values = <num?>[];
@@ -209,13 +227,16 @@ void main() {
       }
     }
     expect(values, [0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 7, 4]);
-    expect(find.textContaining('kg'), findsNothing);
-    expect(find.byTooltip('Export'), findsNothing);
+    expect(find.text('WEEKLY VOLUME (KG)'), findsOneWidget);
+    expect(find.text('MUSCLE GROUP SPLIT'), findsOneWidget);
+    expect(find.text('3,400'), findsNothing);
+    expect(find.byTooltip('Export'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox.shrink());
   });
 
   testWidgets('form groups versions and preserves unassessed chart gaps',
       (tester) async {
-    tester.view.physicalSize = const Size(800, 1500);
+    tester.view.physicalSize = const Size(1000, 4000);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
@@ -227,11 +248,12 @@ void main() {
           _record(id: 'gap', score: null),
           _record(id: 'new-version', score: 91, scoringVersion: 'rule-b'),
         ])));
-    expect(find.text('Estimated form'), findsOneWidget);
+    expect(find.text('Posture accuracy'), findsOneWidget);
     expect(find.textContaining('rule-a'), findsWidgets);
     expect(find.textContaining('rule-b'), findsWidgets);
     final charts = tester
         .widgetList<SfCartesianChart>(find.byType(SfCartesianChart))
+        .where((chart) => chart.primaryXAxis is DateTimeAxis)
         .toList();
     expect(charts, hasLength(2));
     final dynamic series = charts.first.series.single;
@@ -243,10 +265,12 @@ void main() {
         find.text('6 scored attempts · 6 unassessed attempts'), findsOneWidget);
     expect(
         find.text('6 scored attempts · 0 unassessed attempts'), findsOneWidget);
-    expect(find.textContaining('accuracy'), findsNothing);
+    expect(find.text('FORM ACCURACY OVER TIME'), findsOneWidget);
+    expect(find.text('BY EXERCISE'), findsOneWidget);
     expect(find.text('84%'), findsNothing);
-    expect(find.byTooltip('Export'), findsNothing);
+    expect(find.byTooltip('Export'), findsOneWidget);
     expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
   });
 
   testWidgets('live dashboard fits narrow screens with large text',

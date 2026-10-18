@@ -2,12 +2,13 @@ import 'dart:typed_data';
 import 'dart:convert';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:gainpath_domain/identity.dart';
-import 'package:gainpath_ui/gainpath_ui.dart';
-import '../../application/coach_directory_cubit.dart';
+import '../member/browse_coaches_screen.dart';
+import 'coach_profile_screen.dart';
+import 'published_coach_presentation.dart';
 
-class LiveCoachDirectoryView extends StatefulWidget {
+/// Compatibility entry point; the original directory owns the presentation.
+class LiveCoachDirectoryView extends StatelessWidget {
   const LiveCoachDirectoryView(
       {super.key,
       required this.repository,
@@ -19,97 +20,12 @@ class LiveCoachDirectoryView extends StatefulWidget {
   final void Function(String) onOpen;
   final VoidCallback? onOpenBookings;
   @override
-  State<LiveCoachDirectoryView> createState() => _LiveCoachDirectoryViewState();
-}
-
-class _LiveCoachDirectoryViewState extends State<LiveCoachDirectoryView> {
-  late final controller = CoachDirectoryCubit(
-      repository: widget.repository, isCurrent: widget.isCurrent)
-    ..refresh();
-  String search = '';
-  @override
-  void dispose() {
-    controller.close();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) => BlocBuilder<CoachDirectoryCubit,
-          CoachDirectoryState>(
-      bloc: controller,
-      builder: (context, state) {
-        final q = search.trim().toLowerCase();
-        final entries = state.items.where((c) =>
-            '${c.fields.displayName} ${c.fields.specialty} ${c.fields.specializationTags.join(' ')}'
-                .toLowerCase()
-                .contains(q));
-        return Scaffold(
-            appBar: AppBar(title: const Text('Coaches'), actions: [
-              if (widget.onOpenBookings != null)
-                TextButton(
-                    onPressed: widget.onOpenBookings,
-                    child: const Text('My bookings')),
-              IconButton(
-                  tooltip: 'Refresh Coaches',
-                  onPressed: state.loading ? null : controller.refresh,
-                  icon: const Icon(Icons.refresh))
-            ]),
-            body: PageBody(children: [
-              TextField(
-                  decoration: const InputDecoration(
-                      labelText: 'Search loaded Coaches',
-                      prefixIcon: Icon(Icons.search)),
-                  onChanged: (value) => setState(() => search = value)),
-              const SizedBox(height: 12),
-              if (state.loading) const LinearProgressIndicator(),
-              if (state.message != null) Text(state.message!),
-              if (!state.loading &&
-                  state.message == null &&
-                  state.items.isEmpty)
-                const Text(
-                    'No published Coaches are available for this organization.'),
-              if (!state.loading && state.items.isNotEmpty && entries.isEmpty)
-                const Text('No matches in the loaded page(s).'),
-              for (final coach in entries)
-                Padding(
-                    padding: const EdgeInsets.only(bottom: 10),
-                    child: Panel(
-                        onTap: () => widget.onOpen(coach.id),
-                        child: Row(children: [
-                          _PublishedCoachPhoto(
-                              coach: coach,
-                              repository: widget.repository,
-                              isCurrent: widget.isCurrent,
-                              size: 40),
-                          const SizedBox(width: 12),
-                          Expanded(
-                              child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                Text(coach.fields.displayName,
-                                    style: Theme.of(context)
-                                        .textTheme
-                                        .titleMedium),
-                                Text(coach.fields.specialty),
-                                Text(_consultationFee(coach)),
-                                if (coach.certificationVerified)
-                                  const Text('Certification verified'),
-                                Text('Branches: ${coach.branchIds.join(', ')}'),
-                                Text(
-                                    coach.fields.specializationTags.join(' · '))
-                              ])),
-                          const Icon(Icons.chevron_right)
-                        ]))),
-              if (state.nextCursor != null)
-                TextButton(
-                    onPressed: state.loadingMore ? null : controller.loadMore,
-                    child: Text(
-                        state.loadingMore ? 'Loading…' : 'Load more Coaches')),
-              Text(widget.onOpenBookings == null
-                  ? 'Booking is unavailable until availability and booking integration are completed.'
-                  : 'Choose a published Coach to request a pending hold. My bookings remains available for existing records.'),
-            ]));
-      });
+  Widget build(BuildContext context) => BrowseCoachesScreen(
+      live: true,
+      liveRepository: repository,
+      isCurrent: isCurrent,
+      onOpenPublished: onOpen,
+      onOpenBookings: onOpenBookings);
 }
 
 class LiveCoachDetailView extends StatefulWidget {
@@ -132,92 +48,56 @@ class LiveCoachDetailView extends StatefulWidget {
 class _LiveCoachDetailViewState extends State<LiveCoachDetailView> {
   late Future<PublishedCoachProfile?> future =
       widget.repository.loadPublished(widget.coachId);
-  @override
-  Widget build(BuildContext context) => Scaffold(
+  void _refresh() => setState(() {
+        future = widget.repository.loadPublished(widget.coachId);
+      });
+  Widget _status(Widget child) => Scaffold(
       appBar: AppBar(title: const Text('Coach profile'), actions: [
         IconButton(
             tooltip: 'Refresh profile',
-            onPressed: () => setState(() {
-                  future = widget.repository.loadPublished(widget.coachId);
-                }),
+            onPressed: _refresh,
             icon: const Icon(Icons.refresh))
       ]),
-      body: FutureBuilder<PublishedCoachProfile?>(
-          future: future,
-          builder: (context, snapshot) {
-            if (!widget.isCurrent()) {
-              return const Center(
-                  child: Text('Profile unavailable for this session.'));
-            }
-            if (snapshot.connectionState != ConnectionState.done) {
-              return const Center(child: CircularProgressIndicator());
-            }
-            if (snapshot.hasError) {
-              return const Center(
-                  child:
-                      Text('Could not load Coach profile. Refresh to retry.'));
-            }
-            final coach = snapshot.data;
-            if (coach == null) {
-              return const Center(
-                  child: Text('This Coach profile is no longer published.'));
-            }
-            return PageBody(children: [
-              Container(
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                      gradient: AppColors.heroGradient,
-                      borderRadius: BorderRadius.circular(20)),
-                  child: Column(children: [
-                    _PublishedCoachPhoto(
-                        coach: coach,
-                        repository: widget.repository,
-                        isCurrent: widget.isCurrent,
-                        size: 64),
-                    Text(coach.fields.displayName,
-                        style:
-                            const TextStyle(color: Colors.white, fontSize: 22)),
-                    Text(coach.fields.specialty,
-                        style: const TextStyle(color: Colors.white70))
-                  ])),
-              const SizedBox(height: 18),
-              const Eyebrow('About'),
-              Panel(child: Text(coach.fields.bio)),
-              const SizedBox(height: 18),
-              Text(_consultationFee(coach)),
-              if (coach.certificationVerified)
-                const Text('Certification verified'),
-              Text(coach.fields.specializationTags.join(' · ')),
-              Text('Branches: ${coach.branchIds.join(', ')}'),
-              if (coach.fields.yearsExperience != null)
-                Text(
-                    '${coach.fields.yearsExperience} years experience (self-reported)'),
-              const SizedBox(height: 18),
-              OutlinedButton.icon(
-                  onPressed: widget.onOpenSchedule,
-                  icon: const Icon(Icons.calendar_month_outlined),
-                  label: const Text('View schedule')),
-              if (widget.onOpenBooking != null)
-                FilledButton(
-                    onPressed: widget.onOpenBooking,
-                    child: const Text('Choose time')),
-              Text(widget.onOpenBooking == null
-                  ? 'Booking is unavailable.'
-                  : 'Consultation fees are profile information; existing booking prices are unchanged.')
-            ]);
-          }));
+      body: child);
+  @override
+  Widget build(BuildContext context) => FutureBuilder<PublishedCoachProfile?>(
+      future: future,
+      builder: (context, snapshot) {
+        if (!widget.isCurrent()) {
+          return _status(const Center(
+              child: Text('Profile unavailable for this session.')));
+        }
+        if (snapshot.connectionState != ConnectionState.done) {
+          return _status(const Center(child: CircularProgressIndicator()));
+        }
+        if (snapshot.hasError) {
+          return _status(const Center(
+              child: Text('Could not load Coach profile. Refresh to retry.')));
+        }
+        final coach = snapshot.data;
+        if (coach == null) {
+          return _status(const Center(
+              child: Text('This Coach profile is no longer published.')));
+        }
+        return CoachProfileScreen(
+          coach: publishedCoachPresentation(coach),
+          published: coach,
+          photo: PublishedCoachPhoto(
+              coach: coach,
+              repository: widget.repository,
+              isCurrent: widget.isCurrent,
+              size: 84),
+          onRefresh: _refresh,
+          onOpenSchedule: widget.onOpenSchedule,
+          onOpenBooking: widget.onOpenBooking,
+        );
+      });
 }
 
-String _consultationFee(PublishedCoachProfile coach) {
-  final minor = coach.fields.consultationFeeMinor;
-  return minor == null
-      ? 'Consultation fee not provided'
-      : 'Consultation fee: MYR ${(minor / 100).toStringAsFixed(2)}';
-}
-
-class _PublishedCoachPhoto extends StatefulWidget {
-  const _PublishedCoachPhoto(
-      {required this.coach,
+class PublishedCoachPhoto extends StatefulWidget {
+  const PublishedCoachPhoto(
+      {super.key,
+      required this.coach,
       required this.repository,
       required this.isCurrent,
       required this.size});
@@ -226,10 +106,10 @@ class _PublishedCoachPhoto extends StatefulWidget {
   final bool Function() isCurrent;
   final double size;
   @override
-  State<_PublishedCoachPhoto> createState() => _PublishedCoachPhotoState();
+  State<PublishedCoachPhoto> createState() => PublishedCoachPhotoState();
 }
 
-class _PublishedCoachPhotoState extends State<_PublishedCoachPhoto> {
+class PublishedCoachPhotoState extends State<PublishedCoachPhoto> {
   Future<Uint8List?>? bytes;
   @override
   void initState() {
@@ -238,7 +118,7 @@ class _PublishedCoachPhotoState extends State<_PublishedCoachPhoto> {
   }
 
   @override
-  void didUpdateWidget(covariant _PublishedCoachPhoto oldWidget) {
+  void didUpdateWidget(covariant PublishedCoachPhoto oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.coach != widget.coach) load();
   }
@@ -267,8 +147,9 @@ class _PublishedCoachPhotoState extends State<_PublishedCoachPhoto> {
             final data = snapshot.data;
             if (!widget.isCurrent() ||
                 !widget.coach.certificationVerified ||
-                data == null)
+                data == null) {
               return Icon(Icons.person_outline, size: widget.size);
+            }
             return ClipOval(
                 child: Image.memory(data,
                     fit: BoxFit.cover,
@@ -277,7 +158,7 @@ class _PublishedCoachPhotoState extends State<_PublishedCoachPhoto> {
           }));
 }
 
-extension on _PublishedCoachPhotoState {
+extension on PublishedCoachPhotoState {
   Future<Uint8List?> _readPhoto(String path) async {
     if (!widget.isCurrent()) return null;
     final result = await FirebaseFunctions.instance
@@ -295,7 +176,9 @@ extension on _PublishedCoachPhotoState {
         encoded is! String ||
         encoded.length > 7 * 1024 * 1024 ||
         !['image/jpeg', 'image/png', 'image/webp']
-            .contains(data['contentType'])) return null;
+            .contains(data['contentType'])) {
+      return null;
+    }
     final bytes = base64Decode(encoded);
     return bytes.length <= 5 * 1024 * 1024 ? bytes : null;
   }

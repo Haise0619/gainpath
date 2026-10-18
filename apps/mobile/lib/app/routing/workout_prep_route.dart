@@ -19,6 +19,7 @@ class WorkoutPrepRoute extends StatelessWidget {
     this.routineLoadFailed = false,
     this.routineStatusMessage,
     this.routineCatalogControls,
+    this.onOpenEquipment,
   });
 
   final PublishedRoutine? publishedRoutine;
@@ -26,6 +27,7 @@ class WorkoutPrepRoute extends StatelessWidget {
   final bool routineLoadFailed;
   final String? routineStatusMessage;
   final Widget? routineCatalogControls;
+  final VoidCallback? onOpenEquipment;
 
   @override
   Widget build(BuildContext context) {
@@ -33,6 +35,7 @@ class WorkoutPrepRoute extends StatelessWidget {
     final scope = auth?.state.session?.scope;
     return WorkoutPrepScreen(
         live: live,
+        onOpenEquipment: onOpenEquipment,
         publishedRoutine: publishedRoutine,
         routineLoadFailed: routineLoadFailed,
         routineStatusMessage: routineStatusMessage,

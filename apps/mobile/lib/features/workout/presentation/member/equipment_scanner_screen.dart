@@ -17,8 +17,8 @@ Widget _networkHero(String url, {BoxFit fit = BoxFit.cover}) {
     fit: fit,
     loadingBuilder: (context, child, progress) =>
         progress == null ? child : Container(color: AppColors.ink),
-    errorBuilder: (context, error, stack) =>
-        const DecoratedBox(decoration: BoxDecoration(gradient: AppColors.heroGradient)),
+    errorBuilder: (context, error, stack) => const DecoratedBox(
+        decoration: BoxDecoration(gradient: AppColors.heroGradient)),
   );
 }
 
@@ -33,7 +33,10 @@ Widget _networkHero(String url, {BoxFit fit = BoxFit.cover}) {
 /// only touches `_runScan` below: everything downstream already expects
 /// a real `GymEquipment` and doesn't know or care how it was found.
 class EquipmentScannerScreen extends StatefulWidget {
-  const EquipmentScannerScreen({super.key});
+  const EquipmentScannerScreen(
+      {super.key, this.connected = false, this.onBrowse});
+  final bool connected;
+  final VoidCallback? onBrowse;
 
   @override
   State<EquipmentScannerScreen> createState() => _EquipmentScannerScreenState();
@@ -51,7 +54,9 @@ class _EquipmentScannerScreenState extends State<EquipmentScannerScreen>
   @override
   void initState() {
     super.initState();
-    _scanLine = AnimationController(vsync: this, duration: const Duration(milliseconds: 1700))..repeat();
+    _scanLine = AnimationController(
+        vsync: this, duration: const Duration(milliseconds: 1700));
+    if (!widget.connected) _scanLine.repeat();
   }
 
   @override
@@ -62,6 +67,10 @@ class _EquipmentScannerScreenState extends State<EquipmentScannerScreen>
 
   Future<void> _runScan() async {
     if (_scanning) return;
+    if (widget.connected) {
+      showUnavailable(context);
+      return;
+    }
     setState(() {
       _scanning = true;
       _noMatch = false;
@@ -78,7 +87,11 @@ class _EquipmentScannerScreenState extends State<EquipmentScannerScreen>
       return;
     }
 
-    final active = context.read<EquipmentRepository>().gymEquipment.where((e) => e.isActive).toList();
+    final active = context
+        .read<EquipmentRepository>()
+        .gymEquipment
+        .where((e) => e.isActive)
+        .toList();
     if (active.isEmpty) {
       if (!mounted) return;
       setState(() => _noMatch = true);
@@ -87,7 +100,9 @@ class _EquipmentScannerScreenState extends State<EquipmentScannerScreen>
     final equipment = active[(_scanCount - 1) % active.length];
     if (!mounted) return;
     Navigator.push(
-        context, MaterialPageRoute(builder: (_) => EquipmentDetailScreen(equipment: equipment)));
+        context,
+        MaterialPageRoute(
+            builder: (_) => EquipmentDetailScreen(equipment: equipment)));
   }
 
   @override
@@ -97,8 +112,13 @@ class _EquipmentScannerScreenState extends State<EquipmentScannerScreen>
       body: Stack(
         fit: StackFit.expand,
         children: [
-          _networkHero(_viewfinderHero),
-          DecoratedBox(decoration: BoxDecoration(color: AppColors.ink.withValues(alpha: 0.55))),
+          widget.connected
+              ? const DecoratedBox(
+                  decoration: BoxDecoration(gradient: AppColors.heroGradient))
+              : _networkHero(_viewfinderHero),
+          DecoratedBox(
+              decoration:
+                  BoxDecoration(color: AppColors.ink.withValues(alpha: 0.55))),
           SafeArea(
             child: Column(
               children: [
@@ -107,22 +127,38 @@ class _EquipmentScannerScreenState extends State<EquipmentScannerScreen>
                   child: Row(
                     children: [
                       IconButton(
-                        icon: const Icon(Icons.arrow_back_rounded, color: Colors.white),
+                        icon: const Icon(Icons.arrow_back_rounded,
+                            color: Colors.white),
                         onPressed: () => Navigator.pop(context),
                       ),
                       const Expanded(
                         child: Text('Scan equipment',
-                            style: TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w700)),
+                            style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 17,
+                                fontWeight: FontWeight.w700)),
                       ),
                       IconButton(
-                        icon: const Icon(Icons.grid_view_rounded, color: Colors.white),
+                        icon: const Icon(Icons.grid_view_rounded,
+                            color: Colors.white),
                         tooltip: 'Browse all equipment',
-                        onPressed: () => Navigator.push(
-                            context, MaterialPageRoute(builder: (_) => const EquipmentBrowseScreen())),
+                        onPressed: widget.onBrowse ??
+                            () => Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                    builder: (_) =>
+                                        const EquipmentBrowseScreen())),
                       ),
                     ],
                   ),
                 ),
+                if (widget.connected)
+                  const Padding(
+                      padding: EdgeInsets.all(16),
+                      child: Text(
+                          'Recognition: -\nUse Browse all equipment to view the published catalog.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(color: Colors.white))),
                 Expanded(
                   child: Center(
                     child: SizedBox(
@@ -131,21 +167,22 @@ class _EquipmentScannerScreenState extends State<EquipmentScannerScreen>
                       child: Stack(
                         clipBehavior: Clip.none,
                         children: [
-                          ClipRect(
-                            child: AnimatedBuilder(
-                              animation: _scanLine,
-                              builder: (context, _) => Positioned(
-                                top: _scanLine.value * (_boxSize - 3),
-                                left: 0,
-                                right: 0,
-                                child: Container(
-                                  height: 3,
-                                  decoration: BoxDecoration(
-                                    color: AppColors.overlay,
-                                    boxShadow: [
-                                      BoxShadow(color: AppColors.overlay.withValues(alpha: 0.7), blurRadius: 10),
-                                    ],
-                                  ),
+                          AnimatedBuilder(
+                            animation: _scanLine,
+                            builder: (context, _) => Positioned(
+                              top: _scanLine.value * (_boxSize - 3),
+                              left: 0,
+                              right: 0,
+                              child: Container(
+                                height: 3,
+                                decoration: BoxDecoration(
+                                  color: AppColors.overlay,
+                                  boxShadow: [
+                                    BoxShadow(
+                                        color: AppColors.overlay
+                                            .withValues(alpha: 0.7),
+                                        blurRadius: 10),
+                                  ],
                                 ),
                               ),
                             ),
@@ -159,9 +196,16 @@ class _EquipmentScannerScreenState extends State<EquipmentScannerScreen>
                 Padding(
                   padding: const EdgeInsets.fromLTRB(32, 0, 32, 12),
                   child: Text(
-                    _scanning ? 'Scanning…' : 'Point your camera at gym equipment',
+                    widget.connected
+                        ? '-'
+                        : _scanning
+                            ? 'Scanning…'
+                            : 'Point your camera at gym equipment',
                     textAlign: TextAlign.center,
-                    style: const TextStyle(color: Colors.white, fontSize: 14.5, fontWeight: FontWeight.w600),
+                    style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 14.5,
+                        fontWeight: FontWeight.w600),
                   ),
                 ),
                 if (_noMatch)
@@ -177,24 +221,34 @@ class _EquipmentScannerScreenState extends State<EquipmentScannerScreen>
                       child: Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Icon(Icons.search_off_rounded, color: Colors.white, size: 20),
+                          const Icon(Icons.search_off_rounded,
+                              color: Colors.white, size: 20),
                           const SizedBox(width: 10),
                           Expanded(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 const Text("Couldn't recognise this equipment",
-                                    style:
-                                        TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 13.5)),
+                                    style: TextStyle(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.w700,
+                                        fontSize: 13.5)),
                                 const SizedBox(height: 3),
-                                const Text('Try moving closer, or browse the catalogue instead.',
-                                    style: TextStyle(color: Colors.white70, fontSize: 12.5)),
+                                const Text(
+                                    'Try moving closer, or browse the catalogue instead.',
+                                    style: TextStyle(
+                                        color: Colors.white70, fontSize: 12.5)),
                                 const SizedBox(height: 8),
                                 TextButton(
                                   style: TextButton.styleFrom(
-                                      foregroundColor: AppColors.overlay, padding: EdgeInsets.zero),
-                                  onPressed: () => Navigator.push(context,
-                                      MaterialPageRoute(builder: (_) => const EquipmentBrowseScreen())),
+                                      foregroundColor: AppColors.overlay,
+                                      padding: EdgeInsets.zero),
+                                  onPressed: widget.onBrowse ??
+                                      () => Navigator.push(
+                                          context,
+                                          MaterialPageRoute(
+                                              builder: (_) =>
+                                                  const EquipmentBrowseScreen())),
                                   child: const Text('Browse all equipment'),
                                 ),
                               ],
@@ -214,14 +268,17 @@ class _EquipmentScannerScreenState extends State<EquipmentScannerScreen>
                       decoration: const BoxDecoration(
                         shape: BoxShape.circle,
                         color: Colors.white,
-                        border: Border.fromBorderSide(BorderSide(color: Colors.white54, width: 4)),
+                        border: Border.fromBorderSide(
+                            BorderSide(color: Colors.white54, width: 4)),
                       ),
                       child: _scanning
                           ? const Padding(
                               padding: EdgeInsets.all(22),
-                              child: CircularProgressIndicator(strokeWidth: 2.6, color: AppColors.primary),
+                              child: CircularProgressIndicator(
+                                  strokeWidth: 2.6, color: AppColors.primary),
                             )
-                          : const Icon(Icons.camera_alt_rounded, color: AppColors.primary, size: 30),
+                          : const Icon(Icons.camera_alt_rounded,
+                              color: AppColors.primary, size: 30),
                     ),
                   ),
                 ),
@@ -248,10 +305,18 @@ class _EquipmentScannerScreenState extends State<EquipmentScannerScreen>
           height: size,
           decoration: BoxDecoration(
             border: Border(
-              top: top ? const BorderSide(color: Colors.white, width: thickness) : BorderSide.none,
-              bottom: !top ? const BorderSide(color: Colors.white, width: thickness) : BorderSide.none,
-              left: left ? const BorderSide(color: Colors.white, width: thickness) : BorderSide.none,
-              right: !left ? const BorderSide(color: Colors.white, width: thickness) : BorderSide.none,
+              top: top
+                  ? const BorderSide(color: Colors.white, width: thickness)
+                  : BorderSide.none,
+              bottom: !top
+                  ? const BorderSide(color: Colors.white, width: thickness)
+                  : BorderSide.none,
+              left: left
+                  ? const BorderSide(color: Colors.white, width: thickness)
+                  : BorderSide.none,
+              right: !left
+                  ? const BorderSide(color: Colors.white, width: thickness)
+                  : BorderSide.none,
             ),
           ),
         ),

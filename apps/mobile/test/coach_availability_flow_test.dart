@@ -11,6 +11,7 @@ import 'package:gainpath_data/gainpath_data.dart';
 import 'package:gainpath_domain/gainpath_domain.dart' show AuthSession, AppRole;
 import 'coach_directory_flow_test.dart' show DriftingCoachAuth, DirectoryFake;
 import 'coach_profile_state_test.dart' show ProfileFake;
+import 'live_booking_composition_test.dart' show Lists;
 import 'support/fitness_profile_fake.dart';
 
 import 'support/coach_availability_fake.dart';
@@ -72,7 +73,9 @@ void main() {
     expect(find.textContaining('Asia/Kuala_Lumpur'), findsWidgets);
     await tester.tap(find.text('Add window'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Add').last);
+    await tester.scrollUntilVisible(find.widgetWithText(FilledButton, 'Add'), 250);
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, 'Add'));
     await tester.pumpAndSettle();
     await tester.ensureVisible(find.text('Save day'));
     await tester.tap(find.text('Save day'));
@@ -99,6 +102,7 @@ void main() {
     await tester.pumpWidget(GainPathMobileApp(
         authRepository: auth,
         backendConfig: const BackendConfig(BackendMode.firebase),
+        bookingListFactory: (_, __) => Lists(),
         coachProfileFactory: (_, current) => ProfileFake(),
         coachAvailabilityFactory: (_, current) => repo));
     await tester.pumpAndSettle();
@@ -106,7 +110,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Add window'));
     await tester.pumpAndSettle();
-    expect(find.text('Add'), findsOneWidget);
+    expect(find.widgetWithText(FilledButton, 'Add'), findsOneWidget);
     auth.drift(const AuthSession(
         userId: 'coach',
         organizationId: 'org',
@@ -114,7 +118,7 @@ void main() {
         role: AppRole.coach,
         branchIds: ['other']));
     await tester.pumpAndSettle();
-    expect(find.text('Add'), findsNothing);
+    expect(find.widgetWithText(FilledButton, 'Add'), findsNothing);
     await tester.pumpWidget(const SizedBox());
     await auth.dispose();
   });
@@ -165,8 +169,8 @@ void main() {
         home: LiveCoachAvailabilityView(
             repository: repo, coachId: 'coach', isCurrent: () => true)));
     await tester.pumpAndSettle();
-    await tester.ensureVisible(find.byTooltip('Edit window').last);
-    await tester.tap(find.byTooltip('Edit window').last);
+    await tester.scrollUntilVisible(find.byKey(const ValueKey('edit-window-1')), 250);
+    await tester.tap(find.byKey(const ValueKey('edit-window-1')));
     await tester.pumpAndSettle();
     for (final control in find
         .byWidgetPredicate(
@@ -183,8 +187,8 @@ void main() {
     await tester.tap(find.text('Update'));
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
-    await tester.ensureVisible(find.byTooltip('Remove window').last);
-    await tester.tap(find.byTooltip('Remove window').last);
+    await tester.scrollUntilVisible(find.byKey(const ValueKey('remove-window-1')), -250);
+    await tester.tap(find.byKey(const ValueKey('remove-window-1')));
     await tester.pumpAndSettle();
     await tester.ensureVisible(find.text('Save day'));
     await tester.tap(find.text('Save day'));

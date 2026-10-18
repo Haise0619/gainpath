@@ -10,7 +10,8 @@ import 'package:gainpath_domain/membership.dart';
 /// reads as a deliberate decision rather than one option buried in a long
 /// account page.
 class BrowsePlansScreen extends StatelessWidget {
-  const BrowsePlansScreen({super.key});
+  const BrowsePlansScreen({super.key, this.connected = false});
+  final bool connected;
 
   @override
   Widget build(BuildContext context) {
@@ -18,18 +19,29 @@ class BrowsePlansScreen extends StatelessWidget {
       appBar: AppBar(title: const Text('Membership plans')),
       body: PageBody(
         children: [
-          Text('Compare plans and switch anytime. Changes apply from your next billing date.',
+          Text(
+              connected
+                  ? 'Plan catalogue unavailable. -'
+                  : 'Compare plans and switch anytime. Changes apply from your next billing date.',
               style: Theme.of(context).textTheme.bodyLarge),
           const SizedBox(height: 20),
-          ...context.read<MembershipRepository>().membershipPlans.map((plan) {
-            final isCurrent = plan.id == context.read<MembershipRepository>().currentPlanId;
+          ...(connected
+                  ? const [MembershipPlan('-', '-', 0, '-', ['-', '-', '-', '-']), MembershipPlan('-', '-', 0, '-', ['-', '-', '-', '-'], popular: true), MembershipPlan('-', '-', 0, '-', ['-', '-', '-', '-'])]
+                  : context.read<MembershipRepository>().membershipPlans)
+              .map((plan) {
+            final isCurrent = !connected &&
+                plan.id == context.read<MembershipRepository>().currentPlanId;
             return Padding(
               padding: const EdgeInsets.only(bottom: 14),
               child: PlanCard(
                 plan: plan,
+                connected: connected,
                 isCurrent: isCurrent,
                 onSelect: () => Navigator.push(
-                    context, MaterialPageRoute(builder: (_) => PurchasePlanScreen(plan: plan))),
+                    context,
+                    MaterialPageRoute(
+                        builder: (_) => PurchasePlanScreen(
+                            plan: plan, connected: connected))),
               ),
             );
           }),

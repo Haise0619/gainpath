@@ -3,6 +3,8 @@ import 'package:gainpath_ui/gainpath_ui.dart';
 import 'booking_schedule_screen.dart';
 import '../shared/coach_profile_screen.dart';
 import '../shared/live_coach_directory_views.dart';
+import '../shared/published_coach_presentation.dart';
+import '../../application/coach_directory_cubit.dart';
 import 'widgets/coach_card.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:gainpath_domain/identity.dart';
@@ -36,23 +38,48 @@ class _BrowseCoachesScreenState extends State<BrowseCoachesScreen> {
   final _searchController = TextEditingController();
   String _query = '';
 
+  CoachDirectoryCubit? _directory;
+  @override
+  void initState() {
+    super.initState();
+    if (widget.liveRepository != null) {
+      _directory = CoachDirectoryCubit(
+          repository: widget.liveRepository!, isCurrent: widget.isCurrent!)
+        ..refresh();
+    }
+  }
+
   @override
   void dispose() {
+    _directory?.close();
     _searchController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    if (widget.live && widget.liveRepository != null) {
-      return LiveCoachDirectoryView(
-          repository: widget.liveRepository!,
-          isCurrent: widget.isCurrent!,
-          onOpenBookings: widget.onOpenBookings,
-          onOpen: widget.onOpenPublished!);
+    if (_directory != null) {
+      return BlocBuilder<CoachDirectoryCubit, CoachDirectoryState>(
+        bloc: _directory,
+        builder: (context, state) => _content(
+            context,
+            widget.isCurrent!()
+                ? state.items.map(publishedCoachPresentation).toList()
+                : [],
+            state),
+      );
     }
-    final coaches =
-        widget.live ? <Coach>[] : context.read<CoachRepository>().coaches;
+    return _content(
+        context,
+        widget.live ? <Coach>[] : context.read<CoachRepository>().coaches,
+        null);
+  }
+
+  Widget _content(
+      BuildContext context, List<Coach> coaches, CoachDirectoryState? state) {
+    final published = {
+      for (final c in state?.items ?? <PublishedCoachProfile>[]) c.id: c
+    };
     final specialties = [
       'All',
       ...{for (final c in coaches) c.specialty}
@@ -99,11 +126,16 @@ class _BrowseCoachesScreenState extends State<BrowseCoachesScreen> {
                   value: _SortBy.experience, child: Text('Most experienced')),
             ],
           ),
+          if (_directory != null)
+            IconButton(
+                tooltip: 'Refresh Coaches',
+                onPressed: state!.loading ? null : _directory!.refresh,
+                icon: const Icon(Icons.refresh)),
           IconButton(
             icon: const Icon(Icons.event_note_rounded),
             tooltip: 'My bookings',
             onPressed: widget.live
-                ? () => showUnavailable(context)
+                ? widget.onOpenBookings
                 : () => Navigator.push(
                     context,
                     MaterialPageRoute(
@@ -113,6 +145,8 @@ class _BrowseCoachesScreenState extends State<BrowseCoachesScreen> {
       ),
       body: Column(
         children: [
+          if (state?.loading == true) const LinearProgressIndicator(),
+          if (state?.message != null) Text(state!.message!),
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
             child: TextField(
@@ -162,6 +196,11 @@ class _BrowseCoachesScreenState extends State<BrowseCoachesScreen> {
               }).toList(),
             ),
           ),
+          if (state?.nextCursor != null)
+            TextButton(
+                onPressed: state!.loadingMore ? null : _directory!.loadMore,
+                child:
+                    Text(state.loadingMore ? 'Loading…' : 'Load more Coaches')),
           const SizedBox(height: 6),
           Expanded(
             child: visible.isEmpty
@@ -191,11 +230,21 @@ class _BrowseCoachesScreenState extends State<BrowseCoachesScreen> {
                               padding: const EdgeInsets.only(bottom: 10),
                               child: CoachCard(
                                 coach: c,
-                                onTap: () => Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                        builder: (_) =>
-                                            CoachProfileScreen(coach: c))),
+                                published: published[c.id],
+                                photo: published[c.id] == null
+                                    ? null
+                                    : PublishedCoachPhoto(
+                                        coach: published[c.id]!,
+                                        repository: widget.liveRepository!,
+                                        isCurrent: widget.isCurrent!,
+                                        size: 58),
+                                onTap: published[c.id] != null
+                                    ? () => widget.onOpenPublished?.call(c.id)
+                                    : () => Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                            builder: (_) =>
+                                                CoachProfileScreen(coach: c))),
                               ),
                             ))
                         .toList(),

@@ -10,8 +10,8 @@ import 'widgets/local_progress_widgets.dart';
 /// up top (this report's own characteristic: density over time, not
 /// trend or proportion), then the full chronological log below.
 class ActivityTimelineScreen extends StatelessWidget {
-  const ActivityTimelineScreen({super.key, this.localProgress, this.onRefresh,
-    this.onOpenWorkout});
+  const ActivityTimelineScreen(
+      {super.key, this.localProgress, this.onRefresh, this.onOpenWorkout});
 
   final MemberLocalProgress? localProgress;
   final Future<void> Function()? onRefresh;
@@ -20,125 +20,134 @@ class ActivityTimelineScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final local = localProgress;
-    if (local != null) return _buildLocal(context, local);
-    final counts = context.read<AnalyticsRepository>().sessionsPerWeek;
-    final labels = context.read<AnalyticsRepository>().sessionWeekLabels;
-    final data = List.generate(counts.length, (i) => _WeekCount(labels[i], counts[i]));
+    final counts = local == null
+        ? context.read<AnalyticsRepository>().sessionsPerWeek
+        : <int>[];
+    final labels = local == null
+        ? context.read<AnalyticsRepository>().sessionWeekLabels
+        : <String>[];
+    final data =
+        List.generate(counts.length, (i) => _WeekCount(labels[i], counts[i]));
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('Activity timeline'),
         actions: [
+          if (local != null && onRefresh != null)
+            IconButton(
+                tooltip: 'Refresh',
+                icon: const Icon(Icons.refresh_rounded),
+                onPressed: onRefresh),
           IconButton(
             icon: const Icon(Icons.tune_rounded),
             tooltip: 'Filter',
-            onPressed: () => _filter(context),
+            onPressed: () =>
+                local == null ? _filter(context) : showUnavailable(context),
           ),
           IconButton(
             icon: const Icon(Icons.ios_share_rounded),
             tooltip: 'Export',
-            onPressed: () => showToast(context, 'Report saved to your device.'),
+            onPressed: () => showUnavailable(context),
           ),
         ],
       ),
-      body: PageBody(
-        children: [
-          const Eyebrow('Sessions per week'),
-          Panel(
-            child: SizedBox(
-              height: 160,
-              child: SfCartesianChart(
-                plotAreaBorderWidth: 0,
-                primaryXAxis: const CategoryAxis(
-                  majorGridLines: MajorGridLines(width: 0),
-                  axisLine: AxisLine(width: 0),
-                ),
-                primaryYAxis: const NumericAxis(isVisible: false),
-                series: <CartesianSeries<_WeekCount, String>>[
-                  ColumnSeries<_WeekCount, String>(
-                    dataSource: data,
-                    xValueMapper: (d, _) => d.label,
-                    yValueMapper: (d, _) => d.count,
-                    color: AppColors.primarySoft,
-                    width: 0.5,
-                    borderRadius: BorderRadius.circular(5),
-                    dataLabelSettings:
-                        const DataLabelSettings(isVisible: true, textStyle: TextStyle(fontSize: 10)),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 20),
-          const Eyebrow('Log'),
-          ...context.read<WorkoutRepository>().history.map((r) => Padding(
-                padding: const EdgeInsets.only(bottom: 10),
-                child: Panel(
-                  child: Row(
-                    children: [
-                      Container(
-                        width: 42,
-                        height: 42,
-                        decoration: BoxDecoration(
-                          color: AppColors.surfaceAlt,
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: const Icon(Icons.fitness_center_rounded,
-                            size: 19, color: AppColors.primary),
+      body: localProgressRefresh(
+          onRefresh: local == null ? null : onRefresh,
+          child: PageBody(
+            children: [
+              const Eyebrow('Sessions per week'),
+              if (local != null) ...[
+                LocalProgressPeriod(progress: local),
+                LocalWeeklyChart(progress: local),
+              ] else
+                Panel(
+                  child: SizedBox(
+                    height: 160,
+                    child: SfCartesianChart(
+                      plotAreaBorderWidth: 0,
+                      primaryXAxis: const CategoryAxis(
+                        majorGridLines: MajorGridLines(width: 0),
+                        axisLine: AxisLine(width: 0),
                       ),
-                      const SizedBox(width: 14),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+                      primaryYAxis: const NumericAxis(isVisible: false),
+                      series: <CartesianSeries<_WeekCount, String>>[
+                        ColumnSeries<_WeekCount, String>(
+                          dataSource: data,
+                          xValueMapper: (d, _) => d.label,
+                          yValueMapper: (d, _) => d.count,
+                          color: AppColors.primarySoft,
+                          width: 0.5,
+                          borderRadius: BorderRadius.circular(5),
+                          dataLabelSettings: const DataLabelSettings(
+                              isVisible: true,
+                              textStyle: TextStyle(fontSize: 10)),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              const SizedBox(height: 20),
+              const Eyebrow('Log'),
+              if (local != null) ...[
+                Text(
+                    '${local.allTimeSessions} saved sessions · ${local.allTimeRepetitions} full reps · ${local.allTimePartialRepetitions} partial attempts'),
+                if (local.records.isEmpty)
+                  const Panel(child: Text('No saved camera sessions yet.')),
+                ...local.records.map((record) => LocalProgressRecordTile(
+                    record: record,
+                    utcOffset: local.utcOffset,
+                    onOpenWorkout: onOpenWorkout)),
+              ] else
+                ...context.read<WorkoutRepository>().history.map((r) => Padding(
+                      padding: const EdgeInsets.only(bottom: 10),
+                      child: Panel(
+                        child: Row(
                           children: [
-                            Text(r.exercise, style: Theme.of(context).textTheme.titleMedium),
+                            Container(
+                              width: 42,
+                              height: 42,
+                              decoration: BoxDecoration(
+                                color: AppColors.surfaceAlt,
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: const Icon(Icons.fitness_center_rounded,
+                                  size: 19, color: AppColors.primary),
+                            ),
+                            const SizedBox(width: 14),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(r.exercise,
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .titleMedium),
+                                  Text(
+                                    '${_ago(r.date)}  ·  ${r.reps} reps  ·  ${r.durationMin} min',
+                                    style:
+                                        Theme.of(context).textTheme.bodyMedium,
+                                  ),
+                                ],
+                              ),
+                            ),
                             Text(
-                              '${_ago(r.date)}  ·  ${r.reps} reps  ·  ${r.durationMin} min',
-                              style: Theme.of(context).textTheme.bodyMedium,
+                              '${r.accuracy}%',
+                              style: TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w700,
+                                color: r.accuracy >= 80
+                                    ? AppColors.success
+                                    : AppColors.warning,
+                              ),
                             ),
                           ],
                         ),
                       ),
-                      Text(
-                        '${r.accuracy}%',
-                        style: TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w700,
-                          color: r.accuracy >= 80 ? AppColors.success : AppColors.warning,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              )),
-        ],
-      ),
+                    )),
+            ],
+          )),
     );
   }
-
-  Widget _buildLocal(BuildContext context, MemberLocalProgress progress) => Scaffold(
-    appBar: AppBar(title: const Text('Activity timeline'), actions: [
-      if (onRefresh != null) IconButton(tooltip: 'Refresh',
-        icon: const Icon(Icons.refresh_rounded), onPressed: onRefresh),
-    ]),
-    body: localProgressRefresh(onRefresh: onRefresh, child: PageBody(children: [
-      LocalProgressPeriod(progress: progress),
-      const SizedBox(height: 12),
-      const Eyebrow('Saved sessions per week'),
-      LocalWeeklyChart(progress: progress),
-      const SizedBox(height: 20),
-      Text('${progress.allTimeSessions} saved sessions · '
-        '${progress.allTimeRepetitions} full reps · '
-        '${progress.allTimePartialRepetitions} partial attempts',
-        style: Theme.of(context).textTheme.bodyMedium),
-      const SizedBox(height: 12),
-      const Eyebrow('Local workout history'),
-      if (progress.records.isEmpty)
-        const Panel(child: Text('No saved camera sessions yet.')),
-      ...progress.records.map((record) => LocalProgressRecordTile(
-        record: record, utcOffset: progress.utcOffset, onOpenWorkout: onOpenWorkout)),
-    ])),
-  );
 
   String _ago(DateTime d) {
     final days = DateTime.now().difference(d).inDays;
@@ -155,7 +164,8 @@ class ActivityTimelineScreen extends StatelessWidget {
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
       builder: (ctx) => Padding(
-        padding: EdgeInsets.fromLTRB(20, 20, 20, 20 + MediaQuery.of(ctx).padding.bottom),
+        padding: EdgeInsets.fromLTRB(
+            20, 20, 20, 20 + MediaQuery.of(ctx).padding.bottom),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,

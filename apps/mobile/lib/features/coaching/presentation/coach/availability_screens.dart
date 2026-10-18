@@ -4,19 +4,32 @@ import 'block_type_icon.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'live_coach_availability_view.dart';
+import 'availability_page.dart';
 
-String _fmtTime(LocalTime t) => '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
+String _fmtTime(LocalTime t) =>
+    '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
 int _toMinutes(LocalTime t) => t.minutesSinceMidnight;
 LocalTime _local(TimeOfDay t) => LocalTime(hour: t.hour, minute: t.minute);
 TimeOfDay _picker(LocalTime t) => TimeOfDay(hour: t.hour, minute: t.minute);
 
 const _weekdayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 const _monthNames = [
-  'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+  'Jan',
+  'Feb',
+  'Mar',
+  'Apr',
+  'May',
+  'Jun',
+  'Jul',
+  'Aug',
+  'Sep',
+  'Oct',
+  'Nov',
+  'Dec'
 ];
 
-String _fmtDate(DateTime d) => '${_weekdayNames[d.weekday - 1]}, ${d.day} ${_monthNames[d.month - 1]}';
+String _fmtDate(DateTime d) =>
+    '${_weekdayNames[d.weekday - 1]}, ${d.day} ${_monthNames[d.month - 1]}';
 
 Color _blockColor(BlockType type) {
   switch (type) {
@@ -45,7 +58,8 @@ Color _blockColor(BlockType type) {
 /// whatever the coach typed and inserted a hardcoded placeholder row
 /// instead.
 class AvailabilityScreen extends StatefulWidget {
-  const AvailabilityScreen({super.key, this.liveRepository, this.coachId, this.isCurrent});
+  const AvailabilityScreen(
+      {super.key, this.liveRepository, this.coachId, this.isCurrent});
   final CoachAvailabilityRepository? liveRepository;
   final String? coachId;
   final bool Function()? isCurrent;
@@ -56,21 +70,30 @@ class AvailabilityScreen extends StatefulWidget {
 
 class _AvailabilityScreenState extends State<AvailabilityScreen> {
   final _dayKeys = List.generate(7, (_) => GlobalKey());
-  late double _dailyCap = context.read<AvailabilityRepository>().dailyBookingCap.toDouble();
-  late double _lookAhead = context.read<AvailabilityRepository>().advanceBookingDays.toDouble();
+  late double _dailyCap =
+      context.read<AvailabilityRepository>().dailyBookingCap.toDouble();
+  late double _lookAhead =
+      context.read<AvailabilityRepository>().advanceBookingDays.toDouble();
 
   void _jumpToDay(int index) {
     final ctx = _dayKeys[index].currentContext;
     if (ctx != null) {
-      Scrollable.ensureVisible(ctx, duration: const Duration(milliseconds: 350), curve: Curves.easeOut, alignment: 0.1);
+      Scrollable.ensureVisible(ctx,
+          duration: const Duration(milliseconds: 350),
+          curve: Curves.easeOut,
+          alignment: 0.1);
     }
   }
 
   Future<void> _editHours(WorkingDay day) async {
-    final pickedStart = await showTimePicker(context: context, initialTime: _picker(day.start), helpText: 'START TIME');
+    final pickedStart = await showTimePicker(
+        context: context,
+        initialTime: _picker(day.start),
+        helpText: 'START TIME');
     final start = pickedStart == null ? null : _local(pickedStart);
     if (start == null || !mounted) return;
-    final pickedEnd = await showTimePicker(context: context, initialTime: _picker(day.end), helpText: 'END TIME');
+    final pickedEnd = await showTimePicker(
+        context: context, initialTime: _picker(day.end), helpText: 'END TIME');
     final end = pickedEnd == null ? null : _local(pickedEnd);
     if (end == null || !mounted) return;
     if (_toMinutes(end) <= _toMinutes(start)) {
@@ -85,263 +108,301 @@ class _AvailabilityScreenState extends State<AvailabilityScreen> {
 
   @override
   Widget build(BuildContext context) {
-    if (widget.liveRepository != null) return LiveCoachAvailabilityView(repository: widget.liveRepository!, coachId: widget.coachId!, isCurrent: widget.isCurrent!);
+    if (widget.liveRepository != null) {
+      return LiveCoachAvailabilityView(
+          repository: widget.liveRepository!,
+          coachId: widget.coachId!,
+          isCurrent: widget.isCurrent!);
+    }
     final days = context.read<AvailabilityRepository>().workingDays;
-    final blocks = [...context.read<AvailabilityRepository>().blockedSlots]..sort((a, b) => a.date.compareTo(b.date));
+    final blocks = [...context.read<AvailabilityRepository>().blockedSlots]
+      ..sort((a, b) => a.date.compareTo(b.date));
     final now = DateTime.now();
-    final bookedThisWeek = context.read<BookingRepository>().coachRoster
-        .where((b) => b.start.isAfter(now) && b.start.isBefore(now.add(const Duration(days: 7))) && b.status != BookingStatus.cancelled)
+    final bookedThisWeek = context
+        .read<BookingRepository>()
+        .coachRoster
+        .where((b) =>
+            b.start.isAfter(now) &&
+            b.start.isBefore(now.add(const Duration(days: 7))) &&
+            b.status != BookingStatus.cancelled)
         .length;
 
-    return Scaffold(
-      appBar: AppBar(title: const Text('Availability')),
-      body: PageBody(
-        children: [
-          const Eyebrow('This week at a glance'),
-          Row(
-            children: List.generate(7, (i) {
+    return AvailabilityPage(
+      workingHoursTitle: 'Recurring working hours',
+      weekAtGlance: Row(
+        children: List.generate(7, (i) {
+          final day = days[i];
+          final hours = _toMinutes(day.end) - _toMinutes(day.start);
+          return Expanded(
+            child: GestureDetector(
+              onTap: () => _jumpToDay(i),
+              child: Container(
+                margin: EdgeInsets.only(right: i == 6 ? 0 : 6),
+                padding: const EdgeInsets.symmetric(vertical: 10),
+                decoration: BoxDecoration(
+                  color: AppColors.surface,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: AppColors.hairline),
+                ),
+                child: Column(
+                  children: [
+                    Text(_weekdayNames[i][0],
+                        style: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.inkSoft)),
+                    const SizedBox(height: 6),
+                    Container(
+                      width: 6,
+                      height: 6,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color:
+                            day.active ? AppColors.success : AppColors.hairline,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      day.active
+                          ? '${(hours / 60).toStringAsFixed(hours % 60 == 0 ? 0 : 1)}h'
+                          : 'Off',
+                      style: TextStyle(
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.w600,
+                          color:
+                              day.active ? AppColors.ink : AppColors.inkSoft),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        }),
+      ),
+      workingHours: [
+        Panel(
+          padding: EdgeInsets.zero,
+          child: Column(
+            children: List.generate(days.length, (i) {
               final day = days[i];
-              final hours = _toMinutes(day.end) - _toMinutes(day.start);
-              return Expanded(
-                child: GestureDetector(
-                  onTap: () => _jumpToDay(i),
-                  child: Container(
-                    margin: EdgeInsets.only(right: i == 6 ? 0 : 6),
-                    padding: const EdgeInsets.symmetric(vertical: 10),
-                    decoration: BoxDecoration(
-                      color: AppColors.surface,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: AppColors.hairline),
-                    ),
-                    child: Column(
-                      children: [
-                        Text(_weekdayNames[i][0],
-                            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.inkSoft)),
-                        const SizedBox(height: 6),
-                        Container(
-                          width: 6,
-                          height: 6,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: day.active ? AppColors.success : AppColors.hairline,
+              return Container(
+                key: _dayKeys[i],
+                child: Column(
+                  children: [
+                    if (i > 0)
+                      const Divider(height: 1, indent: 16, endIndent: 16),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 6),
+                      child: Row(
+                        children: [
+                          Switch(
+                            value: day.active,
+                            onChanged: (v) => setState(() => day.active = v),
                           ),
-                        ),
-                        const SizedBox(height: 6),
-                        Text(
-                          day.active ? '${(hours / 60).toStringAsFixed(hours % 60 == 0 ? 0 : 1)}h' : 'Off',
-                          style: TextStyle(
-                              fontSize: 10.5,
-                              fontWeight: FontWeight.w600,
-                              color: day.active ? AppColors.ink : AppColors.inkSoft),
-                        ),
-                      ],
+                          const SizedBox(width: 6),
+                          Text(day.day,
+                              style: Theme.of(context).textTheme.titleMedium),
+                          const Spacer(),
+                          if (day.active)
+                            InkWell(
+                              borderRadius: BorderRadius.circular(8),
+                              onTap: () => _editHours(day),
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                    vertical: 8, horizontal: 4),
+                                child: Row(
+                                  children: [
+                                    Text(
+                                        '${_fmtTime(day.start)} – ${_fmtTime(day.end)}',
+                                        style: const TextStyle(
+                                            fontSize: 13.5,
+                                            fontWeight: FontWeight.w600)),
+                                    const SizedBox(width: 4),
+                                    const Icon(Icons.edit_rounded,
+                                        size: 15, color: AppColors.primary),
+                                  ],
+                                ),
+                              ),
+                            )
+                          else
+                            Text('Not working',
+                                style: Theme.of(context).textTheme.bodyMedium),
+                        ],
+                      ),
                     ),
-                  ),
+                  ],
                 ),
               );
             }),
           ),
-          const SizedBox(height: 20),
-          const Eyebrow('Recurring working hours'),
+        ),
+      ],
+      onAddTimeOff: () => _showBlockSheet(context),
+      timeOff: [
+        if (blocks.isEmpty)
           Panel(
-            padding: EdgeInsets.zero,
-            child: Column(
-              children: List.generate(days.length, (i) {
-                final day = days[i];
-                return Container(
-                  key: _dayKeys[i],
-                  child: Column(
+            child: Text('Nothing blocked out right now.',
+                style: Theme.of(context).textTheme.bodyMedium),
+          )
+        else
+          ...blocks.map((b) => Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: Panel(
+                  child: Row(
                     children: [
-                      if (i > 0) const Divider(height: 1, indent: 16, endIndent: 16),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-                        child: Row(
+                      Container(
+                        width: 40,
+                        height: 40,
+                        decoration: BoxDecoration(
+                          color: _blockColor(b.type).withValues(alpha: 0.14),
+                          borderRadius: BorderRadius.circular(11),
+                        ),
+                        child: Icon(b.type.icon,
+                            size: 19, color: _blockColor(b.type)),
+                      ),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Switch(
-                              value: day.active,
-                              onChanged: (v) => setState(() => day.active = v),
+                            Text(b.reason,
+                                style: Theme.of(context).textTheme.titleMedium),
+                            const SizedBox(height: 2),
+                            Text(
+                              '${b.type.label}  ·  ${_fmtDate(b.date)}  ·  '
+                              '${b.fullDay ? 'Full day' : '${_fmtTime(b.startTime!)} to ${_fmtTime(b.endTime!)}'}',
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .bodyMedium
+                                  ?.copyWith(fontSize: 12.5),
                             ),
-                            const SizedBox(width: 6),
-                            Text(day.day, style: Theme.of(context).textTheme.titleMedium),
-                            const Spacer(),
-                            if (day.active)
-                              InkWell(
-                                borderRadius: BorderRadius.circular(8),
-                                onTap: () => _editHours(day),
-                                child: Padding(
-                                  padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
-                                  child: Row(
-                                    children: [
-                                      Text('${_fmtTime(day.start)} – ${_fmtTime(day.end)}',
-                                          style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600)),
-                                      const SizedBox(width: 4),
-                                      const Icon(Icons.edit_rounded, size: 15, color: AppColors.primary),
-                                    ],
-                                  ),
-                                ),
-                              )
-                            else
-                              Text('Not working', style: Theme.of(context).textTheme.bodyMedium),
                           ],
                         ),
                       ),
+                      IconButton(
+                        icon: const Icon(Icons.edit_outlined, size: 18),
+                        onPressed: () => _showBlockSheet(context, existing: b),
+                      ),
+                      IconButton(
+                        icon:
+                            const Icon(Icons.delete_outline_rounded, size: 19),
+                        onPressed: () async {
+                          final ok = await confirmSheet(context,
+                              title: 'Remove this block?',
+                              message: 'That time reopens for members to book.',
+                              confirmLabel: 'Remove',
+                              destructive: true);
+                          if (ok) {
+                            setState(() => context
+                                .read<AvailabilityRepository>()
+                                .blockedSlots
+                                .remove(b));
+                          }
+                        },
+                      ),
                     ],
                   ),
-                );
-              }),
-            ),
-          ),
-          const SizedBox(height: 20),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                ),
+              )),
+      ],
+      limits: [
+        Panel(
+          background: AppColors.surfaceAlt,
+          child: Row(
             children: [
-              const Eyebrow('Time off and breaks'),
-              TextButton.icon(
-                onPressed: () => _showBlockSheet(context),
-                icon: const Icon(Icons.add_rounded, size: 18),
-                label: const Text('Add'),
+              const Icon(Icons.event_note_rounded,
+                  size: 18, color: AppColors.primary),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                    '$bookedThisWeek session${bookedThisWeek == 1 ? '' : 's'} already booked this week',
+                    style: Theme.of(context).textTheme.bodyMedium),
               ),
             ],
           ),
-          if (blocks.isEmpty)
-            Panel(
-              child: Text('Nothing blocked out right now.', style: Theme.of(context).textTheme.bodyMedium),
-            )
-          else
-            ...blocks.map((b) => Padding(
-                  padding: const EdgeInsets.only(bottom: 10),
-                  child: Panel(
-                    child: Row(
-                      children: [
-                        Container(
-                          width: 40,
-                          height: 40,
-                          decoration: BoxDecoration(
-                            color: _blockColor(b.type).withValues(alpha: 0.14),
-                            borderRadius: BorderRadius.circular(11),
-                          ),
-                          child: Icon(b.type.icon, size: 19, color: _blockColor(b.type)),
-                        ),
-                        const SizedBox(width: 14),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(b.reason, style: Theme.of(context).textTheme.titleMedium),
-                              const SizedBox(height: 2),
-                              Text(
-                                '${b.type.label}  ·  ${_fmtDate(b.date)}  ·  '
-                                '${b.fullDay ? 'Full day' : '${_fmtTime(b.startTime!)} to ${_fmtTime(b.endTime!)}'}',
-                                style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontSize: 12.5),
-                              ),
-                            ],
-                          ),
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.edit_outlined, size: 18),
-                          onPressed: () => _showBlockSheet(context, existing: b),
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.delete_outline_rounded, size: 19),
-                          onPressed: () async {
-                            final ok = await confirmSheet(context,
-                                title: 'Remove this block?',
-                                message: 'That time reopens for members to book.',
-                                confirmLabel: 'Remove',
-                                destructive: true);
-                            if (ok) setState(() => context.read<AvailabilityRepository>().blockedSlots.remove(b));
-                          },
-                        ),
-                      ],
+        ),
+        const SizedBox(height: 12),
+        Panel(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Maximum sessions per day',
+                  style: Theme.of(context).textTheme.titleMedium),
+              Row(
+                children: [
+                  Expanded(
+                    child: Slider(
+                      value: _dailyCap,
+                      min: 1,
+                      max: 10,
+                      divisions: 9,
+                      label: '${_dailyCap.round()}',
+                      onChanged: (v) => setState(() => _dailyCap = v),
                     ),
                   ),
-                )),
-          const SizedBox(height: 20),
-          const Eyebrow('Roster scheduling limits'),
-          Panel(
-            background: AppColors.surfaceAlt,
-            child: Row(
-              children: [
-                const Icon(Icons.event_note_rounded, size: 18, color: AppColors.primary),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text('$bookedThisWeek session${bookedThisWeek == 1 ? '' : 's'} already booked this week',
-                      style: Theme.of(context).textTheme.bodyMedium),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 12),
-          Panel(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Maximum sessions per day', style: Theme.of(context).textTheme.titleMedium),
-                Row(
-                  children: [
-                    Expanded(
-                      child: Slider(
-                        value: _dailyCap,
-                        min: 1,
-                        max: 10,
-                        divisions: 9,
-                        label: '${_dailyCap.round()}',
-                        onChanged: (v) => setState(() => _dailyCap = v),
-                      ),
-                    ),
-                    SizedBox(
-                      width: 34,
-                      child: Text('${_dailyCap.round()}',
-                          style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
-                    ),
-                  ],
-                ),
-                const Divider(height: 20),
-                Text('How far ahead members can book', style: Theme.of(context).textTheme.titleMedium),
-                Row(
-                  children: [
-                    Expanded(
-                      child: Slider(
-                        value: _lookAhead,
-                        min: 7,
-                        max: 60,
-                        divisions: 53,
-                        label: '${_lookAhead.round()} days',
-                        onChanged: (v) => setState(() => _lookAhead = v),
-                      ),
-                    ),
-                    SizedBox(
-                      width: 62,
-                      child: Text('${_lookAhead.round()} days',
-                          style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700)),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 4),
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(color: AppColors.primaryTint, borderRadius: BorderRadius.circular(10)),
-                  child: Text(
-                    'Members can book up to ${_dailyCap.round()} session${_dailyCap.round() == 1 ? '' : 's'} with you '
-                    'per day, up to ${_lookAhead.round()} days in advance.',
-                    style: const TextStyle(fontSize: 12.5, height: 1.4, color: AppColors.primaryDark),
+                  SizedBox(
+                    width: 34,
+                    child: Text('${_dailyCap.round()}',
+                        style: const TextStyle(
+                            fontSize: 17, fontWeight: FontWeight.w700)),
                   ),
+                ],
+              ),
+              const Divider(height: 20),
+              Text('How far ahead members can book',
+                  style: Theme.of(context).textTheme.titleMedium),
+              Row(
+                children: [
+                  Expanded(
+                    child: Slider(
+                      value: _lookAhead,
+                      min: 7,
+                      max: 60,
+                      divisions: 53,
+                      label: '${_lookAhead.round()} days',
+                      onChanged: (v) => setState(() => _lookAhead = v),
+                    ),
+                  ),
+                  SizedBox(
+                    width: 62,
+                    child: Text('${_lookAhead.round()} days',
+                        style: const TextStyle(
+                            fontSize: 13.5, fontWeight: FontWeight.w700)),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 4),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                    color: AppColors.primaryTint,
+                    borderRadius: BorderRadius.circular(10)),
+                child: Text(
+                  'Members can book up to ${_dailyCap.round()} session${_dailyCap.round() == 1 ? '' : 's'} with you '
+                  'per day, up to ${_lookAhead.round()} days in advance.',
+                  style: const TextStyle(
+                      fontSize: 12.5,
+                      height: 1.4,
+                      color: AppColors.primaryDark),
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
-          const SizedBox(height: 18),
-          FilledButton(
-            onPressed: () {
-              context.read<AvailabilityRepository>().dailyBookingCap = _dailyCap.round();
-              context.read<AvailabilityRepository>().advanceBookingDays = _lookAhead.round();
-              showToast(context, 'Availability saved.');
-            },
-            child: const Text('Save changes'),
-          ),
-        ],
-      ),
+        ),
+        const SizedBox(height: 18),
+        FilledButton(
+          onPressed: () {
+            context.read<AvailabilityRepository>().dailyBookingCap =
+                _dailyCap.round();
+            context.read<AvailabilityRepository>().advanceBookingDays =
+                _lookAhead.round();
+            showToast(context, 'Availability saved.');
+          },
+          child: const Text('Save changes'),
+        ),
+      ],
     );
   }
 
@@ -350,7 +411,8 @@ class _AvailabilityScreenState extends State<AvailabilityScreen> {
       context: context,
       isScrollControlled: true,
       backgroundColor: AppColors.surface,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
       builder: (ctx) => _BlockSlotSheet(existing: existing),
     ).then((_) => setState(() {}));
   }
@@ -404,7 +466,8 @@ class _BlockSlotSheetState extends State<_BlockSlotSheet> {
   }
 
   Future<void> _pickTime(bool isStart) async {
-    final picked = await showTimePicker(context: context, initialTime: _picker(isStart ? _start : _end));
+    final picked = await showTimePicker(
+        context: context, initialTime: _picker(isStart ? _start : _end));
     if (picked == null) return;
     setState(() {
       if (isStart) {
@@ -435,23 +498,25 @@ class _BlockSlotSheetState extends State<_BlockSlotSheet> {
         ..endTime = _fullDay ? null : _end;
     } else {
       context.read<AvailabilityRepository>().blockedSlots.add(BlockedSlot(
-        id: 'bl${DateTime.now().millisecondsSinceEpoch}',
-        type: _type,
-        reason: _reason.text.trim(),
-        date: _date,
-        fullDay: _fullDay,
-        startTime: _fullDay ? null : _start,
-        endTime: _fullDay ? null : _end,
-      ));
+            id: 'bl${DateTime.now().millisecondsSinceEpoch}',
+            type: _type,
+            reason: _reason.text.trim(),
+            date: _date,
+            fullDay: _fullDay,
+            startTime: _fullDay ? null : _start,
+            endTime: _fullDay ? null : _end,
+          ));
     }
     Navigator.pop(context);
-    showToast(context, existing != null ? 'Block updated.' : 'Time blocked out.');
+    showToast(
+        context, existing != null ? 'Block updated.' : 'Time blocked out.');
   }
 
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: EdgeInsets.fromLTRB(20, 20, 20, 20 + MediaQuery.of(context).viewInsets.bottom),
+      padding: EdgeInsets.fromLTRB(
+          20, 20, 20, 20 + MediaQuery.of(context).viewInsets.bottom),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -468,20 +533,25 @@ class _BlockSlotSheetState extends State<_BlockSlotSheet> {
                 label: Text(t.label),
                 selected: selected,
                 onSelected: (_) => setState(() => _type = t),
-                avatar: Icon(t.icon, size: 16, color: selected ? Colors.white : _blockColor(t)),
+                avatar: Icon(t.icon,
+                    size: 16, color: selected ? Colors.white : _blockColor(t)),
                 backgroundColor: AppColors.surface,
                 selectedColor: _blockColor(t),
                 labelStyle: TextStyle(
-                    fontSize: 12.5, fontWeight: FontWeight.w600, color: selected ? Colors.white : AppColors.ink),
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w600,
+                    color: selected ? Colors.white : AppColors.ink),
                 shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(999), side: const BorderSide(color: AppColors.hairline)),
+                    borderRadius: BorderRadius.circular(999),
+                    side: const BorderSide(color: AppColors.hairline)),
               );
             }).toList(),
           ),
           const SizedBox(height: 14),
           TextField(
             controller: _reason,
-            decoration: const InputDecoration(labelText: 'Reason', hintText: 'Medical leave, holiday, break'),
+            decoration: const InputDecoration(
+                labelText: 'Reason', hintText: 'Medical leave, holiday, break'),
           ),
           const SizedBox(height: 12),
           InkWell(
@@ -496,9 +566,12 @@ class _BlockSlotSheetState extends State<_BlockSlotSheet> {
               ),
               child: Row(
                 children: [
-                  const Icon(Icons.calendar_today_rounded, size: 17, color: AppColors.inkSoft),
+                  const Icon(Icons.calendar_today_rounded,
+                      size: 17, color: AppColors.inkSoft),
                   const SizedBox(width: 10),
-                  Text(_fmtDate(_date), style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.w600)),
+                  Text(_fmtDate(_date),
+                      style: const TextStyle(
+                          fontSize: 14.5, fontWeight: FontWeight.w600)),
                 ],
               ),
             ),
@@ -533,7 +606,8 @@ class _BlockSlotSheetState extends State<_BlockSlotSheet> {
           const SizedBox(height: 18),
           FilledButton(
             onPressed: _save,
-            child: Text(widget.existing != null ? 'Save changes' : 'Block this time'),
+            child: Text(
+                widget.existing != null ? 'Save changes' : 'Block this time'),
           ),
         ],
       ),

@@ -7,6 +7,7 @@ import 'package:gainpath_domain/membership.dart';
 /// the member's current plan. Kept as a single shared widget so the plan
 /// comparison always reads consistently no matter where it's shown.
 class PlanCard extends StatelessWidget {
+  final bool connected;
   final MembershipPlan plan;
   final bool isCurrent;
   final VoidCallback onSelect;
@@ -14,6 +15,7 @@ class PlanCard extends StatelessWidget {
   const PlanCard({
     super.key,
     required this.plan,
+    this.connected = false,
     required this.isCurrent,
     required this.onSelect,
   });
@@ -29,7 +31,12 @@ class PlanCard extends StatelessWidget {
           width: plan.popular ? 1.8 : 1,
         ),
         boxShadow: plan.popular
-            ? [BoxShadow(color: AppColors.primary.withValues(alpha: 0.16), blurRadius: 18, offset: const Offset(0, 8))]
+            ? [
+                BoxShadow(
+                    color: AppColors.primary.withValues(alpha: 0.16),
+                    blurRadius: 18,
+                    offset: const Offset(0, 8))
+              ]
             : null,
       ),
       child: Column(
@@ -43,10 +50,13 @@ class PlanCard extends StatelessWidget {
                 gradient: AppColors.heroGradient,
                 borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
               ),
-              child: const Text('MOST POPULAR',
+              child: Text(connected ? '-' : 'MOST POPULAR',
                   textAlign: TextAlign.center,
                   style: TextStyle(
-                      color: Colors.white, fontSize: 11, fontWeight: FontWeight.w800, letterSpacing: 1)),
+                      color: Colors.white,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 1)),
             ),
           Padding(
             padding: const EdgeInsets.all(18),
@@ -55,7 +65,11 @@ class PlanCard extends StatelessWidget {
               children: [
                 Row(
                   children: [
-                    Text(plan.name, style: Theme.of(context).textTheme.headlineMedium?.copyWith(fontSize: 22)),
+                    Text(plan.name,
+                        style: Theme.of(context)
+                            .textTheme
+                            .headlineMedium
+                            ?.copyWith(fontSize: 22)),
                     if (isCurrent) ...[
                       const SizedBox(width: 8),
                       statusPill('Current'),
@@ -63,16 +77,22 @@ class PlanCard extends StatelessWidget {
                   ],
                 ),
                 const SizedBox(height: 4),
-                Text(plan.tagline, style: Theme.of(context).textTheme.bodyMedium),
+                Text(plan.tagline,
+                    style: Theme.of(context).textTheme.bodyMedium),
                 const SizedBox(height: 14),
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.baseline,
                   textBaseline: TextBaseline.alphabetic,
                   children: [
-                    Text('RM ${plan.price.toStringAsFixed(0)}',
-                        style: const TextStyle(fontSize: 30, fontWeight: FontWeight.w800, letterSpacing: -1)),
+                    Text(
+                        connected ? '-' : 'RM ${plan.price.toStringAsFixed(0)}',
+                        style: const TextStyle(
+                            fontSize: 30,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: -1)),
                     const SizedBox(width: 4),
-                    Text('/ month', style: Theme.of(context).textTheme.bodyMedium),
+                    Text('/ month',
+                        style: Theme.of(context).textTheme.bodyMedium),
                   ],
                 ),
                 const SizedBox(height: 16),
@@ -81,9 +101,13 @@ class PlanCard extends StatelessWidget {
                       child: Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Icon(Icons.check_circle_rounded, size: 17, color: AppColors.success),
+                          const Icon(Icons.check_circle_rounded,
+                              size: 17, color: AppColors.success),
                           const SizedBox(width: 8),
-                          Expanded(child: Text(perk, style: const TextStyle(fontSize: 13.5, height: 1.3))),
+                          Expanded(
+                              child: Text(perk,
+                                  style: const TextStyle(
+                                      fontSize: 13.5, height: 1.3))),
                         ],
                       ),
                     )),
@@ -91,7 +115,9 @@ class PlanCard extends StatelessWidget {
                 SizedBox(
                   width: double.infinity,
                   child: isCurrent
-                      ? OutlinedButton(onPressed: null, child: const Text('Your current plan'))
+                      ? OutlinedButton(
+                          onPressed: null,
+                          child: const Text('Your current plan'))
                       : FilledButton(
                           onPressed: onSelect,
                           child: Text('Choose ${plan.name}'),

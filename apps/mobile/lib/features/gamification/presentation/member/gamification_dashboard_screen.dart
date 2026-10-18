@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../../application/gamification_bloc.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -21,7 +22,7 @@ class GamificationDashboardScreen extends StatelessWidget {
       AppColors.warning
     ],
     [
-      'New high score — Squat Rush',
+      'New high score - Squat Rush',
       '+180 pts',
       Icons.sports_esports_rounded,
       AppColors.primary
@@ -44,10 +45,10 @@ class GamificationDashboardScreen extends StatelessWidget {
             .where((b) => b.unlocked)
             .length;
     final rank = live
-        ? const ['—', '', '']
+        ? const ['-', '', '']
         : context.read<GamificationRepository>().leaderboard.firstWhere(
             (r) => r[1] == context.read<MemberProfileRepository>().memberName,
-            orElse: () => const ['—', '', '']);
+            orElse: () => const ['-', '', '']);
 
     return Scaffold(
       appBar: AppBar(title: const Text('Rewards')),
@@ -83,7 +84,7 @@ class GamificationDashboardScreen extends StatelessWidget {
                                   color: Colors.white70)),
                           const SizedBox(height: 6),
                           if (live)
-                            const Text('—',
+                            const Text('-',
                                 style: TextStyle(
                                     fontSize: 40,
                                     fontWeight: FontWeight.w800,
@@ -111,12 +112,11 @@ class GamificationDashboardScreen extends StatelessWidget {
                     ),
                     InkWell(
                       borderRadius: BorderRadius.circular(999),
-                      onTap: live
-                          ? () => showUnavailable(context)
-                          : () => Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                  builder: (_) => const LeaderboardScreen())),
+                      onTap: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (_) =>
+                                  LeaderboardScreen(connected: live))),
                       child: Container(
                         padding: const EdgeInsets.symmetric(
                             horizontal: 12, vertical: 8),
@@ -144,16 +144,17 @@ class GamificationDashboardScreen extends StatelessWidget {
                   ],
                 ),
                 const SizedBox(height: 14),
-                Row(
+                Wrap(
+                  spacing: 18,
+                  runSpacing: 8,
                   children: [
                     _miniStat(
                         Icons.local_fire_department_rounded,
                         live
-                            ? 'Streak —'
+                            ? 'Streak -'
                             : '${context.watch<GamificationBloc>().state.streak} day streak'),
-                    const SizedBox(width: 18),
                     _miniStat(Icons.military_tech_rounded,
-                        live ? 'Badges —' : '$unlocked badges'),
+                        live ? 'Badges -' : '$unlocked badges'),
                   ],
                 ),
               ],
@@ -171,7 +172,7 @@ class GamificationDashboardScreen extends StatelessWidget {
                       ? 0
                       : context.watch<GamificationBloc>().state.streak / 14,
                   live
-                      ? '—'
+                      ? '-'
                       : '${context.watch<GamificationBloc>().state.streak}/14',
                   color: AppColors.accent,
                 ),
@@ -186,115 +187,134 @@ class GamificationDashboardScreen extends StatelessWidget {
           ),
           const SizedBox(height: 20),
           const Eyebrow('Explore'),
-          GridView.count(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            crossAxisCount: 2,
-            crossAxisSpacing: 12,
-            mainAxisSpacing: 12,
-            childAspectRatio: 1.25,
-            children: [
-              _ExploreCard(
-                icon: Icons.sports_esports_rounded,
-                color: AppColors.primary,
-                title: 'Mini-games',
-                stat: live
-                    ? 'Unavailable'
-                    : '${context.read<GamificationRepository>().miniGames.length} challenges',
-                onTap: live
-                    ? () => showUnavailable(context)
-                    : () => Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                            builder: (_) => const MiniGamesScreen())),
-              ),
-              _ExploreCard(
-                icon: Icons.military_tech_rounded,
-                color: AppColors.warning,
-                title: 'Badges',
-                stat: live
-                    ? 'Unavailable'
-                    : '$unlocked/${context.read<GamificationRepository>().badges.length} unlocked',
-                onTap: live
-                    ? () => showUnavailable(context)
-                    : () => Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                            builder: (_) => const BadgesScreen())),
-              ),
-              _ExploreCard(
-                icon: Icons.card_giftcard_rounded,
-                color: AppColors.success,
-                title: 'Redeem points',
-                stat: live
-                    ? 'Unavailable'
-                    : '${context.read<GamificationRepository>().rewards.length} rewards',
-                onTap: live
-                    ? () => showUnavailable(context)
-                    : () => Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                            builder: (_) => const RewardShopScreen())),
-              ),
-              _ExploreCard(
-                icon: Icons.leaderboard_rounded,
-                color: AppColors.info,
-                title: 'Leaderboard',
-                stat: live ? 'Unavailable' : 'Rank #${rank[0]}',
-                onTap: live
-                    ? () => showUnavailable(context)
-                    : () => Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                            builder: (_) => const LeaderboardScreen())),
-              ),
-            ],
-          ),
+          LayoutBuilder(builder: (context, constraints) {
+            final tileWidth = (constraints.maxWidth - 12) / 2;
+            final titleStyle = Theme.of(context).textTheme.titleMedium;
+            final statStyle =
+                Theme.of(context).textTheme.bodyMedium?.copyWith(fontSize: 12);
+            double heightOf(String text, TextStyle? style) {
+              final painter = TextPainter(
+                  text: TextSpan(text: text, style: style),
+                  textScaler: MediaQuery.textScalerOf(context),
+                  textDirection: Directionality.of(context))
+                ..layout(maxWidth: math.max(1, tileWidth - 34));
+              final height = painter.height;
+              painter.dispose();
+              return height;
+            }
+
+            final titleHeight = [
+              'Mini-games',
+              'Badges',
+              'Redeem points',
+              'Leaderboard'
+            ].map((title) => heightOf(title, titleStyle)).reduce(math.max);
+            return GridView.count(
+              childAspectRatio: tileWidth /
+                  math.max(
+                      tileWidth / 1.25,
+                      42 +
+                          14 +
+                          titleHeight +
+                          2 +
+                          heightOf('-', statStyle) +
+                          34),
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              crossAxisCount: 2,
+              crossAxisSpacing: 12,
+              mainAxisSpacing: 12,
+              children: [
+                _ExploreCard(
+                  icon: Icons.sports_esports_rounded,
+                  color: AppColors.primary,
+                  title: 'Mini-games',
+                  stat: live
+                      ? '-'
+                      : '${context.read<GamificationRepository>().miniGames.length} challenges',
+                  onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                          builder: (_) => MiniGamesScreen(connected: live))),
+                ),
+                _ExploreCard(
+                  icon: Icons.military_tech_rounded,
+                  color: AppColors.warning,
+                  title: 'Badges',
+                  stat: live
+                      ? '-'
+                      : '$unlocked/${context.read<GamificationRepository>().badges.length} unlocked',
+                  onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                          builder: (_) => BadgesScreen(connected: live))),
+                ),
+                _ExploreCard(
+                  icon: Icons.card_giftcard_rounded,
+                  color: AppColors.success,
+                  title: 'Redeem points',
+                  stat: live
+                      ? '-'
+                      : '${context.read<GamificationRepository>().rewards.length} rewards',
+                  onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                          builder: (_) => RewardShopScreen(connected: live))),
+                ),
+                _ExploreCard(
+                  icon: Icons.leaderboard_rounded,
+                  color: AppColors.info,
+                  title: 'Leaderboard',
+                  stat: live ? '-' : 'Rank #${rank[0]}',
+                  onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                          builder: (_) => LeaderboardScreen(connected: live))),
+                ),
+              ],
+            );
+          }),
           const SizedBox(height: 20),
           const Eyebrow('Recent activity'),
           Panel(
             padding: EdgeInsets.zero,
             child: Column(
-              children: live
-                  ? const [
-                      ListTile(title: Text('No reward activity available yet.'))
-                    ]
-                  : List.generate(_activity.length, (i) {
-                      final a = _activity[i];
-                      final positive = (a[1] as String).startsWith('+');
-                      return Column(
-                        children: [
-                          if (i > 0) const Divider(height: 1, indent: 62),
-                          ListTile(
-                            leading: Container(
-                              width: 38,
-                              height: 38,
-                              decoration: BoxDecoration(
-                                color: (a[3] as Color).withValues(alpha: 0.14),
-                                borderRadius: BorderRadius.circular(11),
-                              ),
-                              child: Icon(a[2] as IconData,
-                                  size: 18, color: a[3] as Color),
-                            ),
-                            title: Text(a[0] as String,
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .bodyMedium
-                                    ?.copyWith(
-                                        fontSize: 13.5,
-                                        fontWeight: FontWeight.w600,
-                                        color: AppColors.ink)),
-                            trailing: Text(a[1] as String,
-                                style: TextStyle(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w800,
-                                    color: positive
-                                        ? AppColors.success
-                                        : AppColors.danger)),
-                          ),
-                        ],
-                      );
-                    }),
+              children: List.generate(_activity.length, (i) {
+                final a = _activity[i];
+                final positive = (a[1] as String).startsWith('+');
+                return Column(
+                  children: [
+                    if (i > 0) const Divider(height: 1, indent: 62),
+                    ListTile(
+                      leading: Container(
+                        width: 38,
+                        height: 38,
+                        decoration: BoxDecoration(
+                          color: (a[3] as Color).withValues(alpha: 0.14),
+                          borderRadius: BorderRadius.circular(11),
+                        ),
+                        child: Icon(a[2] as IconData,
+                            size: 18, color: a[3] as Color),
+                      ),
+                      title: Text(live ? '-' : a[0] as String,
+                          style: Theme.of(context)
+                              .textTheme
+                              .bodyMedium
+                              ?.copyWith(
+                                  fontSize: 13.5,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppColors.ink)),
+                      trailing: Text(live ? '-' : a[1] as String,
+                          style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w800,
+                              color: positive
+                                  ? AppColors.success
+                                  : AppColors.danger)),
+                    ),
+                  ],
+                );
+              }),
             ),
           ),
         ],
@@ -303,6 +323,7 @@ class GamificationDashboardScreen extends StatelessWidget {
   }
 
   Widget _miniStat(IconData icon, String label) => Row(
+        mainAxisSize: MainAxisSize.min,
         children: [
           Icon(icon, size: 16, color: AppColors.accent),
           const SizedBox(width: 6),
@@ -359,6 +380,6 @@ class _ExploreCard extends StatelessWidget {
   }
 }
 
-/// AD-M3.1 — Browse Mini-Games. A featured "Challenge of the Day" hero
+/// AD-M3.1 - Browse Mini-Games. A featured "Challenge of the Day" hero
 /// plus a media-card grid for the rest, so the camera-tracked challenges
 /// read as something worth picking, not settings rows.

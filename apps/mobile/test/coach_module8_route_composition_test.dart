@@ -7,6 +7,7 @@ import 'package:gainpath_mobile/app/mobile_app.dart';
 import 'package:gainpath_mobile/features/identity/presentation/coach/coach_account_screen.dart';
 import 'coach_profile_state_test.dart' show ProfileFake;
 import 'support/coach_account_gateway_fake.dart';
+import 'live_booking_composition_test.dart' show Lists;
 
 void main() {
   setUpAll(() => GoogleFonts.config.allowRuntimeFetching = false);
@@ -19,17 +20,21 @@ void main() {
     var accountCompositions = 0;
     await tester.pumpWidget(GainPathMobileApp(
         authRepository: auth,
-        backendConfig: const BackendConfig(BackendMode.firebase),
+        bookingListFactory: (_, __) => Lists(),
         coachProfileFactory: (_, __) => ProfileFake(),
         coachAccountFactory: (_, __) {
           accountCompositions++;
           return CoachAccountGatewayFake();
         }));
     await tester.pumpAndSettle();
+    await tester.tap(find.text('Profile').last);
+    await tester.pumpAndSettle();
     expect(find.byType(CoachAccountScreen), findsOneWidget);
     final navigator =
         tester.state<NavigatorState>(find.byType(Navigator).first);
     navigator.pushNamed('/coach');
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Profile').last);
     await tester.pumpAndSettle();
     expect(find.byType(CoachAccountScreen), findsOneWidget);
     expect(accountCompositions, greaterThanOrEqualTo(2));

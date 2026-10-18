@@ -212,9 +212,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('Refresh Coaches'));
     await tester.pumpAndSettle();
-    expect(
-        find.text('No published Coaches are available for this organization.'),
-        findsOneWidget);
+    expect(find.text('No coaches available yet.'), findsOneWidget);
     expect(await store.read(), isEmpty);
     expect((await sync.read()).toJson(), before);
   });

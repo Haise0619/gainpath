@@ -18,7 +18,16 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 /// write notes for" rather than something that only shows results if you
 /// also happen to be looking at a day with a completed session on it.
 class CoachRosterScreen extends StatefulWidget {
-  const CoachRosterScreen({super.key});
+  const CoachRosterScreen(
+      {super.key,
+      this.persistedBookings,
+      this.statusLabels = const {},
+      this.details = const {},
+      this.header});
+  final List<Booking>? persistedBookings;
+  final Map<String, String> statusLabels;
+  final Map<String, Widget> details;
+  final Widget? header;
 
   @override
   State<CoachRosterScreen> createState() => _CoachRosterScreenState();
@@ -32,14 +41,25 @@ class _CoachRosterScreenState extends State<CoachRosterScreen>
 
   static const _dayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
   static const _monthNames = [
-    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'May',
+    'Jun',
+    'Jul',
+    'Aug',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dec'
   ];
 
   @override
   void initState() {
     super.initState();
-    _reveal = AnimationController(vsync: this, duration: const Duration(milliseconds: 450))
+    _reveal = AnimationController(
+        vsync: this, duration: const Duration(milliseconds: 450))
       ..forward();
   }
 
@@ -81,7 +101,8 @@ class _CoachRosterScreenState extends State<CoachRosterScreen>
 
   @override
   Widget build(BuildContext context) {
-    final roster = context.watch<BookingBloc>().state.coachRoster;
+    final roster = widget.persistedBookings ??
+        context.watch<BookingBloc>().state.coachRoster;
     final days = _days;
     final selectedDay = days[_dayIndex];
     final now = DateTime.now();
@@ -95,11 +116,16 @@ class _CoachRosterScreenState extends State<CoachRosterScreen>
           ..sort((a, b) => a.start.compareTo(b.start)));
 
     final needsReply = roster
-        .where((b) => b.messages.isNotEmpty && b.messages.last.senderRole == 'Member')
+        .where((b) =>
+            b.messages.isNotEmpty && b.messages.last.senderRole == 'Member')
         .length;
-    final todayCount =
-        roster.where((b) => _isSameDay(b.start, DateTime(now.year, now.month, now.day))).length;
-    final weekCount = roster.where((b) => b.start.isAfter(now) && b.start.isBefore(weekEnd)).length;
+    final todayCount = roster
+        .where(
+            (b) => _isSameDay(b.start, DateTime(now.year, now.month, now.day)))
+        .length;
+    final weekCount = roster
+        .where((b) => b.start.isAfter(now) && b.start.isBefore(weekEnd))
+        .length;
 
     return Scaffold(
       appBar: AppBar(
@@ -113,8 +139,12 @@ class _CoachRosterScreenState extends State<CoachRosterScreen>
                 IconButton(
                   icon: const Icon(Icons.forum_outlined),
                   tooltip: 'Messages',
-                  onPressed: () => Navigator.push(context,
-                      MaterialPageRoute(builder: (_) => const CoachMessageInboxScreen())),
+                  onPressed: widget.persistedBookings != null
+                      ? null
+                      : () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (_) => const CoachMessageInboxScreen())),
                 ),
                 if (needsReply > 0)
                   Positioned(
@@ -122,10 +152,13 @@ class _CoachRosterScreenState extends State<CoachRosterScreen>
                     top: 6,
                     child: Container(
                       padding: const EdgeInsets.all(4),
-                      decoration: const BoxDecoration(color: AppColors.danger, shape: BoxShape.circle),
+                      decoration: const BoxDecoration(
+                          color: AppColors.danger, shape: BoxShape.circle),
                       child: Text('$needsReply',
                           style: const TextStyle(
-                              fontSize: 10, fontWeight: FontWeight.w700, color: Colors.white)),
+                              fontSize: 10,
+                              fontWeight: FontWeight.w700,
+                              color: Colors.white)),
                     ),
                   ),
               ],
@@ -135,14 +168,22 @@ class _CoachRosterScreenState extends State<CoachRosterScreen>
       ),
       body: CustomScrollView(
         slivers: [
+          if (widget.header != null)
+            SliverToBoxAdapter(
+                child: Padding(
+                    padding: const EdgeInsets.all(16), child: widget.header!)),
           SliverPadding(
             padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
             sliver: SliverToBoxAdapter(
               child: Row(
                 children: [
-                  Expanded(child: StatTile('${roster.length}', 'Sessions', compact: true)),
+                  Expanded(
+                      child: StatTile('${roster.length}', 'Sessions',
+                          compact: true)),
                   const SizedBox(width: 8),
-                  Expanded(child: StatTile('$weekCount', 'This week', compact: true)),
+                  Expanded(
+                      child:
+                          StatTile('$weekCount', 'This week', compact: true)),
                   const SizedBox(width: 8),
                   Expanded(
                       child: StatTile('$todayCount', 'Today',
@@ -158,7 +199,10 @@ class _CoachRosterScreenState extends State<CoachRosterScreen>
                 child: Text(
                   '${_monthNames[selectedDay.month - 1]} ${selectedDay.year}',
                   style: const TextStyle(
-                      fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 0.6, color: AppColors.inkSoft),
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 0.6,
+                      color: AppColors.inkSoft),
                 ),
               ),
             ),
@@ -172,7 +216,8 @@ class _CoachRosterScreenState extends State<CoachRosterScreen>
                   itemBuilder: (ctx, i) {
                     final d = days[i];
                     final selected = i == _dayIndex;
-                    final count = roster.where((b) => _isSameDay(b.start, d)).length;
+                    final count =
+                        roster.where((b) => _isSameDay(b.start, d)).length;
                     return Padding(
                       padding: const EdgeInsets.only(right: 8),
                       child: Material(
@@ -187,7 +232,10 @@ class _CoachRosterScreenState extends State<CoachRosterScreen>
                             width: 56,
                             decoration: BoxDecoration(
                               borderRadius: BorderRadius.circular(14),
-                              border: Border.all(color: selected ? AppColors.primary : AppColors.hairline),
+                              border: Border.all(
+                                  color: selected
+                                      ? AppColors.primary
+                                      : AppColors.hairline),
                             ),
                             child: Stack(
                               alignment: Alignment.center,
@@ -195,17 +243,24 @@ class _CoachRosterScreenState extends State<CoachRosterScreen>
                                 Column(
                                   mainAxisAlignment: MainAxisAlignment.center,
                                   children: [
-                                    Text(i == 0 ? 'Today' : _dayNames[d.weekday - 1],
+                                    Text(
+                                        i == 0
+                                            ? 'Today'
+                                            : _dayNames[d.weekday - 1],
                                         style: TextStyle(
                                             fontSize: 10.5,
                                             fontWeight: FontWeight.w600,
-                                            color: selected ? Colors.white70 : AppColors.inkSoft)),
+                                            color: selected
+                                                ? Colors.white70
+                                                : AppColors.inkSoft)),
                                     const SizedBox(height: 4),
                                     Text('${d.day}',
                                         style: TextStyle(
                                             fontSize: 19,
                                             fontWeight: FontWeight.w700,
-                                            color: selected ? Colors.white : AppColors.ink)),
+                                            color: selected
+                                                ? Colors.white
+                                                : AppColors.ink)),
                                   ],
                                 ),
                                 if (count > 0)
@@ -217,7 +272,9 @@ class _CoachRosterScreenState extends State<CoachRosterScreen>
                                       height: 7,
                                       decoration: BoxDecoration(
                                         shape: BoxShape.circle,
-                                        color: selected ? Colors.white : AppColors.accent,
+                                        color: selected
+                                            ? Colors.white
+                                            : AppColors.accent,
                                       ),
                                     ),
                                   ),
@@ -280,7 +337,8 @@ class _CoachRosterScreenState extends State<CoachRosterScreen>
                       style: Theme.of(context).textTheme.titleMedium,
                     ),
                   ),
-                  Text('${visible.length} session${visible.length == 1 ? '' : 's'}',
+                  Text(
+                      '${visible.length} session${visible.length == 1 ? '' : 's'}',
                       style: Theme.of(context).textTheme.bodyMedium),
                 ],
               ),
@@ -299,10 +357,13 @@ class _CoachRosterScreenState extends State<CoachRosterScreen>
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Icon(Icons.event_available_outlined, size: 40, color: AppColors.hairline),
+                      const Icon(Icons.event_available_outlined,
+                          size: 40, color: AppColors.hairline),
                       const SizedBox(height: 14),
                       Text(
-                        filtering ? 'No $_statusFilter sessions.' : 'No sessions this day.',
+                        filtering
+                            ? 'No $_statusFilter sessions.'
+                            : 'No sessions this day.',
                         textAlign: TextAlign.center,
                         style: Theme.of(context).textTheme.bodyMedium,
                       ),
@@ -318,7 +379,8 @@ class _CoachRosterScreenState extends State<CoachRosterScreen>
                 delegate: SliverChildBuilderDelegate(
                   (ctx, i) {
                     final start = (i / visible.length).clamp(0.0, 1.0);
-                    final end = ((i + 1) / visible.length * 0.7 + 0.3).clamp(0.0, 1.0);
+                    final end =
+                        ((i + 1) / visible.length * 0.7 + 0.3).clamp(0.0, 1.0);
                     final anim = CurvedAnimation(
                       parent: _reveal,
                       curve: Interval(start * 0.6, end, curve: Curves.easeOut),
@@ -326,9 +388,13 @@ class _CoachRosterScreenState extends State<CoachRosterScreen>
                     return FadeTransition(
                       opacity: anim,
                       child: SlideTransition(
-                        position: anim.drive(Tween(begin: const Offset(0, 0.05), end: Offset.zero)),
+                        position: anim.drive(Tween(
+                            begin: const Offset(0, 0.05), end: Offset.zero)),
                         child: _TimelineRow(
                           booking: visible[i],
+                          live: widget.persistedBookings != null,
+                          statusLabel: widget.statusLabels[visible[i].id],
+                          details: widget.details[visible[i].id],
                           isLast: i == visible.length - 1,
                           showConnector: !filtering,
                         ),
@@ -352,9 +418,18 @@ class _CoachRosterScreenState extends State<CoachRosterScreen>
 /// would misleadingly imply they are.
 class _TimelineRow extends StatelessWidget {
   final Booking booking;
+  final bool live;
+  final String? statusLabel;
+  final Widget? details;
   final bool isLast;
   final bool showConnector;
-  const _TimelineRow({required this.booking, required this.isLast, required this.showConnector});
+  const _TimelineRow(
+      {required this.booking,
+      this.live = false,
+      this.statusLabel,
+      this.details,
+      required this.isLast,
+      required this.showConnector});
 
   @override
   Widget build(BuildContext context) {
@@ -369,15 +444,21 @@ class _TimelineRow extends StatelessWidget {
             child: Column(
               children: [
                 Text('$h:$m',
-                    style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: AppColors.inkSoft)),
+                    style: const TextStyle(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.inkSoft)),
                 const SizedBox(height: 6),
                 Container(
                   width: 10,
                   height: 10,
-                  decoration: BoxDecoration(shape: BoxShape.circle, color: _statusColor(booking.status)),
+                  decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: _statusColor(booking.status)),
                 ),
                 if (showConnector && !isLast)
-                  Expanded(child: Container(width: 2, color: AppColors.hairline)),
+                  Expanded(
+                      child: Container(width: 2, color: AppColors.hairline)),
               ],
             ),
           ),
@@ -385,7 +466,8 @@ class _TimelineRow extends StatelessWidget {
           Expanded(
             child: Padding(
               padding: const EdgeInsets.only(bottom: 16),
-              child: _SessionCard(booking: booking),
+              child: _SessionCard(
+                  booking: booking, live: live, statusLabel: statusLabel, details: details),
             ),
           ),
         ],
@@ -430,19 +512,28 @@ class _ClientStats {
   });
 
   factory _ClientStats.of(BuildContext context, String memberName) {
-    final bookings = context.read<BookingRepository>().coachRoster.where((b) => b.memberName == memberName).toList()
+    final bookings = context
+        .read<BookingRepository>()
+        .coachRoster
+        .where((b) => b.memberName == memberName)
+        .toList()
       ..sort((a, b) => a.start.compareTo(b.start));
-    final completed = bookings.where((b) => b.status == BookingStatus.completed).toList();
-    final withNotes = [...completed]..sort((a, b) => b.start.compareTo(a.start));
+    final completed =
+        bookings.where((b) => b.status == BookingStatus.completed).toList();
+    final withNotes = [...completed]
+      ..sort((a, b) => b.start.compareTo(a.start));
     return _ClientStats(
       sessionsTogether: bookings.length,
       completed: completed.length,
-      cancelled: bookings.where((b) => b.status == BookingStatus.cancelled).length,
+      cancelled:
+          bookings.where((b) => b.status == BookingStatus.cancelled).length,
       revenue: completed.fold(0, (sum, b) => sum + b.fee),
       clientSince: bookings.first.start,
       mostRecentNote: withNotes.isEmpty
           ? null
-          : withNotes.firstWhere((b) => b.notes != null, orElse: () => withNotes.first).notes,
+          : withNotes
+              .firstWhere((b) => b.notes != null, orElse: () => withNotes.first)
+              .notes,
     );
   }
 }
@@ -450,15 +541,27 @@ class _ClientStats {
 void _showClientSnapshot(BuildContext context, Booking booking) {
   final stats = _ClientStats.of(context, booking.memberName);
   const months = [
-    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'May',
+    'Jun',
+    'Jul',
+    'Aug',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dec'
   ];
   showModalBottomSheet(
     context: context,
     backgroundColor: AppColors.surface,
-    shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+    shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
     builder: (ctx) => Padding(
-      padding: EdgeInsets.fromLTRB(20, 20, 20, 20 + MediaQuery.of(ctx).padding.bottom),
+      padding: EdgeInsets.fromLTRB(
+          20, 20, 20, 20 + MediaQuery.of(ctx).padding.bottom),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -468,11 +571,20 @@ void _showClientSnapshot(BuildContext context, Booking booking) {
               Container(
                 width: 48,
                 height: 48,
-                decoration: BoxDecoration(color: AppColors.primaryTint, borderRadius: BorderRadius.circular(14)),
+                decoration: BoxDecoration(
+                    color: AppColors.primaryTint,
+                    borderRadius: BorderRadius.circular(14)),
                 child: Center(
                   child: Text(
-                    booking.memberName.split(' ').map((w) => w[0]).take(2).join(),
-                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: AppColors.primary),
+                    booking.memberName
+                        .split(' ')
+                        .map((w) => w[0])
+                        .take(2)
+                        .join(),
+                    style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.primary),
                   ),
                 ),
               ),
@@ -481,7 +593,8 @@ void _showClientSnapshot(BuildContext context, Booking booking) {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(booking.memberName, style: Theme.of(ctx).textTheme.titleLarge),
+                    Text(booking.memberName,
+                        style: Theme.of(ctx).textTheme.titleLarge),
                     Text(
                       'Client since ${stats.clientSince.day} ${months[stats.clientSince.month - 1]} ${stats.clientSince.year}',
                       style: Theme.of(ctx).textTheme.bodyMedium,
@@ -494,12 +607,17 @@ void _showClientSnapshot(BuildContext context, Booking booking) {
           const SizedBox(height: 18),
           Row(
             children: [
-              Expanded(child: StatTile('${stats.sessionsTogether}', 'Together', compact: true)),
-              const SizedBox(width: 8),
-              Expanded(child: StatTile('${stats.completed}', 'Completed', compact: true)),
+              Expanded(
+                  child: StatTile('${stats.sessionsTogether}', 'Together',
+                      compact: true)),
               const SizedBox(width: 8),
               Expanded(
-                  child: StatTile('RM ${stats.revenue.toStringAsFixed(0)}', 'Revenue',
+                  child: StatTile('${stats.completed}', 'Completed',
+                      compact: true)),
+              const SizedBox(width: 8),
+              Expanded(
+                  child: StatTile(
+                      'RM ${stats.revenue.toStringAsFixed(0)}', 'Revenue',
                       compact: true, valueColor: AppColors.success)),
             ],
           ),
@@ -508,7 +626,8 @@ void _showClientSnapshot(BuildContext context, Booking booking) {
             const Eyebrow('Most recent note'),
             Panel(
               background: AppColors.surfaceAlt,
-              child: Text(stats.mostRecentNote!, style: const TextStyle(fontSize: 13.5, height: 1.45)),
+              child: Text(stats.mostRecentNote!,
+                  style: const TextStyle(fontSize: 13.5, height: 1.45)),
             ),
           ],
           const SizedBox(height: 16),
@@ -516,11 +635,15 @@ void _showClientSnapshot(BuildContext context, Booking booking) {
             children: [
               Expanded(
                 child: OutlinedButton.icon(
-                  style: OutlinedButton.styleFrom(minimumSize: const Size(0, 46)),
+                  style:
+                      OutlinedButton.styleFrom(minimumSize: const Size(0, 46)),
                   onPressed: () {
                     Navigator.pop(ctx);
-                    Navigator.push(context,
-                        MaterialPageRoute(builder: (_) => ClientPostureScreen(name: booking.memberName)));
+                    Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                            builder: (_) =>
+                                ClientPostureScreen(name: booking.memberName)));
                   },
                   icon: const Icon(Icons.insights_rounded, size: 18),
                   label: const Text('Form history'),
@@ -532,8 +655,11 @@ void _showClientSnapshot(BuildContext context, Booking booking) {
                   style: FilledButton.styleFrom(minimumSize: const Size(0, 46)),
                   onPressed: () {
                     Navigator.pop(ctx);
-                    Navigator.push(context,
-                        MaterialPageRoute(builder: (_) => CoachMessageThreadScreen(booking: booking)));
+                    Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                            builder: (_) =>
+                                CoachMessageThreadScreen(booking: booking)));
                   },
                   icon: const Icon(Icons.chat_bubble_outline_rounded, size: 18),
                   label: const Text('Message'),
@@ -562,20 +688,31 @@ void _showClientSnapshot(BuildContext context, Booking booking) {
 /// is always exactly two buttons and never needs to shrink their labels.
 class _SessionCard extends StatelessWidget {
   final Booking booking;
-  const _SessionCard({required this.booking});
+  final bool live;
+  final String? statusLabel;
+  final Widget? details;
+  const _SessionCard(
+      {required this.booking,
+      this.live = false,
+      this.statusLabel,
+      this.details});
 
   @override
   Widget build(BuildContext context) {
     final isPast = booking.start.isBefore(DateTime.now());
-    final stats = _ClientStats.of(context, booking.memberName);
-    final relationship = stats.sessionsTogether <= 1
-        ? 'New client'
-        : '${_ordinal(stats.sessionsTogether)} session together';
+    final stats = live ? null : _ClientStats.of(context, booking.memberName);
+    final relationship = live
+        ? '-'
+        : stats!.sessionsTogether <= 1
+            ? 'New client'
+            : '${_ordinal(stats.sessionsTogether)} session together';
 
     return ClipRRect(
       borderRadius: BorderRadius.circular(16),
       child: Container(
-        decoration: BoxDecoration(color: AppColors.surface, border: Border.all(color: AppColors.hairline)),
+        decoration: BoxDecoration(
+            color: AppColors.surface,
+            border: Border.all(color: AppColors.hairline)),
         child: IntrinsicHeight(
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -592,7 +729,9 @@ class _SessionCard extends StatelessWidget {
                         children: [
                           Expanded(
                             child: InkWell(
-                              onTap: () => _showClientSnapshot(context, booking),
+                              onTap: live
+                                  ? null
+                                  : () => _showClientSnapshot(context, booking),
                               borderRadius: BorderRadius.circular(10),
                               child: Row(
                                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -606,42 +745,64 @@ class _SessionCard extends StatelessWidget {
                                     ),
                                     child: Center(
                                       child: Text(
-                                        booking.memberName.split(' ').map((w) => w[0]).take(2).join(),
+                                        booking.memberName
+                                            .split(' ')
+                                            .map((w) => w[0])
+                                            .take(2)
+                                            .join(),
                                         style: const TextStyle(
-                                            fontSize: 15, fontWeight: FontWeight.w700, color: AppColors.primary),
+                                            fontSize: 15,
+                                            fontWeight: FontWeight.w700,
+                                            color: AppColors.primary),
                                       ),
                                     ),
                                   ),
                                   const SizedBox(width: 14),
                                   Expanded(
                                     child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
                                       children: [
-                                        Text(booking.memberName, style: Theme.of(context).textTheme.titleMedium),
+                                        Text(booking.memberName,
+                                            style: Theme.of(context)
+                                                .textTheme
+                                                .titleMedium),
                                         const SizedBox(height: 3),
                                         Wrap(
                                           spacing: 10,
                                           runSpacing: 3,
-                                          crossAxisAlignment: WrapCrossAlignment.center,
+                                          crossAxisAlignment:
+                                              WrapCrossAlignment.center,
                                           children: [
-                                            _InfoBit(Icons.payments_outlined, 'RM ${booking.fee.toStringAsFixed(0)}'),
-                                            _InfoBit(Icons.schedule_outlined, '${booking.durationMin} min'),
-                                            _InfoBit(Icons.location_on_outlined, booking.branch),
+                                            _InfoBit(
+                                                Icons.payments_outlined,
+                                                live
+                                                    ? '-'
+                                                    : 'RM ${booking.fee.toStringAsFixed(0)}'),
+                                            _InfoBit(Icons.schedule_outlined,
+                                                '${booking.durationMin} min'),
+                                            _InfoBit(Icons.location_on_outlined,
+                                                booking.branch),
                                           ],
                                         ),
                                         const SizedBox(height: 4),
                                         Row(
                                           children: [
-                                            const Icon(Icons.badge_outlined, size: 12, color: AppColors.primary),
+                                            const Icon(Icons.badge_outlined,
+                                                size: 12,
+                                                color: AppColors.primary),
                                             const SizedBox(width: 4),
                                             Flexible(
                                               child: Text(relationship,
                                                   maxLines: 1,
-                                                  overflow: TextOverflow.ellipsis,
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
                                                   style: const TextStyle(
                                                       fontSize: 11.5,
-                                                      fontWeight: FontWeight.w600,
-                                                      color: AppColors.primary)),
+                                                      fontWeight:
+                                                          FontWeight.w600,
+                                                      color:
+                                                          AppColors.primary)),
                                             ),
                                           ],
                                         ),
@@ -656,7 +817,7 @@ class _SessionCard extends StatelessWidget {
                           Column(
                             crossAxisAlignment: CrossAxisAlignment.end,
                             children: [
-                              statusPill(booking.status.label),
+                              statusPill(statusLabel ?? booking.status.label),
                               if (!isPast) ...[
                                 const SizedBox(height: 6),
                                 SizedBox(
@@ -669,13 +830,16 @@ class _SessionCard extends StatelessWidget {
                                       foregroundColor: AppColors.danger,
                                     ),
                                     tooltip: 'Cancel session',
-                                    onPressed: () => confirmSheet(context,
-                                        title: 'Cancel this session?',
-                                        message:
-                                            'The member is notified and the slot reopens for booking. Any refund is handled separately by staff.',
-                                        confirmLabel: 'Cancel session',
-                                        destructive: true),
-                                    icon: const Icon(Icons.close_rounded, size: 15),
+                                    onPressed: live
+                                        ? null
+                                        : () => confirmSheet(context,
+                                            title: 'Cancel this session?',
+                                            message:
+                                                'The member is notified and the slot reopens for booking. Any refund is handled separately by staff.',
+                                            confirmLabel: 'Cancel session',
+                                            destructive: true),
+                                    icon: const Icon(Icons.close_rounded,
+                                        size: 15),
                                   ),
                                 ),
                               ],
@@ -683,23 +847,27 @@ class _SessionCard extends StatelessWidget {
                           ),
                         ],
                       ),
+                      if (details != null) details!,
                       if (booking.notes != null) ...[
                         const SizedBox(height: 10),
                         Container(
                           width: double.infinity,
                           padding: const EdgeInsets.all(10),
                           decoration: BoxDecoration(
-                              color: AppColors.surfaceAlt, borderRadius: BorderRadius.circular(10)),
+                              color: AppColors.surfaceAlt,
+                              borderRadius: BorderRadius.circular(10)),
                           child: Row(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              const Icon(Icons.sticky_note_2_outlined, size: 14, color: AppColors.inkSoft),
+                              const Icon(Icons.sticky_note_2_outlined,
+                                  size: 14, color: AppColors.inkSoft),
                               const SizedBox(width: 8),
                               Expanded(
                                 child: Text(booking.notes!,
                                     maxLines: 2,
                                     overflow: TextOverflow.ellipsis,
-                                    style: const TextStyle(fontSize: 12.5, height: 1.4)),
+                                    style: const TextStyle(
+                                        fontSize: 12.5, height: 1.4)),
                               ),
                             ],
                           ),
@@ -713,10 +881,13 @@ class _SessionCard extends StatelessWidget {
                               icon: Icons.insights_rounded,
                               label: 'Form history',
                               filled: false,
-                              onPressed: () => Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                      builder: (_) => ClientPostureScreen(name: booking.memberName))),
+                              onPressed: live
+                                  ? null
+                                  : () => Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                          builder: (_) => ClientPostureScreen(
+                                              name: booking.memberName))),
                             ),
                           ),
                           const SizedBox(width: 8),
@@ -726,10 +897,14 @@ class _SessionCard extends StatelessWidget {
                                 icon: Icons.edit_note_rounded,
                                 label: 'Write notes',
                                 filled: true,
-                                onPressed: () => Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                        builder: (_) => ConsultationNotesScreen(booking: booking))),
+                                onPressed: live
+                                    ? null
+                                    : () => Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                            builder: (_) =>
+                                                ConsultationNotesScreen(
+                                                    booking: booking))),
                               ),
                             )
                           else
@@ -738,10 +913,14 @@ class _SessionCard extends StatelessWidget {
                                 icon: Icons.chat_bubble_outline_rounded,
                                 label: 'Message',
                                 filled: false,
-                                onPressed: () => Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                        builder: (_) => CoachMessageThreadScreen(booking: booking))),
+                                onPressed: live
+                                    ? null
+                                    : () => Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                            builder: (_) =>
+                                                CoachMessageThreadScreen(
+                                                    booking: booking))),
                               ),
                             ),
                         ],
@@ -789,7 +968,10 @@ class _InfoBit extends StatelessWidget {
         Icon(icon, size: 12, color: AppColors.inkSoft),
         const SizedBox(width: 3),
         Text(label,
-            style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w500, color: AppColors.inkSoft)),
+            style: const TextStyle(
+                fontSize: 11.5,
+                fontWeight: FontWeight.w500,
+                color: AppColors.inkSoft)),
       ],
     );
   }
@@ -806,7 +988,7 @@ class _ActionButton extends StatelessWidget {
   final IconData icon;
   final String label;
   final bool filled;
-  final VoidCallback onPressed;
+  final VoidCallback? onPressed;
   const _ActionButton({
     required this.icon,
     required this.label,
@@ -827,7 +1009,9 @@ class _ActionButton extends StatelessWidget {
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
-                fontSize: 13, fontWeight: FontWeight.w600, color: filled ? Colors.white : AppColors.primary),
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: filled ? Colors.white : AppColors.primary),
           ),
         ),
       ],
@@ -836,12 +1020,14 @@ class _ActionButton extends StatelessWidget {
       height: 42,
       child: filled
           ? FilledButton(
-              style: FilledButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 8)),
+              style: FilledButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 8)),
               onPressed: onPressed,
               child: child,
             )
           : OutlinedButton(
-              style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 8)),
+              style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 8)),
               onPressed: onPressed,
               child: child,
             ),

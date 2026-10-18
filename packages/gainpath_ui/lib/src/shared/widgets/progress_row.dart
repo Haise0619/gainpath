@@ -20,9 +20,10 @@ class ProgressRow extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(label,
+              Expanded(child: Text(label,
                   style: const TextStyle(
-                      fontSize: 14, fontWeight: FontWeight.w600)),
+                      fontSize: 14, fontWeight: FontWeight.w600))),
+              const SizedBox(width: 8),
               Text(trailing,
                   style: const TextStyle(
                       fontSize: 13,

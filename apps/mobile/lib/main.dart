@@ -10,7 +10,7 @@ Future<void> main() => launchGainPathApp();
 
 Future<void> launchGainPathApp({BackendConfig? backendConfig}) async {
   WidgetsFlutterBinding.ensureInitialized();
-  final config = backendConfig ?? BackendConfig.fromEnvironment();
+  final config = backendConfig ?? const BackendConfig(BackendMode.firebase);
   if (config.isFirebase) {
     try {
       await initializeGainPathFirebase();
@@ -57,10 +57,8 @@ class FirebaseSetupRequiredApp extends StatelessWidget {
                       'flutter run -d <android-device-id> --dart-define=BACKEND=firebase',
                     ),
                     const SizedBox(height: 24),
-                    const Text('To preview the Windows interface with demo data:'),
-                    const SelectableText(
-                      'flutter run -d windows --dart-define=BACKEND=mock',
-                    ),
+                    const Text(
+                        'GainPath uses connected account data. No sample-account fallback is enabled.'),
                   ],
                 ),
               ),

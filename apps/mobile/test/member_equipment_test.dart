@@ -1,3 +1,4 @@
+import 'package:gainpath_mobile/features/workout/presentation/member/equipment_scanner_screen.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -71,9 +72,13 @@ void main() {
                 syncStore: sync,
                 activeScope: active)));
     await tester.pumpAndSettle();
-    await tester.drag(find.byType(CustomScrollView).first, const Offset(0,-800));
+    await tester.drag(
+        find.byType(CustomScrollView).first, const Offset(0, -800));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Equipment'));
+    await tester.pumpAndSettle();
+    expect(find.byType(EquipmentScannerScreen), findsOneWidget);
+    await tester.tap(find.byTooltip('Browse all equipment'));
     await tester.pumpAndSettle();
     expect(find.byType(EquipmentBrowseScreen), findsOneWidget);
     expect(find.text('Published equipment'), findsOneWidget);

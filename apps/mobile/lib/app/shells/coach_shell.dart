@@ -25,7 +25,8 @@ class CoachShell extends StatefulWidget {
 class _CoachShellState extends State<CoachShell> {
   late int _index = widget.initialIndex;
   CoachModule8Dependencies? _module8;
-  bool _availabilityVisited = false, _rosterVisited = false;
+  late bool _availabilityVisited = widget.initialIndex == 1;
+  late bool _rosterVisited = widget.initialIndex == 0;
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
@@ -56,9 +57,7 @@ class _CoachShellState extends State<CoachShell> {
               : widget.restrictUnsupportedWorkflows
                   ? unavailable('Availability')
                   : const AvailabilityScreen(),
-          widget.restrictUnsupportedWorkflows
-              ? unavailable('Earnings')
-              : const EarningsScreen(),
+          EarningsScreen(connected: widget.restrictUnsupportedWorkflows),
           CoachAccountScreen(
               profileRepository: dependencies.profile,
               accountRepository: dependencies.account),

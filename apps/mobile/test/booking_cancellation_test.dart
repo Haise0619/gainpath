@@ -121,21 +121,26 @@ void main() {
         home: LiveBookingListView(
             repository: fake, cancellation: fake, isCurrent: () => true)));
     await tester.pumpAndSettle();
-    await tester.ensureVisible(find.text('Cancel pending hold'));
-    await tester.tap(find.text('Cancel pending hold'));
+    await tester.ensureVisible(find.widgetWithText(OutlinedButton, 'Cancel'));
+    await tester.tap(find.widgetWithText(OutlinedButton, 'Cancel'));
     await tester.pumpAndSettle();
     expect(fake.requests, isEmpty);
     await tester.tap(find.text('Cancel hold'));
     await tester.pumpAndSettle();
     expect(fake.requests.length, 1);
-    expect(find.text('cancelled'), findsOneWidget);
-    expect(find.text('Cancel pending hold'), findsNothing);
+    expect(find.text('cancelled'), findsNWidgets(2));
+    expect(find.widgetWithText(OutlinedButton, 'Cancel'), findsNothing);
     await tester.pumpWidget(MaterialApp(
         home: LiveBookingListView(
             key: const ValueKey('readonly'),
             repository: LifecycleFake(),
             isCurrent: () => true)));
     await tester.pumpAndSettle();
-    expect(find.text('Cancel pending hold'), findsNothing);
+    expect(
+        tester
+            .widget<OutlinedButton>(
+                find.widgetWithText(OutlinedButton, 'Cancel'))
+            .onPressed,
+        isNull);
   });
 }

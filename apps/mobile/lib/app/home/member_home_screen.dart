@@ -52,6 +52,8 @@ class MemberHomeScreen extends StatefulWidget {
       this.onOpenProgress,
       this.onOpenHistory,
       this.onOpenEquipment,
+      this.onOpenCoaches,
+      this.onOpenBookings,
       this.onOpenWorkout});
 
   final AuthSession? liveSession;
@@ -68,6 +70,7 @@ class MemberHomeScreen extends StatefulWidget {
   final Future<void> Function()? onRefreshAnnouncements;
   final VoidCallback? onOpenProgress, onOpenHistory;
   final VoidCallback? onOpenEquipment;
+  final VoidCallback? onOpenCoaches, onOpenBookings;
   final void Function(LocalWorkoutProgressRecord)? onOpenWorkout;
 
   @override
@@ -174,7 +177,7 @@ class _MemberHomeScreenState extends State<MemberHomeScreen>
     return Scaffold(
       floatingActionButton: FloatingActionButton.extended(
         onPressed: live
-            ? () => showUnavailable(context)
+            ? () => _go(const ChatbotScreen(connected: true))
             : () => _go(const ChatbotScreen()),
         backgroundColor: AppColors.primary,
         foregroundColor: Colors.white,
@@ -223,7 +226,7 @@ class _MemberHomeScreenState extends State<MemberHomeScreen>
                     reward: RewardPolicy.dailyCheckIn,
                   ),
                   const SizedBox(height: 20),
-                  Eyebrow(live ? 'Available workout' : "Today's session"),
+                  const Eyebrow("Today's session"),
                   _TodayWorkoutCard(
                       live: live,
                       publishedRoutine: widget.publishedRoutine,
@@ -263,11 +266,14 @@ class _MemberHomeScreenState extends State<MemberHomeScreen>
                         child: const Text('View local workout history')),
                   ],
                   const SizedBox(height: 20),
-                  if (nextBooking != null) ...[
+                  if (live || nextBooking != null) ...[
                     const Eyebrow('Next with a coach'),
                     _NextSessionCard(
                       booking: nextBooking,
-                      onTap: () => _go(const BookingScheduleScreen()),
+                      onTap: live
+                          ? widget.onOpenBookings ??
+                              () => showUnavailable(context)
+                          : () => _go(const BookingScheduleScreen()),
                     ),
                     const SizedBox(height: 20),
                   ],
@@ -276,19 +282,23 @@ class _MemberHomeScreenState extends State<MemberHomeScreen>
                       onSelect: _go,
                       enabled: !live,
                       onOpenEquipment: widget.onOpenEquipment,
+                      onOpenCoaches: widget.onOpenCoaches,
+                      onOpenBookings: widget.onOpenBookings,
                       onOpenProgress: widget.onOpenProgress),
                   const SizedBox(height: 20),
                   const Eyebrow('Goal progress'),
                   _GoalPreviewCard(
+                      live: live,
                       liveProfile: widget.liveProfile,
                       onTap: live
-                          ? () => showUnavailable(context)
+                          ? () => _go(const GoalProgressScreen(live: true))
                           : () => _go(const GoalProgressScreen())),
                   const SizedBox(height: 20),
                   _MembershipStrip(
                       live: live,
                       onTap: live
-                          ? () => showUnavailable(context)
+                          ? () => _go(
+                              const MembershipDashboardScreen(connected: true))
                           : () => _go(const MembershipDashboardScreen())),
                 ],
               ),
@@ -582,7 +592,7 @@ class _StreakCard extends StatelessWidget {
                     children: [
                       Text(
                           live
-                              ? 'Streak unavailable'
+                              ? '- day streak'
                               : '${context.watch<GamificationBloc>().state.streak}-day streak',
                           style: Theme.of(context).textTheme.titleMedium),
                       Text(
@@ -735,6 +745,8 @@ class _TodayWorkoutCard extends StatelessWidget {
           Wrap(
             spacing: 6,
             runSpacing: 6,
+            // Keep the exercise chips in the shared layout while the routine
+            // is unavailable, without implying that sample exercises exist.
             children: (live
                     ? publishedRoutine?.exercises ?? <Exercise>[]
                     : context.read<WorkoutRepository>().routine)
@@ -754,6 +766,22 @@ class _TodayWorkoutCard extends StatelessWidget {
                     ))
                 .toList(),
           ),
+          if (live && publishedRoutine == null)
+            Wrap(
+              spacing: 6,
+              children: List.generate(
+                  3,
+                  (_) => Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.16),
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                        child: const Text('-',
+                            style: TextStyle(color: Colors.white)),
+                      )),
+            ),
           const SizedBox(height: 16),
           SizedBox(
             width: double.infinity,
@@ -797,9 +825,8 @@ class _RingStatsRow extends StatelessWidget {
         Expanded(
           child: _RingStat(
             value: live ? 0 : 0.84,
-            label: live ? 'Full reps' : 'Avg form',
-            display:
-                live ? (progress?.weeklyRepetitions.toString() ?? '—') : '84%',
+            label: 'Avg form',
+            display: live ? '-' : '84%',
             color: AppColors.success,
             icon: Icons.verified_rounded,
           ),
@@ -808,12 +835,8 @@ class _RingStatsRow extends StatelessWidget {
         Expanded(
           child: _RingStat(
             value: live ? 0 : 12 / 14,
-            label: live ? 'Coverage' : 'To badge',
-            display: live
-                ? (progress == null
-                    ? '—'
-                    : localProgressCoverage(progress!.weeklyCoverage))
-                : '12/14',
+            label: 'To badge',
+            display: live ? '-' : '12/14',
             color: AppColors.accent,
             icon: Icons.military_tech_rounded,
           ),
@@ -914,12 +937,12 @@ class _RingPainter extends CustomPainter {
 }
 
 class _NextSessionCard extends StatelessWidget {
-  final Booking booking;
+  final Booking? booking;
   final VoidCallback onTap;
   const _NextSessionCard({required this.booking, required this.onTap});
 
   String get _countdown {
-    final diff = booking.start.difference(DateTime.now());
+    final diff = booking!.start.difference(DateTime.now());
     if (diff.inDays >= 1) {
       return 'in ${diff.inDays} day${diff.inDays == 1 ? '' : 's'}';
     }
@@ -943,9 +966,10 @@ class _NextSessionCard extends StatelessWidget {
       'Nov',
       'Dec'
     ];
-    final d = booking.start;
-    final time =
-        '${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
+    final d = booking?.start;
+    final time = d == null
+        ? '-'
+        : '${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
 
     return Panel(
       onTap: onTap,
@@ -961,12 +985,12 @@ class _NextSessionCard extends StatelessWidget {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Text('${d.day}',
+                Text(d == null ? '-' : '${d.day}',
                     style: const TextStyle(
                         fontSize: 17,
                         fontWeight: FontWeight.w800,
                         color: AppColors.primary)),
-                Text(months[d.month - 1],
+                Text(d == null ? '-' : months[d.month - 1],
                     style: const TextStyle(
                         fontSize: 10,
                         fontWeight: FontWeight.w700,
@@ -979,15 +1003,15 @@ class _NextSessionCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('with ${booking.coachName}',
+                Text(booking == null ? 'with -' : 'with ${booking!.coachName}',
                     style: Theme.of(context).textTheme.titleMedium),
                 const SizedBox(height: 2),
-                Text('$time  ·  $_countdown',
+                Text(booking == null ? '-  ·  -' : '$time  ·  $_countdown',
                     style: Theme.of(context).textTheme.bodyMedium),
               ],
             ),
           ),
-          statusPill(booking.status.label),
+          statusPill(booking?.status.label ?? '-'),
           const SizedBox(width: 6),
           const Icon(Icons.arrow_forward_ios_rounded,
               size: 14, color: AppColors.inkSoft),
@@ -1004,10 +1028,13 @@ class _QuickActionsGrid extends StatelessWidget {
   final bool enabled;
   final VoidCallback? onOpenProgress;
   final VoidCallback? onOpenEquipment;
+  final VoidCallback? onOpenCoaches, onOpenBookings;
   const _QuickActionsGrid(
       {required this.onSelect,
       this.enabled = true,
       this.onOpenProgress,
+      this.onOpenCoaches,
+      this.onOpenBookings,
       this.onOpenEquipment});
 
   @override
@@ -1016,17 +1043,20 @@ class _QuickActionsGrid extends StatelessWidget {
       _QuickAction(Icons.insights_rounded, 'Progress', AppColors.primary,
           onOpenProgress ?? () => onSelect(const ProgressDashboardScreen())),
       _QuickAction(Icons.emoji_events_rounded, 'Rewards', AppColors.accent,
-          () => onSelect(const GamificationDashboardScreen())),
+          () => onSelect(GamificationDashboardScreen(live: !enabled))),
       _QuickAction(Icons.people_alt_rounded, 'Coaches', AppColors.info,
-          () => onSelect(const BrowseCoachesScreen())),
+          onOpenCoaches ?? () => onSelect(const BrowseCoachesScreen())),
       _QuickAction(Icons.event_note_rounded, 'Bookings', AppColors.success,
-          () => onSelect(const BookingScheduleScreen())),
+          onOpenBookings ?? () => onSelect(const BookingScheduleScreen())),
       _QuickAction(Icons.leaderboard_rounded, 'Ranking', AppColors.warning,
           () => onSelect(const LeaderboardScreen())),
       _QuickAction(Icons.sports_esports_rounded, 'Mini-games',
           AppColors.primarySoft, () => onSelect(const MiniGamesScreen())),
-      _QuickAction(Icons.card_membership_rounded, 'Membership',
-          AppColors.primary, () => onSelect(const MembershipDashboardScreen())),
+      _QuickAction(
+          Icons.card_membership_rounded,
+          'Membership',
+          AppColors.primary,
+          () => onSelect(MembershipDashboardScreen(connected: !enabled))),
       _QuickAction(Icons.bookmark_rounded, 'Saved tips', AppColors.info,
           () => onSelect(const SavedAdviceScreen())),
       _QuickAction(
@@ -1036,21 +1066,32 @@ class _QuickActionsGrid extends StatelessWidget {
           onOpenEquipment ?? () => onSelect(const EquipmentScannerScreen())),
     ];
 
-    return GridView.count(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      crossAxisCount: 4,
-      crossAxisSpacing: 10,
-      mainAxisSpacing: 10,
-      childAspectRatio: 0.82,
-      children: actions
-          .map((a) => _QuickActionTile(
-              action: a,
-              enabled: enabled ||
-                  (a.label == 'Progress' && onOpenProgress != null) ||
-                  (a.label == 'Equipment' && onOpenEquipment != null)))
-          .toList(),
-    );
+    return LayoutBuilder(builder: (context, constraints) {
+      final textScale = MediaQuery.textScalerOf(context).scale(11) / 11;
+      final columns =
+          (constraints.maxWidth / (72 * textScale)).floor().clamp(2, 4);
+      final tileWidth = (constraints.maxWidth - 10 * (columns - 1)) / columns;
+      return GridView.count(
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        crossAxisCount: columns,
+        crossAxisSpacing: 10,
+        mainAxisSpacing: 10,
+        childAspectRatio:
+            tileWidth / math.max(tileWidth / 0.82, 72 + 28 * textScale),
+        children: actions
+            .map((a) => _QuickActionTile(
+                action: a,
+                enabled: enabled ||
+                    a.label == 'Rewards' ||
+                    a.label == 'Membership' ||
+                    (a.label == 'Progress' && onOpenProgress != null) ||
+                    (a.label == 'Coaches' && onOpenCoaches != null) ||
+                    (a.label == 'Bookings' && onOpenBookings != null) ||
+                    (a.label == 'Equipment' && onOpenEquipment != null)))
+            .toList(),
+      );
+    });
   }
 }
 
@@ -1097,7 +1138,7 @@ class _QuickActionTile extends StatelessWidget {
               Text(
                 action.label,
                 textAlign: TextAlign.center,
-                maxLines: 1,
+                maxLines: 2,
                 overflow: TextOverflow.ellipsis,
                 style:
                     const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
@@ -1111,9 +1152,11 @@ class _QuickActionTile extends StatelessWidget {
 }
 
 class _GoalPreviewCard extends StatelessWidget {
+  final bool live;
   final VoidCallback? onTap;
   final FitnessProfile? liveProfile;
-  const _GoalPreviewCard({required this.onTap, this.liveProfile});
+  const _GoalPreviewCard(
+      {required this.onTap, this.liveProfile, this.live = false});
 
   @override
   Widget build(BuildContext context) {
@@ -1121,14 +1164,16 @@ class _GoalPreviewCard extends StatelessWidget {
       onTap: onTap,
       child: Column(
         children: [
-          if (liveProfile == null) ...[
+          if (!live) ...[
             const ProgressRow('Train 4x per week', 0.75, '3 of 4'),
             const ProgressRow('Hit 85% average form', 0.99, '84 of 85',
                 color: AppColors.accent),
           ] else ...[
-            Text(liveProfile!.goals.map((goal) => goal.label).join(' · ')),
-            const SizedBox(height: 8),
-            const Text('Goal progress is not connected yet.'),
+            const ProgressRow('Train 4x per week', 0, '-'),
+            const ProgressRow('Hit 85% average form', 0, '-',
+                color: AppColors.accent),
+            if (liveProfile != null)
+              Text(liveProfile!.goals.map((goal) => goal.label).join(' · ')),
           ],
           const SizedBox(height: 6),
           const Row(
@@ -1171,7 +1216,7 @@ class _MembershipStrip extends StatelessWidget {
               children: [
                 Text(
                     live
-                        ? 'Membership unavailable'
+                        ? '- membership'
                         : '${context.read<MemberProfileRepository>().memberTier} membership',
                     style: Theme.of(context)
                         .textTheme
@@ -1179,7 +1224,7 @@ class _MembershipStrip extends StatelessWidget {
                         ?.copyWith(fontSize: 14)),
                 Text(
                     live
-                        ? 'Details are not connected yet.'
+                        ? 'Renews -  ·  - days left'
                         : 'Renews 12 Oct  ·  28 days left',
                     style: Theme.of(context)
                         .textTheme

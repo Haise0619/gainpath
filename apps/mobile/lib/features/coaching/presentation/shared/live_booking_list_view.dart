@@ -2,6 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:gainpath_domain/gainpath_domain.dart';
 import '../../application/live_booking_cubit.dart';
+import '../member/booking_schedule_screen.dart';
+import '../coach/roster_screen.dart';
+import 'persisted_booking_presentation.dart';
+import 'package:gainpath_ui/gainpath_ui.dart';
 import '../../application/booking_cancellation_cubit.dart';
 
 class LiveBookingListView extends StatefulWidget {
@@ -60,95 +64,96 @@ class _LiveBookingListViewState extends State<LiveBookingListView> {
   }
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-      appBar: AppBar(title: Text(widget.title), actions: [
-        IconButton(
-            tooltip: 'Refresh bookings',
-            onPressed: () {
-              if (!cancellation.state.busy) controller.refresh();
-            },
-            icon: const Icon(Icons.refresh))
-      ]),
-      body: BlocBuilder<BookingCancellationCubit, BookingCancellationState>(
-          bloc: cancellation,
-          builder: (context, action) => BlocBuilder<BookingListCubit,
-                  BookingListState>(
-              bloc: controller,
-              builder: (context, state) {
-                if (!widget.isCurrent()) {
-                  return const Center(
-                      child: Text('Bookings unavailable for this session.'));
-                }
-                return ListView(padding: const EdgeInsets.all(16), children: [
-                  const Text(
-                      'Upcoming persisted records. Holds are not paid reservations. No confirmation or payment is available here.'),
-                  if (state.busy) const LinearProgressIndicator(),
-                  if (state.message != null) Text(state.message!),
-                  if (action.busy) const LinearProgressIndicator(),
-                  if (action.message != null) Text(action.message!),
-                  if (action.uncertain && action.request != null) ...[
-                    const Text(
-                        'Cancellation outcome unknown. Retry the same request or refresh server status. Leaving this screen does not undo a committed cancellation.'),
-                    TextButton(
-                        onPressed: action.busy || state.busy
-                            ? null
-                            : () =>
-                                _cancel(action.request!.bookingId, retry: true),
-                        child: const Text('Retry same cancellation')),
-                  ],
-                  if (state.page != null)
-                    Text(
-                        '${state.page!.firstLocalDate} – ${state.page!.throughLocalDate} · ${state.page!.timeZone}'),
-                  if (!state.busy &&
-                      state.page != null &&
-                      state.records.isEmpty)
-                    const Text('No bookings in this upcoming range.'),
-                  for (final record in state.records)
-                    Card(
-                        child: Padding(
-                            padding: const EdgeInsets.all(16),
-                            child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text('Booking ${record.bookingId}',
-                                      style: Theme.of(context)
-                                          .textTheme
-                                          .titleMedium),
-                                  Text(bookingStatusLabel(
-                                      record, state.page!.serverNowMillis)),
-                                  Text(
-                                      '${record.localDate} · ${record.startLabel} – ${record.endLabel}'),
-                                  Text('Original timezone: ${record.timeZone}'),
-                                  if (record.timeZone != state.page!.timeZone)
-                                    const Text(
-                                        'Timezone differs from current policy; review original times.'),
-                                  Text('Hold expiry: ${record.expiryLabel}'),
-                                  if (record.resolution != null)
-                                    Text(record.resolution == 'hold_expired'
-                                        ? 'Closed by server hold expiry.'
-                                        : 'Closed by Member cancellation.'),
-                                  Text(
-                                      'Coach: ${record.coachId} · Member: ${record.memberId}'),
-                                  Text(
-                                      'Branch: ${record.branchId} · ${record.durationMinutes} minutes'),
-                                  if (widget.cancellation != null &&
-                                      record.status ==
-                                          BookingStatus.pendingHold)
-                                    TextButton(
-                                        onPressed: state.busy ||
-                                                action.busy ||
-                                                action.request != null
-                                            ? null
-                                            : () => _cancel(record.bookingId),
-                                        child:
-                                            const Text('Cancel pending hold')),
-                                ]))),
-                  if (state.page?.nextCursor != null)
-                    TextButton(
-                        onPressed: state.busy || action.busy
-                            ? null
-                            : controller.loadMore,
-                        child: const Text('Load more bookings')),
-                ]);
-              })));
+  Widget build(BuildContext context) =>
+      BlocBuilder<BookingCancellationCubit, BookingCancellationState>(
+        bloc: cancellation,
+        builder: (context, action) =>
+            BlocBuilder<BookingListCubit, BookingListState>(
+          bloc: controller,
+          builder: (context, state) {
+            if (!widget.isCurrent()) {
+              return const Scaffold(
+                  body: Center(
+                      child: Text('Bookings unavailable for this session.')));
+            }
+            final labels = {
+              for (final record in state.records)
+                record.bookingId: record.status == BookingStatus.pendingHold
+                    ? 'Pending hold'
+                    : record.rawStatus
+            };
+            final header =
+                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              if (state.busy || action.busy) const LinearProgressIndicator(),
+              if (state.message != null) Text(state.message!),
+              if (action.message != null) Text(action.message!),
+              if (state.page != null)
+                Text(
+                    '${state.page!.firstLocalDate} – ${state.page!.throughLocalDate} · ${state.page!.timeZone}'),
+              Row(children: [
+                TextButton.icon(
+                    onPressed:
+                        action.busy || state.busy ? null : controller.refresh,
+                    icon: const Icon(Icons.refresh),
+                    label: const Text('Refresh bookings')),
+                if (state.page?.nextCursor != null)
+                  TextButton(
+                      onPressed: state.busy || action.busy
+                          ? null
+                          : controller.loadMore,
+                      child: const Text('Load more bookings')),
+              ]),
+              if (action.uncertain && action.request != null) ...[
+                const Text(
+                    'Cancellation outcome unknown. Retry the same request or refresh server status.'),
+                TextButton(
+                    onPressed: action.busy || state.busy
+                        ? null
+                        : () => _cancel(action.request!.bookingId, retry: true),
+                    child: const Text('Retry same cancellation')),
+              ],
+            ]);
+            final bookings =
+                state.records.map(persistedBookingPresentation).toList();
+            final details = {
+              for (final record in state.records)
+                record.bookingId: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const SizedBox(height: 12),
+                      DetailRow('Booking', record.bookingId),
+                      DetailRow(
+                          'Status',
+                          bookingStatusLabel(
+                              record, state.page!.serverNowMillis)),
+                      DetailRow(
+                          'Time', '${record.startLabel} – ${record.endLabel}'),
+                      DetailRow('Timezone', record.timeZone),
+                      DetailRow('Hold expiry', record.expiryLabel),
+                      if (record.timeZone != state.page!.timeZone)
+                        const Text(
+                            'Timezone differs from current policy; review original times.'),
+                    ])
+            };
+            if (widget.coachId != null) {
+              return CoachRosterScreen(
+                  persistedBookings: bookings,
+                  statusLabels: labels,
+                  details: details,
+                  header: header);
+            }
+            return BookingScheduleScreen(
+                persistedBookings: bookings,
+                statusLabels: labels,
+                header: header,
+                onCancelHold: widget.cancellation == null ||
+                        state.busy ||
+                        action.busy ||
+                        action.request != null
+                    ? null
+                    : (id) => _cancel(id),
+                details: details);
+          },
+        ),
+      );
 }

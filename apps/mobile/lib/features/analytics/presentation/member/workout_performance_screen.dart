@@ -25,10 +25,12 @@ class WorkoutPerformanceScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final local = localProgress;
-    if (local != null) return _buildLocal(context, local);
-    final volume = context.read<AnalyticsRepository>().volumeTrend;
-    final data =
-        List.generate(volume.length, (i) => _WeekPoint(_weekLabels[i], volume[i]));
+
+    final volume = local == null
+        ? context.read<AnalyticsRepository>().volumeTrend
+        : <int>[];
+    final data = List.generate(
+        volume.length, (i) => _WeekPoint(_weekLabels[i], volume[i]));
 
     return Scaffold(
       appBar: AppBar(
@@ -37,23 +39,26 @@ class WorkoutPerformanceScreen extends StatelessWidget {
           IconButton(
             icon: const Icon(Icons.ios_share_rounded),
             tooltip: 'Export',
-            onPressed: () => showToast(context, 'Report saved to your device.'),
+            onPressed: () => showUnavailable(context),
           ),
         ],
       ),
       body: PageBody(
         children: [
           Row(
-            children: const [
-              Expanded(child: StatTile('3,400', 'kg lifted this week')),
+            children: [
+              Expanded(
+                  child: StatTile(
+                      local == null ? '3,400' : '-', 'kg lifted this week')),
               SizedBox(width: 10),
               Expanded(
-                  child: StatTile('+13%', 'vs last week',
+                  child: StatTile(local == null ? '+13%' : '-', 'vs last week',
                       valueColor: AppColors.success)),
             ],
           ),
           const SizedBox(height: 20),
           const Eyebrow('Weekly volume (kg)'),
+          if (local != null) const Text('-'),
           Panel(
             child: SizedBox(
               height: 220,
@@ -85,6 +90,7 @@ class WorkoutPerformanceScreen extends StatelessWidget {
           ),
           const SizedBox(height: 20),
           const Eyebrow('Muscle group split'),
+          if (local != null) const Text('-'),
           Panel(
             child: SizedBox(
               height: 220,
@@ -96,7 +102,9 @@ class WorkoutPerformanceScreen extends StatelessWidget {
                 ),
                 series: <CircularSeries<MuscleGroupShare, String>>[
                   DoughnutSeries<MuscleGroupShare, String>(
-                    dataSource: context.read<AnalyticsRepository>().muscleGroupSplit,
+                    dataSource: local == null
+                        ? context.read<AnalyticsRepository>().muscleGroupSplit
+                        : <MuscleGroupShare>[],
                     xValueMapper: (d, _) => d.label,
                     yValueMapper: (d, _) => d.ratio,
                     dataLabelMapper: (d, _) => '${(d.ratio * 100).round()}%',
@@ -105,7 +113,8 @@ class WorkoutPerformanceScreen extends StatelessWidget {
                     dataLabelSettings: const DataLabelSettings(
                       isVisible: true,
                       labelPosition: ChartDataLabelPosition.outside,
-                      textStyle: TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+                      textStyle:
+                          TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
                     ),
                     pointColorMapper: (d, i) =>
                         _sliceColors[i % _sliceColors.length],
@@ -114,40 +123,47 @@ class WorkoutPerformanceScreen extends StatelessWidget {
               ),
             ),
           ),
+          if (local != null) ..._localDetails(context, local),
         ],
       ),
     );
   }
 
-  Widget _buildLocal(BuildContext context, MemberLocalProgress progress) => Scaffold(
-    appBar: AppBar(title: const Text('Workout performance')),
-    body: PageBody(children: [
-      LocalProgressPeriod(progress: progress),
-      const SizedBox(height: 12),
-      Row(children: [
-        Expanded(child: StatTile('${progress.weeklySessions}', 'Saved sessions this week', compact: true)),
-        const SizedBox(width: 10),
-        Expanded(child: StatTile('${progress.weeklyRepetitions}', 'Full reps this week', compact: true)),
-      ]),
-      const SizedBox(height: 10),
-      Text('${progress.weeklyPartialRepetitions} partial attempts this week · '
-        'measurement coverage: ${localProgressCoverage(progress.weeklyCoverage)}',
-        style: Theme.of(context).textTheme.bodyMedium),
-      const SizedBox(height: 20),
-      const Eyebrow('Saved sessions per week'),
-      LocalWeeklyChart(progress: progress),
-      const SizedBox(height: 20),
-      const Eyebrow('Full reps per week'),
-      LocalWeeklyChart(progress: progress, repetitions: true),
-      const SizedBox(height: 12),
-      const Text('Counts include saved camera captures with zero reps. '
-        'Partial attempts remain separate from full reps.'),
-      if (progress.records.isEmpty) ...[
+  List<Widget> _localDetails(
+          BuildContext context, MemberLocalProgress progress) =>
+      [
+        LocalProgressPeriod(progress: progress),
         const SizedBox(height: 12),
-        const Panel(child: Text('No saved camera sessions yet.')),
-      ],
-    ]),
-  );
+        Row(children: [
+          Expanded(
+              child: StatTile(
+                  '${progress.weeklySessions}', 'Saved sessions this week',
+                  compact: true)),
+          const SizedBox(width: 10),
+          Expanded(
+              child: StatTile(
+                  '${progress.weeklyRepetitions}', 'Full reps this week',
+                  compact: true)),
+        ]),
+        const SizedBox(height: 10),
+        Text(
+            '${progress.weeklyPartialRepetitions} partial attempts this week · '
+            'measurement coverage: ${localProgressCoverage(progress.weeklyCoverage)}',
+            style: Theme.of(context).textTheme.bodyMedium),
+        const SizedBox(height: 20),
+        const Eyebrow('Saved sessions per week'),
+        LocalWeeklyChart(progress: progress),
+        const SizedBox(height: 20),
+        const Eyebrow('Full reps per week'),
+        LocalWeeklyChart(progress: progress, repetitions: true),
+        const SizedBox(height: 12),
+        const Text('Counts include saved camera captures with zero reps. '
+            'Partial attempts remain separate from full reps.'),
+        if (progress.records.isEmpty) ...[
+          const SizedBox(height: 12),
+          const Panel(child: Text('No saved camera sessions yet.')),
+        ],
+      ];
 }
 
 class _WeekPoint {

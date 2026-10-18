@@ -14,15 +14,21 @@ import 'package:gainpath_domain/membership.dart';
 /// plans, billing history, refunds) — each now has room to be designed
 /// properly instead of fighting for space on one long scroll.
 class MembershipDashboardScreen extends StatefulWidget {
-  const MembershipDashboardScreen({super.key});
+  const MembershipDashboardScreen(
+      {super.key, this.connected = false, this.planName, this.status});
+  final bool connected;
+  final String? planName;
+  final String? status;
 
   @override
-  State<MembershipDashboardScreen> createState() => _MembershipDashboardScreenState();
+  State<MembershipDashboardScreen> createState() =>
+      _MembershipDashboardScreenState();
 }
 
 class _MembershipDashboardScreenState extends State<MembershipDashboardScreen> {
   MembershipPlan get _plan =>
-      context.read<MembershipRepository>().membershipPlans.firstWhere((p) => p.id == context.read<MembershipRepository>().currentPlanId);
+      context.read<MembershipRepository>().membershipPlans.firstWhere(
+          (p) => p.id == context.read<MembershipRepository>().currentPlanId);
 
   Future<void> _toggleAutoRenew(bool value) async {
     if (!value) {
@@ -42,9 +48,12 @@ class _MembershipDashboardScreenState extends State<MembershipDashboardScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final membership = context.watch<MembershipBloc>().state;
-    final plan = _plan;
-    final recent = context.read<MembershipRepository>().transactions.take(2).toList();
+    final membership =
+        widget.connected ? null : context.watch<MembershipBloc>().state;
+    final plan = widget.connected ? null : _plan;
+    final recent = widget.connected
+        ? null
+        : context.read<MembershipRepository>().transactions.take(2).toList();
 
     return Scaffold(
       appBar: AppBar(title: const Text('Membership')),
@@ -56,7 +65,10 @@ class _MembershipDashboardScreenState extends State<MembershipDashboardScreen> {
               gradient: AppColors.heroGradient,
               borderRadius: BorderRadius.circular(20),
               boxShadow: [
-                BoxShadow(color: AppColors.primary.withValues(alpha: 0.28), blurRadius: 22, offset: const Offset(0, 10)),
+                BoxShadow(
+                    color: AppColors.primary.withValues(alpha: 0.28),
+                    blurRadius: 22,
+                    offset: const Offset(0, 10)),
               ],
             ),
             child: Column(
@@ -64,31 +76,46 @@ class _MembershipDashboardScreenState extends State<MembershipDashboardScreen> {
               children: [
                 const Text('CURRENT PLAN',
                     style: TextStyle(
-                        fontSize: 11, letterSpacing: 1.4, fontWeight: FontWeight.w700, color: Colors.white70)),
+                        fontSize: 11,
+                        letterSpacing: 1.4,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.white70)),
                 const SizedBox(height: 6),
-                Text(plan.name,
+                Text(widget.connected ? (widget.planName ?? '-') : plan!.name,
                     style: const TextStyle(
-                        fontSize: 30, fontWeight: FontWeight.w800, color: Colors.white, letterSpacing: -1)),
+                        fontSize: 30,
+                        fontWeight: FontWeight.w800,
+                        color: Colors.white,
+                        letterSpacing: -1)),
                 const SizedBox(height: 4),
-                Text('RM ${plan.price.toStringAsFixed(0)} per month  ·  renews 12 Oct',
-                    style: const TextStyle(color: Colors.white70, fontSize: 14)),
+                Text(
+                    widget.connected
+                        ? (widget.status ?? '-')
+                        : 'RM ${plan!.price.toStringAsFixed(0)} per month  ·  renews 12 Oct',
+                    style:
+                        const TextStyle(color: Colors.white70, fontSize: 14)),
                 const SizedBox(height: 16),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                   decoration: BoxDecoration(
                     color: Colors.white.withValues(alpha: 0.14),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Row(
                     children: [
-                      const Icon(Icons.autorenew_rounded, size: 18, color: Colors.white),
+                      const Icon(Icons.autorenew_rounded,
+                          size: 18, color: Colors.white),
                       const SizedBox(width: 10),
                       const Expanded(
-                        child: Text('Auto-renew', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+                        child: Text('Auto-renew',
+                            style: TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w600)),
                       ),
                       Switch(
-                        value: membership.autoRenew,
-                        onChanged: _toggleAutoRenew,
+                        value: membership?.autoRenew ?? false,
+                        onChanged: widget.connected ? null : _toggleAutoRenew,
                         activeThumbColor: Colors.white,
                         activeTrackColor: Colors.white.withValues(alpha: 0.4),
                       ),
@@ -107,7 +134,10 @@ class _MembershipDashboardScreenState extends State<MembershipDashboardScreen> {
                           side: const BorderSide(color: Colors.white38),
                         ),
                         onPressed: () => Navigator.push(
-                            context, MaterialPageRoute(builder: (_) => const RenewScreen())),
+                            context,
+                            MaterialPageRoute(
+                                builder: (_) =>
+                                    RenewScreen(connected: widget.connected))),
                         child: const _ActionButtonLabel('Renew now'),
                       ),
                     ),
@@ -121,7 +151,10 @@ class _MembershipDashboardScreenState extends State<MembershipDashboardScreen> {
                           foregroundColor: AppColors.primaryDark,
                         ),
                         onPressed: () => Navigator.push(
-                            context, MaterialPageRoute(builder: (_) => const BrowsePlansScreen())),
+                            context,
+                            MaterialPageRoute(
+                                builder: (_) => BrowsePlansScreen(
+                                    connected: widget.connected))),
                         child: const _ActionButtonLabel('Change plan'),
                       ),
                     ),
@@ -136,16 +169,23 @@ class _MembershipDashboardScreenState extends State<MembershipDashboardScreen> {
             padding: EdgeInsets.zero,
             child: Column(
               children: [
-                ...recent.asMap().entries.map((entry) {
+                if (widget.connected)
+                  const ListTile(
+                      title: Text('-'),
+                      subtitle: Text('Billing data unavailable')),
+                ...?recent?.asMap().entries.map((entry) {
                   final t = entry.value;
                   return Column(
                     children: [
                       if (entry.key > 0) const Divider(height: 1, indent: 16),
                       ListTile(
-                        title: Text(t.type, style: Theme.of(context).textTheme.titleMedium),
-                        subtitle: Text(t.id, style: Theme.of(context).textTheme.bodyMedium),
+                        title: Text(t.type,
+                            style: Theme.of(context).textTheme.titleMedium),
+                        subtitle: Text(t.id,
+                            style: Theme.of(context).textTheme.bodyMedium),
                         trailing: Text('RM ${t.amount.toStringAsFixed(2)}',
-                            style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.w700)),
+                            style: const TextStyle(
+                                fontSize: 14.5, fontWeight: FontWeight.w700)),
                       ),
                     ],
                   );
@@ -153,10 +193,17 @@ class _MembershipDashboardScreenState extends State<MembershipDashboardScreen> {
                 const Divider(height: 1, indent: 16),
                 ListTile(
                   title: const Text('View all billing history',
-                      style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.w700, fontSize: 14)),
-                  trailing: const Icon(Icons.arrow_forward_ios_rounded, size: 13, color: AppColors.primary),
+                      style: TextStyle(
+                          color: AppColors.primary,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 14)),
+                  trailing: const Icon(Icons.arrow_forward_ios_rounded,
+                      size: 13, color: AppColors.primary),
                   onTap: () => Navigator.push(
-                      context, MaterialPageRoute(builder: (_) => const BillingHistoryScreen())),
+                      context,
+                      MaterialPageRoute(
+                          builder: (_) => BillingHistoryScreen(
+                              connected: widget.connected))),
                 ),
               ],
             ),
@@ -166,7 +213,10 @@ class _MembershipDashboardScreenState extends State<MembershipDashboardScreen> {
             child: TextButton.icon(
               style: TextButton.styleFrom(foregroundColor: AppColors.danger),
               onPressed: () => Navigator.push(
-                  context, MaterialPageRoute(builder: (_) => const RefundRequestScreen())),
+                  context,
+                  MaterialPageRoute(
+                      builder: (_) =>
+                          RefundRequestScreen(connected: widget.connected))),
               icon: const Icon(Icons.receipt_long_rounded, size: 18),
               label: const Text('Request a refund'),
             ),

@@ -8,7 +8,8 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 /// its own screen so the full transaction list, filtering, and per-charge
 /// actions (invoice, refund) have room to breathe.
 class BillingHistoryScreen extends StatefulWidget {
-  const BillingHistoryScreen({super.key});
+  const BillingHistoryScreen({super.key, this.connected = false});
+  final bool connected;
 
   @override
   State<BillingHistoryScreen> createState() => _BillingHistoryScreenState();
@@ -18,24 +19,36 @@ class _BillingHistoryScreenState extends State<BillingHistoryScreen> {
   static const _filters = ['All', 'Membership', 'Coaching'];
   String _filter = 'All';
 
-  bool _isEligible(Transaction t) =>
-      const RefundPolicy().isEligible(t.date);
+  bool _isEligible(Transaction t) => const RefundPolicy().isEligible(t.date);
 
   String _date(DateTime d) {
     const months = [
-      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec'
     ];
     return '${d.day} ${months[d.month - 1]} ${d.year}';
   }
 
   @override
   Widget build(BuildContext context) {
-    final visible = context.read<MembershipRepository>().transactions.where((t) {
+    final transactions = widget.connected
+        ? [Transaction('-', '-', 0, DateTime(1970), TransactionStatus.pending)]
+        : context.read<MembershipRepository>().transactions;
+    final visible = transactions.where((t) {
       if (_filter == 'All') return true;
       return t.type.toLowerCase().contains(_filter.toLowerCase());
     }).toList();
-    final totalThisYear = context.read<MembershipRepository>().transactions
+    final totalThisYear = transactions
         .where((t) => t.date.year == DateTime.now().year)
         .fold<double>(0, (sum, t) => sum + t.amount);
 
@@ -47,9 +60,13 @@ class _BillingHistoryScreenState extends State<BillingHistoryScreen> {
             background: AppColors.primaryTint,
             child: Row(
               children: [
-                const Icon(Icons.receipt_long_rounded, color: AppColors.primary),
+                const Icon(Icons.receipt_long_rounded,
+                    color: AppColors.primary),
                 const SizedBox(width: 12),
-                Text('RM ${totalThisYear.toStringAsFixed(2)} spent this year',
+                Text(
+                    widget.connected
+                        ? '- spent this year'
+                        : 'RM ${totalThisYear.toStringAsFixed(2)} spent this year',
                     style: Theme.of(context).textTheme.titleMedium),
               ],
             ),
@@ -71,7 +88,9 @@ class _BillingHistoryScreenState extends State<BillingHistoryScreen> {
                   backgroundColor: AppColors.surface,
                   selectedColor: AppColors.primary,
                   labelStyle: TextStyle(
-                      fontSize: 13, fontWeight: FontWeight.w600, color: selected ? Colors.white : AppColors.ink),
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: selected ? Colors.white : AppColors.ink),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(999),
                     side: const BorderSide(color: AppColors.hairline),
@@ -115,23 +134,34 @@ class _BillingHistoryScreenState extends State<BillingHistoryScreen> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(t.type, style: Theme.of(context).textTheme.titleMedium),
-                              Text('${t.id}  ·  ${_date(t.date)}',
-                                  style: Theme.of(context).textTheme.bodyMedium),
+                              Text(t.type,
+                                  style:
+                                      Theme.of(context).textTheme.titleMedium),
+                              Text(
+                                  widget.connected
+                                      ? '-'
+                                      : '${t.id}  ·  ${_date(t.date)}',
+                                  style:
+                                      Theme.of(context).textTheme.bodyMedium),
                             ],
                           ),
                         ),
                         Column(
                           crossAxisAlignment: CrossAxisAlignment.end,
                           children: [
-                            Text('RM ${t.amount.toStringAsFixed(2)}',
-                                style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
+                            Text(
+                                widget.connected
+                                    ? '-'
+                                    : 'RM ${t.amount.toStringAsFixed(2)}',
+                                style: const TextStyle(
+                                    fontSize: 15, fontWeight: FontWeight.w700)),
                             const SizedBox(height: 4),
-                            statusPill(t.status.label),
+                            statusPill(widget.connected ? '-' : t.status.label),
                           ],
                         ),
                         const SizedBox(width: 4),
-                        const Icon(Icons.arrow_forward_ios_rounded, size: 13, color: AppColors.inkSoft),
+                        const Icon(Icons.arrow_forward_ios_rounded,
+                            size: 13, color: AppColors.inkSoft),
                       ],
                     ),
                   ),
@@ -142,21 +172,25 @@ class _BillingHistoryScreenState extends State<BillingHistoryScreen> {
   }
 
   void _openDetail(BuildContext context, Transaction t) {
-    final eligible = _isEligible(t);
+    final eligible = !widget.connected && _isEligible(t);
     showModalBottomSheet(
       context: context,
       backgroundColor: AppColors.surface,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
       builder: (ctx) => Padding(
-        padding: EdgeInsets.fromLTRB(20, 20, 20, 20 + MediaQuery.of(ctx).padding.bottom),
+        padding: EdgeInsets.fromLTRB(
+            20, 20, 20, 20 + MediaQuery.of(ctx).padding.bottom),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               children: [
-                Expanded(child: Text(t.type, style: Theme.of(ctx).textTheme.titleLarge)),
-                statusPill(t.status.label),
+                Expanded(
+                    child: Text(t.type,
+                        style: Theme.of(ctx).textTheme.titleLarge)),
+                statusPill(widget.connected ? '-' : t.status.label),
               ],
             ),
             const SizedBox(height: 16),
@@ -165,9 +199,13 @@ class _BillingHistoryScreenState extends State<BillingHistoryScreen> {
                 children: [
                   DetailRow('Reference', t.id),
                   const Divider(height: 20),
-                  DetailRow('Date', _date(t.date)),
+                  DetailRow('Date', widget.connected ? '-' : _date(t.date)),
                   const Divider(height: 20),
-                  DetailRow('Amount', 'RM ${t.amount.toStringAsFixed(2)}'),
+                  DetailRow(
+                      'Amount',
+                      widget.connected
+                          ? '-'
+                          : 'RM ${t.amount.toStringAsFixed(2)}'),
                 ],
               ),
             ),
@@ -177,7 +215,7 @@ class _BillingHistoryScreenState extends State<BillingHistoryScreen> {
               child: OutlinedButton.icon(
                 onPressed: () {
                   Navigator.pop(ctx);
-                  showToast(context, 'Invoice saved to your device.');
+                  showUnavailable(context);
                 },
                 icon: const Icon(Icons.download_rounded, size: 18),
                 label: const Text('Download invoice'),
@@ -188,22 +226,27 @@ class _BillingHistoryScreenState extends State<BillingHistoryScreen> {
               width: double.infinity,
               child: eligible
                   ? OutlinedButton.icon(
-                      style: OutlinedButton.styleFrom(foregroundColor: AppColors.danger),
+                      style: OutlinedButton.styleFrom(
+                          foregroundColor: AppColors.danger),
                       onPressed: () {
                         Navigator.pop(ctx);
                         Navigator.push(
                           context,
                           MaterialPageRoute(
-                              builder: (_) => RefundRequestScreen(preselectedTransactionId: t.id)),
+                              builder: (_) => RefundRequestScreen(
+                                  preselectedTransactionId: t.id)),
                         );
                       },
                       icon: const Icon(Icons.receipt_long_rounded, size: 18),
                       label: const Text('Request a refund'),
                     )
                   : Text(
-                      'Outside the ${RefundPolicy.defaultWindowDays}-day refund window.',
+                      widget.connected
+                          ? 'Refund eligibility: -'
+                          : 'Outside the ${RefundPolicy.defaultWindowDays}-day refund window.',
                       textAlign: TextAlign.center,
-                      style: const TextStyle(fontSize: 12.5, color: AppColors.inkSoft),
+                      style: const TextStyle(
+                          fontSize: 12.5, color: AppColors.inkSoft),
                     ),
             ),
           ],
