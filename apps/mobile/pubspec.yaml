@@ -32,6 +32,8 @@ dependencies:
   firebase_storage: ^13.6.0
   file_selector: ^1.0.4
   http: ^1.6.0
+  phone_numbers_parser: 9.0.28
+  country_picker: 2.0.28
   cloud_firestore: ^6.10.0
   cloud_functions: ^6.5.0
   camera: 0.11.4
