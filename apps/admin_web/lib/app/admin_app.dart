@@ -17,6 +17,8 @@ import 'package:gainpath_domain/identity.dart'
     show AdminAccountContactRepository, AdminMemberDirectoryRepository;
 import 'package:gainpath_domain/coaching.dart' show CoachAvailabilityRepository;
 
+import 'di/admin_presentation_dependencies.dart';
+
 class GainPathAdminWebApp extends StatelessWidget {
   const GainPathAdminWebApp(
       {super.key,
@@ -31,11 +33,13 @@ class GainPathAdminWebApp extends StatelessWidget {
       this.memberDirectoryFactory,
       this.rewardCatalogFactory,
       this.facilitySettingsFactory,
+      this.reportingGatewayFactory,
       this.passwordResetSender});
 
   final AuthRepository? authRepository;
   final BackendConfig? backendConfig;
   final Future<void> Function(String)? passwordResetSender;
+  final ReportingGatewayFactory? reportingGatewayFactory;
   final TutorialRepository Function(SessionScope)? tutorialRepositoryFactory;
   final RoutineTemplateRepository Function(SessionScope, TutorialRepository)?
       routineRepositoryFactory;
@@ -56,7 +60,7 @@ class GainPathAdminWebApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final config = backendConfig ?? BackendConfig.fromEnvironment();
+    final config = backendConfig ?? const BackendConfig(BackendMode.firebase);
     config.validate();
     return RepositoryProvider<AuthRepository>(
       create: (_) =>
@@ -102,6 +106,7 @@ class GainPathAdminWebApp extends StatelessWidget {
               memberDirectoryFactory: memberDirectoryFactory,
               rewardCatalogFactory: rewardCatalogFactory,
               facilitySettingsFactory: facilitySettingsFactory,
+              reportingGatewayFactory: reportingGatewayFactory,
               child: app,
             );
           },

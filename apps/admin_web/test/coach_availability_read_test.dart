@@ -1,3 +1,4 @@
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -5,6 +6,7 @@ import 'package:gainpath_data/gainpath_data.dart';
 import 'package:gainpath_domain/coaching.dart';
 import 'package:gainpath_domain/gainpath_domain.dart'
     show AppRole, SessionScope;
+import 'package:gainpath_domain/identity.dart';
 import 'package:gainpath_admin_web/app/admin_app.dart';
 import 'coach_directory_publication_flow_test.dart' show AdminFake;
 
@@ -45,6 +47,11 @@ class ScheduleFake implements CoachAvailabilityRepository {
       throw StateError('Admin UI must never save availability.');
 }
 
+class _EmptyPhotoAccount extends Fake implements AdminAccountContactRepository {
+  @override
+  Future<Uint8List?> loadCurrentPhoto() async => null;
+}
+
 void main() {
   setUpAll(() => GoogleFonts.config.allowRuntimeFetching = false);
   testWidgets(
@@ -59,6 +66,7 @@ void main() {
     await tester.pumpWidget(GainPathAdminWebApp(
         authRepository: auth,
         backendConfig: const BackendConfig(BackendMode.firebase),
+        accountContactFactory: (_, __) => _EmptyPhotoAccount(),
         coachRepositoryFactory: (_, current) =>
             AdminFake(session.scope)..seed(),
         coachAvailabilityFactory: (scope, current) => ScheduleFake(scope)));

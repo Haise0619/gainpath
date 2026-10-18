@@ -39,6 +39,8 @@ import '../../infrastructure/local/account_photo_picker.dart';
 import '../../infrastructure/firebase/firebase_admin_member_directory_repository.dart';
 import '../../infrastructure/firebase/firebase_reward_catalog_repository.dart';
 import '../../infrastructure/firebase/firebase_facility_settings_repository.dart';
+import 'admin_presentation_dependencies.dart';
+import '../../features/analytics/application/admin_reporting_gateway.dart';
 
 /// Composition root for data access. Swap the in-memory implementations for
 /// Firebase-backed ones here without touching any screen.
@@ -57,10 +59,12 @@ class AppRepositories extends StatefulWidget {
     this.memberDirectoryFactory,
     this.rewardCatalogFactory,
     this.facilitySettingsFactory,
+    this.reportingGatewayFactory,
   });
   final Widget child;
   final BackendConfig config;
   final AuthSession? session;
+  final ReportingGatewayFactory? reportingGatewayFactory;
   final TutorialRepository Function(SessionScope)? tutorialRepositoryFactory;
   final RoutineTemplateRepository Function(SessionScope, TutorialRepository)?
       routineRepositoryFactory;
@@ -97,12 +101,23 @@ class _AppRepositoriesState extends State<AppRepositories> {
   CatalogEditSessionGuard? _memberDirectoryGuard;
   CatalogEditSessionGuard? _rewardGuard;
   CatalogEditSessionGuard? _facilityGuard;
+  CatalogEditSessionGuard _buildSessionGuard() {
+    AuthBloc? auth;
+    try {
+      auth = context.read<AuthBloc?>();
+    } catch (_) {
+      auth = null;
+    }
+    return CatalogEditSessionGuard(
+      expected: widget.session!,
+      current: () =>
+          auth?.state ?? const AuthState(status: AuthStatus.signedOut),
+      changes: auth?.stream ?? const Stream.empty(),
+    );
+  }
+
   FacilitySettingsRepository _createFacilitySettings(SessionScope scope) {
-    final auth = context.read<AuthBloc>();
-    _facilityGuard = CatalogEditSessionGuard(
-        expected: widget.session!,
-        current: () => auth.state,
-        changes: auth.stream);
+    _facilityGuard = _buildSessionGuard();
     return widget.facilitySettingsFactory
             ?.call(scope, _facilityGuard!.isCurrent) ??
         FirebaseFacilitySettingsRepository(
@@ -110,22 +125,14 @@ class _AppRepositoriesState extends State<AppRepositories> {
   }
 
   RewardCatalogRepository _createRewardCatalog(SessionScope scope) {
-    final auth = context.read<AuthBloc>();
-    _rewardGuard = CatalogEditSessionGuard(
-        expected: widget.session!,
-        current: () => auth.state,
-        changes: auth.stream);
+    _rewardGuard = _buildSessionGuard();
     return widget.rewardCatalogFactory?.call(scope, _rewardGuard!.isCurrent) ??
         FirebaseRewardCatalogRepository(
             scope: scope, isCurrent: _rewardGuard!.isCurrent);
   }
 
   AdminMemberDirectoryRepository _createMemberDirectory(SessionScope scope) {
-    final auth = context.read<AuthBloc>();
-    _memberDirectoryGuard = CatalogEditSessionGuard(
-        expected: widget.session!,
-        current: () => auth.state,
-        changes: auth.stream);
+    _memberDirectoryGuard = _buildSessionGuard();
     return widget.memberDirectoryFactory
             ?.call(scope, _memberDirectoryGuard!.isCurrent) ??
         FirebaseAdminMemberDirectoryRepository(
@@ -133,75 +140,49 @@ class _AppRepositoriesState extends State<AppRepositories> {
   }
 
   AdminAccountContactRepository _createAccountContact(SessionScope scope) {
-    final auth = context.read<AuthBloc>();
-    _accountContactGuard = CatalogEditSessionGuard(
-        expected: widget.session!,
-        current: () => auth.state,
-        changes: auth.stream);
-    return widget.accountContactFactory
-            ?.call(scope, _accountContactGuard!.isCurrent) ??
-        FirebaseAdminAccountContactRepository(
-            scope: scope, isCurrent: _accountContactGuard!.isCurrent);
+    _accountContactGuard = _buildSessionGuard();
+    if (widget.accountContactFactory != null) {
+      return widget.accountContactFactory!(
+          scope, _accountContactGuard!.isCurrent);
+    }
+    return FirebaseAdminAccountContactRepository(
+        scope: scope, isCurrent: _accountContactGuard!.isCurrent);
   }
 
   ComplianceDocumentRepository _createCompliance(SessionScope scope) {
-    final auth = context.read<AuthBloc>();
-    _complianceGuard = CatalogEditSessionGuard(
-        expected: widget.session!,
-        current: () => auth.state,
-        changes: auth.stream);
+    _complianceGuard = _buildSessionGuard();
     return FirebaseComplianceDocumentRepository(
         scope: scope, isCurrent: _complianceGuard!.isCurrent);
   }
 
   ChatbotDisclaimerRepository _createDisclaimer(SessionScope scope) {
-    final auth = context.read<AuthBloc>();
-    _disclaimerGuard = CatalogEditSessionGuard(
-        expected: widget.session!,
-        current: () => auth.state,
-        changes: auth.stream);
+    _disclaimerGuard = _buildSessionGuard();
     return FirebaseChatbotDisclaimerRepository(
         scope: scope, isCurrent: _disclaimerGuard!.isCurrent);
   }
 
   CatalogEditSessionGuard? _equipmentGuard;
   EquipmentRepository _createEquipment(SessionScope scope) {
-    final auth = context.read<AuthBloc>();
-    _equipmentGuard = CatalogEditSessionGuard(
-        expected: widget.session!,
-        current: () => auth.state,
-        changes: auth.stream);
+    _equipmentGuard = _buildSessionGuard();
     return FirebaseEquipmentRepository(
         scope: scope, isCurrent: _equipmentGuard!.isCurrent);
   }
 
   ContentRepository _createAnnouncements(SessionScope scope) {
-    final auth = context.read<AuthBloc>();
-    _announcementGuard = CatalogEditSessionGuard(
-        expected: widget.session!,
-        current: () => auth.state,
-        changes: auth.stream);
+    _announcementGuard = _buildSessionGuard();
     return FirebaseAnnouncementRepository(
         scope: scope, isCurrent: _announcementGuard!.isCurrent);
   }
 
   BookingListRepository _createBookingList(SessionScope scope) {
-    final auth = context.read<AuthBloc>();
-    _bookingGuard = CatalogEditSessionGuard(
-        expected: widget.session!,
-        current: () => auth.state,
-        changes: auth.stream);
+    _bookingGuard = _buildSessionGuard();
     return widget.bookingListFactory?.call(scope, _bookingGuard!.isCurrent) ??
         FirebaseBookingListRepository(
             scope: scope, isCurrent: _bookingGuard!.isCurrent);
   }
 
   CoachAvailabilityRepository _createAvailability(SessionScope scope) {
-    final auth = context.read<AuthBloc>();
-    _availabilityGuard = CatalogEditSessionGuard(
-        expected: widget.session!,
-        current: () => auth.state,
-        changes: auth.stream);
+    _availabilityGuard = _buildSessionGuard();
     return widget.coachAvailabilityFactory
             ?.call(scope, _availabilityGuard!.isCurrent) ??
         FirebaseCoachAvailabilityRepository(
@@ -209,11 +190,7 @@ class _AppRepositoriesState extends State<AppRepositories> {
   }
 
   CoachProfileAdminRepository _createCoachDirectory(SessionScope scope) {
-    final auth = context.read<AuthBloc>();
-    _coachGuard = CatalogEditSessionGuard(
-        expected: widget.session!,
-        current: () => auth.state,
-        changes: auth.stream);
+    _coachGuard = _buildSessionGuard();
     return widget.coachRepositoryFactory?.call(scope, _coachGuard!.isCurrent) ??
         FirebaseCoachProfileAdminRepository(
             scope: scope, isCurrent: _coachGuard!.isCurrent);
@@ -222,11 +199,7 @@ class _AppRepositoriesState extends State<AppRepositories> {
   TutorialRepository _createCatalog(SessionScope scope) {
     final factory = widget.tutorialRepositoryFactory;
     if (factory != null) return factory(scope);
-    final auth = context.read<AuthBloc>();
-    _catalogGuard = CatalogEditSessionGuard(
-        expected: widget.session!,
-        current: () => auth.state,
-        changes: auth.stream);
+    _catalogGuard = _buildSessionGuard();
     return FirebaseExerciseCatalogRepository(
         scope: scope, isSessionCurrent: _catalogGuard!.isCurrent);
   }
@@ -235,11 +208,7 @@ class _AppRepositoriesState extends State<AppRepositories> {
       SessionScope scope, TutorialRepository catalog) {
     final factory = widget.routineRepositoryFactory;
     if (factory != null) return factory(scope, catalog);
-    final auth = context.read<AuthBloc>();
-    _routineGuard = CatalogEditSessionGuard(
-        expected: widget.session!,
-        current: () => auth.state,
-        changes: auth.stream);
+    _routineGuard = _buildSessionGuard();
     return FirebaseRoutineTemplateRepository(
         scope: scope,
         exerciseCatalog: catalog,
@@ -270,42 +239,66 @@ class _AppRepositoriesState extends State<AppRepositories> {
     if (widget.config.isFirebase && widget.session == null) return widget.child;
     final scope = widget.session?.scope;
     if (widget.config.isFirebase) {
+      AuthBloc? auth;
+      try {
+        auth = context.read<AuthBloc?>();
+      } catch (_) {
+        auth = null;
+      }
+      bool isCurrent() => auth != null && auth.state.session == widget.session;
+      final deps = AdminPresentationDependencies.fromScope(
+        scope: scope!,
+        isCurrent: isCurrent,
+        session: widget.session,
+        reportingFactory: widget.reportingGatewayFactory,
+      );
       return MultiRepositoryProvider(providers: [
+        RepositoryProvider<AdminPresentationDependencies>.value(value: deps),
+        RepositoryProvider<AdminReportingGateway>.value(value: deps.reportingGateway),
+        RepositoryProvider<AnalyticsRepository>.value(value: deps.analytics),
+        RepositoryProvider<RecommendationRepository>.value(value: deps.recommendation),
+        RepositoryProvider<MembershipRepository>.value(value: deps.membership),
+        RepositoryProvider<BookingRepository>.value(value: deps.booking),
+        RepositoryProvider<AvailabilityRepository>.value(value: deps.availability),
+        RepositoryProvider<CoachRepository>.value(value: deps.coach),
+        RepositoryProvider<UserAccountRepository>.value(value: deps.userAccount),
         RepositoryProvider<FacilitySettingsRepository>(
-            create: (_) => _createFacilitySettings(scope!)),
+            create: (_) => _createFacilitySettings(scope)),
         RepositoryProvider<RewardCatalogRepository>(
-            create: (_) => _createRewardCatalog(scope!)),
+            create: (_) => _createRewardCatalog(scope)),
         RepositoryProvider<AdminMemberDirectoryRepository>(
-            create: (_) => _createMemberDirectory(scope!)),
+            create: (_) => _createMemberDirectory(scope)),
         RepositoryProvider<AccountPhotoPicker>(
             create: (_) => LocalAccountPhotoPicker()),
         RepositoryProvider<AdminAccountContactRepository>(
-            create: (_) => _createAccountContact(scope!)),
+            create: (_) => _createAccountContact(scope)),
         RepositoryProvider<ComplianceDocumentRepository>(
-            create: (_) => _createCompliance(scope!)),
+            create: (_) => _createCompliance(scope)),
         RepositoryProvider<ChatbotDisclaimerRepository>(
-            create: (_) => _createDisclaimer(scope!)),
+            create: (_) => _createDisclaimer(scope)),
         RepositoryProvider<EquipmentImagePicker>(
             create: (_) => LocalEquipmentImagePicker()),
         RepositoryProvider<EquipmentRepository>(
-            create: (_) => _createEquipment(scope!)),
+            create: (_) => _createEquipment(scope)),
         RepositoryProvider<ContentRepository>(
-            create: (_) => _createAnnouncements(scope!)),
+            create: (_) => _createAnnouncements(scope)),
         RepositoryProvider<BookingListRepository>(
-            create: (_) => _createBookingList(scope!)),
+            create: (_) => _createBookingList(scope)),
         RepositoryProvider<CoachAvailabilityRepository>(
-            create: (_) => _createAvailability(scope!)),
+            create: (_) => _createAvailability(scope)),
         RepositoryProvider<CoachProfileAdminRepository>(
-            create: (_) => _createCoachDirectory(scope!)),
+            create: (_) => _createCoachDirectory(scope)),
         RepositoryProvider<TutorialRepository>(
-            create: (_) => _createCatalog(scope!)),
+            create: (_) => _createCatalog(scope)),
         RepositoryProvider<RoutineTemplateRepository>(
             create: (context) =>
-                _createRoutines(scope!, context.read<TutorialRepository>())),
+                _createRoutines(scope, context.read<TutorialRepository>())),
       ], child: widget.child);
     }
     return MultiRepositoryProvider(
       providers: [
+        RepositoryProvider<AdminReportingGateway>(
+            create: (_) => const UnavailableAdminReportingGateway()),
         RepositoryProvider<MemberProfileRepository>(
             create: (_) => InMemoryMemberProfileRepository(session: session)),
         RepositoryProvider<CoachRepository>(

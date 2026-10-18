@@ -26,7 +26,7 @@ class SystemSettingsScreen extends StatefulWidget {
 class _SystemSettingsScreenState extends State<SystemSettingsScreen>
     with SingleTickerProviderStateMixin {
   late final _tabs =
-      TabController(length: 3, initialIndex: widget.live ? 2 : 0, vsync: this);
+      TabController(length: 3, initialIndex: 0, vsync: this);
 
   @override
   void dispose() {
@@ -83,13 +83,7 @@ class _SystemSettingsScreenState extends State<SystemSettingsScreen>
               controller: _tabs,
               children: [
                 _GeneralPreferencesTab(live: widget.live),
-                widget.live
-                    ? const PageBody(children: [
-                        Panel(
-                            child: Text(
-                                'Reward conversion is not connected to Firebase yet.'))
-                      ])
-                    : const _ConversionRateTab(),
+                _ConversionRateTab(live: widget.live),
                 _ComplianceDocumentTab(live: widget.live),
               ],
             ),
@@ -442,14 +436,15 @@ class _GeneralPreferencesTabState extends State<_GeneralPreferencesTab> {
 }
 
 class _ConversionRateTab extends StatefulWidget {
-  const _ConversionRateTab();
+  final bool live;
+  const _ConversionRateTab({this.live = false});
 
   @override
   State<_ConversionRateTab> createState() => _ConversionRateTabState();
 }
 
 class _ConversionRateTabState extends State<_ConversionRateTab> {
-  late final _rate = TextEditingController(text: '200');
+  late final _rate = TextEditingController(text: widget.live ? '—' : '200');
   String? _error;
 
   @override
@@ -459,6 +454,7 @@ class _ConversionRateTabState extends State<_ConversionRateTab> {
   }
 
   void _save() {
+    if (widget.live) return;
     final value = int.tryParse(_rate.text.trim());
     if (value == null || value <= 0) {
       setState(() => _error = 'Enter a whole number greater than zero.');
@@ -470,7 +466,7 @@ class _ConversionRateTabState extends State<_ConversionRateTab> {
 
   @override
   Widget build(BuildContext context) {
-    final rate = int.tryParse(_rate.text.trim()) ?? 0;
+    final rate = widget.live ? 0 : (int.tryParse(_rate.text.trim()) ?? 0);
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(28, 20, 28, 32),
       child: _SettingsTabLayout(
@@ -485,6 +481,7 @@ class _ConversionRateTabState extends State<_ConversionRateTab> {
                     'How many gamification points equal RM 1.00 in the reward shop.',
                 control: TextField(
                   controller: _rate,
+                  enabled: !widget.live,
                   keyboardType: TextInputType.number,
                   onChanged: (_) => setState(() {
                     if (_error != null) _error = null;
@@ -493,9 +490,29 @@ class _ConversionRateTabState extends State<_ConversionRateTab> {
                 ),
               ),
             ),
+            if (widget.live) ...[
+              const SizedBox(height: 12),
+              Panel(
+                background: AppColors.surface,
+                child: Row(
+                  children: [
+                    const Icon(Icons.info_outline,
+                        size: 18, color: AppColors.inkSoft),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Reward conversion policy is managed by organization operations and is read-only in this console.',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
             const SizedBox(height: 24),
             FilledButton(
-                onPressed: _save, child: const Text('Save conversion rate')),
+                onPressed: widget.live ? null : _save,
+                child: const Text('Save conversion rate')),
           ],
         ),
         rail: Column(
@@ -506,7 +523,10 @@ class _ConversionRateTabState extends State<_ConversionRateTab> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('At $rate points = RM 1.00:',
+                  Text(
+                      widget.live
+                          ? 'Conversion rate: —'
+                          : 'At $rate points = RM 1.00:',
                       style: Theme.of(context).textTheme.bodyLarge),
                   const SizedBox(height: 14),
                   DetailRow(

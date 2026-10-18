@@ -25,7 +25,6 @@ import 'package:gainpath_domain/gainpath_domain.dart'
 import 'package:gainpath_domain/coaching.dart' show CoachAvailabilityRepository;
 import '../di/coach_availability_factory.dart';
 import '../di/booking_factory.dart';
-import '../admin_feature_availability.dart';
 import '../routing/app_routes.dart';
 
 /// A single directly-selectable sidebar destination.
@@ -69,6 +68,8 @@ class AdminShell extends StatefulWidget {
 class _AdminShellState extends State<AdminShell> {
   final _coachReviewGuard = CoachReviewDiscardGuard();
   int _index = 0;
+  String? _scopedCoachIdForBookings;
+  String? _scopedCoachIdForSchedule;
   final Set<int> _visited = {0};
   final Set<String> _expanded = {'Users & Coaches'};
 
@@ -82,6 +83,8 @@ class _AdminShellState extends State<AdminShell> {
         'Dashboard',
         'How the facility is doing today',
         AdminDashboardScreen(
+            live: widget.liveSession != null,
+            liveSession: widget.liveSession,
             onOpenRefunds: () => _select(_indexOfLabel('Refunds')))),
     _NavGroup(
         Icons.people_outline_rounded, Icons.people_rounded, 'Users & Coaches', [
@@ -96,16 +99,19 @@ class _AdminShellState extends State<AdminShell> {
           Icons.sports_rounded,
           'Coaches',
           'Provision, verify, and manage coaches by branch',
-          const CoachesScreen()),
+          CoachesScreen(
+              live: widget.liveSession != null,
+              discardGuard: _coachReviewGuard)),
     ]),
     _NavPage(
         Icons.auto_awesome_outlined,
         Icons.auto_awesome_rounded,
         'Recommendations',
         'High-risk exercises and matched leads',
-        const RiskLeaderboardScreen()),
+        RiskLeaderboardScreen(live: widget.liveSession != null)),
     _NavPage(Icons.receipt_long_outlined, Icons.receipt_long_rounded, 'Refunds',
-        'Approve or reject disputed transactions', const RefundsScreen()),
+        'Approve or reject disputed transactions',
+        RefundsScreen(live: widget.liveSession != null)),
     _NavGroup(Icons.folder_outlined, Icons.folder_rounded, 'Content', [
       _NavPage(
           Icons.video_library_outlined,
@@ -145,7 +151,8 @@ class _AdminShellState extends State<AdminShell> {
           ChatbotDisclaimerScreen(live: widget.liveSession != null)),
     ]),
     _NavPage(Icons.bar_chart_outlined, Icons.bar_chart_rounded, 'Reports',
-        'Sales, branch performance, and analytics', const ReportsScreen()),
+        'Sales, branch performance, and analytics',
+        ReportsScreen(live: widget.liveSession != null)),
     _NavPage(
         Icons.tune_outlined,
         Icons.tune_rounded,
@@ -200,14 +207,33 @@ class _AdminShellState extends State<AdminShell> {
   /// page in this console can point to where it sits.
   List<_Crumb> _breadcrumbs() {
     final crumbs = <_Crumb>[
-      _Crumb('Home', _index == 0 ? null : () => _select(0))
+      _Crumb('Home',
+          _index == 0 &&
+                  _scopedCoachIdForBookings == null &&
+                  _scopedCoachIdForSchedule == null
+              ? null
+              : () => _select(0))
     ];
-    if (_index == 0) return crumbs;
+    if (_index == 0 &&
+        _scopedCoachIdForBookings == null &&
+        _scopedCoachIdForSchedule == null) {
+      return crumbs;
+    }
     final group = _groupLabelFor(_index);
     if (group != null) {
       crumbs.add(_Crumb(group, () => _select(_firstChildIndexOfGroup(group))));
     }
-    crumbs.add(_Crumb(_flatPages[_index].label, null));
+    if (_scopedCoachIdForBookings != null) {
+      crumbs.add(_Crumb(_flatPages[_index].label,
+          () => setState(() => _scopedCoachIdForBookings = null)));
+      crumbs.add(_Crumb('Coach Bookings ($_scopedCoachIdForBookings)', null));
+    } else if (_scopedCoachIdForSchedule != null) {
+      crumbs.add(_Crumb(_flatPages[_index].label,
+          () => setState(() => _scopedCoachIdForSchedule = null)));
+      crumbs.add(_Crumb('Coach Schedule ($_scopedCoachIdForSchedule)', null));
+    } else {
+      crumbs.add(_Crumb(_flatPages[_index].label, null));
+    }
     return crumbs;
   }
 
@@ -218,6 +244,8 @@ class _AdminShellState extends State<AdminShell> {
     final owner = _groupLabelFor(flatIndex);
     setState(() {
       _index = flatIndex;
+      _scopedCoachIdForBookings = null;
+      _scopedCoachIdForSchedule = null;
       _visited.add(flatIndex);
       if (owner != null) _expanded.add(owner);
     });
@@ -287,37 +315,35 @@ class _AdminShellState extends State<AdminShell> {
                             return const SizedBox.shrink();
                           }
                           if (d.label == 'Coaches') {
+                            if (_scopedCoachIdForBookings != null) {
+                              final repository =
+                                  context.read<BookingListRepository>();
+                              return AdminBookingListRoute(
+                                  session: session,
+                                  repository: repository,
+                                  coachId: _scopedCoachIdForBookings!);
+                            }
+                            if (_scopedCoachIdForSchedule != null) {
+                              final repository =
+                                  context.read<CoachAvailabilityRepository>();
+                              return AdminCoachScheduleRoute(
+                                  session: session,
+                                  repository: repository,
+                                  coachId: _scopedCoachIdForSchedule!);
+                            }
                             return CoachesScreen(
                                 discardGuard: _coachReviewGuard,
                                 live: true,
-                                onOpenBookings: (id) {
-                                  final repository =
-                                      context.read<BookingListRepository>();
-                                  Navigator.push(
-                                      context,
-                                      MaterialPageRoute(
-                                          builder: (_) => AdminBookingListRoute(
-                                              session: session,
-                                              repository: repository,
-                                              coachId: id)));
-                                },
-                                onOpenSchedule: (id) {
-                                  final repository = context
-                                      .read<CoachAvailabilityRepository>();
-                                  Navigator.push(
-                                      context,
-                                      MaterialPageRoute(
-                                          builder: (_) =>
-                                              AdminCoachScheduleRoute(
-                                                  session: session,
-                                                  repository: repository,
-                                                  coachId: id)));
-                                });
+                                onOpenBookings: (id) => setState(() {
+                                  _scopedCoachIdForBookings = id;
+                                  _scopedCoachIdForSchedule = null;
+                                }),
+                                onOpenSchedule: (id) => setState(() {
+                                  _scopedCoachIdForSchedule = id;
+                                  _scopedCoachIdForBookings = null;
+                                }));
                           }
-                          return AdminFeatureAvailability.connected
-                                  .contains(d.label)
-                              ? d.page
-                              : AdminFeatureAvailability.page(d.label, session);
+                          return d.page;
                         }).toList(),
                       ),
                     ),

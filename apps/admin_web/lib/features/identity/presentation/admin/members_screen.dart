@@ -69,6 +69,103 @@ class _MembersScreenState extends State<MembersScreen> {
   String _query = '';
   int _page = 0;
 
+  // Live state
+  List<AdminMemberRecord> _liveItems = [];
+  final _liveCursors = <String?>[null];
+  String? _liveNext;
+  String? _liveError;
+  bool _liveLoading = true;
+  int _liveGeneration = 0;
+  Timer? _liveDebounce;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.live) {
+      _loadLive();
+    }
+  }
+
+  @override
+  void dispose() {
+    _liveDebounce?.cancel();
+    _liveGeneration++;
+    super.dispose();
+  }
+
+  Future<void> _loadLive() async {
+    _liveDebounce?.cancel();
+    final generation = ++_liveGeneration;
+    setState(() {
+      _liveLoading = true;
+      _liveError = null;
+      _liveItems = [];
+      _liveNext = null;
+    });
+    try {
+      final result = await context
+          .read<AdminMemberDirectoryRepository>()
+          .loadPage(
+            query: _query,
+            status: _status,
+            afterId: _liveCursors.last,
+          );
+      if (!mounted || generation != _liveGeneration) return;
+      setState(() {
+        _liveItems = result.items;
+        _liveNext = result.nextCursor;
+        _liveLoading = false;
+      });
+    } catch (_) {
+      if (!mounted || generation != _liveGeneration) return;
+      setState(() {
+        _liveLoading = false;
+        _liveError = 'Could not load members. Check your Admin access and retry.';
+      });
+    }
+  }
+
+  void _onSearch(String value) {
+    if (widget.live) {
+      _liveDebounce?.cancel();
+      _liveGeneration++;
+      setState(() {
+        _query = value;
+        _liveCursors
+          ..clear()
+          ..add(null);
+        _liveItems = [];
+        _liveNext = null;
+        _liveLoading = true;
+        _liveError = null;
+      });
+      _liveDebounce = Timer(const Duration(milliseconds: 300), _loadLive);
+    } else {
+      setState(() {
+        _query = value;
+        _page = 0;
+      });
+    }
+  }
+
+  void _onStatus(String s) {
+    if (widget.live) {
+      _liveDebounce?.cancel();
+      setState(() {
+        _status = s;
+        _liveCursors
+          ..clear()
+          ..add(null);
+      });
+      _loadLive();
+    } else {
+      setState(() {
+        _status = s;
+        _page = 0;
+      });
+    }
+  }
+
   void _refresh() => setState(() {});
 
   List<UserAccount> get _members => context
@@ -79,25 +176,30 @@ class _MembersScreenState extends State<MembersScreen> {
 
   @override
   Widget build(BuildContext context) {
-    if (widget.live) return const _LiveMembersView();
-    final all = _members;
-    final activeCount =
-        all.where((u) => u.status == AccountStatus.active).length;
-    final suspendedCount =
-        all.where((u) => u.status == AccountStatus.suspended).length;
+    final all = widget.live ? const <UserAccount>[] : _members;
+    final activeCount = widget.live
+        ? _liveItems.where((u) => u.status == 'active').length
+        : all.where((u) => u.status == AccountStatus.active).length;
+    final suspendedCount = widget.live
+        ? _liveItems.where((u) => u.status == 'suspended').length
+        : all.where((u) => u.status == AccountStatus.suspended).length;
 
-    final filtered = all.where((u) {
-      final matchesStatus = _status == 'All' || u.status.label == _status;
-      final matchesQuery = _query.isEmpty ||
-          u.name.toLowerCase().contains(_query.toLowerCase()) ||
-          u.email.toLowerCase().contains(_query.toLowerCase());
-      return matchesStatus && matchesQuery;
-    }).toList();
+    final filtered = widget.live
+        ? const <UserAccount>[]
+        : all.where((u) {
+            final matchesStatus = _status == 'All' || u.status.label == _status;
+            final matchesQuery = _query.isEmpty ||
+                u.name.toLowerCase().contains(_query.toLowerCase()) ||
+                u.email.toLowerCase().contains(_query.toLowerCase());
+            return matchesStatus && matchesQuery;
+          }).toList();
 
-    final pageCount = (filtered.length / _pageSize).ceil().clamp(1, 1 << 30);
+    final pageCount =
+        (filtered.length / _pageSize).ceil().clamp(1, 1 << 30);
     final page = _page.clamp(0, pageCount - 1);
     final start = page * _pageSize;
-    final pageItems = filtered.skip(start).take(_pageSize).toList();
+    final pageItems =
+        filtered.skip(start).take(_pageSize).toList();
 
     return Scaffold(
       backgroundColor: Colors.transparent,
@@ -111,30 +213,34 @@ class _MembersScreenState extends State<MembersScreen> {
               runSpacing: 12,
               children: [
                 _StatChip(
-                    icon: Icons.groups_rounded,
-                    label: 'Total members',
-                    value: '${all.length}'),
+                  icon: Icons.groups_rounded,
+                  label: widget.live ? 'Members on page' : 'Total members',
+                  value: widget.live ? '${_liveItems.length}' : '${all.length}',
+                ),
                 _StatChip(
-                    icon: Icons.check_circle_outline_rounded,
-                    label: 'Active',
-                    value: '$activeCount',
-                    color: AppColors.success),
+                  icon: Icons.check_circle_outline_rounded,
+                  label: widget.live ? 'Active on page' : 'Active',
+                  value: '$activeCount',
+                  color: AppColors.success,
+                ),
                 _StatChip(
-                    icon: Icons.block_rounded,
-                    label: 'Suspended',
-                    value: '$suspendedCount',
-                    color: AppColors.danger),
+                  icon: Icons.block_rounded,
+                  label: widget.live ? 'Suspended on page' : 'Suspended',
+                  value: '$suspendedCount',
+                  color: AppColors.danger,
+                ),
               ],
             ),
+            if (widget.live) ...[
+              const SizedBox(height: 12),
+              const Text('Organization membership records · Read-only directory'),
+            ],
             const SizedBox(height: 18),
             Row(
               children: [
                 Expanded(
                   child: TextField(
-                    onChanged: (v) => setState(() {
-                      _query = v;
-                      _page = 0;
-                    }),
+                    onChanged: _onSearch,
                     decoration: const InputDecoration(
                       isDense: true,
                       hintText: 'Search by name or email',
@@ -150,10 +256,7 @@ class _MembersScreenState extends State<MembersScreen> {
                     child: ChoiceChip(
                       label: Text(s),
                       selected: selected,
-                      onSelected: (_) => setState(() {
-                        _status = s;
-                        _page = 0;
-                      }),
+                      onSelected: (_) => _onStatus(s),
                       backgroundColor: AppColors.surface,
                       selectedColor: AppColors.primary,
                       labelStyle: TextStyle(
@@ -168,57 +271,156 @@ class _MembersScreenState extends State<MembersScreen> {
                     ),
                   );
                 }),
+                if (widget.live)
+                  Padding(
+                    padding: const EdgeInsets.only(left: 6),
+                    child: IconButton(
+                      tooltip: 'Refresh members',
+                      onPressed: _liveLoading
+                          ? null
+                          : () {
+                              _liveCursors
+                                ..clear()
+                                ..add(null);
+                              _loadLive();
+                            },
+                      icon: const Icon(Icons.refresh_rounded),
+                    ),
+                  ),
               ],
             ),
             const SizedBox(height: 14),
-            Container(
-              decoration: BoxDecoration(
-                color: AppColors.surface,
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: AppColors.hairline),
-              ),
-              child: Column(
-                children: [
-                  const _TableHeader(),
-                  const Divider(height: 1),
-                  if (pageItems.isEmpty)
-                    Padding(
-                      padding: const EdgeInsets.all(36),
-                      child: Center(
-                        child: Text('No members match that search.',
-                            style: Theme.of(context).textTheme.bodyMedium),
-                      ),
-                    )
-                  else
-                    ...List.generate(pageItems.length, (i) {
-                      final u = pageItems[i];
-                      return Column(
-                        children: [
+            if (widget.live && _liveLoading)
+              const LinearProgressIndicator()
+            else if (widget.live && _liveError != null)
+              Panel(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(_liveError!),
+                    TextButton(onPressed: _loadLive, child: const Text('Retry')),
+                  ],
+                ),
+              )
+            else
+              Container(
+                decoration: BoxDecoration(
+                  color: AppColors.surface,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: AppColors.hairline),
+                ),
+                child: Column(
+                  children: [
+                    const _TableHeader(),
+                    const Divider(height: 1),
+                    if (widget.live) ...[
+                      if (_liveItems.isEmpty)
+                        Padding(
+                          padding: const EdgeInsets.all(36),
+                          child: Center(
+                            child: Text(
+                              _liveNext != null
+                                  ? 'No matches in this batch. Continue to search more members.'
+                                  : _query.isNotEmpty || _status != 'All'
+                                      ? 'No members match that search.'
+                                      : 'No members found.',
+                              style: Theme.of(context).textTheme.bodyMedium,
+                            ),
+                          ),
+                        )
+                      else
+                        for (var i = 0; i < _liveItems.length; i++) ...[
                           if (i > 0) const Divider(height: 1),
-                          _MemberRow(
-                              user: u, onManage: () => _manage(context, u)),
+                          _MemberRow.member(
+                            _liveItems[i],
+                            onManage: () => showDialog<void>(
+                              context: context,
+                              builder: (_) => MemberDetailsDialog(
+                                memberId: _liveItems[i].id,
+                                repository: context.read<
+                                    AdminMemberDirectoryRepository>(),
+                              ),
+                            ),
+                          ),
                         ],
-                      );
-                    }),
-                ],
+                    ] else ...[
+                      if (pageItems.isEmpty)
+                        Padding(
+                          padding: const EdgeInsets.all(36),
+                          child: Center(
+                            child: Text('No members match that search.',
+                                style: Theme.of(context).textTheme.bodyMedium),
+                          ),
+                        )
+                      else
+                        ...List.generate(pageItems.length, (i) {
+                          final u = pageItems[i];
+                          return Column(
+                            children: [
+                              if (i > 0) const Divider(height: 1),
+                              _MemberRow(
+                                  user: u, onManage: () => _manage(context, u)),
+                            ],
+                          );
+                        }),
+                    ],
+                  ],
+                ),
               ),
-            ),
             const SizedBox(height: 12),
-            Row(
-              children: [
-                Text('${filtered.length} of ${all.length} members',
+            if (widget.live)
+              Wrap(
+                spacing: 12,
+                runSpacing: 8,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  Text(
+                    'Page ${_liveCursors.length} · ${_liveItems.length} matching members',
                     style: Theme.of(context)
                         .textTheme
                         .bodyMedium
-                        ?.copyWith(fontSize: 12)),
-                const Spacer(),
-                if (pageCount > 1)
-                  _Pagination(
-                      page: page,
-                      pageCount: pageCount,
-                      onSelect: (p) => setState(() => _page = p)),
-              ],
-            ),
+                        ?.copyWith(fontSize: 12),
+                  ),
+                  TextButton(
+                    onPressed: _liveLoading || _liveCursors.length == 1
+                        ? null
+                        : () {
+                            _liveCursors.removeLast();
+                            _loadLive();
+                          },
+                    child: const Text('Previous'),
+                  ),
+                  TextButton(
+                    onPressed: _liveLoading || _liveNext == null
+                        ? null
+                        : () {
+                            _liveCursors.add(_liveNext);
+                            _loadLive();
+                          },
+                    child: Text(
+                      _query.isNotEmpty || _status != 'All'
+                          ? 'Continue search'
+                          : 'Next',
+                    ),
+                  ),
+                ],
+              )
+            else
+              Row(
+                children: [
+                  Text('${filtered.length} of ${all.length} members',
+                      style: Theme.of(context)
+                          .textTheme
+                          .bodyMedium
+                          ?.copyWith(fontSize: 12)),
+                  const Spacer(),
+                  if (pageCount > 1)
+                    _Pagination(
+                        page: page,
+                        pageCount: pageCount,
+                        onSelect: (p) => setState(() => _page = p)),
+                ],
+              ),
           ],
         ),
       ),
@@ -472,216 +674,5 @@ class _MemberRow extends StatelessWidget {
         ),
       ),
     );
-  }
-}
-
-class _LiveMembersView extends StatefulWidget {
-  const _LiveMembersView();
-  @override
-  State<_LiveMembersView> createState() => _LiveMembersViewState();
-}
-
-class _LiveMembersViewState extends State<_LiveMembersView> {
-  List<AdminMemberRecord> _items = [];
-  final _cursors = <String?>[null];
-  String _query = '', _status = 'All';
-  String? _next, _error;
-  bool _loading = true;
-  int _generation = 0;
-  Timer? _debounce;
-  @override
-  void initState() {
-    super.initState();
-    _load();
-  }
-
-  @override
-  void dispose() {
-    _debounce?.cancel();
-    _generation++;
-    super.dispose();
-  }
-
-  Future<void> _load() async {
-    _debounce?.cancel();
-    final generation = ++_generation;
-    setState(() {
-      _loading = true;
-      _error = null;
-      _items = [];
-      _next = null;
-    });
-    try {
-      final result = await context
-          .read<AdminMemberDirectoryRepository>()
-          .loadPage(query: _query, status: _status, afterId: _cursors.last);
-      if (!mounted || generation != _generation) return;
-      setState(() {
-        _items = result.items;
-        _next = result.nextCursor;
-        _loading = false;
-      });
-    } catch (_) {
-      if (!mounted || generation != _generation) return;
-      setState(() {
-        _loading = false;
-        _error = 'Could not load members. Check your Admin access and retry.';
-      });
-    }
-  }
-
-  void _search(String value) {
-    _debounce?.cancel();
-    _generation++;
-    setState(() {
-      _query = value;
-      _cursors
-        ..clear()
-        ..add(null);
-      _items = [];
-      _next = null;
-      _loading = true;
-      _error = null;
-    });
-    _debounce = Timer(const Duration(milliseconds: 300), _load);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-        backgroundColor: Colors.transparent,
-        body: SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(28, 22, 28, 36),
-            child:
-                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Wrap(spacing: 12, runSpacing: 12, children: [
-                _StatChip(
-                    icon: Icons.groups_rounded,
-                    label: 'Members on page',
-                    value: '${_items.length}'),
-                _StatChip(
-                    icon: Icons.check_circle_outline_rounded,
-                    label: 'Active on page',
-                    value:
-                        '${_items.where((e) => e.status == "active").length}',
-                    color: AppColors.success),
-                _StatChip(
-                    icon: Icons.block_rounded,
-                    label: 'Suspended on page',
-                    value:
-                        '${_items.where((e) => e.status == "suspended").length}',
-                    color: AppColors.danger),
-              ]),
-              const SizedBox(height: 12),
-              const Text(
-                  'Organization membership records · Read-only directory'),
-              const SizedBox(height: 18),
-              Wrap(
-                  spacing: 10,
-                  runSpacing: 10,
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  children: [
-                    SizedBox(
-                        width: 330,
-                        child: TextField(
-                            maxLength: 120,
-                            onChanged: _search,
-                            onSubmitted: (_) => _load(),
-                            decoration: const InputDecoration(
-                                counterText: '',
-                                isDense: true,
-                                hintText: 'Search by name or email',
-                                prefixIcon:
-                                    Icon(Icons.search_rounded, size: 19)))),
-                    for (final status in ['All', 'Active', 'Suspended'])
-                      ChoiceChip(
-                          label: Text(status),
-                          selected: _status == status,
-                          onSelected: (_) {
-                            _debounce?.cancel();
-                            _status = status;
-                            _cursors
-                              ..clear()
-                              ..add(null);
-                            _load();
-                          }),
-                    IconButton(
-                        tooltip: 'Refresh members',
-                        onPressed: _loading
-                            ? null
-                            : () {
-                                _cursors
-                                  ..clear()
-                                  ..add(null);
-                                _load();
-                              },
-                        icon: const Icon(Icons.refresh_rounded)),
-                  ]),
-              const SizedBox(height: 14),
-              if (_loading) const LinearProgressIndicator(),
-              if (_error != null)
-                Panel(
-                    child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                      Text(_error!),
-                      TextButton(onPressed: _load, child: const Text('Retry')),
-                    ]))
-              else if (!_loading)
-                Container(
-                    decoration: BoxDecoration(
-                        color: AppColors.surface,
-                        borderRadius: BorderRadius.circular(14),
-                        border: Border.all(color: AppColors.hairline)),
-                    child: Column(children: [
-                      const _TableHeader(),
-                      const Divider(height: 1),
-                      if (_items.isEmpty)
-                        Padding(
-                            padding: const EdgeInsets.all(36),
-                            child: Text(_next != null
-                                ? 'No matches in this batch. Continue to search more members.'
-                                : _query.isNotEmpty || _status != 'All'
-                                    ? 'No members match that search.'
-                                    : 'No members found.')),
-                      for (final item in _items) ...[
-                        _MemberRow.member(item,
-                            onManage: () => showDialog<void>(
-                                context: context,
-                                builder: (_) => MemberDetailsDialog(
-                                    memberId: item.id,
-                                    repository: context.read<
-                                        AdminMemberDirectoryRepository>()))),
-                        const Divider(height: 1),
-                      ],
-                    ])),
-              const SizedBox(height: 12),
-              Wrap(
-                  spacing: 12,
-                  runSpacing: 8,
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  children: [
-                    Text(
-                        'Page ${_cursors.length} · ${_items.length} matching members'),
-                    TextButton(
-                        onPressed: _loading || _cursors.length == 1
-                            ? null
-                            : () {
-                                _cursors.removeLast();
-                                _load();
-                              },
-                        child: const Text('Previous')),
-                    TextButton(
-                        onPressed: _loading || _next == null
-                            ? null
-                            : () {
-                                _cursors.add(_next);
-                                _load();
-                              },
-                        child: Text(_query.isNotEmpty || _status != 'All'
-                            ? 'Continue search'
-                            : 'Next')),
-                  ]),
-            ])));
   }
 }

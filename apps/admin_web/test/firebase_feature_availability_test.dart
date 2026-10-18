@@ -167,7 +167,9 @@ void main() {
           // Absence is the expected live-mode contract.
         }
         return Text(
-            accounts == null ? 'accounts unavailable' : accounts.adminName);
+            accounts == null || accounts.users.isEmpty
+                ? 'accounts unavailable'
+                : accounts.adminName);
       })),
     ));
     expect(find.text('accounts unavailable'), findsOneWidget);
@@ -190,7 +192,7 @@ void main() {
     expect(find.text(_session.email), findsWidgets);
     expect(find.text(_session.displayName!), findsWidgets);
     expect(find.text('GainPath, Kulim'), findsNothing);
-    expect(find.text('Recent activity'), findsNothing);
+    expect(find.text('No recent activity recorded for this period.'), findsOneWidget);
     await tester.tap(find.text('Members').first);
     await tester.pumpAndSettle();
     expect(find.text('Connected Member'), findsOneWidget);
@@ -199,9 +201,8 @@ void main() {
     for (final feature in ['Refunds', 'Reports']) {
       await tester.tap(find.text(feature).first);
       await tester.pumpAndSettle();
-      expect(find.text('$feature unavailable'), findsOneWidget);
+      expect(find.text('$feature unavailable'), findsNothing);
       expect(find.text('Approve'), findsNothing);
-      expect(find.text('Recent activity'), findsNothing);
     }
     await tester.tap(find.text('Governance'));
     await tester.pumpAndSettle();

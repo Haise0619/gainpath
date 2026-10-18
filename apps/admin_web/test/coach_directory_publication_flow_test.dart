@@ -149,7 +149,10 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Coaches').last);
     await tester.pumpAndSettle();
-    expect(find.text('Add a coach'), findsNothing);
+    expect(
+        tester.widget<FilledButton>(
+            find.byKey(const ValueKey('add-coach'))).onPressed,
+        isNull);
     await tester.tap(find.text('Review'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Publish profile'));

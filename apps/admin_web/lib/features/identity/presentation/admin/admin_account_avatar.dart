@@ -20,7 +20,14 @@ class _AdminAccountAvatarState extends State<AdminAccountAvatar> {
     super.didChangeDependencies();
     if (_started || !widget.live) return;
     _started = true;
-    _photo = context.read<AdminAccountContactRepository>().loadCurrentPhoto();
+    try {
+      _photo = context
+          .read<AdminAccountContactRepository>()
+          .loadCurrentPhoto()
+          .catchError((_) => null);
+    } catch (_) {
+      _photo = null;
+    }
   }
 
   @override

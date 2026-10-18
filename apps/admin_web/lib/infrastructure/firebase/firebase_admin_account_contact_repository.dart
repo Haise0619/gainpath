@@ -13,13 +13,15 @@ class FirebaseAdminAccountContactRepository
       AccountPhotoStore? photoStore,
       FirebaseFirestore? firestore,
       FirebaseAuth? auth})
-      : _db = firestore ?? FirebaseFirestore.instance,
+      : _firestore = firestore,
         _photos = photoStore,
-        _auth = auth ?? FirebaseAuth.instance;
+        _authInstance = auth;
   final SessionScope scope;
   final bool Function() isCurrent;
-  final FirebaseFirestore _db;
-  final FirebaseAuth _auth;
+  final FirebaseFirestore? _firestore;
+  final FirebaseAuth? _authInstance;
+  FirebaseFirestore get _db => _firestore ?? FirebaseFirestore.instance;
+  FirebaseAuth get _auth => _authInstance ?? FirebaseAuth.instance;
   final Object _lifetime = Object();
   bool _invalidated = false;
   AccountPhotoStore? _photos;
@@ -235,8 +237,12 @@ class FirebaseAdminAccountContactRepository
 
   @override
   Future<Uint8List?> loadCurrentPhoto() {
-    _check();
-    return _preview ??= load().then(readPhoto);
+    try {
+      _check();
+      return _preview ??= load().then(readPhoto);
+    } catch (e) {
+      return Future.error(e);
+    }
   }
 
   @override

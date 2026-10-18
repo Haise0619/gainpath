@@ -19,7 +19,13 @@ class _HourPoint {
 class UsageEngagementSection extends StatelessWidget {
   final GlobalKey anchorKey;
   final ReportFilter filter;
-  const UsageEngagementSection({super.key, required this.anchorKey, required this.filter});
+  final bool live;
+  const UsageEngagementSection({
+    super.key,
+    required this.anchorKey,
+    required this.filter,
+    this.live = false,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -38,12 +44,16 @@ class UsageEngagementSection extends StatelessWidget {
       anchorKey: anchorKey,
       title: 'Platform Usage Pattern',
       subtitle: 'When members are actually training',
-      live: false,
+      live: live,
+      tagLabel: live ? 'Unavailable' : null,
       exportFilename: 'usage_pattern.csv',
-      exportRows: () => [
-        ['Hour', 'Sessions'],
-        ...hourData.map((h) => [h.label, h.count]),
-      ],
+      exportEnabled: !live,
+      exportRows: live
+          ? null
+          : () => [
+              ['Hour', 'Sessions'],
+              ...hourData.map((h) => [h.label, h.count]),
+            ],
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -51,36 +61,43 @@ class UsageEngagementSection extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Sessions started, by hour — illustrative, all platform activity',
+                Text(
+                    live
+                        ? 'Hourly session distribution — tracking unavailable'
+                        : 'Sessions started, by hour — illustrative, all platform activity',
                     style: Theme.of(context).textTheme.bodyMedium),
                 const SizedBox(height: 10),
                 SizedBox(
                   height: 190,
-                  child: SfCartesianChart(
-                    plotAreaBorderWidth: 0,
-                    primaryXAxis: const CategoryAxis(
-                      majorGridLines: MajorGridLines(width: 0),
-                      axisLine: AxisLine(width: 0),
-                      interval: 3,
-                      labelStyle: TextStyle(fontSize: 10, color: AppColors.inkSoft),
-                    ),
-                    primaryYAxis: const NumericAxis(
-                      majorGridLines: MajorGridLines(width: 0.6, color: AppColors.hairline),
-                      axisLine: AxisLine(width: 0),
-                      labelStyle: TextStyle(fontSize: 10, color: AppColors.inkSoft),
-                    ),
-                    tooltipBehavior: TooltipBehavior(enable: true, header: '', format: 'point.x h  ·  point.y sessions'),
-                    series: <CartesianSeries<_HourPoint, String>>[
-                      ColumnSeries<_HourPoint, String>(
-                        dataSource: hourData,
-                        xValueMapper: (d, _) => d.label,
-                        yValueMapper: (d, _) => d.count,
-                        color: AppColors.primary,
-                        width: 0.7,
-                        borderRadius: BorderRadius.circular(3),
-                      ),
-                    ],
-                  ),
+                  child: live
+                      ? const NoFilteredData(
+                          message:
+                              'Platform hourly usage patterns are unavailable in this release.')
+                      : SfCartesianChart(
+                          plotAreaBorderWidth: 0,
+                          primaryXAxis: const CategoryAxis(
+                            majorGridLines: MajorGridLines(width: 0),
+                            axisLine: AxisLine(width: 0),
+                            interval: 3,
+                            labelStyle: TextStyle(fontSize: 10, color: AppColors.inkSoft),
+                          ),
+                          primaryYAxis: const NumericAxis(
+                            majorGridLines: MajorGridLines(width: 0.6, color: AppColors.hairline),
+                            axisLine: AxisLine(width: 0),
+                            labelStyle: TextStyle(fontSize: 10, color: AppColors.inkSoft),
+                          ),
+                          tooltipBehavior: TooltipBehavior(enable: true, header: '', format: 'point.x h  ·  point.y sessions'),
+                          series: <CartesianSeries<_HourPoint, String>>[
+                            ColumnSeries<_HourPoint, String>(
+                              dataSource: hourData,
+                              xValueMapper: (d, _) => d.label,
+                              yValueMapper: (d, _) => d.count,
+                              color: AppColors.primary,
+                              width: 0.7,
+                              borderRadius: BorderRadius.circular(3),
+                            ),
+                          ],
+                        ),
                 ),
               ],
             ),
@@ -89,10 +106,15 @@ class UsageEngagementSection extends StatelessWidget {
           Row(
             children: [
               Expanded(
-                  child: StatTile('${bookings.length}', 'Coaching sessions in this period',
+                  child: StatTile(
+                      live ? '—' : '${bookings.length}',
+                      'Coaching sessions in this period',
                       valueColor: AppColors.primary)),
               const SizedBox(width: 10),
-              Expanded(child: StatTile('$weekendPct%', 'Fall on a weekend')),
+              Expanded(
+                  child: StatTile(
+                      live ? '—' : '$weekendPct%',
+                      'Fall on a weekend')),
             ],
           ),
         ],
@@ -104,7 +126,13 @@ class UsageEngagementSection extends StatelessWidget {
 class CoachBookingUtilizationSection extends StatelessWidget {
   final GlobalKey anchorKey;
   final ReportFilter filter;
-  const CoachBookingUtilizationSection({super.key, required this.anchorKey, required this.filter});
+  final bool live;
+  const CoachBookingUtilizationSection({
+    super.key,
+    required this.anchorKey,
+    required this.filter,
+    this.live = false,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -127,14 +155,21 @@ class CoachBookingUtilizationSection extends StatelessWidget {
       anchorKey: anchorKey,
       title: 'Coach Booking Utilization',
       subtitle: 'How full the roster is',
-      live: true,
+      live: !live || rows.isNotEmpty,
+      tagLabel: live && rows.isEmpty ? 'Unavailable' : null,
       exportFilename: 'coach_booking_utilization.csv',
-      exportRows: () => [
-        ['Coach', 'Branch', 'Sessions', 'Utilization %'],
-        ...rows.map((r) => [r.coach.name, r.coach.branch, r.sessions, (r.utilization * 100).round()]),
-      ],
+      exportEnabled: !(live && rows.isEmpty),
+      exportRows: live && rows.isEmpty
+          ? null
+          : () => [
+              ['Coach', 'Branch', 'Sessions', 'Utilization %'],
+              ...rows.map((r) => [r.coach.name, r.coach.branch, r.sessions, (r.utilization * 100).round()]),
+            ],
       child: rows.isEmpty
-          ? const NoFilteredData(message: 'No coaches match this branch filter.')
+          ? NoFilteredData(
+              message: live
+                  ? 'No coach booking utilization data available in this release.'
+                  : 'No coaches match this branch filter.')
           : Panel(
               child: Column(
                 children: rows
@@ -158,7 +193,13 @@ class CoachBookingUtilizationSection extends StatelessWidget {
 class CoachPerformanceSection extends StatelessWidget {
   final GlobalKey anchorKey;
   final ReportFilter filter;
-  const CoachPerformanceSection({super.key, required this.anchorKey, required this.filter});
+  final bool live;
+  const CoachPerformanceSection({
+    super.key,
+    required this.anchorKey,
+    required this.filter,
+    this.live = false,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -176,15 +217,22 @@ class CoachPerformanceSection extends StatelessWidget {
       anchorKey: anchorKey,
       title: 'Coach Performance Comparison',
       subtitle: 'Ratings across the roster',
-      live: true,
+      live: !live || coaches.isNotEmpty,
+      tagLabel: live && coaches.isEmpty ? 'Unavailable' : null,
       exportFilename: 'coach_performance.csv',
-      exportRows: () => [
-        ['Coach', 'Rating', 'Reviews', 'Sessions in period', 'Response time'],
-        ...coaches.map((c) =>
-            [c.name, c.rating, c.reviews, sessionsInPeriod[c.id], c.responseTime]),
-      ],
+      exportEnabled: !(live && coaches.isEmpty),
+      exportRows: live && coaches.isEmpty
+          ? null
+          : () => [
+              ['Coach', 'Rating', 'Reviews', 'Sessions in period', 'Response time'],
+              ...coaches.map((c) =>
+                  [c.name, c.rating, c.reviews, sessionsInPeriod[c.id], c.responseTime]),
+            ],
       child: coaches.isEmpty
-          ? const NoFilteredData(message: 'No coaches match this branch filter.')
+          ? NoFilteredData(
+              message: live
+                  ? 'No coach performance data available in this release.'
+                  : 'No coaches match this branch filter.')
           : Column(
               children: [
                 Panel(
