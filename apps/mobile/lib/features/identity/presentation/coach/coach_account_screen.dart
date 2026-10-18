@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:gainpath_identity/gainpath_identity.dart';
 import 'package:gainpath_domain/identity.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
-import '../../../../navigation/feature_navigation.dart';
+import 'coach_account_presentation.dart';
 import 'certifications_screen.dart';
 import 'coach_settings_screen.dart';
 import 'live_coach_profile_views.dart';
@@ -63,93 +63,33 @@ class _CoachAccountScreenState extends State<CoachAccountScreen> {
         .where((c) => c.status == CertificationStatus.pendingReview)
         .length;
 
-    return Scaffold(
-      appBar: AppBar(title: const Text('My account')),
-      body: PageBody(
-        children: [
-          _ProHeader(coach: coach),
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              Expanded(
-                  child: StatTile('${coach.rating}', 'Rating',
-                      valueColor: AppColors.accent)),
-              const SizedBox(width: 10),
-              Expanded(
-                  child: StatTile('${coach.sessionsCompleted}', 'Sessions')),
-              const SizedBox(width: 10),
-              Expanded(
-                  child: StatTile('${coach.yearsExperience}y', 'Experience')),
-            ],
-          ),
-          const SizedBox(height: 12),
-          SizedBox(
-            width: double.infinity,
-            child: OutlinedButton.icon(
-              style: OutlinedButton.styleFrom(minimumSize: const Size(0, 48)),
-              onPressed: () => Navigator.pushNamed(
-                  context, FeatureNavigation.coach,
-                  arguments: coach),
-              icon: const Icon(Icons.visibility_outlined, size: 19),
-              label: const Text('Preview public profile'),
-            ),
-          ),
-          const SizedBox(height: 22),
-          const Eyebrow('Professional profile'),
-          Panel(
-            padding: EdgeInsets.zero,
-            child: Column(
-              children: [
-                _row(
-                  context,
-                  Icons.edit_note_rounded,
-                  'Bio & specialties',
-                  'What members see in the directory',
-                  () => _open(const EditCoachProfileScreen()),
-                ),
-                const Divider(height: 1, indent: 62),
-                _row(
-                  context,
-                  Icons.workspace_premium_rounded,
-                  'Certifications',
-                  '$verifiedCerts verified'
-                      '${pendingCerts > 0 ? ', $pendingCerts pending review' : ''}',
-                  () => _open(const CertificationsScreen()),
-                ),
-                const Divider(height: 1, indent: 62),
-                _row(
-                  context,
-                  Icons.photo_camera_rounded,
-                  'Profile photo',
-                  'Update your directory picture',
-                  () => showToast(
-                      context, 'Photo upload is not part of this prototype.'),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 20),
-          const Eyebrow('Account'),
-          Panel(
-            padding: EdgeInsets.zero,
-            child: _row(
-              context,
-              Icons.settings_outlined,
-              'Settings',
-              'Contact details, notifications, security',
-              () => _open(const CoachSettingsScreen()),
-            ),
-          ),
-          const SizedBox(height: 20),
-          OutlinedButton.icon(
-            style: OutlinedButton.styleFrom(foregroundColor: AppColors.danger),
-            onPressed: _signOut,
-            icon: const Icon(Icons.logout_rounded, size: 19),
-            label: const Text('Sign out'),
-          ),
-        ],
-      ),
-    );
+    final data = CoachAccountData(
+        name: coach.name,
+        specialty: coach.specialty,
+        photo: NetworkImage(coach.imageUrl),
+        verified: coach.verified,
+        published: true,
+        directoryLabel: 'Live in directory',
+        branch: coach.branch,
+        rating: '${coach.rating}',
+        sessions: '${coach.sessionsCompleted}',
+        experience: '${coach.yearsExperience}y',
+        reviews: '${coach.reviews}',
+        approvedCertifications: verifiedCerts,
+        pendingCertifications: pendingCerts,
+        bio: coach.bio,
+        tags: coach.specializationTags,
+        fee: 'MYR ${coach.fee.toStringAsFixed(2)}');
+    return CoachAccountPresentation(
+        data: data,
+        onSignOut: _signOut,
+        onPreview: () => _open(CoachAccountProfilePreview(
+            data: data, label: 'Public profile preview')),
+        onEdit: () => _open(const EditCoachProfileScreen()),
+        onCertifications: () => _open(const CertificationsScreen()),
+        onPhoto: () =>
+            showToast(context, 'Photo upload is not part of this prototype.'),
+        onSettings: () => _open(const CoachSettingsScreen()));
   }
 
   Future<void> _signOut() async {
@@ -161,128 +101,5 @@ class _CoachAccountScreenState extends State<CoachAccountScreen> {
     if (ok && mounted) {
       context.read<AuthBloc>().add(const LoggedOut());
     }
-  }
-
-  Widget _row(BuildContext context, IconData icon, String title,
-      String subtitle, VoidCallback onTap) {
-    return ListTile(
-      onTap: onTap,
-      leading: Container(
-        width: 38,
-        height: 38,
-        decoration: BoxDecoration(
-          color: AppColors.surfaceAlt,
-          borderRadius: BorderRadius.circular(11),
-        ),
-        child: Icon(icon, size: 19, color: AppColors.primary),
-      ),
-      title: Text(title, style: Theme.of(context).textTheme.titleMedium),
-      subtitle: Text(subtitle,
-          style:
-              Theme.of(context).textTheme.bodyMedium?.copyWith(fontSize: 13)),
-      trailing: const Icon(Icons.arrow_forward_ios_rounded, size: 14),
-    );
-  }
-}
-
-/// Professional hero: online photo, name + verification, specialty, and a
-/// live directory-status pill — the trust signal that distinguishes a
-/// coach's account from a member's personal card.
-class _ProHeader extends StatelessWidget {
-  final Coach coach;
-  const _ProHeader({required this.coach});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        gradient: AppColors.heroGradient,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-              color: AppColors.primary.withValues(alpha: 0.28),
-              blurRadius: 22,
-              offset: const Offset(0, 10)),
-        ],
-      ),
-      child: Column(
-        children: [
-          Row(
-            children: [
-              ClipRRect(
-                borderRadius: BorderRadius.circular(18),
-                child: SizedBox(
-                    width: 68,
-                    height: 68,
-                    child: networkAvatar(coach.imageUrl)),
-              ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Flexible(
-                          child: Text(coach.name,
-                              style: const TextStyle(
-                                  fontSize: 19,
-                                  fontWeight: FontWeight.w800,
-                                  color: Colors.white)),
-                        ),
-                        if (coach.verified) ...[
-                          const SizedBox(width: 6),
-                          const Icon(Icons.verified_rounded,
-                              size: 18, color: Colors.white),
-                        ],
-                      ],
-                    ),
-                    const SizedBox(height: 3),
-                    Text(coach.specialty,
-                        style: const TextStyle(
-                            color: Colors.white70, fontSize: 13.5)),
-                    const SizedBox(height: 3),
-                    Text(coach.branch,
-                        style: const TextStyle(
-                            color: Colors.white60, fontSize: 12.5)),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 14),
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.15),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Row(
-              children: [
-                Container(
-                  width: 8,
-                  height: 8,
-                  decoration: const BoxDecoration(
-                      color: AppColors.success, shape: BoxShape.circle),
-                ),
-                const SizedBox(width: 10),
-                const Expanded(
-                  child: Text('Live in directory',
-                      style: TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w600,
-                          fontSize: 13.5)),
-                ),
-                Text('${coach.reviews} reviews',
-                    style:
-                        const TextStyle(color: Colors.white70, fontSize: 12.5)),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
   }
 }

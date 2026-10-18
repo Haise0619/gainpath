@@ -7,6 +7,7 @@ import 'package:firebase_storage/firebase_storage.dart';
 import 'package:http/http.dart' as http;
 import 'package:gainpath_domain/gainpath_domain.dart' show SessionScope;
 import 'package:gainpath_domain/identity.dart';
+import '../local/coach_avatar_image.dart';
 
 class FirebaseCoachAccountRepository {
   FirebaseCoachAccountRepository(
@@ -144,6 +145,21 @@ class FirebaseCoachAccountRepository {
             contentType: contentType, cacheControl: 'private, no-store'));
     check();
     return target;
+  }
+
+  Future<Uint8List?> loadProfilePhoto(String? photoPath) async {
+    check();
+    if (photoPath == null) return null;
+    final prefix =
+        'orgs/${scope.organizationId}/coachProfilePhotos/${scope.userId}/';
+    if (!photoPath.startsWith(prefix) ||
+        !RegExp(r'^[a-f0-9]{32}$')
+            .hasMatch(photoPath.substring(prefix.length))) {
+      throw const CoachRepositoryException('permission-denied');
+    }
+    final image = await decodeStaticCoachAvatar(await read(photoPath));
+    check();
+    return image;
   }
 
   Future<Uint8List> read(String path) async {

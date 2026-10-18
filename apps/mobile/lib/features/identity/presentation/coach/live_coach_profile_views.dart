@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+import 'coach_account_presentation.dart';
 import 'coach_unsaved_changes_guard.dart';
 import 'coach_account_session_guard.dart';
 import 'package:flutter/material.dart';
@@ -31,135 +33,240 @@ class _LiveCoachAccountViewState extends State<LiveCoachAccountView> {
   late final controller = CoachProfileCubit(
       repository: widget.repository, isCurrent: widget.isCurrent)
     ..reload();
+  int? approvedCount, pendingCount;
+  bool? credentialsVerified;
+  String? cachedPhotoPath;
+  int? cachedPhotoRevision;
+  Future<Uint8List?>? cachedPhoto;
+  @override
+  void initState() {
+    super.initState();
+    loadCertificationSummary();
+  }
+
+  Future<void> loadCertificationSummary() async {
+    final repository = widget.accountRepository;
+    if (repository == null || !widget.isCurrent()) return;
+    try {
+      final response =
+          await repository.command('getCoachCertificationsCommand');
+      final count = response['approvedCount'],
+          entries = response['certifications'];
+      if (!mounted || !widget.isCurrent()) return;
+      if (response['schemaVersion'] != 1 ||
+          count is! int ||
+          count < 0 ||
+          response['certificationVerified'] is! bool ||
+          entries is! List) {
+        return;
+      }
+      setState(() {
+        approvedCount = count;
+        credentialsVerified =
+            response['certificationVerified'] == true && count > 0;
+        pendingCount = response['nextCursor'] == null
+            ? entries
+                .where((entry) => entry is Map && entry['status'] == 'pending')
+                .length
+            : null;
+      });
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          approvedCount = null;
+          pendingCount = null;
+          credentialsVerified = null;
+        });
+      }
+    }
+  }
+
+  Future<void> openAccount(Widget child) async {
+    final repository = widget.accountRepository;
+    if (repository == null || !widget.isCurrent()) return;
+    await Navigator.push(
+        context,
+        MaterialPageRoute(
+            builder: (_) => CoachAccountSessionGuard(
+                repository: repository, child: child)));
+    if (mounted && widget.isCurrent()) {
+      await controller.reload();
+      await loadCertificationSummary();
+    }
+  }
+
+  Future<void> refresh() async {
+    // An explicit retry must also recover a failed image fetch at this revision.
+    cachedPhoto = null;
+    await controller.reload();
+    await loadCertificationSummary();
+  }
+
+  Future<Uint8List?> photoFor(String? path, int revision) {
+    if (cachedPhoto == null ||
+        cachedPhotoPath != path ||
+        cachedPhotoRevision != revision) {
+      cachedPhotoPath = path;
+      cachedPhotoRevision = revision;
+      cachedPhoto = path == null
+          ? Future.value(null)
+          : (widget.accountRepository?.loadProfilePhoto(path) ??
+                  Future<Uint8List?>.value(null))
+              .catchError((_) => null);
+    }
+    return cachedPhoto!;
+  }
+
+  CoachAccountData dataFor(CoachProfileState state,
+      CoachProfessionalFields? fields, ImageProvider? photo,
+      {bool draftPreview = false}) {
+    final publication = state.publication;
+    final published = publication?.isPublished == true;
+    return CoachAccountData(
+        name: fields?.displayName ?? '-',
+        specialty: fields?.specialty ?? '-',
+        photo: photo,
+        verified:
+            credentialsVerified ?? publication?.certificationVerified ?? false,
+        published: published && !draftPreview,
+        directoryLabel: draftPreview
+            ? 'Draft — not published'
+            : published
+                ? 'Live in directory'
+                : publication == null
+                    ? 'Not published in directory'
+                    : 'Inactive in directory',
+        experience: fields?.yearsExperience == null
+            ? null
+            : '${fields!.yearsExperience}y',
+        approvedCertifications: approvedCount ??
+            (publication?.certificationVerified == true
+                ? publication!.approvedCertificationCount
+                : null),
+        pendingCertifications: pendingCount,
+        publicationStatus: published
+            ? 'Directory: published'
+            : publication == null
+                ? 'Directory: not published'
+                : 'Directory: inactive',
+        publicationMessage: state.profile == null
+            ? 'Create a profile for Admin review.'
+            : published &&
+                    publication?.sourceRevision == state.profile?.revision
+                ? 'Current profile is published. Credentials are verified separately by Admin.'
+                : 'Saved draft / pending Admin publication. Previous public content remains until Admin republishes or deactivates.',
+        bio: fields?.bio,
+        tags: fields?.specializationTags ?? const [],
+        fee: fields?.consultationFeeMinor == null
+            ? null
+            : 'MYR ${(fields!.consultationFeeMinor! / 100).toStringAsFixed(2)}');
+  }
+
+  Future<void> preview(CoachProfileState state) async {
+    final repository = widget.accountRepository;
+    if (!widget.isCurrent() || state.profile == null) return;
+    final publication = state.publication;
+    final draftBytes = await photoFor(
+        state.profile!.fields.photoPath, state.profile!.revision);
+    if (!mounted || !widget.isCurrent()) return;
+    final draft = dataFor(state, state.profile!.fields,
+        draftBytes == null ? null : MemoryImage(draftBytes),
+        draftPreview: true);
+    CoachAccountData data = draft;
+    if (publication != null) {
+      Uint8List? bytes;
+      try {
+        bytes =
+            await repository?.loadProfilePhoto(publication.fields.photoPath);
+      } catch (_) {
+        bytes = null;
+      }
+      if (!mounted || !widget.isCurrent()) return;
+      data = dataFor(
+          state, publication.fields, bytes == null ? null : MemoryImage(bytes));
+    }
+    final child = CoachAccountProfilePreview(
+        data: data,
+        label: publication == null
+            ? 'Owner draft preview — not published'
+            : publication.isPublished
+                ? 'Published directory snapshot — what members can see'
+                : 'Inactive directory snapshot — hidden from members',
+        draft: publication != null &&
+                publication.sourceRevision != state.profile!.revision
+            ? draft
+            : null);
+    if (repository != null) {
+      try {
+        repository.check();
+      } catch (_) {
+        return;
+      }
+    }
+    await Navigator.push(
+        context,
+        MaterialPageRoute(
+            builder: (_) => repository == null
+                ? child
+                : CoachAccountSessionGuard(
+                    repository: repository, child: child)));
+  }
+
   @override
   void dispose() {
+    cachedPhoto = null;
     controller.close();
     super.dispose();
   }
 
   @override
-  Widget build(BuildContext context) => BlocBuilder<CoachProfileCubit,
-          CoachProfileState>(
-      bloc: controller,
-      builder: (context, state) => Scaffold(
-          appBar: AppBar(title: const Text('My account'), actions: [
-            IconButton(
-                tooltip: 'Refresh profile',
-                onPressed: state.saving ? null : controller.reload,
-                icon: const Icon(Icons.refresh))
-          ]),
-          body: PageBody(children: [
-            if (state.status == CoachProfileStatus.loading)
-              const LinearProgressIndicator(),
-            if (state.message != null) Text(state.message!),
-            if (state.status == CoachProfileStatus.ready) ...[
-              if (state.profile?.fields.photoPath != null &&
-                  widget.accountRepository != null)
-                FutureBuilder(
-                    future: widget.accountRepository!
-                        .read(state.profile!.fields.photoPath!),
-                    builder: (context, snapshot) => snapshot.hasData
-                        ? SizedBox(
-                            height: 140,
-                            child: Image.memory(snapshot.data!,
-                                gaplessPlayback: false))
-                        : const ListTile(
-                            leading: Icon(Icons.person),
-                            title: Text('Professional profile photo'),
-                            subtitle: Text('Private photo preview'))),
-              Container(
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                      gradient: AppColors.heroGradient,
-                      borderRadius: BorderRadius.circular(20)),
-                  child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                            state.profile?.fields.displayName ??
-                                'Professional profile',
-                            style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 22,
-                                fontWeight: FontWeight.bold)),
-                        Text(
-                            state.profile?.fields.specialty ??
-                                'No professional profile yet',
-                            style: const TextStyle(color: Colors.white70)),
-                      ])),
-              const SizedBox(height: 16),
-              Text(state.publication?.isPublished == true
-                  ? 'Directory: published'
-                  : state.publication == null
-                      ? 'Directory: not published'
-                      : 'Directory: inactive'),
-              Text(state.publication?.certificationVerified == true
-                  ? 'Credentials: Admin approved'
-                  : 'Credentials: no approved publication summary'),
-              Text(state.profile?.fields.consultationFeeMinor == null
-                  ? 'Consultation fee: not set'
-                  : 'Consultation fee: MYR ${(state.profile!.fields.consultationFeeMinor! / 100).toStringAsFixed(2)}'),
-              Text(state.profile == null
-                  ? 'Create a profile for Admin review.'
-                  : state.publication?.isPublished == true &&
-                          state.publication?.sourceRevision ==
-                              state.profile?.revision
-                      ? 'Current profile is published. Publication is not certification verification.'
-                      : 'Saved draft / pending Admin publication. Previous public content remains until Admin republishes or deactivates.'),
-              const SizedBox(height: 16),
-              if (state.profile != null)
-                Panel(
-                    child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                      Text(state.profile!.fields.bio),
-                      Text(
-                          state.profile!.fields.specializationTags.join(' · ')),
-                      if (state.profile!.fields.yearsExperience != null)
-                        Text(
-                            '${state.profile!.fields.yearsExperience} years experience (self-reported)')
-                    ])),
-              const SizedBox(height: 16),
-              FilledButton.icon(
-                  onPressed: widget.onOpenEditor == null
-                      ? null
-                      : () => widget.onOpenEditor!(controller),
-                  icon: const Icon(Icons.edit_note),
-                  label: const Text('Edit professional profile')),
-              const SizedBox(height: 16),
-              if (widget.accountRepository != null) ...[
-                ListTile(
-                    leading: const Icon(Icons.workspace_premium),
-                    title: const Text('Certifications'),
-                    subtitle:
-                        const Text('Private evidence and Admin review status'),
-                    onTap: () => Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                            builder: (_) => CoachAccountSessionGuard(
-                                repository: widget.accountRepository!,
-                                child: LiveCoachCertifications(
-                                    repository: widget.accountRepository!))))),
-                ListTile(
-                    leading: const Icon(Icons.settings),
-                    title: const Text('Settings'),
-                    subtitle: const Text(
-                        'Private contact details, notifications and password'),
-                    onTap: () => Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                            builder: (_) => CoachAccountSessionGuard(
-                                repository: widget.accountRepository!,
-                                child: LiveCoachAccountSettings(
-                                    repository: widget.accountRepository!))))),
-              ],
-            ],
-            const SizedBox(height: 20),
-            OutlinedButton.icon(
-                onPressed: widget.onSignOut,
-                icon: const Icon(Icons.logout),
-                label: const Text('Sign out')),
-          ])));
+  Widget build(BuildContext context) =>
+      BlocBuilder<CoachProfileCubit, CoachProfileState>(
+          bloc: controller,
+          builder: (context, state) {
+            final ready =
+                state.status == CoachProfileStatus.ready && widget.isCurrent();
+            return FutureBuilder<Uint8List?>(
+                key: ValueKey(
+                    (state.profile?.fields.photoPath, state.profile?.revision)),
+                future: ready
+                    ? photoFor(state.profile?.fields.photoPath,
+                        state.profile?.revision ?? 0)
+                    : null,
+                builder: (context, snapshot) {
+                  final bytes = ready &&
+                          snapshot.connectionState == ConnectionState.done &&
+                          !snapshot.hasError
+                      ? snapshot.data
+                      : null;
+                  final data = dataFor(state, state.profile?.fields,
+                      bytes == null ? null : MemoryImage(bytes));
+                  return CoachAccountPresentation(
+                      data: data,
+                      loading: state.status == CoachProfileStatus.loading,
+                      message: state.message,
+                      onRefresh: refresh,
+                      onSignOut: widget.onSignOut,
+                      onPreview: ready && state.profile != null
+                          ? () => preview(state)
+                          : null,
+                      onEdit: ready && widget.onOpenEditor != null
+                          ? () => widget.onOpenEditor!(controller)
+                          : null,
+                      onPhoto: ready && widget.onOpenEditor != null
+                          ? () => widget.onOpenEditor!(controller)
+                          : null,
+                      onCertifications:
+                          ready && widget.accountRepository != null
+                              ? () => openAccount(LiveCoachCertifications(
+                                  repository: widget.accountRepository!))
+                              : null,
+                      onSettings: ready && widget.accountRepository != null
+                          ? () => openAccount(LiveCoachAccountSettings(
+                              repository: widget.accountRepository!))
+                          : null);
+                });
+          });
 }
 
 class LiveCoachProfileEditor extends StatefulWidget {
@@ -253,7 +360,10 @@ class _LiveCoachProfileEditorState extends State<LiveCoachProfileEditor> {
       setState(() => validation = null);
       final priorRevision = widget.controller.state.profile?.revision ?? 0;
       await widget.controller.save(fields);
-      if (mounted && (widget.controller.state.profile?.revision ?? 0) > priorRevision) setState(_reset);
+      if (mounted &&
+          (widget.controller.state.profile?.revision ?? 0) > priorRevision) {
+        setState(_reset);
+      }
     } on FormatException {
       if (mounted) {
         setState(() => validation =

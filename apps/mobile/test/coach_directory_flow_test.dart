@@ -91,7 +91,7 @@ void main() {
           backendConfig: const BackendConfig(BackendMode.firebase),
           coachProfileFactory: (_, current) => repo));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Edit professional profile'));
+      await tester.tap(find.text('Bio & specialties'));
       await tester.pumpAndSettle();
       await tester.enterText(
           find.byWidgetPredicate(
@@ -134,7 +134,7 @@ void main() {
         coachAvailabilityFactory: (_, current) => AvailabilityFake()));
     await tester.pumpAndSettle();
     expect(find.text('Directory: not published'), findsOneWidget);
-    await tester.tap(find.text('Edit professional profile'));
+    await tester.tap(find.text('Bio & specialties'));
     await tester.pumpAndSettle();
     for (final entry in {
       'Display name': 'Fixture Coach',
