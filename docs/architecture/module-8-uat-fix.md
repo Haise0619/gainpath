@@ -20,8 +20,20 @@ Phone tests: 12 passed across metadata-backed MY/SG/GB/US normalization, invalid
 
 Commits: `9f6fb15` (main Admin/schema recovery) and `9c0fd6c` (phone UX). Stable main Admin served JavaScript SHA256: `65c3151b77ac89e788ff6af55a5573aabbfd72892a637d6a4ba26f1fc121c626`.
 
-Final compatible Android build: `build/module-8-uat-fix/gainpath-coach-phone-firebase-debug.apk`, 219,359,073 bytes, SHA256 `2f416853f5aa05270b16bbc1fd2ae4a033dcf64ae3655ea4885c53e0ed48421c`; Firebase backend/debug App Check, same package/signing setup. Build succeeded. Installation on the connected Xiaomi is pending explicit owner approval; no installation has been performed for this repair yet.
+Final compatible Android build: `build/module-8-uat-fix/gainpath-coach-phone-firebase-debug.apk`, 219,359,073 bytes, SHA256 `2f416853f5aa05270b16bbc1fd2ae4a033dcf64ae3655ea4885c53e0ed48421c`; Firebase backend/debug App Check, same package/signing setup. Build succeeded. Owner-approved installation and launch succeeded on Xiaomi `23013RK75C`: previous APK/private data backed up, signing certificate matched, private data archive byte-identical before launch, and installed APK hash matched. No data clearing or uninstall.
 
-Existing canonical account contact data and certification decisions remain untouched during automated diagnosis. Live disposable fixture testing is prepared but not executed pending the owner's requested scope approval. Actual live approval/rejection/publication mutations and new phone persistence therefore remain unverified in this repair; existing real Firebase loading/history were verified, and mutation logic passed focused local tests. Manual acceptance is not implied by these reads or tests.
+## Approved live disposable Coach UAT
+
+The owner explicitly approved one clearly labelled synthetic Coach fixture. Only its new identity/profile/evidence/settings were written; existing Coach records and bookings were excluded. The existing authenticated Admin session reviewed it at the main URL without credential extraction.
+
+- Coach profile save, immutable synthetic PNG upload and pending certification submission succeeded in real Firebase.
+- Main Admin displayed its unpublished draft and private certification; authenticated private preview opened successfully.
+- Publication while pending was denied by BR-5. Rejection without a reason was blocked inline. Rejection with a synthetic test reason persisted as revision 2.
+- Approval persisted as revision 3 and did **not** automatically publish. Explicit publication then succeeded, and explicit deactivation persisted the listing as inactive. UI history displayed pending/rejected/approved revisions with retained actors/timestamps.
+- Fixture phone save and canonical reload matched E.164. Invalid server input was denied. A duplicate attempt against an existing active claim returned ALREADY_EXISTS without modifying that claim or its owner. Optional blank clear/reload succeeded and the fixture claim was released. No second fixture identity was created.
+
+Final read-back verified the fixture listing inactive, certification archived at revision 4, verification flag false/approved count zero, membership inactive and phone cleared. The immutable evidence object, identity and four history snapshots (pending, rejected, approved, archived) remain retained. Both pre-existing Coach draft/public records matched their saved data exactly. No deletes or Booking writes occurred.
+
+These are observed live backend/UI results on a disposable fixture, not owner manual UI PASS. No next module starts before owner acceptance. Sanitized live/install results are recorded in `module-8-uat-live-results.json`; private credentials and raw records remain excluded from Git.
 
 Retest: open the stable main Admin, review the unpublished Coach and private history, then use authorized test evidence to reject/approve and explicitly publish. On the approved phone build, select MY +60, save `012-3456789`, reopen, test another country and invalid/duplicate numbers, then clear/reopen. Keep existing bookings and personal records unchanged.
