@@ -63,7 +63,7 @@ class _LiveCoachDirectoryAdminViewState
                     icon: const Icon(Icons.refresh))
               ]),
               const Text(
-                  'Review professional drafts and public directory listings. Publication is not certification verification.'),
+                  'Review private Coach drafts and certifications here, including unpublished Coaches. Approve valid certifications first, then explicitly publish the reviewed profile to the Member directory.'),
               if (state.loading) const LinearProgressIndicator(),
               if (state.message != null) Text(state.message!),
               if (state.allowed) ...[

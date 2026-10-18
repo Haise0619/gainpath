@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'dart:typed_data';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:gainpath_data/gainpath_data.dart';
@@ -7,12 +8,18 @@ import 'package:gainpath_domain/identity.dart';
 import 'package:gainpath_admin_web/app/admin_app.dart';
 import 'package:gainpath_admin_web/features/identity/application/coach_directory_admin_cubit.dart';
 
+class _EmptyPhotoAccount extends Fake implements AdminAccountContactRepository {
+  @override
+  Future<Uint8List?> loadCurrentPhoto() async => null;
+}
+
 class AdminFake implements CoachProfileAdminRepository {
   AdminFake(this.scope);
   @override
   final SessionScope scope;
   bool allowed = true;
   String? failure;
+  Object? loadFailure;
   final requests = <String>[];
   final fields = CoachProfessionalFields(
       displayName: 'Fixture Coach',
@@ -35,8 +42,10 @@ class AdminFake implements CoachProfileAdminRepository {
   Future<bool> canManageDirectory() async => allowed;
   @override
   Future<CoachDirectoryPage<CoachProfessionalProfile>> loadDraftPage(
-          {String? afterId}) async =>
-      CoachDirectoryPage(draft == null ? [] : [draft!]);
+          {String? afterId}) async {
+    if (loadFailure != null) throw loadFailure!;
+    return CoachDirectoryPage(draft == null ? [] : [draft!]);
+  }
   @override
   Future<CoachDirectoryPage<PublishedCoachProfile>> loadPublicPage(
           {String? afterId}) async =>
@@ -77,6 +86,20 @@ class AdminFake implements CoachProfileAdminRepository {
 
 void main() {
   setUpAll(() => GoogleFonts.config.allowRuntimeFetching = false);
+  test('unsupported stored schema directs Admin to the stable main entry', () async {
+    final repo = AdminFake(SessionScope(userId: 'admin', organizationId: 'o'))
+      ..seed()
+      ..loadFailure = const FormatException('Unsupported public Coach profile.');
+    final cubit = CoachDirectoryAdminCubit(repo);
+    await cubit.refresh();
+    expect(cubit.state.message, contains('http://localhost:7359/'));
+    expect(cubit.state.allowed, isFalse);
+    repo.loadFailure = null;
+    await cubit.refresh();
+    expect(cubit.state.drafts, hasLength(1));
+    expect(cubit.state.allowed, isTrue);
+    await cubit.close();
+  });
   test(
       'Admin retries stable intent; conflict blocks mutation until fresh review; staff denied',
       () async {
@@ -121,6 +144,7 @@ void main() {
     await tester.pumpWidget(GainPathAdminWebApp(
         authRepository: auth,
         backendConfig: const BackendConfig(BackendMode.firebase),
+        accountContactFactory: (_, __) => _EmptyPhotoAccount(),
         coachRepositoryFactory: (_, current) => repo));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Coaches').last);
