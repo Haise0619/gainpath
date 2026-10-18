@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:gainpath_identity/gainpath_identity.dart';
-import '../../../../infrastructure/firebase/firebase_coach_account_repository.dart';
+import '../../application/coach_account_gateway.dart';
 
 /// Auth changes replace the entire route subtree, disposing transient evidence.
 class CoachAccountSessionGuard extends StatelessWidget {
   const CoachAccountSessionGuard(
       {super.key, required this.repository, required this.child});
-  final FirebaseCoachAccountRepository repository;
+  final CoachAccountGateway repository;
   final Widget child;
   @override
   Widget build(BuildContext context) =>

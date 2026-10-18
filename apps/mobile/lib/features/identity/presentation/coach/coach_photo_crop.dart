@@ -5,11 +5,11 @@ import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:gainpath_domain/identity.dart';
 import '../../../../infrastructure/local/account_photo_picker.dart';
-import '../../../../infrastructure/firebase/firebase_coach_account_repository.dart';
+import '../../application/coach_account_gateway.dart';
 import 'coach_account_session_guard.dart';
 
 Future<AccountPhoto?> pickCoachPhoto(
-    BuildContext context, FirebaseCoachAccountRepository repository) async {
+    BuildContext context, CoachAccountGateway repository) async {
   final camera = await showModalBottomSheet<bool>(
       context: context,
       builder: (context) => SafeArea(
@@ -110,7 +110,9 @@ class _CoachCameraState extends State<_CoachCamera> {
                                 if (context.mounted) {
                                   Navigator.pop(context, file);
                                 } else {
-                                  try { await File(file.path).delete(); } catch (_) {}
+                                  try {
+                                    await File(file.path).delete();
+                                  } catch (_) {}
                                 }
                               } catch (_) {
                                 if (mounted) {

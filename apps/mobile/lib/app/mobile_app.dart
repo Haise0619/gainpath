@@ -45,6 +45,7 @@ class GainPathMobileApp extends StatelessWidget {
       this.announcementReaderFactory,
       this.equipmentReaderFactory,
       this.coachProfileFactory,
+      this.coachAccountFactory,
       this.coachDirectoryFactory,
       this.coachAvailabilityFactory,
       this.bookingFactory,
@@ -64,6 +65,7 @@ class GainPathMobileApp extends StatelessWidget {
       announcementReaderFactory;
   final EquipmentReaderFactory? equipmentReaderFactory;
   final CoachProfileFactory? coachProfileFactory;
+  final CoachAccountFactory? coachAccountFactory;
   final CoachDirectoryFactory? coachDirectoryFactory;
   final CoachAvailabilityFactory? coachAvailabilityFactory;
   final BookingServicesFactory? bookingFactory;
@@ -112,6 +114,7 @@ class GainPathMobileApp extends StatelessWidget {
                   announcementReaderFactory: announcementReaderFactory,
                   equipmentReaderFactory: equipmentReaderFactory,
                   coachProfileFactory: coachProfileFactory,
+                  coachAccountFactory: coachAccountFactory,
                   coachDirectoryFactory: coachDirectoryFactory,
                   coachAvailabilityFactory: coachAvailabilityFactory,
                   bookingFactory: bookingFactory,
@@ -120,12 +123,30 @@ class GainPathMobileApp extends StatelessWidget {
                   passwordResetSender: passwordResetSender,
                   accountLifecycleFactory: accountLifecycleFactory,
                   memberSettingsBuilder: memberSettingsBuilder),
-              routes: AppRouteBuilders.withLogin((_) => LoginScreen(
-                  prefillDemoPassword: !config.isFirebase,
-                  onPasswordReset: config.isFirebase
-                      ? passwordResetSender ??
-                          (email) => FirebasePasswordResetActions().send(email)
-                      : null)),
+              routes: AppRouteBuilders.withLogin(
+                  (_) => LoginScreen(
+                      prefillDemoPassword: !config.isFirebase,
+                      onPasswordReset: config.isFirebase
+                          ? passwordResetSender ??
+                              (email) =>
+                                  FirebasePasswordResetActions().send(email)
+                          : null),
+                  coachBuilder: config.isFirebase
+                      ? (_) => BlocBuilder<AuthBloc, AuthState>(
+                              builder: (context, state) {
+                            final session = state.session;
+                            if (session == null ||
+                                !AuthRolePolicy.canEnter(state,
+                                    allowed: {AppRole.coach})) {
+                              return const LoginScreen();
+                            }
+                            return buildFirebaseCoachShell(session,
+                                factory: coachProfileFactory,
+                                accountFactory: coachAccountFactory,
+                                availabilityFactory: coachAvailabilityFactory,
+                                bookingListFactory: bookingListFactory);
+                          })
+                      : null),
               onGenerateRoute: (settings) => buildFeatureRoute(settings,
                   firebase: config.isFirebase,
                   progressRepositoryFactory: progressRepositoryFactory),
@@ -152,6 +173,7 @@ class _MobileAuthGate extends StatefulWidget {
       this.announcementReaderFactory,
       this.equipmentReaderFactory,
       this.coachProfileFactory,
+      this.coachAccountFactory,
       this.coachDirectoryFactory,
       this.coachAvailabilityFactory,
       this.bookingFactory,
@@ -169,6 +191,7 @@ class _MobileAuthGate extends StatefulWidget {
       announcementReaderFactory;
   final EquipmentReaderFactory? equipmentReaderFactory;
   final CoachProfileFactory? coachProfileFactory;
+  final CoachAccountFactory? coachAccountFactory;
   final CoachDirectoryFactory? coachDirectoryFactory;
   final CoachAvailabilityFactory? coachAvailabilityFactory;
   final BookingServicesFactory? bookingFactory;
@@ -309,6 +332,7 @@ class _MobileAuthGateState extends State<_MobileAuthGate> {
             }
             return buildFirebaseCoachShell(state.session!,
                 factory: widget.coachProfileFactory,
+                accountFactory: widget.coachAccountFactory,
                 bookingListFactory: widget.bookingListFactory,
                 availabilityFactory: widget.coachAvailabilityFactory);
           }

@@ -1,3 +1,4 @@
+import 'support/coach_account_gateway_fake.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -89,7 +90,8 @@ void main() {
       await tester.pumpWidget(GainPathMobileApp(
           authRepository: auth,
           backendConfig: const BackendConfig(BackendMode.firebase),
-          coachProfileFactory: (_, current) => repo));
+          coachProfileFactory: (_, current) => repo,
+          coachAccountFactory: (_, current) => CoachAccountGatewayFake()));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Bio & specialties'));
       await tester.pumpAndSettle();
@@ -131,9 +133,10 @@ void main() {
         authRepository: auth,
         backendConfig: const BackendConfig(BackendMode.firebase),
         coachProfileFactory: (_, current) => repo,
+        coachAccountFactory: (_, current) => CoachAccountGatewayFake(),
         coachAvailabilityFactory: (_, current) => AvailabilityFake()));
     await tester.pumpAndSettle();
-    expect(find.text('Directory: not published'), findsOneWidget);
+    expect(find.text('Not published in directory'), findsOneWidget);
     await tester.tap(find.text('Bio & specialties'));
     await tester.pumpAndSettle();
     for (final entry in {
@@ -147,6 +150,8 @@ void main() {
               (w) => w is TextField && w.decoration?.labelText == entry.key),
           entry.value);
     }
+    await tester.scrollUntilVisible(find.text('Save profile'), 200,
+        scrollable: find.byType(Scrollable).first);
     await tester.tap(find.text('Save profile'));
     await tester.pumpAndSettle();
     expect(repo.profile!.fields.bio, 'Saved draft');
@@ -154,7 +159,7 @@ void main() {
         findsOneWidget);
     await tester.pageBack();
     await tester.pumpAndSettle();
-    expect(find.text('Directory: not published'), findsOneWidget);
+    expect(find.text('Not published in directory'), findsOneWidget);
     await tester.tap(find.text('Availability').last);
     await tester.pumpAndSettle();
     expect(find.text('No availability windows for this date.'), findsOneWidget);

@@ -79,12 +79,15 @@ class CoachAccountPresentation extends StatelessWidget {
           Row(
             children: [
               Expanded(
-                  child: StatTile(data.rating ?? '-', 'Rating',
+                  child: _CoachSummaryTile(data.rating ?? '-', 'Rating',
                       valueColor: AppColors.accent)),
               const SizedBox(width: 10),
-              Expanded(child: StatTile(data.sessions ?? '-', 'Sessions')),
+              Expanded(
+                  child: _CoachSummaryTile(data.sessions ?? '-', 'Sessions')),
               const SizedBox(width: 10),
-              Expanded(child: StatTile(data.experience ?? '-', 'Experience')),
+              Expanded(
+                  child:
+                      _CoachSummaryTile(data.experience ?? '-', 'Experience')),
             ],
           ),
           const SizedBox(height: 12),
@@ -148,21 +151,6 @@ class CoachAccountPresentation extends StatelessWidget {
             icon: const Icon(Icons.logout_rounded, size: 19),
             label: const Text('Sign out'),
           ),
-          const SizedBox(height: 20),
-          CoachProfessionalDetails(data: data),
-          if (data.publicationStatus != null ||
-              data.publicationMessage != null) ...[
-            const SizedBox(height: 16),
-            Panel(
-                child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                  if (data.publicationStatus != null)
-                    Text(data.publicationStatus!),
-                  if (data.publicationMessage != null)
-                    Text(data.publicationMessage!)
-                ]))
-          ],
         ],
       ),
     );
@@ -351,5 +339,28 @@ class CoachAccountProfilePreview extends StatelessWidget {
           const SizedBox(height: 16),
           CoachProfessionalDetails(data: draft!)
         ],
+      ]));
+}
+
+class _CoachSummaryTile extends StatelessWidget {
+  const _CoachSummaryTile(this.value, this.label, {this.valueColor});
+  final String value, label;
+  final Color? valueColor;
+  @override
+  Widget build(BuildContext context) => Panel(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 14),
+      child: Column(children: [
+        Text(value,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+                fontSize: 22,
+                fontWeight: FontWeight.w800,
+                color: valueColor ?? AppColors.ink)),
+        const SizedBox(height: 4),
+        FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(label,
+                maxLines: 1, style: Theme.of(context).textTheme.bodySmall))
       ]));
 }

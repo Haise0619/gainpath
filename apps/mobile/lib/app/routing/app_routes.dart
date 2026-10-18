@@ -12,7 +12,9 @@ import 'package:gainpath_domain/gainpath_domain.dart' show AppRole;
 import '../../features/identity/presentation/shared/login_screen.dart';
 
 abstract final class AppRouteBuilders {
-  static Map<String, WidgetBuilder> withLogin(WidgetBuilder loginBuilder) => {
+  static Map<String, WidgetBuilder> withLogin(WidgetBuilder loginBuilder,
+          {WidgetBuilder? coachBuilder}) =>
+      {
         ...builders,
         for (final route in [
           AppRoutes.login,
@@ -28,7 +30,9 @@ abstract final class AppRouteBuilders {
         AppRoutes.coach: (_) => _RoleGuard(
             role: AppRole.coach,
             loginBuilder: loginBuilder,
-            child: const CoachShell()),
+            child: coachBuilder == null
+                ? const CoachShell()
+                : Builder(builder: coachBuilder)),
       };
   static Map<String, WidgetBuilder> get builders => {
         WorkoutNavigation.guided: (_) => const WorkoutRoute(),

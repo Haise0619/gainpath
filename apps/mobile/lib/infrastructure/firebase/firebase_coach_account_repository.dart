@@ -8,8 +8,10 @@ import 'package:http/http.dart' as http;
 import 'package:gainpath_domain/gainpath_domain.dart' show SessionScope;
 import 'package:gainpath_domain/identity.dart';
 import '../local/coach_avatar_image.dart';
+import '../../features/identity/application/coach_account_gateway.dart';
+import 'firebase_password_actions.dart';
 
-class FirebaseCoachAccountRepository {
+class FirebaseCoachAccountRepository implements CoachAccountGateway {
   FirebaseCoachAccountRepository(
       {required this.scope,
       required this.isCurrent,
@@ -19,7 +21,9 @@ class FirebaseCoachAccountRepository {
       : _providedFunctions = functions,
         _providedAuth = auth,
         _providedStorage = storage;
+  @override
   final SessionScope scope;
+  @override
   final bool Function() isCurrent;
   final FirebaseFunctions? _providedFunctions;
   final FirebaseAuth? _providedAuth;
@@ -29,11 +33,35 @@ class FirebaseCoachAccountRepository {
   FirebaseAuth get _auth => _providedAuth ?? FirebaseAuth.instance;
   FirebaseStorage get _storage => _providedStorage ?? FirebaseStorage.instance;
   bool _invalidated = false;
+  @override
+  String? get publicAvatarUrl => null;
+  @override
+  bool get passwordManagementAvailable => true;
+  @override
+  CoachAccountMetrics get metrics => const CoachAccountMetrics();
+  late final FirebasePasswordActions _passwordActions =
+      FirebasePasswordActions(scope: scope, auth: _auth);
+  @override
+  Future<void> verifyCurrentPassword(String password) async {
+    check();
+    await _passwordActions.verifyCurrent(password);
+    check();
+  }
+
+  @override
+  Future<void> changePassword(String password) async {
+    check();
+    await _passwordActions.saveNew(password);
+    check();
+  }
+
+  @override
   String get email {
     check();
     return _auth.currentUser?.email ?? '';
   }
 
+  @override
   void check() {
     if (_invalidated ||
         !isCurrent() ||
@@ -69,9 +97,11 @@ class FirebaseCoachAccountRepository {
     }
   }
 
+  @override
   Future<CoachAccountSettings> loadSettings() async =>
       CoachAccountSettings.fromJson(
           await command('getCoachAccountSettingsCommand'));
+  @override
   Future<CoachAccountSettings> saveSettings(
       CoachAccountSettings baseline,
       String phone,
@@ -96,7 +126,52 @@ class FirebaseCoachAccountRepository {
     }));
   }
 
+  @override
   String? certificationCursor;
+  @override
+  Future<CoachCertificationSummary> loadCertificationSummary() async {
+    final data = await command('getCoachCertificationsCommand');
+    final count = data['approvedCount'], entries = data['certifications'];
+    if (data['schemaVersion'] != 1 ||
+        count is! int ||
+        count < 0 ||
+        data['certificationVerified'] is! bool ||
+        entries is! List) {
+      throw const FormatException('Unsupported certification summary.');
+    }
+    return CoachCertificationSummary(
+        approved: count,
+        verified: data['certificationVerified'] == true && count > 0,
+        pending: data['nextCursor'] == null
+            ? entries.where((e) => e is Map && e['status'] == 'pending').length
+            : null);
+  }
+
+  @override
+  Future<CoachCertificationDetail> loadCertificationDetail(String id) async {
+    final data =
+        await command('getCoachCertificationsCommand', {'certificationId': id});
+    final entries = data['certifications'];
+    if (data['schemaVersion'] != 1 ||
+        entries is! List ||
+        entries.length != 1 ||
+        entries.first is! Map) {
+      throw const FormatException('Certification detail unavailable.');
+    }
+    final entry = Map<String, dynamic>.from(entries.first as Map);
+    final certification = PrivateCoachCertification.fromJson(entry);
+    if (certification.id != id) {
+      throw const FormatException('Certification detail mismatch.');
+    }
+    final history = entry['history'];
+    if (history is! List || history.any((e) => e is! Map)) {
+      throw const FormatException('Unsupported certification history.');
+    }
+    return CoachCertificationDetail(certification,
+        history.map((e) => Map<String, dynamic>.from(e as Map)).toList());
+  }
+
+  @override
   Future<List<PrivateCoachCertification>> loadCertifications(
       {String? afterId}) async {
     final data = await command('getCoachCertificationsCommand',
@@ -114,6 +189,7 @@ class FirebaseCoachAccountRepository {
         .toList();
   }
 
+  @override
   Future<void> submitCertification(String id, String title, String issuer,
       String path, String requestId) async {
     await command('submitCoachCertificationCommand', {
@@ -125,6 +201,7 @@ class FirebaseCoachAccountRepository {
     });
   }
 
+  @override
   Future<void> archive(PrivateCoachCertification cert, String requestId) async {
     await command('archiveCoachCertificationCommand', {
       'requestId': requestId,
@@ -135,6 +212,7 @@ class FirebaseCoachAccountRepository {
 
   String path(String collection, String id) =>
       'orgs/${scope.organizationId}/$collection/${scope.userId}/$id';
+  @override
   Future<String> upload(
       String collection, String id, Uint8List bytes, String contentType) async {
     check();
@@ -147,6 +225,7 @@ class FirebaseCoachAccountRepository {
     return target;
   }
 
+  @override
   Future<Uint8List?> loadProfilePhoto(String? photoPath) async {
     check();
     if (photoPath == null) return null;
@@ -162,6 +241,7 @@ class FirebaseCoachAccountRepository {
     return image;
   }
 
+  @override
   Future<Uint8List> read(String path) async {
     check();
     final escapedOrg = RegExp.escape(scope.organizationId),

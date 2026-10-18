@@ -14,12 +14,15 @@ import '../../features/coaching/presentation/shared/live_coach_schedule_view.dar
 import '../shells/coach_shell.dart';
 import '../../features/coaching/presentation/member/browse_coaches_screen.dart';
 import '../../features/coaching/presentation/shared/live_coach_directory_views.dart';
-import '../../features/identity/presentation/coach/live_coach_profile_views.dart';
+import 'coach_module8_dependencies.dart';
 import '../../features/coaching/presentation/shared/live_booking_list_view.dart';
 import 'booking_factory.dart';
 import '../../infrastructure/firebase/firebase_coach_account_repository.dart';
+import '../../features/identity/application/coach_account_gateway.dart';
 
 typedef CoachProfileFactory = CoachProfileRepository Function(
+    SessionScope, bool Function());
+typedef CoachAccountFactory = CoachAccountGateway Function(
     SessionScope, bool Function());
 typedef CoachDirectoryFactory = CoachDirectoryRepository Function(
     SessionScope, bool Function());
@@ -82,32 +85,28 @@ class _CoachSessionHostState extends State<CoachSessionHost> {
 
 Widget buildFirebaseCoachShell(AuthSession session,
         {CoachProfileFactory? factory,
+        CoachAccountFactory? accountFactory,
         CoachAvailabilityFactory? availabilityFactory,
         BookingListFactory? bookingListFactory}) =>
     CoachSessionHost(
         key: ObjectKey(session),
         session: session,
         builder: (context, isCurrent) => CoachShell(
-            accountRepository: FirebaseCoachAccountRepository(
-                scope: session.scope, isCurrent: isCurrent),
-            liveRepository: factory?.call(session.scope, isCurrent) ??
-                FirebaseCoachProfileRepository(
-                    scope: session.scope, isCurrent: isCurrent),
-            isCurrent: isCurrent,
+            module8: CoachModule8Dependencies(
+                account: accountFactory?.call(session.scope, isCurrent) ??
+                    FirebaseCoachAccountRepository(
+                        scope: session.scope, isCurrent: isCurrent),
+                profile: factory?.call(session.scope, isCurrent) ??
+                    FirebaseCoachProfileRepository(
+                        scope: session.scope, isCurrent: isCurrent)),
+            initialIndex: 3,
+            restrictUnsupportedWorkflows: true,
             liveRosterBuilder: (_) => LiveBookingListView(
                 title: 'Roster',
                 repository:
                     createBookingList(session, isCurrent, bookingListFactory),
                 isCurrent: isCurrent),
-            liveAvailabilityBuilder: (_) => AvailabilityScreen(
-                liveRepository:
-                    availabilityFactory?.call(session.scope, isCurrent) ??
-                        FirebaseCoachAvailabilityRepository(
-                            scope: session.scope, isCurrent: isCurrent),
-                coachId: session.userId,
-                isCurrent: isCurrent),
-            onOpenLiveEditor: (controller) =>
-                Navigator.push(context, MaterialPageRoute(builder: (_) => CoachSessionHost(session: session, builder: (_, current) => LiveCoachProfileEditor(controller: controller, accountRepository: FirebaseCoachAccountRepository(scope: session.scope, isCurrent: current)))))));
+            liveAvailabilityBuilder: (_) => AvailabilityScreen(liveRepository: availabilityFactory?.call(session.scope, isCurrent) ?? FirebaseCoachAvailabilityRepository(scope: session.scope, isCurrent: isCurrent), coachId: session.userId, isCurrent: isCurrent)));
 Widget buildFirebaseCoachDirectory(AuthSession session,
         {CoachDirectoryFactory? factory,
         CoachAvailabilityFactory? availabilityFactory,

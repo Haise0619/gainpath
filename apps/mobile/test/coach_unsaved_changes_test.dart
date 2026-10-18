@@ -1,3 +1,4 @@
+import 'support/coach_account_gateway_fake.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -21,7 +22,8 @@ void main() {
                         context,
                         MaterialPageRoute(
                             builder: (_) => LiveCoachProfileEditor(
-                                controller: controller))),
+                                controller: controller,
+                                accountRepository: CoachAccountGatewayFake()))),
                     child: const Text('Open editor'))))));
     await tester.tap(find.text('Open editor'));
     await tester.pumpAndSettle();

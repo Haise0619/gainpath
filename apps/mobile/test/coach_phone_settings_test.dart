@@ -4,8 +4,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:gainpath_domain/gainpath_domain.dart' show SessionScope;
 import 'package:gainpath_domain/identity.dart';
-import 'package:gainpath_mobile/features/identity/presentation/coach/live_coach_account_settings.dart';
-import 'package:gainpath_mobile/infrastructure/firebase/firebase_coach_account_repository.dart';
+import 'package:gainpath_mobile/features/identity/presentation/coach/coach_settings_screen.dart';
+import 'package:gainpath_mobile/features/identity/application/coach_account_gateway.dart';
 
 CoachAccountSettings settings(String phone, [int revision = 0]) =>
     CoachAccountSettings(
@@ -15,12 +15,15 @@ CoachAccountSettings settings(String phone, [int revision = 0]) =>
         cancellations: true,
         reminders: false);
 
-class PhoneSettingsFake extends FirebaseCoachAccountRepository {
-  PhoneSettingsFake([String phone = ''])
-      : stored = settings(phone),
-        super(
-            scope: SessionScope(userId: 'coach', organizationId: 'gym'),
-            isCurrent: () => true);
+class PhoneSettingsFake extends Fake implements CoachAccountGateway {
+  PhoneSettingsFake([String phone = '']) : stored = settings(phone);
+  @override
+  SessionScope get scope =>
+      SessionScope(userId: 'coach', organizationId: 'gym');
+  @override
+  bool Function() get isCurrent => () => true;
+  @override
+  bool get passwordManagementAvailable => false;
   CoachAccountSettings stored;
   int saves = 0, loads = 0;
   String? savedPhone, failure;
@@ -62,7 +65,7 @@ Future<void> mount(WidgetTester tester, PhoneSettingsFake repository) async {
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
   await tester.pumpWidget(
-      MaterialApp(home: LiveCoachAccountSettings(repository: repository)));
+      MaterialApp(home: CoachSettingsScreen(repository: repository)));
   await tester.pumpAndSettle();
 }
 
@@ -79,6 +82,8 @@ void main() {
     await tester.enterText(
         find.byKey(const Key('coach-phone-national')), '012-3456789');
     await tester.pump();
+    await tester.pump();
+    await tester.ensureVisible(find.text('Save changes'));
     await tester.tap(find.text('Save changes'));
     await tester.pump();
     await tester.pump();
@@ -103,6 +108,8 @@ void main() {
     await mount(tester, repository);
     await tester.enterText(
         find.byKey(const Key('coach-phone-national')), '123');
+    await tester.pump();
+    await tester.ensureVisible(find.text('Save changes'));
     await tester.tap(find.text('Save changes'));
     await tester.pumpAndSettle();
     expect(repository.saves, 0);
@@ -110,6 +117,8 @@ void main() {
     repository.failure = 'already-exists';
     await tester.enterText(
         find.byKey(const Key('coach-phone-national')), '012-3456789');
+    await tester.pump();
+    await tester.ensureVisible(find.text('Save changes'));
     await tester.tap(find.text('Save changes'));
     await tester.pumpAndSettle();
     expect(find.textContaining('already linked'), findsWidgets);
@@ -128,6 +137,8 @@ void main() {
     await mount(tester, repository);
     expect(find.textContaining('Singapore'), findsOneWidget);
     await tester.enterText(find.byKey(const Key('coach-phone-national')), '');
+    await tester.pump();
+    await tester.ensureVisible(find.text('Save changes'));
     await tester.tap(find.text('Save changes'));
     await tester.pumpAndSettle();
     expect(repository.savedPhone, '');
@@ -140,6 +151,8 @@ void main() {
     await mount(tester, repository);
     await tester.enterText(
         find.byKey(const Key('coach-phone-national')), '0123456789');
+    await tester.pump();
+    await tester.ensureVisible(find.text('Save changes'));
     await tester.tap(find.text('Save changes'));
     await tester.pump();
     await tester.pump();
@@ -160,6 +173,8 @@ void main() {
     await mount(tester, repository);
     await tester.enterText(
         find.byKey(const Key('coach-phone-national')), '0123456789');
+    await tester.pump();
+    await tester.ensureVisible(find.text('Save changes'));
     await tester.tap(find.text('Save changes'));
     await tester.pumpAndSettle();
     expect(find.textContaining('Check your connection'), findsWidgets);
@@ -182,6 +197,8 @@ void main() {
     await tester.pumpAndSettle();
     await tester.enterText(
         find.byKey(const Key('coach-phone-national')), '020 7946 0018');
+    await tester.pump();
+    await tester.ensureVisible(find.text('Save changes'));
     await tester.tap(find.text('Save changes'));
     await tester.pumpAndSettle();
     expect(repository.savedPhone, '+442079460018');
