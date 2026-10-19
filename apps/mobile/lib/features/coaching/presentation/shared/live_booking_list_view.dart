@@ -18,11 +18,13 @@ class LiveBookingListView extends StatefulWidget {
       required this.repository,
       required this.isCurrent,
       this.cancellation,
+      this.onPayment,
       this.communication,
       this.loadCoachName,
       this.coachId,
       this.title = 'My bookings'});
   final BookingListRepository repository;
+  final void Function(String bookingId)? onPayment;
   final bool Function() isCurrent;
   final BookingCancellationRepository? cancellation;
   final BookingCommunicationRepository? communication;
@@ -149,6 +151,12 @@ class _LiveBookingListViewState extends State<LiveBookingListView> {
                     children: [
                       const SizedBox(height: 12),
                       DetailRow('Booking', record.bookingId),
+                      if (widget.onPayment != null)
+                        TextButton(
+                            onPressed: state.busy
+                                ? null
+                                : () => widget.onPayment!(record.bookingId),
+                            child: const Text('View payment / continue')),
                       DetailRow(
                           'Status',
                           bookingStatusLabel(

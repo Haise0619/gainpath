@@ -8,3 +8,4 @@ export 'src/coaching/coach_availability_contracts.dart';
 export 'src/coaching/coach_roster_contracts.dart';
 
 export 'src/coaching/booking_communication.dart';
+export 'src/coaching/booking_payment.dart';

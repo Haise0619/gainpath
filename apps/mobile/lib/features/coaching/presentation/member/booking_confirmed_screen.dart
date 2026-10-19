@@ -8,24 +8,42 @@ import 'package:gainpath_domain/coaching.dart';
 /// coach/time parameters, so every figure shown here is guaranteed to
 /// match what "My bookings" will show afterwards.
 class BookingConfirmedScreen extends StatelessWidget {
-  final Booking booking;
-  const BookingConfirmedScreen({super.key, required this.booking});
+  final Booking? booking;
+  final BookingPaymentView? payment;
+  const BookingConfirmedScreen({super.key, this.booking, this.payment})
+      : assert(booking != null || payment != null);
 
   @override
   Widget build(BuildContext context) {
+    final payment = this.payment;
+    if (payment != null && !payment.confirmed) {
+      return const Scaffold(
+          body: Center(child: Text('Booking is not confirmed.')));
+    }
+    final coachName = payment?.quote.coachName ?? booking!.coachName;
+    final dateLabel = payment == null
+        ? _formatDate(booking!.start)
+        : '${payment.localDate} · ${payment.startLabel} – ${payment.endLabel}';
+    final branch = payment?.quote.branchName ?? booking!.branch;
+    final amount = payment?.quote.formattedAmount ??
+        'RM ${booking!.fee.toStringAsFixed(2)}';
     return Scaffold(
-      appBar: AppBar(title: const Text('Booking confirmed'), automaticallyImplyLeading: false),
+      appBar: AppBar(
+          title: const Text('Booking confirmed'),
+          automaticallyImplyLeading: false),
       body: PageBody(
         children: [
           Panel(
             background: AppColors.primaryTint,
             child: Column(
               children: [
-                const Icon(Icons.event_available_rounded, size: 44, color: AppColors.primary),
+                const Icon(Icons.event_available_rounded,
+                    size: 44, color: AppColors.primary),
                 const SizedBox(height: 12),
-                Text('You are booked in', style: Theme.of(context).textTheme.titleLarge),
+                Text('You are booked in',
+                    style: Theme.of(context).textTheme.titleLarge),
                 const SizedBox(height: 6),
-                Text('${booking.coachName} at ${_formatDate(booking.start)}',
+                Text('$coachName at $dateLabel',
                     style: Theme.of(context).textTheme.bodyLarge),
               ],
             ),
@@ -34,13 +52,13 @@ class BookingConfirmedScreen extends StatelessWidget {
           Panel(
             child: Column(
               children: [
-                DetailRow('Coach', booking.coachName),
+                DetailRow('Coach', coachName),
                 const Divider(height: 20),
-                DetailRow('Date & time', _formatDate(booking.start)),
+                DetailRow('Date & time', dateLabel),
                 const Divider(height: 20),
-                DetailRow('Location', booking.branch),
+                DetailRow('Location', branch),
                 const Divider(height: 20),
-                DetailRow('Paid', 'RM ${booking.fee.toStringAsFixed(2)}'),
+                DetailRow('Paid', amount),
               ],
             ),
           ),
@@ -56,8 +74,18 @@ class BookingConfirmedScreen extends StatelessWidget {
 
   String _formatDate(DateTime d) {
     const months = [
-      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec'
     ];
     final h = d.hour.toString().padLeft(2, '0');
     final m = d.minute.toString().padLeft(2, '0');
