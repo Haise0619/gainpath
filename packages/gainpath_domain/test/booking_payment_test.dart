@@ -2,6 +2,12 @@ import 'package:test/test.dart';
 import 'package:gainpath_domain/coaching.dart';
 
 void main() {
+  test('payment status exposes refunds without treating them as booking confirmation', () {
+    final json = <String, dynamic>{'schemaVersion':1,'bookingId':'booking','status':'reconciliation_required','amountMinor':100,'currency':'MYR','durationMinutes':60,'coachName':'Coach','branchName':'Branch','startLabel':'10:00','endLabel':'11:00','localDate':'2026-10-20','holdExpiresAtMillis':100,'paymentStatus':'cleared','refundStatus':'completed'};
+    final p=BookingPaymentView.fromJson(json,bookingId:'booking');
+    expect(p.paymentStatus,'cleared'); expect(p.refundStatus,'completed');expect(p.confirmed,isFalse);
+    json['refundStatus']='invented';expect(()=>BookingPaymentView.fromJson(json,bookingId:'booking'),throwsFormatException);
+  });
   test('sandbox checkout accepts exact HTTPS hosts only', () {
     expect(
         isBillplzSandboxCheckoutUrl(

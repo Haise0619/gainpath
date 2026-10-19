@@ -52,11 +52,14 @@ class BookingPaymentView {
       required this.localDate,
       required this.holdExpiresAtMillis,
       this.checkoutUrl,
+      this.paymentStatus,
+      this.refundStatus,
       this.resolutionReason});
   final String bookingId, status, startLabel, endLabel, localDate;
   final BookingPaymentQuote quote;
   final int holdExpiresAtMillis;
   final String? checkoutUrl, resolutionReason;
+  final String? paymentStatus, refundStatus;
   bool get confirmed => status == 'confirmed';
   factory BookingPaymentView.fromJson(Map<String, dynamic> json,
       {required String bookingId}) {
@@ -69,6 +72,8 @@ class BookingPaymentView {
           'reconciliation_required'
         ].contains(json['status']) ||
         json['holdExpiresAtMillis'] is! int ||
+        (json['paymentStatus'] != null && !const ['pending','cleared'].contains(json['paymentStatus'])) ||
+        (json['refundStatus'] != null && !const ['approved','rejected','processing','uncertain','completed','failed'].contains(json['refundStatus'])) ||
         [
           'startLabel',
           'endLabel',
@@ -90,6 +95,8 @@ class BookingPaymentView {
         localDate: json['localDate'] as String,
         holdExpiresAtMillis: json['holdExpiresAtMillis'] as int,
         checkoutUrl: json['checkoutUrl'] as String?,
+        paymentStatus: json['paymentStatus'] as String?,
+        refundStatus: json['refundStatus'] as String?,
         resolutionReason: json['resolutionReason'] as String?);
   }
 }

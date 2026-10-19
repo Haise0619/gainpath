@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:gainpath_domain/coaching.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
@@ -10,11 +11,13 @@ class BookingPaymentScreen extends StatefulWidget {
       required this.repository,
       required this.bookingId,
       required this.isCurrent,
-      this.create = false});
+      this.create = false,
+      this.now = DateTime.now});
   final BookingPaymentRepository repository;
   final String bookingId;
   final bool Function() isCurrent;
   final bool create;
+  final DateTime Function() now;
   @override
   State<BookingPaymentScreen> createState() => _BookingPaymentScreenState();
 }
@@ -24,51 +27,96 @@ class _BookingPaymentScreenState extends State<BookingPaymentScreen>
   BookingPaymentView? _payment;
   bool _busy = false;
   String? _message;
-  DateTime? _lastCheck;
+  DateTime? _nextAllowedCheck;
+  DateTime? _lastChecked;
+  Timer? _retryTimer;
+  int _followupsRemaining = 6;
+  bool _foreground = true;
+  bool _finished = false;
+  bool _createRequested = false;
+  bool get _canCheck =>
+      mounted && _foreground && !_finished && widget.isCurrent();
+
+  void _scheduleCheck() {
+    _retryTimer?.cancel();
+    _retryTimer = null;
+    if (!_canCheck || _followupsRemaining <= 0) return;
+    final delay = _nextAllowedCheck?.difference(widget.now()) ?? Duration.zero;
+    _retryTimer = Timer(delay.isNegative ? Duration.zero : delay, () {
+      _retryTimer = null;
+      if (!_canCheck) return;
+      _followupsRemaining--;
+      _load();
+    });
+  }
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    final lifecycle = WidgetsBinding.instance.lifecycleState;
+    _foreground = lifecycle == null || lifecycle == AppLifecycleState.resumed;
     _load(create: widget.create);
   }
 
   @override
   void dispose() {
+    _retryTimer?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) _load();
+    _foreground = state == AppLifecycleState.resumed;
+    if (!_foreground) {
+      _retryTimer?.cancel();
+      _retryTimer = null;
+    } else {
+      _followupsRemaining = 6;
+      _load();
+    }
   }
 
-  Future<void> _load({bool create = false}) async {
-    if (_busy ||
-        !widget.isCurrent() ||
-        (!create &&
-            _lastCheck != null &&
-            DateTime.now().difference(_lastCheck!) <
-                const Duration(seconds: 5))) {
+  Future<void> _load({bool create = false, bool manual = false}) async {
+    if (!_canCheck || _busy) return;
+    if (manual) _followupsRemaining = 6;
+    _createRequested = _createRequested || create;
+    final remaining = _nextAllowedCheck?.difference(widget.now());
+    if (remaining != null && remaining > Duration.zero) {
+      setState(() => _message =
+          'Waiting for the next trusted check. We will check again automatically.');
+      _scheduleCheck();
       return;
     }
-    _lastCheck = DateTime.now();
+    _retryTimer?.cancel();
+    _retryTimer = null;
+    final shouldCreate = _createRequested;
+    _createRequested = false;
     setState(() {
       _busy = true;
       _message = null;
     });
     try {
-      final result = await (create
+      final result = await (shouldCreate
           ? widget.repository.create(widget.bookingId)
           : widget.repository.get(widget.bookingId));
       if (!mounted || !widget.isCurrent()) return;
-      setState(() => _payment = result);
-      if (result.confirmed) {
+      setState(() {
+        _payment = result;
+        _lastChecked = widget.now();
+      });
+      if (_foreground &&
+          result.confirmed &&
+          result.refundStatus != 'completed') {
+        _finished = true;
         Navigator.pushReplacement(
             context,
             MaterialPageRoute<void>(
                 builder: (_) => BookingConfirmedScreen(payment: result)));
-      } else if (create && result.status == 'awaiting_payment') {
+      } else if (_foreground &&
+          shouldCreate &&
+          result.status == 'awaiting_payment') {
         await _open();
       }
     } catch (_) {
@@ -77,7 +125,11 @@ class _BookingPaymentScreenState extends State<BookingPaymentScreen>
             'Payment status unavailable. Check again or retry payment for this same booking.');
       }
     } finally {
-      if (mounted) setState(() => _busy = false);
+      _nextAllowedCheck = widget.now().add(const Duration(seconds: 10));
+      if (mounted) {
+        setState(() => _busy = false);
+        _scheduleCheck();
+      }
     }
   }
 
@@ -111,6 +163,33 @@ class _BookingPaymentScreenState extends State<BookingPaymentScreen>
           body: Center(child: Text('Payments unavailable for this session.')));
     }
     final value = _payment;
+    final refund = value?.refundStatus;
+    final title = switch (refund) {
+      'completed' => 'Refund completed',
+      'failed' => 'Refund needs attention',
+      'processing' || 'approved' || 'uncertain' => 'Refund in progress',
+      'rejected' => 'Refund request declined',
+      _ => value?.status == 'reconciliation_required'
+          ? 'Payment needs review'
+          : 'Complete payment with Billplz',
+    };
+    final detail = switch (refund) {
+      'completed' =>
+        'Your payment has been refunded. This booking is not confirmed.',
+      'failed' =>
+        'The refund could not be completed. Contact the gym for help.',
+      'processing' ||
+      'approved' ||
+      'uncertain' =>
+        'Your refund is being processed. Contact the gym if you need help.',
+      'rejected' =>
+        'The gym declined this refund request. Contact the gym for details.',
+      _ => value?.status == 'reconciliation_required'
+          ? value?.paymentStatus == 'cleared'
+              ? 'Payment was received, but your booking is not confirmed. Contact the gym for a payment review.'
+              : 'Your booking is not confirmed. Contact the gym before attempting another payment.'
+          : 'Your booking remains pending until the server verifies payment.',
+    };
     return Scaffold(
         appBar: AppBar(title: const Text('Session payment')),
         body: PageBody(children: [
@@ -119,11 +198,7 @@ class _BookingPaymentScreenState extends State<BookingPaymentScreen>
               child: Column(children: [
             const Icon(Icons.lock_outline, color: AppColors.primary, size: 40),
             const SizedBox(height: 12),
-            Text(
-                value?.status == 'reconciliation_required'
-                    ? 'Payment needs review'
-                    : 'Complete payment with Billplz',
-                style: Theme.of(context).textTheme.titleLarge),
+            Text(title, style: Theme.of(context).textTheme.titleLarge),
             const SizedBox(height: 12),
             const Text(
                 'Billplz sandbox opens in your browser. Return here to check the trusted booking status.'),
@@ -133,9 +208,13 @@ class _BookingPaymentScreenState extends State<BookingPaymentScreen>
               DetailRow('Date', value.localDate),
               DetailRow('Time', '${value.startLabel} – ${value.endLabel}'),
               DetailRow('Total', value.quote.formattedAmount),
-              Text(value.status == 'reconciliation_required'
-                  ? 'Your booking is not confirmed. Contact the gym before attempting another payment.'
-                  : 'Your booking remains pending until the server verifies payment.'),
+              Text(detail),
+              if (_lastChecked != null)
+                Text(
+                    'Last checked at ${TimeOfDay.fromDateTime(_lastChecked!).format(context)}.'),
+              Text(_followupsRemaining > 0
+                  ? 'Checks continue every 10 seconds while this screen is open.'
+                  : 'Automatic checks paused. Check again when you are ready.'),
             ],
             if (_message != null) Text(_message!),
           ])),
@@ -144,13 +223,14 @@ class _BookingPaymentScreenState extends State<BookingPaymentScreen>
                 onPressed: _busy ? null : _open,
                 child: const Text('Open Billplz sandbox')),
           OutlinedButton(
-              onPressed: _busy ? null : () => _load(),
+              onPressed: _busy ? null : () => _load(manual: true),
               child: const Text('Check payment status')),
           if (value == null ||
               value.status == 'creating' ||
               (value.status == 'awaiting_payment' && value.checkoutUrl == null))
             TextButton(
-                onPressed: _busy ? null : () => _load(create: true),
+                onPressed:
+                    _busy ? null : () => _load(create: true, manual: true),
                 child: const Text('Retry payment for same booking')),
         ]));
   }
