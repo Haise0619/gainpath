@@ -2,12 +2,12 @@
 
 ## Delivery and acceptance boundary
 
-Source implementation is complete for C3 **FR-10.1–FR-10.4**, with focused verification and an integrated Firebase Android build. **Production activation and owner manual UAT are pending.** Emulator results do not establish real Firebase CRUD success. Do not start another module until the owner reports PASS/FAIL.
+Source implementation is complete for C3 **FR-10.1–FR-10.4**, with focused verification and an integrated Firebase Android build. **The approved six-function production activation is complete; real CRUD save/reload and owner manual UAT remain pending.** Emulator results do not establish real Firebase CRUD success. Do not start another module until the owner reports PASS/FAIL.
 
 - Backend commit: `d0e8a8fd6efd93939dfc936b4fbe97decb2207bb`.
 - Shared presentation/adapter commit: `9e5bafc2d6b4423b11618a4b0074861269dfec0d`.
 - Accepted Admin checkpoint: `18e4130`; pushed integration milestone `e5f9c99` passed [CI run 39183693687](https://github.com/Haise0619/gainpath/actions/runs/39183693687).
-- The Module 10 commits remain local. No new business-module push, backend deployment, APK installation or canonical account modification occurred.
+- The Module 10 commits remain local. The owner explicitly approved the six-function deployment, which completed successfully. No new business-module push, APK installation or canonical account modification occurred.
 
 ## Original requirement coverage
 
@@ -43,14 +43,14 @@ Member schedules contain effective windows without private reasons. Current Coac
 
 Evidence is retained under ignored `build/module-10/`, `build/module10-backend-emulator/` and `build/non-core-crud-sprint/module-10-activation/`. Expected denied Rules requests produce stderr. Local Node 24 reports a declared-Node-22 warning; production build/typechecks passed and deployment runtime remains Node 22.
 
-## Exact live configuration and proposed selective activation
+## Exact live configuration and approved selective activation
 
 Read-only project: `gainpath-0619`, organization `gainpath`, region `us-central1`; 24 ACTIVE Node 22 functions. Booking policy remains Asia/Kuala_Lumpur, 15-minute holds and one active booking per Member/day.
 
 - Firestore Rules SHA-256: `3b11087f0d21639249374ae17035fbc4d734a0827f1c7390acd118b0c486e2db`.
 - Storage Rules SHA-256: `50138b9c519882e03005c1f7f5821b306d9d35baf3aca701c716c1feb8b3fc8d`.
 
-**No Rules, indexes, Storage, Hosting, IAM or Scheduler deployment is needed.** The proposed activation is restricted to these six function names:
+**No Rules, indexes, Storage, Hosting, project/service-account IAM roles or Scheduler changes were made.** The owner-approved deployment was restricted to these six function names:
 
 1. `getCoachRosterCommand` — new private read, App Check enforced.
 2. `saveCoachRosterCommand` — new own-Coach aggregate command, App Check enforced.
@@ -59,7 +59,9 @@ Read-only project: `gainpath-0619`, organization `gainpath`, region `us-central1
 5. `getMemberBookingOptionsCommand` — Coach capacity/advance enforcement.
 6. `createBookingHold` — same trusted enforcement at checkout.
 
-Recheck live Rules hashes and target function revisions immediately before an approved deployment. Select exact function names, never blanket-deploy `firebase.json`. No account data must be rewritten during activation. The new client dated-save payload includes a roster revision, so deploy the reviewed functions before installing the new APK for ordinary live use. Real save/reload checks remain pending owner UAT; no canonical identities were used for automated writes.
+Live Rules hashes and target revisions were rechecked immediately before deployment. The CLI deployed only the six explicit function names, without a blanket Firebase deployment or account-data rewrite. Readback confirmed **26 functions**, all six targets ACTIVE on Node 22, every unrelated function revision unchanged, and both Rules hashes unchanged. New read/write roster endpoints each rejected anonymous calls with HTTP 401/UNAUTHENTICATED. Revisions: `getcoachrostercommand-00001-gub`, `savecoachrostercommand-00001-nar`, `getcoachavailabilitycommand-00003-yin`, `savecoachavailabilitydaycommand-00003-xon`, `getmemberbookingoptionscommand-00003-lir`, `createbookinghold-00003-mew`.
+
+The new client dated-save payload includes a roster revision; the reviewed server handlers are now deployed for compatibility. Real save/reload checks remain pending owner UAT; no canonical identities were used for automated writes. The official Admin build was reloaded and its authenticated shell opened; this is not a claim of owner acceptance or live roster CRUD success. Firebase CLI reported an image-cleanup warning after successful deployment; no build images were deleted or unrelated redeployment attempted. Sanitized deployment/readback evidence remains in the ignored activation directory.
 
 ## Builds and official entry
 
