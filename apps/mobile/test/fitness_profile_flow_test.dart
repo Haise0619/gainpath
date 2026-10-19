@@ -251,7 +251,8 @@ void main() {
     await mount(tester, auth, profiles);
     expect(find.byType(MemberHomeScreen), findsOneWidget);
     expect(find.text('Announcements'), findsOneWidget);
-    expect(find.text('Streak unavailable'), findsOneWidget);
+    expect(find.text('- day streak'), findsOneWidget);
+    expect(find.text('Check-in is not connected yet.'), findsOneWidget);
     expect(find.text('No published routine yet'), findsOneWidget);
     expect(
         tester
@@ -283,9 +284,7 @@ void main() {
     expect(find.text('YOUR POINTS'), findsOneWidget);
     await tap(tester, 'Coaches');
     expect(find.byType(BrowseCoachesScreen), findsOneWidget);
-    expect(
-        find.text('No published Coaches are available for this organization.'),
-        findsOneWidget);
+    expect(find.text('No coaches available yet.'), findsOneWidget);
     await tester.pumpWidget(const SizedBox());
     await auth.dispose();
   });

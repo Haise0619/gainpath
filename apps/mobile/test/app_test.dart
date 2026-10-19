@@ -19,7 +19,11 @@ void main() {
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
     final repository = InMemoryAuthRepository();
-    await tester.pumpWidget(GainPathMobileApp(authRepository: repository));
+    await tester.pumpWidget(GainPathMobileApp(
+      authRepository: repository,
+      backendConfig: const BackendConfig(BackendMode.firebase),
+      profileRepositoryFactory: FakeProfileGateway().repository,
+    ));
     await tester.pumpAndSettle();
     await tester.ensureVisible(find.text('New here? Create an account'));
     await tester.pumpAndSettle();
@@ -27,6 +31,8 @@ void main() {
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField).at(0), 'New Member');
     await tester.enterText(find.byType(TextField).at(1), 'new@example.com');
+    await tester.enterText(find.byType(TextField).at(2), 'password123');
+    await tester.enterText(find.byType(TextField).at(3), 'password123');
     await tester.tap(find.byType(Checkbox));
     final submit = find.widgetWithText(FilledButton, 'Create account');
     await tester.ensureVisible(submit);
@@ -44,7 +50,8 @@ void main() {
     await repository.dispose();
   });
   testWidgets('signed-out mobile app opens one login page', (tester) async {
-    await tester.pumpWidget(const GainPathMobileApp());
+    await tester.pumpWidget(const GainPathMobileApp(
+        backendConfig: BackendConfig(BackendMode.mock)));
     await tester.pumpAndSettle();
     expect(find.byType(LoginScreen), findsOneWidget);
     expect(find.text('Member or coach'), findsOneWidget);
@@ -57,7 +64,8 @@ void main() {
     tester.view.physicalSize = const Size(1000, 1600);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
-    await tester.pumpWidget(const GainPathMobileApp());
+    await tester.pumpWidget(const GainPathMobileApp(
+        backendConfig: BackendConfig(BackendMode.mock)));
     await tester.pumpAndSettle();
     await tester.tap(find.text('View introduction'));
     await tester.pumpAndSettle();
@@ -92,7 +100,8 @@ void main() {
 
   testWidgets('authenticated member can enter the local workout flow',
       (tester) async {
-    await tester.pumpWidget(const GainPathMobileApp());
+    await tester.pumpWidget(const GainPathMobileApp(
+        backendConfig: BackendConfig(BackendMode.mock)));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField).at(0), 'member@example.com');
     await tester.enterText(find.byType(TextField).at(1), 'password123');
@@ -108,7 +117,8 @@ void main() {
     tester.view.physicalSize = const Size(1000, 1600);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
-    await tester.pumpWidget(const GainPathMobileApp());
+    await tester.pumpWidget(const GainPathMobileApp(
+        backendConfig: BackendConfig(BackendMode.mock)));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField).at(0), 'coach@example.com');
     await tester.enterText(find.byType(TextField).at(1), 'password123');
@@ -131,7 +141,9 @@ void main() {
       email: 'coach@example.com',
       password: 'password123',
     );
-    await tester.pumpWidget(GainPathMobileApp(authRepository: repository));
+    await tester.pumpWidget(GainPathMobileApp(
+        authRepository: repository,
+        backendConfig: const BackendConfig(BackendMode.mock)));
     await tester.pumpAndSettle();
     expect(find.text('Roster'), findsWidgets);
     expect(find.byType(LoginScreen), findsNothing);
@@ -162,10 +174,15 @@ void main() {
       await tester.ensureVisible(submit);
       await tester.tap(submit);
       await tester.pumpAndSettle();
+      if (role == 'coach') {
+        expect(find.text('Roster'), findsWidgets);
+        await tester.tap(find.text('Profile').last);
+        await tester.pumpAndSettle();
+      }
       expect(
           role == 'member'
               ? find.byType(ProfileSetupScreen)
-              : find.text('Directory: not published'),
+              : find.text('Not published in directory'),
           findsOneWidget);
       expect(find.byType(LoginScreen), findsNothing);
       await tester.tap(find.text('Sign out'));

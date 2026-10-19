@@ -7,6 +7,7 @@ import 'package:gainpath_data/workout.dart';
 import 'package:gainpath_identity/gainpath_identity.dart';
 import 'package:gainpath_mobile/app/routing/feature_routes.dart';
 import 'package:gainpath_mobile/features/membership/presentation/shared/billplz_checkout_screen.dart';
+import 'package:gainpath_mobile/features/membership/presentation/shared/membership_dashboard_screen.dart';
 import 'package:gainpath_mobile/navigation/feature_navigation.dart';
 import 'package:google_fonts/google_fonts.dart';
 
@@ -41,10 +42,6 @@ void main() {
   }
 
   final routes = [
-    const RouteSettings(name: FeatureNavigation.membership),
-    const RouteSettings(
-        name: FeatureNavigation.checkout,
-        arguments: CheckoutArguments(amount: 75, description: 'Prototype')),
     RouteSettings(
         name: FeatureNavigation.coach,
         arguments: InMemoryCoachRepository().currentCoach),
@@ -61,6 +58,54 @@ void main() {
       expect(tester.takeException(), isNull);
     });
   }
+
+  testWidgets(
+      'Firebase membership retains the shared dashboard without seeded billing',
+      (tester) async {
+    await open(tester, const RouteSettings(name: FeatureNavigation.membership));
+    expect(find.byType(MembershipDashboardScreen), findsOneWidget);
+    expect(
+        tester
+            .widget<MembershipDashboardScreen>(
+                find.byType(MembershipDashboardScreen))
+            .connected,
+        isTrue);
+    expect(find.text('CURRENT PLAN'), findsOneWidget);
+    expect(find.text('-'), findsWidgets);
+    expect(find.text('Billing data unavailable'), findsOneWidget);
+    expect(tester.widget<Switch>(find.byType(Switch)).onChanged, isNull);
+    expect(find.text('Renew now'), findsOneWidget);
+    expect(find.text('Change plan'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('Firebase checkout retains the shared UI with payment disabled',
+      (tester) async {
+    await open(
+        tester,
+        const RouteSettings(
+            name: FeatureNavigation.checkout,
+            arguments:
+                CheckoutArguments(amount: 75, description: 'Prototype')));
+    expect(find.byType(BillplzCheckoutScreen), findsOneWidget);
+    expect(
+        tester
+            .widget<BillplzCheckoutScreen>(find.byType(BillplzCheckoutScreen))
+            .connected,
+        isTrue);
+    expect(find.text('Payment service unavailable'), findsOneWidget);
+    expect(find.text('RM 75.00'), findsNothing);
+    expect(find.text('billplz.com/bill/checkout'), findsNothing);
+    await tester.tap(find.text('Maybank2u'));
+    await tester.pumpAndSettle();
+    expect(
+        tester
+            .widget<FilledButton>(
+                find.widgetWithText(FilledButton, 'Payment unavailable'))
+            .onPressed,
+        isNull);
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets('mock checkout preserves simulated payment navigation',
       (tester) async {
