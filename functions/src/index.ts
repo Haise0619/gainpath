@@ -14,6 +14,7 @@ export { getCoachAvailabilityCommand, saveCoachAvailabilityDayCommand } from './
 export { getCoachRosterCommand, saveCoachRosterCommand } from './modules/coaching/coach-availability-callables';
 export { paymentWebhook } from './modules/commerce/payment-webhook';
 export { getBookingPaymentQuoteCommand, createBookingPaymentCommand, getBookingPaymentCommand, billplzSandboxReturn } from './modules/commerce/booking-payment-callables';
+export { listAdminBookingPaymentsCommand, getAdminBookingPaymentCommand, manageAdminBookingPaymentCommand } from './modules/commerce/booking-payment-admin-callables';
 export { provisionMemberRegistration } from './modules/identity/provision-member-registration';
 export { getMemberAccountLifecycleCommand, requestMemberDeactivationCommand, cancelMemberDeactivationCommand } from './modules/identity/member-account-lifecycle-callables';
 export { publishRoutineCommand } from './modules/content/publish-routine-callable';

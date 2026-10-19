@@ -60,6 +60,8 @@ function payment(d: DocumentData | undefined, org: string, id: string): Document
 function view(d: DocumentData) {
   return { schemaVersion: 1, bookingId: String(d.bookingId), status: String(d.fulfilmentStatus), amountMinor: Number(d.amountMinor), currency: 'MYR', coachName: String(d.coachName), branchName: String(d.branchName), startLabel: String(d.startLabel), endLabel: String(d.endLabel), localDate: String(d.localDate), durationMinutes: Number(d.durationMinutes), holdExpiresAtMillis: Number(d.holdExpiresAtMillis),
     ...(d.fulfilmentStatus === 'awaiting_payment' && typeof d.checkoutUrl === 'string' ? { checkoutUrl: d.checkoutUrl } : {}),
+    paymentStatus:String(d.paymentStatus),
+    ...(typeof d.refundStatus === 'string' ? { refundStatus: d.refundStatus } : {}),
     ...(typeof d.resolutionReason === 'string' ? { resolutionReason: d.resolutionReason } : {}) };
 }
 function audit(tx: TransactionPort, org: string, id: string, event: string, now: number, fields: DocumentData = {}) {

@@ -11,6 +11,7 @@ import type { BillplzGateway, SandboxBill } from '../src/modules/commerce/billpl
 import { readFileSync } from 'node:fs';
 import { initializeTestEnvironment, assertFails } from '@firebase/rules-unit-testing';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { manageAdminBookingPayment } from '../src/modules/commerce/booking-payment-admin';
 let app:App,db:Firestore,id:string,creates:number;
 const store=()=>new FirestoreStore(db);
 const auth={uid:'member-1',token:{email_verified:true}};
@@ -60,4 +61,15 @@ it('exact Rules deny direct financial/audit reads and writes for provisioned cli
       }
     }
   }finally{await env.cleanup();}
+});
+it('concurrent Admin refund execution reserves one provider order and preserves expired booking',async()=>{
+ await create();await expireBookingHoldService(store(),`orgs/org-1/jobs/${keyOf('expireBookingHold',id)}`,()=>now+900001);
+ await settleBookingPayment(store(),'org-1',id,bill(true),eligibleCoach,()=>now+900001);
+ await db.doc('users/admin-1').set({organizationId:'org-1'});await db.doc('orgs/org-1/members/admin-1').set({organizationId:'org-1',status:'active',role:'admin',branchIds:[]});
+ let payouts=0;const order={id:'11111111-1111-4111-8111-111111111111',collectionId:'refunds',reference:'refund-'+id,amountMinor:12000,status:'completed'};
+ const deps={bills:gateway,collectionId:'sandbox-collection',refundCollectionId:'refunds',readIdentity:eligibleCoach,refunds:{create:async()=>{payouts++;return order;},get:async()=>order},reader:{list:async()=>[],events:async()=>[]}};
+ const actor={uid:'admin-1',token:{email_verified:true}},input=(action:string,requestId:string)=>({schemaVersion:1,organizationId:'org-1',bookingId:id,requestId,action,reason:'Synthetic refund test'});
+ await manageAdminBookingPayment(store(),actor,input('approve_refund','approve'),deps,()=>now+901000);
+ await Promise.all(Array.from({length:4},()=>manageAdminBookingPayment(store(),actor,input('execute_refund','execute'),deps,()=>now+902000)));
+ expect(payouts).toBe(1);expect((await db.doc(`orgs/org-1/transactions/${id}`).get()).data()?.refundStatus).toBe('completed');expect((await db.doc(`orgs/org-1/bookings/${id}`).get()).data()?.status).toBe('expired');
 });

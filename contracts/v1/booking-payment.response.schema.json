@@ -82,6 +82,12 @@
     "resolutionReason": {
       "type": "string",
       "maxLength": 80
+    },
+    "paymentStatus": {
+      "enum": ["pending", "cleared"]
+    },
+    "refundStatus": {
+      "enum": ["approved", "rejected", "processing", "uncertain", "completed", "failed"]
     }
   }
 }
