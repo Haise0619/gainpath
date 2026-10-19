@@ -11,6 +11,39 @@ import 'package:gainpath_mobile/features/identity/presentation/member/member_pro
 void main() {
   setUpAll(() => GoogleFonts.config.allowRuntimeFetching = false);
 
+  testWidgets('connected profile opens app-composed metrics and membership',
+      (tester) async {
+    final auth = AuthBloc(repository: InMemoryAuthRepository());
+    addTearDown(auth.close);
+    await tester.pumpWidget(BlocProvider.value(
+      value: auth,
+      child: MaterialApp(
+        home: MemberProfileScreen(
+          liveSession: const AuthSession(
+              email: 'member@example.test', role: AppRole.member),
+          bodyMetricsBuilder: (_) =>
+              const Scaffold(body: Text('Metrics destination')),
+          membershipBuilder: (_) =>
+              const Scaffold(body: Text('Membership destination')),
+        ),
+      ),
+    ));
+    await tester.pumpAndSettle();
+    for (final entry in {
+      'Body metrics': 'Metrics destination',
+      'Membership': 'Membership destination',
+    }.entries) {
+      await tester.ensureVisible(find.text(entry.key));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(entry.key));
+      await tester.pumpAndSettle();
+      expect(find.text(entry.value), findsOneWidget);
+      Navigator.of(tester.element(find.text(entry.value))).pop();
+      await tester.pumpAndSettle();
+    }
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('connected profile retains badge and menus with missing fields',
       (tester) async {
     final auth = AuthBloc(repository: InMemoryAuthRepository());

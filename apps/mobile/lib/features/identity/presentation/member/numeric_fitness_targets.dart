@@ -1,11 +1,10 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:gainpath_data/gainpath_data.dart';
 import 'package:gainpath_domain/gainpath_domain.dart';
 import 'package:gainpath_identity/gainpath_identity.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
-import '../../../../infrastructure/firebase/firebase_numeric_fitness_goal_gateway.dart';
+import '../../../../infrastructure/firebase/member_profile_repositories.dart';
 
 /// Reuses the profile's target cards and Add affordance in both modes.
 class NumericFitnessTargets extends StatefulWidget {
@@ -74,10 +73,8 @@ class _NumericFitnessTargetsState extends State<NumericFitnessTargets> {
       });
       if (_repository == null && _session != null && _current()) {
         try {
-          _repository = FirebaseNumericFitnessGoalRepository(
-              scope: _session!.scope,
-              gateway:
-                  FlutterNumericFitnessGoalGateway(isSessionCurrent: _current));
+          _repository =
+              createNumericFitnessGoalRepository(_session!.scope, _current);
         } catch (_) {
           _initializationFailure =
               'Targets unavailable. Restart the app and sign in again.';

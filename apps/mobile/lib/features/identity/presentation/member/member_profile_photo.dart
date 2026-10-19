@@ -2,13 +2,11 @@ import 'dart:async';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:gainpath_data/gainpath_data.dart';
 import 'package:gainpath_domain/gainpath_domain.dart';
 import 'package:gainpath_domain/identity.dart';
 import 'package:gainpath_identity/gainpath_identity.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
-import '../../../../infrastructure/firebase/firebase_member_photo_gateway.dart';
-import '../../../../infrastructure/firebase/firebase_member_photo_store.dart';
+import '../../../../infrastructure/firebase/member_profile_repositories.dart';
 import '../../../../infrastructure/local/account_photo_picker.dart';
 import 'module1_edit_guard.dart';
 
@@ -67,13 +65,7 @@ class _MemberProfilePhotoState extends State<MemberProfilePhoto> {
     if (widget.session != null && _repository == null) {
       final scope = widget.session!.scope;
       try {
-        _repository = FirebaseMemberPhotoRepository(
-            scope: scope,
-            isCurrent: _current,
-            gateway:
-                FlutterMemberPhotoGateway(scope: scope, isCurrent: _current),
-            photos:
-                FirebaseAccountPhotoStore(scope: scope, isCurrent: _current));
+        _repository = createMemberPhotoRepository(scope, _current);
       } catch (_) {
         _initializationFailed = true;
         _error = 'Photo unavailable. Restart the app and sign in again.';

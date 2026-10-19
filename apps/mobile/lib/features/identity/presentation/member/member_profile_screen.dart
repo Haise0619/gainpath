@@ -12,8 +12,6 @@ import 'activity_level_screen.dart';
 import 'experience_level_screen.dart';
 import 'goals_screen.dart';
 import 'physical_profile_screen.dart';
-import '../../../membership/presentation/shared/membership_dashboard_screen.dart';
-import '../../../analytics/presentation/member/body_metrics_screen.dart';
 
 class MemberProfileScreen extends StatelessWidget {
   const MemberProfileScreen(
@@ -21,11 +19,14 @@ class MemberProfileScreen extends StatelessWidget {
       this.liveSession,
       this.liveProfile,
       this.onOpenProgress,
+      this.bodyMetricsBuilder,
+      this.membershipBuilder,
       this.memberSettingsBuilder});
 
   final AuthSession? liveSession;
   final FitnessProfile? liveProfile;
   final VoidCallback? onOpenProgress;
+  final WidgetBuilder? bodyMetricsBuilder, membershipBuilder;
   final WidgetBuilder? memberSettingsBuilder;
 
   @override
@@ -129,14 +130,10 @@ class MemberProfileScreen extends StatelessWidget {
                       Icons.monitor_weight_outlined,
                       'Body metrics',
                       '$height · $weight',
-                      () => Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                              builder: (_) => BodyMetricsScreen(
-                                  live: true,
-                                  weightKg: liveProfile?.weightKg.toDouble(),
-                                  heightCm:
-                                      liveProfile?.heightCm.toDouble())))),
+                      bodyMetricsBuilder == null
+                          ? null
+                          : () => Navigator.push(context,
+                              MaterialPageRoute(builder: bodyMetricsBuilder!))),
                 const Divider(height: 1, indent: 62),
                 _row(
                     context,
@@ -197,14 +194,11 @@ class MemberProfileScreen extends StatelessWidget {
                     Icons.card_membership_rounded,
                     'Membership',
                     liveSession == null ? 'Premium  ·  renews 12 Oct' : '-',
-                    () => liveSession == null
+                    () => membershipBuilder == null
                         ? Navigator.pushNamed(
                             context, FeatureNavigation.membership)
-                        : Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                                builder: (_) => const MembershipDashboardScreen(
-                                    connected: true)))),
+                        : Navigator.push(context,
+                            MaterialPageRoute(builder: membershipBuilder!))),
                 const Divider(height: 1, indent: 62),
                 _row(
                     context,
@@ -250,7 +244,7 @@ class MemberProfileScreen extends StatelessWidget {
   }
 
   Widget _row(BuildContext context, IconData icon, String title,
-      String subtitle, VoidCallback onTap) {
+      String subtitle, VoidCallback? onTap) {
     return ListTile(
       onTap: onTap,
       leading: Container(

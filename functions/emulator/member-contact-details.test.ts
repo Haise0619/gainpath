@@ -6,8 +6,8 @@ let env:RulesTestEnvironment;
 const client=(uid='member',verified=true)=>env.authenticatedContext(uid,{email_verified:verified}).firestore();
 const photo='orgs/o/memberProfilePhotos/member/0123456789abcdef0123456789abcdef';
 beforeAll(async()=>{
- if(!process.env.FIRESTORE_EMULATOR_HOST||!process.env.MEMBER_CONTACT_RULES_FILE)throw Error('Exact candidate/local emulator required');
- env=await initializeTestEnvironment({projectId:'demo-gainpath',firestore:{rules:readFileSync(process.env.MEMBER_CONTACT_RULES_FILE,'utf8')}});
+ if(!process.env.FIRESTORE_EMULATOR_HOST)throw Error('Local emulator required');
+ env=await initializeTestEnvironment({projectId:'demo-gainpath',firestore:{rules:readFileSync(process.env.MEMBER_CONTACT_RULES_FILE ?? '../firebase/firestore.rules','utf8')}});
 });
 beforeEach(async()=>{await env.clearFirestore();await env.withSecurityRulesDisabled(async c=>{
  for(const [uid,role]of [['member','member'],['other','member'],['admin','admin'],['coach','coach'],['staff','staff']]){

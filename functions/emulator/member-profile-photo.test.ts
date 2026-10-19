@@ -11,8 +11,8 @@ let fixtureId=0;
 const png=new Uint8Array([137,80,78,71,13,10,26,10]);
 const client=(uid='member',verified=true)=>env.authenticatedContext(uid,{email_verified:verified});
 beforeAll(async()=>{
- if(!process.env.FIRESTORE_EMULATOR_HOST||!process.env.MEMBER_PHOTO_RULES_DIR)throw Error('Exact candidate/local emulators required');
- const dir=process.env.MEMBER_PHOTO_RULES_DIR;
+ if(!process.env.FIRESTORE_EMULATOR_HOST||!process.env.FIREBASE_STORAGE_EMULATOR_HOST)throw Error('Local emulators required');
+ const dir=process.env.MEMBER_PHOTO_RULES_DIR ?? '../firebase';
  env=await initializeTestEnvironment({projectId:'demo-gainpath',firestore:{rules:readFileSync(join(dir,'firestore.rules'),'utf8')},storage:{rules:readFileSync(join(dir,'storage.rules'),'utf8')}});
 });
 beforeEach(async()=>{path=`orgs/o/memberProfilePhotos/member/${(++fixtureId).toString(16).padStart(32,'0')}`;await env.clearFirestore();await env.clearStorage();await env.withSecurityRulesDisabled(async c=>{

@@ -23,6 +23,8 @@ import '../../features/workout/data/published_routine.dart';
 import '../../features/gamification/presentation/member/gamification_dashboard_screen.dart';
 import '../../features/coaching/presentation/member/browse_coaches_screen.dart';
 import '../../features/identity/presentation/member/member_profile_screen.dart';
+import '../../features/analytics/presentation/member/body_metrics_screen.dart';
+import '../../features/membership/presentation/shared/membership_dashboard_screen.dart';
 
 /// Bottom-navigation shell for the Gym Member role (Modules 1 to 7).
 class MemberShell extends StatefulWidget {
@@ -178,7 +180,15 @@ class _MemberShellState extends State<MemberShell> {
               : () => Navigator.push(
                   context,
                   MaterialPageRoute(
-                      builder: (_) => EquipmentScannerScreen(connected: true, onBrowse: () => Navigator.push(context, MaterialPageRoute(builder: (_) => buildMemberEquipmentCatalog(session, factory: widget.equipmentReaderFactory)))))),
+                      builder: (_) => EquipmentScannerScreen(
+                          connected: true,
+                          onBrowse: () => Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                  builder: (_) => buildMemberEquipmentCatalog(
+                                      session,
+                                      factory:
+                                          widget.equipmentReaderFactory)))))),
           onOpenCoaches: () => setState(() {
                 _index = 3;
                 _directoryVisited = true;
@@ -208,7 +218,15 @@ class _MemberShellState extends State<MemberShell> {
               : () => Navigator.push(
                   context,
                   MaterialPageRoute(
-                      builder: (_) => EquipmentScannerScreen(connected: true, onBrowse: () => Navigator.push(context, MaterialPageRoute(builder: (_) => buildMemberEquipmentCatalog(session, factory: widget.equipmentReaderFactory))))))),
+                      builder: (_) => EquipmentScannerScreen(
+                          connected: true,
+                          onBrowse: () => Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                  builder: (_) => buildMemberEquipmentCatalog(
+                                      session,
+                                      factory:
+                                          widget.equipmentReaderFactory))))))),
       GamificationDashboardScreen(live: connected),
       session == null
           ? const BrowseCoachesScreen()
@@ -222,6 +240,15 @@ class _MemberShellState extends State<MemberShell> {
       MemberProfileScreen(
           liveSession: session,
           liveProfile: widget.liveProfile,
+          bodyMetricsBuilder: session == null
+              ? null
+              : (_) => BodyMetricsScreen(
+                  live: true,
+                  weightKg: widget.liveProfile?.weightKg.toDouble(),
+                  heightCm: widget.liveProfile?.heightCm.toDouble()),
+          membershipBuilder: session == null
+              ? null
+              : (_) => const MembershipDashboardScreen(connected: true),
           onOpenProgress:
               open == null ? null : () => open(MemberProgressView.dashboard),
           memberSettingsBuilder: widget.memberSettingsBuilder),

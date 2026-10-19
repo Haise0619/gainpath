@@ -20,4 +20,17 @@ Six pre-existing tracked modifications are retained and excluded from this check
 4. Observe the single `.github/workflows/verify.yml` run triggered by that push, covering the existing Flutter and backend jobs. Do not also run a redundant full local CI suite. Report the actual result and any necessary blocker; do not claim CI passed before completion.
 5. After this checkpoint/CI sequence, implement Module 10 as one integrated sprint against original C3 FR-10.1–FR-10.4 and C4. Inspect exact live Firebase policy/configuration before proposing deployment; request approval for production/policy/security changes. Preserve existing transactions, reservation locks, timezone rules, data and frozen systems.
 
-No application source, Firebase configuration or live data changed while preparing this checkpoint. Push and consolidated CI are pending owner push approval.
+No application source, Firebase configuration or live data changed while preparing the original checkpoint.
+
+## Approved push and observed CI
+
+The owner approved the exact checkpoint push. A normal fast-forward push advanced only `codex/real-squat-flow` from `99d5ed1` to `97f65c0f3e53ca107624537273671c3d2b76bc5e`; all six pre-existing modified files stayed excluded. The single automatically triggered [Verify workspace run 39181449682](https://github.com/Haise0619/gainpath/actions/runs/39181449682) completed with failures in both jobs:
+
+- Flutter stopped at Architecture boundaries: two Member profile widgets imported concrete data repositories, and the profile screen directly imported Membership and Body Metrics feature implementations.
+- Backend build, test typecheck and unit tests passed; the Rules emulator step failed because five suites required ignored activation candidates/environment variables absent from a clean checkout.
+
+The bounded integration repair moves repository construction into infrastructure, composes the two navigation destinations in MemberShell through builders, and defaults those five Rules suites to committed Rules. Explicit activation-candidate overrides remain supported, including `MODULE8_RULES_DIR`. No test is skipped, no Rules or deployed policy changes, and no live record is written. Tests against committed Rules are not evidence of deployed-policy validation.
+
+Focused repair verification: architecture checker passed; targeted Dart analysis passed; 16 Member widget tests passed (including both navigation destinations); backend test typecheck passed; all 36 tests in the five affected Rules files passed on isolated local emulators. Emulator shutdown emitted a Java tooling warning after successful test exit. The original CI remains failed; these focused results do not establish a passing consolidated CI run.
+
+The repair requires a separate exact-SHA push approval. A subsequent CI run is necessary because the first run found genuine integration failures, not a routine repeated audit. Module 10 implementation and backend deployment have not started while this checkpoint is unresolved.

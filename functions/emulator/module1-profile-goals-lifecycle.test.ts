@@ -11,8 +11,8 @@ const profilePath='orgs/o/profiles/member',goalPath=profilePath+'/goals/goal_1';
 const baseProfile={schemaVersion:1,gender:'unspecified',age:25,heightCm:165,weightKg:65,experience:'beginner',activity:'lightlyActive',goals:['generalFitness'],updatedAt:Timestamp.fromMillis(1)};
 const goal=(patch:Record<string,unknown>={})=>({schemaVersion:1,category:'trainingFrequency',targetValue:4,unit:'sessions',evaluationPeriod:'calendarWeek',status:'active',revision:1,createdAt:serverTimestamp(),updatedAt:serverTimestamp(),...patch});
 beforeAll(async()=>{
-  const dir=process.env.MODULE1_RULES_DIR;
-  if(!dir||!process.env.FIRESTORE_EMULATOR_HOST||!process.env.FIREBASE_STORAGE_EMULATOR_HOST)throw Error('Exact Module 1 candidate/local emulators required');
+  const dir=process.env.MODULE1_RULES_DIR ?? '../firebase';
+  if(!process.env.FIRESTORE_EMULATOR_HOST||!process.env.FIREBASE_STORAGE_EMULATOR_HOST)throw Error('Local emulators required');
   env=await initializeTestEnvironment({projectId:'demo-gainpath',firestore:{rules:readFileSync(join(dir,'firestore.rules'),'utf8')},storage:{rules:readFileSync(join(dir,'storage.rules'),'utf8')}});
 });
 beforeEach(async()=>{
