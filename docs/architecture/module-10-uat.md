@@ -7,7 +7,7 @@ Source implementation is complete for C3 **FR-10.1–FR-10.4**, with focused ver
 - Backend commit: `d0e8a8fd6efd93939dfc936b4fbe97decb2207bb`.
 - Shared presentation/adapter commit: `9e5bafc2d6b4423b11618a4b0074861269dfec0d`.
 - Accepted Admin checkpoint: `18e4130`; pushed integration milestone `e5f9c99` passed [CI run 39183693687](https://github.com/Haise0619/gainpath/actions/runs/39183693687).
-- The Module 10 commits remain local. The owner explicitly approved the six-function deployment, which completed successfully. No new business-module push, APK installation or canonical account modification occurred.
+- The Module 10 commits remain local. The owner explicitly approved the six-function deployment, which completed successfully, and subsequently requested installation of the new version. No new business-module push or canonical account modification occurred.
 
 ## Original requirement coverage
 
@@ -68,7 +68,7 @@ The new client dated-save payload includes a roster revision; the reviewed serve
 - Official Admin: **http://localhost:7359/**, final build served with HTTP 200 and matching JavaScript SHA-256 `ba988f9094c57267452171dfb14247f8d253e6ba8c31872d706ca9327eae568f`. No per-module website or route was created.
 - Android: `build/module-10/gainpath-module10-firebase-debug.apk`.
 - APK SHA-256: `014fc5c0bbd0eb40688c09f72561037702d0e1536771ebcf6c69a89aae33fd95`.
-- Signing certificate matches the previously installed unified-mobile artifact. **Not installed.** No phone private data was accessed or changed.
+- **Installed and launched on the owner’s Xiaomi (23013RK75C) on 19 October 2026, Asia/Kuala_Lumpur**, following the explicit installation request. The current APK and private data were backed up first; the signing certificate matches, the installed APK hash matches the artifact above, and private data was byte-identical immediately after the in-place update and before launch. No app-data clear or uninstall occurred. Private backups are retained under ignored `build/non-core-crud-sprint/module-10-activation/private/install-module10/`; the sanitized result is `module-10-activation/install-result.json`. Launch verification is not owner manual UAT PASS.
 
 The six pre-existing modified files remain uncommitted and byte-for-byte preserved. The APK includes the unchanged owner roster-routing fix already in the working tree; it is not silently included in the Module 10 commits. Source provenance and owner-file hashes are retained in ignored delivery evidence.
 
