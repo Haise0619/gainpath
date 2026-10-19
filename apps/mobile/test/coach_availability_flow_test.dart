@@ -77,8 +77,10 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(FilledButton, 'Add'));
     await tester.pumpAndSettle();
-    await tester.ensureVisible(find.text('Save day'));
-    await tester.tap(find.text('Save day'));
+    final saveDay = find.widgetWithText(FilledButton, 'Save day');
+    await Scrollable.ensureVisible(tester.element(saveDay), alignment: 0.5);
+    await tester.pumpAndSettle();
+    await tester.tap(saveDay);
     await tester.pumpAndSettle();
     expect(repo.stored, hasLength(1));
     await tester.pumpWidget(MaterialApp(
@@ -88,6 +90,10 @@ void main() {
     expect(find.textContaining('main'), findsWidgets);
     expect(find.text('Coach schedule; booking unavailable.'), findsOneWidget);
     expect(find.text('Save day'), findsNothing);
+    await tester.tap(find.byTooltip('Refresh schedule'));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    expect(find.textContaining('main'), findsWidgets);
   });
   testWidgets(
       'Firebase Coach reaches dated tab and loses open editor on account drift',

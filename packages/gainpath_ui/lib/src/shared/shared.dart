@@ -1,6 +1,7 @@
 export 'charts/bar_chart.dart';
 export 'charts/trend_chart.dart';
 export 'widgets/confirm_sheet.dart';
+export 'widgets/unsaved_changes_guard.dart';
 export 'widgets/detail_row.dart';
 export 'widgets/eyebrow.dart';
 export 'widgets/network_avatar.dart';

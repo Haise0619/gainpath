@@ -20,8 +20,9 @@ class LiveCoachScheduleView extends StatefulWidget {
 class _LiveCoachScheduleViewState extends State<LiveCoachScheduleView> {
   late Future<CoachAvailabilityContext> future =
       widget.repository.load(coachId: widget.coachId);
-  void _load([String? date]) => setState(() => future =
-      widget.repository.load(coachId: widget.coachId, firstLocalDate: date));
+  void _load([String? date]) => setState(() {
+    future = widget.repository.load(coachId: widget.coachId, firstLocalDate: date);
+  });
   @override
   Widget build(BuildContext context) => Scaffold(
       appBar: AppBar(title: const Text('Coach schedule'), actions: [

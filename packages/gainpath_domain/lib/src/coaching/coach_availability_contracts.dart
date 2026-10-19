@@ -135,6 +135,7 @@ class CoachAvailabilityContext {
       required this.todayLocalDate,
       required this.timeZone,
       this.policyVersion,
+      this.rosterRevision,
       this.writableFromLocalDate,
       this.writableThroughLocalDate,
       required List<String> assignedBranchIds,
@@ -143,6 +144,7 @@ class CoachAvailabilityContext {
         days = List.unmodifiable(days);
   final String coachId, todayLocalDate, timeZone;
   final int serverNowMillis;
+  final int? rosterRevision;
   final String? policyVersion, writableFromLocalDate, writableThroughLocalDate;
   final List<String> assignedBranchIds;
   final List<CoachAvailabilityDay> days;
@@ -174,6 +176,9 @@ class CoachAvailabilityContext {
         todayLocalDate: _date(data['todayLocalDate']),
         timeZone: data['timeZone'],
         policyVersion: data['policyVersion'],
+        rosterRevision: data['rosterRevision'] == null
+            ? null
+            : _int(data['rosterRevision'], max: 9007199254740990),
         writableFromLocalDate: data['writableFromLocalDate'] == null
             ? null
             : _date(data['writableFromLocalDate']),
