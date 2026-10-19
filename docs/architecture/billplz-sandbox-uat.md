@@ -4,11 +4,13 @@ Date: 2026-10-19. Implementation commits: `14acdb3` (backend/contracts), `b7b26b
 
 ## Current activation status
 
-Implemented and locally verified; not deployed or verified against the real Sandbox. No credentials have been committed, provisioned or embedded in the APK. No live payment/booking records were changed. Owner manual UAT remains pending.
+Implemented, selectively deployed and verified against real Firebase and Billplz Sandbox after explicit owner approval. Credentials are held in server-side Secret Manager and are not committed or embedded in the APK. Only approved synthetic fixture records were created/changed. Owner manual UAT remains pending.
 
 Read-only Firebase inspection: project `gainpath-0619`, organization `gainpath`, region `us-central1`; 27 active functions, none of the five payment targets deployed. Existing hold policy is 15 minutes. Exact deployed Firestore Rules were used for the focused authorization emulator checks. No Rules, indexes, Storage, Hosting or Scheduler changes are proposed.
 
-Selective activation requires approval for `getBookingPaymentQuoteCommand`, `createBookingPaymentCommand`, `getBookingPaymentCommand`, `paymentWebhook`, and `billplzSandboxReturn`. Provision server-side secrets `BILLPLZ_SANDBOX_API_KEY` and `BILLPLZ_SANDBOX_X_SIGNATURE_KEY`, with runtime access only where required. Configure `BILLPLZ_SANDBOX_COLLECTION_ID`, `BILLPLZ_SANDBOX_ORGANIZATION_ID=gainpath`, and `BILLPLZ_SANDBOX_ENABLED=true`. Default is disabled. Only the Sandbox provider host is supported.
+Owner approved activation of `getBookingPaymentQuoteCommand`, `createBookingPaymentCommand`, `getBookingPaymentCommand`, `paymentWebhook`, and `billplzSandboxReturn`. All five are ACTIVE on Node.js 22. Secret Manager API was enabled as a provisioning prerequisite; the two secrets have secret-level runtime accessor bindings. API key version 2 and signature key version 1 are bound only to the appropriate functions. Collection, organization and enabled configuration read-back passed. Default in code remains disabled; only the Sandbox provider host is supported.
+
+Post-deployment read-back found 32 functions: the five new targets and all 27 previous functions with unchanged revisions. Exact Firestore/Storage Rules hashes are unchanged. Anonymous calls to each of the three payment callables returned 401 UNAUTHENTICATED. Firebase CLI reported a build-image cleanup warning after successful deployment; no unrelated cleanup was attempted.
 
 ## Behavior and boundaries
 
@@ -26,7 +28,15 @@ Selective activation requires approval for `getBookingPaymentQuoteCommand`, `cre
 - 16 focused Flutter/domain tests passed: payment UI/repository/contracts and existing booking composition/cubit.
 - Three real Firestore emulator tests passed: concurrent creation/confirmation, expiry/conflict reconciliation and direct financial-record denial for Member/Coach/Admin.
 - Functions build, test TypeScript checking and targeted Flutter analysis passed. Independent security review completed; identified branch eligibility, shortened booking window and cancellation-during-request issues were fixed with regressions.
-- These results do not establish real Firebase/Billplz success. No broad CI rerun was required.
+- No broad CI rerun was required. The separate live results below establish the tested Firebase/Billplz behavior; they do not replace owner UI acceptance.
+
+## Observed live Sandbox results
+
+- Two newly registered, verified disposable identities (Member and Coach), synthetic professional/credential eligibility fixtures, and dated availability were used. Synthetic credentials are test setup, not evidence of a genuine professional qualification or of exercising Admin credential review. No canonical identity or existing booking was modified.
+- Server-authoritative RM1.00 quote produced a genuine Sandbox bill for the original pending hold. Hosted Billplz Simulator completed payment. Before any Member refresh, the real provider callback independently verified the bill and persisted cleared payment plus confirmed booking. Member and assigned Coach payment read-back agreed.
+- Live invalid-signature request returned 401. Correctly signed replay, duplicate replay and an older due callback returned accepted without changing the confirmed booking or four financial audit entries. Repeating checkout returned the same bill.
+- A second bill was created while its hold was pending. The Member cancelled through the existing callable, then completed the hosted Sandbox simulator payment. Payment became cleared/reconciliation_required while the booking remained cancelled, with no refund claim.
+- Member/Coach booking-list consistency and disposable listing cleanup are recorded in sanitized delivery evidence. Audit and fixture history are retained. Admin visual UAT, account-switch mobile UAT and real elapsed 15-minute expiry/replacement-slot UAT remain manual; expiry/concurrency/lock integrity passed focused unit and Firestore emulator tests. No live timestamp or policy bypass occurred.
 
 ## Consolidated Sandbox UAT after activation approval
 
@@ -40,4 +50,4 @@ Use only separately approved disposable identities and synthetic records; retain
 
 APK installation requires exact-artifact approval, matching installed signing identity and backup of existing APK/private data; update in place without clearing data. Build includes the owner's preserved uncommitted mobile work and is not represented as a clean-HEAD artifact.
 
-Built Firebase debug APK: `build/billplz-sandbox/gainpath-billplz-sandbox-firebase-debug.apk`. SHA256: `f72194f7db18281ff5901a4cdf78bd0b3265d07ccb82ca9008b11ec550a89dcc`. APK signature verification passed; certificate SHA256 `38154139b51d8bbfed38fe1d673d2fbdaafb8ee5e3f8e60abb1fab95ef9f7450` matches the previously installed chat-fix artifact. Installation has not occurred; actual installed signature must be rechecked before updating.
+Built Firebase debug APK: `build/billplz-sandbox/gainpath-billplz-sandbox-firebase-debug.apk`. SHA256: `f72194f7db18281ff5901a4cdf78bd0b3265d07ccb82ca9008b11ec550a89dcc`. Installed and launched on approved Xiaomi `23013RK75C` after actual installed-signature verification and backup. Certificate SHA256 `38154139b51d8bbfed38fe1d673d2fbdaafb8ee5e3f8e60abb1fab95ef9f7450` matched. Private backup was 98,854,400 bytes; before/after private archives were byte-identical. Installed APK hash matched the approved artifact. No app data was cleared.

@@ -1,0 +1,111 @@
+{
+  "schemaVersion": 1,
+  "at": "2026-10-19T09:09:07.672Z",
+  "project": "gainpath-0619",
+  "sandboxOnly": true,
+  "ownerApproved": true,
+  "deployment": {
+    "at": "2026-10-19T09:01:31.762Z",
+    "functionCount": 32,
+    "targets": [
+      {
+        "name": "getBookingPaymentQuoteCommand",
+        "state": "ACTIVE",
+        "runtime": "nodejs22",
+        "revision": "getbookingpaymentquotecommand-00001-guh"
+      },
+      {
+        "name": "createBookingPaymentCommand",
+        "state": "ACTIVE",
+        "runtime": "nodejs22",
+        "revision": "createbookingpaymentcommand-00001-zoh"
+      },
+      {
+        "name": "getBookingPaymentCommand",
+        "state": "ACTIVE",
+        "runtime": "nodejs22",
+        "revision": "getbookingpaymentcommand-00001-xem"
+      },
+      {
+        "name": "paymentWebhook",
+        "state": "ACTIVE",
+        "runtime": "nodejs22",
+        "revision": "paymentwebhook-00001-kip"
+      },
+      {
+        "name": "billplzSandboxReturn",
+        "state": "ACTIVE",
+        "runtime": "nodejs22",
+        "revision": "billplzsandboxreturn-00001-qis"
+      }
+    ],
+    "unrelatedRevisionsUnchanged": true,
+    "rulesUnchanged": true,
+    "anonymousBoundary": [
+      {
+        "name": "getBookingPaymentQuoteCommand",
+        "status": 401,
+        "error": "UNAUTHENTICATED"
+      },
+      {
+        "name": "createBookingPaymentCommand",
+        "status": 401,
+        "error": "UNAUTHENTICATED"
+      },
+      {
+        "name": "getBookingPaymentCommand",
+        "status": 401,
+        "error": "UNAUTHENTICATED"
+      }
+    ]
+  },
+  "security": {
+    "at": "2026-10-19T09:06:06.400Z",
+    "syntheticOnly": true,
+    "invalidSignatureDenied": true,
+    "signedReplayAccepted": true,
+    "duplicateAccepted": true,
+    "outOfOrderDueCannotDowngrade": true,
+    "financialAuditUnchanged": true,
+    "bookingUnchanged": true,
+    "auditCount": 4
+  },
+  "cancelledPayment": {
+    "at": "2026-10-19T09:07:54.851Z",
+    "syntheticOnly": true,
+    "paidAfterCancellation": true,
+    "bookingRemainsCancelled": true,
+    "reconciliationRequired": true,
+    "refundClaimed": false
+  },
+  "installation": {
+    "packageName": "com.zyang.gainpath",
+    "at": "2026-10-19T08:56:36.706Z",
+    "installed": true,
+    "launched": true,
+    "model": "23013RK75C",
+    "signingCertificateMatches": true,
+    "privateDataByteIdentical": true,
+    "installedApkHashMatches": true,
+    "apkSha256": "f72194f7db18281ff5901a4cdf78bd0b3265d07ccb82ca9008b11ec550a89dcc"
+  },
+  "livePayment": {
+    "authoritativeAmountMinor": 100,
+    "currency": "MYR",
+    "realHostedSimulator": true,
+    "providerCallbackConfirmedBeforeMemberRefresh": true,
+    "memberAndCoachReadback": true,
+    "memberAndCoachBookingListsConsistent": true,
+    "repeatedCheckoutSameBill": true
+  },
+  "disposableListingInactive": true,
+  "auditRetained": true,
+  "canonicalAccountsModified": false,
+  "ownerManualPass": false,
+  "liveElapsedExpiryTested": false,
+  "remaining": [
+    "Owner mobile/Admin visual UAT",
+    "Live elapsed expiry and replacement-slot UAT",
+    "Refund execution not implemented"
+  ]
+}
