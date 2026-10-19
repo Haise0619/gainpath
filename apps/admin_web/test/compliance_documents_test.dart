@@ -265,6 +265,8 @@ void main() {
                 home: const SystemSettingsScreen(live: true))));
     await tester.pumpAndSettle();
     expect(find.text('Publish new version'), findsNothing);
+    await tester.tap(find.text('Legal & compliance'));
+    await tester.pumpAndSettle();
     expect(find.textContaining('No compliance draft has been saved.'),
         findsOneWidget);
     await tester.enterText(find.byType(TextField), 'First compliance draft');
@@ -299,9 +301,16 @@ void main() {
     expect(find.byType(Switch), findsNothing);
     await tester.tap(find.text('Reward conversion'));
     await tester.pumpAndSettle();
-    expect(find.text('Reward conversion is not connected to Firebase yet.'),
+    expect(
+        find.text(
+            'Reward conversion policy is managed by organization operations and is read-only in this console.'),
         findsOneWidget);
-    expect(find.text('Save conversion rate'), findsNothing);
+    expect(
+        tester
+            .widget<FilledButton>(
+                find.widgetWithText(FilledButton, 'Save conversion rate'))
+            .onPressed,
+        isNull);
   });
   testWidgets('stale draft save is blocked until reload without false success',
       (tester) async {
@@ -315,6 +324,8 @@ void main() {
             child: MaterialApp(
                 theme: AppTheme.build(),
                 home: const SystemSettingsScreen(live: true))));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Legal & compliance'));
     await tester.pumpAndSettle();
     db.records[path]!['text'] = 'Another editor';
     db.records[path]!['revision'] = 2;
