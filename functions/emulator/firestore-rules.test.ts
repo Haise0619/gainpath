@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { initializeTestEnvironment, assertFails, assertSucceeds, type RulesTestEnvironment } from '@firebase/rules-unit-testing';
-import { doc, getDoc, setDoc, updateDoc, collection, query, where, getDocs, serverTimestamp, deleteDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc, updateDoc, collection, query, where, getDocs, serverTimestamp, deleteDoc, writeBatch } from 'firebase/firestore';
 import { beforeAll, beforeEach, afterAll, expect, it } from 'vitest';
 
 let env: RulesTestEnvironment;
@@ -86,6 +86,7 @@ const fitnessProfile = () => ({
   schemaVersion: 1, gender: 'unspecified', age: 25, heightCm: 165, weightKg: 65,
   experience: 'beginner', activity: 'lightlyActive', goals: ['generalFitness'],
   updatedAt: serverTimestamp(),
+  createdAt: serverTimestamp(), profileCompletedAt: serverTimestamp(),
 });
 
 const memberPreferences = () => ({
@@ -200,7 +201,11 @@ it('denies stale claim escalation and suspended profile edits', async () => {
   await assertFails(getDoc(doc(dbFor('other', { role: 'admin' }), 'orgs/o/bookings/own')));
   await assertFails(updateDoc(doc(dbFor('suspended'), 'orgs/o/members/suspended'), { displayName: 'Changed' }));
   await assertFails(updateDoc(doc(dbFor('member'), 'orgs/o/members/member'), { role: 'admin' }));
-  await assertSucceeds(updateDoc(doc(dbFor('member'), 'orgs/o/members/member'), { displayName: 'Changed' }));
+  // Member names now require an atomic identity/membership pair (Module 1).
+  const db = dbFor('member'), batch = writeBatch(db);
+  batch.update(doc(db, 'users/member'), { displayName: 'Changed', updatedAtMillis: 1 });
+  batch.update(doc(db, 'orgs/o/members/member'), { displayName: 'Changed', updatedAtMillis: 1 });
+  await assertSucceeds(batch.commit());
 });
 it('protects server-owned writes even from admin client SDKs', async () => {
   for (const path of ['bookings/new', 'slotLocks/new', 'bookingDays/new', 'jobs/new', 'commandReceipts/new',

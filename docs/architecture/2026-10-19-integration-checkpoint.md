@@ -34,3 +34,12 @@ The bounded integration repair moves repository construction into infrastructure
 Focused repair verification: architecture checker passed; targeted Dart analysis passed; 16 Member widget tests passed (including both navigation destinations); backend test typecheck passed; all 36 tests in the five affected Rules files passed on isolated local emulators. Emulator shutdown emitted a Java tooling warning after successful test exit. The original CI remains failed; these focused results do not establish a passing consolidated CI run.
 
 The repair requires a separate exact-SHA push approval. A subsequent CI run is necessary because the first run found genuine integration failures, not a routine repeated audit. Module 10 implementation and backend deployment have not started while this checkpoint is unresolved.
+
+## Repair push result and remaining legacy fixture repair
+
+The owner approved pushing `08f2e89b3538b70e490bebde85e69351a83bbc84`; the normal fast-forward push succeeded. [Run 39182247344](https://github.com/Haise0619/gainpath/actions/runs/39182247344) passed architecture boundaries and the previously repaired Rules suites, but exposed two further legacy test integration defects:
+
+- Analysis: the ChatBloc test fake implemented `EquipmentRepository` without its newer methods. It now extends that repository and inherits the existing defaults; no application behavior changed. All six ChatBloc tests pass. The exact maintained-source analysis step was reproduced locally: exit 0, no errors or warnings, 18 informational style notices.
+- Backend: unit tests passed (19 files), while the emulator step reported 26 passing files and four failures in `firestore-rules.test.ts`. Its old fitness profile fixture lacked required `createdAt`/`profileCompletedAt` timestamps, and its name test expected a standalone membership update instead of the existing atomic identity/membership pair. Updating only these fixtures yields 22 passing tests in that file; no Rules were relaxed or changed. Backend test typecheck also passes.
+
+The owner’s six original modified files remain excluded. These two test-only fixes and this evidence require another exact-SHA push approval; consolidated CI is still not claimed as passed. Module 10 remains pending the integration gate.
