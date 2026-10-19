@@ -1,0 +1,58 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://gainpath.app/contracts/v1/coach-roster.schema.json",
+  "title": "Coach roster snapshot v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "coachId", "revision", "serverNowMillis", "todayLocalDate", "timeZone", "policyVersion", "throughLocalDate", "assignedBranchIds", "weeklyAvailability", "exceptions"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "coachId": { "$ref": "#/definitions/id" },
+    "revision": { "type": "integer", "minimum": 0, "maximum": 9007199254740990 },
+    "serverNowMillis": { "$ref": "#/definitions/time" },
+    "todayLocalDate": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" },
+    "timeZone": { "type": "string", "minLength": 1, "maxLength": 100 },
+    "policyVersion": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "throughLocalDate": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" },
+    "assignedBranchIds": { "type": "array", "minItems": 1, "maxItems": 8, "uniqueItems": true, "items": { "$ref": "#/definitions/id" } },
+    "weeklyAvailability": { "anyOf": [{ "type": "null" }, { "$ref": "#/definitions/weeklyAvailability" }] },
+    "exceptions": { "type": "array", "maxItems": 64, "items": { "$ref": "#/definitions/returnedException" } }
+  },
+  "definitions": {
+    "id": { "type": "string", "pattern": "^[A-Za-z0-9_-]{1,128}$" },
+    "time": { "type": "integer", "minimum": 1, "maximum": 8639999996400000 },
+    "weeklyAvailability": {
+      "type": "object", "additionalProperties": false,
+      "required": ["dailyCapacityHours", "advanceBookingWindowDays", "schedule"],
+      "properties": {
+        "dailyCapacityHours": { "type": "integer", "minimum": 1, "maximum": 24 },
+        "advanceBookingWindowDays": { "type": "integer", "minimum": 1, "maximum": 30 },
+        "schedule": { "type": "array", "minItems": 7, "maxItems": 7, "items": { "$ref": "#/definitions/weeklyDay" } }
+      }
+    },
+    "weeklyDay": {
+      "type": "object", "additionalProperties": false,
+      "required": ["dayOfWeek", "isActive", "startMinute", "endMinute", "branchId"],
+      "properties": {
+        "dayOfWeek": { "type": "integer", "minimum": 1, "maximum": 7 },
+        "isActive": { "type": "boolean" },
+        "startMinute": { "type": "integer", "minimum": 0, "maximum": 1410, "multipleOf": 30 },
+        "endMinute": { "type": "integer", "minimum": 30, "maximum": 1440, "multipleOf": 30 },
+        "branchId": { "$ref": "#/definitions/id" }
+      }
+    },
+    "returnedException": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "type", "reason", "startAtMillis", "endAtMillis"],
+      "properties": {
+        "id": { "$ref": "#/definitions/id" },
+        "type": { "enum": ["breakTime", "offDay", "leave"] },
+        "reason": { "type": "string", "maxLength": 200 },
+        "startAtMillis": { "type": "integer", "allOf": [{ "$ref": "#/definitions/time" }], "multipleOf": 1800000 },
+        "endAtMillis": { "type": "integer", "allOf": [{ "$ref": "#/definitions/time" }], "multipleOf": 1800000 },
+        "startLabel": { "type": "string", "maxLength": 256 },
+        "endLabel": { "type": "string", "maxLength": 256 }
+      }
+    }
+  }
+}

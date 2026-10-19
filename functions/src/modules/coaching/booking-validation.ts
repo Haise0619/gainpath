@@ -4,8 +4,9 @@ import type { DocumentData, TransactionPort } from '../../platform/firestore/sto
 import { readAll } from '../../platform/firestore/store';
 import { keyOf } from '../../platform/idempotency';
 import type { CreateBookingHoldInput } from '../../platform/validation';
-import { branchIds, bookingPolicy, dateGrid, localDate, MAX_TIME, plusDate, SLOT, storedDay } from './coach-availability-contracts';
+import { branchIds, bookingPolicy, dateGrid, localDate, MAX_TIME, plusDate, SLOT } from './coach-availability-contracts';
 import type { CoachIdentityReader } from './coach-profile-service';
+import { resolveRosterDay, storedRoster } from './coach-roster-contracts';
 
 export const validBookingId = (value: unknown): value is string => typeof value === 'string' && /^[A-Za-z0-9_-]{1,128}$/.test(value);
 export const validBookingTime = (value: unknown): value is number => Number.isSafeInteger(value) && Number(value) > 0 && Number(value) <= MAX_TIME;
@@ -79,10 +80,11 @@ export function activeBookingReservations(data: DocumentData | undefined, member
 }
 export async function bookingDaySnapshot(tx: TransactionPort, org: string, coachId: string, memberId: string,
   date: string, policy: ReturnType<typeof currentBookingPolicy>, assigned: readonly string[], now: number) {
-  const today = localDate(now, policy.timeZone), through = plusDate(today, 30);
-  if (date < today || date > through) throw new DomainError('invalid-argument', 'Choose today through 30 days ahead.');
-  const root = `orgs/${org}`, grid = dateGrid(date, policy.timeZone);
-  const day = storedDay(await tx.get(`${root}/coachAvailability/${coachId}/days/${date}`), date, policy.timeZone, assigned);
+  const root = `orgs/${org}`, roster = storedRoster(await tx.get(`${root}/coachAvailability/${coachId}`), policy.timeZone, assigned);
+  const today = localDate(now, policy.timeZone), through = plusDate(today, roster.weeklyAvailability?.advanceBookingWindowDays ?? 30);
+  if (date < today || date > through) throw new DomainError('invalid-argument', `Choose today through ${through}.`);
+  const grid = dateGrid(date, policy.timeZone);
+  const day = resolveRosterDay(await tx.get(`${root}/coachAvailability/${coachId}/days/${date}`), date, policy.timeZone, assigned, roster);
   if (day.reviewRequired) throw new DomainError('failed-precondition', 'Legacy schedule requires authorized review.');
   const dayPath = `${root}/bookingDays/${keyOf(memberId, date)}`;
   const reservations = activeBookingReservations(await tx.get(dayPath), memberId, date, policy.timeZone, now);
@@ -99,5 +101,5 @@ export async function bookingDaySnapshot(tx: TransactionPort, org: string, coach
       blocked.add(slot);
     }
   }
-  return { today, through, grid, windows: day.windows, reservations, dayPath, blocked };
+  return { today, through, grid, windows: day.windows, reservations, dayPath, blocked, dailyCapacityMinutes: roster.weeklyAvailability ? roster.weeklyAvailability.dailyCapacityHours * 60 : undefined };
 }

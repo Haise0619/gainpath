@@ -1,0 +1,3 @@
+import { org } from './coach-availability.fixture';
+export const weekly = { dailyCapacityHours: 2, advanceBookingWindowDays: 30, schedule: Array.from({ length: 7 }, (_, i) => ({ dayOfWeek: i + 1, isActive: true, startMinute: 600, endMinute: 840, branchId: 'main' })) };
+export const rosterSave = (requestId = 'roster', expectedRevision = 0, exceptions: object[] = []) => ({ schemaVersion: 1, organizationId: org, requestId, expectedRevision, expectedPolicyVersion: 'booking-v1', expectedTimeZone: 'Asia/Kuala_Lumpur', expectedCoachBranchIds: ['main', 'other'], weeklyAvailability: weekly, exceptions });

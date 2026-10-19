@@ -54,6 +54,7 @@ export async function createBookingHoldService(store: DocumentStore, actorId: st
     const slots = Array.from({ length: input.durationMinutes / 30 }, (_, i) => input.startAtMillis + i * SLOT);
     if (slots.some(slot => day.blocked.has(slot))) throw new DomainError('aborted', 'The selected time is no longer available.');
     if (day.reservations.length >= policy.cap) throw new DomainError('resource-exhausted', 'Daily booking limit reached.');
+    if (day.dailyCapacityMinutes !== undefined && day.blocked.size * 30 + input.durationMinutes > day.dailyCapacityMinutes) throw new DomainError('resource-exhausted', 'Coach daily booking hours reached.');
     const holdExpiresAtMillis = Math.min(now + policy.holdMillis, input.startAtMillis);
     const result: CreateBookingHoldResult = { schemaVersion: 1, bookingId, requestId: input.requestId, status: 'pending_hold', holdExpiresAtMillis };
     tx.create(`${root}/bookings/${bookingId}`, { ...input, ...result, createdBy: actorId, createdAtMillis: now,

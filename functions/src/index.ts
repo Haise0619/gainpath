@@ -9,6 +9,7 @@ export { cancelBookingHoldCommand } from './modules/coaching/booking-lifecycle-c
 export { expireBookingHolds } from './modules/coaching/booking-expiry-worker';
 export { saveCoachProfileCommand, setCoachDirectoryStatusCommand } from './modules/coaching/coach-profile-callables';
 export { getCoachAvailabilityCommand, saveCoachAvailabilityDayCommand } from './modules/coaching/coach-availability-callables';
+export { getCoachRosterCommand, saveCoachRosterCommand } from './modules/coaching/coach-availability-callables';
 export { paymentWebhook } from './modules/commerce/payment-webhook';
 export { provisionMemberRegistration } from './modules/identity/provision-member-registration';
 export { getMemberAccountLifecycleCommand, requestMemberDeactivationCommand, cancelMemberDeactivationCommand } from './modules/identity/member-account-lifecycle-callables';
