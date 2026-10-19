@@ -142,13 +142,15 @@ class _EarningsScreenState extends State<EarningsScreen> {
         actions: [
           IconButton(
             icon: const Icon(Icons.ios_share_rounded),
-            tooltip: 'Export statement',
-            onPressed: () => showUnavailable(context),
+            tooltip: widget.connected ? 'Unavailable until settled commission records exist' : 'Export statement',
+            onPressed: widget.connected ? null : () => showUnavailable(context),
           ),
         ],
       ),
       body: PageBody(
         children: [
+          if (widget.connected)
+            const Padding(padding: EdgeInsets.only(bottom: 12), child: Text('Ratings, commission earnings and statements are unavailable until authoritative reviews and cleared commission records exist. A booking fee or pending hold is not earned income.')),
           Panel(
             background: AppColors.primary,
             child: Column(

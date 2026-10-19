@@ -14,7 +14,7 @@ legacy.Booking persistedBookingPresentation(
       id: record.bookingId,
       coachId: record.coachId,
       coachName: '-',
-      memberName: '-',
+      memberName: record.memberDisplayName ?? '-',
       start: _calendarTime(record.localDate, record.startLabel),
       durationMin: record.durationMinutes,
       branch: record.branchId,

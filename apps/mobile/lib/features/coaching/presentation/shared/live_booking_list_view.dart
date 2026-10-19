@@ -1,12 +1,16 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:gainpath_domain/gainpath_domain.dart';
+import 'package:gainpath_domain/coaching.dart'
+    show BookingCommunicationRepository;
 import '../../application/live_booking_cubit.dart';
 import '../member/booking_schedule_screen.dart';
 import '../coach/roster_screen.dart';
 import 'persisted_booking_presentation.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
 import '../../application/booking_cancellation_cubit.dart';
+import '../coach/message_inbox_screen.dart';
 
 class LiveBookingListView extends StatefulWidget {
   const LiveBookingListView(
@@ -14,11 +18,13 @@ class LiveBookingListView extends StatefulWidget {
       required this.repository,
       required this.isCurrent,
       this.cancellation,
+      this.communication,
       this.coachId,
       this.title = 'My bookings'});
   final BookingListRepository repository;
   final bool Function() isCurrent;
   final BookingCancellationRepository? cancellation;
+  final BookingCommunicationRepository? communication;
   final String? coachId;
   final String title;
   @override
@@ -26,6 +32,20 @@ class LiveBookingListView extends StatefulWidget {
 }
 
 class _LiveBookingListViewState extends State<LiveBookingListView> {
+  Timer? _updates;
+  @override
+  void initState() {
+    super.initState();
+    _updates = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (mounted &&
+          widget.isCurrent() &&
+          !cancellation.state.busy &&
+          !cancellation.state.uncertain &&
+          controller.state.records.length <= 20 &&
+          (ModalRoute.of(context)?.isCurrent ?? true)) { controller.refresh(); }
+    });
+  }
+
   late final cancellation = BookingCancellationCubit(
       repository: widget.cancellation, isCurrent: widget.isCurrent);
   late final controller = BookingListCubit(
@@ -35,6 +55,7 @@ class _LiveBookingListViewState extends State<LiveBookingListView> {
     ..refresh();
   @override
   void dispose() {
+    _updates?.cancel();
     controller.close();
     cancellation.close();
     super.dispose();
@@ -90,6 +111,8 @@ class _LiveBookingListViewState extends State<LiveBookingListView> {
               if (state.page != null)
                 Text(
                     '${state.page!.firstLocalDate} – ${state.page!.throughLocalDate} · ${state.page!.timeZone}'),
+              const Text(
+                  'Updates every 30 seconds. Counts and filters use loaded bookings; load more for the full date range.'),
               Row(children: [
                 TextButton.icon(
                     onPressed:
@@ -130,6 +153,12 @@ class _LiveBookingListViewState extends State<LiveBookingListView> {
                           'Time', '${record.startLabel} – ${record.endLabel}'),
                       DetailRow('Timezone', record.timeZone),
                       DetailRow('Hold expiry', record.expiryLabel),
+                      if (widget.coachId != null) ...[
+                        const Text(
+                            'Form history: — · Confirmed booking and authorized cloud measurements required.'),
+                        const Text(
+                            'Cancellation and consultation completion require an eligible confirmed session. Pending holds cannot be marked delivered.'),
+                      ],
                       if (record.timeZone != state.page!.timeZone)
                         const Text(
                             'Timezone differs from current policy; review original times.'),
@@ -137,12 +166,41 @@ class _LiveBookingListViewState extends State<LiveBookingListView> {
             };
             if (widget.coachId != null) {
               return CoachRosterScreen(
+                  onOpenMessages: widget.communication == null
+                      ? null
+                      : () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (_) => CoachMessageInboxScreen(
+                                  bookings: bookings,
+                                  repository: widget.communication,
+                                  isCurrent: widget.isCurrent))),
+                  todayLocalDate: state.page?.firstLocalDate,
+                  onMessage: widget.communication == null
+                      ? null
+                      : (booking) => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (_) => CoachMessageThreadScreen(
+                                  booking: booking,
+                                  repository: widget.communication,
+                                  isCurrent: widget.isCurrent))),
                   persistedBookings: bookings,
                   statusLabels: labels,
                   details: details,
                   header: header);
             }
             return BookingScheduleScreen(
+                onMessage: widget.communication == null
+                    ? null
+                    : (booking) => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                            builder: (_) => CoachMessageThreadScreen(
+                                booking: booking,
+                                repository: widget.communication,
+                                isCurrent: widget.isCurrent,
+                                ownRole: 'Member'))),
                 persistedBookings: bookings,
                 statusLabels: labels,
                 header: header,

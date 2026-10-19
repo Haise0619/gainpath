@@ -18,6 +18,7 @@ import 'coach_module8_dependencies.dart';
 import '../../features/coaching/presentation/shared/live_booking_list_view.dart';
 import 'booking_factory.dart';
 import '../../infrastructure/firebase/firebase_coach_account_repository.dart';
+import '../../infrastructure/firebase/firebase_booking_communication_repository.dart';
 import '../../features/identity/application/coach_account_gateway.dart';
 
 typedef CoachProfileFactory = CoachProfileRepository Function(
@@ -102,7 +103,9 @@ Widget buildFirebaseCoachShell(AuthSession session,
             initialIndex: 3,
             restrictUnsupportedWorkflows: true,
             liveRosterBuilder: (_) => LiveBookingListView(
+                communication: FirebaseBookingCommunicationRepository(scope: session.scope, isCurrent: isCurrent),
                 title: 'Roster',
+                coachId: session.userId,
                 repository:
                     createBookingList(session, isCurrent, bookingListFactory),
                 isCurrent: isCurrent),

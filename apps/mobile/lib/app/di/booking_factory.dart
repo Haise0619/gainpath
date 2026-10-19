@@ -5,6 +5,7 @@ import '../../infrastructure/firebase/firebase_booking_repository.dart';
 import '../../features/coaching/presentation/member/live_member_booking_view.dart';
 import '../../features/coaching/presentation/shared/live_booking_list_view.dart';
 import 'coach_profile_factory.dart';
+import '../../infrastructure/firebase/firebase_booking_communication_repository.dart';
 
 typedef BookingServices = ({
   MemberBookingOptionsRepository options,
@@ -37,6 +38,7 @@ void openBookingList(BuildContext context, AuthSession session,
           builder: (_) => CoachSessionHost(
               session: session,
               builder: (_, current) => LiveBookingListView(
+                  communication: FirebaseBookingCommunicationRepository(scope: session.scope, isCurrent: current),
                   repository: createBookingList(session, current, factory),
                   coachId:
                       session.role == AppRole.coach ? session.userId : null,

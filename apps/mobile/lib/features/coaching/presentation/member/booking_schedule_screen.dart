@@ -28,11 +28,13 @@ class BookingScheduleScreen extends StatefulWidget {
       this.statusLabels = const {},
       this.details = const {},
       this.onCancelHold,
+      this.onMessage,
       this.header});
   final List<Booking>? persistedBookings;
   final Map<String, String> statusLabels;
   final Map<String, Widget> details;
   final void Function(String)? onCancelHold;
+  final void Function(Booking)? onMessage;
   final Widget? header;
 
   @override
@@ -91,7 +93,11 @@ class _BookingScheduleScreenState extends State<BookingScheduleScreen> {
                             ? null
                             : () => widget.onCancelHold!(b.id))
                         : () => _cancel(b),
-                    onMessage: live ? null : () => _message(b),
+                    onMessage: live
+                        ? (widget.onMessage == null
+                            ? null
+                            : () => widget.onMessage!(b))
+                        : () => _message(b),
                   ),
                 )),
           const SizedBox(height: 14),
@@ -106,7 +112,11 @@ class _BookingScheduleScreenState extends State<BookingScheduleScreen> {
                     live: live,
                     statusLabel: widget.statusLabels[b.id],
                     details: widget.details[b.id],
-                    onMessage: live ? null : () => _message(b),
+                    onMessage: live
+                        ? (widget.onMessage == null
+                            ? null
+                            : () => widget.onMessage!(b))
+                        : () => _message(b),
                     onRate: live ? null : () => _rate(b),
                   ),
                 )),
@@ -123,6 +133,9 @@ class _BookingScheduleScreenState extends State<BookingScheduleScreen> {
                     statusLabel: widget.statusLabels[b.id],
                     details: widget.details[b.id],
                     onBookAgain: live ? null : () => _bookAgain(b),
+                    onMessage: live && widget.onMessage != null
+                        ? () => widget.onMessage!(b)
+                        : null,
                   ),
                 )),
         ],

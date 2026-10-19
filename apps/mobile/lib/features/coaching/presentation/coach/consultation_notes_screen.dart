@@ -15,7 +15,8 @@ class ConsultationNotesScreen extends StatefulWidget {
   const ConsultationNotesScreen({super.key, required this.booking});
 
   @override
-  State<ConsultationNotesScreen> createState() => _ConsultationNotesScreenState();
+  State<ConsultationNotesScreen> createState() =>
+      _ConsultationNotesScreenState();
 }
 
 class _ConsultationNotesScreenState extends State<ConsultationNotesScreen> {
@@ -35,13 +36,11 @@ class _ConsultationNotesScreenState extends State<ConsultationNotesScreen> {
   }
 
   void _generateDraft() {
-    final name = widget.booking.memberName;
     setState(() {
-      _controller.text = 'Session focus: technique and controlled tempo.\n\n'
-          '$name showed good effort and engagement throughout. Note specific '
-          'form cues covered today, any exercises to progress or regress next '
-          'session, and one thing to watch for going forward.\n\n'
-          'Next session: continue building on today\'s work.';
+      _controller.text = 'Session focus:\n\n'
+          'Coach observations:\n\n'
+          'Technique cues covered:\n\n'
+          'Next session recommendations:\n';
       _error = null;
     });
   }
@@ -51,7 +50,9 @@ class _ConsultationNotesScreenState extends State<ConsultationNotesScreen> {
       setState(() => _error = 'Add some notes before publishing.');
       return;
     }
-    context.read<BookingBloc>().add(BookingNotesPublished(widget.booking.id, _controller.text.trim()));
+    context
+        .read<BookingBloc>()
+        .add(BookingNotesPublished(widget.booking.id, _controller.text.trim()));
     Navigator.pop(context);
     showToast(context, 'Notes published. Session marked complete.');
   }
@@ -81,7 +82,7 @@ class _ConsultationNotesScreenState extends State<ConsultationNotesScreen> {
               TextButton.icon(
                 onPressed: _generateDraft,
                 icon: const Icon(Icons.auto_awesome_rounded, size: 16),
-                label: const Text('Generate draft'),
+                label: const Text('Insert outline'),
               ),
             ],
           ),
@@ -103,7 +104,8 @@ class _ConsultationNotesScreenState extends State<ConsultationNotesScreen> {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Icon(Icons.info_outline_rounded, size: 18, color: AppColors.inkSoft),
+                const Icon(Icons.info_outline_rounded,
+                    size: 18, color: AppColors.inkSoft),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Text(
@@ -127,8 +129,18 @@ class _ConsultationNotesScreenState extends State<ConsultationNotesScreen> {
 
   String _formatDate(DateTime d) {
     const months = [
-      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec'
     ];
     final h = d.hour.toString().padLeft(2, '0');
     final m = d.minute.toString().padLeft(2, '0');
