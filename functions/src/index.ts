@@ -13,6 +13,7 @@ export { saveCoachProfileCommand, setCoachDirectoryStatusCommand } from './modul
 export { getCoachAvailabilityCommand, saveCoachAvailabilityDayCommand } from './modules/coaching/coach-availability-callables';
 export { getCoachRosterCommand, saveCoachRosterCommand } from './modules/coaching/coach-availability-callables';
 export { paymentWebhook } from './modules/commerce/payment-webhook';
+export { getBookingPaymentQuoteCommand, createBookingPaymentCommand, getBookingPaymentCommand, billplzSandboxReturn } from './modules/commerce/booking-payment-callables';
 export { provisionMemberRegistration } from './modules/identity/provision-member-registration';
 export { getMemberAccountLifecycleCommand, requestMemberDeactivationCommand, cancelMemberDeactivationCommand } from './modules/identity/member-account-lifecycle-callables';
 export { publishRoutineCommand } from './modules/content/publish-routine-callable';

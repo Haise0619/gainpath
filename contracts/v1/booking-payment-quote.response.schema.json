@@ -1,0 +1,43 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Authoritative booking payment quote v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "amountMinor",
+    "currency",
+    "coachName",
+    "branchName",
+    "durationMinutes"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "amountMinor": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 100000000
+    },
+    "currency": {
+      "const": "MYR"
+    },
+    "coachName": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 80
+    },
+    "branchName": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 120
+    },
+    "durationMinutes": {
+      "enum": [
+        30,
+        60
+      ]
+    }
+  }
+}
