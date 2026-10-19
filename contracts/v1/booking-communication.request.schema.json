@@ -1,0 +1,16 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Booking participant conversation command v1",
+  "type": "object", "additionalProperties": false,
+  "required": ["schemaVersion", "organizationId", "bookingId"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "organizationId": { "type": "string", "pattern": "^[A-Za-z0-9_-]{1,128}$" },
+    "bookingId": { "type": "string", "pattern": "^[A-Za-z0-9_-]{1,128}$" },
+    "requestId": { "type": "string", "pattern": "^[A-Za-z0-9_-]{1,128}$" },
+    "text": { "type": "string", "minLength": 1, "maxLength": 500 },
+    "beforeSequence": { "type": "integer", "minimum": 1 }
+  },
+  "dependencies": { "requestId": ["text"], "text": ["requestId"] },
+  "not": { "required": ["text", "beforeSequence"] }
+}

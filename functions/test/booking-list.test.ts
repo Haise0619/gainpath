@@ -23,6 +23,13 @@ beforeEach(() => {
   store.documents.set('orgs/org-1/members/admin-1', { organizationId: 'org-1', role: 'admin', status: 'active', branchIds: [] });
   store.documents.set('orgs/org-1/bookings/booking-1', structuredClone(record));
 });
+it('exposes only the related client display name, never their private contact fields', async () => {
+  Object.assign(store.documents.get('orgs/org-1/members/member-1')!, { displayName: 'Fixture Client', email: 'private@example.invalid' });
+  const result = await read('coach-1', { includeParticipantNames: true });
+  expect(result.records[0]).toMatchObject({ memberDisplayName: 'Fixture Client' });
+  expect(result.records[0]).not.toHaveProperty('email');
+  expect((await read('coach-1')).records[0]).not.toHaveProperty('memberDisplayName');
+});
 it('projects the same persisted record for Member, Coach and canonical Admin without mutations', async () => {
   const before = structuredClone([...store.documents]);
   for (const [uid, changes] of [['member-1', {}], ['coach-1', {}], ['admin-1', { coachId: 'coach-1' }]] as const) {

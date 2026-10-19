@@ -1,0 +1,21 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Booking participant conversation page v1",
+  "type": "object", "additionalProperties": false,
+  "required": ["schemaVersion", "bookingId", "messages"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "bookingId": { "type": "string", "pattern": "^[A-Za-z0-9_-]{1,128}$" },
+    "nextBeforeSequence": { "type": "integer", "minimum": 2 },
+    "messages": { "type": "array", "maxItems": 51, "items": {
+      "type": "object", "additionalProperties": false,
+      "required": ["sequence", "senderRole", "text", "sentAtMillis"],
+      "properties": {
+        "sequence": { "type": "integer", "minimum": 1 },
+        "senderRole": { "enum": ["member", "coach"] },
+        "text": { "type": "string", "minLength": 1, "maxLength": 500 },
+        "sentAtMillis": { "type": "integer", "minimum": 1 }
+      }
+    } }
+  }
+}

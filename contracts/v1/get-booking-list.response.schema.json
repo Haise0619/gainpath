@@ -34,6 +34,7 @@
         "holdExpiresAtMillis": { "$ref": "#/definitions/time" }, "localDate": { "$ref": "#/definitions/date" }, "timeZone": { "$ref": "#/definitions/zone" },
         "policyVersion": { "type": "string", "minLength": 1, "maxLength": 128 }, "createdAtMillis": { "$ref": "#/definitions/time" },
         "resolvedAtMillis": { "$ref": "#/definitions/time" }, "resolution": { "enum": ["member_cancelled", "hold_expired"] },
+        "memberDisplayName": { "type": "string", "minLength": 1, "maxLength": 120 },
         "startLabel": { "$ref": "#/definitions/label" }, "endLabel": { "$ref": "#/definitions/label" }, "expiryLabel": { "$ref": "#/definitions/label" }
       },
       "allOf": [{"if":{"properties":{"status":{"const":"expired"}}},"then":{"required":["resolvedAtMillis","resolution"],"properties":{"resolution":{"const":"hold_expired"}}}},{"if":{"required":["resolution"]},"then":{"required":["resolvedAtMillis"],"oneOf":[{"properties":{"status":{"const":"expired"},"resolution":{"const":"hold_expired"}}},{"properties":{"status":{"const":"cancelled"},"resolution":{"const":"member_cancelled"}}}]}},{"if":{"required":["resolvedAtMillis"]},"then":{"required":["resolution"]}}]

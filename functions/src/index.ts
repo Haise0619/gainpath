@@ -2,6 +2,8 @@ import { initializeApp } from 'firebase-admin/app';
 
 initializeApp();
 
+export { bookingCommunicationCommand } from './modules/coaching/booking-communication-callable';
+
 export { createBookingHold } from './modules/coaching/create-booking-hold';
 export { getMemberBookingOptionsCommand } from './modules/coaching/member-booking-options-callable';
 export { getBookingListCommand } from './modules/coaching/booking-read-callables';

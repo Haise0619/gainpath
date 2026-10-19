@@ -14,6 +14,7 @@ export interface PersistedBookingRecord {
   holdExpiresAtMillis: number; localDate: string; timeZone: string; policyVersion: string; createdAtMillis: number;
   resolvedAtMillis?: number; resolution?: BookingResolution;
   startLabel: string; endLabel: string; expiryLabel: string;
+  memberDisplayName?: string;
 }
 export interface BookingPage { schemaVersion: 1; serverNowMillis: number; timeZone: string; firstLocalDate: string; throughLocalDate: string; records: PersistedBookingRecord[]; nextCursor?: BookingCursor }
 const review = () => new DomainError('failed-precondition', 'Stored bookings need authorized review.');
@@ -31,7 +32,8 @@ function project(row: { path: string; data: DocumentData }, q: BookingQuery): Pe
 }
 export async function getBookingListService(store: DocumentStore, auth: { uid: string; token: Record<string, unknown> } | undefined, raw: unknown, reader: BookingQueryReader, clock = Date.now): Promise<BookingPage> {
   requireVerifiedEmail(auth);
-  const input = object(raw); allowed(input, ['schemaVersion', 'organizationId', 'coachId', 'firstLocalDate', 'dayCount', 'cursor']);
+  const input = object(raw); allowed(input, ['schemaVersion', 'organizationId', 'coachId', 'firstLocalDate', 'dayCount', 'cursor', 'includeParticipantNames']);
+  if (input.includeParticipantNames !== undefined && typeof input.includeParticipantNames !== 'boolean') throw new InputValidationError('includeParticipantNames must be a boolean.');
   if (input.schemaVersion !== 1) throw new InputValidationError('schemaVersion 1 is required.');
   const org = requiredIdentifier(input.organizationId, 'organizationId'), uid = requiredIdentifier(auth!.uid, 'actorId');
   const selectedCoach = input.coachId === undefined ? undefined : requiredIdentifier(input.coachId, 'coachId');
@@ -79,6 +81,15 @@ export async function getBookingListService(store: DocumentStore, auth: { uid: s
     ids.add(r.bookingId); previous = r;
   }
   const records = projected.slice(0, 20), last = records.at(-1);
+  // Related names only; private contact/account fields never enter the projection.
+  if (input.includeParticipantNames === true) await store.transact(async tx => {
+    if (JSON.stringify(before) !== JSON.stringify(await scope(tx))) throw new DomainError('permission-denied', 'Booking access changed. Refresh the current account scope.');
+    for (const record of records) {
+      const member = await tx.get(`orgs/${org}/members/${record.memberId}`);
+      const name = member?.organizationId === org ? member.displayName : undefined;
+      if (typeof name === 'string' && name.trim() && name.trim().length <= 120) record.memberDisplayName = name.trim();
+    }
+  });
   return { schemaVersion: 1, serverNowMillis, timeZone: before.policy.timeZone, firstLocalDate, throughLocalDate, records,
     ...(projected.length > 20 && last ? { nextCursor: { startAtMillis: last.startAtMillis, bookingId: last.bookingId } } : {}) };
 }
