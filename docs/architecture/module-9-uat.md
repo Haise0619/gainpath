@@ -81,3 +81,11 @@ No live disposable fixture write, canonical account mutation, push or owner Modu
 19 October 2026, Asia/Kuala_Lumpur: installed and launched the approved SHA256 `b1f03021…` APK on Xiaomi `23013RK75C`. The existing APK and 98,808,832 bytes of private data were backed up first. The signing certificate matched the actual installed APK; installed APK hash matches the approved artifact. Private data was byte-identical immediately after the in-place update and before launch. No uninstall or app-data clear occurred.
 
 Ignored evidence: `build/non-core-crud-sprint/module-9-activation/install-result.json`; private backups: `module-9-activation/private/install-module9/`. Successful installation/launch is not owner manual UI PASS or authenticated Firebase messaging save/reload proof.
+
+## Member calendar UAT FAIL repair
+
+The owner reported Member booking failure at calendar/available times. Read-only live inspection found the published Coach's configured advance window is **14 days**. The existing mobile `BookingOptionsContext` parser required exactly 30 days, so it rejected the valid backend response before rendering availability. The date UI already uses the backend's `throughLocalDate`; no server policy or booking transaction change was needed.
+
+Repair `2606933` accepts configured windows of 1–30 days, matching the existing roster policy, and still rejects dates outside the returned range. A new regression test first reproduced the failure, then passed; all 19 focused domain/repository/cubit/route tests passed. Targeted analysis is clean. No Firebase deployment or live booking write occurred.
+
+Corrected integrated APK: `build/module-9/gainpath-module9-booking-fix-firebase-debug.apk`; SHA256 `28ba705f2ae2468446e9021c6c3f46cd727d5dffb22e7b82b86e7818206fcbfb`. Debug build succeeded and signature matches the installed Module 9 artifact. Installation requires separate owner approval; original Module 9 artifact and backups remain preserved. Real device calendar/booking confirmation retest remains pending.
