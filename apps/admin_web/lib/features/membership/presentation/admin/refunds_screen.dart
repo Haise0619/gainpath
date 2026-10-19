@@ -397,10 +397,11 @@ class RefundsScreenState extends State<RefundsScreen> {
                       reason: true)),
             if (['processing', 'uncertain']
                 .contains(r.text('refundStatus'))) ...[
-              _button(
-                  'Check refund status',
-                  () => _action('check_refund', 'Check refund status',
-                      'Read the existing Payment Order status without creating another refund.')),
+              if (r.text('refundOrderId').isNotEmpty)
+                _button(
+                    'Check refund status',
+                    () => _action('check_refund', 'Check refund status',
+                        'Read the existing Payment Order status without creating another refund.')),
               if (r.text('refundOrderId').isEmpty)
                 _button(
                     'Recover Payment Order',

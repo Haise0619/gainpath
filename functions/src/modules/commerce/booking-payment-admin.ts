@@ -123,7 +123,11 @@ export async function manageAdminBookingPayment(store: DocumentStore, auth: Auth
         eligible(initial.p);
         if (!['processing', 'uncertain'].includes(String(initial.p.refundStatus)))
             throw invalid();
-        const orderId = action === 'recover_refund' ? requiredIdentifier(d.refundOrderId, 'refundOrderId') : requiredIdentifier(initial.p.refundOrderId, 'refundOrderId');
+        const rawOrderId = action === 'recover_refund' ? d.refundOrderId : (initial.p.refundOrderId ?? d.refundOrderId);
+        if (!rawOrderId || typeof rawOrderId !== 'string' || !rawOrderId.trim()) {
+            throw new DomainError('failed-precondition', 'Payment Order ID is required to check status. Use Recover Payment Order to attach the provider order ID.');
+        }
+        const orderId = requiredIdentifier(rawOrderId, 'refundOrderId');
         const order = await deps.refunds.get(orderId);
         await applyOrder(store, org, id, uid, order, deps, requestId, reason, fingerprint, clock);
         return result();
@@ -146,7 +150,8 @@ export async function manageAdminBookingPayment(store: DocumentStore, auth: Auth
     try {
         order = await deps.refunds.create({ reference: 'refund-' + id, amountMinor: Number(initial.p.amountMinor), name: 'GainPath Sandbox Refund', description: 'Sandbox booking refund ' + id });
     }
-    catch {
+    catch (err) {
+        console.error('[SANDBOX_REFUND_CREATE_ERROR]', (err as Error)?.name || 'Error');
         await store.transact(async (tx) => { const p = payment(await tx.get(path(org, id)), org, id); if (p.refundStatus !== 'processing' || p.refundOrderId)
             return; tx.set(path(org, id), { ...p, refundStatus: 'uncertain', updatedAtMillis: clock() }); audit(tx, org, id, 'refund_uncertain', requestId, uid, clock(), { reason: 'Provider result uncertain; recover the original order. Do not resend.' }); });
         return result();

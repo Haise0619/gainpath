@@ -18,7 +18,13 @@ type Config = { apiKey: string; signatureKey: string; collectionId: string };
 const uuid = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 const referencePattern = /^[a-zA-Z0-9_-]{1,255}$/;
 const statuses: readonly string[] = ['processing', 'enquiring', 'executing', 'reviewing', 'completed', 'refunded'];
-const failure = () => new DomainError('unavailable', 'Sandbox refund provider request failed.');
+class BillplzProviderError extends DomainError {
+  constructor(message = 'Sandbox refund provider request failed.') {
+    super('unavailable', message);
+    this.name = 'BillplzProviderError';
+  }
+}
+const failure = () => new BillplzProviderError();
 
 /** Server-only V5 adapter: fixed sandbox host and synthetic bank details only. */
 export class BillplzSandboxRefundGateway implements SandboxRefundGateway {
@@ -77,20 +83,60 @@ export class BillplzSandboxRefundGateway implements SandboxRefundGateway {
           ...init, redirect: 'error', signal: controller.signal,
           headers: { ...init.headers, Authorization: `Basic ${Buffer.from(`${this.config.apiKey}:`).toString('base64')}` },
         });
-        if (!response.ok) throw failure();
+        if (!response.ok) {
+          console.error('[BILLPLZ_V5_HTTP_ERROR]', response.status);
+          throw failure();
+        }
         const value: unknown = await response.json();
-        if (!value || typeof value !== 'object' || Array.isArray(value)) throw failure();
+        if (!value || typeof value !== 'object' || Array.isArray(value)) {
+          console.error('[BILLPLZ_V5_INVALID_JSON_BODY]');
+          throw failure();
+        }
         const order = value as Record<string, unknown>;
+        const rawTotal = order.total;
+        let totalMinor: number | null = null;
+        if (typeof rawTotal === 'number') {
+          if (Number.isSafeInteger(rawTotal) && rawTotal > 0) {
+            totalMinor = rawTotal;
+          }
+        } else if (typeof rawTotal === 'string' && /^[1-9][0-9]*$/.test(rawTotal)) {
+          const parsed = Number(rawTotal);
+          if (Number.isSafeInteger(parsed) && parsed > 0) {
+            totalMinor = parsed;
+          }
+        }
+        const bankCode = typeof order.bank_code === 'string' ? order.bank_code.toUpperCase() : '';
+        const bankAccount = typeof order.bank_account_number === 'string'
+          ? order.bank_account_number
+          : typeof order.bank_account_number === 'number'
+            ? String(order.bank_account_number)
+            : '';
+        const status = typeof order.status === 'string' ? order.status.toLowerCase() : '';
         if (typeof order.id !== 'string' || !uuid.test(order.id) || order.payment_order_collection_id !== this.config.collectionId
-          || order.bank_code !== 'DUMMYBANKVERIFIED' || order.bank_account_number !== '0000000000'
+          || bankCode !== 'DUMMYBANKVERIFIED' || !['0000000000', '0'].includes(bankAccount)
           || typeof order.reference_id !== 'string' || !referencePattern.test(order.reference_id)
-          || typeof order.total !== 'string' || !/^[1-9][0-9]*$/.test(order.total)
-          || !Number.isSafeInteger(Number(order.total)) || typeof order.status !== 'string' || !statuses.includes(order.status)) throw failure();
+          || totalMinor === null || !statuses.includes(status)) {
+          console.error('[BILLPLZ_V5_VALIDATION_FAILED]', {
+            hasValidId: typeof order.id === 'string' && uuid.test(order.id),
+            isCollectionMatch: order.payment_order_collection_id === this.config.collectionId,
+            isBankCodeMatch: bankCode === 'DUMMYBANKVERIFIED',
+            isValidAccount: ['0000000000', '0'].includes(bankAccount),
+            isValidRef: typeof order.reference_id === 'string' && referencePattern.test(order.reference_id),
+            isValidTotal: totalMinor !== null,
+            isValidStatus: statuses.includes(status),
+          });
+          throw failure();
+        }
         return { id: order.id, collectionId: this.config.collectionId, reference: order.reference_id,
-          amountMinor: Number(order.total), status: order.status as SandboxRefundOrder['status'] };
+          amountMinor: totalMinor, status: status as SandboxRefundOrder['status'] };
       };
       return await Promise.race([operation(), timeout]);
-    } catch { throw failure(); }
+    } catch (e) {
+      if (!(e instanceof BillplzProviderError)) {
+        console.error('[BILLPLZ_V5_REQUEST_EXCEPTION]', (e as Error)?.name || 'Error');
+      }
+      throw e instanceof DomainError ? e : failure();
+    }
     finally { if (timer !== undefined) clearTimeout(timer); }
   }
 }

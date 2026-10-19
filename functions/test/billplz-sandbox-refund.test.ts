@@ -33,14 +33,53 @@ describe('Sandbox Payment Order refunds', () => {
     expect(getUrl.searchParams.get('epoch')).toBe(epoch);
     expect(getUrl.toString()).not.toContain(config.apiKey);
   });
+  it('accepts integer total, single zero dummy bank account and normalized dummy bank code with V5 status', async () => {
+    const gateway = new BillplzSandboxRefundGateway(config, transport({ ...response, total: 1200, bank_code: 'dummybankverified', bank_account_number: '0', status: 'completed' }));
+    expect(await gateway.create(input)).toEqual({ id, collectionId, reference: input.reference, amountMinor: 1200, status: 'completed' });
+  });
   it.each([
-    { total: '1201' }, { total: '01200' }, { total: 1200 }, { total: '1.2e3' },
+    { total: '1201' }, { total: 1201 }, { total: '01200' }, { total: '1.2e3' },
+    { total: 0 }, { total: '0' }, { total: -100 }, { total: '-100' },
+    { total: 1200.5 }, { total: '1200.5' }, { total: ' 1200 ' }, { total: '1200sen' },
+    { total: Number.MAX_SAFE_INTEGER + 1 }, { total: '9007199254740992' },
     { reference_id: 'different' }, { payment_order_collection_id: id },
     { bank_code: 'MBBEMYKL' }, { bank_account_number: '1234567890' },
-    { id: '../escape' }, { status: 'paid' },
+    { id: '../escape' }, { status: 'unknown' }, { status: 'paid' }, { status: 'settled' }, { status: 'success' },
   ])('rejects mismatched or malformed create response %j', async patch => {
     await expect(new BillplzSandboxRefundGateway(config, transport({ ...response, ...patch })).create(input)).rejects.toThrow('Sandbox refund provider request failed.');
   });
+  it('does not duplicate error logs on response validation failure', async () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const gateway = new BillplzSandboxRefundGateway(config, transport({ ...response, total: 'bad' }));
+      await expect(gateway.create(input)).rejects.toThrow();
+      expect(errorSpy).toHaveBeenCalledTimes(1);
+      expect(errorSpy.mock.calls[0][0]).toBe('[BILLPLZ_V5_VALIDATION_FAILED]');
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
+  it('logs request exception exactly once on unexpected transport failure', async () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const fetcher = vi.fn(async () => { throw new TypeError('Network connection refused'); }) as unknown as typeof fetch;
+      const gateway = new BillplzSandboxRefundGateway(config, fetcher);
+      await expect(gateway.create(input)).rejects.toThrow();
+      expect(errorSpy).toHaveBeenCalledTimes(1);
+      expect(errorSpy.mock.calls[0][0]).toBe('[BILLPLZ_V5_REQUEST_EXCEPTION]');
+      expect(errorSpy.mock.calls[0][1]).toBe('TypeError');
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
+  it.each(['processing', 'enquiring', 'executing', 'reviewing', 'completed', 'refunded'] as const)(
+    'accepts official Billplz V5 payment order status: %s',
+    async (status) => {
+      const gateway = new BillplzSandboxRefundGateway(config, transport({ ...response, total: 1200, status }));
+      const order = await gateway.get(id);
+      expect(order.status).toBe(status);
+    }
+  );
   it('binds GET response ID and never converts refunded status to success', async () => {
     await expect(new BillplzSandboxRefundGateway(config, transport({ ...response, id: collectionId })).get(id)).rejects.toThrow();
     expect((await new BillplzSandboxRefundGateway(config, transport({ ...response, status: 'refunded' })).get(id)).status).toBe('refunded');

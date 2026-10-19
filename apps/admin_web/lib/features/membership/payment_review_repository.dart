@@ -9,9 +9,18 @@ class PaymentReviewException implements Exception {
   const PaymentReviewException(this.code);
   final String code;
   @override
-  String toString() => code == 'permission-denied'
-      ? 'This Admin session is no longer authorized. Sign in again.'
-      : 'Payment review could not be completed ($code). Refresh the record before retrying.';
+  String toString() {
+    switch (code) {
+      case 'permission-denied':
+        return 'This Admin session is no longer authorized. Sign in again.';
+      case 'failed-precondition':
+        return 'Payment review state changed or order ID required. Refresh the record before retrying.';
+      case 'invalid-argument':
+        return 'Invalid payment review request. Check the entered details and retry.';
+      default:
+        return 'Payment review could not be completed ($code). Refresh the record before retrying.';
+    }
+  }
 }
 
 class PaymentReviewRecord {
