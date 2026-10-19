@@ -63,7 +63,9 @@ class BookingOptionsContext {
     bookingTimeZone(timeZone);
     final first = DateTime.parse('${todayLocalDate}T00:00:00Z');
     final last = DateTime.parse('${throughLocalDate}T00:00:00Z');
-    if (last.difference(first).inDays != 30 ||
+    final advanceDays = last.difference(first).inDays;
+    if (advanceDays < 1 ||
+        advanceDays > 30 ||
         localDate.compareTo(todayLocalDate) < 0 ||
         localDate.compareTo(throughLocalDate) > 0 ||
         permittedBranchIds.isEmpty ||
