@@ -25,4 +25,4 @@ Official local entry: **http://localhost:7359/**. The integrated build replaces 
 4. Open Dashboard/Reports, change filters and inspect unavailable states. Missing values should show `—`/empty chart frames; unsupported exports remain disabled. A failed report request should show Retry and no previous-filter values. With the default unavailable reporting adapter, no real analytics pipeline is claimed.
 5. Check Members, existing content/equipment/routine/governance/settings destinations, narrower browser widths, and sign-out. Previously implemented Firebase functionality and private-session isolation should remain intact.
 
-Manual PASS/FAIL for the integrated Admin Web remains pending. Do not start another business module before owner acceptance.
+The owner confirmed Unified Admin Web Manual UAT **PASS** for commit `18e4130` on **19 October 2026**, Asia/Kuala_Lumpur. This records owner manual acceptance separately from the automated checks above. The owner authorized an integration checkpoint followed by Module 10; pushing the checkpoint and any later security-sensitive/policy/production deployment operation require separate approval.
