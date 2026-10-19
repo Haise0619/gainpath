@@ -19,12 +19,14 @@ class LiveBookingListView extends StatefulWidget {
       required this.isCurrent,
       this.cancellation,
       this.communication,
+      this.loadCoachName,
       this.coachId,
       this.title = 'My bookings'});
   final BookingListRepository repository;
   final bool Function() isCurrent;
   final BookingCancellationRepository? cancellation;
   final BookingCommunicationRepository? communication;
+  final Future<String?> Function(String coachId)? loadCoachName;
   final String? coachId;
   final String title;
   @override
@@ -42,7 +44,9 @@ class _LiveBookingListViewState extends State<LiveBookingListView> {
           !cancellation.state.busy &&
           !cancellation.state.uncertain &&
           controller.state.records.length <= 20 &&
-          (ModalRoute.of(context)?.isCurrent ?? true)) { controller.refresh(); }
+          (ModalRoute.of(context)?.isCurrent ?? true)) {
+        controller.refresh();
+      }
     });
   }
 
@@ -200,6 +204,10 @@ class _LiveBookingListViewState extends State<LiveBookingListView> {
                                 booking: booking,
                                 repository: widget.communication,
                                 isCurrent: widget.isCurrent,
+                                loadCoachName: widget.loadCoachName == null
+                                    ? null
+                                    : () =>
+                                        widget.loadCoachName!(booking.coachId),
                                 ownRole: 'Member'))),
                 persistedBookings: bookings,
                 statusLabels: labels,

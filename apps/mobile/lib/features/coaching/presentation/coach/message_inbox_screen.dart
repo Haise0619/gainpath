@@ -257,12 +257,14 @@ class CoachMessageThreadScreen extends StatefulWidget {
       required this.booking,
       this.repository,
       this.isCurrent,
+      this.loadCoachName,
       this.responseTime = '-',
       this.ownRole = 'Coach'});
   final BookingCommunicationRepository? repository;
   final bool Function()? isCurrent;
   final String ownRole;
   final String responseTime;
+  final Future<String?> Function()? loadCoachName;
 
   @override
   State<CoachMessageThreadScreen> createState() =>
@@ -277,14 +279,39 @@ class _CoachMessageThreadScreenState extends State<CoachMessageThreadScreen> {
   String? _error, _requestId, _pendingText;
   int? _before;
   bool _allowLeave = false;
+  bool _historyLoaded = false;
+  String? _coachName;
+  String get _otherName {
+    final name = widget.ownRole == 'Coach'
+        ? widget.booking.memberName
+        : (_coachName ?? widget.booking.coachName);
+    return name.trim().isEmpty || name == '-'
+        ? (widget.ownRole == 'Coach' ? 'Client' : 'Coach')
+        : name;
+  }
+
   bool get _current => widget.isCurrent?.call() ?? true;
   @override
   void initState() {
     super.initState();
+    _historyLoaded = widget.repository == null;
+    if (widget.ownRole == 'Member' && widget.loadCoachName != null) {
+      _resolveCoachName();
+    }
     if (widget.repository != null) _load();
   }
 
+  Future<void> _resolveCoachName() async {
+    try {
+      final name = await widget.loadCoachName!();
+      if (mounted && _current && name != null && name.trim().isNotEmpty) {
+        setState(() => _coachName = name.trim());
+      }
+    } catch (_) {/* Keep a truthful generic counterparty label. */}
+  }
+
   void _accept(SessionConversation page, {bool older = false}) {
+    _historyLoaded = true;
     final rows = page.messages
         .map((m) => BookingMessage(m.senderRole == 'coach' ? 'Coach' : 'Member',
             m.text, DateTime.fromMillisecondsSinceEpoch(m.sentAtMillis)))
@@ -410,16 +437,12 @@ class _CoachMessageThreadScreenState extends State<CoachMessageThreadScreen> {
           }
         },
         child: Scaffold(
-          appBar: AppBar(
-              title: Text(widget.ownRole == 'Coach'
-                  ? widget.booking.memberName
-                  : widget.booking.coachName),
-              actions: [
-                if (widget.repository != null)
-                  IconButton(
-                      onPressed: _busy ? null : () => _load(),
-                      icon: const Icon(Icons.refresh))
-              ]),
+          appBar: AppBar(title: Text(_otherName), actions: [
+            if (widget.repository != null)
+              IconButton(
+                  onPressed: _busy ? null : () => _load(),
+                  icon: const Icon(Icons.refresh))
+          ]),
           body: Column(
             children: [
               if (_busy) const LinearProgressIndicator(),
@@ -442,7 +465,11 @@ class _CoachMessageThreadScreenState extends State<CoachMessageThreadScreen> {
                                   size: 40, color: AppColors.hairline),
                               const SizedBox(height: 14),
                               Text(
-                                  'No messages yet with ${widget.booking.memberName}.',
+                                  _busy
+                                      ? 'Loading messages…'
+                                      : !_historyLoaded
+                                          ? 'Messages unavailable. Refresh to retry.'
+                                          : 'No messages yet with $_otherName.',
                                   textAlign: TextAlign.center,
                                   style:
                                       Theme.of(context).textTheme.bodyMedium),

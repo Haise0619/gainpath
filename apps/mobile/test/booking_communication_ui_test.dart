@@ -1,16 +1,22 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gainpath_domain/coaching.dart';
-import '../lib/features/coaching/presentation/coach/message_inbox_screen.dart';
+import 'package:gainpath_mobile/features/coaching/presentation/coach/message_inbox_screen.dart';
 
 class _Messages implements BookingCommunicationRepository {
   final sent = <String>[];
   final requests = <String>[];
   bool failNext = false;
   SessionConversation page = const SessionConversation([]);
+  Completer<SessionConversation>? pendingLoad;
+  bool failLoad = false;
   @override
-  Future<SessionConversation> load(String id, {int? beforeSequence}) async =>
-      page;
+  Future<SessionConversation> load(String id, {int? beforeSequence}) async {
+    if (failLoad) throw Exception('network');
+    return pendingLoad?.future ?? Future.value(page);
+  }
+
   @override
   Future<SessionConversation> send(
       String id, String request, String text) async {
@@ -28,6 +34,64 @@ class _Messages implements BookingCommunicationRepository {
 }
 
 void main() {
+  testWidgets(
+      'failed initial history load never claims the conversation is empty',
+      (tester) async {
+    final repository = _Messages()..failLoad = true;
+    final booking = Booking(
+        id: 'b',
+        coachId: 'c',
+        coachName: 'Fixture Coach',
+        memberName: 'Fixture Member',
+        start: DateTime(2026),
+        durationMin: 60,
+        branch: 'main',
+        status: BookingStatus.pending,
+        fee: 0);
+    await tester.pumpWidget(MaterialApp(
+        home: CoachMessageThreadScreen(
+            booking: booking,
+            ownRole: 'Member',
+            repository: repository,
+            isCurrent: () => true)));
+    await tester.pumpAndSettle();
+    expect(
+        find.text('Messages unavailable. Refresh to retry.'), findsOneWidget);
+    expect(find.textContaining('No messages yet'), findsNothing);
+  });
+  testWidgets(
+      'Member chat loads Coach name and never claims empty history while loading',
+      (tester) async {
+    final repository = _Messages()
+      ..pendingLoad = Completer<SessionConversation>();
+    final name = Completer<String?>();
+    final booking = Booking(
+        id: 'b',
+        coachId: 'c',
+        coachName: '-',
+        memberName: 'Fixture Member',
+        start: DateTime(2026),
+        durationMin: 60,
+        branch: 'main',
+        status: BookingStatus.pending,
+        fee: 0);
+    await tester.pumpWidget(MaterialApp(
+        home: CoachMessageThreadScreen(
+            booking: booking,
+            ownRole: 'Member',
+            repository: repository,
+            isCurrent: () => true,
+            loadCoachName: () => name.future)));
+    await tester.pump();
+    expect(find.text('Loading messages…'), findsOneWidget);
+    expect(find.textContaining('No messages yet'), findsNothing);
+    name.complete('Fixture Coach');
+    repository.pendingLoad!.complete(const SessionConversation([]));
+    await tester.pumpAndSettle();
+    expect(find.text('Fixture Coach'), findsOneWidget);
+    expect(find.text('No messages yet with Fixture Coach.'), findsOneWidget);
+    expect(find.textContaining('with Fixture Member'), findsNothing);
+  });
   testWidgets(
       'live inbox loads genuine preview and accepts repeated whitespace in client names',
       (tester) async {
