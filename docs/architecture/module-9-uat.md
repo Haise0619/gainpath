@@ -2,7 +2,7 @@
 
 19 October 2026, Asia/Kuala_Lumpur. Original sources: C3 Table 3.29, UC-9.1–UC-9.8, BR-12/BR-14/BR-15; C4 §4.7.9 and §4.8.9. The owner explicitly authorized starting Module 9 despite the previously pending Module 8/10 acceptance conditions. This is authorization to proceed, not a retroactive manual PASS.
 
-**Deployment update:** the owner approved the exact two-function activation, completed and independently read back at 2026-10-19T06:55:52Z. APK installation, authenticated live save/reload and owner manual UAT remain pending.
+**Deployment update:** the owner approved the exact two-function activation, completed and independently read back at 2026-10-19T06:55:52Z. The separately approved APK installation and launch also succeeded. Authenticated live save/reload and owner manual UAT remain pending.
 
 ## Coverage
 
@@ -54,7 +54,7 @@ Read-only inventory at 2026-10-19T05:49:14Z: project `gainpath-0619`, region `us
 4. Sign out or switch accounts while a thread is open/loading: prior protected data disappears and no delayed result restores it. Unrelated Coach/Member and Admin/Staff cannot access private conversations. Verify the existing Module 8 profile/certification and Module 10 availability routes still open in the integrated build.
 5. Confirm form-history/cancellation/completion remain unavailable with truthful explanations until real prerequisites exist. Performance widgets remain present with `-`; financial export is disabled. No pending/unpaid booking can become Completed, and no fee is represented as commission.
 
-No live disposable fixture write, canonical account mutation, APK installation, push or owner Module 9 PASS has occurred in this sprint.
+No live disposable fixture write, canonical account mutation, push or owner Module 9 PASS has occurred in this sprint. The separately approved APK installation is recorded below.
 
 ## Local commits and Android artifact
 
@@ -62,10 +62,10 @@ No live disposable fixture write, canonical account mutation, APK installation, 
 - Shared mobile integration: `9490b2b`.
 - APK: `build/module-9/gainpath-module9-firebase-debug.apk`, debug, Firebase, App Check debug; package `com.zyang.gainpath`, version `0.1.0`/code `1`.
 - SHA256: `b1f03021e2f4df9ef32e8beda645d5f7cf77f6350e76ee6e77cdeb155d64fe5b`; 219,484,947 bytes.
-- APK signature verifies and matches the retained Module 10 APK previously installed on Xiaomi. No current-phone installation/signature read or private-data mutation was performed for this build.
+- APK signature verifies and matches the retained Module 10 APK previously installed on Xiaomi. The approved installation also verified it against the actual installed APK before updating.
 - The artifact includes the preserved existing availability working-tree edits as requested for an integrated build; those unrelated edits remain outside the Module 9 commits. This is not a clean-HEAD-only APK.
 - Final Android debug build and Functions build/import check succeeded. Local Functions build used Node 24 and emitted the existing package engine warning; deployment target remains Node 22. No full CI or live backend success is claimed.
-- The two-function activation prerequisite is satisfied. APK installation still requires separate explicit owner approval and in-place backup/signature verification.
+- The two-function activation prerequisite is satisfied. The owner separately approved APK installation; the in-place update completed without uninstalling or clearing data.
 
 ## Approved production read-back
 
@@ -75,3 +75,9 @@ No live disposable fixture write, canonical account mutation, APK installation, 
 - Both live callable endpoints return HTTP 401 / UNAUTHENTICATED to anonymous probes. This verifies the negative authentication boundary, not authenticated message persistence or full App Check UAT.
 - Deployment CLI exited successfully. It reported a build-image cleanup warning; no images were deleted or unrelated redeployment attempted.
 - Sanitized evidence: ignored `module-9-activation/predeploy-check.json` and `deployment-readback.json`. No canonical or disposable booking records were written for verification.
+
+## Approved Xiaomi installation
+
+19 October 2026, Asia/Kuala_Lumpur: installed and launched the approved SHA256 `b1f03021…` APK on Xiaomi `23013RK75C`. The existing APK and 98,808,832 bytes of private data were backed up first. The signing certificate matched the actual installed APK; installed APK hash matches the approved artifact. Private data was byte-identical immediately after the in-place update and before launch. No uninstall or app-data clear occurred.
+
+Ignored evidence: `build/non-core-crud-sprint/module-9-activation/install-result.json`; private backups: `module-9-activation/private/install-module9/`. Successful installation/launch is not owner manual UI PASS or authenticated Firebase messaging save/reload proof.
