@@ -2,13 +2,15 @@
 
 19 October 2026, Asia/Kuala_Lumpur. Original sources: C3 Table 3.29, UC-9.1–UC-9.8, BR-12/BR-14/BR-15; C4 §4.7.9 and §4.8.9. The owner explicitly authorized starting Module 9 despite the previously pending Module 8/10 acceptance conditions. This is authorization to proceed, not a retroactive manual PASS.
 
+**Deployment update:** the owner approved the exact two-function activation, completed and independently read back at 2026-10-19T06:55:52Z. APK installation, authenticated live save/reload and owner manual UAT remain pending.
+
 ## Coverage
 
 | Requirement | Current result | Remaining gap |
 |---|---|---|
-| FR-9.1 | Partially blocked: existing authenticated booking reader reused; original roster/day rail/cards retained; client and status filters, 30-day date picker, reset, related client name projection and pagination. | Production activation of opt-in names; manual UAT. Refresh is periodic (30 seconds on the first page), not a Firestore live listener. Additional loaded pages require explicit refresh. No confirmed booking producer exists. |
+| FR-9.1 | Partially blocked: existing authenticated booking reader reused; original roster/day rail/cards retained; client and status filters, 30-day date picker, reset, related client name projection and pagination. Opt-in names reader deployed. | Manual UAT. Refresh is periodic (30 seconds on the first page), not a Firestore live listener. Additional loaded pages require explicit refresh. No confirmed booking producer exists. |
 | FR-9.2 | Unavailable; original form-history action retained disabled. | Requires an authorized confirmed relationship, consent and measured cloud history. Local device workout records are never uploaded by this module. |
-| FR-9.3 | Partially blocked: participant-only booking questions/replies, ordered immutable history, pagination, confirmed save/reopen, stable uncertain-send retry, inbox previews and session/discard protection implemented locally. | New callable deployment, authorized live save/reload and manual UAT. Notification delivery is not implemented. |
+| FR-9.3 | Partially blocked: participant-only booking questions/replies, ordered immutable history, pagination, confirmed save/reopen, stable uncertain-send retry, inbox previews and session/discard protection implemented; callable deployed. | Authorized live save/reload and manual UAT. Notification delivery is not implemented. |
 | FR-9.4 | Unavailable; Coach cancellation action stays disabled. | B4 only cancels Member pending holds. There is no production settlement-to-confirmed workflow or established confirmed cancellation resolution/lock transition. Do not mutate pending holds into confirmed sessions or reuse Member cancellation as Coach cancellation. Future extension must enforce the original cancellation policy and release confirmed locks atomically. |
 | FR-9.5 | Unavailable; live note/completion action stays disabled. The existing note outline contains only headings, never invented observations. | No authoritative confirmed/fulfilled session prerequisite or completion transition. Current booking reader only covers today forward. Notes cannot mark a pending/unpaid session completed. Consultation corrections need a legitimate authorized transition/history contract. |
 | FR-9.6 | Unavailable; original Earnings/Performance cards/charts/navigation retained with hyphens, explanation and disabled export. | No authoritative cleared commission ledger, rating records/eligibility or verified export rows. Fees and pending holds never become earnings. |
@@ -32,7 +34,7 @@ Read-only inventory at 2026-10-19T05:49:14Z: project `gainpath-0619`, region `us
 - Firestore Rules SHA256: `3b11087f0d21639249374ae17035fbc4d734a0827f1c7390acd118b0c486e2db`.
 - Storage Rules SHA256: `50138b9c519882e03005c1f7f5821b306d9d35baf3aca701c716c1feb8b3fc8d`.
 - Exact live Rules deny direct client access to message/state subcollections. No Rules, indexes, Storage, Hosting, IAM or Scheduler change is needed or authorized.
-- Proposed selective deployment only: **`bookingCommunicationCommand,getBookingListCommand`**. This adds private participant communication and opt-in related-client names. Production deployment requires the owner's exact approval. Never blanket-deploy firebase.json.
+- Owner-approved selective deployment completed: **`bookingCommunicationCommand,getBookingListCommand`**. This adds private participant communication and opt-in related-client names. No blanket firebase.json deployment occurred.
 - Sanitized read-only evidence and exact Rules are retained under ignored `build/non-core-crud-sprint/module-9-activation/`. Emulator success is not live Firebase save/reload proof.
 
 ## Focused verification
@@ -63,4 +65,13 @@ No live disposable fixture write, canonical account mutation, APK installation, 
 - APK signature verifies and matches the retained Module 10 APK previously installed on Xiaomi. No current-phone installation/signature read or private-data mutation was performed for this build.
 - The artifact includes the preserved existing availability working-tree edits as requested for an integrated build; those unrelated edits remain outside the Module 9 commits. This is not a clean-HEAD-only APK.
 - Final Android debug build and Functions build/import check succeeded. Local Functions build used Node 24 and emitted the existing package engine warning; deployment target remains Node 22. No full CI or live backend success is claimed.
-- **Do not install for live Module 9 acceptance before the two-function activation:** new mobile booking-name requests require the updated reader. APK installation requires a separate explicit owner approval and in-place backup/signature verification.
+- The two-function activation prerequisite is satisfied. APK installation still requires separate explicit owner approval and in-place backup/signature verification.
+
+## Approved production read-back
+
+- `bookingCommunicationCommand`: ACTIVE, Node 22, revision `bookingcommunicationcommand-00001-fuf`.
+- `getBookingListCommand`: ACTIVE, Node 22, revision `getbookinglistcommand-00002-xig`.
+- 27 live functions; every unrelated function revision remains unchanged. Exact Firestore/Storage Rules hashes remain unchanged from preflight.
+- Both live callable endpoints return HTTP 401 / UNAUTHENTICATED to anonymous probes. This verifies the negative authentication boundary, not authenticated message persistence or full App Check UAT.
+- Deployment CLI exited successfully. It reported a build-image cleanup warning; no images were deleted or unrelated redeployment attempted.
+- Sanitized evidence: ignored `module-9-activation/predeploy-check.json` and `deployment-readback.json`. No canonical or disposable booking records were written for verification.
