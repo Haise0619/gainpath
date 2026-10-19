@@ -102,10 +102,57 @@
   "auditRetained": true,
   "canonicalAccountsModified": false,
   "ownerManualPass": false,
-  "liveElapsedExpiryTested": false,
+  "liveElapsedExpiryTested": true,
   "remaining": [
     "Owner mobile/Admin visual UAT",
-    "Live elapsed expiry and replacement-slot UAT",
-    "Refund execution not implemented"
-  ]
+    "New review/refund backend activation approval",
+    "Sandbox Payment Order collection and sufficient test limit",
+    "New APK installation approval"
+  ],
+  "paymentReviewExtension": {
+    "at": "2026-10-19T11:29:51.807Z",
+    "implementationCommits": {
+      "backend": "512a0eb",
+      "mobile": "12d844c",
+      "admin": "69f4663"
+    },
+    "localOnlyPendingActivationApproval": true,
+    "backendTests": 61,
+    "mobileAndDomainTests": 14,
+    "adminFocusedTests": 13,
+    "firestoreEmulatorTests": 4,
+    "independentReview": "No remaining actionable P1/P2 findings in reviewed scope",
+    "sandboxRefundsOnly": true,
+    "realBankDetailsAccepted": false,
+    "realMoneyRefundsSupported": false,
+    "paymentOrderCollectionConfigured": false,
+    "sandboxCapacityForTwoRM1RefundTests": false,
+    "apk": {
+      "path": "build/payment-review/gainpath-payment-review-firebase-debug.apk",
+      "sha256": "6e5a2ed1b0f9c15a26a944b7bb7649856846828ce36b7f456b273b3d6a901170",
+      "signingCertificateMatchesPriorArtifact": true,
+      "installed": false
+    },
+    "officialAdminUrl": "http://localhost:7359/",
+    "ownerManualPass": false,
+    "canonicalAdminBuild": {
+      "sha256": "d6b598be983ad4816fcd9810eaca35df0288934732cfba73f7b10c1bcac1622b",
+      "servedHashVerified": true,
+      "legacyCacheBypassCommit": "ba194f1",
+      "browserNewScreenVerified": true,
+      "newBackendActionsPendingApproval": true
+    }
+  },
+  "liveElapsedExpiryEvidence": {
+    "at": "2026-10-19T11:37:05.842Z",
+    "realElapsedHoldExpiry": true,
+    "holdMinutes": 15,
+    "noTimestampBypass": true,
+    "paidAfterExpiry": true,
+    "bookingRemainsExpired": true,
+    "reconciliationRequired": true,
+    "refundClaimed": false,
+    "replacementLocksUnchanged": true,
+    "replacementBookingRetainedAndCancelled": true
+  }
 }
