@@ -25,6 +25,7 @@ import 'package:gainpath_domain/gainpath_domain.dart'
 import 'package:gainpath_domain/coaching.dart' show CoachAvailabilityRepository;
 import '../di/coach_availability_factory.dart';
 import '../di/booking_factory.dart';
+import '../di/payment_review_factory.dart';
 import '../routing/app_routes.dart';
 
 /// A single directly-selectable sidebar destination.
@@ -109,9 +110,14 @@ class _AdminShellState extends State<AdminShell> {
         'Recommendations',
         'High-risk exercises and matched leads',
         RiskLeaderboardScreen(live: widget.liveSession != null)),
-    _NavPage(Icons.receipt_long_outlined, Icons.receipt_long_rounded, 'Refunds',
-        'Approve or reject disputed transactions',
-        RefundsScreen(live: widget.liveSession != null)),
+    _NavPage(
+        Icons.receipt_long_outlined,
+        Icons.receipt_long_rounded,
+        'Refunds',
+        'Reconcile booking payments and review sandbox refunds',
+        widget.liveSession == null
+            ? const RefundsScreen()
+            : AdminPaymentReviewRoute(session: widget.liveSession!)),
     _NavGroup(Icons.folder_outlined, Icons.folder_rounded, 'Content', [
       _NavPage(
           Icons.video_library_outlined,
