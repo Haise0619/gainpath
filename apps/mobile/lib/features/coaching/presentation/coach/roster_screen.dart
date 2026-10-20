@@ -23,11 +23,17 @@ class CoachRosterScreen extends StatefulWidget {
       this.persistedBookings,
       this.statusLabels = const {},
       this.details = const {},
+      this.onMessage,
+      this.onOpenMessages,
+      this.todayLocalDate,
       this.header});
   final List<Booking>? persistedBookings;
   final Map<String, String> statusLabels;
   final Map<String, Widget> details;
   final Widget? header;
+  final void Function(Booking)? onMessage;
+  final VoidCallback? onOpenMessages;
+  final String? todayLocalDate;
 
   @override
   State<CoachRosterScreen> createState() => _CoachRosterScreenState();
@@ -37,6 +43,9 @@ class _CoachRosterScreenState extends State<CoachRosterScreen>
     with SingleTickerProviderStateMixin {
   String _statusFilter = 'All';
   int _dayIndex = 0;
+  String _clientFilter = '';
+  final _clientController = TextEditingController();
+  DateTime? _pickedDate;
   late final AnimationController _reveal;
 
   static const _dayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
@@ -65,13 +74,15 @@ class _CoachRosterScreenState extends State<CoachRosterScreen>
 
   @override
   void dispose() {
+    _clientController.dispose();
     _reveal.dispose();
     super.dispose();
   }
 
   void _selectDay(int i) {
-    if (i == _dayIndex && _statusFilter == 'All') return;
+    if (i == _dayIndex && _statusFilter == 'All' && _pickedDate == null) return;
     setState(() {
+      _pickedDate = null;
       _dayIndex = i;
       _statusFilter = 'All';
     });
@@ -89,7 +100,9 @@ class _CoachRosterScreenState extends State<CoachRosterScreen>
   }
 
   List<DateTime> get _days {
-    final today = DateTime.now();
+    final today = widget.todayLocalDate == null
+        ? DateTime.now()
+        : DateTime.parse(widget.todayLocalDate!);
     return List.generate(7, (i) {
       final d = today.add(Duration(days: i));
       return DateTime(d.year, d.month, d.day);
@@ -104,15 +117,26 @@ class _CoachRosterScreenState extends State<CoachRosterScreen>
     final roster = widget.persistedBookings ??
         context.watch<BookingBloc>().state.coachRoster;
     final days = _days;
-    final selectedDay = days[_dayIndex];
-    final now = DateTime.now();
+    final selectedDay = _pickedDate ?? days[_dayIndex];
+    final now = widget.todayLocalDate == null
+        ? DateTime.now()
+        : DateTime.parse(widget.todayLocalDate!);
     final weekEnd = now.add(const Duration(days: 7));
     final filtering = _statusFilter != 'All';
 
+    final candidates = roster.where((b) => '${b.memberName} ${b.id}'
+        .toLowerCase()
+        .contains(_clientFilter.toLowerCase()));
     final visible = filtering
-        ? (roster.where((b) => b.status.label == _statusFilter).toList()
-          ..sort((a, b) => b.start.compareTo(a.start)))
-        : (roster.where((b) => _isSameDay(b.start, selectedDay)).toList()
+        ? (candidates
+            .where((b) =>
+                (widget.statusLabels[b.id] ?? b.status.label)
+                    .replaceAll('_', ' ')
+                    .toLowerCase() ==
+                _statusFilter.toLowerCase())
+            .toList()
+          ..sort((a, b) => a.start.compareTo(b.start)))
+        : (candidates.where((b) => _isSameDay(b.start, selectedDay)).toList()
           ..sort((a, b) => a.start.compareTo(b.start)));
 
     final needsReply = roster
@@ -140,7 +164,7 @@ class _CoachRosterScreenState extends State<CoachRosterScreen>
                   icon: const Icon(Icons.forum_outlined),
                   tooltip: 'Messages',
                   onPressed: widget.persistedBookings != null
-                      ? null
+                      ? widget.onOpenMessages
                       : () => Navigator.push(
                           context,
                           MaterialPageRoute(
@@ -168,6 +192,44 @@ class _CoachRosterScreenState extends State<CoachRosterScreen>
       ),
       body: CustomScrollView(
         slivers: [
+          SliverToBoxAdapter(
+              child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: TextField(
+                    controller: _clientController,
+                    onChanged: (value) => setState(() => _clientFilter = value),
+                    decoration: const InputDecoration(
+                        labelText: 'Search client or booking',
+                        prefixIcon: Icon(Icons.search)),
+                  ))),
+          SliverToBoxAdapter(
+              child: Row(children: [
+            TextButton.icon(
+                icon: const Icon(Icons.calendar_month),
+                label: const Text('Choose date'),
+                onPressed: () async {
+                  final day = await showDatePicker(
+                      context: context,
+                      initialDate: selectedDay,
+                      firstDate: days.first,
+                      lastDate: days.first.add(const Duration(days: 30)));
+                  if (day != null && mounted) {
+                    setState(() {
+                      _pickedDate = day;
+                      _statusFilter = 'All';
+                    });
+                  }
+                }),
+            TextButton(
+                onPressed: () => setState(() {
+                      _pickedDate = null;
+                      _dayIndex = 0;
+                      _statusFilter = 'All';
+                      _clientFilter = '';
+                      _clientController.clear();
+                    }),
+                child: const Text('Reset filters')),
+          ])),
           if (widget.header != null)
             SliverToBoxAdapter(
                 child: Padding(
@@ -297,7 +359,18 @@ class _CoachRosterScreenState extends State<CoachRosterScreen>
               child: ListView(
                 scrollDirection: Axis.horizontal,
                 padding: const EdgeInsets.symmetric(horizontal: 16),
-                children: ['All', 'Confirmed', 'Pending', 'Completed'].map((s) {
+                children: (widget.persistedBookings == null
+                        ? ['All', 'Confirmed', 'Pending', 'Completed']
+                        : [
+                            'All',
+                            'Confirmed',
+                            'Pending hold',
+                            'Completed',
+                            'Cancelled',
+                            'Expired',
+                            'Refunded'
+                          ])
+                    .map((s) {
                   final selected = s == _statusFilter;
                   return Padding(
                     padding: const EdgeInsets.only(right: 8),
@@ -395,6 +468,9 @@ class _CoachRosterScreenState extends State<CoachRosterScreen>
                           live: widget.persistedBookings != null,
                           statusLabel: widget.statusLabels[visible[i].id],
                           details: widget.details[visible[i].id],
+                          onMessage: widget.onMessage == null
+                              ? null
+                              : () => widget.onMessage!(visible[i]),
                           isLast: i == visible.length - 1,
                           showConnector: !filtering,
                         ),
@@ -421,6 +497,7 @@ class _TimelineRow extends StatelessWidget {
   final bool live;
   final String? statusLabel;
   final Widget? details;
+  final VoidCallback? onMessage;
   final bool isLast;
   final bool showConnector;
   const _TimelineRow(
@@ -428,6 +505,7 @@ class _TimelineRow extends StatelessWidget {
       this.live = false,
       this.statusLabel,
       this.details,
+      this.onMessage,
       required this.isLast,
       required this.showConnector});
 
@@ -467,7 +545,11 @@ class _TimelineRow extends StatelessWidget {
             child: Padding(
               padding: const EdgeInsets.only(bottom: 16),
               child: _SessionCard(
-                  booking: booking, live: live, statusLabel: statusLabel, details: details),
+                  booking: booking,
+                  live: live,
+                  statusLabel: statusLabel,
+                  details: details,
+                  onMessage: onMessage),
             ),
           ),
         ],
@@ -691,11 +773,13 @@ class _SessionCard extends StatelessWidget {
   final bool live;
   final String? statusLabel;
   final Widget? details;
+  final VoidCallback? onMessage;
   const _SessionCard(
       {required this.booking,
       this.live = false,
       this.statusLabel,
-      this.details});
+      this.details,
+      this.onMessage});
 
   @override
   Widget build(BuildContext context) {
@@ -914,7 +998,7 @@ class _SessionCard extends StatelessWidget {
                                 label: 'Message',
                                 filled: false,
                                 onPressed: live
-                                    ? null
+                                    ? onMessage
                                     : () => Navigator.push(
                                         context,
                                         MaterialPageRoute(

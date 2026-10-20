@@ -63,7 +63,9 @@ class BookingOptionsContext {
     bookingTimeZone(timeZone);
     final first = DateTime.parse('${todayLocalDate}T00:00:00Z');
     final last = DateTime.parse('${throughLocalDate}T00:00:00Z');
-    if (last.difference(first).inDays != 30 ||
+    final advanceDays = last.difference(first).inDays;
+    if (advanceDays < 1 ||
+        advanceDays > 30 ||
         localDate.compareTo(todayLocalDate) < 0 ||
         localDate.compareTo(throughLocalDate) > 0 ||
         permittedBranchIds.isEmpty ||
@@ -197,7 +199,9 @@ class PersistedBookingRecord {
       this.resolution,
       required this.startLabel,
       required this.endLabel,
-      required this.expiryLabel}) {
+      required this.expiryLabel,
+      this.memberDisplayName}) {
+    if (memberDisplayName != null) bookingText(memberDisplayName, max: 120);
     for (final id in [
       bookingId,
       organizationId,
@@ -256,6 +260,7 @@ class PersistedBookingRecord {
   final BookingStatus status;
   final int? resolvedAtMillis;
   final String? resolution;
+  final String? memberDisplayName;
   int get schemaVersion => 1;
   String get rawStatus => _rawStatus(status);
   DateTime get startAt =>
@@ -287,7 +292,8 @@ class PersistedBookingRecord {
       'expiryLabel'
     ], [
       'resolvedAtMillis',
-      'resolution'
+      'resolution',
+      'memberDisplayName'
     ]);
     if ((data.containsKey('resolvedAtMillis') &&
             data['resolvedAtMillis'] == null) ||
@@ -317,7 +323,10 @@ class PersistedBookingRecord {
         resolution: data['resolution'],
         startLabel: bookingText(data['startLabel'], max: 80),
         endLabel: bookingText(data['endLabel'], max: 80),
-        expiryLabel: bookingText(data['expiryLabel'], max: 80));
+        expiryLabel: bookingText(data['expiryLabel'], max: 80),
+        memberDisplayName: data['memberDisplayName'] == null
+            ? null
+            : bookingText(data['memberDisplayName'], max: 120));
   }
   Map<String, dynamic> toJson() => {
         'bookingId': bookingId,
@@ -338,6 +347,7 @@ class PersistedBookingRecord {
         'createdAtMillis': createdAtMillis,
         if (resolvedAtMillis != null) 'resolvedAtMillis': resolvedAtMillis,
         if (resolution != null) 'resolution': resolution,
+        if (memberDisplayName != null) 'memberDisplayName': memberDisplayName,
         'startLabel': startLabel,
         'endLabel': endLabel,
         'expiryLabel': expiryLabel

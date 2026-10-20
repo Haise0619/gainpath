@@ -4,7 +4,7 @@ import 'package:gainpath_domain/coaching.dart';
 import 'package:gainpath_domain/gainpath_domain.dart' show SessionScope;
 
 class FirebaseCoachAvailabilityRepository
-    implements CoachAvailabilityRepository {
+    implements CoachAvailabilityRepository, CoachRosterRepository {
   FirebaseCoachAvailabilityRepository(
       {required this.scope,
       required this.isCurrent,
@@ -75,6 +75,7 @@ class FirebaseCoachAvailabilityRepository
       'requestId': requestId,
       'localDate': baseline.localDate,
       'expectedRevision': baseline.revision,
+      'expectedRosterRevision': context.rosterRevision ?? 0,
       'expectedPolicyVersion': context.policyVersion,
       'expectedTimeZone': context.timeZone,
       'expectedCoachBranchIds': context.assignedBranchIds,
@@ -83,6 +84,48 @@ class FirebaseCoachAvailabilityRepository
     if (result.coachId != scope.userId ||
         result.localDate != baseline.localDate ||
         result.requestId != requestId) {
+      throw const CoachAvailabilityException('failed-precondition');
+    }
+    return result;
+  }
+
+  @override
+  Future<CoachRosterSnapshot> loadRoster({required String coachId}) async {
+    final result = CoachRosterSnapshot.fromJson(await _call(
+        'getCoachRosterCommand', {
+      'schemaVersion': 1,
+      'organizationId': scope.organizationId,
+      'coachId': coachId
+    }));
+    if (result.coachId != coachId) {
+      throw const CoachAvailabilityException('failed-precondition');
+    }
+    return result;
+  }
+
+  @override
+  Future<CoachRosterSnapshot> saveRoster(
+      {required CoachRosterSnapshot baseline,
+      required CoachWeeklyAvailability weeklyAvailability,
+      required List<CoachTimeException> exceptions,
+      required String requestId}) async {
+    if (baseline.coachId != scope.userId) {
+      throw const CoachAvailabilityException('permission-denied');
+    }
+    final result =
+        CoachRosterSnapshot.fromJson(await _call('saveCoachRosterCommand', {
+      'schemaVersion': 1,
+      'organizationId': scope.organizationId,
+      'requestId': requestId,
+      'expectedRevision': baseline.revision,
+      'expectedPolicyVersion': baseline.policyVersion,
+      'expectedTimeZone': baseline.timeZone,
+      'expectedCoachBranchIds': baseline.assignedBranchIds,
+      'weeklyAvailability': weeklyAvailability.toJson(),
+      'exceptions': exceptions.map((e) => e.toJson()).toList()
+    }));
+    if (result.coachId != scope.userId ||
+        result.revision != baseline.revision + 1) {
       throw const CoachAvailabilityException('failed-precondition');
     }
     return result;

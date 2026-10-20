@@ -1,0 +1,279 @@
+{
+  "schemaVersion": 1,
+  "at": "2026-10-19T09:09:07.672Z",
+  "project": "gainpath-0619",
+  "sandboxOnly": true,
+  "ownerApproved": true,
+  "deployment": {
+    "at": "2026-10-19T09:01:31.762Z",
+    "functionCount": 32,
+    "targets": [
+      {
+        "name": "getBookingPaymentQuoteCommand",
+        "state": "ACTIVE",
+        "runtime": "nodejs22",
+        "revision": "getbookingpaymentquotecommand-00001-guh"
+      },
+      {
+        "name": "createBookingPaymentCommand",
+        "state": "ACTIVE",
+        "runtime": "nodejs22",
+        "revision": "createbookingpaymentcommand-00001-zoh"
+      },
+      {
+        "name": "getBookingPaymentCommand",
+        "state": "ACTIVE",
+        "runtime": "nodejs22",
+        "revision": "getbookingpaymentcommand-00001-xem"
+      },
+      {
+        "name": "paymentWebhook",
+        "state": "ACTIVE",
+        "runtime": "nodejs22",
+        "revision": "paymentwebhook-00001-kip"
+      },
+      {
+        "name": "billplzSandboxReturn",
+        "state": "ACTIVE",
+        "runtime": "nodejs22",
+        "revision": "billplzsandboxreturn-00001-qis"
+      }
+    ],
+    "unrelatedRevisionsUnchanged": true,
+    "rulesUnchanged": true,
+    "anonymousBoundary": [
+      {
+        "name": "getBookingPaymentQuoteCommand",
+        "status": 401,
+        "error": "UNAUTHENTICATED"
+      },
+      {
+        "name": "createBookingPaymentCommand",
+        "status": 401,
+        "error": "UNAUTHENTICATED"
+      },
+      {
+        "name": "getBookingPaymentCommand",
+        "status": 401,
+        "error": "UNAUTHENTICATED"
+      }
+    ]
+  },
+  "security": {
+    "at": "2026-10-19T09:06:06.4Z",
+    "syntheticOnly": true,
+    "invalidSignatureDenied": true,
+    "signedReplayAccepted": true,
+    "duplicateAccepted": true,
+    "outOfOrderDueCannotDowngrade": true,
+    "financialAuditUnchanged": true,
+    "bookingUnchanged": true,
+    "auditCount": 4
+  },
+  "cancelledPayment": {
+    "at": "2026-10-19T09:07:54.851Z",
+    "syntheticOnly": true,
+    "paidAfterCancellation": true,
+    "bookingRemainsCancelled": true,
+    "reconciliationRequired": true,
+    "refundClaimed": false
+  },
+  "installation": {
+    "packageName": "com.zyang.gainpath",
+    "at": "2026-10-19T08:56:36.706Z",
+    "installed": true,
+    "launched": true,
+    "model": "23013RK75C",
+    "signingCertificateMatches": true,
+    "privateDataByteIdentical": true,
+    "installedApkHashMatches": true,
+    "apkSha256": "f72194f7db18281ff5901a4cdf78bd0b3265d07ccb82ca9008b11ec550a89dcc"
+  },
+  "livePayment": {
+    "authoritativeAmountMinor": 100,
+    "currency": "MYR",
+    "realHostedSimulator": true,
+    "providerCallbackConfirmedBeforeMemberRefresh": true,
+    "memberAndCoachReadback": true,
+    "memberAndCoachBookingListsConsistent": true,
+    "repeatedCheckoutSameBill": true
+  },
+  "disposableListingInactive": true,
+  "auditRetained": true,
+  "canonicalAccountsModified": false,
+  "ownerManualPass": false,
+  "liveElapsedExpiryTested": true,
+  "remaining": [
+    "Owner mobile/Admin visual UAT",
+    "Sandbox virtual limit/credit setup and live dummy refund verification"
+  ],
+  "paymentReviewExtension": {
+    "at": "2026-10-19T11:29:51.807Z",
+    "implementationCommits": {
+      "backend": "512a0eb",
+      "mobile": "12d844c",
+      "admin": "69f4663"
+    },
+    "localOnlyPendingActivationApproval": false,
+    "backendTests": 61,
+    "mobileAndDomainTests": 14,
+    "adminFocusedTests": 13,
+    "firestoreEmulatorTests": 4,
+    "independentReview": "No remaining actionable P1/P2 findings in reviewed scope",
+    "sandboxRefundsOnly": true,
+    "realBankDetailsAccepted": false,
+    "realMoneyRefundsSupported": false,
+    "paymentOrderCollectionConfigured": true,
+    "sandboxCapacityForTwoRM1RefundTests": false,
+    "apk": {
+      "path": "build/payment-review/gainpath-payment-review-firebase-debug.apk",
+      "sha256": "6e5a2ed1b0f9c15a26a944b7bb7649856846828ce36b7f456b273b3d6a901170",
+      "signingCertificateMatchesPriorArtifact": true,
+      "installed": true
+    },
+    "officialAdminUrl": "http://localhost:7359/",
+    "ownerManualPass": false,
+    "canonicalAdminBuild": {
+      "sha256": "d6b598be983ad4816fcd9810eaca35df0288934732cfba73f7b10c1bcac1622b",
+      "servedHashVerified": true,
+      "legacyCacheBypassCommit": "ba194f1",
+      "browserNewScreenVerified": true,
+      "newBackendActionsPendingApproval": false
+    },
+    "deployment": {
+      "at": "2026-10-19T11:56:34.786Z",
+      "functionCount": 35,
+      "targets": [
+        {
+          "name": "listAdminBookingPaymentsCommand",
+          "state": "ACTIVE",
+          "runtime": "nodejs22",
+          "revision": "listadminbookingpaymentscommand-00001-gav"
+        },
+        {
+          "name": "getAdminBookingPaymentCommand",
+          "state": "ACTIVE",
+          "runtime": "nodejs22",
+          "revision": "getadminbookingpaymentcommand-00001-wos"
+        },
+        {
+          "name": "manageAdminBookingPaymentCommand",
+          "state": "ACTIVE",
+          "runtime": "nodejs22",
+          "revision": "manageadminbookingpaymentcommand-00001-dur"
+        },
+        {
+          "name": "getBookingPaymentCommand",
+          "state": "ACTIVE",
+          "runtime": "nodejs22",
+          "revision": "getbookingpaymentcommand-00002-wuk"
+        }
+      ],
+      "unrelatedRevisionsUnchanged": true,
+      "rulesUnchanged": true,
+      "anonymousBoundary": [
+        {
+          "name": "listAdminBookingPaymentsCommand",
+          "status": 401,
+          "error": "UNAUTHENTICATED"
+        },
+        {
+          "name": "getAdminBookingPaymentCommand",
+          "status": 401,
+          "error": "UNAUTHENTICATED"
+        },
+        {
+          "name": "manageAdminBookingPaymentCommand",
+          "status": 401,
+          "error": "UNAUTHENTICATED"
+        },
+        {
+          "name": "getBookingPaymentCommand",
+          "status": 401,
+          "error": "UNAUTHENTICATED"
+        }
+      ]
+    },
+    "installation": {
+      "packageName": "com.zyang.gainpath",
+      "at": "2026-10-19T11:53:01.748Z",
+      "installed": true,
+      "launched": true,
+      "model": "23013RK75C",
+      "signingCertificateMatches": true,
+      "privateDataByteIdentical": true,
+      "installedApkHashMatches": true,
+      "apkSha256": "6e5a2ed1b0f9c15a26a944b7bb7649856846828ce36b7f456b273b3d6a901170"
+    },
+    "liveAdminReview": {
+      "at": "2026-10-19T12:01:35.465Z",
+      "syntheticOnly": true,
+      "adminQueueLoaded": true,
+      "adminDetailLoaded": true,
+      "rejectedWithReason": true,
+      "approvedWithReason": true,
+      "refundStatus": "approved",
+      "bookingStatus": "cancelled",
+      "paymentStatus": "cleared",
+      "payoutNotRequested": true,
+      "bothDecisionAuditEntriesRetained": true
+    },
+    "liveAuthorization": {
+      "at": "2026-10-19T11:57:57.1Z",
+      "results": [
+        {
+          "role": "member",
+          "command": "listAdminBookingPaymentsCommand",
+          "denied": true
+        },
+        {
+          "role": "member",
+          "command": "getAdminBookingPaymentCommand",
+          "denied": true
+        },
+        {
+          "role": "member",
+          "command": "manageAdminBookingPaymentCommand",
+          "denied": true
+        },
+        {
+          "role": "coach",
+          "command": "listAdminBookingPaymentsCommand",
+          "denied": true
+        },
+        {
+          "role": "coach",
+          "command": "getAdminBookingPaymentCommand",
+          "denied": true
+        },
+        {
+          "role": "coach",
+          "command": "manageAdminBookingPaymentCommand",
+          "denied": true
+        }
+      ]
+    },
+    "liveParticipantRefundReadback": {
+      "at": "2026-10-19T12:02:25.72Z",
+      "memberAndCoachRefundReadback": true,
+      "status": "reconciliation_required",
+      "paymentStatus": "cleared",
+      "refundStatus": "approved",
+      "bookingNotConfirmed": true
+    },
+    "refundExecutionVerified": false,
+    "refundExecutionBlocker": "Sandbox limit RM0 and credit RM-1.70. Virtual RM10 limit reload bill opened; Simulator unresponsive and Proceed to pay disabled after reload. No payout attempted or real funds loaded."
+  },
+  "liveElapsedExpiryEvidence": {
+    "at": "2026-10-19T11:37:05.842Z",
+    "realElapsedHoldExpiry": true,
+    "holdMinutes": 15,
+    "noTimestampBypass": true,
+    "paidAfterExpiry": true,
+    "bookingRemainsExpired": true,
+    "reconciliationRequired": true,
+    "refundClaimed": false,
+    "replacementLocksUnchanged": true,
+    "replacementBookingRetainedAndCancelled": true
+  }
+}

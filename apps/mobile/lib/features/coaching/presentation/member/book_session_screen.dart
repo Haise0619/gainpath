@@ -1,3 +1,4 @@
+import 'booking_payment_screen.dart';
 import 'package:flutter/material.dart';
 import '../../application/booking_bloc.dart';
 import 'package:gainpath_domain/coaching.dart';
@@ -17,6 +18,7 @@ import 'widgets/booking_selection_page.dart';
 /// over one shared list, not separate data.
 class BookSessionScreen extends StatefulWidget {
   final Coach? coach;
+  final BookingPaymentRepository? payments;
   final persisted.MemberBookingOptionsRepository? options;
   final persisted.BookingRepository? writer;
   final String? coachId;
@@ -25,6 +27,7 @@ class BookSessionScreen extends StatefulWidget {
   const BookSessionScreen(
       {super.key,
       this.coach,
+      this.payments,
       this.options,
       this.writer,
       this.coachId,
@@ -47,6 +50,7 @@ class _BookSessionScreenState extends State<BookSessionScreen> {
       return _PersistedBookSessionView(
           options: widget.options!,
           writer: widget.writer!,
+          payments: widget.payments,
           coachId: widget.coachId!,
           isCurrent: widget.isCurrent!,
           onOpenBookings: widget.onOpenBookings!);
@@ -132,11 +136,13 @@ class _PersistedBookSessionView extends StatefulWidget {
   const _PersistedBookSessionView(
       {required this.options,
       required this.writer,
+      this.payments,
       required this.coachId,
       required this.isCurrent,
       required this.onOpenBookings});
   final persisted.MemberBookingOptionsRepository options;
   final persisted.BookingRepository writer;
+  final BookingPaymentRepository? payments;
   final String coachId;
   final bool Function() isCurrent;
   final VoidCallback onOpenBookings;
@@ -156,6 +162,71 @@ class __PersistedBookSessionViewState extends State<_PersistedBookSessionView> {
   void dispose() {
     controller.close();
     super.dispose();
+  }
+
+  BookingPaymentQuote? _quote;
+  String? _quoteError;
+  bool _quoteBusy = false;
+  int _quoteGeneration = 0;
+  Future<void> _refresh({String? localDate, int? durationMinutes}) async {
+    _quoteGeneration++;
+    setState(() {
+      _quote = null;
+      _quoteBusy = false;
+      _quoteError = null;
+    });
+    await controller.refresh(
+        localDate: localDate, durationMinutes: durationMinutes);
+  }
+
+  Future<void> _select(persisted.BookingOption option) async {
+    controller.select(option);
+    await _loadQuote();
+  }
+
+  Future<void> _loadQuote() async {
+    final intent = controller.state.intent;
+    final repo = widget.payments;
+    if (repo == null || intent == null) return;
+    final generation = ++_quoteGeneration;
+    setState(() {
+      _quote = null;
+      _quoteBusy = true;
+      _quoteError = null;
+    });
+    try {
+      final result = await repo.loadQuote(
+          coachId: widget.coachId,
+          branchId: intent.branchId.value,
+          durationMinutes: intent.durationMinutes);
+      if (mounted && widget.isCurrent() && generation == _quoteGeneration) {
+        setState(() => _quote = result);
+      }
+    } catch (_) {
+      if (mounted && widget.isCurrent() && generation == _quoteGeneration) {
+        setState(() => _quoteError =
+            'Fee unavailable. Retry the quote before continuing.');
+      }
+    } finally {
+      if (mounted && generation == _quoteGeneration) {
+        setState(() => _quoteBusy = false);
+      }
+    }
+  }
+
+  Future<void> _continuePayment() async {
+    if (_quote == null || _quoteBusy || !widget.isCurrent()) return;
+    await controller.submit();
+    final hold = controller.state.hold;
+    if (!mounted || !widget.isCurrent() || hold == null) return;
+    await Navigator.push(
+        context,
+        MaterialPageRoute<void>(
+            builder: (_) => BookingPaymentScreen(
+                repository: widget.payments!,
+                bookingId: hold.bookingId,
+                isCurrent: widget.isCurrent,
+                create: true)));
   }
 
   Future<bool> _discard() async {
@@ -199,7 +270,9 @@ class __PersistedBookSessionViewState extends State<_PersistedBookSessionView> {
                   !state.busy &&
                   state.uncertain &&
                   await _discard() &&
-                  context.mounted) { Navigator.pop(context); }
+                  context.mounted) {
+                Navigator.pop(context);
+              }
             },
             child: BookingSelectionPage(
               actions: [
@@ -227,9 +300,8 @@ class __PersistedBookSessionViewState extends State<_PersistedBookSessionView> {
                         BookingDayOption(
                             date: DateTime.parse(date),
                             selected: date == options.localDate,
-                            onTap: locked
-                                ? null
-                                : () => controller.refresh(localDate: date))
+                            onTap:
+                                locked ? null : () => _refresh(localDate: date))
                     ],
               times: options == null
                   ? []
@@ -240,8 +312,7 @@ class __PersistedBookSessionViewState extends State<_PersistedBookSessionView> {
                                 '${option.startLabel} – ${option.endLabel} · ${option.branchId}',
                             selected: state.intent?.startAt == option.startAt &&
                                 state.intent?.branchId.value == option.branchId,
-                            onTap:
-                                locked ? null : () => controller.select(option))
+                            onTap: locked ? null : () => _select(option))
                     ],
               duration: options == null
                   ? null
@@ -254,10 +325,9 @@ class __PersistedBookSessionViewState extends State<_PersistedBookSessionView> {
                           .toList(),
                       onChanged: locked
                           ? null
-                          : (value) =>
-                              controller.refresh(durationMinutes: value)),
+                          : (value) => _refresh(durationMinutes: value)),
               details: [
-                const DetailRow('Coach', '-'),
+                DetailRow('Coach', _quote?.coachName ?? '-'),
                 DetailRow('Date', options?.localDate ?? '-'),
                 DetailRow(
                     'Time',
@@ -270,20 +340,40 @@ class __PersistedBookSessionViewState extends State<_PersistedBookSessionView> {
                                 .map((o) => '${o.startLabel} – ${o.endLabel}')
                                 .firstOrNull ??
                             '-'),
-                DetailRow('Location', state.intent?.branchId.value ?? '-'),
-                const DetailRow('Total', '-'),
+                DetailRow('Location',
+                    _quote?.branchName ?? state.intent?.branchId.value ?? '-'),
+                DetailRow(
+                    'Total',
+                    _quoteBusy
+                        ? 'Loading fee…'
+                        : _quote?.formattedAmount ?? '-'),
               ],
               footer: [
+                if (_quoteError != null) Text(_quoteError!),
+                if (widget.payments != null &&
+                    state.intent != null &&
+                    _quote == null)
+                  TextButton(
+                      onPressed: _quoteBusy ? null : _loadQuote,
+                      child: const Text('Retry fee quote')),
                 if (state.hold == null)
                   OutlinedButton(
-                      onPressed: locked ? null : controller.refresh,
+                      onPressed: locked ? null : _refresh,
                       child: const Text('Refresh times / retry readiness')),
                 if (state.intent != null && state.hold == null)
                   FilledButton(
-                      onPressed: state.busy ? null : controller.submit,
+                      onPressed: state.busy ||
+                              (widget.payments != null &&
+                                  (_quote == null || _quoteBusy))
+                          ? null
+                          : widget.payments == null
+                              ? controller.submit
+                              : _continuePayment,
                       child: Text(state.uncertain
                           ? 'Retry same request'
-                          : 'Request pending hold')),
+                          : widget.payments == null
+                              ? 'Request pending hold'
+                              : 'Continue to payment')),
                 if (state.uncertain) ...[
                   const Text(
                       'Outcome unknown. The same immutable request is retained; retry will recover its receipt if it exists.'),
@@ -292,6 +382,16 @@ class __PersistedBookSessionViewState extends State<_PersistedBookSessionView> {
                       child: const Text('Discard intent with warning')),
                 ],
                 if (state.hold != null) ...[
+                  if (widget.payments != null)
+                    FilledButton(
+                        onPressed: () => Navigator.push(
+                            context,
+                            MaterialPageRoute<void>(
+                                builder: (_) => BookingPaymentScreen(
+                                    repository: widget.payments!,
+                                    bookingId: state.hold!.bookingId,
+                                    isCurrent: widget.isCurrent))),
+                        child: const Text('Check / continue payment')),
                   Text('Booking ${state.hold!.bookingId}'),
                   const Text(
                       'Original creation receipt — pending hold, not a paid reservation.'),

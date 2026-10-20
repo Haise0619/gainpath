@@ -1,0 +1,136 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "payment": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "bookingId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "memberId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "coachName": {
+          "type": "string"
+        },
+        "branchName": {
+          "type": "string"
+        },
+        "amountMinor": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "currency": {
+          "const": "MYR"
+        },
+        "paymentStatus": {
+          "enum": [
+            "pending",
+            "cleared"
+          ]
+        },
+        "fulfilmentStatus": {
+          "enum": [
+            "creating",
+            "awaiting_payment",
+            "confirmed",
+            "reconciliation_required"
+          ]
+        },
+        "createdAtMillis": {
+          "type": "integer"
+        },
+        "updatedAtMillis": {
+          "type": "integer"
+        },
+        "billId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "resolutionReason": {
+          "type": "string"
+        },
+        "refundStatus": {
+          "enum": [
+            "approved",
+            "rejected",
+            "processing",
+            "uncertain",
+            "completed",
+            "failed"
+          ]
+        },
+        "refundOrderId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "reviewReason": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "bookingId",
+        "memberId",
+        "amountMinor",
+        "currency",
+        "paymentStatus",
+        "fulfilmentStatus",
+        "createdAtMillis",
+        "updatedAtMillis"
+      ]
+    },
+    "events": {
+      "type": "array",
+      "maxItems": 100,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "event": {
+            "type": "string"
+          },
+          "atMillis": {
+            "type": "integer"
+          },
+          "actorId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "reason": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "event",
+          "atMillis"
+        ]
+      }
+    },
+    "refundExecutionAvailable": {
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "payment",
+    "events",
+    "refundExecutionAvailable"
+  ]
+}

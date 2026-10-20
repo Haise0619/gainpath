@@ -113,7 +113,7 @@ void main() {
       expect(find.text('Conversion rate: —'), findsOneWidget);
     });
 
-    testWidgets('Refunds screen displays honest unavailable and empty states',
+    testWidgets('Refunds screen fails closed without a scoped repository',
         (tester) async {
       tester.view.physicalSize = const Size(1600, 1000);
       tester.view.devicePixelRatio = 1;
@@ -130,22 +130,11 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      // Pending claims and disputed total show '—'
-      expect(find.text('—'), findsWidgets);
-
-      // Empty state message
       expect(
-        find.text('Refund dispute processing is unavailable in this release.'),
+        find.text('Payment review requires a current Admin session.'),
         findsOneWidget,
       );
-
-      // Header indicates operational status
-      expect(
-        find.text(
-          'Dispute resolution is not connected to a live financial processor.',
-        ),
-        findsOneWidget,
-      );
+      expect(find.text('Approve refund'), findsNothing);
     });
 
     testWidgets('Recommendations screen displays honest unavailable metrics and prevents mutations',

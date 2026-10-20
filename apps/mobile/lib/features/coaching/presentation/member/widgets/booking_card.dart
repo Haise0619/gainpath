@@ -211,14 +211,21 @@ class BookingCard extends StatelessWidget {
           ],
         );
       case BookingStatus.cancelled:
-        return SizedBox(
-          width: double.infinity,
-          child: OutlinedButton(
+        return Row(children: [
+          Expanded(
+              child: OutlinedButton(
             style: OutlinedButton.styleFrom(minimumSize: const Size(0, 42)),
             onPressed: onBookAgain,
             child: const Text('Book again'),
-          ),
-        );
+          )),
+          if (onMessage != null) ...[
+            const SizedBox(width: 8),
+            IconButton.outlined(
+                onPressed: onMessage,
+                tooltip: 'Booking message history',
+                icon: const Icon(Icons.chat_bubble_outline_rounded))
+          ]
+        ]);
     }
   }
 

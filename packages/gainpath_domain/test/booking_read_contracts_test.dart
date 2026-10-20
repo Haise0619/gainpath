@@ -51,6 +51,30 @@ Map<String, dynamic> page() => {
     };
 
 void main() {
+  test('options accept Coach configured advance windows from 1 through 30 days',
+      () {
+    for (final days in [1, 14, 30]) {
+      final json = {
+        ...options(),
+        'throughLocalDate': '2030-01-${(days + 1).toString().padLeft(2, '0')}'
+      };
+      expect(BookingOptionsContext.fromJson(json).throughLocalDate,
+          json['throughLocalDate']);
+    }
+    for (final last in ['2030-01-01', '2030-02-01']) {
+      expect(
+          () => BookingOptionsContext.fromJson(
+              {...options(), 'throughLocalDate': last}),
+          throwsFormatException);
+    }
+    expect(
+        () => BookingOptionsContext.fromJson({
+              ...options(),
+              'throughLocalDate': '2030-01-15',
+              'localDate': '2030-01-16'
+            }),
+        throwsFormatException);
+  });
   test('options preserve epochs and server labels with immutable collections',
       () {
     final json = options();

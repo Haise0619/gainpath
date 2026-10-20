@@ -1,5 +1,6 @@
 // Rebuild the existing Admin application. Never registers credentials or deploys Firebase.
 const fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypto'),{spawn}=require('node:child_process');
+const {versionLocalCode}=require('./cache-policy.cjs');
 const root=path.resolve(__dirname,'../..'),out=path.join(root,'build/admin-web/current');
 (async()=>{
  const fixturePath=process.env.GAINPATH_ADMIN_APP_CHECK_FIXTURE||path.join(root,'build/non-core-crud-sprint/module-8-activation/private/admin-web-app-check.json');
@@ -16,6 +17,9 @@ const root=path.resolve(__dirname,'../..'),out=path.join(root,'build/admin-web/c
  await new Promise(resolve=>log.end(resolve));if(code!==0)throw Error('Admin build failed; see sanitized build/admin-web/build.log');
  const file=path.join(out,'flutter_bootstrap.js'),bootstrap=fs.readFileSync(file,'utf8');
  fs.writeFileSync(file,bootstrap.replace(/_flutter\.loader\.load\(\{\s*serviceWorkerSettings:\s*\{\s*serviceWorkerVersion:\s*"[0-9]+"\s*\}\s*\}\);/,'_flutter.loader.load();'));
- const result={url:'http://localhost:7359/',backend:'firebase',project:'gainpath-0619',baseHref:'/',sha256:crypto.createHash('sha256').update(fs.readFileSync(path.join(out,'main.dart.js'))).digest('hex')};
+ const hash=crypto.createHash('sha256').update(fs.readFileSync(path.join(out,'main.dart.js'))).digest('hex');
+ const indexPath=path.join(out,'index.html'),versioned=versionLocalCode(fs.readFileSync(indexPath,'utf8'),fs.readFileSync(file,'utf8'),hash);
+ fs.writeFileSync(indexPath,versioned.index);fs.writeFileSync(file,versioned.bootstrap);
+ const result={url:'http://localhost:7359/',backend:'firebase',project:'gainpath-0619',baseHref:'/',sha256:hash};
  fs.writeFileSync(path.join(root,'build/admin-web/build-result.json'),JSON.stringify(result,null,2));console.log(JSON.stringify(result));
 })().catch(e=>{console.error(e.message?.includes('Admin build failed')?e.message:'Main Admin build failed; verify existing private build inputs.');process.exitCode=1;});

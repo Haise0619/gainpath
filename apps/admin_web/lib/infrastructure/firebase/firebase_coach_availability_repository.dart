@@ -4,7 +4,7 @@ import 'package:gainpath_domain/coaching.dart';
 import 'package:gainpath_domain/gainpath_domain.dart' show SessionScope;
 
 class FirebaseCoachAvailabilityRepository
-    implements CoachAvailabilityRepository {
+    implements CoachAvailabilityRepository, CoachRosterRepository {
   FirebaseCoachAvailabilityRepository(
       {required this.scope,
       required this.isCurrent,
@@ -75,6 +75,7 @@ class FirebaseCoachAvailabilityRepository
       'requestId': requestId,
       'localDate': baseline.localDate,
       'expectedRevision': baseline.revision,
+      'expectedRosterRevision': context.rosterRevision ?? 0,
       'expectedPolicyVersion': context.policyVersion,
       'expectedTimeZone': context.timeZone,
       'expectedCoachBranchIds': context.assignedBranchIds,
@@ -86,5 +87,28 @@ class FirebaseCoachAvailabilityRepository
       throw const CoachAvailabilityException('failed-precondition');
     }
     return result;
+  }
+
+  @override
+  Future<CoachRosterSnapshot> loadRoster({required String coachId}) async {
+    final result = CoachRosterSnapshot.fromJson(await _call(
+        'getCoachRosterCommand', {
+      'schemaVersion': 1,
+      'organizationId': scope.organizationId,
+      'coachId': coachId
+    }));
+    if (result.coachId != coachId) {
+      throw const CoachAvailabilityException('failed-precondition');
+    }
+    return result;
+  }
+
+  @override
+  Future<CoachRosterSnapshot> saveRoster(
+      {required CoachRosterSnapshot baseline,
+      required CoachWeeklyAvailability weeklyAvailability,
+      required List<CoachTimeException> exceptions,
+      required String requestId}) async {
+    throw const CoachAvailabilityException('permission-denied');
   }
 }

@@ -36,7 +36,7 @@ export async function getMemberBookingOptionsService(store: DocumentStore,
     const date = requestedDate === undefined ? localDate(now, policy.timeZone) : requestedDate as string;
     const day = await bookingDaySnapshot(tx, org, coachId, uid, date, policy, coach.assigned, now);
     const options: MemberBookingOption[] = [], labels = new Map(day.grid.boundaries.map(b => [b.atMillis, b.label]));
-    const dailyLimit = day.reservations.length >= policy.cap;
+    const dailyLimit = day.reservations.length >= policy.cap || (day.dailyCapacityMinutes !== undefined && day.blocked.size * 30 + durationMinutes > day.dailyCapacityMinutes);
     if (!dailyLimit) for (const start of day.grid.slots) {
       const end = start + durationMinutes * 60000;
       const window = day.windows.find(w => coach.permitted.includes(w.branchId) && w.startAtMillis <= start && w.endAtMillis >= end);

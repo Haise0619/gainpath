@@ -454,7 +454,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                       Icons.receipt_long_rounded,
                       AppColors.inkSoft,
                       'Refund requests',
-                      'Dispute resolution is unavailable in this release',
+                      'Review booking payments, bill recovery and Sandbox refunds',
                       onTap: widget.onOpenRefunds,
                     ),
                     const Divider(height: 1, indent: 62),

@@ -1,417 +1,553 @@
 import 'package:flutter/material.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
-import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:gainpath_domain/membership.dart';
+import '../../payment_review_repository.dart';
 
-/// AD-M11.7 — Process Refund Request. Promoted from a Dashboard-alert-only
-/// flow into a real sidebar destination: list and detail live in one
-/// page — a small in-page breadcrumb replaces the push+AppBar+back-button
-/// pattern the rest of this console has already moved away from. The
-/// Dashboard's "refund requests pending" alert jumps straight here.
+/// One payment review presentation for demo and session-scoped live repositories.
 class RefundsScreen extends StatefulWidget {
+  const RefundsScreen(
+      {super.key, this.live = false, this.repository, this.isCurrent});
   final bool live;
-  const RefundsScreen({super.key, this.live = false});
-
+  final PaymentReviewRepository? repository;
+  final bool Function()? isCurrent;
   @override
   State<RefundsScreen> createState() => RefundsScreenState();
 }
 
 class RefundsScreenState extends State<RefundsScreen> {
-  late final List<RefundClaim> _claims = [...context.read<MembershipRepository>().refundClaims];
-  RefundClaim? _selected;
+  late final PaymentReviewRepository? _repository = widget.repository ??
+      (widget.live ? null : EmptyPaymentReviewRepository());
+  PaymentReviewPage? _page;
+  PaymentReviewDetail? _selected;
+  String? _error;
+  bool _loading = false;
   bool _processing = false;
   String _query = '';
-
-  Future<void> _approve(RefundClaim claim) async {
-    if (widget.live) {
-      showToast(context, 'Refund approval is unavailable in this release.');
-      return;
-    }
-    setState(() => _processing = true);
-    await Future.delayed(const Duration(milliseconds: 1200));
-    if (!mounted) return;
-
-    // Simulate an occasional gateway timeout: the claim stays pending
-    // rather than silently failing, matching the doc's explicit edge case.
-    final timedOut = claim.id == 'CLM-3092';
-    if (timedOut) {
-      setState(() => _processing = false);
-      if (!mounted) return;
-      showDialog(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          icon: const Icon(Icons.wifi_off_rounded, color: AppColors.warning, size: 32),
-          title: const Text('Gateway did not respond'),
-          content: const Text(
-              'The reversal request timed out. The claim stays Pending — nothing has been charged or refunded. Try again shortly.'),
-          actions: [
-            FilledButton(onPressed: () => Navigator.pop(ctx), child: const Text('OK')),
-          ],
-        ),
-      );
-      return;
-    }
-
-    setState(() {
-      _processing = false;
-      _claims.remove(claim);
-      _selected = null;
-    });
-    showToast(context, 'Refund approved for ${claim.memberName}.');
+  String _filter = 'All';
+  final List<String?> _cursors = [null];
+  int _pageIndex = 0;
+  int _generation = 0;
+  bool get _current => widget.isCurrent?.call() ?? !widget.live;
+  @override
+  void initState() {
+    super.initState();
+    _load();
   }
 
-  Future<void> _reject(RefundClaim claim) async {
-    if (widget.live) {
-      showToast(context, 'Refund rejection is unavailable in this release.');
+  bool _valid(int generation) =>
+      mounted && _current && generation == _generation;
+  Future<void> _load() async {
+    if (_repository == null || !_current) return;
+    final generation = ++_generation;
+    setState(() {
+      _loading = true;
+      _error = null;
+      _page = null;
+    });
+    try {
+      final page = await _repository.load(afterId: _cursors[_pageIndex]);
+      if (_valid(generation)) setState(() => _page = page);
+    } catch (e) {
+      if (_valid(generation)) setState(() => _error = _message(e));
+    } finally {
+      if (_valid(generation)) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _open(PaymentReviewRecord record) async {
+    if (_processing || _loading || !_current) return;
+    final generation = ++_generation;
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final detail = await _repository!.detail(record.id);
+      if (_valid(generation)) setState(() => _selected = detail);
+    } catch (e) {
+      if (_valid(generation)) setState(() => _error = _message(e));
+    } finally {
+      if (_valid(generation)) setState(() => _loading = false);
+    }
+  }
+
+  String _message(Object error) => error is PaymentReviewException
+      ? error.toString()
+      : 'Payment review could not be loaded. Refresh and try again.';
+  Future<void> _action(String action, String label, String consequence,
+      {bool reason = false, String? identifier}) async {
+    if (_processing || _loading || !_current) return;
+    final bookingId = _selected!.payment.id;
+    setState(() => _processing = true);
+    final values = await showDialog<(String, String)>(
+        context: context,
+        builder: (_) => _PaymentActionDialog(
+            label: label,
+            consequence: consequence,
+            requireReason: reason,
+            identifier: identifier));
+    if (!mounted) return;
+    if (values == null || !_current) {
+      setState(() => _processing = false);
       return;
     }
-    final reason = await showDialog<String>(
-      context: context,
-      builder: (ctx) => _RejectClaimDialog(claim: claim),
-    );
-    if (reason != null && reason.isNotEmpty && mounted) {
-      setState(() {
-        _claims.remove(claim);
-        _selected = null;
-      });
-      showToast(context, 'Claim rejected. ${claim.memberName} has been notified.');
+    final generation = ++_generation;
+    setState(() => _error = null);
+    try {
+      final detail = await _repository!.manage(bookingId, action,
+          requestId:
+              '$bookingId-$action-${DateTime.now().microsecondsSinceEpoch}',
+          reason: reason ? values.$1 : null,
+          billId: action == 'recover_bill' ? values.$2 : null,
+          refundOrderId: action == 'recover_refund' ? values.$2 : null);
+      if (!_valid(generation)) return;
+      setState(() => _selected = detail);
+      // Refresh the current page so returning to the queue never shows stale state.
+      final page = await _repository.load(afterId: _cursors[_pageIndex]);
+      if (_valid(generation)) setState(() => _page = page);
+    } catch (e) {
+      if (_valid(generation)) setState(() => _error = _message(e));
+    } finally {
+      if (_valid(generation)) setState(() => _processing = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    if (!_current || _repository == null) {
+      return const Scaffold(
+          backgroundColor: Colors.transparent,
+          body: Center(
+              child: Text('Payment review requires a current Admin session.')));
+    }
     return Scaffold(
-      backgroundColor: Colors.transparent,
-      body: _selected == null ? _list(context) : _detail(context, _selected!),
-    );
+        backgroundColor: Colors.transparent,
+        body: LayoutBuilder(
+            builder: (context, constraints) => SingleChildScrollView(
+                padding: EdgeInsets.fromLTRB(
+                    constraints.maxWidth < 600 ? 16 : 28,
+                    24,
+                    constraints.maxWidth < 600 ? 16 : 28,
+                    40),
+                child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (_selected == null)
+                        ..._list(context)
+                      else
+                        ..._detail(context, _selected!),
+                    ]))));
   }
 
-  Widget _list(BuildContext context) {
-    final visible = _claims.where((c) {
-      if (_query.isEmpty) return true;
-      final q = _query.toLowerCase();
-      return c.memberName.toLowerCase().contains(q) || c.transactionType.toLowerCase().contains(q);
-    }).toList();
-    final totalDisputed = _claims.fold<double>(0, (sum, c) => sum + c.amount);
-
-    return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(28, 24, 28, 40),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('Refund disputes', style: Theme.of(context).textTheme.headlineMedium),
-          const SizedBox(height: 4),
-          Text(
-            widget.live
-                ? 'Dispute resolution is not connected to a live financial processor.'
-                : 'Pending refund claims, oldest first.',
-            style: Theme.of(context).textTheme.bodyLarge,
-          ),
-          const SizedBox(height: 18),
-          Row(
-            children: [
-              Expanded(
-                  child: StatTile(
-                      widget.live ? '—' : '${_claims.length}',
-                      'Pending claims',
-                      valueColor: widget.live ? AppColors.inkSoft : AppColors.danger)),
-              const SizedBox(width: 10),
-              Expanded(
-                  child: StatTile(
-                      widget.live ? '—' : 'RM ${totalDisputed.toStringAsFixed(0)}',
-                      'Total amount disputed')),
-            ],
-          ),
-          const SizedBox(height: 18),
-          TextField(
-            onChanged: (v) => setState(() => _query = v),
-            decoration: const InputDecoration(
-              isDense: true,
-              hintText: 'Search by member or transaction type',
-              prefixIcon: Icon(Icons.search_rounded, size: 19),
-            ),
-          ),
-          const SizedBox(height: 16),
-          if (visible.isEmpty)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 40),
-              child: Center(
-                child: Column(
-                  children: [
-                    const Icon(Icons.task_alt_rounded, size: 40, color: AppColors.hairline),
-                    const SizedBox(height: 14),
-                    Text(
-                        _claims.isEmpty
-                            ? (widget.live
-                                ? 'Refund dispute processing is unavailable in this release.'
-                                : 'No pending disputes. All caught up.')
-                            : 'No claims match that search.',
-                        style: Theme.of(context).textTheme.bodyMedium),
-                  ],
-                ),
-              ),
-            )
-          else
-            ...visible.map((c) => Padding(
-                  padding: const EdgeInsets.only(bottom: 10),
+  List<Widget> _feedback() => [
+        if (_loading || _processing)
+          const Padding(
+              padding: EdgeInsets.symmetric(vertical: 12),
+              child: LinearProgressIndicator()),
+        if (_error != null)
+          Padding(
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              child: Semantics(
+                  liveRegion: true,
                   child: Panel(
-                    onTap: () => setState(() => _selected = c),
-                    child: Row(
-                      children: [
-                        Container(
-                          width: 42,
-                          height: 42,
-                          decoration:
-                              BoxDecoration(color: AppColors.dangerTint, borderRadius: BorderRadius.circular(12)),
-                          child: const Icon(Icons.receipt_long_rounded, size: 19, color: AppColors.danger),
-                        ),
-                        const SizedBox(width: 14),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(c.memberName, style: Theme.of(context).textTheme.titleMedium),
-                              Text('${c.transactionType}  ·  ${c.reason}',
-                                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontSize: 12.5)),
-                            ],
-                          ),
-                        ),
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.end,
-                          children: [
-                            Text('RM ${c.amount.toStringAsFixed(2)}',
-                                style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
-                            const SizedBox(height: 4),
-                            statusPill(c.status.label),
-                          ],
-                        ),
-                        const SizedBox(width: 8),
-                        const Icon(Icons.arrow_forward_ios_rounded, size: 13, color: AppColors.inkSoft),
-                      ],
-                    ),
-                  ),
-                )),
-        ],
-      ),
-    );
-  }
-
-  Widget _detail(BuildContext context, RefundClaim claim) {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(28, 24, 28, 40),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              InkWell(
-                borderRadius: BorderRadius.circular(6),
-                onTap: () => setState(() => _selected = null),
-                child: Text('Refunds',
-                    style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                        color: AppColors.primary, fontWeight: FontWeight.w700)),
-              ),
-              const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 6),
-                child: Icon(Icons.chevron_right_rounded, size: 18, color: AppColors.inkSoft),
-              ),
-              Text(claim.id, style: Theme.of(context).textTheme.bodyLarge),
-            ],
-          ),
-          const SizedBox(height: 18),
-          LayoutBuilder(
-            builder: (context, constraints) {
-              final wide = constraints.maxWidth >= 900;
-              final claimPanel = _claimDetail(context, claim);
-              final historyPanel = _transactionHistory(context, claim);
-              return wide
-                  ? IntrinsicHeight(
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Expanded(flex: 3, child: claimPanel),
-                          const SizedBox(width: 16),
-                          Expanded(flex: 2, child: historyPanel),
-                        ],
-                      ),
-                    )
-                  : Column(children: [claimPanel, const SizedBox(height: 16), historyPanel]);
-            },
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _claimDetail(BuildContext context, RefundClaim claim) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
+                      background: AppColors.dangerTint,
+                      child: Text(_error!,
+                          style: const TextStyle(color: AppColors.danger))))),
+      ];
+  List<Widget> _list(BuildContext context) {
+    final records = _page?.records ?? [];
+    final visible = records.where((r) {
+      final match =
+          '${r.id} ${r.text('memberId')} ${r.text('coachName')} ${r.text('branchName')} ${r.text('billId')}'
+              .toLowerCase()
+              .contains(_query.toLowerCase());
+      return match &&
+          (_filter == 'All' ||
+              (_filter == 'Reconciliation' && r.needsReview) ||
+              (_filter == 'Refunds' && r.text('refundStatus').isNotEmpty) ||
+              (_filter == 'Pending payment' &&
+                  r.text('paymentStatus') == 'pending'));
+    }).toList();
+    return [
+      Text('Payment review & refunds',
+          style: Theme.of(context).textTheme.headlineMedium),
+      const SizedBox(height: 4),
+      Text(
+          '${widget.live ? 'Sandbox' : 'Not connected · Sandbox'} · Review booking payments, recover uncertain bills, and resolve refunds.',
+          style: Theme.of(context).textTheme.bodyLarge),
+      const SizedBox(height: 18),
+      Wrap(spacing: 10, runSpacing: 10, children: [
+        SizedBox(
+            width: 230,
+            child: StatTile(
+                _page == null || _repository is EmptyPaymentReviewRepository
+                    ? '—'
+                    : '${records.where((r) => r.needsReview).length}',
+                'Needs review · this page',
+                valueColor: AppColors.danger)),
+        SizedBox(
+            width: 230,
+            child: StatTile(
+                _page == null || _repository is EmptyPaymentReviewRepository
+                    ? '—'
+                    : 'RM ${(records.fold<int>(0, (sum, r) => sum + r.amountMinor) / 100).toStringAsFixed(2)}',
+                'Payment amount · this page')),
+      ]),
+      const SizedBox(height: 18),
+      TextField(
+          onChanged: (value) => setState(() => _query = value),
+          decoration: const InputDecoration(
+              labelText: 'Search this page',
+              hintText: 'Booking, member, coach, branch or bill ID',
+              prefixIcon: Icon(Icons.search_rounded))),
+      const SizedBox(height: 12),
+      Wrap(spacing: 8, runSpacing: 8, children: [
+        for (final filter in [
+          'All',
+          'Reconciliation',
+          'Refunds',
+          'Pending payment'
+        ])
+          ChoiceChip(
+              label: Text(filter),
+              selected: _filter == filter,
+              onSelected: (_) => setState(() => _filter = filter)),
+        OutlinedButton.icon(
+            onPressed: _loading || _processing ? null : _load,
+            icon: const Icon(Icons.refresh_rounded),
+            label: const Text('Refresh')),
+      ]),
+      ..._feedback(),
+      const SizedBox(height: 16),
+      if (!_loading && _error == null && visible.isEmpty)
         Panel(
-          background: AppColors.dangerTint,
-          child: Row(
-            children: [
-              const Icon(Icons.receipt_long_rounded, color: AppColors.danger, size: 22),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
+            child: Text(records.isEmpty
+                ? 'No booking payments on this page.'
+                : 'No payments match this page’s search and filter.')),
+      for (final record in visible)
+        Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: Panel(
+                onTap: _loading || _processing ? null : () => _open(record),
+                child: Row(children: [
+                  Container(
+                      width: 42,
+                      height: 42,
+                      decoration: BoxDecoration(
+                          color: AppColors.dangerTint,
+                          borderRadius: BorderRadius.circular(12)),
+                      child: const Icon(Icons.receipt_long_rounded,
+                          color: AppColors.danger, size: 19)),
+                  const SizedBox(width: 14),
+                  Expanded(
+                      child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                        Text(record.id,
+                            style: Theme.of(context).textTheme.titleMedium),
+                        Text(
+                            '${record.text('memberId')} · ${record.text('coachName')}'),
+                        Text(_status(record),
+                            style: Theme.of(context).textTheme.bodyMedium),
+                      ])),
+                  const SizedBox(width: 8),
+                  Text(record.amount,
+                      style: const TextStyle(fontWeight: FontWeight.w700)),
+                  const SizedBox(width: 8),
+                  const Icon(Icons.chevron_right_rounded, size: 18),
+                ]))),
+      const SizedBox(height: 14),
+      Wrap(
+          spacing: 12,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            OutlinedButton(
+                onPressed: _pageIndex == 0 || _loading || _processing
+                    ? null
+                    : () {
+                        setState(() => _pageIndex--);
+                        _load();
+                      },
+                child: const Text('Previous')),
+            Text(
+                'Page ${_pageIndex + 1} · search and counts apply to this page'),
+            OutlinedButton(
+                onPressed: _page?.nextAfterId == null || _loading || _processing
+                    ? null
+                    : () {
+                        final next = _page!.nextAfterId;
+                        setState(() {
+                          if (_cursors.length > _pageIndex + 1) {
+                            _cursors.removeRange(
+                                _pageIndex + 1, _cursors.length);
+                          }
+                          _cursors.add(next);
+                          _pageIndex++;
+                        });
+                        _load();
+                      },
+                child: const Text('Next')),
+          ]),
+    ];
+  }
+
+  String _label(String value) => value
+      .split('_')
+      .map((word) =>
+          word.isEmpty ? '' : '${word[0].toUpperCase()}${word.substring(1)}')
+      .join(' ');
+  String _status(PaymentReviewRecord r) =>
+      '${_label(r.text('paymentStatus'))} · ${_label(r.text('fulfilmentStatus'))}${r.text('refundStatus').isEmpty ? '' : ' · Refund ${_label(r.text('refundStatus'))}'}';
+  List<Widget> _detail(BuildContext context, PaymentReviewDetail detail) {
+    final r = detail.payment;
+    return [
+      Wrap(crossAxisAlignment: WrapCrossAlignment.center, children: [
+        TextButton(
+            onPressed: _processing || _loading
+                ? null
+                : () => setState(() {
+                      _selected = null;
+                      _error = null;
+                    }),
+            child: const Text('Refunds')),
+        const Icon(Icons.chevron_right_rounded, size: 18),
+        Text(r.id)
+      ]),
+      const SizedBox(height: 18),
+      Text(
+          '${widget.live ? 'Sandbox' : 'Not connected · Sandbox'} · No real-money refund is issued by this console.'),
+      ..._feedback(),
+      const SizedBox(height: 16),
+      LayoutBuilder(builder: (context, constraints) {
+        final summary =
+            Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Panel(
+              background: AppColors.dangerTint,
+              child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('RM ${claim.amount.toStringAsFixed(2)} disputed',
-                        style: Theme.of(context).textTheme.titleMedium),
-                    Text('Submitted ${_ago(claim.submitted)}', style: Theme.of(context).textTheme.bodyMedium),
-                  ],
-                ),
-              ),
-              statusPill(claim.status.label),
+                    Text(r.amount,
+                        style: Theme.of(context).textTheme.titleLarge),
+                    const SizedBox(height: 4),
+                    Text(_status(r))
+                  ])),
+          const SizedBox(height: 16),
+          const Eyebrow('Payment details'),
+          Panel(
+              child: Column(children: [
+            DetailRow('Member ID', r.text('memberId')),
+            const Divider(height: 20),
+            DetailRow('Coach / branch',
+                '${r.text('coachName')} / ${r.text('branchName')}'),
+            const Divider(height: 20),
+            DetailRow(
+                'Provider bill ID',
+                r.text('billId').isEmpty
+                    ? 'Unknown — recovery required'
+                    : r.text('billId')),
+            const Divider(height: 20),
+            DetailRow(
+                'Payment Order ID',
+                r.text('refundOrderId').isEmpty
+                    ? 'None recorded'
+                    : r.text('refundOrderId')),
+            const Divider(height: 20),
+            DetailRow(
+                'Resolution reason',
+                r.text('resolutionReason').isEmpty
+                    ? 'None recorded'
+                    : r.text('resolutionReason')),
+            if (r.text('reviewReason').isNotEmpty) ...[
+              const Divider(height: 20),
+              DetailRow('Admin reason', r.text('reviewReason'))
             ],
-          ),
-        ),
-        const SizedBox(height: 16),
-        const Eyebrow('Claim details'),
-        Panel(
-          child: Column(
-            children: [
-              DetailRow('Member', claim.memberName),
-              const Divider(height: 20),
-              DetailRow('Transaction', '${claim.transactionId} · ${claim.transactionType}'),
-              const Divider(height: 20),
-              DetailRow('Reason given', claim.reason),
-              const Divider(height: 20),
-              DetailRow('Amount', 'RM ${claim.amount.toStringAsFixed(2)}'),
+          ])),
+          const SizedBox(height: 20),
+          Wrap(spacing: 12, runSpacing: 12, children: [
+            if (r.text('billId').isNotEmpty)
+              _button(
+                  'Verify payment',
+                  () => _action('verify', 'Verify payment',
+                      'Read provider status and reconcile this booking. This does not create another bill.')),
+            if (r.text('billId').isEmpty &&
+                r.text('paymentStatus') == 'pending')
+              _button(
+                  'Recover bill',
+                  () => _action('recover_bill', 'Recover bill',
+                      'Attach an existing provider bill only after the server verifies its booking reference, collection and amount. This never creates another bill.',
+                      reason: true, identifier: 'Provider bill ID')),
+            if (r.canDecide) ...[
+              if (r.text('refundStatus') != 'approved')
+                _button(
+                    'Approve refund',
+                    () => _action('approve_refund', 'Approve refund',
+                        'Record approval for this paid reconciliation case. Approval alone does not issue a refund or restore the booking.',
+                        reason: true)),
+              _button(
+                  'Reject refund',
+                  () => _action('reject_refund', 'Reject refund',
+                      'Record rejection and its reason. The paid booking remains in reconciliation for follow-up.',
+                      reason: true)),
             ],
-          ),
-        ),
-        const SizedBox(height: 16),
-        const Eyebrow('Member notes'),
-        Panel(child: Text(claim.notes, style: const TextStyle(fontSize: 14.5, height: 1.5))),
-        const SizedBox(height: 20),
-        Row(
-          children: [
-            Expanded(
-              child: OutlinedButton(
-                style: OutlinedButton.styleFrom(foregroundColor: AppColors.danger, minimumSize: const Size(0, 48)),
-                onPressed: _processing ? null : () => _reject(claim),
-                child: const FittedBox(fit: BoxFit.scaleDown, child: Text('Reject', maxLines: 1)),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: FilledButton(
-                style: FilledButton.styleFrom(minimumSize: const Size(0, 48)),
-                onPressed: _processing ? null : () => _approve(claim),
-                child: _processing
-                    ? const SizedBox(
-                        width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2.4, color: Colors.white))
-                    : const FittedBox(fit: BoxFit.scaleDown, child: Text('Approve refund', maxLines: 1)),
-              ),
-            ),
-          ],
-        ),
-      ],
-    );
+            if (r.text('refundStatus') == 'approved' &&
+                detail.refundExecutionAvailable)
+              _button(
+                  'Execute sandbox refund',
+                  () => _action('execute_refund', 'Execute sandbox refund',
+                      'Create a Sandbox Payment Order using dummy-bank details. This simulates a refund and never moves real money. Do not repeat while the outcome is uncertain.',
+                      reason: true)),
+            if (['processing', 'uncertain']
+                .contains(r.text('refundStatus'))) ...[
+              if (r.text('refundOrderId').isNotEmpty)
+                _button(
+                    'Check refund status',
+                    () => _action('check_refund', 'Check refund status',
+                        'Read the existing Payment Order status without creating another refund.')),
+              if (r.text('refundOrderId').isEmpty)
+                _button(
+                    'Recover Payment Order',
+                    () => _action('recover_refund', 'Recover Payment Order',
+                        'Attach an existing Sandbox Payment Order. The server verifies the collection, refund reference, full amount and dummy destination before checking status.',
+                        reason: true, identifier: 'Provider Payment Order ID')),
+            ],
+          ]),
+          if (!detail.refundExecutionAvailable)
+            const Padding(
+                padding: EdgeInsets.only(top: 12),
+                child: Text(
+                    'Sandbox refund execution is not configured. Approval records a decision only.')),
+        ]);
+        final history =
+            Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          const Eyebrow('Payment history · most recent 100 events'),
+          Panel(
+              child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                if (detail.events.isEmpty)
+                  const Text('No payment events recorded.'),
+                for (final event in detail.events)
+                  Padding(
+                      padding: const EdgeInsets.only(bottom: 14),
+                      child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                                '${event['event'] ?? 'Payment event'}'
+                                    .replaceAll('_', ' '),
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.w600)),
+                            Text(_time(event['atMillis'])),
+                            if (event['actorId'] != null)
+                              Text('Admin: ${event['actorId']}'),
+                            if (event['reason'] != null)
+                              Text('${event['reason']}'),
+                          ])),
+              ]))
+        ]);
+        return constraints.maxWidth >= 900
+            ? Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Expanded(flex: 3, child: summary),
+                const SizedBox(width: 16),
+                Expanded(flex: 2, child: history)
+              ])
+            : Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [summary, const SizedBox(height: 16), history]);
+      }),
+      const SizedBox(height: 16),
+      OutlinedButton.icon(
+          onPressed: _processing || _loading ? null : () => _open(r),
+          icon: const Icon(Icons.refresh_rounded),
+          label: const Text('Refresh payment')),
+    ];
   }
 
-  Widget _transactionHistory(BuildContext context, RefundClaim claim) {
-    final related = context.read<MembershipRepository>().transactions.where((t) => t.id != claim.transactionId).take(3).toList();
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Eyebrow('Transaction history'),
-        Panel(
-          padding: EdgeInsets.zero,
-          child: Column(
-            children: List.generate(related.length, (i) {
-              final t = related[i];
-              return Column(
-                children: [
-                  if (i > 0) const Divider(height: 1, indent: 16),
-                  ListTile(
-                    dense: true,
-                    title: Text(t.type, style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600)),
-                    subtitle: Text(t.id, style: const TextStyle(fontSize: 12)),
-                    trailing: Text('RM ${t.amount.toStringAsFixed(2)}',
-                        style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
-                  ),
-                ],
-              );
-            }),
-          ),
-        ),
-      ],
-    );
-  }
-
-  String _ago(DateTime d) {
-    final days = DateTime.now().difference(d).inDays;
-    if (days == 0) return 'today';
-    if (days == 1) return '1 day ago';
-    return '$days days ago';
-  }
+  Widget _button(String label, VoidCallback onPressed) => OutlinedButton(
+      onPressed: _processing || _loading ? null : onPressed,
+      style: OutlinedButton.styleFrom(minimumSize: const Size(0, 48)),
+      child: Text(label));
+  String _time(dynamic millis) => millis is num && millis > 0
+      ? DateTime.fromMillisecondsSinceEpoch(millis.toInt()).toLocal().toString()
+      : 'Time unavailable';
 }
 
-class _RejectClaimDialog extends StatefulWidget {
-  final RefundClaim claim;
-  const _RejectClaimDialog({required this.claim});
-
+class _PaymentActionDialog extends StatefulWidget {
+  const _PaymentActionDialog(
+      {required this.label,
+      required this.consequence,
+      required this.requireReason,
+      this.identifier});
+  final String label, consequence;
+  final bool requireReason;
+  final String? identifier;
   @override
-  State<_RejectClaimDialog> createState() => _RejectClaimDialogState();
+  State<_PaymentActionDialog> createState() => _PaymentActionDialogState();
 }
 
-class _RejectClaimDialogState extends State<_RejectClaimDialog> {
+class _PaymentActionDialogState extends State<_PaymentActionDialog> {
+  final _form = GlobalKey<FormState>();
   final _reason = TextEditingController();
-  String? _error;
-
+  final _identifier = TextEditingController();
   @override
   void dispose() {
     _reason.dispose();
+    _identifier.dispose();
     super.dispose();
   }
 
   @override
-  Widget build(BuildContext context) {
-    return AdminDialog(
-      width: 400,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('Reject this claim?', style: Theme.of(context).textTheme.titleLarge),
-          const SizedBox(height: 6),
-          Text('The invoice reverts to its original state and ${widget.claim.memberName} is notified.',
-              style: Theme.of(context).textTheme.bodyMedium),
-          const SizedBox(height: 16),
-          TextField(
-            controller: _reason,
-            maxLines: 3,
-            autofocus: true,
-            decoration: InputDecoration(hintText: 'Reason shown to the member', errorText: _error, isDense: true),
-          ),
-          const SizedBox(height: 18),
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: FilledButton(
-                  style: FilledButton.styleFrom(backgroundColor: AppColors.danger),
-                  onPressed: () {
-                    if (_reason.text.trim().isEmpty) {
-                      setState(() => _error = 'A reason is required.');
-                      return;
-                    }
-                    Navigator.pop(context, _reason.text.trim());
-                  },
-                  child: const Text('Reject claim'),
-                ),
-              ),
-            ],
-          ),
+  Widget build(BuildContext context) => AlertDialog(
+        title: Text(widget.label),
+        content: SizedBox(
+            width: 420,
+            child: SingleChildScrollView(
+                child: Form(
+                    key: _form,
+                    child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(widget.consequence),
+                          if (widget.identifier != null) ...[
+                            const SizedBox(height: 16),
+                            TextFormField(
+                                controller: _identifier,
+                                decoration: InputDecoration(
+                                    labelText: widget.identifier),
+                                validator: (v) => v == null || v.trim().isEmpty
+                                    ? 'Provider ID is required.'
+                                    : null)
+                          ],
+                          if (widget.requireReason) ...[
+                            const SizedBox(height: 16),
+                            TextFormField(
+                                controller: _reason,
+                                minLines: 2,
+                                maxLines: 4,
+                                maxLength: 500,
+                                decoration: const InputDecoration(
+                                    labelText: 'Admin reason',
+                                    helperText:
+                                        'Saved in the payment audit history.'),
+                                validator: (v) => v == null || v.trim().isEmpty
+                                    ? 'A reason is required.'
+                                    : v.trim().length < 5
+                                        ? 'Enter at least 5 characters.'
+                                        : null)
+                          ],
+                        ])))),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel')),
+          FilledButton(
+              onPressed: () {
+                if (_form.currentState!.validate()) {
+                  Navigator.pop(
+                      context, (_reason.text.trim(), _identifier.text.trim()));
+                }
+              },
+              child: const Text('Confirm'))
         ],
-      ),
-    );
-  }
+      );
 }
