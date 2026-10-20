@@ -25,6 +25,7 @@ class CoachRosterScreen extends StatefulWidget {
       this.details = const {},
       this.onMessage,
       this.onNotes,
+      this.onCancel,
       this.showAllDates = false,
       this.onOpenMessages,
       this.todayLocalDate,
@@ -35,6 +36,7 @@ class CoachRosterScreen extends StatefulWidget {
   final Widget? header;
   final void Function(Booking)? onMessage;
   final void Function(Booking)? onNotes;
+  final void Function(Booking)? onCancel;
   final bool showAllDates;
   final VoidCallback? onOpenMessages;
   final String? todayLocalDate;
@@ -480,6 +482,9 @@ class _CoachRosterScreenState extends State<CoachRosterScreen>
                           onNotes: widget.onNotes == null
                               ? null
                               : () => widget.onNotes!(visible[i]),
+                          onCancel: widget.onCancel == null
+                              ? null
+                              : () => widget.onCancel!(visible[i]),
                           isLast: i == visible.length - 1,
                           showConnector: !filtering,
                         ),
@@ -508,6 +513,7 @@ class _TimelineRow extends StatelessWidget {
   final Widget? details;
   final VoidCallback? onMessage;
   final VoidCallback? onNotes;
+  final VoidCallback? onCancel;
   final bool isLast;
   final bool showConnector;
   const _TimelineRow(
@@ -517,6 +523,7 @@ class _TimelineRow extends StatelessWidget {
       this.details,
       this.onMessage,
       this.onNotes,
+      this.onCancel,
       required this.isLast,
       required this.showConnector});
 
@@ -561,7 +568,8 @@ class _TimelineRow extends StatelessWidget {
                   statusLabel: statusLabel,
                   details: details,
                   onMessage: onMessage,
-                  onNotes: onNotes),
+                  onNotes: onNotes,
+                  onCancel: onCancel),
             ),
           ),
         ],
@@ -787,13 +795,15 @@ class _SessionCard extends StatelessWidget {
   final Widget? details;
   final VoidCallback? onMessage;
   final VoidCallback? onNotes;
+  final VoidCallback? onCancel;
   const _SessionCard(
       {required this.booking,
       this.live = false,
       this.statusLabel,
       this.details,
       this.onMessage,
-      this.onNotes});
+      this.onNotes,
+      this.onCancel});
 
   @override
   Widget build(BuildContext context) {
@@ -929,7 +939,7 @@ class _SessionCard extends StatelessWidget {
                                     ),
                                     tooltip: 'Cancel session',
                                     onPressed: live
-                                        ? null
+                                        ? (onCancel != null && booking.status == BookingStatus.confirmed ? onCancel : null)
                                         : () => confirmSheet(context,
                                             title: 'Cancel this session?',
                                             message:

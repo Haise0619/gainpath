@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:gainpath_domain/gainpath_domain.dart';
 import 'package:gainpath_domain/coaching.dart'
-    show Booking, BookingCommunicationRepository, ConsultationNotesRepository;
+    show Booking, BookingCommunicationRepository, ConsultationNotesRepository, CoachBookingCancellationRepository;
 import '../coach/consultation_notes_screen.dart';
 import '../../application/live_booking_cubit.dart';
 import '../member/booking_schedule_screen.dart';
@@ -19,6 +19,7 @@ class LiveBookingListView extends StatefulWidget {
       required this.repository,
       required this.isCurrent,
       this.cancellation,
+      this.coachCancellation,
       this.onPayment,
       this.communication,
       this.notes,
@@ -29,6 +30,7 @@ class LiveBookingListView extends StatefulWidget {
   final void Function(String bookingId)? onPayment;
   final bool Function() isCurrent;
   final BookingCancellationRepository? cancellation;
+  final CoachBookingCancellationRepository? coachCancellation;
   final BookingCommunicationRepository? communication;
   final ConsultationNotesRepository? notes;
   final Future<String?> Function(String coachId)? loadCoachName;
@@ -90,6 +92,102 @@ class _LiveBookingListViewState extends State<LiveBookingListView> {
     }
     if (await cancellation.cancel(bookingId) && mounted) {
       await controller.refresh();
+    }
+  }
+
+  Future<void> _cancelCoachBooking(Booking booking) async {
+    if (widget.coachCancellation == null || !widget.isCurrent()) return;
+    final reasonController = TextEditingController();
+    String? validationError;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Cancel confirmed session?'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Cancel session with ' + booking.memberName + ' on ' +
+                    booking.start.toLocal().toString().substring(0, 16) + '?' +
+                    '\nThe member will be notified, slot lock released, and refund review queued.',
+                style: const TextStyle(fontSize: 13),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: reasonController,
+                autofocus: true,
+                maxLines: 3,
+                maxLength: 500,
+                decoration: InputDecoration(
+                  labelText: 'Cancellation reason *',
+                  hintText: 'e.g. Schedule emergency or illness',
+                  errorText: validationError,
+                  border: const OutlineInputBorder(),
+                ),
+                onChanged: (_) {
+                  if (validationError != null) {
+                    setDialogState(() => validationError = null);
+                  }
+                },
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('Keep session'),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.danger,
+                foregroundColor: Colors.white,
+              ),
+              onPressed: () {
+                final text = reasonController.text.trim();
+                if (text.isEmpty) {
+                  setDialogState(() => validationError = 'Reason is required');
+                  return;
+                }
+                Navigator.pop(dialogContext, true);
+              },
+              child: const Text('Cancel session'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (confirmed != true || !mounted || !widget.isCurrent()) return;
+
+    final reason = reasonController.text.trim();
+    final requestId = 'coach-cancel-' + DateTime.now().millisecondsSinceEpoch.toString() + '-' + booking.id.hashCode.abs().toString();
+
+    try {
+      final res = await widget.coachCancellation!.cancel(
+        bookingId: booking.id,
+        requestId: requestId,
+        reason: reason,
+      );
+      if (!mounted || !widget.isCurrent()) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(res.outcome == 'already_cancelled'
+              ? 'Session was already cancelled.'
+              : 'Session cancelled. Slot released.'),
+        ),
+      );
+      await controller.refresh();
+    } catch (e) {
+      if (!mounted || !widget.isCurrent()) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to cancel session: ' + e.toString()),
+          backgroundColor: AppColors.danger,
+        ),
+      );
     }
   }
 
@@ -212,6 +310,7 @@ class _LiveBookingListViewState extends State<LiveBookingListView> {
               return CoachRosterScreen(
                   showAllDates: controller.recentHistory,
                   onNotes: widget.notes == null ? null : _notes,
+                  onCancel: widget.coachCancellation == null ? null : _cancelCoachBooking,
                   onOpenMessages: widget.communication == null
                       ? null
                       : () => Navigator.push(

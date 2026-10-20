@@ -15,25 +15,34 @@ export interface PersistedBookingRecord {
   resolvedAtMillis?: number; resolution?: BookingResolution;
   startLabel: string; endLabel: string; expiryLabel: string;
   memberDisplayName?: string;
+  cancellationReason?: string;
+  cancelledBy?: string;
 }
 export interface BookingPage { schemaVersion: 1; serverNowMillis: number; timeZone: string; firstLocalDate: string; throughLocalDate: string; records: PersistedBookingRecord[]; nextCursor?: BookingCursor }
 const review = () => new DomainError('failed-precondition', 'Stored bookings need authorized review.');
 function after(a: BookingCursor, b: BookingCursor) { return a.startAtMillis > b.startAtMillis || (a.startAtMillis === b.startAtMillis && a.bookingId > b.bookingId); }
-function project(row: { path: string; data: DocumentData }, q: BookingQuery): PersistedBookingRecord {
+function project(row: { path: string; data: DocumentData }, q: BookingQuery, includeCancellationDetails = false): PersistedBookingRecord {
   try {
     const d = storedBooking(row.data, q.organizationId, String(row.data.bookingId));
     if (row.path !== `orgs/${q.organizationId}/bookings/${d.bookingId}` || d[q.ownerField] !== q.ownerId
       || (q.branchIds && !q.branchIds.includes(d.branchId)) || d.startAtMillis < q.firstStartAtMillis || d.startAtMillis >= q.throughStartAtMillis) throw review();
     const formatter = new Intl.DateTimeFormat('en-GB', { timeZone: d.timeZone, hour: '2-digit', minute: '2-digit', hourCycle: 'h23', timeZoneName: 'shortOffset' });
     const { createdBy: _private, ...publicData } = d;
+    if (d.status === 'cancelled' && d.resolution === 'coach_cancelled' && !includeCancellationDetails) {
+      delete (publicData as any).resolution;
+      delete (publicData as any).resolvedAtMillis;
+      delete (publicData as any).cancellationReason;
+      delete (publicData as any).cancelledBy;
+    }
     return { ...publicData, startLabel: formatter.format(Number(d.startAtMillis)), endLabel: formatter.format(Number(d.endAtMillis)),
       expiryLabel: `${localDate(Number(d.holdExpiresAtMillis), d.timeZone)} ${formatter.format(Number(d.holdExpiresAtMillis))}` } as unknown as PersistedBookingRecord;
   } catch { throw review(); }
 }
 export async function getBookingListService(store: DocumentStore, auth: { uid: string; token: Record<string, unknown> } | undefined, raw: unknown, reader: BookingQueryReader, clock = Date.now): Promise<BookingPage> {
   requireVerifiedEmail(auth);
-  const input = object(raw); allowed(input, ['schemaVersion', 'organizationId', 'coachId', 'firstLocalDate', 'dayCount', 'cursor', 'includeParticipantNames']);
+  const input = object(raw); allowed(input, ['schemaVersion', 'organizationId', 'coachId', 'firstLocalDate', 'dayCount', 'cursor', 'includeParticipantNames', 'includeCancellationDetails']);
   if (input.includeParticipantNames !== undefined && typeof input.includeParticipantNames !== 'boolean') throw new InputValidationError('includeParticipantNames must be a boolean.');
+  if (input.includeCancellationDetails !== undefined && typeof input.includeCancellationDetails !== 'boolean') throw new InputValidationError('includeCancellationDetails must be a boolean.');
   if (input.schemaVersion !== 1) throw new InputValidationError('schemaVersion 1 is required.');
   const org = requiredIdentifier(input.organizationId, 'organizationId'), uid = requiredIdentifier(auth!.uid, 'actorId');
   const selectedCoach = input.coachId === undefined ? undefined : requiredIdentifier(input.coachId, 'coachId');
@@ -73,7 +82,8 @@ export async function getBookingListService(store: DocumentStore, auth: { uid: s
   const current = await store.transact(scope);
   if (JSON.stringify(before) !== JSON.stringify(current)) throw new DomainError('permission-denied', 'Booking access changed. Refresh the current account scope.');
   if (!Array.isArray(rows) || rows.length > 21) throw review();
-  const projected = rows.map(r => project(r, q));
+  const includeCancellationDetails = input.includeCancellationDetails === true;
+  const projected = rows.map(r => project(r, q, includeCancellationDetails));
   const ids = new Set<string>();
   let previous = cursor;
   for (const r of projected) {

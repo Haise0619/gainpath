@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../infrastructure/firebase/firebase_consultation_notes_repository.dart';
+import '../../infrastructure/firebase/firebase_coach_booking_cancellation_repository.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:gainpath_domain/gainpath_domain.dart'
     show AuthSession, SessionScope;
@@ -106,6 +107,8 @@ Widget buildFirebaseCoachShell(AuthSession session,
             liveRosterBuilder: (_) => LiveBookingListView(
                 notes:
                     FirebaseConsultationNotesRepository(scope: session.scope, isCurrent: isCurrent),
+                coachCancellation:
+                    FirebaseCoachBookingCancellationRepository(scope: session.scope, isCurrent: isCurrent),
                 communication: FirebaseBookingCommunicationRepository(scope: session.scope, isCurrent: isCurrent),
                 title: 'Roster',
                 coachId: session.userId,

@@ -22,9 +22,11 @@ legacy.Booking persistedBookingPresentation(
       fee: 0,
       cancellationReason: record.resolution == 'hold_expired'
           ? 'Hold expired'
-          : record.resolution == null
-              ? null
-              : 'Member cancellation');
+          : record.resolution == 'coach_cancelled'
+              ? (record.cancellationReason ?? 'Coach cancellation')
+              : record.resolution == null
+                  ? null
+                  : 'Member cancellation');
 }
 
 DateTime _calendarTime(String date, String label) {

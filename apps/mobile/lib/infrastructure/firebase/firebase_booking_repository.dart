@@ -177,6 +177,7 @@ class FirebaseBookingListRepository implements BookingListRepository {
           await _transport.call('getBookingListCommand', {
             'schemaVersion': 1,
             'includeParticipantNames': true,
+            'includeCancellationDetails': true,
             'organizationId': scope.organizationId,
             if (coachId != null) 'coachId': coachId,
             if (firstLocalDate != null) 'firstLocalDate': firstLocalDate,

@@ -200,7 +200,9 @@ class PersistedBookingRecord {
       required this.startLabel,
       required this.endLabel,
       required this.expiryLabel,
-      this.memberDisplayName}) {
+      this.memberDisplayName,
+      this.cancellationReason,
+      this.cancelledBy}) {
     if (memberDisplayName != null) bookingText(memberDisplayName, max: 120);
     for (final id in [
       bookingId,
@@ -229,15 +231,31 @@ class PersistedBookingRecord {
         resolution != null ||
         status == BookingStatus.expired) {
       bookingInt(resolvedAtMillis);
-      if (resolvedAtMillis! < createdAtMillis ||
-          (status == BookingStatus.cancelled
-              ? resolution != 'member_cancelled' ||
-                  resolvedAtMillis! >= holdExpiresAtMillis
-              : status != BookingStatus.expired ||
-                  resolution != 'hold_expired' ||
-                  resolvedAtMillis! < holdExpiresAtMillis)) {
+      if (resolvedAtMillis! < createdAtMillis) {
         invalidBookingData();
       }
+      if (status == BookingStatus.cancelled) {
+        if (resolution == 'member_cancelled') {
+          if (resolvedAtMillis! >= holdExpiresAtMillis) invalidBookingData();
+        } else if (resolution == 'coach_cancelled') {
+          if (resolvedAtMillis! > startAtMillis) invalidBookingData();
+        } else if (resolution != null) {
+          invalidBookingData();
+        }
+      } else if (status == BookingStatus.expired) {
+        if (resolution != 'hold_expired' ||
+            resolvedAtMillis! < holdExpiresAtMillis) {
+          invalidBookingData();
+        }
+      } else {
+        invalidBookingData();
+      }
+    }
+    if (cancellationReason != null) {
+      bookingText(cancellationReason!, max: 500, multiline: true);
+    }
+    if (cancelledBy != null) {
+      _bookingIdValue(cancelledBy!);
     }
   }
   final String bookingId,
@@ -261,6 +279,8 @@ class PersistedBookingRecord {
   final int? resolvedAtMillis;
   final String? resolution;
   final String? memberDisplayName;
+  final String? cancellationReason;
+  final String? cancelledBy;
   int get schemaVersion => 1;
   String get rawStatus => _rawStatus(status);
   DateTime get startAt =>
@@ -293,7 +313,9 @@ class PersistedBookingRecord {
     ], [
       'resolvedAtMillis',
       'resolution',
-      'memberDisplayName'
+      'memberDisplayName',
+      'cancellationReason',
+      'cancelledBy'
     ]);
     if ((data.containsKey('resolvedAtMillis') &&
             data['resolvedAtMillis'] == null) ||
@@ -326,7 +348,14 @@ class PersistedBookingRecord {
         expiryLabel: bookingText(data['expiryLabel'], max: 80),
         memberDisplayName: data['memberDisplayName'] == null
             ? null
-            : bookingText(data['memberDisplayName'], max: 120));
+            : bookingText(data['memberDisplayName'], max: 120),
+        cancellationReason: data['cancellationReason'] == null
+            ? null
+            : bookingText(data['cancellationReason'],
+                max: 500, multiline: true),
+        cancelledBy: data['cancelledBy'] == null
+            ? null
+            : _bookingIdValue(data['cancelledBy']));
   }
   Map<String, dynamic> toJson() => {
         'bookingId': bookingId,
@@ -348,6 +377,8 @@ class PersistedBookingRecord {
         if (resolvedAtMillis != null) 'resolvedAtMillis': resolvedAtMillis,
         if (resolution != null) 'resolution': resolution,
         if (memberDisplayName != null) 'memberDisplayName': memberDisplayName,
+        if (cancellationReason != null) 'cancellationReason': cancellationReason,
+        if (cancelledBy != null) 'cancelledBy': cancelledBy,
         'startLabel': startLabel,
         'endLabel': endLabel,
         'expiryLabel': expiryLabel
