@@ -41,11 +41,14 @@ int bookingDuration(dynamic value) {
   return value;
 }
 
-String bookingText(dynamic value, {int max = 100}) {
+String bookingText(dynamic value, {int max = 100, bool multiline = false}) {
+  final pattern = multiline
+      ? RegExp(r'[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]')
+      : RegExp(r'[\x00-\x1F\x7F]');
   if (value is! String ||
       value.trim().isEmpty ||
       value.length > max ||
-      RegExp(r'[\x00-\x1F\x7F]').hasMatch(value)) {
+      pattern.hasMatch(value)) {
     invalidBookingData();
   }
   return value;

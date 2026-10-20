@@ -33,7 +33,7 @@ class ConsultationNotesResult {
     if (data['note'] != null) {
       final note = Map<String, dynamic>.from(data['note'] as Map);
       wire.bookingShape(note, ['text', 'publishedAtMillis']);
-      text = wire.bookingText(note['text'], max: 5000);
+      text = wire.bookingText(note['text'], max: 5000, multiline: true);
       published = wire.bookingInt(note['publishedAtMillis']);
       if (data['status'] != 'completed' || data['canPublish'] == true) {
         wire.invalidBookingData();

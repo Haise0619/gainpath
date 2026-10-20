@@ -93,4 +93,25 @@ void main() {
     await tester.pump();
     expect(find.text('Saved consultation.'), findsNothing);
   });
+  testWidgets('publishes and reloads multiline formatted notes with newlines',
+      (tester) async {
+    const multilineText = 'Session focus: good\n\n'
+        'Coach observations: good\n\n'
+        'Technique cues covered: good\n\n'
+        'Next session recommendations: good';
+    final repo = NotesFake()
+      ..result = const ConsultationNotesResult(
+          bookingId: 'booking-1',
+          status: 'completed',
+          canPublish: false,
+          text: multilineText,
+          publishedAtMillis: 1792466515934);
+    await tester.pumpWidget(MaterialApp(
+        home: ConsultationNotesScreen(
+            booking: booking, repository: repo, isCurrent: () => true)));
+    await tester.pumpAndSettle();
+    expect(find.text(multilineText), findsOneWidget);
+    expect(find.text('Published notes'), findsOneWidget);
+    expect(find.text('Publish notes'), findsNothing);
+  });
 }
