@@ -30,11 +30,12 @@ export async function getClientPostureHistory(
 ): Promise<ClientPostureResult> {
   requireVerifiedEmail(auth);
   const input = object(raw);
-  allowed(input, ['schemaVersion', 'organizationId', 'memberId']);
+  allowed(input, ['schemaVersion', 'organizationId', 'memberId', 'bookingId']);
   if (input.schemaVersion !== 1) throw new InputValidationError('schemaVersion 1 is required.');
   const org = requiredIdentifier(input.organizationId, 'organizationId');
   const memberId = requiredIdentifier(input.memberId, 'memberId');
   const coachUid = requiredIdentifier(auth!.uid, 'actorId');
+  const bookingId = typeof input.bookingId === 'string' && input.bookingId.trim() ? input.bookingId.trim() : undefined;
 
   return store.transact(async tx => {
     const coachActor = await currentBookingMembership(tx, org, coachUid);
@@ -46,6 +47,39 @@ export async function getClientPostureHistory(
 
     if (coachActor.branchIds.length === 0) {
       throw new DomainError('permission-denied', 'Active coach branch assignment is required.');
+    }
+
+    // Verify coach-client booking relationship before accessing client workout consent/data
+    if (!bookingId) {
+      return {
+        schemaVersion: 1,
+        memberId,
+        authorized: false,
+        sharingStatus: 'unauthorized_relationship',
+        measurementsStatus: 'measurements_pending_validation',
+        message: 'A confirmed booking reference is required to verify the coaching relationship.',
+        sessions: [],
+      };
+    }
+
+    const bookingDoc = await tx.get(`orgs/${org}/bookings/${bookingId}`);
+    if (
+      !bookingDoc ||
+      bookingDoc.schemaVersion !== 1 ||
+      bookingDoc.organizationId !== org ||
+      bookingDoc.coachId !== coachUid ||
+      bookingDoc.memberId !== memberId ||
+      (bookingDoc.status !== 'confirmed' && bookingDoc.status !== 'completed')
+    ) {
+      return {
+        schemaVersion: 1,
+        memberId,
+        authorized: false,
+        sharingStatus: 'unauthorized_relationship',
+        measurementsStatus: 'measurements_pending_validation',
+        message: 'No active or completed booking relationship found for this member and session.',
+        sessions: [],
+      };
     }
 
     const consentDoc = await tx.get(`orgs/${org}/workoutConsents/${memberId}`);

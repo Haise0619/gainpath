@@ -9,7 +9,7 @@ class FakeClientPostureRepository implements ClientPostureRepository {
   final ClientPostureResult result;
 
   @override
-  Future<ClientPostureResult> loadPostureHistory(String memberId) async {
+  Future<ClientPostureResult> loadPostureHistory(String memberId, {String? bookingId}) async {
     return result;
   }
 }

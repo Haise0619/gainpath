@@ -14,12 +14,14 @@ import 'package:gainpath_domain/coaching.dart'
 class ClientPostureScreen extends StatelessWidget {
   final String name;
   final String? memberId;
+  final String? bookingId;
   final ClientPostureRepository? repository;
 
   const ClientPostureScreen({
     super.key,
     required this.name,
     this.memberId,
+    this.bookingId,
     this.repository,
   });
 
@@ -36,7 +38,7 @@ class ClientPostureScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     if (repository != null && memberId != null) {
       return FutureBuilder<ClientPostureResult>(
-        future: repository!.loadPostureHistory(memberId!),
+        future: repository!.loadPostureHistory(memberId!, bookingId: bookingId),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return Scaffold(

@@ -291,6 +291,7 @@ class _LiveBookingListViewState extends State<LiveBookingListView> {
         builder: (_) => ClientPostureScreen(
           name: booking.memberName,
           memberId: memberId,
+          bookingId: booking.id,
           repository: widget.posture,
         ),
       ),

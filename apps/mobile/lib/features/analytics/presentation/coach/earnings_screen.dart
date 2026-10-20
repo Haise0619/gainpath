@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'dart:io';
+import 'package:path_provider/path_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:gainpath_domain/coaching.dart';
 import 'package:syncfusion_flutter_charts/charts.dart' hide CornerStyle;
@@ -42,7 +45,7 @@ class _WeekBucket {
     required this.sessions,
   });
 
-  double get total => sessions.fold(0, (sum, b) => sum + (b.fee > 0 ? b.fee : 35.0));
+  double get total => sessions.fold(0.0, (sum, b) => sum + b.fee);
 
   String get axisLabel => '${monday.day}–${sunday.day}';
   String get rangeLabel => monday.month == sunday.month
@@ -113,6 +116,16 @@ class _EarningsScreenState extends State<EarningsScreen> {
                 width: double.infinity,
                 child: ElevatedButton.icon(
                   onPressed: () {
+                    try {
+                      _generatePdf(
+                        completedCount: completed.length,
+                        grossVolume: totalEarned > 0 ? totalEarned / 0.70 : 0.0,
+                        platformFee:
+                            totalEarned > 0 ? (totalEarned / 0.70) * 0.30 : 0.0,
+                        netCommission: totalEarned,
+                        sessions: completed,
+                      );
+                    } catch (_) {}
                     Navigator.pop(ctx);
                     ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(
@@ -129,6 +142,65 @@ class _EarningsScreenState extends State<EarningsScreen> {
         ),
       ),
     );
+  }
+
+
+  File _generatePdf({
+    required int completedCount,
+    required double grossVolume,
+    required double platformFee,
+    required double netCommission,
+    required List<Booking> sessions,
+  }) {
+    final buffer = StringBuffer();
+    final objects = <int>[];
+
+    void addObj(String content) {
+      objects.add(buffer.length);
+      buffer.write('${objects.length} 0 obj\n$content\nendobj\n');
+    }
+
+    buffer.write('%PDF-1.4\n');
+    addObj('<< /Type /Catalog /Pages 2 0 R >>');
+    addObj('<< /Type /Pages /Kids [3 0 R] /Count 1 >>');
+    addObj('<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>');
+    addObj('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>');
+
+    final stream = StringBuffer();
+    stream.writeln('BT');
+    stream.writeln('/F1 18 Tf');
+    stream.writeln('50 740 Td (GainPath - Coach Performance Statement) Tj');
+    stream.writeln('/F1 11 Tf');
+    stream.writeln('0 -25 Td (Statement Period: Past 30 Days) Tj');
+    stream.writeln('0 -18 Td (Generated: ${DateTime.now().toIso8601String().split('T')[0]}) Tj');
+    stream.writeln('0 -30 Td (Financial Summary) Tj');
+    stream.writeln('/F1 10 Tf');
+    stream.writeln('0 -18 Td (Completed Sessions: $completedCount) Tj');
+    stream.writeln('0 -16 Td (Gross Volume: RM ${grossVolume.toStringAsFixed(2)}) Tj');
+    stream.writeln('0 -16 Td (Platform Fee: RM ${platformFee.toStringAsFixed(2)}) Tj');
+    stream.writeln('0 -16 Td (Net Coach Commission: RM ${netCommission.toStringAsFixed(2)}) Tj');
+    stream.writeln('0 -30 Td (Completed Sessions Breakdown) Tj');
+    for (final b in sessions.take(20)) {
+      final name = b.memberName.replaceAll(RegExp(r'[()]'), '');
+      stream.writeln('0 -16 Td ($name | RM ${b.fee.toStringAsFixed(2)}) Tj');
+    }
+    stream.writeln('ET');
+
+    final streamBytes = utf8.encode(stream.toString());
+    addObj('<< /Length ${streamBytes.length} >>\nstream\n${stream.toString()}endstream');
+
+    final startXref = buffer.length;
+    buffer.write('xref\n0 ${objects.length + 1}\n0000000000 65535 f \n');
+    for (final offset in objects) {
+      buffer.write(offset.toString().padLeft(10, '0') + ' 00000 n \n');
+    }
+    buffer.write('trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n$startXref\n%%EOF\n');
+
+    final dir = Directory.systemTemp;
+    final timestamp = DateTime.now().millisecondsSinceEpoch;
+    final file = File('${dir.path}/statement_$timestamp.pdf');
+    file.writeAsBytesSync(utf8.encode(buffer.toString()), flush: true);
+    return file;
   }
 
   List<_WeekBucket> _buildWeeks(List<Booking> completed) {
@@ -162,7 +234,7 @@ class _EarningsScreenState extends State<EarningsScreen> {
         .where((b) => b.status == BookingStatus.completed)
         .toList()
       ..sort((a, b) => b.start.compareTo(a.start));
-    final totalEarned = completed.fold<double>(0, (sum, b) => sum + (b.fee > 0 ? b.fee : 35.0));
+    final totalEarned = completed.fold<double>(0.0, (sum, b) => sum + b.fee);
     final notCancelled =
         roster.where((b) => b.status != BookingStatus.cancelled).length;
     final fillRate =
@@ -231,17 +303,17 @@ class _EarningsScreenState extends State<EarningsScreen> {
             children: [
               Expanded(
                   child: StatTile(
-                      '${widget.connected ? (widget.rating ?? '-') : coach!.rating}',
+                      '${widget.connected ? (widget.rating != null ? widget.rating!.toStringAsFixed(1) : "—") : coach!.rating}',
                       'Avg rating',
                       valueColor: AppColors.accent)),
               const SizedBox(width: 10),
               Expanded(
                   child: StatTile(
-                      '${widget.connected ? (widget.reviews ?? '-') : coach!.reviews}',
+                      '${widget.connected ? (widget.reviews != null ? widget.reviews!.toString() : "—") : coach!.reviews}',
                       'Reviews')),
               const SizedBox(width: 10),
               Expanded(
-                  child: StatTile(available ? '$fillRate%' : '-', 'Fill rate')),
+                  child: StatTile(available ? '$fillRate%' : '—', 'Fill rate')),
             ],
           ),
           const SizedBox(height: 10),

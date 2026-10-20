@@ -20,6 +20,13 @@ describe('client posture history service', () => {
       status: 'active',
       branchIds: ['branch-1'],
     });
+    store.documents.set(`orgs/${org}/bookings/booking-1`, {
+      schemaVersion: 1,
+      organizationId: org,
+      coachId: coachUid,
+      memberId: memberUid,
+      status: 'confirmed',
+    });
     return store;
   }
 
@@ -32,6 +39,7 @@ describe('client posture history service', () => {
         schemaVersion: 1,
         organizationId: org,
         memberId: memberUid,
+        bookingId: 'booking-1',
       })
     ).rejects.toThrow('Verify the account email before continuing.');
   });
@@ -53,16 +61,53 @@ describe('client posture history service', () => {
         schemaVersion: 1,
         organizationId: org,
         memberId: memberUid,
+        bookingId: 'booking-1',
       })
     ).rejects.toThrow('Only coaches may query client posture history.');
   });
 
-  it('returns consent_not_granted when member has no consent record', async () => {
+  it('returns unauthorized_relationship when bookingId is missing or unverified', async () => {
     const store = setupStore();
     const result = await getClientPostureHistory(store, coachAuth, {
       schemaVersion: 1,
       organizationId: org,
       memberId: memberUid,
+    });
+
+    expect(result.authorized).toBe(false);
+    expect(result.sharingStatus).toBe('unauthorized_relationship');
+    expect(result.sessions).toEqual([]);
+  });
+
+  it('returns unauthorized_relationship when booking belongs to a different coach', async () => {
+    const store = setupStore();
+    store.documents.set(`orgs/${org}/bookings/booking-other`, {
+      schemaVersion: 1,
+      organizationId: org,
+      coachId: 'coach-2',
+      memberId: memberUid,
+      status: 'confirmed',
+    });
+
+    const result = await getClientPostureHistory(store, coachAuth, {
+      schemaVersion: 1,
+      organizationId: org,
+      memberId: memberUid,
+      bookingId: 'booking-other',
+    });
+
+    expect(result.authorized).toBe(false);
+    expect(result.sharingStatus).toBe('unauthorized_relationship');
+    expect(result.sessions).toEqual([]);
+  });
+
+  it('returns consent_not_granted when relationship is verified but member has no consent record', async () => {
+    const store = setupStore();
+    const result = await getClientPostureHistory(store, coachAuth, {
+      schemaVersion: 1,
+      organizationId: org,
+      memberId: memberUid,
+      bookingId: 'booking-1',
     });
 
     expect(result.authorized).toBe(false);
@@ -86,6 +131,7 @@ describe('client posture history service', () => {
       schemaVersion: 1,
       organizationId: org,
       memberId: memberUid,
+      bookingId: 'booking-1',
     });
 
     expect(result.authorized).toBe(false);
@@ -109,6 +155,7 @@ describe('client posture history service', () => {
       schemaVersion: 1,
       organizationId: org,
       memberId: memberUid,
+      bookingId: 'booking-1',
     });
 
     expect(result.authorized).toBe(true);

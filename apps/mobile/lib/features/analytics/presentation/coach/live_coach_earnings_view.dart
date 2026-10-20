@@ -102,8 +102,8 @@ class _LiveCoachEarningsViewState extends State<LiveCoachEarningsView> {
     return EarningsScreen(
       connected: true,
       bookings: _bookings,
-      rating: completed.isEmpty ? null : 5.0,
-      reviews: completed.isEmpty ? null : completed.length,
+      rating: null,
+      reviews: null,
     );
   }
 }

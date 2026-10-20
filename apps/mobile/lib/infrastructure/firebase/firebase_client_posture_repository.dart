@@ -24,16 +24,20 @@ class FirebaseClientPostureRepository implements ClientPostureRepository {
   final BookingTransport _transport;
 
   @override
-  Future<ClientPostureResult> loadPostureHistory(String memberId) async {
+  Future<ClientPostureResult> loadPostureHistory(String memberId, {String? bookingId}) async {
     _transport.check();
     if (!await _readiness.ensureReady(check: _transport.check)) {
       throw const BookingException('app-check-unavailable');
     }
-    final raw = await _transport.call('getClientPostureHistoryCommand', {
+    final payload = <String, dynamic>{
       'schemaVersion': 1,
       'organizationId': _scope.organizationId,
       'memberId': memberId,
-    });
+    };
+    if (bookingId != null && bookingId.isNotEmpty) {
+      payload['bookingId'] = bookingId;
+    }
+    final raw = await _transport.call('getClientPostureHistoryCommand', payload);
     try {
       return ClientPostureResult.fromJson(
         raw,

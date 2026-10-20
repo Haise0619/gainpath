@@ -100,5 +100,5 @@ class ClientPostureResult {
 }
 
 abstract class ClientPostureRepository {
-  Future<ClientPostureResult> loadPostureHistory(String memberId);
+  Future<ClientPostureResult> loadPostureHistory(String memberId, {String? bookingId});
 }

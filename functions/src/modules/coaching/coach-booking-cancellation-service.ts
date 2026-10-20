@@ -116,9 +116,9 @@ export async function cancelAssignedBookingService(
 
     // ALL READS ARE COMPLETE. NOW PERFORM WRITES.
 
-    // 1. Release slot locks
+    // 1. Release slot locks by marking them as expired pending holds
     for (const { path: lockPath, data: lock } of locksToRelease) {
-      tx.set(lockPath, { ...lock, status: 'cancelled', expiresAtMillis: now });
+      tx.set(lockPath, { ...lock, status: 'pending_hold', expiresAtMillis: now });
     }
 
     // 2. Prune reservation from member's bookingDays

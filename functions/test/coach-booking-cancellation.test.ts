@@ -3,6 +3,7 @@ import { MemoryStore } from './memory-store';
 import { seeds, now, start } from './booking-fixture';
 import { cancelAssignedBookingService } from '../src/modules/coaching/coach-booking-cancellation-service';
 import { keyOf } from '../src/platform/idempotency';
+import { bookingDaySnapshot, currentBookingPolicy } from '../src/modules/coaching/booking-validation';
 
 let store: MemoryStore;
 const org = 'org-1';
@@ -58,7 +59,7 @@ beforeEach(() => {
       coachId: 'coach-1',
       branchId: 'branch-1',
       status: 'confirmed',
-      expiresAtMillis: 0,
+      expiresAtMillis: now - 1800000,
     });
   }
 
@@ -73,7 +74,7 @@ beforeEach(() => {
       {
         bookingId,
         status: 'confirmed',
-        expiresAtMillis: 0,
+        expiresAtMillis: now - 1800000,
       },
     ],
   });
@@ -113,11 +114,11 @@ it('atomically cancels assigned booking, releases locks, routes payment to refun
   expect(updatedBooking?.cancelledBy).toBe('coach-1');
   expect(updatedBooking?.resolvedAtMillis).toBe(now);
 
-  // Verify slot locks released
+  // Verify slot locks released as expired pending holds for slot reuse
   for (let slot = start; slot < start + 3600000; slot += 1800000) {
     const lockPath = `orgs/${org}/slotLocks/${keyOf('coach-1', slot)}`;
     const lock = store.documents.get(lockPath);
-    expect(lock?.status).toBe('cancelled');
+    expect(lock?.status).toBe('pending_hold');
     expect(lock?.expiresAtMillis).toBe(now);
   }
 
@@ -195,4 +196,26 @@ it('rejects empty, whitespace-only, invalid control characters, or oversized rea
   await expect(call('coach-1', { reason: '   ' })).rejects.toThrow('Enter a reason');
   await expect(call('coach-1', { reason: 'Emergency\x00Cancellation' })).rejects.toThrow('Reason contains invalid characters');
   await expect(call('coach-1', { reason: 'A'.repeat(501) })).rejects.toThrow('Enter a reason');
+});
+
+it('releases slot locks such that bookingDaySnapshot succeeds and unblocks the slot for reuse', async () => {
+  // Initially slot is locked
+  await store.transact(async tx => {
+    const policy = currentBookingPolicy(await tx.get(`orgs/${org}/settings/booking`));
+    const snapshot = await bookingDaySnapshot(tx, org, 'coach-1', 'member-1', '2026-10-02', policy, ['branch-1'], now);
+    expect(snapshot.blocked.has(start)).toBe(true);
+    expect(snapshot.blocked.has(start + 1800000)).toBe(true);
+  });
+
+  // Cancel booking as coach
+  await call('coach-1');
+
+  // Verify bookingDaySnapshot succeeds without throwing "Reservation lock needs authorized review"
+  // and slots are now unblocked for member reuse
+  await store.transact(async tx => {
+    const policy = currentBookingPolicy(await tx.get(`orgs/${org}/settings/booking`));
+    const snapshot = await bookingDaySnapshot(tx, org, 'coach-1', 'member-1', '2026-10-02', policy, ['branch-1'], now);
+    expect(snapshot.blocked.has(start)).toBe(false);
+    expect(snapshot.blocked.has(start + 1800000)).toBe(false);
+  });
 });
