@@ -19,17 +19,23 @@ class CoachCertificationAdminAdapter {
   Future<Map<String, dynamic>> load(String coachId,
       {String? afterId, String? certificationId}) async {
     await _check();
-    final result = await FirebaseFunctions.instance
-        .httpsCallable('getCoachCertificationsCommand')
-        .call({
-      'schemaVersion': 1,
-      'organizationId': repository.scope.organizationId,
-      'coachId': coachId,
-      if (afterId != null) 'afterId': afterId,
-      if (certificationId != null) 'certificationId': certificationId,
-    });
-    await _check();
-    return Map<String, dynamic>.from(result.data as Map);
+    try {
+      final result = await FirebaseFunctions.instance
+          .httpsCallable('getCoachCertificationsCommand')
+          .call({
+        'schemaVersion': 1,
+        'organizationId': repository.scope.organizationId,
+        'coachId': coachId,
+        if (afterId != null) 'afterId': afterId,
+        if (certificationId != null) 'certificationId': certificationId,
+      });
+      await _check();
+      return Map<String, dynamic>.from(result.data as Map);
+    } on FirebaseFunctionsException catch (e) {
+      throw CoachRepositoryException(e.code, e.message);
+    } on FirebaseException catch (e) {
+      throw CoachRepositoryException(e.code, e.message);
+    }
   }
 
   Future<Uint8List> bytes(
@@ -96,21 +102,28 @@ class CoachCertificationAdminAdapter {
       required String requestId}) async {
     await _check();
     if (decision == 'reject' && reason.trim().isEmpty) {
-      throw const CoachRepositoryException('invalid-argument');
+      throw const CoachRepositoryException(
+          'invalid-argument', 'A reason is required to reject a certification.');
     }
-    await FirebaseFunctions.instance
-        .httpsCallable('reviewCoachCertificationCommand')
-        .call({
-      'schemaVersion': 1,
-      'organizationId': repository.scope.organizationId,
-      'coachId': coachId,
-      'certificationId': certification['id'],
-      'expectedRevision': certification['revision'],
-      'decision': decision,
-      'requestId': requestId,
-      if (reason.trim().isNotEmpty) 'reason': reason.trim(),
-    });
-    await _check();
+    try {
+      await FirebaseFunctions.instance
+          .httpsCallable('reviewCoachCertificationCommand')
+          .call({
+        'schemaVersion': 1,
+        'organizationId': repository.scope.organizationId,
+        'coachId': coachId,
+        'certificationId': certification['id'],
+        'expectedRevision': certification['revision'],
+        'decision': decision,
+        'requestId': requestId,
+        if (reason.trim().isNotEmpty) 'reason': reason.trim(),
+      });
+      await _check();
+    } on FirebaseFunctionsException catch (e) {
+      throw CoachRepositoryException(e.code, e.message);
+    } on FirebaseException catch (e) {
+      throw CoachRepositoryException(e.code, e.message);
+    }
   }
 }
 

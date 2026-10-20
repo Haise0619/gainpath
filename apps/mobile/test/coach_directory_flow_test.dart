@@ -162,7 +162,7 @@ void main() {
     expect(find.text('Not published in directory'), findsOneWidget);
     await tester.tap(find.text('Availability').last);
     await tester.pumpAndSettle();
-    expect(find.text('No availability windows for this date.'), findsOneWidget);
+    expect(find.text('THIS WEEK AT A GLANCE'), findsOneWidget);
     await auth.signOut();
     await tester.pumpAndSettle();
     expect(find.text('Saved draft'), findsNothing);

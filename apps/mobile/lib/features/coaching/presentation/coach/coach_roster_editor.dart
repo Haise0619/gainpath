@@ -87,6 +87,61 @@ class CoachRosterEditor extends ChangeNotifier {
     notifyListeners();
   }
 
+  CoachWeeklyDay? dayFor(int dayOfWeek) =>
+      schedule.where((d) => d.dayOfWeek == dayOfWeek).firstOrNull;
+
+  void toggleDay(int dayOfWeek, bool active) {
+    if (!enabled) return;
+    final defaultBranch = (baseline?.assignedBranchIds.isNotEmpty == true)
+        ? baseline!.assignedBranchIds.first
+        : 'main';
+    dailyHours ??= 8;
+    advanceDays ??= 14;
+    final existing = {for (final d in schedule) d.dayOfWeek: d};
+    schedule = List.generate(7, (i) {
+      final dNum = i + 1;
+      if (dNum == dayOfWeek) {
+        final old = existing[dNum];
+        return CoachWeeklyDay(
+            dayOfWeek: dNum,
+            isActive: active,
+            startMinute: old?.startMinute ?? 540,
+            endMinute: old?.endMinute ?? 1020,
+            branchId: old?.branchId ?? defaultBranch);
+      }
+      return existing[dNum] ??
+          CoachWeeklyDay(
+              dayOfWeek: dNum,
+              isActive: false,
+              startMinute: 540,
+              endMinute: 1020,
+              branchId: defaultBranch);
+    });
+    notifyListeners();
+  }
+
+  void initializeAllDays() {
+    if (!enabled) return;
+    final defaultBranch = (baseline?.assignedBranchIds.isNotEmpty == true)
+        ? baseline!.assignedBranchIds.first
+        : 'main';
+    dailyHours ??= 8;
+    advanceDays ??= 14;
+    schedule = List.generate(7, (i) {
+      final dayNumber = i + 1;
+      final existing = dayFor(dayNumber);
+      return existing ??
+          CoachWeeklyDay(
+            dayOfWeek: dayNumber,
+            isActive: dayNumber <= 5,
+            startMinute: 540,
+            endMinute: 1020,
+            branchId: defaultBranch,
+          );
+    });
+    notifyListeners();
+  }
+
   void exception(CoachTimeException value) {
     if (!enabled) return;
     exceptions = [...exceptions.where((e) => e.id != value.id), value]
@@ -106,7 +161,7 @@ class CoachRosterEditor extends ChangeNotifier {
         conflict ||
         !isCurrent() ||
         baseline == null ||
-        !dirty) {
+        (!dirty && !uncertain)) {
       return;
     }
     if (dailyHours == null || advanceDays == null || schedule.length != 7) {
@@ -155,9 +210,24 @@ class CoachRosterEditor extends ChangeNotifier {
     }
   }
 
-  String _error(Object error) => error is CoachAvailabilityException
-      ? error.message
-      : 'Could not load or save the roster. Reload or retry.';
+  String _error(Object error) {
+    if (error is CoachAvailabilityException) {
+      if (error.code == 'unauthenticated') {
+        return 'App Check or authentication verification failed. Ensure the app is authorized and retry.';
+      }
+      if (error.code == 'permission-denied') {
+        return 'Permission denied. Only authorized coaches can edit availability.';
+      }
+      if (error.code == 'aborted') {
+        return 'Schedule was modified elsewhere. Discard and reload to get latest changes.';
+      }
+      if (error.code == 'failed-precondition') {
+        return 'Could not save availability due to conflicting bookings or preconditions.';
+      }
+      return error.message;
+    }
+    return 'Could not load or save the roster. Reload or retry.';
+  }
   @override
   void dispose() {
     _disposed = true;

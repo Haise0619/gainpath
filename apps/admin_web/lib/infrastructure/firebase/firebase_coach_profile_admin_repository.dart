@@ -111,6 +111,12 @@ class FirebaseCoachProfileAdminRepository
     } on CoachRepositoryException catch (e) {
       if (!['permission-denied', 'not-found'].contains(e.code)) rethrow;
     }
+    Map<String, dynamic>? certSummary;
+    try {
+      certSummary = await _get('$root/coachProfiles/$coachId/certificationState/current');
+    } on CoachRepositoryException catch (e) {
+      if (!['permission-denied', 'not-found'].contains(e.code)) rethrow;
+    }
     // Users/Auth are private and not client-readable by this Admin. The trusted
     // publication command independently verifies target assignment/Auth.
     final rawBranches = membership?['branchIds'];
@@ -120,6 +126,10 @@ class FirebaseCoachProfileAdminRepository
         rawBranches.every((v) =>
             v is String && RegExp(r'^[A-Za-z0-9_-]{1,128}$').hasMatch(v)) &&
         rawBranches.toSet().length == rawBranches.length;
+    final certVerified = certSummary?['certificationVerified'] == true;
+    final rawApprovedCount = certSummary?['approvedCount'];
+    final approvedCount =
+        rawApprovedCount is num ? rawApprovedCount.toInt() : 0;
     await _admin();
     return CoachPublicationReview(
         coachId: coachId,
@@ -133,7 +143,9 @@ class FirebaseCoachProfileAdminRepository
         targetMembershipEligible: membership?['role'] == 'coach' &&
             membership?['status'] == 'active' &&
             membership?['organizationId'] == scope.organizationId &&
-            validBranches);
+            validBranches,
+        certificationVerified: certVerified,
+        approvedCertificationCount: approvedCount);
   }
 
   @override
@@ -144,6 +156,11 @@ class FirebaseCoachProfileAdminRepository
     await _admin();
     _id(baseline.coachId);
     if (action == CoachDirectoryAction.publish && !baseline.canPublish) {
+      if (!baseline.certificationVerified ||
+          baseline.approvedCertificationCount <= 0) {
+        throw const CoachRepositoryException('failed-precondition',
+            'An approved certification is required for publication.');
+      }
       throw const CoachRepositoryException('failed-precondition');
     }
     try {
@@ -173,7 +190,7 @@ class FirebaseCoachProfileAdminRepository
       }
       return result;
     } on FirebaseException catch (e) {
-      throw CoachRepositoryException(e.code);
+      throw CoachRepositoryException(e.code, e.message);
     }
   }
 }

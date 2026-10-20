@@ -43,4 +43,30 @@ void main() {
     await tester.pump();
     await auth.dispose();
   });
+
+  testWidgets(
+      'Firebase coach shell Roster tab renders CoachRosterScreen (My schedule)',
+      (tester) async {
+    final auth = InMemoryAuthRepository();
+    await auth.signIn(
+        role: AppRole.coach, email: 'coach@example.test', password: 'fixture');
+    await tester.pumpWidget(GainPathMobileApp(
+        authRepository: auth,
+        bookingListFactory: (_, __) => Lists(),
+        coachProfileFactory: (_, __) => ProfileFake(),
+        coachAccountFactory: (_, __) => CoachAccountGatewayFake()));
+    await tester.pumpAndSettle();
+
+    // Tap Roster navigation tab
+    await tester.tap(find.text('Roster').last);
+    await tester.pumpAndSettle();
+
+    // Verify CoachRosterScreen ("My schedule") is shown, not BookingScheduleScreen ("My bookings")
+    expect(find.text('My schedule'), findsOneWidget);
+    expect(find.text('My bookings'), findsNothing);
+
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump();
+    await auth.dispose();
+  });
 }

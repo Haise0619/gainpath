@@ -233,14 +233,6 @@ class CoachDirectoryAdminCubit extends Cubit<CoachDirectoryAdminState> {
   bool _revoked(Object e) =>
       e is CoachRepositoryException &&
       ['permission-denied', 'unauthenticated'].contains(e.code);
-  String _message(Object e) {
-    if (e is CoachRepositoryException) return e.message;
-    if (e is FormatException) {
-      return 'This Admin build cannot read the Coach record format. Open the main Admin at http://localhost:7359/ and reload. No records were changed.';
-    }
-    if (e is TimeoutException) {
-      return 'Coach loading timed out. Check your connection and retry.';
-    }
-    return 'Could not load or update Coach profiles. Refresh or retry.';
-  }
+  String _message(Object e) => safeCoachErrorMessage(e,
+      fallback: 'Could not load or update Coach profiles. Refresh or retry.');
 }

@@ -284,4 +284,32 @@ void main() {
     expect(result!.id, matches(RegExp(r'^[a-f0-9]{32}$')));
     expect(repo.rosterRequests, isEmpty);
   });
+  testWidgets('load failure displays clear error and retry action in UI',
+      (tester) async {
+    var fail = true;
+    final repo = _FailingRosterRepo(() => fail);
+    await tester.pumpWidget(MaterialApp(
+        home: LiveCoachAvailabilityView(
+            repository: repo, coachId: 'coach', isCurrent: () => true)));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('App Check or authentication verification failed'),
+        findsOneWidget);
+    expect(find.text('Retry loading roster'), findsWidgets);
+    fail = false;
+    await tester.tap(find.text('Retry loading roster').first);
+    await tester.pumpAndSettle();
+    expect(find.text('Monday'), findsOneWidget);
+  });
+}
+
+class _FailingRosterRepo extends RosterUiFake {
+  _FailingRosterRepo(this.shouldFail);
+  final bool Function() shouldFail;
+  @override
+  Future<CoachRosterSnapshot> loadRoster({required String coachId}) async {
+    if (shouldFail()) {
+      throw const CoachAvailabilityException('unauthenticated');
+    }
+    return snapshot();
+  }
 }

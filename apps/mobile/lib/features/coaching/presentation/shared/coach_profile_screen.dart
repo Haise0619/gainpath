@@ -166,12 +166,23 @@ class CoachProfileScreen extends StatelessWidget {
               children: [
                 DetailRow('Duration', published != null ? '-' : '60 minutes'),
                 const Divider(height: 20),
-                DetailRow(
-                    'Fee',
-                    published != null &&
-                            published!.fields.consultationFeeMinor == null
-                        ? '-'
-                        : 'RM ${coach.fee.toStringAsFixed(0)}'),
+                Builder(builder: (context) {
+                  final bool hasValidFee;
+                  final String feeDisplay;
+                  if (published != null) {
+                    final minor = published!.fields.consultationFeeMinor;
+                    hasValidFee = minor != null && minor > 0;
+                    feeDisplay = hasValidFee
+                        ? 'RM ${(minor / 100).toStringAsFixed(2)}'
+                        : '—';
+                  } else {
+                    hasValidFee = coach.fee > 0;
+                    feeDisplay = hasValidFee
+                        ? 'RM ${coach.fee.toStringAsFixed(2)}'
+                        : '—';
+                  }
+                  return DetailRow('Fee', feeDisplay);
+                }),
                 const Divider(height: 20),
                 DetailRow('Location', coach.branch),
               ],
