@@ -3,6 +3,8 @@ import 'package:syncfusion_flutter_charts/charts.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:gainpath_domain/analytics.dart';
+import 'package:gainpath_domain/coaching.dart'
+    show ClientPostureRepository, ClientPostureResult, ClientPostureSession;
 
 /// UC-9.5 — View Client Posture History. Uses the same Syncfusion chart
 /// language already established in the member-facing Progress module
@@ -11,7 +13,15 @@ import 'package:gainpath_domain/analytics.dart';
 /// their own progress screen — not a different, less capable widget.
 class ClientPostureScreen extends StatelessWidget {
   final String name;
-  const ClientPostureScreen({super.key, required this.name});
+  final String? memberId;
+  final ClientPostureRepository? repository;
+
+  const ClientPostureScreen({
+    super.key,
+    required this.name,
+    this.memberId,
+    this.repository,
+  });
 
   static const _sessionLabels = ['S1', 'S2', 'S3', 'S4', 'S5', 'S6', 'S7'];
 
@@ -24,9 +34,107 @@ class ClientPostureScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (repository != null && memberId != null) {
+      return FutureBuilder<ClientPostureResult>(
+        future: repository!.loadPostureHistory(memberId!),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return Scaffold(
+              appBar: AppBar(title: Text(name)),
+              body: const Center(child: CircularProgressIndicator()),
+            );
+          }
+          if (snapshot.hasError) {
+            return Scaffold(
+              appBar: AppBar(title: Text(name)),
+              body: PageBody(
+                children: [
+                  const Eyebrow('Client Posture History'),
+                  Panel(
+                    child: Text(
+                      'Unable to load posture history: ${snapshot.error}',
+                      style: const TextStyle(color: AppColors.danger),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }
+          final res = snapshot.data!;
+          if (!res.authorized || res.sessions.isEmpty) {
+            return Scaffold(
+              appBar: AppBar(title: Text(name)),
+              body: PageBody(
+                children: [
+                  const Eyebrow('Client Posture History'),
+                  Panel(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(
+                              res.authorized
+                                  ? Icons.info_outline
+                                  : Icons.lock_outline,
+                              color: AppColors.primary,
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              res.authorized
+                                  ? 'Measurements Pending'
+                                  : 'Access Restricted',
+                              style: Theme.of(context).textTheme.titleMedium,
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          res.message,
+                          style: Theme.of(context).textTheme.bodyMedium,
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Status: ${res.sharingStatus} · Measurements: ${res.measurementsStatus}',
+                          style: const TextStyle(
+                              fontSize: 12, color: AppColors.inkSoft),
+                        ),
+                        const SizedBox(height: 12),
+                        const Text(
+                          'Form history: — · Confirmed booking and authorized cloud measurements required.',
+                          style: TextStyle(
+                              fontSize: 12.5, fontWeight: FontWeight.w600),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }
+
+          final data = List.generate(
+            res.sessions.length,
+            (i) => _SessionPoint(
+              'S${i + 1}',
+              res.sessions[i].overallScore,
+            ),
+          );
+
+          return _buildChartScaffold(context, data);
+        },
+      );
+    }
+
     final trend = context.read<AnalyticsRepository>().postureTrend;
-    final data = List.generate(trend.length, (i) => _SessionPoint(_sessionLabels[i], trend[i]));
-    final weakest = _byMovement.reduce((a, b) => a.accuracy < b.accuracy ? a : b);
+    final data = List.generate(
+        trend.length, (i) => _SessionPoint(_sessionLabels[i], trend[i]));
+    return _buildChartScaffold(context, data);
+  }
+
+  Widget _buildChartScaffold(BuildContext context, List<_SessionPoint> data) {
+    final weakest =
+        _byMovement.reduce((a, b) => a.accuracy < b.accuracy ? a : b);
     final atRisk = weakest.accuracy < 75;
 
     return Scaffold(
@@ -49,9 +157,11 @@ class ClientPostureScreen extends StatelessWidget {
                     primaryYAxis: const NumericAxis(
                       minimum: 50,
                       maximum: 100,
-                      majorGridLines: MajorGridLines(width: 0.6, color: AppColors.hairline),
+                      majorGridLines: MajorGridLines(
+                          width: 0.6, color: AppColors.hairline),
                       axisLine: AxisLine(width: 0),
-                      labelStyle: TextStyle(fontSize: 10, color: AppColors.inkSoft),
+                      labelStyle:
+                          TextStyle(fontSize: 10, color: AppColors.inkSoft),
                     ),
                     trackballBehavior: TrackballBehavior(
                       enable: true,
@@ -66,13 +176,14 @@ class ClientPostureScreen extends StatelessWidget {
                         color: AppColors.primary.withValues(alpha: 0.18),
                         borderColor: AppColors.primary,
                         borderWidth: 2.4,
-                        markerSettings: const MarkerSettings(isVisible: true, height: 6, width: 6),
+                        markerSettings: const MarkerSettings(
+                            isVisible: true, height: 6, width: 6),
                       ),
                     ],
                   ),
                 ),
                 const SizedBox(height: 12),
-                Text('Improving steadily over the last ${trend.length} sessions.',
+                Text('Improving steadily over the last ${data.length} sessions.',
                     style: Theme.of(context).textTheme.bodyMedium),
               ],
             ),
@@ -101,7 +212,7 @@ class ClientPostureScreen extends StatelessWidget {
                       textStyle: TextStyle(fontSize: 11, fontWeight: FontWeight.w700),
                     ),
                     pointColorMapper: (d, _) =>
-                        d.accuracy >= 80 ? AppColors.success : AppColors.warning,
+                        d.accuracy >= 80 ? AppColors.success : AppColors.danger,
                     borderRadius: BorderRadius.circular(6),
                     width: 0.6,
                   ),
@@ -122,7 +233,7 @@ class ClientPostureScreen extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('Watch ${weakest.name}',
+                        Text('Watch ' + weakest.name,
                             style: Theme.of(context).textTheme.titleMedium),
                         const SizedBox(height: 3),
                         Text(

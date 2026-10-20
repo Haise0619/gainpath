@@ -25,3 +25,5 @@ export { acknowledgeWorkoutConsentCommand, revokeWorkoutConsentCommand, submitWo
 
 export { submitCoachCertificationCommand, archiveCoachCertificationCommand, reviewCoachCertificationCommand, getCoachCertificationsCommand, getCoachAccountSettingsCommand, saveCoachAccountSettingsCommand } from './modules/coaching/coach-management-callables';
 export { getCoachPublishedPhotoCommand } from './modules/coaching/coach-management-callables';
+export { getClientPostureHistoryCommand } from './modules/coaching/client-posture-callable';
+export { submitBookingReviewCommand } from './modules/coaching/booking-review-callable';

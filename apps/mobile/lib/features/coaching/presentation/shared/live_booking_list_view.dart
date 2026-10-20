@@ -3,7 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:gainpath_domain/gainpath_domain.dart';
 import 'package:gainpath_domain/coaching.dart'
-    show Booking, BookingCommunicationRepository, ConsultationNotesRepository, CoachBookingCancellationRepository;
+    show Booking, BookingCommunicationRepository, ConsultationNotesRepository, CoachBookingCancellationRepository, ClientPostureRepository, BookingReviewRepository;
+import '../coach/client_posture_screen.dart';
 import '../coach/consultation_notes_screen.dart';
 import '../../application/live_booking_cubit.dart';
 import '../member/booking_schedule_screen.dart';
@@ -23,6 +24,8 @@ class LiveBookingListView extends StatefulWidget {
       this.onPayment,
       this.communication,
       this.notes,
+      this.posture,
+      this.review,
       this.loadCoachName,
       this.coachId,
       this.title = 'My bookings'});
@@ -33,6 +36,8 @@ class LiveBookingListView extends StatefulWidget {
   final CoachBookingCancellationRepository? coachCancellation;
   final BookingCommunicationRepository? communication;
   final ConsultationNotesRepository? notes;
+  final ClientPostureRepository? posture;
+  final BookingReviewRepository? review;
   final Future<String?> Function(String coachId)? loadCoachName;
   final String? coachId;
   final String title;
@@ -191,6 +196,107 @@ class _LiveBookingListViewState extends State<LiveBookingListView> {
     }
   }
 
+  Future<void> _showReviewDialog(String bookingId) async {
+    if (widget.review == null || !widget.isCurrent()) return;
+    int selectedStars = 5;
+    final textController = TextEditingController();
+
+    final submitted = await showDialog<bool>(
+      context: context,
+      builder: (dialogCtx) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Rate session'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('How was your coaching consultation?'),
+              const SizedBox(height: 12),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: List.generate(5, (i) {
+                  final star = i + 1;
+                  return IconButton(
+                    icon: Icon(
+                      star <= selectedStars
+                          ? Icons.star_rounded
+                          : Icons.star_outline_rounded,
+                      color: Colors.amber,
+                      size: 32,
+                    ),
+                    onPressed: () => setDialogState(() => selectedStars = star),
+                  );
+                }),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: textController,
+                maxLines: 3,
+                maxLength: 500,
+                decoration: const InputDecoration(
+                  labelText: 'Feedback (optional)',
+                  hintText: 'Share how your session went...',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogCtx, false),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(dialogCtx, true),
+              child: const Text('Submit review'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (submitted != true || !mounted || !widget.isCurrent()) return;
+
+    final requestId =
+        'rev-' + DateTime.now().millisecondsSinceEpoch.toString() + '-' + bookingId.hashCode.abs().toString();
+
+    try {
+      await widget.review!.submitReview(
+        bookingId: bookingId,
+        requestId: requestId,
+        stars: selectedStars,
+        reviewText: textController.text.trim(),
+      );
+      if (!mounted || !widget.isCurrent()) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Review submitted. Thank you for your feedback!')),
+      );
+      await controller.refresh();
+    } catch (e) {
+      if (!mounted || !widget.isCurrent()) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to submit review: ' + e.toString()),
+          backgroundColor: AppColors.danger,
+        ),
+      );
+    }
+  }
+
+  void _openPosture(Booking booking, String memberId) {
+    if (widget.posture == null || !widget.isCurrent()) return;
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ClientPostureScreen(
+          name: booking.memberName,
+          memberId: memberId,
+          repository: widget.posture,
+        ),
+      ),
+    );
+  }
+
   Future<void> _notes(Booking booking) async {
     if (widget.notes == null || !widget.isCurrent()) return;
     await Navigator.push(
@@ -288,13 +394,19 @@ class _LiveBookingListViewState extends State<LiveBookingListView> {
                       DetailRow('Timezone', record.timeZone),
                       DetailRow('Hold expiry', record.expiryLabel),
                       if (widget.coachId == null &&
-                          widget.notes != null &&
-                          record.rawStatus == 'completed')
-                        TextButton.icon(
-                            onPressed: () =>
-                                _notes(persistedBookingPresentation(record)),
-                            icon: const Icon(Icons.sticky_note_2_outlined),
-                            label: const Text('View consultation notes')),
+                          record.rawStatus == 'completed') ...[
+                        if (widget.notes != null)
+                          TextButton.icon(
+                              onPressed: () =>
+                                  _notes(persistedBookingPresentation(record)),
+                              icon: const Icon(Icons.sticky_note_2_outlined),
+                              label: const Text('View consultation notes')),
+                        if (widget.review != null)
+                          TextButton.icon(
+                              onPressed: () => _showReviewDialog(record.bookingId),
+                              icon: const Icon(Icons.star_rate_rounded),
+                              label: const Text('Rate session')),
+                      ],
                       if (widget.coachId != null) ...[
                         const Text(
                             'Form history: — · Confirmed booking and authorized cloud measurements required.'),
@@ -307,10 +419,14 @@ class _LiveBookingListViewState extends State<LiveBookingListView> {
                     ])
             };
             if (widget.coachId != null) {
+              final memberIds = {for (final r in state.records) r.bookingId: r.memberId};
               return CoachRosterScreen(
                   showAllDates: controller.recentHistory,
                   onNotes: widget.notes == null ? null : _notes,
                   onCancel: widget.coachCancellation == null ? null : _cancelCoachBooking,
+                  onPosture: widget.posture == null
+                      ? null
+                      : (b) => _openPosture(b, memberIds[b.id] ?? ''),
                   onOpenMessages: widget.communication == null
                       ? null
                       : () => Navigator.push(

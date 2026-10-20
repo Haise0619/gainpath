@@ -10,6 +10,7 @@ import '../../features/coaching/presentation/shared/live_booking_list_view.dart'
 import 'coach_profile_factory.dart';
 import '../../infrastructure/firebase/firebase_booking_communication_repository.dart';
 import '../../infrastructure/firebase/firebase_consultation_notes_repository.dart';
+import '../../infrastructure/firebase/firebase_booking_review_repository.dart';
 import '../../infrastructure/firebase/firebase_coach_directory_repository.dart';
 
 typedef BookingServices = ({
@@ -44,6 +45,8 @@ void openBookingList(BuildContext context, AuthSession session,
               session: session,
               builder: (_, current) => LiveBookingListView(
                   notes: FirebaseConsultationNotesRepository(
+                      scope: session.scope, isCurrent: current),
+                  review: FirebaseBookingReviewRepository(
                       scope: session.scope, isCurrent: current),
                   onPayment: session.role != AppRole.member
                       ? null

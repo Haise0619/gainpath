@@ -2,6 +2,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../infrastructure/firebase/firebase_consultation_notes_repository.dart';
 import '../../infrastructure/firebase/firebase_coach_booking_cancellation_repository.dart';
+import '../../infrastructure/firebase/firebase_client_posture_repository.dart';
+import '../../features/analytics/presentation/coach/live_coach_earnings_view.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:gainpath_domain/gainpath_domain.dart'
     show AuthSession, SessionScope;
@@ -109,12 +111,19 @@ Widget buildFirebaseCoachShell(AuthSession session,
                     FirebaseConsultationNotesRepository(scope: session.scope, isCurrent: isCurrent),
                 coachCancellation:
                     FirebaseCoachBookingCancellationRepository(scope: session.scope, isCurrent: isCurrent),
+                posture:
+                    FirebaseClientPostureRepository(scope: session.scope, isCurrent: isCurrent),
                 communication: FirebaseBookingCommunicationRepository(scope: session.scope, isCurrent: isCurrent),
                 title: 'Roster',
                 coachId: session.userId,
                 repository: createBookingList(session, isCurrent, bookingListFactory),
                 isCurrent: isCurrent),
-            liveAvailabilityBuilder: (_) => AvailabilityScreen(liveRepository: availabilityFactory?.call(session.scope, isCurrent) ?? FirebaseCoachAvailabilityRepository(scope: session.scope, isCurrent: isCurrent), coachId: session.userId, isCurrent: isCurrent)));
+            liveAvailabilityBuilder: (_) => AvailabilityScreen(liveRepository: availabilityFactory?.call(session.scope, isCurrent) ?? FirebaseCoachAvailabilityRepository(scope: session.scope, isCurrent: isCurrent), coachId: session.userId, isCurrent: isCurrent),
+            liveEarningsBuilder: (_) => LiveCoachEarningsView(
+                scope: session.scope,
+                isCurrent: isCurrent,
+                coachId: session.userId,
+                bookingListRepo: createBookingList(session, isCurrent, bookingListFactory))));
 Widget buildFirebaseCoachDirectory(AuthSession session,
         {CoachDirectoryFactory? factory,
         CoachAvailabilityFactory? availabilityFactory,

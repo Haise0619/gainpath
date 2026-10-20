@@ -12,10 +12,11 @@ class CoachShell extends StatefulWidget {
       this.module8,
       this.liveAvailabilityBuilder,
       this.liveRosterBuilder,
+      this.liveEarningsBuilder,
       this.restrictUnsupportedWorkflows = false,
       this.initialIndex = 0});
   final CoachModule8Dependencies? module8;
-  final WidgetBuilder? liveAvailabilityBuilder, liveRosterBuilder;
+  final WidgetBuilder? liveAvailabilityBuilder, liveRosterBuilder, liveEarningsBuilder;
   final bool restrictUnsupportedWorkflows;
   final int initialIndex;
   @override
@@ -57,7 +58,9 @@ class _CoachShellState extends State<CoachShell> {
               : widget.restrictUnsupportedWorkflows
                   ? unavailable('Availability')
                   : const AvailabilityScreen(),
-          EarningsScreen(connected: widget.restrictUnsupportedWorkflows),
+          widget.liveEarningsBuilder != null
+              ? widget.liveEarningsBuilder!(context)
+              : EarningsScreen(connected: widget.restrictUnsupportedWorkflows),
           CoachAccountScreen(
               profileRepository: dependencies.profile,
               accountRepository: dependencies.account),

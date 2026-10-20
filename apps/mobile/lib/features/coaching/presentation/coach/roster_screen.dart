@@ -26,6 +26,7 @@ class CoachRosterScreen extends StatefulWidget {
       this.onMessage,
       this.onNotes,
       this.onCancel,
+      this.onPosture,
       this.showAllDates = false,
       this.onOpenMessages,
       this.todayLocalDate,
@@ -37,6 +38,7 @@ class CoachRosterScreen extends StatefulWidget {
   final void Function(Booking)? onMessage;
   final void Function(Booking)? onNotes;
   final void Function(Booking)? onCancel;
+  final void Function(Booking)? onPosture;
   final bool showAllDates;
   final VoidCallback? onOpenMessages;
   final String? todayLocalDate;
@@ -485,6 +487,9 @@ class _CoachRosterScreenState extends State<CoachRosterScreen>
                           onCancel: widget.onCancel == null
                               ? null
                               : () => widget.onCancel!(visible[i]),
+                          onPosture: widget.onPosture == null
+                              ? null
+                              : () => widget.onPosture!(visible[i]),
                           isLast: i == visible.length - 1,
                           showConnector: !filtering,
                         ),
@@ -514,6 +519,7 @@ class _TimelineRow extends StatelessWidget {
   final VoidCallback? onMessage;
   final VoidCallback? onNotes;
   final VoidCallback? onCancel;
+  final VoidCallback? onPosture;
   final bool isLast;
   final bool showConnector;
   const _TimelineRow(
@@ -524,6 +530,7 @@ class _TimelineRow extends StatelessWidget {
       this.onMessage,
       this.onNotes,
       this.onCancel,
+      this.onPosture,
       required this.isLast,
       required this.showConnector});
 
@@ -569,7 +576,8 @@ class _TimelineRow extends StatelessWidget {
                   details: details,
                   onMessage: onMessage,
                   onNotes: onNotes,
-                  onCancel: onCancel),
+                  onCancel: onCancel,
+                  onPosture: onPosture),
             ),
           ),
         ],
@@ -796,6 +804,7 @@ class _SessionCard extends StatelessWidget {
   final VoidCallback? onMessage;
   final VoidCallback? onNotes;
   final VoidCallback? onCancel;
+  final VoidCallback? onPosture;
   const _SessionCard(
       {required this.booking,
       this.live = false,
@@ -803,7 +812,8 @@ class _SessionCard extends StatelessWidget {
       this.details,
       this.onMessage,
       this.onNotes,
-      this.onCancel});
+      this.onCancel,
+      this.onPosture});
 
   @override
   Widget build(BuildContext context) {
@@ -990,7 +1000,7 @@ class _SessionCard extends StatelessWidget {
                               label: 'Form history',
                               filled: false,
                               onPressed: live
-                                  ? null
+                                  ? onPosture
                                   : () => Navigator.push(
                                       context,
                                       MaterialPageRoute(
