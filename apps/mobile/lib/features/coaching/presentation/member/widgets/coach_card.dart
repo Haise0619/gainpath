@@ -75,15 +75,29 @@ class CoachCard extends StatelessWidget {
                     Text(published != null ? '  (-)' : '  (${coach.reviews})',
                         style: Theme.of(context).textTheme.bodyMedium),
                     const Spacer(),
-                    Text(
-                        published != null &&
-                                published!.fields.consultationFeeMinor == null
-                            ? '-'
-                            : 'RM ${coach.fee.toStringAsFixed(0)}/session',
+                    Builder(builder: (context) {
+                      final bool hasValidFee;
+                      final String feeText;
+                      if (published != null) {
+                        final minor = published!.fields.consultationFeeMinor;
+                        hasValidFee = minor != null && minor > 0;
+                        feeText = hasValidFee
+                            ? 'RM ${(minor / 100).toStringAsFixed(2)}/session'
+                            : '—';
+                      } else {
+                        hasValidFee = coach.fee > 0;
+                        feeText = hasValidFee
+                            ? 'RM ${coach.fee.toStringAsFixed(2)}/session'
+                            : '—';
+                      }
+                      return Text(
+                        feeText,
                         style: const TextStyle(
                             fontSize: 12.5,
                             fontWeight: FontWeight.w700,
-                            color: AppColors.primary)),
+                            color: AppColors.primary),
+                      );
+                    }),
                   ],
                 ),
               ],

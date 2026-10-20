@@ -26,11 +26,11 @@ for (const file of [
 }
 for (const [file, canonical] of [
   ['features/coaching/presentation/member/live_member_booking_view.dart', 'BookSessionScreen'],
-  ['features/coaching/presentation/coach/live_coach_availability_view.dart', 'AvailabilityPage'],
+  ['features/coaching/presentation/coach/live_coach_availability_view.dart', 'AvailabilityScreen'],
   ['features/coaching/presentation/coach/availability_screens.dart', 'AvailabilityPage'],
   ['features/coaching/presentation/member/book_session_screen.dart', 'BookingSelectionPage'],
 ]) {
-  if (!read(mobile + file).includes(canonical)) {
+  if (!new RegExp(`\\b${canonical}\\s*\\(`).test(read(mobile + file))) {
     violations.push(`${file}: must compose ${canonical}`);
   }
 }

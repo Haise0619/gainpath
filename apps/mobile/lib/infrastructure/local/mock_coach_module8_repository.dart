@@ -144,9 +144,7 @@ class MockCoachModule8Repository
         updatedAtMillis: DateTime.now().millisecondsSinceEpoch);
     legacy.currentCoach.bio = fields.bio;
     legacy.currentCoach.specializationTags = [...fields.specializationTags];
-    if (fields.consultationFeeMinor != null) {
-      legacy.currentCoach.fee = fields.consultationFeeMinor! / 100;
-    }
+    legacy.currentCoach.fee = (fields.consultationFeeMinor ?? 0) / 100;
     return _profileReceipts[requestId] = CoachCommandResult(
         requestId: requestId,
         coachId: scope.userId,

@@ -70,10 +70,16 @@ void main() {
         home: LiveCoachAvailabilityView(
             repository: repo, coachId: 'coach', isCurrent: () => true)));
     await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(find.text('Edit specific date'), 300);
+    await tester.ensureVisible(find.text('Edit specific date'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Edit specific date'));
+    await tester.pumpAndSettle();
     expect(find.textContaining('Asia/Kuala_Lumpur'), findsWidgets);
     await tester.tap(find.text('Add window'));
     await tester.pumpAndSettle();
-    await tester.scrollUntilVisible(find.widgetWithText(FilledButton, 'Add'), 250);
+    await tester.scrollUntilVisible(find.widgetWithText(FilledButton, 'Add'), 250,
+        scrollable: find.byType(Scrollable).last);
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(FilledButton, 'Add'));
     await tester.pumpAndSettle();
@@ -113,6 +119,9 @@ void main() {
         coachAvailabilityFactory: (_, current) => repo));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Availability'));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(find.text('Edit specific date'), 300);
+    await tester.tap(find.text('Edit specific date'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Add window'));
     await tester.pumpAndSettle();
@@ -175,7 +184,11 @@ void main() {
         home: LiveCoachAvailabilityView(
             repository: repo, coachId: 'coach', isCurrent: () => true)));
     await tester.pumpAndSettle();
-    await tester.scrollUntilVisible(find.byKey(const ValueKey('edit-window-1')), 250);
+    await tester.scrollUntilVisible(find.text('Edit specific date'), 300);
+    await tester.tap(find.text('Edit specific date'));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(find.byKey(const ValueKey('edit-window-1')), 250,
+        scrollable: find.byType(Scrollable).last);
     await tester.tap(find.byKey(const ValueKey('edit-window-1')));
     await tester.pumpAndSettle();
     for (final control in find
@@ -193,7 +206,8 @@ void main() {
     await tester.tap(find.text('Update'));
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
-    await tester.scrollUntilVisible(find.byKey(const ValueKey('remove-window-1')), -250);
+    await tester.scrollUntilVisible(find.byKey(const ValueKey('remove-window-1')), -250,
+        scrollable: find.byType(Scrollable).last);
     await tester.tap(find.byKey(const ValueKey('remove-window-1')));
     await tester.pumpAndSettle();
     await tester.ensureVisible(find.text('Save day'));

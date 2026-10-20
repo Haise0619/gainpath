@@ -118,6 +118,8 @@ class _TestCoachAdminRepo implements CoachProfileAdminRepository {
       publication: reviewPublication ? publication(coachId) : null,
       branchIds: const ['b1'],
       targetMembershipEligible: true,
+      certificationVerified: true,
+      approvedCertificationCount: 1,
     );
   }
 

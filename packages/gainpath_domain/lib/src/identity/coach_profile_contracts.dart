@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import '../identity.dart' show SessionScope;
 
@@ -222,15 +223,23 @@ class CoachPublicationReview {
       required this.draft,
       required this.publication,
       required List<String> branchIds,
-      required this.targetMembershipEligible})
+      required this.targetMembershipEligible,
+      this.certificationVerified = false,
+      this.approvedCertificationCount = 0})
       : branchIds = List.unmodifiable(branchIds);
   final String coachId;
   final CoachProfessionalProfile? draft;
   final PublishedCoachProfile? publication;
   final List<String> branchIds;
   final bool targetMembershipEligible;
+  final bool certificationVerified;
+  final int approvedCertificationCount;
   bool get canPublish =>
-      draft != null && targetMembershipEligible && branchIds.isNotEmpty;
+      draft != null &&
+      targetMembershipEligible &&
+      branchIds.isNotEmpty &&
+      certificationVerified &&
+      approvedCertificationCount > 0;
   int get publicRevision => publication?.revision ?? 0;
 }
 
@@ -257,19 +266,92 @@ class CoachCommandResult {
   }
 }
 
+const safeCoachAllowlistedMessages = <String>{
+  'An approved certification is required for publication.',
+  'Coach assignments changed. Reload the review.',
+  'Coach professional profile not found.',
+  'Public Coach profile not found.',
+  'Certification changed. Reload before continuing.',
+  'Certification unavailable.',
+  'Archived certification cannot change. Upload a new certification.',
+  'Certification limit reached.',
+  'Certification summary requires review.',
+  'Certification revision limit reached. Upload a new certification.',
+  'Invalid certification ID.',
+  'Invalid decision.',
+  'Invalid certification cursor.',
+  'A reason is required to reject a certification.',
+  'A reason is required to reject or revoke a certification.',
+  'A reason is required to revoke an approval.',
+  'Enter a reason before rejecting.',
+  'The profile changed. Discard and reload.',
+  'This Coach operation is unavailable for the current account.',
+  'The profile or service is unavailable.',
+  'Profile or account eligibility needs review.',
+  'Check the professional fields.',
+};
+
+bool isSafeCoachMessage(String msg) {
+  final trimmed = msg.trim();
+  if (trimmed.isEmpty) return false;
+  if (safeCoachAllowlistedMessages.contains(trimmed)) return true;
+  if (trimmed.length > 200) return false;
+  final lower = trimmed.toLowerCase();
+  if (lower.contains('token') ||
+      lower.contains('bearer') ||
+      lower.contains('auth') ||
+      lower.contains('uid') ||
+      lower.contains('exception') ||
+      lower.contains('error:') ||
+      lower.contains('stack') ||
+      lower.contains('http') ||
+      lower.contains('/') ||
+      lower.contains(r'\') ||
+      lower.contains('projects/') ||
+      lower.contains('databases/')) {
+    return false;
+  }
+  return true;
+}
+
+String safeCoachErrorMessage(Object? error,
+    {String fallback =
+        'Could not complete the Coach operation. Retry or refresh.'}) {
+  if (error == null) return fallback;
+  if (error is CoachRepositoryException) {
+    return error.message;
+  }
+  if (error is FormatException) {
+    return 'This Admin build cannot read the Coach record format. Open the main Admin at http://localhost:7359/ and reload. No records were changed.';
+  }
+  if (error is TimeoutException) {
+    return 'Coach operation timed out. Check your connection and retry.';
+  }
+  return fallback;
+}
+
 class CoachRepositoryException implements Exception {
-  const CoachRepositoryException(this.code);
+  const CoachRepositoryException(this.code, [this.customMessage]);
   final String code;
-  String get message => switch (code) {
-        'aborted' => 'The profile changed. Discard and reload.',
-        'permission-denied' ||
-        'unauthenticated' =>
-          'This Coach operation is unavailable for the current account.',
-        'not-found' => 'The profile or service is unavailable.',
-        'failed-precondition' => 'Profile or account eligibility needs review.',
-        'invalid-argument' => 'Check the professional fields.',
-        _ => 'Could not complete the Coach operation. Retry or refresh.'
-      };
+  final String? customMessage;
+  String get message {
+    if (customMessage != null && isSafeCoachMessage(customMessage!)) {
+      return customMessage!.trim();
+    }
+    return switch (code) {
+      'aborted' => 'The profile changed. Discard and reload.',
+      'permission-denied' ||
+      'unauthenticated' =>
+        'This Coach operation is unavailable for the current account.',
+      'not-found' => 'The profile or service is unavailable.',
+      'failed-precondition' => 'Profile or account eligibility needs review.',
+      'invalid-argument' => 'Check the professional fields.',
+      'resource-exhausted' => 'The limit for this operation was reached.',
+      'unavailable' =>
+        'Service temporarily unavailable. Check connection and retry.',
+      _ => 'Could not complete the Coach operation. Retry or refresh.'
+    };
+  }
   @override
   String toString() => message;
 }

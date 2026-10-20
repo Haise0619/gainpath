@@ -84,11 +84,20 @@ class _BookSessionScreenState extends State<BookSessionScreen> {
             'Date', '${dayNames[days[_day].weekday - 1]} ${days[_day].day}'),
         DetailRow('Time', _slot == null ? 'Not selected' : _slots[_slot!]),
         DetailRow('Location', widget.coach!.branch),
-        DetailRow('Total', 'RM ${widget.coach!.fee.toStringAsFixed(2)}')
+        DetailRow('Total',
+            widget.coach!.fee > 0 ? 'RM ${widget.coach!.fee.toStringAsFixed(2)}' : '—')
       ],
       footer: [
+        if (widget.coach!.fee <= 0)
+          const Padding(
+            padding: EdgeInsets.only(bottom: 8),
+            child: Text(
+              'This coach does not have a valid consultation fee set. Booking checkout is unavailable.',
+              style: TextStyle(color: AppColors.inkSoft),
+            ),
+          ),
         FilledButton(
-            onPressed: _slot == null ? null : _pay,
+            onPressed: (_slot == null || widget.coach!.fee <= 0) ? null : _pay,
             child: const Text('Continue to payment'))
       ],
     );
@@ -202,10 +211,12 @@ class __PersistedBookSessionViewState extends State<_PersistedBookSessionView> {
       if (mounted && widget.isCurrent() && generation == _quoteGeneration) {
         setState(() => _quote = result);
       }
-    } catch (_) {
+    } catch (e) {
       if (mounted && widget.isCurrent() && generation == _quoteGeneration) {
         setState(() => _quoteError =
-            'Fee unavailable. Retry the quote before continuing.');
+            (e is persisted.BookingException && e.code == 'failed-precondition')
+                ? 'The Coach has no valid published consultation fee. Booking checkout is unavailable.'
+                : 'Fee unavailable. Retry the quote before continuing.');
       }
     } finally {
       if (mounted && generation == _quoteGeneration) {
@@ -346,10 +357,18 @@ class __PersistedBookSessionViewState extends State<_PersistedBookSessionView> {
                     'Total',
                     _quoteBusy
                         ? 'Loading fee…'
-                        : _quote?.formattedAmount ?? '-'),
+                        : _quote?.formattedAmount ?? '—'),
               ],
               footer: [
-                if (_quoteError != null) Text(_quoteError!),
+                if (_quoteError != null)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Text(
+                      _quoteError!,
+                      style: const TextStyle(
+                          color: AppColors.inkSoft, fontSize: 13),
+                    ),
+                  ),
                 if (widget.payments != null &&
                     state.intent != null &&
                     _quote == null)

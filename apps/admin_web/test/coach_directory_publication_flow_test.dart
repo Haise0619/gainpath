@@ -19,7 +19,10 @@ class AdminFake implements CoachProfileAdminRepository {
   final SessionScope scope;
   bool allowed = true;
   String? failure;
+  CoachRepositoryException? customException;
   Object? loadFailure;
+  bool certificationVerified = true;
+  int approvedCertificationCount = 1;
   final requests = <String>[];
   final fields = CoachProfessionalFields(
       displayName: 'Fixture Coach',
@@ -57,13 +60,16 @@ class AdminFake implements CoachProfileAdminRepository {
           draft: draft,
           publication: publication,
           branchIds: ['main'],
-          targetMembershipEligible: true);
+          targetMembershipEligible: true,
+          certificationVerified: certificationVerified,
+          approvedCertificationCount: approvedCertificationCount);
   @override
   Future<CoachCommandResult> setStatus(
       {required CoachPublicationReview baseline,
       required CoachDirectoryAction action,
       required String requestId}) async {
     requests.add(requestId);
+    if (customException != null) throw customException!;
     if (failure != null) throw CoachRepositoryException(failure!);
     publication = PublishedCoachProfile(
         id: baseline.coachId,
@@ -175,5 +181,65 @@ void main() {
     await auth.signOut();
     await tester.pumpAndSettle();
     expect(find.text('Reviewable bio'), findsNothing);
+  });
+
+  test(
+      'revoking last approved certification removes BR-5 publication eligibility and re-approving restores it',
+      () async {
+    final repo = AdminFake(SessionScope(userId: 'admin', organizationId: 'o'))
+      ..seed();
+    final cubit = CoachDirectoryAdminCubit(repo);
+    await cubit.refresh();
+    await cubit.review('coach');
+    expect(cubit.state.review!.canPublish, isTrue);
+
+    // Revocation drops approved count to 0 and verified to false
+    repo.certificationVerified = false;
+    repo.approvedCertificationCount = 0;
+    await cubit.review('coach');
+    expect(cubit.state.review!.certificationVerified, isFalse);
+    expect(cubit.state.review!.approvedCertificationCount, 0);
+    expect(cubit.state.review!.canPublish, isFalse);
+
+    // Publication attempt is blocked
+    await cubit.setStatus(CoachDirectoryAction.publish);
+    expect(repo.publication, isNull);
+
+    // Restoring decision (approving) restores BR-5 eligibility
+    repo.certificationVerified = true;
+    repo.approvedCertificationCount = 1;
+    await cubit.review('coach');
+    expect(cubit.state.review!.canPublish, isTrue);
+    await cubit.setStatus(CoachDirectoryAction.publish);
+    expect(repo.publication!.isPublished, isTrue);
+
+    await cubit.close();
+  });
+
+  test(
+      'cubit filters out unsafe exception messages and preserves safe domain explanations',
+      () async {
+    final repo = AdminFake(SessionScope(userId: 'admin', organizationId: 'o'))
+      ..seed();
+    final cubit = CoachDirectoryAdminCubit(repo);
+    await cubit.refresh();
+    await cubit.review('coach');
+
+    // Unsafe message with internal path or sensitive token is sanitized
+    repo.customException = const CoachRepositoryException(
+        'failed-precondition', 'Error at orgs/o1/coachProfiles/c1 with token secret_xyz');
+    await cubit.setStatus(CoachDirectoryAction.publish);
+    expect(cubit.state.message, isNot(contains('secret_xyz')));
+    expect(cubit.state.message, isNot(contains('orgs/')));
+    expect(cubit.state.message, 'Profile or account eligibility needs review.');
+
+    // Allowlisted message is preserved verbatim
+    repo.customException = const CoachRepositoryException(
+        'failed-precondition', 'An approved certification is required for publication.');
+    await cubit.setStatus(CoachDirectoryAction.publish);
+    expect(
+        cubit.state.message, 'An approved certification is required for publication.');
+
+    await cubit.close();
   });
 }

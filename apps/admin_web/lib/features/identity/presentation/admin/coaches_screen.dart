@@ -95,6 +95,9 @@ class _CoachesScreenState extends State<CoachesScreen> {
             imageUrl: _profileFor(user)?.imageUrl,
             rating: _profileFor(user)?.rating,
             sessionsCompleted: _profileFor(user)?.sessionsCompleted,
+            feeLabel: _profileFor(user) != null && _profileFor(user)!.fee > 0
+                ? 'RM ${_profileFor(user)!.fee.toStringAsFixed(2)}'
+                : '—',
             note: _profileFor(user) == null
                 ? 'Not yet onboarded — no public profile'
                 : null,
@@ -132,6 +135,13 @@ class _CoachesScreenState extends State<CoachesScreen> {
           pending: drafts[id] != null &&
               (publications[id] == null ||
                   drafts[id]!.revision != publications[id]!.sourceRevision),
+          feeLabel: publications[id]?.fields.consultationFeeMinor != null &&
+                  publications[id]!.fields.consultationFeeMinor! > 0
+              ? 'RM ${(publications[id]!.fields.consultationFeeMinor! / 100).toStringAsFixed(2)}'
+              : (drafts[id]?.fields.consultationFeeMinor != null &&
+                      drafts[id]!.fields.consultationFeeMinor! > 0
+                  ? 'Draft: RM ${(drafts[id]!.fields.consultationFeeMinor! / 100).toStringAsFixed(2)}'
+                  : '—'),
           note: drafts[id]?.fields.yearsExperience == null
               ? null
               : '${drafts[id]!.fields.yearsExperience} yrs experience',
@@ -278,22 +288,127 @@ class _CoachesScreenState extends State<CoachesScreen> {
               ),
             const SizedBox(height: 8),
           ],
+          Builder(builder: (context) {
+            final draftFeeMinor = review.draft?.fields.consultationFeeMinor;
+            final draftFeeText = draftFeeMinor != null && draftFeeMinor > 0
+                ? 'RM ${(draftFeeMinor / 100).toStringAsFixed(2)} / session'
+                : '— (no fee set)';
+            final pubFeeMinor = review.publication?.fields.consultationFeeMinor;
+            final pubFeeText = pubFeeMinor != null && pubFeeMinor > 0
+                ? 'RM ${(pubFeeMinor / 100).toStringAsFixed(2)} / session'
+                : '— (no fee published)';
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Proposed fee (draft): $draftFeeText',
+                    style: const TextStyle(fontWeight: FontWeight.w600)),
+                Text('Published fee: $pubFeeText'),
+                if (review.draft != null &&
+                    (draftFeeMinor == null || draftFeeMinor <= 0))
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Text(
+                      'Note: No valid consultation fee is set in draft. If published, members will see "—" and session checkout will be disabled.',
+                      style: TextStyle(
+                          fontSize: 12, color: Colors.amber.shade900),
+                    ),
+                  ),
+                if (review.draft != null &&
+                    review.publication != null &&
+                    draftFeeMinor != null &&
+                    draftFeeMinor > 0 &&
+                    draftFeeMinor != pubFeeMinor)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Text(
+                      'Publishing will update public consultation fee from $pubFeeText to $draftFeeText. Existing bookings retain their snapshotted transaction prices.',
+                      style: TextStyle(
+                          fontSize: 12, color: Colors.blue.shade900),
+                    ),
+                  ),
+                const SizedBox(height: 6),
+              ],
+            );
+          }),
           Text(
             'Draft revision: ${review.draft?.revision ?? 'missing'} · Public revision: ${review.publicRevision}',
           ),
           Text(
             'Directory: ${review.publication?.status ?? 'not published'} · Assigned branches: ${review.branchIds.join(', ')}',
           ),
+          const SizedBox(height: 6),
+          Row(
+            children: [
+              Icon(
+                review.certificationVerified &&
+                        review.approvedCertificationCount > 0
+                    ? Icons.verified
+                    : Icons.gpp_maybe_outlined,
+                size: 16,
+                color: review.certificationVerified &&
+                        review.approvedCertificationCount > 0
+                    ? Colors.green.shade700
+                    : Colors.amber.shade900,
+              ),
+              const SizedBox(width: 6),
+              Text(
+                'Certification verification (BR-5): ${review.certificationVerified && review.approvedCertificationCount > 0 ? "Verified (${review.approvedCertificationCount} approved)" : "Unverified (0 approved)"}',
+                style: TextStyle(
+                  fontWeight: FontWeight.w600,
+                  color: review.certificationVerified &&
+                          review.approvedCertificationCount > 0
+                      ? Colors.green.shade800
+                      : Colors.amber.shade900,
+                ),
+              ),
+            ],
+          ),
+          if (!review.certificationVerified ||
+              review.approvedCertificationCount <= 0)
+            Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                decoration: BoxDecoration(
+                  color: Colors.amber.shade50,
+                  border: Border.all(color: Colors.amber.shade300),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.info_outline,
+                        size: 16, color: Colors.amber.shade900),
+                    const SizedBox(width: 8),
+                    const Expanded(
+                      child: Text(
+                        'Publication requires at least one approved certification (BR-5). Approve a submitted certification below to enable publication.',
+                        style: TextStyle(fontSize: 12.5),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
           if (review.draft == null)
-            const Text(
-              'Draft missing. Existing public content can still be deactivated.',
+            const Padding(
+              padding: EdgeInsets.only(top: 4),
+              child: Text(
+                'Draft missing. Existing public content can still be deactivated.',
+              ),
             ),
           if (review.draft != null && !review.targetMembershipEligible)
-            const Text(
-              'Current Coach membership is unavailable; publication is blocked.',
+            const Padding(
+              padding: EdgeInsets.only(top: 4),
+              child: Text(
+                'Current Coach membership is unavailable; publication is blocked.',
+              ),
             ),
-          const Text(
-            'The server also checks current account and branch eligibility at publication.',
+          const Padding(
+            padding: EdgeInsets.only(top: 4),
+            child: Text(
+              'The server also checks current account and branch eligibility at publication.',
+            ),
           ),
           const SizedBox(height: 12),
           CoachCertificationReviewPanel(
@@ -301,7 +416,62 @@ class _CoachesScreenState extends State<CoachesScreen> {
             coachId: review.coachId,
             discardGuard: _discardGuard,
             repository: context.read<CoachProfileAdminRepository>(),
+            onReviewed: () => _cubit!.review(review.coachId),
           ),
+          if (state.message != null) ...[
+            const SizedBox(height: 10),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              decoration: BoxDecoration(
+                color: state.message!.toLowerCase().contains('failed') ||
+                        state.message!.toLowerCase().contains('error') ||
+                        state.message!.toLowerCase().contains('review')
+                    ? Colors.red.shade50
+                    : Colors.green.shade50,
+                border: Border.all(
+                  color: state.message!.toLowerCase().contains('failed') ||
+                          state.message!.toLowerCase().contains('error') ||
+                          state.message!.toLowerCase().contains('review')
+                      ? Colors.red.shade200
+                      : Colors.green.shade200,
+                ),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    state.message!.toLowerCase().contains('failed') ||
+                            state.message!.toLowerCase().contains('error') ||
+                            state.message!.toLowerCase().contains('review')
+                        ? Icons.error_outline
+                        : Icons.check_circle_outline,
+                    size: 16,
+                    color: state.message!.toLowerCase().contains('failed') ||
+                            state.message!.toLowerCase().contains('error') ||
+                            state.message!.toLowerCase().contains('review')
+                        ? Colors.red.shade800
+                        : Colors.green.shade800,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      state.message!,
+                      style: TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w500,
+                        color:
+                            state.message!.toLowerCase().contains('failed') ||
+                                    state.message!.toLowerCase().contains('error') ||
+                                    state.message!.toLowerCase().contains('review')
+                                ? Colors.red.shade900
+                                : Colors.green.shade900,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
           const SizedBox(height: 12),
           Wrap(
             spacing: 12,
@@ -327,7 +497,14 @@ class _CoachesScreenState extends State<CoachesScreen> {
                     ? () => _guarded(
                         () => _cubit!.setStatus(CoachDirectoryAction.publish))
                     : null,
-                child: const Text('Publish profile'),
+                child: state.busy
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                            strokeWidth: 2, color: Colors.white),
+                      )
+                    : const Text('Publish profile'),
               ),
               OutlinedButton(
                 onPressed:
@@ -401,13 +578,14 @@ class _CoachEntry {
       this.imageUrl,
       this.rating,
       this.sessionsCompleted,
+      this.feeLabel,
       this.note,
       this.onTap,
       this.actionLabel});
   final String id, name, specialty, statusLabel;
   final List<String> branchIds;
   final bool pending;
-  final String? imageUrl, note, actionLabel;
+  final String? imageUrl, note, actionLabel, feeLabel;
   final double? rating;
   final int? sessionsCompleted;
   final VoidCallback? onTap;
@@ -476,6 +654,12 @@ class _CoachCard extends StatelessWidget {
                   style: const TextStyle(
                       fontSize: 11.5, color: AppColors.inkSoft)),
             ]),
+            const SizedBox(height: 4),
+            Text('Fee: ${entry.feeLabel ?? '—'}',
+                style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.primary)),
             if (entry.note != null)
               Text(entry.note!,
                   style: const TextStyle(

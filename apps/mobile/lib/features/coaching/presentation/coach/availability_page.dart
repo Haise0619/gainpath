@@ -10,14 +10,16 @@ class AvailabilityPage extends StatelessWidget {
       required this.timeOff,
       required this.limits,
       this.header = const [],
+      this.footer = const [],
       this.actions,
       this.onAddTimeOff,
-      this.workingHoursTitle = 'Working hours'});
+      this.workingHoursTitle = 'Working hours',
+      this.limitsTitle = 'Booking limits'});
   final Widget weekAtGlance;
-  final List<Widget> workingHours, timeOff, limits, header;
+  final List<Widget> workingHours, timeOff, limits, header, footer;
   final List<Widget>? actions;
   final VoidCallback? onAddTimeOff;
-  final String workingHoursTitle;
+  final String workingHoursTitle, limitsTitle;
   @override
   Widget build(BuildContext context) => Scaffold(
         appBar: AppBar(title: const Text('Availability'), actions: actions),
@@ -38,8 +40,12 @@ class AvailabilityPage extends StatelessWidget {
           ]),
           ...timeOff,
           const SizedBox(height: 20),
-          const Eyebrow('Roster scheduling limits'),
+          Eyebrow(limitsTitle),
           ...limits,
+          if (footer.isNotEmpty) ...[
+            const SizedBox(height: 20),
+            ...footer,
+          ],
         ]),
       );
 }

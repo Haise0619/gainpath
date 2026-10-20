@@ -10,10 +10,12 @@ class CoachCertificationReviewPanel extends StatefulWidget {
       {super.key,
       required this.coachId,
       required this.repository,
-      required this.discardGuard});
+      required this.discardGuard,
+      this.onReviewed});
   final String coachId;
   final CoachProfileAdminRepository repository;
   final CoachReviewDiscardGuard discardGuard;
+  final VoidCallback? onReviewed;
   @override
   State<CoachCertificationReviewPanel> createState() => _ReviewState();
 }
@@ -102,10 +104,12 @@ class _ReviewState extends State<CoachCertificationReviewPanel> {
     }
   }
 
-  Future<void> review(Map<String, dynamic> cert, String decision) async {
-    final reason = reasons[cert['id']]?.text.trim() ?? '';
+  Future<void> review(Map<String, dynamic> cert, String decision,
+      {String? overrideReason}) async {
+    final reason = overrideReason ?? (reasons[cert['id']]?.text.trim() ?? '');
     if (decision == 'reject' && reason.isEmpty) {
-      setState(() => message = 'Enter a reason before rejecting.');
+      setState(() =>
+          message = 'A reason is required to reject or revoke a certification.');
       return;
     }
     final key = '${cert['id']}:${cert['revision']}:$decision:$reason';
@@ -131,15 +135,159 @@ class _ReviewState extends State<CoachCertificationReviewPanel> {
       if (mounted) {
         reasons[cert['id']]?.clear();
         reload();
-        setState(() => message = 'Review saved.');
+        setState(() => message = decision == 'approve'
+            ? 'Certification approved.'
+            : 'Certification rejected / approval revoked.');
+        widget.onReviewed?.call();
       }
-    } catch (_) {
-      if (mounted)
-        setState(() => message =
-            'Review was not confirmed. Retry the same decision or refresh for the latest revision.');
+    } catch (e) {
+      if (mounted) {
+        setState(() => message = safeCoachErrorMessage(e,
+            fallback:
+                'Review was not confirmed. Retry or refresh for the latest revision.'));
+      }
     } finally {
       if (mounted) setState(() => busy = false);
     }
+  }
+
+  Future<void> promptRevoke(Map<String, dynamic> cert) async {
+    final controller = TextEditingController();
+    String? localError;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Row(
+            children: [
+              Icon(Icons.warning_amber_rounded, color: Colors.red),
+              SizedBox(width: 8),
+              Text('Revoke Certification Approval'),
+            ],
+          ),
+          content: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 480),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Revoking approval for "${cert['title']}" will mark this certification as rejected and deduct it from verified credentials.',
+                  style: const TextStyle(fontSize: 13.5),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'If this is the coach\'s only approved certification, their directory profile will automatically become inactive under BR-5.',
+                  style: TextStyle(
+                      fontSize: 13,
+                      color: Colors.red.shade800,
+                      fontWeight: FontWeight.w500),
+                ),
+                const SizedBox(height: 14),
+                TextField(
+                  controller: controller,
+                  maxLength: 1000,
+                  maxLines: 2,
+                  autofocus: true,
+                  decoration: InputDecoration(
+                    labelText: 'Reason for revocation (required)',
+                    errorText: localError,
+                    border: const OutlineInputBorder(),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              style:
+                  FilledButton.styleFrom(backgroundColor: Colors.red.shade700),
+              onPressed: () {
+                final reason = controller.text.trim();
+                if (reason.isEmpty) {
+                  setDialogState(() => localError =
+                      'A reason is required to revoke an approval.');
+                  return;
+                }
+                Navigator.of(dialogContext).pop(true);
+              },
+              child: const Text('Confirm Revocation'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (confirmed == true && mounted) {
+      final reason = controller.text.trim();
+      await review(cert, 'reject', overrideReason: reason);
+    }
+    controller.dispose();
+  }
+
+  Future<void> promptReviseToApprove(Map<String, dynamic> cert) async {
+    final controller = TextEditingController();
+    final confirmed = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.verified, color: Colors.green),
+            SizedBox(width: 8),
+            Text('Revise Decision: Approve'),
+          ],
+        ),
+        content: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 480),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Are you sure you want to approve "${cert['title']}"? This will restore this certification to verified status and count toward BR-5 directory eligibility.',
+                style: const TextStyle(fontSize: 13.5),
+              ),
+              const SizedBox(height: 14),
+              TextField(
+                controller: controller,
+                maxLength: 1000,
+                maxLines: 2,
+                autofocus: true,
+                decoration: const InputDecoration(
+                  labelText: 'Correction note (optional)',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            style:
+                FilledButton.styleFrom(backgroundColor: Colors.green.shade700),
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Confirm Approval'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && mounted) {
+      final reason = controller.text.trim();
+      await review(cert, 'approve',
+          overrideReason: reason.isNotEmpty ? reason : null);
+    }
+    controller.dispose();
   }
 
   @override
@@ -175,6 +323,10 @@ class _ReviewState extends State<CoachCertificationReviewPanel> {
                   Builder(builder: (context) {
                     final cert = Map<String, dynamic>.from(raw);
                     final id = cert['id'] as String;
+                    final status = cert['status'] as String? ?? 'pending';
+                    final isPending = status == 'pending';
+                    final isApproved = status == 'approved';
+                    final isRejected = status == 'rejected';
                     final reason =
                         reasons.putIfAbsent(id, TextEditingController.new);
                     return Card(
@@ -183,12 +335,64 @@ class _ReviewState extends State<CoachCertificationReviewPanel> {
                             child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Text('${cert['title']} · ${cert['issuer']}'),
-                                  Text(
-                                      'Status: ${cert['status']} · Revision: ${cert['revision']}'),
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                        child: Text(
+                                          '${cert['title']} · ${cert['issuer']}',
+                                          style: const TextStyle(
+                                              fontWeight: FontWeight.w600,
+                                              fontSize: 15),
+                                        ),
+                                      ),
+                                      Chip(
+                                        visualDensity: VisualDensity.compact,
+                                        label: Text(
+                                          status.toUpperCase(),
+                                          style: TextStyle(
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.bold,
+                                            color: isApproved
+                                                ? Colors.green.shade800
+                                                : isRejected
+                                                    ? Colors.red.shade800
+                                                    : isPending
+                                                        ? Colors.orange.shade800
+                                                        : Colors.grey.shade700,
+                                          ),
+                                        ),
+                                        backgroundColor: isApproved
+                                            ? Colors.green.shade50
+                                            : isRejected
+                                                ? Colors.red.shade50
+                                                : isPending
+                                                    ? Colors.orange.shade50
+                                                    : Colors.grey.shade100,
+                                        side: BorderSide(
+                                          color: isApproved
+                                              ? Colors.green.shade300
+                                              : isRejected
+                                                  ? Colors.red.shade300
+                                                  : isPending
+                                                      ? Colors.orange.shade300
+                                                      : Colors.grey.shade300,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text('Revision: ${cert['revision']}'),
                                   if (cert['reason'] is String &&
                                       (cert['reason'] as String).isNotEmpty)
-                                    Text('Review reason: ${cert['reason']}'),
+                                    Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                          vertical: 4),
+                                      child: Text(
+                                        'Review reason: ${cert['reason']}',
+                                        style: const TextStyle(
+                                            fontStyle: FontStyle.italic),
+                                      ),
+                                    ),
                                   TextButton.icon(
                                       onPressed:
                                           busy ? null : () => preview(cert),
@@ -196,26 +400,118 @@ class _ReviewState extends State<CoachCertificationReviewPanel> {
                                           Icons.description_outlined),
                                       label:
                                           const Text('View private document')),
-                                  if (cert['status'] != 'archived') ...[
+                                  if (isPending) ...[
                                     TextField(
                                         controller: reason,
                                         enabled: !busy,
                                         maxLength: 1000,
                                         decoration: const InputDecoration(
                                             labelText:
-                                                'Review reason (required for rejection)')),
+                                                'Review reason (required for rejection, optional for approval)')),
+                                    const SizedBox(height: 8),
                                     Wrap(spacing: 12, children: [
-                                      FilledButton(
+                                      FilledButton.icon(
                                           onPressed: busy
                                               ? null
                                               : () => review(cert, 'approve'),
-                                          child: const Text('Approve')),
-                                      OutlinedButton(
+                                          icon: const Icon(
+                                              Icons.check_circle_outline,
+                                              size: 16),
+                                          label: const Text('Approve')),
+                                      OutlinedButton.icon(
                                           onPressed: busy
                                               ? null
                                               : () => review(cert, 'reject'),
-                                          child: const Text('Reject'))
+                                          icon: const Icon(
+                                              Icons.cancel_outlined,
+                                              size: 16),
+                                          label: const Text('Reject'))
                                     ]),
+                                  ] else if (isApproved) ...[
+                                    Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                          vertical: 6),
+                                      child: Row(
+                                        children: [
+                                          Icon(Icons.verified,
+                                              size: 16,
+                                              color: Colors.green.shade700),
+                                          const SizedBox(width: 6),
+                                          Text(
+                                            'Certification verified and approved.',
+                                            style: TextStyle(
+                                              color: Colors.green.shade800,
+                                              fontWeight: FontWeight.w500,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    const SizedBox(height: 6),
+                                    OutlinedButton.icon(
+                                      onPressed: busy
+                                          ? null
+                                          : () => promptRevoke(cert),
+                                      icon: const Icon(
+                                          Icons.remove_circle_outline,
+                                          size: 16,
+                                          color: Colors.red),
+                                      label: const Text('Revoke approval',
+                                          style: TextStyle(color: Colors.red)),
+                                      style: OutlinedButton.styleFrom(
+                                        side: BorderSide(
+                                            color: Colors.red.shade300),
+                                      ),
+                                    ),
+                                  ] else if (isRejected) ...[
+                                    Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                          vertical: 6),
+                                      child: Row(
+                                        children: [
+                                          Icon(Icons.block,
+                                              size: 16,
+                                              color: Colors.red.shade700),
+                                          const SizedBox(width: 6),
+                                          Text(
+                                            'Certification rejected.',
+                                            style: TextStyle(
+                                              color: Colors.red.shade800,
+                                              fontWeight: FontWeight.w500,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    const SizedBox(height: 6),
+                                    OutlinedButton.icon(
+                                      onPressed: busy
+                                          ? null
+                                          : () => promptReviseToApprove(cert),
+                                      icon: const Icon(
+                                          Icons.check_circle_outline,
+                                          size: 16,
+                                          color: Colors.green),
+                                      label: const Text(
+                                          'Revise decision (Approve)',
+                                          style:
+                                              TextStyle(color: Colors.green)),
+                                      style: OutlinedButton.styleFrom(
+                                        side: BorderSide(
+                                            color: Colors.green.shade300),
+                                      ),
+                                    ),
+                                  ] else if (status == 'archived') ...[
+                                    const Padding(
+                                      padding:
+                                          EdgeInsets.symmetric(vertical: 6),
+                                      child: Text(
+                                        'Archived certification cannot be modified.',
+                                        style: TextStyle(
+                                            fontStyle: FontStyle.italic,
+                                            color: Colors.grey),
+                                      ),
+                                    ),
                                   ],
                                   ExpansionTile(
                                     title: const Text('Review history'),

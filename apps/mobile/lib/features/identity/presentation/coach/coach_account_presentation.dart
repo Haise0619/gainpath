@@ -110,7 +110,9 @@ class CoachAccountPresentation extends StatelessWidget {
                   context,
                   Icons.edit_note_rounded,
                   'Bio & specialties',
-                  'What members see in the directory',
+                  data.fee != null
+                      ? 'Fee: ${data.fee} / session'
+                      : 'What members see in the directory',
                   onEdit,
                 ),
                 const Divider(height: 1, indent: 62),
@@ -284,6 +286,33 @@ class CoachProfessionalHeader extends StatelessWidget {
               ],
             ),
           ),
+          if (data.publicationMessage != null &&
+              data.publicationMessage!.startsWith('Saved draft')) ...[
+            const SizedBox(height: 8),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Row(
+                children: [
+                  Icon(Icons.edit_note, size: 16, color: Colors.white70),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Draft saved — pending Admin publication',
+                      style: TextStyle(
+                          color: Colors.white70,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -311,7 +340,7 @@ class CoachProfessionalDetails extends StatelessWidget {
           const Text('-')
         ],
         const SizedBox(height: 8),
-        Text('Consultation fee: ${data.fee ?? '-'}'),
+        Text('Consultation fee: ${data.fee ?? '—'}'),
       ]));
 }
 

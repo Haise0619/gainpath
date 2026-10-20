@@ -170,10 +170,41 @@ class CoachRosterSections {
   List<Widget> get workingHours => [
         const Eyebrow('Recurring working hours'),
         if (editor.loading) const LinearProgressIndicator(),
-        if (editor.message != null) Text(editor.message!),
-        if (editor.baseline == null)
+        if (editor.baseline == null && editor.message != null)
+          Panel(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Icon(Icons.error_outline,
+                        color: AppColors.danger, size: 20),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        editor.message!,
+                        style: const TextStyle(
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.danger),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                FilledButton.tonalIcon(
+                  onPressed: () => editor.reload(discard: true),
+                  icon: const Icon(Icons.refresh, size: 18),
+                  label: const Text('Retry loading roster'),
+                ),
+              ],
+            ),
+          )
+        else if (editor.message != null)
+          Text(editor.message!),
+        if (editor.baseline == null && editor.message == null)
           const Panel(child: Text('-'))
-        else ...[
+        else if (editor.baseline != null) ...[
           Text('Organization time: ${editor.baseline!.timeZone}'),
           const Text(
               'Weekly changes apply to future unbooked time. Existing bookings are preserved.'),
@@ -201,7 +232,34 @@ class CoachRosterSections {
   }
 
   List<Widget> get timeOff => [
-        if (editor.baseline == null)
+        if (editor.baseline == null && editor.message != null)
+          Panel(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Row(
+                  children: [
+                    Icon(Icons.warning_amber_rounded,
+                        color: AppColors.danger, size: 18),
+                    SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        'Time off and breaks could not be loaded.',
+                        style: TextStyle(fontWeight: FontWeight.w500),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                TextButton.icon(
+                  onPressed: () => editor.reload(discard: true),
+                  icon: const Icon(Icons.refresh, size: 16),
+                  label: const Text('Retry loading roster'),
+                ),
+              ],
+            ),
+          )
+        else if (editor.baseline == null)
           const Panel(child: Text('-'))
         else if (editor.exceptions.isEmpty)
           const Panel(child: Text('No time off or breaks scheduled.')),
@@ -241,48 +299,73 @@ class CoachRosterSections {
   List<Widget> get limits => [
         Panel(
             child: Column(children: [
-          DetailRow('Maximum booking hours per day',
-              editor.dailyHours?.toString() ?? '-'),
-          DropdownButtonFormField<int>(
-              key: ValueKey(('hours', editor.dailyHours)),
-              initialValue: editor.dailyHours,
-              decoration:
-                  const InputDecoration(labelText: 'Booking hours per day'),
-              items: List.generate(
-                  24,
-                  (i) => DropdownMenuItem(
-                      value: i + 1, child: Text('${i + 1} hours'))),
-              onChanged: enabled ? (v) => editor.limits(hours: v) : null),
-          const Divider(height: 20),
-          DetailRow('How far ahead members can book',
-              editor.advanceDays == null ? '-' : '${editor.advanceDays} days'),
-          DropdownButtonFormField<int>(
-              key: ValueKey(('days', editor.advanceDays)),
-              initialValue: editor.advanceDays,
-              decoration:
-                  const InputDecoration(labelText: 'Advance booking days'),
-              items: List.generate(
-                  30,
-                  (i) => DropdownMenuItem(
-                      value: i + 1, child: Text('${i + 1} days'))),
-              onChanged: enabled ? (v) => editor.limits(days: v) : null),
-          const SizedBox(height: 16),
-          if (editor.uncertain)
-            const Text(
-                'Save could not be confirmed. Retry the same changes or discard and reload.'),
-          FilledButton(
-              onPressed: allowEdit &&
-                      !editor.busy &&
-                      !editor.conflict &&
-                      editor.dirty &&
-                      editor.isCurrent()
-                  ? editor.save
-                  : null,
-              child: Text(editor.saving
-                  ? 'Saving roster…'
-                  : editor.uncertain
-                      ? 'Retry roster save'
-                      : 'Save roster')),
+          if (editor.baseline == null && editor.message != null) ...[
+            const Row(
+              children: [
+                Icon(Icons.warning_amber_rounded,
+                    color: AppColors.danger, size: 18),
+                SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    'Scheduling limits could not be loaded.',
+                    style: TextStyle(fontWeight: FontWeight.w500),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                onPressed: () => editor.reload(discard: true),
+                icon: const Icon(Icons.refresh, size: 16),
+                label: const Text('Retry loading roster'),
+              ),
+            ),
+          ] else ...[
+            DetailRow('Maximum booking hours per day',
+                editor.dailyHours?.toString() ?? '-'),
+            DropdownButtonFormField<int>(
+                key: ValueKey(('hours', editor.dailyHours)),
+                initialValue: editor.dailyHours,
+                decoration:
+                    const InputDecoration(labelText: 'Booking hours per day'),
+                items: List.generate(
+                    24,
+                    (i) => DropdownMenuItem(
+                        value: i + 1, child: Text('${i + 1} hours'))),
+                onChanged: enabled ? (v) => editor.limits(hours: v) : null),
+            const Divider(height: 20),
+            DetailRow('How far ahead members can book',
+                editor.advanceDays == null ? '-' : '${editor.advanceDays} days'),
+            DropdownButtonFormField<int>(
+                key: ValueKey(('days', editor.advanceDays)),
+                initialValue: editor.advanceDays,
+                decoration:
+                    const InputDecoration(labelText: 'Advance booking days'),
+                items: List.generate(
+                    30,
+                    (i) => DropdownMenuItem(
+                        value: i + 1, child: Text('${i + 1} days'))),
+                onChanged: enabled ? (v) => editor.limits(days: v) : null),
+            const SizedBox(height: 16),
+            if (editor.uncertain)
+              const Text(
+                  'Save could not be confirmed. Retry the same changes or discard and reload.'),
+            FilledButton(
+                onPressed: allowEdit &&
+                        !editor.busy &&
+                        !editor.conflict &&
+                        editor.dirty &&
+                        editor.isCurrent()
+                    ? editor.save
+                    : null,
+                child: Text(editor.saving
+                    ? 'Saving roster…'
+                    : editor.uncertain
+                        ? 'Retry roster save'
+                        : 'Save roster')),
+          ],
         ]))
       ];
 }

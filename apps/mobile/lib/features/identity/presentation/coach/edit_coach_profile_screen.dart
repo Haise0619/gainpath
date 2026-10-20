@@ -78,18 +78,27 @@ class _EditCoachProfileScreenState extends State<EditCoachProfileScreen> {
   }
 
   Future<void> _save() async {
+    final rawFeeInput = fee.text.trim();
+    var cleanedFee = rawFeeInput;
+    if (cleanedFee.toLowerCase().startsWith('rm')) {
+      cleanedFee = cleanedFee.substring(2).trim();
+    } else if (cleanedFee.toLowerCase().startsWith('myr')) {
+      cleanedFee = cleanedFee.substring(3).trim();
+    }
+
     try {
       final raw = years.text.trim(),
           parsed = raw.isEmpty ? null : int.tryParse(raw);
-      if (raw.isNotEmpty && parsed == null) throw const FormatException();
-      final rawFee = fee.text.trim();
-      if (rawFee.isNotEmpty &&
-          !RegExp(r'^\d{1,5}(\.\d{1,2})?$').hasMatch(rawFee)) {
+      if (raw.isNotEmpty && parsed == null) {
+        throw const FormatException('Years of experience must be a whole number.');
+      }
+      if (cleanedFee.isNotEmpty &&
+          !RegExp(r'^\d{1,5}(\.\d{1,2})?$').hasMatch(cleanedFee)) {
         throw const FormatException(
-            'Enter a fee with up to two decimal places.');
+            'Enter a valid fee (e.g. 150.00) with up to two decimal places.');
       }
       final feeMinor =
-          rawFee.isEmpty ? null : (double.parse(rawFee) * 100).round();
+          cleanedFee.isEmpty ? null : (double.parse(cleanedFee) * 100).round();
       if (feeMinor != null && feeMinor > 1000000) {
         throw const FormatException('Fee must be MYR 10,000 or less.');
       }
@@ -114,20 +123,73 @@ class _EditCoachProfileScreenState extends State<EditCoachProfileScreen> {
           consultationFeeMinor: feeMinor,
           photoPath: photoPath);
       setState(() => validation = null);
+
+      final currentFields = widget.controller.state.profile?.fields;
+      final patch = CoachProfilePatch.between(currentFields, fields);
+      if (patch.isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('No changes to save.'),
+              behavior: SnackBarBehavior.floating,
+              duration: Duration(seconds: 2),
+            ),
+          );
+        }
+        return;
+      }
+
       final priorRevision = widget.controller.state.profile?.revision ?? 0;
       await widget.controller.save(fields);
-      if (mounted &&
-          (widget.controller.state.profile?.revision ?? 0) > priorRevision) {
-        setState(_reset);
-      }
-    } on FormatException {
       if (mounted) {
-        setState(() => validation =
-            'Check name, specialty, bio, tags, experience and fee (MYR 0–10,000, up to two decimals).');
+        final currentRevision = widget.controller.state.profile?.revision ?? 0;
+        if (currentRevision > priorRevision) {
+          setState(_reset);
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Profile draft saved. Pending Admin publication.'),
+              behavior: SnackBarBehavior.floating,
+              duration: Duration(seconds: 3),
+            ),
+          );
+        } else if (widget.controller.state.message != null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(widget.controller.state.message!),
+              behavior: SnackBarBehavior.floating,
+              backgroundColor: AppColors.danger,
+              duration: const Duration(seconds: 4),
+            ),
+          );
+        }
+      }
+    } on FormatException catch (e) {
+      if (mounted) {
+        final msg = e.message.isNotEmpty
+            ? e.message
+            : 'Check name, specialty, bio, tags, experience and fee (MYR 0–10,000, up to two decimals).';
+        setState(() => validation = msg);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(msg),
+            behavior: SnackBarBehavior.floating,
+            backgroundColor: AppColors.danger,
+            duration: const Duration(seconds: 4),
+          ),
+        );
       }
     } catch (_) {
       if (mounted) {
-        setState(() => validation = 'Could not upload the photo. Try again.');
+        const msg = 'Could not save the profile. Check connection and try again.';
+        setState(() => validation = msg);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(msg),
+            behavior: SnackBarBehavior.floating,
+            backgroundColor: AppColors.danger,
+            duration: Duration(seconds: 4),
+          ),
+        );
       }
     } finally {
       if (mounted) setState(() => photoBusy = false);
@@ -144,6 +206,12 @@ class _EditCoachProfileScreenState extends State<EditCoachProfileScreen> {
             !state.conflict &&
             !photoBusy;
         final fields = state.profile?.fields;
+        final currentFeeMinor = () {
+          final rawFee = fee.text.trim();
+          if (rawFee.isEmpty) return null;
+          final d = double.tryParse(rawFee);
+          return d == null ? -1 : (d * 100).round();
+        }();
         final dirty = photo != null ||
             photoPath != fields?.photoPath ||
             name.text != (fields?.displayName ?? '') ||
@@ -151,10 +219,7 @@ class _EditCoachProfileScreenState extends State<EditCoachProfileScreen> {
             bio.text != (fields?.bio ?? '') ||
             tags.text != (fields?.specializationTags.join(', ') ?? '') ||
             years.text != (fields?.yearsExperience?.toString() ?? '') ||
-            fee.text !=
-                (fields?.consultationFeeMinor == null
-                    ? ''
-                    : (fields!.consultationFeeMinor! / 100).toStringAsFixed(2));
+            currentFeeMinor != fields?.consultationFeeMinor;
         return CoachUnsavedChangesGuard(
             dirty: dirty,
             busy: state.saving || photoBusy,
@@ -334,8 +399,25 @@ class _EditCoachProfileScreenState extends State<EditCoachProfileScreen> {
                             child: const Text('Manage private certifications')),
                       ])),
                   const SizedBox(height: 24),
-                  if (validation != null) Text(validation!),
-                  if (state.message != null) Text(state.message!),
+                  if (validation != null)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: Text(validation!,
+                          style: const TextStyle(
+                              color: AppColors.danger,
+                              fontWeight: FontWeight.w600)),
+                    ),
+                  if (state.message != null)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: Text(state.message!,
+                          style: TextStyle(
+                              color: state.status == CoachProfileStatus.error ||
+                                      state.conflict
+                                  ? AppColors.danger
+                                  : AppColors.success,
+                              fontWeight: FontWeight.w600)),
+                    ),
                   FilledButton(
                       onPressed: enabled ? _save : null,
                       child: Text(state.saving ? 'Saving…' : 'Save profile')),

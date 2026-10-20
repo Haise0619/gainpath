@@ -71,5 +71,56 @@ void main() {
         targetMembershipEligible: false);
     expect(review.canPublish, isFalse);
     expect(review.publicRevision, 0);
+
+    final eligibleWithoutCert = CoachPublicationReview(
+        coachId: 'coach',
+        draft: CoachProfessionalProfile(
+            id: 'coach',
+            fields: fields(),
+            revision: 1,
+            createdAtMillis: 1,
+            updatedAtMillis: 2),
+        publication: null,
+        branchIds: ['b1'],
+        targetMembershipEligible: true,
+        certificationVerified: false,
+        approvedCertificationCount: 0);
+    expect(eligibleWithoutCert.canPublish, isFalse);
+
+    final eligibleWithCert = CoachPublicationReview(
+        coachId: 'coach',
+        draft: CoachProfessionalProfile(
+            id: 'coach',
+            fields: fields(),
+            revision: 1,
+            createdAtMillis: 1,
+            updatedAtMillis: 2),
+        publication: null,
+        branchIds: ['b1'],
+        targetMembershipEligible: true,
+        certificationVerified: true,
+        approvedCertificationCount: 1);
+    expect(eligibleWithCert.canPublish, isTrue);
+
+    expect(
+        const CoachRepositoryException('failed-precondition',
+                'An approved certification is required for publication.')
+            .message,
+        'An approved certification is required for publication.');
+    expect(
+        const CoachRepositoryException('failed-precondition').message,
+        'Profile or account eligibility needs review.');
+    // Unsafe or raw exception messages with paths or tokens are safely discarded
+    expect(
+        const CoachRepositoryException('failed-precondition',
+                'Error: at orgs/o1/coachProfiles/c1 with token secret_xyz')
+            .message,
+        'Profile or account eligibility needs review.');
+    expect(
+        safeCoachErrorMessage(const CoachRepositoryException('not-found')),
+        'The profile or service is unavailable.');
+    expect(
+        safeCoachErrorMessage(Exception('internal server crash stack trace')),
+        'Could not complete the Coach operation. Retry or refresh.');
   });
 }
