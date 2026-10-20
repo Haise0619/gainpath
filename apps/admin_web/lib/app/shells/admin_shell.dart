@@ -5,6 +5,7 @@ import 'package:gainpath_ui/gainpath_ui.dart';
 import '../../features/analytics/presentation/admin/admin_dashboard_screens.dart';
 import '../../features/recommendation/presentation/admin/admin_recommendation_screens.dart';
 import '../../features/identity/presentation/admin/admin_settings_screens.dart';
+import '../../features/identity/presentation/admin/admin_account_avatar.dart';
 import '../../features/workout/presentation/admin/exercise_tutorials_screen.dart';
 import '../../features/workout/presentation/admin/routine_templates_screen.dart';
 import '../../features/workout/presentation/admin/equipment_catalog_screen.dart';
@@ -16,8 +17,14 @@ import '../../features/analytics/presentation/admin/reports_screen.dart';
 import '../../features/content/presentation/admin/system_settings_screen.dart';
 import '../../features/identity/presentation/admin/members_screen.dart';
 import '../../features/identity/presentation/admin/coaches_screen.dart';
+import '../../features/identity/presentation/admin/coach_review_discard_guard.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:gainpath_domain/identity.dart';
+import 'package:gainpath_domain/gainpath_domain.dart'
+    show AuthSession, BookingListRepository;
+import 'package:gainpath_domain/coaching.dart' show CoachAvailabilityRepository;
+import '../di/coach_availability_factory.dart';
+import '../di/booking_factory.dart';
 import '../routing/app_routes.dart';
 
 /// A single directly-selectable sidebar destination.
@@ -51,14 +58,19 @@ class _NavGroup {
 /// ever pushes a new screen or shows a back button; the sidebar is the
 /// only way to move between areas, exactly like a real admin website.
 class AdminShell extends StatefulWidget {
-  const AdminShell({super.key});
+  const AdminShell({super.key, this.liveSession});
+  final AuthSession? liveSession;
 
   @override
   State<AdminShell> createState() => _AdminShellState();
 }
 
 class _AdminShellState extends State<AdminShell> {
+  final _coachReviewGuard = CoachReviewDiscardGuard();
   int _index = 0;
+  String? _scopedCoachIdForBookings;
+  String? _scopedCoachIdForSchedule;
+  final Set<int> _visited = {0};
   final Set<String> _expanded = {'Users & Coaches'};
 
   /// Built once (not `const`) so the Dashboard's refund-alert callback can
@@ -71,26 +83,35 @@ class _AdminShellState extends State<AdminShell> {
         'Dashboard',
         'How the facility is doing today',
         AdminDashboardScreen(
+            live: widget.liveSession != null,
+            liveSession: widget.liveSession,
             onOpenRefunds: () => _select(_indexOfLabel('Refunds')))),
     _NavGroup(
         Icons.people_outline_rounded, Icons.people_rounded, 'Users & Coaches', [
-      _NavPage(Icons.groups_outlined, Icons.groups_rounded, 'Members',
-          'Search, filter, and manage member accounts', const MembersScreen()),
+      _NavPage(
+          Icons.groups_outlined,
+          Icons.groups_rounded,
+          'Members',
+          'Search, filter, and view member accounts',
+          MembersScreen(live: widget.liveSession != null)),
       _NavPage(
           Icons.sports_outlined,
           Icons.sports_rounded,
           'Coaches',
           'Provision, verify, and manage coaches by branch',
-          const CoachesScreen()),
+          CoachesScreen(
+              live: widget.liveSession != null,
+              discardGuard: _coachReviewGuard)),
     ]),
     _NavPage(
         Icons.auto_awesome_outlined,
         Icons.auto_awesome_rounded,
         'Recommendations',
         'High-risk exercises and matched leads',
-        const RiskLeaderboardScreen()),
+        RiskLeaderboardScreen(live: widget.liveSession != null)),
     _NavPage(Icons.receipt_long_outlined, Icons.receipt_long_rounded, 'Refunds',
-        'Approve or reject disputed transactions', const RefundsScreen()),
+        'Approve or reject disputed transactions',
+        RefundsScreen(live: widget.liveSession != null)),
     _NavGroup(Icons.folder_outlined, Icons.folder_rounded, 'Content', [
       _NavPage(
           Icons.video_library_outlined,
@@ -116,8 +137,10 @@ class _AdminShellState extends State<AdminShell> {
           Icons.card_giftcard_outlined,
           Icons.card_giftcard_rounded,
           'Reward Catalog',
-          'Points-shop inventory and stock',
-          const RewardCatalogScreen()),
+          widget.liveSession != null
+              ? 'Author and archive reward metadata drafts'
+              : 'Points-shop inventory and stock',
+          RewardCatalogScreen(live: widget.liveSession != null)),
       _NavPage(Icons.campaign_outlined, Icons.campaign_rounded, 'Announcements',
           'Broadcast messages to every member', const AnnouncementsScreen()),
       _NavPage(
@@ -125,16 +148,17 @@ class _AdminShellState extends State<AdminShell> {
           Icons.smart_toy_rounded,
           'AI Chatbot Disclaimer',
           'The safety notice shown before first use',
-          const ChatbotDisclaimerScreen()),
+          ChatbotDisclaimerScreen(live: widget.liveSession != null)),
     ]),
     _NavPage(Icons.bar_chart_outlined, Icons.bar_chart_rounded, 'Reports',
-        'Sales, branch performance, and analytics', const ReportsScreen()),
+        'Sales, branch performance, and analytics',
+        ReportsScreen(live: widget.liveSession != null)),
     _NavPage(
         Icons.tune_outlined,
         Icons.tune_rounded,
         'System Settings',
         'General, reward conversion, legal & compliance',
-        const SystemSettingsScreen()),
+        SystemSettingsScreen(live: widget.liveSession != null)),
   ];
 
   List<_NavPage> get _flatPages {
@@ -183,22 +207,46 @@ class _AdminShellState extends State<AdminShell> {
   /// page in this console can point to where it sits.
   List<_Crumb> _breadcrumbs() {
     final crumbs = <_Crumb>[
-      _Crumb('Home', _index == 0 ? null : () => _select(0))
+      _Crumb('Home',
+          _index == 0 &&
+                  _scopedCoachIdForBookings == null &&
+                  _scopedCoachIdForSchedule == null
+              ? null
+              : () => _select(0))
     ];
-    if (_index == 0) return crumbs;
+    if (_index == 0 &&
+        _scopedCoachIdForBookings == null &&
+        _scopedCoachIdForSchedule == null) {
+      return crumbs;
+    }
     final group = _groupLabelFor(_index);
     if (group != null) {
       crumbs.add(_Crumb(group, () => _select(_firstChildIndexOfGroup(group))));
     }
-    crumbs.add(_Crumb(_flatPages[_index].label, null));
+    if (_scopedCoachIdForBookings != null) {
+      crumbs.add(_Crumb(_flatPages[_index].label,
+          () => setState(() => _scopedCoachIdForBookings = null)));
+      crumbs.add(_Crumb('Coach Bookings ($_scopedCoachIdForBookings)', null));
+    } else if (_scopedCoachIdForSchedule != null) {
+      crumbs.add(_Crumb(_flatPages[_index].label,
+          () => setState(() => _scopedCoachIdForSchedule = null)));
+      crumbs.add(_Crumb('Coach Schedule ($_scopedCoachIdForSchedule)', null));
+    } else {
+      crumbs.add(_Crumb(_flatPages[_index].label, null));
+    }
     return crumbs;
   }
 
-  void _select(int flatIndex) {
+  void _select(int flatIndex) async {
     if (flatIndex < 0) return;
+    if (flatIndex != _index && !await _coachReviewGuard.canLeave()) return;
+    if (!mounted) return;
     final owner = _groupLabelFor(flatIndex);
     setState(() {
       _index = flatIndex;
+      _scopedCoachIdForBookings = null;
+      _scopedCoachIdForSchedule = null;
+      _visited.add(flatIndex);
       if (owner != null) _expanded.add(owner);
     });
   }
@@ -214,6 +262,7 @@ class _AdminShellState extends State<AdminShell> {
   }
 
   Future<void> _signOut() async {
+    if (!await _coachReviewGuard.canLeave() || !mounted) return;
     final ok = await confirmDialog(context,
         title: 'Sign out of the console?',
         message: 'You will need to sign in again next time.',
@@ -221,11 +270,10 @@ class _AdminShellState extends State<AdminShell> {
         destructive: true);
     if (ok && mounted) {
       context.read<AuthBloc>().add(const LoggedOut());
-      Navigator.pushNamedAndRemoveUntil(
-        context,
-        kIsWeb ? AppRoutes.adminLogin : AppRoutes.roleSelect,
-        (r) => false,
-      );
+      if (widget.liveSession == null) {
+        Navigator.pushNamedAndRemoveUntil(context,
+            kIsWeb ? AppRoutes.adminLogin : AppRoutes.roleSelect, (r) => false);
+      }
     }
   }
 
@@ -241,6 +289,7 @@ class _AdminShellState extends State<AdminShell> {
           return Row(
             children: [
               _Sidebar(
+                liveSession: widget.liveSession,
                 collapsed: collapsed,
                 selectedIndex: _index,
                 expandedGroups: _expanded,
@@ -252,13 +301,50 @@ class _AdminShellState extends State<AdminShell> {
                 child: Column(
                   children: [
                     _TopBar(
+                        liveSession: widget.liveSession,
                         breadcrumbs: _breadcrumbs(),
                         subtitle: current.subtitle,
                         onSignOut: _signOut),
                     Expanded(
                       child: IndexedStack(
                         index: _index,
-                        children: flatPages.map((d) => d.page).toList(),
+                        children: flatPages.asMap().entries.map((entry) {
+                          final session = widget.liveSession, d = entry.value;
+                          if (session == null) return d.page;
+                          if (!_visited.contains(entry.key)) {
+                            return const SizedBox.shrink();
+                          }
+                          if (d.label == 'Coaches') {
+                            if (_scopedCoachIdForBookings != null) {
+                              final repository =
+                                  context.read<BookingListRepository>();
+                              return AdminBookingListRoute(
+                                  session: session,
+                                  repository: repository,
+                                  coachId: _scopedCoachIdForBookings!);
+                            }
+                            if (_scopedCoachIdForSchedule != null) {
+                              final repository =
+                                  context.read<CoachAvailabilityRepository>();
+                              return AdminCoachScheduleRoute(
+                                  session: session,
+                                  repository: repository,
+                                  coachId: _scopedCoachIdForSchedule!);
+                            }
+                            return CoachesScreen(
+                                discardGuard: _coachReviewGuard,
+                                live: true,
+                                onOpenBookings: (id) => setState(() {
+                                  _scopedCoachIdForBookings = id;
+                                  _scopedCoachIdForSchedule = null;
+                                }),
+                                onOpenSchedule: (id) => setState(() {
+                                  _scopedCoachIdForSchedule = id;
+                                  _scopedCoachIdForBookings = null;
+                                }));
+                          }
+                          return d.page;
+                        }).toList(),
                       ),
                     ),
                   ],
@@ -285,9 +371,11 @@ class _TopBar extends StatelessWidget {
   final List<_Crumb> breadcrumbs;
   final String subtitle;
   final VoidCallback onSignOut;
+  final AuthSession? liveSession;
   const _TopBar(
       {required this.breadcrumbs,
       required this.subtitle,
+      this.liveSession,
       required this.onSignOut});
 
   @override
@@ -332,6 +420,7 @@ class _TopBar extends StatelessWidget {
             width: 260,
             height: 40,
             child: TextField(
+              enabled: liveSession == null,
               style: const TextStyle(fontSize: 13.5),
               decoration: InputDecoration(
                 isDense: true,
@@ -357,9 +446,9 @@ class _TopBar extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 14),
-          const _NotificationButton(),
+          if (liveSession == null) const _NotificationButton(),
           const SizedBox(width: 6),
-          _ProfileMenu(onSignOut: onSignOut),
+          _ProfileMenu(onSignOut: onSignOut, liveSession: liveSession),
         ],
       ),
     );
@@ -494,7 +583,8 @@ class _NotificationButton extends StatelessWidget {
 
 class _ProfileMenu extends StatelessWidget {
   final VoidCallback onSignOut;
-  const _ProfileMenu({required this.onSignOut});
+  final AuthSession? liveSession;
+  const _ProfileMenu({required this.onSignOut, this.liveSession});
 
   @override
   Widget build(BuildContext context) {
@@ -505,8 +595,16 @@ class _ProfileMenu extends StatelessWidget {
       onSelected: (v) {
         if (v == 'signout') onSignOut();
         if (v == 'account') {
-          Navigator.push(context,
-              MaterialPageRoute(builder: (_) => const AdminSettingsScreen()));
+          Navigator.push(
+              context,
+              MaterialPageRoute(
+                  builder: (_) => AdminSettingsScreen(
+                      liveSession: liveSession,
+                      onSaved: liveSession == null
+                          ? null
+                          : () => context
+                              .read<AuthBloc>()
+                              .add(const AuthRestoreRequested()))));
         }
       },
       itemBuilder: (context) => [
@@ -518,10 +616,15 @@ class _ProfileMenu extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(context.read<UserAccountRepository>().adminName,
+                Text(
+                    liveSession?.displayName ??
+                        liveSession?.email ??
+                        context.read<UserAccountRepository>().adminName,
                     style: const TextStyle(
                         fontWeight: FontWeight.w700, fontSize: 13)),
-                Text(context.read<UserAccountRepository>().adminEmail,
+                Text(
+                    liveSession?.email ??
+                        context.read<UserAccountRepository>().adminEmail,
                     style: const TextStyle(
                         fontSize: 11.5, color: AppColors.inkSoft)),
               ],
@@ -553,15 +656,11 @@ class _ProfileMenu extends StatelessWidget {
       ],
       child: Row(
         mainAxisSize: MainAxisSize.min,
-        children: const [
-          CircleAvatar(
-            radius: 17,
-            backgroundColor: AppColors.primaryTint,
-            child:
-                Icon(Icons.person_rounded, size: 18, color: AppColors.primary),
-          ),
-          SizedBox(width: 6),
-          Icon(Icons.expand_more_rounded, size: 18, color: AppColors.inkSoft),
+        children: [
+          AdminAccountAvatar(live: liveSession != null),
+          const SizedBox(width: 6),
+          const Icon(Icons.expand_more_rounded,
+              size: 18, color: AppColors.inkSoft),
         ],
       ),
     );
@@ -569,6 +668,7 @@ class _ProfileMenu extends StatelessWidget {
 }
 
 class _Sidebar extends StatelessWidget {
+  final AuthSession? liveSession;
   final bool collapsed;
   final int selectedIndex;
   final Set<String> expandedGroups;
@@ -577,6 +677,7 @@ class _Sidebar extends StatelessWidget {
   final ValueChanged<String> onToggleGroup;
 
   const _Sidebar({
+    this.liveSession,
     required this.collapsed,
     required this.selectedIndex,
     required this.expandedGroups,
@@ -713,12 +814,7 @@ class _Sidebar extends StatelessWidget {
                   ? MainAxisAlignment.center
                   : MainAxisAlignment.start,
               children: [
-                const CircleAvatar(
-                  radius: 17,
-                  backgroundColor: AppColors.primaryTint,
-                  child: Icon(Icons.person_rounded,
-                      size: 18, color: AppColors.primary),
-                ),
+                AdminAccountAvatar(live: liveSession != null),
                 if (!collapsed) ...[
                   const SizedBox(width: 10),
                   Expanded(
@@ -726,13 +822,20 @@ class _Sidebar extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Text(context.read<UserAccountRepository>().adminName,
+                        Text(
+                            liveSession?.displayName ??
+                                liveSession?.email ??
+                                context.read<UserAccountRepository>().adminName,
                             overflow: TextOverflow.ellipsis,
                             style: Theme.of(context)
                                 .textTheme
                                 .titleMedium
                                 ?.copyWith(fontSize: 13.5)),
-                        Text(context.read<UserAccountRepository>().adminEmail,
+                        Text(
+                            liveSession?.email ??
+                                context
+                                    .read<UserAccountRepository>()
+                                    .adminEmail,
                             overflow: TextOverflow.ellipsis,
                             style: Theme.of(context)
                                 .textTheme

@@ -29,10 +29,117 @@ service firebase.storage {
         && request.resource.contentType.matches('image/.*|application/pdf');
     }
 
+    function memberSessionActive(uid) {
+      let user = firestore.get(/databases/(default)/documents/users/$(uid)).data;
+      return !('accountLifecycle' in user) || (user.accountLifecycle is map
+        && user.accountLifecycle.schemaVersion == 1
+        && user.accountLifecycle.state == 'active'
+        && user.accountLifecycle.revision is number && user.accountLifecycle.revision == math.floor(user.accountLifecycle.revision) && user.accountLifecycle.revision >= 1
+        && user.accountLifecycle.requestedAtMillis is number && user.accountLifecycle.requestedAtMillis == math.floor(user.accountLifecycle.requestedAtMillis) && user.accountLifecycle.requestedAtMillis > 0
+        && user.accountLifecycle.sessionNotBeforeSeconds is number && user.accountLifecycle.sessionNotBeforeSeconds == math.floor(user.accountLifecycle.sessionNotBeforeSeconds)
+        && user.accountLifecycle.sessionNotBeforeSeconds == math.floor(user.accountLifecycle.requestedAtMillis / 1000) + 1
+        && user.accountLifecycle.revocationPending == false
+        && user.accountLifecycle.sessionRevokedAtMillis is number && user.accountLifecycle.sessionRevokedAtMillis == math.floor(user.accountLifecycle.sessionRevokedAtMillis)
+        && user.accountLifecycle.sessionRevokedAtMillis >= user.accountLifecycle.requestedAtMillis
+        && user.accountLifecycle.reactivatedAtMillis is number && user.accountLifecycle.reactivatedAtMillis == math.floor(user.accountLifecycle.reactivatedAtMillis)
+        && user.accountLifecycle.reactivatedAtMillis >= user.accountLifecycle.sessionRevokedAtMillis
+        && request.auth.token.auth_time is number
+        && request.auth.token.auth_time == math.floor(request.auth.token.auth_time)
+        && request.auth.token.auth_time >= user.accountLifecycle.sessionNotBeforeSeconds);
+    }
+
+    // FR-1.7: private immutable Member photo objects; clearing removes only the reference.
+    match /orgs/{orgId}/memberProfilePhotos/{ownerUid}/{imageId} {
+      function memberPhotoOwner() {
+        return request.auth != null && request.auth.uid == ownerUid
+          && request.auth.token.email_verified == true
+          && firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.organizationId == orgId
+          && firestore.get(/databases/(default)/documents/orgs/$(orgId)/members/$(request.auth.uid)).data.organizationId == orgId
+          && firestore.get(/databases/(default)/documents/orgs/$(orgId)/members/$(request.auth.uid)).data.status == 'active'
+          && firestore.get(/databases/(default)/documents/orgs/$(orgId)/members/$(request.auth.uid)).data.role == 'member'
+          && memberSessionActive(ownerUid);
+      }
+      allow get: if memberPhotoOwner();
+      allow create: if memberPhotoOwner() && resource == null
+        && imageId.matches('[a-f0-9]{32}')
+        && request.resource.size > 0 && request.resource.size <= 5 * 1024 * 1024
+        && request.resource.contentType in ['image/jpeg', 'image/png', 'image/webp'];
+      allow update, delete, list: if false;
+    }
+
+    // Private Admin profile photos only. Existing Storage permissions stay unchanged.
+    match /orgs/{orgId}/profilePhotos/{ownerUid}/{imageId} {
+      function profilePhotoOwner() {
+        return request.auth != null
+          && request.auth.uid == ownerUid
+          && request.auth.token.email_verified == true
+          && firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.organizationId == orgId
+          && firestore.get(/databases/(default)/documents/orgs/$(orgId)/members/$(request.auth.uid)).data.organizationId == orgId
+          && firestore.get(/databases/(default)/documents/orgs/$(orgId)/members/$(request.auth.uid)).data.status == 'active'
+          && firestore.get(/databases/(default)/documents/orgs/$(orgId)/members/$(request.auth.uid)).data.role == 'admin';
+      }
+      allow get: if profilePhotoOwner();
+      allow create: if profilePhotoOwner() && resource == null
+        && imageId.matches('[a-f0-9]{32}')
+        && request.resource.size > 0 && request.resource.size <= 5 * 1024 * 1024
+        && request.resource.contentType in ['image/jpeg', 'image/png', 'image/webp'];
+      allow update, delete, list: if false;
+    }
+
+    // Equipment photos only. Existing member/content contracts remain unchanged.
+    match /orgs/{orgId}/equipmentImages/{uploaderUid}/{imageId} {
+      function currentEquipmentMember() {
+        return request.auth != null
+          && request.auth.token.email_verified == true
+          && firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.organizationId == orgId
+          && firestore.get(/databases/(default)/documents/orgs/$(orgId)/members/$(request.auth.uid)).data.organizationId == orgId
+          && firestore.get(/databases/(default)/documents/orgs/$(orgId)/members/$(request.auth.uid)).data.status == 'active';
+      }
+      allow get: if currentEquipmentMember();
+      allow create: if currentEquipmentMember()
+        && resource == null
+        && request.auth.uid == uploaderUid
+        && firestore.get(/databases/(default)/documents/orgs/$(orgId)/members/$(request.auth.uid)).data.role in ['admin', 'staff']
+        && request.resource.size > 0 && request.resource.size <= 5 * 1024 * 1024
+        && request.resource.contentType in ['image/jpeg', 'image/png', 'image/webp'];
+      allow update, delete, list: if false;
+    }
+
     match /orgs/{orgId}/content/{filePath=**} {
       allow read: if activeMember(orgId);
       // Publication and media validation belong to trusted content commands.
       allow write: if false;
     }
+    // Module 8: two-document authority; Members use the checked photo callable.
+    function module8StorageMember(orgId) {
+      return request.auth != null && request.auth.token.email_verified == true
+        && firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.organizationId == orgId
+        && firestore.get(/databases/(default)/documents/orgs/$(orgId)/members/$(request.auth.uid)).data.organizationId == orgId
+        && firestore.get(/databases/(default)/documents/orgs/$(orgId)/members/$(request.auth.uid)).data.status == 'active';
+    }
+    function module8StorageOwner(orgId, ownerUid) {
+      return module8StorageMember(orgId) && request.auth.uid == ownerUid
+        && firestore.get(/databases/(default)/documents/orgs/$(orgId)/members/$(request.auth.uid)).data.role == 'coach';
+    }
+    function module8StorageReader(orgId, ownerUid) {
+      return module8StorageMember(orgId)
+        && ((request.auth.uid == ownerUid && firestore.get(/databases/(default)/documents/orgs/$(orgId)/members/$(request.auth.uid)).data.role == 'coach')
+          || firestore.get(/databases/(default)/documents/orgs/$(orgId)/members/$(request.auth.uid)).data.role == 'admin');
+    }
+    match /orgs/{orgId}/coachCertifications/{ownerUid}/{objectId} {
+      allow get: if module8StorageReader(orgId, ownerUid);
+      allow create: if module8StorageOwner(orgId, ownerUid) && resource == null
+        && objectId.matches('[a-f0-9]{32}') && request.resource.size > 0 && request.resource.size <= 5 * 1024 * 1024
+        && request.resource.contentType in ['application/pdf', 'image/jpeg', 'image/png'];
+      allow update, delete, list: if false;
+    }
+    match /orgs/{orgId}/coachProfilePhotos/{ownerUid}/{objectId} {
+      allow get: if module8StorageReader(orgId, ownerUid);
+      allow create: if module8StorageOwner(orgId, ownerUid) && resource == null
+        && objectId.matches('[a-f0-9]{32}') && request.resource.size > 0 && request.resource.size <= 5 * 1024 * 1024
+        && request.resource.contentType in ['image/jpeg', 'image/png', 'image/webp'];
+      allow update, delete, list: if false;
+    }
+
   }
 }

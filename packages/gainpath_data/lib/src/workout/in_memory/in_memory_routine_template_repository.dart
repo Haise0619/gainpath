@@ -11,4 +11,26 @@ class InMemoryRoutineTemplateRepository implements RoutineTemplateRepository {
 
   @override
   List<RoutineBlueprint> get routineTemplates => _seed.routineTemplates;
+
+  @override
+  Future<List<RoutineBlueprint>> load() async => routineTemplates;
+
+  @override
+  Future<RoutineBlueprint> save(RoutineBlueprint blueprint) async {
+    final index =
+        _seed.routineTemplates.indexWhere((item) => item.id == blueprint.id);
+    if (index < 0) {
+      _seed.routineTemplates.add(blueprint);
+    } else {
+      _seed.routineTemplates[index] = blueprint;
+    }
+    return blueprint;
+  }
+
+  @override
+  Future<void> publish(String blueprintId) async {
+    if (!_seed.routineTemplates.any((item) => item.id == blueprintId)) {
+      throw StateError('Routine blueprint not found.');
+    }
+  }
 }

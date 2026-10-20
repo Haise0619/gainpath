@@ -3,6 +3,26 @@ import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:gainpath_data/gainpath_data.dart';
 
+String firebaseAuthFailureMessage(String code) => switch (code) {
+      'invalid-credential' ||
+      'wrong-password' ||
+      'user-not-found' =>
+        'Email or password is incorrect.',
+      'email-already-in-use' => 'This email is already registered.',
+      'invalid-email' => 'Enter a valid email address.',
+      'weak-password' => 'Choose a stronger password.',
+      'network-request-failed' =>
+        'Could not reach Firebase. Check your internet connection and retry.',
+      'too-many-requests' => 'Too many attempts. Wait a while and try again.',
+      'user-disabled' => 'This account is disabled. Contact gym staff.',
+      'user-token-expired' ||
+      'invalid-user-token' =>
+        'Your session has expired. Sign in again.',
+      'operation-not-allowed' =>
+        'Email and password sign-in is not enabled for this Firebase project.',
+      _ => 'Unable to complete authentication. Please try again.',
+    };
+
 Map<String, Object?> membershipClaims({
   required Map<String, Object?> userData,
   required Map<String, Object?> memberData,
@@ -10,9 +30,35 @@ Map<String, Object?> membershipClaims({
   final organizationId = userData['organizationId'];
   if (organizationId is! String ||
       organizationId.trim().isEmpty ||
-      memberData['organizationId'] != organizationId ||
-      memberData['status'] != 'active') {
+      memberData['organizationId'] != organizationId) {
     throw StateError('The account has no active organization membership.');
+  }
+  final lifecycleData = userData['accountLifecycle'];
+  final lifecycle = lifecycleData == null
+      ? 'active'
+      : lifecycleData is Map
+          ? lifecycleData['state']
+          : null;
+  final status = memberData['status'];
+  if (status == 'suspended' || userData['status'] == 'suspended') {
+    throw const AuthException('This account is suspended. Contact gym staff.');
+  }
+  if (lifecycle == 'pendingDeletion' &&
+      status == 'pendingDeletion' &&
+      memberData['role'] == 'member') {
+    return {
+      'organizationId': organizationId,
+      'role': memberData['role'],
+      'status': status,
+      'branchIds': memberData['branchIds'],
+      'accountLifecycleState': 'pendingDeletion',
+    };
+  }
+  if (lifecycle != 'active' ||
+      status != 'active' ||
+      (userData['status'] != null && userData['status'] != 'active')) {
+    throw const AuthException(
+        'This account has an unavailable or inconsistent membership. Contact gym staff.');
   }
   return {
     'organizationId': organizationId,
@@ -61,7 +107,17 @@ class FlutterFirebaseAuthGateway
       );
       final user = credential.user!;
       _suppressedRegistrationUsers.remove(user.uid);
-      return _resolveUser(user, provisionIfMissing: true);
+      return await _resolveUser(user, provisionIfMissing: true);
+    } on AuthException {
+      rethrow;
+    } on StateError catch (error) {
+      throw AuthException(error.message.toString());
+    } on FirebaseAuthException catch (error) {
+      throw AuthException(firebaseAuthFailureMessage(error.code));
+    } on FirebaseException catch (error) {
+      throw AuthException(error.code == 'permission-denied'
+          ? 'This account cannot access its gym membership. Contact gym staff.'
+          : 'Could not reach your account. Check your connection and retry.');
     } finally {
       _authMutationInProgress = false;
     }
@@ -88,7 +144,22 @@ class FlutterFirebaseAuthGateway
         // profile update is temporarily unavailable.
       }
       await _provision(name.trim());
-      return _resolveUser(user);
+      return await _resolveUser(user);
+    } on AuthException catch (error) {
+      if (_auth.currentUser != null) {
+        throw AuthException(
+            '${error.message} Your account may already exist. Sign in with the same email and password to retry setup.');
+      }
+      rethrow;
+    } on StateError catch (error) {
+      throw AuthException(
+          '${error.message} Sign in with the same email and password to retry setup.');
+    } on FirebaseAuthException catch (error) {
+      throw AuthException(firebaseAuthFailureMessage(error.code));
+    } on FirebaseException catch (error) {
+      throw AuthException(error.code == 'permission-denied'
+          ? 'Account setup was denied. Contact gym staff.'
+          : 'Could not finish account setup. Check your connection and retry.');
     } finally {
       _authMutationInProgress = false;
     }
@@ -97,18 +168,47 @@ class FlutterFirebaseAuthGateway
   @override
   Future<void> sendEmailVerification() async {
     final user = _auth.currentUser;
-    if (user == null) throw StateError('No authenticated user.');
-    await user.sendEmailVerification();
+    if (user == null) {
+      throw const AuthException(
+          'Sign in again to request a verification link.');
+    }
+    try {
+      await user.sendEmailVerification();
+    } on FirebaseAuthException catch (error) {
+      throw AuthException(firebaseAuthFailureMessage(error.code));
+    }
   }
 
   @override
   Future<FirebaseAuthUser?> restoreUser() async {
     final user = _auth.currentUser;
     if (user == null) return null;
-    await user.reload();
-    final refreshed = _auth.currentUser!;
-    await refreshed.getIdToken(true);
-    return _resolveUser(refreshed, provisionIfMissing: true);
+    try {
+      await user.reload();
+      final refreshed = _auth.currentUser;
+      if (refreshed == null || refreshed.uid != user.uid) {
+        throw const AuthException('Your session changed. Sign in again.');
+      }
+      await refreshed.getIdToken(true);
+      return await _resolveUser(refreshed, provisionIfMissing: true);
+    } on FirebaseAuthException catch (error) {
+      if (error.code == 'network-request-failed') {
+        throw const FirebaseAuthRefreshUnavailable(
+            'Could not reload your account. Check your connection and retry.');
+      }
+      throw AuthException(firebaseAuthFailureMessage(error.code));
+    } on FirebaseException catch (error) {
+      if (error.code == 'unavailable' ||
+          error.code == 'deadline-exceeded' ||
+          error.code == 'network-request-failed') {
+        throw const FirebaseAuthRefreshUnavailable(
+            'Could not reload your account. Check your connection and retry.');
+      }
+      throw const AuthException(
+          'Could not reload your account. Check your connection and retry.');
+    } on StateError catch (error) {
+      throw AuthException(error.message.toString());
+    }
   }
 
   @override
@@ -163,6 +263,11 @@ class FlutterFirebaseAuthGateway
     return FirebaseAuthUser(
       userId: user.uid,
       email: email,
+      displayName: memberData['displayName'] is String
+          ? memberData['displayName'] as String
+          : userData['displayName'] is String
+              ? userData['displayName'] as String
+              : null,
       emailVerified: user.emailVerified,
       claims: membershipClaims(
         userData: userData.cast<String, Object?>(),
@@ -171,11 +276,18 @@ class FlutterFirebaseAuthGateway
     );
   }
 
-  Future<void> _provision(String displayName) =>
-      _functions.httpsCallable('provisionMemberRegistration').call<void>({
+  Future<void> _provision(String displayName) async {
+    try {
+      await _functions.httpsCallable('provisionMemberRegistration').call<void>({
         'schemaVersion': 1,
         'displayName': displayName,
       });
+    } on FirebaseFunctionsException catch (error) {
+      throw AuthException(error.code == 'not-found'
+          ? 'Account setup service is not deployed. Contact the project administrator.'
+          : 'Account setup failed (${error.code}). Please retry or contact the project administrator.');
+    }
+  }
 
   String _fallbackDisplayName(User user) {
     final current = user.displayName?.trim();

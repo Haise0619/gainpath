@@ -1,0 +1,42 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://gainpath.local/contracts/v1/get-booking-list.response.schema.json",
+  "title": "Scoped booking list response v1",
+  "type": "object", "additionalProperties": false,
+  "required": ["schemaVersion", "serverNowMillis", "timeZone", "firstLocalDate", "throughLocalDate", "records"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "serverNowMillis": { "$ref": "#/definitions/time" },
+    "timeZone": { "$ref": "#/definitions/zone" },
+    "firstLocalDate": { "$ref": "#/definitions/date" },
+    "throughLocalDate": { "$ref": "#/definitions/date" },
+    "records": { "type": "array", "maxItems": 20, "items": { "$ref": "#/definitions/record" } },
+    "nextCursor": {
+      "type": "object", "additionalProperties": false, "required": ["startAtMillis", "bookingId"],
+      "properties": { "startAtMillis": { "type": "integer", "minimum": 1, "maximum": 8639999996400000, "multipleOf": 1800000 }, "bookingId": { "$ref": "#/definitions/id" } }
+    }
+  },
+  "definitions": {
+    "id": { "type": "string", "pattern": "^[A-Za-z0-9_-]{1,128}$" },
+    "time": { "type": "integer", "minimum": 1, "maximum": 8639999996400000 },
+    "date": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" },
+    "zone": { "type": "string", "minLength": 1, "maxLength": 100 },
+    "label": { "type": "string", "minLength": 1, "maxLength": 80 },
+    "record": {
+      "type": "object", "additionalProperties": false,
+      "required": ["schemaVersion", "bookingId", "organizationId", "memberId", "coachId", "branchId", "requestId", "startAtMillis", "endAtMillis", "durationMinutes", "status", "holdExpiresAtMillis", "localDate", "timeZone", "policyVersion", "createdAtMillis", "startLabel", "endLabel", "expiryLabel"],
+      "properties": {
+        "schemaVersion": { "const": 1 },
+        "bookingId": { "$ref": "#/definitions/id" }, "organizationId": { "$ref": "#/definitions/id" }, "memberId": { "$ref": "#/definitions/id" }, "coachId": { "$ref": "#/definitions/id" }, "branchId": { "$ref": "#/definitions/id" }, "requestId": { "$ref": "#/definitions/id" },
+        "startAtMillis": { "type": "integer", "minimum": 1, "maximum": 8639999996400000, "multipleOf": 1800000 },
+        "endAtMillis": { "type": "integer", "minimum": 1, "maximum": 8639999996400000, "multipleOf": 1800000 },
+        "durationMinutes": { "enum": [30, 60] }, "status": { "enum": ["pending_hold", "confirmed", "cancelled", "expired", "completed", "refunded"] },
+        "holdExpiresAtMillis": { "$ref": "#/definitions/time" }, "localDate": { "$ref": "#/definitions/date" }, "timeZone": { "$ref": "#/definitions/zone" },
+        "policyVersion": { "type": "string", "minLength": 1, "maxLength": 128 }, "createdAtMillis": { "$ref": "#/definitions/time" },
+        "resolvedAtMillis": { "$ref": "#/definitions/time" }, "resolution": { "enum": ["member_cancelled", "hold_expired"] },
+        "startLabel": { "$ref": "#/definitions/label" }, "endLabel": { "$ref": "#/definitions/label" }, "expiryLabel": { "$ref": "#/definitions/label" }
+      },
+      "allOf": [{"if":{"properties":{"status":{"const":"expired"}}},"then":{"required":["resolvedAtMillis","resolution"],"properties":{"resolution":{"const":"hold_expired"}}}},{"if":{"required":["resolution"]},"then":{"required":["resolvedAtMillis"],"oneOf":[{"properties":{"status":{"const":"expired"},"resolution":{"const":"hold_expired"}}},{"properties":{"status":{"const":"cancelled"},"resolution":{"const":"member_cancelled"}}}]}},{"if":{"required":["resolvedAtMillis"]},"then":{"required":["resolution"]}}]
+    }
+  }
+}

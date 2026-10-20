@@ -89,7 +89,7 @@ void main() {
   });
 }
 
-class _FailingWorkoutUploadGateway implements WorkoutUploadGateway {
+class _FailingWorkoutUploadGateway implements DemoWorkoutUploadGateway {
   @override
   Future<WorkoutUploadReceipt> upload(WorkoutSessionSummary summary) {
     throw StateError('network unavailable');

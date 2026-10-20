@@ -2,20 +2,31 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
 import 'package:gainpath_domain/workout.dart';
+import '../../domain/published_routine_view.dart';
 import 'exercise_tutorial_screen.dart';
 import 'widgets/workout_media.dart';
 
 class RoutineScreen extends StatelessWidget {
-  const RoutineScreen({super.key});
+  const RoutineScreen({super.key, this.publishedRoutine, this.tutorialBuilder});
+  final PublishedRoutine? publishedRoutine;
+  final Widget Function(BuildContext, PublishedRoutineExercise)?
+      tutorialBuilder;
 
   @override
   Widget build(BuildContext context) {
-    final routine = context.read<WorkoutRepository>().routine;
+    final routine = publishedRoutine?.exercises ??
+        context.read<WorkoutRepository>().routine;
     return Scaffold(
-      appBar: AppBar(title: const Text('Today\'s routine')),
+      appBar: AppBar(
+          title: Text(publishedRoutine == null
+              ? 'Today\'s routine'
+              : publishedRoutine!.title)),
       body: PageBody(
         children: [
-          Text('${routine.length} exercises in order. Tap one to review its form cues.',
+          Text(
+              publishedRoutine == null
+                  ? '${routine.length} exercises in order. Tap one to review its form cues.'
+                  : '${routine.length} exercises in order. Tap one to review its published tutorial.',
               style: Theme.of(context).textTheme.bodyLarge),
           const SizedBox(height: 16),
           ...routine.asMap().entries.map((entry) {
@@ -25,8 +36,24 @@ class RoutineScreen extends StatelessWidget {
               padding: const EdgeInsets.only(bottom: 10),
               child: Panel(
                 padding: EdgeInsets.zero,
-                onTap: () => Navigator.push(
-                    context, MaterialPageRoute(builder: (_) => ExerciseTutorialScreen(exercise: e))),
+                onTap: publishedRoutine == null
+                    ? () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                            builder: (_) =>
+                                ExerciseTutorialScreen(exercise: e)))
+                    : () {
+                        final builder = tutorialBuilder;
+                        if (builder == null) {
+                          showUnavailable(context);
+                          return;
+                        }
+                        final row = publishedRoutine!.exercises[i];
+                        Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                                builder: (ctx) => builder(ctx, row)));
+                      },
                 child: Row(
                   children: [
                     Padding(
@@ -40,7 +67,8 @@ class RoutineScreen extends StatelessWidget {
                           borderRadius: BorderRadius.circular(9),
                         ),
                         child: Text('${i + 1}',
-                            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w800)),
+                            style: const TextStyle(
+                                fontSize: 13, fontWeight: FontWeight.w800)),
                       ),
                     ),
                     ClipRRect(
@@ -58,17 +86,25 @@ class RoutineScreen extends StatelessWidget {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(e.name, style: Theme.of(context).textTheme.titleMedium),
+                            Text(e.name,
+                                style: Theme.of(context).textTheme.titleMedium),
                             const SizedBox(height: 2),
-                            Text('${e.sets} sets  ·  ${e.reps} reps  ·  90s rest',
-                                style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontSize: 12.5)),
+                            Text(
+                                publishedRoutine == null
+                                    ? '${e.sets} sets  ·  ${e.reps} reps  ·  90s rest'
+                                    : '${e.sets} sets  ·  ${e.reps} reps',
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .bodyMedium
+                                    ?.copyWith(fontSize: 12.5)),
                           ],
                         ),
                       ),
                     ),
                     const Padding(
                       padding: EdgeInsets.only(right: 14),
-                      child: Icon(Icons.play_circle_outline_rounded, color: AppColors.primary, size: 22),
+                      child: Icon(Icons.play_circle_outline_rounded,
+                          color: AppColors.primary, size: 22),
                     ),
                   ],
                 ),
@@ -81,7 +117,5 @@ class RoutineScreen extends StatelessWidget {
   }
 }
 
-/// UC-2.2 — Watch Exercise Tutorial. A simulated video player: tapping
-/// play swaps the thumbnail for the same animated pose-demo used on the
-/// live tracking screen, with a real scrubber and replay so it reads and
-/// behaves like a video even though nothing is actually streamed.
+/// UC-2.2 — Published rows use an app-composed tutorial destination;
+/// mock rows retain the isolated animated demonstration.

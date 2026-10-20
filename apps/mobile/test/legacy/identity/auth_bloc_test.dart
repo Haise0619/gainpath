@@ -54,7 +54,7 @@ void main() {
   );
 
   blocTest<AuthBloc, AuthState>(
-    'logging out returns to signed out but remembers the role',
+    'logging out clears the previous account role',
     build: _bloc,
     act: (b) => b
       ..add(const RoleSelected(AppRole.admin))
@@ -62,7 +62,7 @@ void main() {
       ..add(const LoggedOut()),
     verify: (b) {
       expect(b.state.status, AuthStatus.signedOut);
-      expect(b.state.role, AppRole.admin);
+      expect(b.state.role, isNull);
       expect(b.state.email, isNull);
     },
   );

@@ -17,7 +17,7 @@ WorkoutSessionSummary summary(SessionScope scope, String id) =>
       endedAt: DateTime.utc(2026, 1, 1, 0, 1),
     );
 
-class _DelayedUpload implements WorkoutUploadGateway {
+class _DelayedUpload implements DemoWorkoutUploadGateway {
   final started = Completer<void>();
   final release = Completer<void>();
   int calls = 0;

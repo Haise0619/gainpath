@@ -8,15 +8,38 @@ import 'workout_route.dart';
 import '../shells/coach_shell.dart';
 import '../shells/member_shell.dart';
 import 'package:gainpath_identity/gainpath_identity.dart';
+import 'package:gainpath_domain/gainpath_domain.dart' show AppRole;
 import '../../features/identity/presentation/shared/login_screen.dart';
-import '../../features/identity/presentation/shared/role_select_screen.dart';
 
 abstract final class AppRouteBuilders {
+  static Map<String, WidgetBuilder> withLogin(WidgetBuilder loginBuilder,
+          {WidgetBuilder? coachBuilder}) =>
+      {
+        ...builders,
+        for (final route in [
+          AppRoutes.login,
+          AppRoutes.roleSelect,
+          AppRoutes.memberLogin,
+          AppRoutes.coachLogin
+        ])
+          route: loginBuilder,
+        AppRoutes.member: (_) => _RoleGuard(
+            role: AppRole.member,
+            loginBuilder: loginBuilder,
+            child: const MemberShell()),
+        AppRoutes.coach: (_) => _RoleGuard(
+            role: AppRole.coach,
+            loginBuilder: loginBuilder,
+            child: coachBuilder == null
+                ? const CoachShell()
+                : Builder(builder: coachBuilder)),
+      };
   static Map<String, WidgetBuilder> get builders => {
         WorkoutNavigation.guided: (_) => const WorkoutRoute(),
-        AppRoutes.roleSelect: (_) => const RoleSelectScreen(),
-        AppRoutes.memberLogin: (_) => const LoginScreen(role: AppRole.member),
-        AppRoutes.coachLogin: (_) => const LoginScreen(role: AppRole.coach),
+        AppRoutes.login: (_) => const LoginScreen(),
+        AppRoutes.roleSelect: (_) => const LoginScreen(),
+        AppRoutes.memberLogin: (_) => const LoginScreen(),
+        AppRoutes.coachLogin: (_) => const LoginScreen(),
         AppRoutes.member: (_) =>
             const _RoleGuard(role: AppRole.member, child: MemberShell()),
         AppRoutes.coach: (_) =>
@@ -25,10 +48,12 @@ abstract final class AppRouteBuilders {
 }
 
 class _RoleGuard extends StatelessWidget {
-  const _RoleGuard({required this.role, required this.child});
+  const _RoleGuard(
+      {required this.role, required this.child, this.loginBuilder});
 
   final AppRole role;
   final Widget child;
+  final WidgetBuilder? loginBuilder;
 
   @override
   Widget build(BuildContext context) {
@@ -37,7 +62,7 @@ class _RoleGuard extends StatelessWidget {
         if (AppRoutePolicy.canEnterShell(auth: auth, requiredRole: role)) {
           return child;
         }
-        return LoginScreen(role: role);
+        return loginBuilder?.call(context) ?? const LoginScreen();
       },
     );
   }

@@ -5,7 +5,8 @@ import 'package:gainpath_domain/gamification.dart';
 import 'package:gainpath_domain/identity.dart';
 
 class LeaderboardScreen extends StatefulWidget {
-  const LeaderboardScreen({super.key});
+  const LeaderboardScreen({super.key, this.connected = false});
+  final bool connected;
 
   @override
   State<LeaderboardScreen> createState() => _LeaderboardScreenState();
@@ -14,7 +15,11 @@ class LeaderboardScreen extends StatefulWidget {
 class _LeaderboardScreenState extends State<LeaderboardScreen> {
   int _scope = 0;
 
-  static const _podiumColors = [Color(0xFFFFD700), Color(0xFFC0C0C0), Color(0xFFCD7F32)];
+  static const _podiumColors = [
+    Color(0xFFFFD700),
+    Color(0xFFC0C0C0),
+    Color(0xFFCD7F32)
+  ];
   // Comfortably fits the tallest slot's content (avatar 44 + spacing 14 +
   // name/points ~30 + tallest bar 108 ≈ 196) with headroom to spare, so the
   // podium can never overflow regardless of name length.
@@ -23,12 +28,18 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final top3 = context.read<GamificationRepository>().leaderboard.take(3).toList();
-    final rest = context.read<GamificationRepository>().leaderboard.skip(3).toList();
-    final you = context.read<GamificationRepository>().leaderboard.firstWhere((r) => r[1] == context.read<MemberProfileRepository>().memberName,
+    final rows = widget.connected
+        ? List.generate(5, (_) => <String>['-', '-', '-'])
+        : context.read<GamificationRepository>().leaderboard;
+    final top3 = rows.take(3).toList();
+    final rest = rows.skip(3).toList();
+    final you = rows.firstWhere(
+        (r) =>
+            !widget.connected &&
+            r[1] == context.read<MemberProfileRepository>().memberName,
         orElse: () => const ['—', '', '0']);
     final youPoints = int.tryParse(you[2].replaceAll(',', '')) ?? 0;
-    final ahead = context.read<GamificationRepository>().leaderboard
+    final ahead = rows
         .where((r) => (int.tryParse(r[2].replaceAll(',', '')) ?? 0) > youPoints)
         .toList();
     final gap = ahead.isEmpty
@@ -57,11 +68,16 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
               ),
               child: Row(
                 children: [
-                  const Icon(Icons.trending_up_rounded, color: Colors.white, size: 20),
+                  const Icon(Icons.trending_up_rounded,
+                      color: Colors.white, size: 20),
                   const SizedBox(width: 10),
                   Expanded(
-                    child: Text('You are rank #${you[0]} — just $gap points from #${ahead.last[0]}.',
-                        style: const TextStyle(color: Colors.white, fontSize: 12.5, fontWeight: FontWeight.w700)),
+                    child: Text(
+                        'You are rank #${you[0]} — just $gap points from #${ahead.last[0]}.',
+                        style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w700)),
                   ),
                 ],
               ),
@@ -84,7 +100,8 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
             ),
           const SizedBox(height: 20),
           ...rest.map((row) {
-            final isYou = row[1] == context.read<MemberProfileRepository>().memberName;
+            final isYou = !widget.connected &&
+                row[1] == context.read<MemberProfileRepository>().memberName;
             final rankNum = int.tryParse(row[0]) ?? 0;
             final trendUp = rankNum.isEven;
             return Padding(
@@ -110,7 +127,8 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
                     const SizedBox(width: 10),
                     CircleAvatar(
                       radius: 16,
-                      backgroundColor: isYou ? AppColors.primary : AppColors.surfaceAlt,
+                      backgroundColor:
+                          isYou ? AppColors.primary : AppColors.surfaceAlt,
                       child: Text(
                         row[1].substring(0, 1),
                         style: TextStyle(
@@ -128,8 +146,14 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
                               fontWeight:
                                   isYou ? FontWeight.w700 : FontWeight.w500)),
                     ),
-                    Icon(trendUp ? Icons.arrow_upward_rounded : Icons.arrow_downward_rounded,
-                        size: 14, color: trendUp ? AppColors.success : AppColors.danger),
+                    Icon(
+                        widget.connected
+                            ? Icons.remove
+                            : trendUp
+                                ? Icons.arrow_upward_rounded
+                                : Icons.arrow_downward_rounded,
+                        size: 14,
+                        color: trendUp ? AppColors.success : AppColors.danger),
                     const SizedBox(width: 4),
                     Text(row[2],
                         style: const TextStyle(
@@ -147,7 +171,8 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
   }
 
   Widget _podiumSlot(BuildContext context, List<String> row, int podiumIndex) {
-    final isYou = row[1] == context.read<MemberProfileRepository>().memberName;
+    final isYou = !widget.connected &&
+        row[1] == context.read<MemberProfileRepository>().memberName;
     final color = _podiumColors[podiumIndex];
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -164,12 +189,18 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
                 shape: BoxShape.circle,
                 border: Border.all(color: color, width: 2.5),
                 boxShadow: podiumIndex == 0
-                    ? [BoxShadow(color: color.withValues(alpha: 0.5), blurRadius: 14, spreadRadius: 1)]
+                    ? [
+                        BoxShadow(
+                            color: color.withValues(alpha: 0.5),
+                            blurRadius: 14,
+                            spreadRadius: 1)
+                      ]
                     : null,
               ),
               padding: const EdgeInsets.all(2),
               child: CircleAvatar(
-                backgroundColor: isYou ? AppColors.primary : AppColors.surfaceAlt,
+                backgroundColor:
+                    isYou ? AppColors.primary : AppColors.surfaceAlt,
                 child: Text(row[1].substring(0, 1),
                     style: TextStyle(
                         fontSize: 15,
@@ -189,9 +220,14 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 12, fontWeight: isYou ? FontWeight.w800 : FontWeight.w600)),
+            style: TextStyle(
+                fontSize: 12,
+                fontWeight: isYou ? FontWeight.w800 : FontWeight.w600)),
         Text(row[2],
-            style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: AppColors.primary)),
+            style: const TextStyle(
+                fontSize: 11.5,
+                fontWeight: FontWeight.w700,
+                color: AppColors.primary)),
         const SizedBox(height: 8),
         Container(
           width: double.infinity,
@@ -203,7 +239,9 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
           ),
           alignment: Alignment.topCenter,
           padding: const EdgeInsets.only(top: 8),
-          child: Text(row[0], style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: color)),
+          child: Text(row[0],
+              style: TextStyle(
+                  fontSize: 18, fontWeight: FontWeight.w800, color: color)),
         ),
       ],
     );

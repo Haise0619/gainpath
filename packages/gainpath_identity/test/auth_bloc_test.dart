@@ -12,13 +12,13 @@ class _RecordingAuthRepository implements AuthRepository {
 
   @override
   Future<AuthSession> signIn({
-    required AppRole role,
+    AppRole? role,
     required String email,
     required String password,
   }) async {
     signInCalls++;
     if (fail) throw const AuthException('Unable to sign in.');
-    return AuthSession(email: email, role: role);
+    return AuthSession(email: email, role: role ?? AppRole.coach);
   }
 
   @override
@@ -44,6 +44,24 @@ class _RecordingAuthRepository implements AuthRepository {
 void main() {
   group('AuthBloc', () {
     blocTest<AuthBloc, AuthState>(
+      'shared login accepts the role returned by the account',
+      build: () => AuthBloc(repository: _RecordingAuthRepository()),
+      act: (bloc) => bloc.add(const LoginSubmitted(
+        email: 'coach@example.com',
+        password: 'password123',
+      )),
+      wait: const Duration(milliseconds: 5),
+      expect: () => [
+        const AuthState(status: AuthStatus.submitting),
+        const AuthState(
+          role: AppRole.coach,
+          status: AuthStatus.signedIn,
+          email: 'coach@example.com',
+          session: AuthSession(email: 'coach@example.com', role: AppRole.coach),
+        ),
+      ],
+    );
+    blocTest<AuthBloc, AuthState>(
       'rejects invalid credentials without calling the repository',
       build: () => AuthBloc(repository: _RecordingAuthRepository()),
       act: (bloc) {
@@ -58,6 +76,7 @@ void main() {
             email: 'Enter a valid email address.',
             password: 'Enter your password.',
           ),
+          message: AuthBloc.fieldsError,
         ),
       ],
     );

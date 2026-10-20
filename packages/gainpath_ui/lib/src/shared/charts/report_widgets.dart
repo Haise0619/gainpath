@@ -45,7 +45,8 @@ class ReportSection extends StatelessWidget {
   /// filter bar), other admin pages reusing this shell supply their own.
   final String? tagLabel;
   final String exportFilename;
-  final List<List<Object?>> Function() exportRows;
+  final List<List<Object?>> Function()? exportRows;
+  final bool exportEnabled;
   final Widget child;
 
   const ReportSection({
@@ -56,12 +57,14 @@ class ReportSection extends StatelessWidget {
     required this.live,
     this.tagLabel,
     required this.exportFilename,
-    required this.exportRows,
+    this.exportRows,
+    this.exportEnabled = true,
     required this.child,
   });
 
   @override
   Widget build(BuildContext context) {
+    final canExport = exportEnabled && exportRows != null;
     return Container(
       key: anchorKey,
       padding: const EdgeInsets.only(bottom: 32),
@@ -89,11 +92,13 @@ class ReportSection extends StatelessWidget {
               ),
               IconButton(
                 icon: const Icon(Icons.download_rounded, size: 19),
-                tooltip: 'Export CSV',
-                onPressed: () {
-                  downloadCsv(exportFilename, exportRows());
-                  showToast(context, 'Downloaded $exportFilename.');
-                },
+                tooltip: canExport ? 'Export CSV' : 'Export unavailable',
+                onPressed: canExport
+                    ? () {
+                        downloadCsv(exportFilename, exportRows!());
+                        showToast(context, 'Downloaded $exportFilename.');
+                      }
+                    : null,
               ),
             ],
           ),

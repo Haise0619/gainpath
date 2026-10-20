@@ -2,7 +2,7 @@ import 'identity.dart';
 
 abstract interface class AuthRepository {
   Future<AuthSession> signIn(
-      {required AppRole role, required String email, required String password});
+      {AppRole? role, required String email, required String password});
   Future<AuthSession> register(
       {required AppRole role,
       required String email,

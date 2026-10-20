@@ -15,7 +15,8 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 /// threshold/gap-report side rail), the two queues are action lists
 /// (a responsive card grid instead of a single stacked column).
 class RiskLeaderboardScreen extends StatefulWidget {
-  const RiskLeaderboardScreen({super.key});
+  final bool live;
+  const RiskLeaderboardScreen({super.key, this.live = false});
 
   @override
   State<RiskLeaderboardScreen> createState() => _RiskLeaderboardScreenState();
@@ -54,6 +55,10 @@ class _RiskLeaderboardScreenState extends State<RiskLeaderboardScreen>
   }
 
   void _refreshTrainerQueue() {
+    if (widget.live) {
+      showToast(context, 'Trainer matching queue is unavailable in this release.');
+      return;
+    }
     if (_trainerPoolIndex < context.read<RecommendationRepository>().trainerLeadsPool.length) {
       setState(() {
         _trainerLeads.add(context.read<RecommendationRepository>().trainerLeadsPool[_trainerPoolIndex]);
@@ -66,6 +71,10 @@ class _RiskLeaderboardScreenState extends State<RiskLeaderboardScreen>
   }
 
   void _refreshContentQueue() {
+    if (widget.live) {
+      showToast(context, 'Content recommendation queue is unavailable in this release.');
+      return;
+    }
     if (_contentPoolIndex < context.read<RecommendationRepository>().contentLeadsPool.length) {
       setState(() {
         _contentLeads.add(context.read<RecommendationRepository>().contentLeadsPool[_contentPoolIndex]);
@@ -78,11 +87,19 @@ class _RiskLeaderboardScreenState extends State<RiskLeaderboardScreen>
   }
 
   Future<void> _send(RiskLead lead, List<RiskLead> list, {required bool isCoach}) async {
+    if (widget.live) {
+      showToast(context, 'Lead recommendation dispatch is unavailable in this release.');
+      return;
+    }
     setState(() => list.remove(lead));
     showToast(context, isCoach ? 'Sent to ${lead.suggestion} for ${lead.memberName}.' : 'Surfaced to ${lead.memberName}.');
   }
 
   Future<void> _dismiss(RiskLead lead, List<RiskLead> list) async {
+    if (widget.live) {
+      showToast(context, 'Lead dismissal is unavailable in this release.');
+      return;
+    }
     final reason = await showDialog<String>(
       context: context,
       builder: (ctx) => _DismissReasonDialog(memberName: lead.memberName),
@@ -163,16 +180,21 @@ class _RiskLeaderboardScreenState extends State<RiskLeaderboardScreen>
         anchorKey: _leaderboardKey,
         title: 'High-Risk Exercise Leaderboard',
         subtitle: 'Ranked by lowest average form score across all members',
-        live: true,
-        tagLabel: 'Live · threshold-driven',
+        live: false,
+        tagLabel: widget.live ? 'Unavailable' : 'Live · threshold-driven',
         exportFilename: 'high_risk_leaderboard.csv',
-        exportRows: () => [
-          ['Rank', 'Exercise', 'Avg score', 'Category', 'Risk tier'],
-          ...List.generate(context.read<RecommendationRepository>().riskExercises.length, (i) {
-            final e = context.read<RecommendationRepository>().riskExercises[i];
-            return [i + 1, e[0], e[1], e[2], RiskPolicy(thresholdPct: context.read<RecommendationRepository>().postureRiskThreshold).tierFor(int.parse(e[1].replaceAll('%', '')))];
-          }),
-        ],
+        exportRows: () => widget.live
+            ? [
+                ['Status'],
+                ['High-risk exercise leaderboard is unavailable in this release'],
+              ]
+            : [
+                ['Rank', 'Exercise', 'Avg score', 'Category', 'Risk tier'],
+                ...List.generate(context.read<RecommendationRepository>().riskExercises.length, (i) {
+                  final e = context.read<RecommendationRepository>().riskExercises[i];
+                  return [i + 1, e[0], e[1], e[2], RiskPolicy(thresholdPct: context.read<RecommendationRepository>().postureRiskThreshold).tierFor(int.parse(e[1].replaceAll('%', '')))];
+                }),
+              ],
         child: LayoutBuilder(builder: (context, constraints) {
           final wide = constraints.maxWidth >= 900;
           final main = _leaderboardMain(context, rows, categories);
@@ -219,35 +241,40 @@ class _RiskLeaderboardScreenState extends State<RiskLeaderboardScreen>
         Panel(
           child: SizedBox(
             height: 220,
-            child: SfCartesianChart(
-              plotAreaBorderWidth: 0,
-              primaryXAxis: const CategoryAxis(
-                majorGridLines: MajorGridLines(width: 0),
-                axisLine: AxisLine(width: 0),
-                labelIntersectAction: AxisLabelIntersectAction.wrap,
-                labelStyle: TextStyle(fontSize: 10, color: AppColors.inkSoft),
-              ),
-              primaryYAxis: const NumericAxis(
-                minimum: 0,
-                maximum: 100,
-                majorGridLines: MajorGridLines(width: 0.6, color: AppColors.hairline),
-                axisLine: AxisLine(width: 0),
-                labelStyle: TextStyle(fontSize: 10, color: AppColors.inkSoft),
-              ),
-              tooltipBehavior: TooltipBehavior(enable: true, header: '', format: 'point.x  ·  point.y%'),
-              series: <CartesianSeries<List<String>, String>>[
-                ColumnSeries<List<String>, String>(
-                  dataSource: rows,
-                  xValueMapper: (e, _) => e[0],
-                  yValueMapper: (e, _) => int.parse(e[1].replaceAll('%', '')),
-                  pointColorMapper: (e, _) {
-                    final tier = RiskPolicy(thresholdPct: context.read<RecommendationRepository>().postureRiskThreshold).tierFor(int.parse(e[1].replaceAll('%', '')));
-                    return tier == 'High'
-                        ? AppColors.danger
-                        : tier == 'Moderate'
-                            ? AppColors.warning
-                            : AppColors.success;
-                  },
+            child: widget.live || rows.isEmpty
+                ? NoFilteredData(
+                    message: widget.live
+                        ? 'High-risk exercise data is unavailable in this release.'
+                        : 'No exercises match this category.')
+                : SfCartesianChart(
+                    plotAreaBorderWidth: 0,
+                    primaryXAxis: const CategoryAxis(
+                      majorGridLines: MajorGridLines(width: 0),
+                      axisLine: AxisLine(width: 0),
+                      labelIntersectAction: AxisLabelIntersectAction.wrap,
+                      labelStyle: TextStyle(fontSize: 10, color: AppColors.inkSoft),
+                    ),
+                    primaryYAxis: const NumericAxis(
+                      minimum: 0,
+                      maximum: 100,
+                      majorGridLines: MajorGridLines(width: 0.6, color: AppColors.hairline),
+                      axisLine: AxisLine(width: 0),
+                      labelStyle: TextStyle(fontSize: 10, color: AppColors.inkSoft),
+                    ),
+                    tooltipBehavior: TooltipBehavior(enable: true, header: '', format: 'point.x  ·  point.y%'),
+                    series: <CartesianSeries<List<String>, String>>[
+                      ColumnSeries<List<String>, String>(
+                        dataSource: rows,
+                        xValueMapper: (e, _) => e[0],
+                        yValueMapper: (e, _) => int.parse(e[1].replaceAll('%', '')),
+                        pointColorMapper: (e, _) {
+                          final tier = RiskPolicy(thresholdPct: context.read<RecommendationRepository>().postureRiskThreshold).tierFor(int.parse(e[1].replaceAll('%', '')));
+                          return tier == 'High'
+                              ? AppColors.danger
+                              : tier == 'Moderate'
+                                  ? AppColors.warning
+                                  : AppColors.success;
+                        },
                   width: 0.6,
                   borderRadius: BorderRadius.circular(6),
                   onPointTap: (details) {
@@ -310,9 +337,17 @@ class _RiskLeaderboardScreenState extends State<RiskLeaderboardScreen>
         Row(
           children: [
             Expanded(
-                child: StatTile('$highRiskCount', 'Flagged High risk', valueColor: AppColors.danger, compact: true)),
+                child: StatTile(
+                    widget.live ? '—' : '$highRiskCount',
+                    'Flagged High risk',
+                    valueColor: AppColors.danger,
+                    compact: true)),
             const SizedBox(width: 8),
-            Expanded(child: StatTile('${gaps.length}', 'Missing a tutorial', compact: true)),
+            Expanded(
+                child: StatTile(
+                    widget.live ? '—' : '${gaps.length}',
+                    'Missing a tutorial',
+                    compact: true)),
           ],
         ),
         const SizedBox(height: 14),
@@ -347,15 +382,25 @@ class _RiskLeaderboardScreenState extends State<RiskLeaderboardScreen>
         ),
         const SizedBox(height: 14),
         const Eyebrow('Content gap report'),
-        if (gaps.isEmpty)
+        if (widget.live || gaps.isEmpty)
           Panel(
             child: Row(
               children: [
-                const Icon(Icons.task_alt_rounded, size: 18, color: AppColors.success),
+                Icon(
+                    widget.live
+                        ? Icons.info_outline_rounded
+                        : Icons.task_alt_rounded,
+                    size: 18,
+                    color:
+                        widget.live ? AppColors.inkSoft : AppColors.success),
                 const SizedBox(width: 10),
                 Expanded(
-                  child: Text('Every high-risk exercise has a tutorial.',
-                      style: Theme.of(context).textTheme.bodyMedium),
+                  child: Text(
+                    widget.live
+                        ? 'Content gap analysis is unavailable in this release.'
+                        : 'Every high-risk exercise has a tutorial.',
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
                 ),
               ],
             ),
@@ -405,13 +450,18 @@ class _RiskLeaderboardScreenState extends State<RiskLeaderboardScreen>
         anchorKey: _trainerKey,
         title: 'Trainer Matching Leads',
         subtitle: 'At-risk members matched to a coach',
-        live: true,
-        tagLabel: 'Live queue',
+        live: false,
+        tagLabel: widget.live ? 'Unavailable' : 'Live queue',
         exportFilename: 'trainer_matching_leads.csv',
-        exportRows: () => [
-          ['Member', 'Weak movement', 'Score', 'Suggested coach'],
-          ..._trainerLeads.map((l) => [l.memberName, l.weakCategory, l.score, l.suggestion]),
-        ],
+        exportRows: () => widget.live
+            ? [
+                ['Status'],
+                ['Trainer matching leads are unavailable in this release'],
+              ]
+            : [
+                ['Member', 'Weak movement', 'Score', 'Suggested coach'],
+                ..._trainerLeads.map((l) => [l.memberName, l.weakCategory, l.score, l.suggestion]),
+              ],
         child: _queueBody(
           context,
           leads: visible,
@@ -433,13 +483,18 @@ class _RiskLeaderboardScreenState extends State<RiskLeaderboardScreen>
         anchorKey: _contentKey,
         title: 'Content Recommendation Leads',
         subtitle: 'At-risk members matched to a tutorial video',
-        live: true,
-        tagLabel: 'Live queue',
+        live: false,
+        tagLabel: widget.live ? 'Unavailable' : 'Live queue',
         exportFilename: 'content_recommendation_leads.csv',
-        exportRows: () => [
-          ['Member', 'Weak movement', 'Score', 'Suggested video'],
-          ..._contentLeads.map((l) => [l.memberName, l.weakCategory, l.score, l.suggestion]),
-        ],
+        exportRows: () => widget.live
+            ? [
+                ['Status'],
+                ['Content recommendation leads are unavailable in this release'],
+              ]
+            : [
+                ['Member', 'Weak movement', 'Score', 'Suggested video'],
+                ..._contentLeads.map((l) => [l.memberName, l.weakCategory, l.score, l.suggestion]),
+              ],
         child: _queueBody(
           context,
           leads: visible,
@@ -503,7 +558,12 @@ class _RiskLeaderboardScreenState extends State<RiskLeaderboardScreen>
                   children: [
                     const Icon(Icons.inbox_rounded, size: 30, color: AppColors.hairline),
                     const SizedBox(height: 8),
-                    Text(query.isEmpty ? 'Queue is clear. Refresh to check for new leads.' : 'No leads match that search.',
+                    Text(
+                        widget.live
+                            ? 'Lead recommendations are unavailable in this environment.'
+                            : (query.isEmpty
+                                ? 'Queue is clear. Refresh to check for new leads.'
+                                : 'No leads match that search.'),
                         style: Theme.of(context).textTheme.bodyMedium),
                   ],
                 ),

@@ -7,8 +7,18 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:gainpath_domain/identity.dart';
 
 const _monthNames = [
-  'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+  'Jan',
+  'Feb',
+  'Mar',
+  'Apr',
+  'May',
+  'Jun',
+  'Jul',
+  'Aug',
+  'Sep',
+  'Oct',
+  'Nov',
+  'Dec'
 ];
 
 DateTime _mondayOf(DateTime d) {
@@ -35,8 +45,9 @@ class _WeekBucket {
   double get total => sessions.fold(0, (sum, b) => sum + b.fee);
 
   String get axisLabel => '${monday.day}–${sunday.day}';
-  String get rangeLabel =>
-      monday.month == sunday.month ? '${monday.day}–${sunday.day} ${_monthNames[monday.month - 1]}' : '${_shortDate(monday)} – ${_shortDate(sunday)}';
+  String get rangeLabel => monday.month == sunday.month
+      ? '${monday.day}–${sunday.day} ${_monthNames[monday.month - 1]}'
+      : '${_shortDate(monday)} – ${_shortDate(sunday)}';
 }
 
 class _WeekPoint {
@@ -54,7 +65,16 @@ class _WeekPoint {
 /// current week, and expands inline underneath the chart with that
 /// week's real session list when tapped.
 class EarningsScreen extends StatefulWidget {
-  const EarningsScreen({super.key});
+  const EarningsScreen(
+      {super.key,
+      this.connected = false,
+      this.bookings,
+      this.rating,
+      this.reviews});
+  final bool connected;
+  final List<Booking>? bookings;
+  final double? rating;
+  final int? reviews;
 
   @override
   State<EarningsScreen> createState() => _EarningsScreenState();
@@ -74,32 +94,47 @@ class _EarningsScreenState extends State<EarningsScreen> {
         return !d.isBefore(monday) && !d.isAfter(sunday);
       }).toList()
         ..sort((a, b) => b.start.compareTo(a.start));
-      return _WeekBucket(monday: monday, sunday: sunday, isCurrent: weeksAgo == 0, sessions: sessions);
+      return _WeekBucket(
+          monday: monday,
+          sunday: sunday,
+          isCurrent: weeksAgo == 0,
+          sessions: sessions);
     });
   }
 
   @override
   Widget build(BuildContext context) {
-    final coach = context.read<CoachRepository>().currentCoach;
-    final roster = context.read<BookingRepository>().coachRoster;
-    final completed = roster.where((b) => b.status == BookingStatus.completed).toList()
+    final coach =
+        widget.connected ? null : context.read<CoachRepository>().currentCoach;
+    final available = !widget.connected || widget.bookings != null;
+    final roster = widget.connected
+        ? (widget.bookings ?? <Booking>[])
+        : context.read<BookingRepository>().coachRoster;
+    final completed = roster
+        .where((b) => b.status == BookingStatus.completed)
+        .toList()
       ..sort((a, b) => b.start.compareTo(a.start));
     final totalEarned = completed.fold<double>(0, (sum, b) => sum + b.fee);
-    final notCancelled = roster.where((b) => b.status != BookingStatus.cancelled).length;
-    final fillRate = roster.isEmpty ? 0 : (notCancelled / roster.length * 100).round();
-    final avgPerSession = completed.isEmpty ? 0.0 : totalEarned / completed.length;
+    final notCancelled =
+        roster.where((b) => b.status != BookingStatus.cancelled).length;
+    final fillRate =
+        roster.isEmpty ? 0 : (notCancelled / roster.length * 100).round();
+    final avgPerSession =
+        completed.isEmpty ? 0.0 : totalEarned / completed.length;
 
     final weeks = _buildWeeks(completed);
     final bestWeek = weeks.reduce((a, b) => a.total >= b.total ? a : b);
-    final weekData = weeks.map((w) => _WeekPoint(w.axisLabel, w.total)).toList();
+    final weekData =
+        weeks.map((w) => _WeekPoint(w.axisLabel, w.total)).toList();
 
     final topClients = <String, List<Booking>>{};
     for (final b in completed) {
       topClients.putIfAbsent(b.memberName, () => []).add(b);
     }
     final topClientEntries = topClients.entries.toList()
-      ..sort((a, b) =>
-          b.value.fold<double>(0, (s, x) => s + x.fee).compareTo(a.value.fold<double>(0, (s, x) => s + x.fee)));
+      ..sort((a, b) => b.value
+          .fold<double>(0, (s, x) => s + x.fee)
+          .compareTo(a.value.fold<double>(0, (s, x) => s + x.fee)));
 
     return Scaffold(
       appBar: AppBar(
@@ -108,7 +143,7 @@ class _EarningsScreenState extends State<EarningsScreen> {
           IconButton(
             icon: const Icon(Icons.ios_share_rounded),
             tooltip: 'Export statement',
-            onPressed: () => showToast(context, 'Statement saved to your device.'),
+            onPressed: () => showUnavailable(context),
           ),
         ],
       ),
@@ -121,37 +156,61 @@ class _EarningsScreenState extends State<EarningsScreen> {
               children: [
                 const Text('TOTAL EARNED',
                     style: TextStyle(
-                        fontSize: 11, letterSpacing: 1.4, fontWeight: FontWeight.w700, color: Colors.white70)),
+                        fontSize: 11,
+                        letterSpacing: 1.4,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.white70)),
                 const SizedBox(height: 6),
-                Text('RM ${totalEarned.toStringAsFixed(0)}',
+                Text(available ? 'RM ${totalEarned.toStringAsFixed(0)}' : '-',
                     style: const TextStyle(
-                        fontSize: 34, fontWeight: FontWeight.w800, color: Colors.white, letterSpacing: -1)),
+                        fontSize: 34,
+                        fontWeight: FontWeight.w800,
+                        color: Colors.white,
+                        letterSpacing: -1)),
                 const SizedBox(height: 4),
-                Text('${completed.length} sessions completed',
-                    style: const TextStyle(color: Colors.white70, fontSize: 14)),
+                Text(available ? '${completed.length} sessions completed' : '-',
+                    style:
+                        const TextStyle(color: Colors.white70, fontSize: 14)),
               ],
             ),
           ),
           const SizedBox(height: 16),
           Row(
             children: [
-              Expanded(child: StatTile('${coach.rating}', 'Avg rating', valueColor: AppColors.accent)),
+              Expanded(
+                  child: StatTile(
+                      '${widget.connected ? (widget.rating ?? '-') : coach!.rating}',
+                      'Avg rating',
+                      valueColor: AppColors.accent)),
               const SizedBox(width: 10),
-              Expanded(child: StatTile('${coach.reviews}', 'Reviews')),
+              Expanded(
+                  child: StatTile(
+                      '${widget.connected ? (widget.reviews ?? '-') : coach!.reviews}',
+                      'Reviews')),
               const SizedBox(width: 10),
-              Expanded(child: StatTile('$fillRate%', 'Fill rate')),
+              Expanded(
+                  child: StatTile(available ? '$fillRate%' : '-', 'Fill rate')),
             ],
           ),
           const SizedBox(height: 10),
           Row(
             children: [
               Expanded(
-                  child: StatTile('RM ${avgPerSession.toStringAsFixed(0)}', 'Avg / session',
+                  child: StatTile(
+                      available
+                          ? 'RM ${avgPerSession.toStringAsFixed(0)}'
+                          : '-',
+                      'Avg / session',
                       compact: true)),
               const SizedBox(width: 10),
               Expanded(
-                  child: StatTile('RM ${bestWeek.total.toStringAsFixed(0)}', 'Best week',
-                      compact: true, valueColor: AppColors.success)),
+                  child: StatTile(
+                      available
+                          ? 'RM ${bestWeek.total.toStringAsFixed(0)}'
+                          : '-',
+                      'Best week',
+                      compact: true,
+                      valueColor: AppColors.success)),
             ],
           ),
           const SizedBox(height: 20),
@@ -162,10 +221,15 @@ class _EarningsScreenState extends State<EarningsScreen> {
               children: [
                 Row(
                   children: [
-                    const Icon(Icons.touch_app_outlined, size: 14, color: AppColors.inkSoft),
+                    const Icon(Icons.touch_app_outlined,
+                        size: 14, color: AppColors.inkSoft),
                     const SizedBox(width: 6),
-                    Text('Tap a bar to see that week\'s sessions',
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontSize: 12)),
+                    Expanded(
+                        child: Text('Tap a bar to see that week\'s sessions',
+                            style: Theme.of(context)
+                                .textTheme
+                                .bodyMedium
+                                ?.copyWith(fontSize: 12))),
                   ],
                 ),
                 const SizedBox(height: 8),
@@ -177,12 +241,15 @@ class _EarningsScreenState extends State<EarningsScreen> {
                       majorGridLines: MajorGridLines(width: 0),
                       axisLine: AxisLine(width: 0),
                       labelIntersectAction: AxisLabelIntersectAction.wrap,
-                      labelStyle: TextStyle(fontSize: 10, color: AppColors.inkSoft),
+                      labelStyle:
+                          TextStyle(fontSize: 10, color: AppColors.inkSoft),
                     ),
                     primaryYAxis: const NumericAxis(
-                      majorGridLines: MajorGridLines(width: 0.6, color: AppColors.hairline),
+                      majorGridLines:
+                          MajorGridLines(width: 0.6, color: AppColors.hairline),
                       axisLine: AxisLine(width: 0),
-                      labelStyle: TextStyle(fontSize: 10, color: AppColors.inkSoft),
+                      labelStyle:
+                          TextStyle(fontSize: 10, color: AppColors.inkSoft),
                     ),
                     tooltipBehavior: TooltipBehavior(
                       enable: true,
@@ -191,17 +258,19 @@ class _EarningsScreenState extends State<EarningsScreen> {
                     ),
                     series: <CartesianSeries<_WeekPoint, String>>[
                       ColumnSeries<_WeekPoint, String>(
-                        dataSource: weekData,
+                        dataSource: available ? weekData : const <_WeekPoint>[],
                         xValueMapper: (d, _) => d.label,
                         yValueMapper: (d, _) => d.amount,
-                        pointColorMapper: (d, i) =>
-                            weeks[i].isCurrent ? AppColors.accent : AppColors.primary,
+                        pointColorMapper: (d, i) => weeks[i].isCurrent
+                            ? AppColors.accent
+                            : AppColors.primary,
                         width: 0.55,
                         borderRadius: BorderRadius.circular(6),
                         onPointTap: (details) {
                           final i = details.pointIndex;
                           if (i == null) return;
-                          setState(() => _expandedWeek = _expandedWeek == i ? null : i);
+                          setState(() =>
+                              _expandedWeek = _expandedWeek == i ? null : i);
                         },
                       ),
                     ],
@@ -252,8 +321,9 @@ class _EarningsScreenState extends State<EarningsScreen> {
                         annotations: [
                           GaugeAnnotation(
                             positionFactor: 0,
-                            widget: Text('$fillRate%',
-                                style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
+                            widget: Text(available ? '$fillRate%' : '-',
+                                style: const TextStyle(
+                                    fontSize: 17, fontWeight: FontWeight.w800)),
                           ),
                         ],
                       ),
@@ -263,8 +333,9 @@ class _EarningsScreenState extends State<EarningsScreen> {
                 const SizedBox(width: 16),
                 Expanded(
                   child: Text(
-                    '$notCancelled of ${roster.length} booked slots went ahead — the rest were '
-                    'cancelled.',
+                    available
+                        ? '$notCancelled of ${roster.length} bookings are not cancelled.'
+                        : 'Booking fill rate: -',
                     style: Theme.of(context).textTheme.bodyMedium,
                   ),
                 ),
@@ -275,7 +346,8 @@ class _EarningsScreenState extends State<EarningsScreen> {
           const Eyebrow('Top clients'),
           if (topClientEntries.isEmpty)
             Panel(
-              child: Text('No completed sessions yet.', style: Theme.of(context).textTheme.bodyMedium),
+              child: Text(available ? 'No completed sessions yet.' : '-',
+                  style: Theme.of(context).textTheme.bodyMedium),
             )
           else
             ...topClientEntries.take(3).map((e) {
@@ -288,11 +360,16 @@ class _EarningsScreenState extends State<EarningsScreen> {
                       Container(
                         width: 38,
                         height: 38,
-                        decoration: BoxDecoration(color: AppColors.primaryTint, borderRadius: BorderRadius.circular(11)),
+                        decoration: BoxDecoration(
+                            color: AppColors.primaryTint,
+                            borderRadius: BorderRadius.circular(11)),
                         child: Center(
                           child: Text(
                             e.key.split(' ').map((w) => w[0]).take(2).join(),
-                            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: AppColors.primary),
+                            style: const TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.primary),
                           ),
                         ),
                       ),
@@ -301,14 +378,19 @@ class _EarningsScreenState extends State<EarningsScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(e.key, style: Theme.of(context).textTheme.titleMedium),
-                            Text('${e.value.length} session${e.value.length == 1 ? '' : 's'}',
+                            Text(e.key,
+                                style: Theme.of(context).textTheme.titleMedium),
+                            Text(
+                                '${e.value.length} session${e.value.length == 1 ? '' : 's'}',
                                 style: Theme.of(context).textTheme.bodyMedium),
                           ],
                         ),
                       ),
                       Text('RM ${revenue.toStringAsFixed(0)}',
-                          style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.w700, color: AppColors.success)),
+                          style: const TextStyle(
+                              fontSize: 14.5,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.success)),
                     ],
                   ),
                 ),
@@ -318,7 +400,8 @@ class _EarningsScreenState extends State<EarningsScreen> {
           const Eyebrow('Recent sessions'),
           if (completed.isEmpty)
             Panel(
-              child: Text('No completed sessions yet.', style: Theme.of(context).textTheme.bodyMedium),
+              child: Text(available ? 'No completed sessions yet.' : '-',
+                  style: Theme.of(context).textTheme.bodyMedium),
             )
           else
             ...completed.take(5).map((b) => Padding(
@@ -330,7 +413,9 @@ class _EarningsScreenState extends State<EarningsScreen> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(b.memberName, style: Theme.of(context).textTheme.titleMedium),
+                              Text(b.memberName,
+                                  style:
+                                      Theme.of(context).textTheme.titleMedium),
                               Text(
                                 '${_shortDate(b.start)}  ·  ${b.notes != null ? 'Notes published' : 'Completed session'}',
                                 style: Theme.of(context).textTheme.bodyMedium,
@@ -340,7 +425,9 @@ class _EarningsScreenState extends State<EarningsScreen> {
                         ),
                         Text('RM ${b.fee.toStringAsFixed(0)}',
                             style: const TextStyle(
-                                fontSize: 15, fontWeight: FontWeight.w700, color: AppColors.success)),
+                                fontSize: 15,
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.success)),
                       ],
                     ),
                   ),
@@ -351,12 +438,12 @@ class _EarningsScreenState extends State<EarningsScreen> {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Icon(Icons.info_outline_rounded, size: 18, color: AppColors.inkSoft),
+                const Icon(Icons.info_outline_rounded,
+                    size: 18, color: AppColors.inkSoft),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Text(
-                    'Figures reflect completed and cleared sessions only. Payouts are settled '
-                    'by the facility on their usual schedule.',
+                    'Figures reflect recorded completed session fees. Payment clearance and payouts are unavailable.',
                     style: Theme.of(context).textTheme.bodyMedium,
                   ),
                 ),
@@ -381,7 +468,8 @@ class _WeekDetail extends StatelessWidget {
     return Container(
       margin: const EdgeInsets.only(top: 14),
       padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(color: AppColors.surfaceAlt, borderRadius: BorderRadius.circular(14)),
+      decoration: BoxDecoration(
+          color: AppColors.surfaceAlt, borderRadius: BorderRadius.circular(14)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -391,26 +479,37 @@ class _WeekDetail extends StatelessWidget {
                 child: Row(
                   children: [
                     Text(week.rangeLabel,
-                        style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700)),
+                        style: const TextStyle(
+                            fontSize: 13.5, fontWeight: FontWeight.w700)),
                     if (week.isCurrent) ...[
                       const SizedBox(width: 6),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                        decoration: BoxDecoration(color: AppColors.accent, borderRadius: BorderRadius.circular(999)),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 7, vertical: 2),
+                        decoration: BoxDecoration(
+                            color: AppColors.accent,
+                            borderRadius: BorderRadius.circular(999)),
                         child: const Text('CURRENT',
-                            style: TextStyle(fontSize: 9, fontWeight: FontWeight.w800, color: Colors.white)),
+                            style: TextStyle(
+                                fontSize: 9,
+                                fontWeight: FontWeight.w800,
+                                color: Colors.white)),
                       ),
                     ],
                   ],
                 ),
               ),
               Text('RM ${week.total.toStringAsFixed(0)}',
-                  style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w800, color: AppColors.primary)),
+                  style: const TextStyle(
+                      fontSize: 13.5,
+                      fontWeight: FontWeight.w800,
+                      color: AppColors.primary)),
             ],
           ),
           const SizedBox(height: 10),
           if (week.sessions.isEmpty)
-            Text('No completed sessions in this week.', style: Theme.of(context).textTheme.bodyMedium)
+            Text('No completed sessions in this week.',
+                style: Theme.of(context).textTheme.bodyMedium)
           else
             ...week.sessions.map((b) => Padding(
                   padding: const EdgeInsets.only(bottom: 8),
@@ -420,14 +519,17 @@ class _WeekDetail extends StatelessWidget {
                         width: 6,
                         height: 6,
                         margin: const EdgeInsets.only(right: 10),
-                        decoration: const BoxDecoration(shape: BoxShape.circle, color: AppColors.primary),
+                        decoration: const BoxDecoration(
+                            shape: BoxShape.circle, color: AppColors.primary),
                       ),
                       Expanded(
-                        child: Text('${b.memberName}  ·  ${_shortDate(b.start)}',
+                        child: Text(
+                            '${b.memberName}  ·  ${_shortDate(b.start)}',
                             style: const TextStyle(fontSize: 13)),
                       ),
                       Text('RM ${b.fee.toStringAsFixed(0)}',
-                          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
+                          style: const TextStyle(
+                              fontSize: 13, fontWeight: FontWeight.w700)),
                     ],
                   ),
                 )),

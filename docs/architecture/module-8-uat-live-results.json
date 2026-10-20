@@ -1,0 +1,44 @@
+{
+  "dateAsiaKualaLumpur": "2026-10-18",
+  "project": "gainpath-0619",
+  "mainAdminUrl": "http://localhost:7359/",
+  "ownerApprovedDisposableCoachTest": true,
+  "liveResults": {
+    "unpublishedDraftAndPrivateCertificationLoaded": true,
+    "authenticatedPrivatePreviewOpened": true,
+    "publicationBeforeApprovalDenied": true,
+    "rejectionWithoutReasonBlocked": true,
+    "rejectionWithReasonPersisted": true,
+    "approvalPersistedWithoutAutomaticPublication": true,
+    "explicitPublicationPersisted": true,
+    "explicitDeactivationPersisted": true,
+    "auditStatusesRetained": ["pending", "rejected", "approved", "archived"],
+    "phoneSaveAndReload": true,
+    "invalidPhoneDenied": true,
+    "existingClaimDuplicateDenied": true,
+    "optionalPhoneClearAndReload": true,
+    "syntheticPhoneClaimReleased": true
+  },
+  "finalState": {
+    "publicListingInactive": true,
+    "credentialArchived": true,
+    "certificationVerified": false,
+    "approvedCertificationCount": 0,
+    "fixtureMembershipInactive": true,
+    "fixturePhoneCleared": true,
+    "identityEvidenceAndAuditRetained": true,
+    "existingCoachRecordsComparedAndUnchanged": 2,
+    "bookingWrites": 0,
+    "deletes": 0
+  },
+  "android": {
+    "ownerApprovedInstallation": true,
+    "installedAndLaunched": true,
+    "signingIdentityMatched": true,
+    "privateDataByteIdenticalBeforeLaunch": true,
+    "installedHashMatched": true,
+    "sha256": "2f416853f5aa05270b16bbc1fd2ae4a033dcf64ae3655ea4885c53e0ed48421c"
+  },
+  "firebaseCodeOrRulesDeploymentNeeded": false,
+  "ownerManualPassClaimed": false
+}

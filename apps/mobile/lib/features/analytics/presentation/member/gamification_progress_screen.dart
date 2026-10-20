@@ -10,13 +10,18 @@ import 'package:gainpath_domain/gamification.dart';
 /// earned per week as a filled area trend, plus the current streak read
 /// as a "how full is the tank toward my longest streak" radial gauge.
 class GamificationProgressScreen extends StatelessWidget {
-  const GamificationProgressScreen({super.key});
+  const GamificationProgressScreen({super.key, this.live = false});
+  final bool live;
 
   @override
   Widget build(BuildContext context) {
-    final pts = context.read<AnalyticsRepository>().pointsHistory;
-    final labels = context.read<AnalyticsRepository>().pointsWeekLabels;
-    final data = List.generate(pts.length, (i) => _WeekPoints(labels[i], pts[i]));
+    final pts =
+        live ? <int>[] : context.read<AnalyticsRepository>().pointsHistory;
+    final labels = live
+        ? <String>[]
+        : context.read<AnalyticsRepository>().pointsWeekLabels;
+    final data =
+        List.generate(pts.length, (i) => _WeekPoints(labels[i], pts[i]));
 
     return Scaffold(
       appBar: AppBar(title: const Text('Points & streak')),
@@ -24,10 +29,19 @@ class GamificationProgressScreen extends StatelessWidget {
         children: [
           Row(
             children: [
-              Expanded(child: StatTile('${context.read<GamificationRepository>().points}', 'Total points')),
+              Expanded(
+                  child: StatTile(
+                      live
+                          ? '-'
+                          : '${context.read<GamificationRepository>().points}',
+                      'Total points')),
               const SizedBox(width: 10),
               Expanded(
-                  child: StatTile('${context.read<GamificationRepository>().streak}', 'Day streak',
+                  child: StatTile(
+                      live
+                          ? '-'
+                          : '${context.read<GamificationRepository>().streak}',
+                      'Day streak',
                       valueColor: AppColors.accentDark)),
             ],
           ),
@@ -74,7 +88,13 @@ class GamificationProgressScreen extends StatelessWidget {
                     axes: [
                       RadialAxis(
                         minimum: 0,
-                        maximum: context.read<GamificationRepository>().longestStreak.toDouble(),
+                        maximum: live
+                            ? 1
+                            : context
+                                .read<GamificationRepository>()
+                                .longestStreak
+                                .toDouble()
+                                .clamp(1, double.infinity),
                         showLabels: false,
                         showTicks: false,
                         startAngle: 270,
@@ -87,7 +107,12 @@ class GamificationProgressScreen extends StatelessWidget {
                         ),
                         pointers: [
                           RangePointer(
-                            value: context.read<GamificationRepository>().streak.toDouble(),
+                            value: live
+                                ? 0
+                                : context
+                                    .read<GamificationRepository>()
+                                    .streak
+                                    .toDouble(),
                             width: 0.16,
                             sizeUnit: GaugeSizeUnit.factor,
                             color: AppColors.accentDark,
@@ -97,8 +122,12 @@ class GamificationProgressScreen extends StatelessWidget {
                         annotations: [
                           GaugeAnnotation(
                             positionFactor: 0,
-                            widget: Text('${context.read<GamificationRepository>().streak}d',
-                                style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
+                            widget: Text(
+                                live
+                                    ? '-'
+                                    : '${context.read<GamificationRepository>().streak}d',
+                                style: const TextStyle(
+                                    fontSize: 17, fontWeight: FontWeight.w800)),
                           ),
                         ],
                       ),
@@ -108,9 +137,11 @@ class GamificationProgressScreen extends StatelessWidget {
                 const SizedBox(width: 16),
                 Expanded(
                   child: Text(
-                    'Your current streak is ${context.read<GamificationRepository>().streak} days — '
-                    '${context.read<GamificationRepository>().longestStreak - context.read<GamificationRepository>().streak} days from your personal '
-                    'best of ${context.read<GamificationRepository>().longestStreak}.',
+                    live
+                        ? '-'
+                        : 'Your current streak is ${context.read<GamificationRepository>().streak} days — '
+                            '${context.read<GamificationRepository>().longestStreak - context.read<GamificationRepository>().streak} days from your personal '
+                            'best of ${context.read<GamificationRepository>().longestStreak}.',
                     style: Theme.of(context).textTheme.bodyMedium,
                   ),
                 ),

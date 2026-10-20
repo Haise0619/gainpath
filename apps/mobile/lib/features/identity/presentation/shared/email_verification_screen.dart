@@ -1,14 +1,11 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
+import 'package:gainpath_domain/gainpath_domain.dart';
 
 /// SD-M1.4 — Verify Email Address. Triggered automatically right after
 /// account creation in the registration flow; not independently navigable.
-/// A valid token normally proceeds automatically with no screen for the
-/// member to dismiss — since this prototype has no real mail client to
-/// hand off to, the "I've verified" action stands in for that silent
-/// token check, clearly labelled as such rather than pretending to be a
-/// real deep link.
+/// Firebase owns link validation; the continue action reloads Auth state.
 class EmailVerificationScreen extends StatefulWidget {
   final String email;
   const EmailVerificationScreen({
@@ -33,6 +30,8 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen>
   int _cooldown = 0;
   Timer? _timer;
   bool _justResent = false;
+  bool _busy = false;
+  String? _error;
 
   @override
   void initState() {
@@ -65,18 +64,46 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen>
   }
 
   Future<void> _resend() async {
-    await widget.onResend?.call();
-    if (!mounted) return;
-    setState(() => _justResent = true);
-    _startCooldown();
-    showToast(context, 'Verification link re-sent to ${widget.email}.');
-    Future.delayed(const Duration(seconds: 3), () {
-      if (mounted) setState(() => _justResent = false);
+    if (_busy || _cooldown > 0 || widget.onResend == null) return;
+    setState(() {
+      _busy = true;
+      _error = null;
+      _justResent = false;
     });
+    try {
+      await widget.onResend!();
+      if (!mounted) return;
+      setState(() => _justResent = true);
+      _startCooldown();
+      showToast(context, 'Verification link re-sent to ${widget.email}.');
+    } catch (error) {
+      if (mounted) {
+        setState(() => _error = error is AuthException
+            ? error.message
+            : 'Could not send a verification link. Check your connection and retry.');
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
   }
 
-  void _continue() {
-    widget.onVerified?.call();
+  Future<void> _continue() async {
+    if (_busy || widget.onVerified == null) return;
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      await widget.onVerified!();
+    } catch (error) {
+      if (mounted) {
+        setState(() => _error = error is AuthException
+            ? error.message
+            : 'Could not check verification. Check your connection and retry.');
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
   }
 
   @override
@@ -130,7 +157,7 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen>
                         .bodyLarge
                         ?.copyWith(height: 1.5),
                     children: [
-                      const TextSpan(text: 'We sent a verification link to '),
+                      const TextSpan(text: 'Confirm the email address '),
                       TextSpan(
                           text: widget.email,
                           style: const TextStyle(
@@ -138,7 +165,7 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen>
                               color: AppColors.ink)),
                       const TextSpan(
                           text:
-                              '. Open it on this device to confirm your account.'),
+                              '. Open your verification email, then return here. If it is missing or expired, request a new link.'),
                     ],
                   ),
                   textAlign: TextAlign.center,
@@ -176,16 +203,25 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen>
                     : const SizedBox(key: ValueKey('empty'), height: 0),
               ),
               const Spacer(),
+              if (_error != null) ...[
+                Text(_error!,
+                    style: const TextStyle(color: AppColors.danger),
+                    semanticsLabel: _error),
+                const SizedBox(height: 10),
+              ],
               OutlinedButton(
-                onPressed: _cooldown > 0 ? null : _resend,
+                onPressed: _busy || _cooldown > 0 || widget.onResend == null
+                    ? null
+                    : _resend,
                 child: Text(_cooldown > 0
                     ? 'Resend link in ${_cooldown}s'
                     : 'Resend verification link'),
               ),
               const SizedBox(height: 10),
               FilledButton(
-                onPressed: widget.onVerified == null ? null : _continue,
-                child: const Text("I've verified my email"),
+                onPressed:
+                    _busy || widget.onVerified == null ? null : _continue,
+                child: Text(_busy ? 'Please wait…' : "I've verified my email"),
               ),
               const SizedBox(height: 6),
               TextButton(

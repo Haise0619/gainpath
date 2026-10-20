@@ -1,10 +1,13 @@
 import 'dart:math' as math;
+import 'package:gainpath_domain/analytics.dart';
+import '../../features/analytics/presentation/member/widgets/local_progress_widgets.dart';
+import '../../features/workout/data/published_routine.dart';
 import 'package:flutter/material.dart';
 import '../../features/gamification/application/gamification_bloc.dart';
 import 'package:gainpath_domain/gamification.dart';
 import 'package:gainpath_domain/coaching.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
-import '../../features/workout/presentation/member/workout_prep_screen.dart';
+import '../routing/workout_prep_route.dart';
 import '../../features/workout/presentation/member/equipment_scanner_screen.dart';
 import '../../features/analytics/presentation/member/goal_progress_screen.dart';
 import '../../features/analytics/presentation/shared/progress_dashboard_screen.dart';
@@ -19,6 +22,8 @@ import '../../features/membership/presentation/shared/membership_dashboard_scree
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:gainpath_domain/identity.dart';
 import 'package:gainpath_domain/workout.dart';
+import 'package:gainpath_domain/gainpath_domain.dart'
+    show AuthSession, FitnessProfile;
 
 /// Member landing screen — the hub every other member flow is reachable
 /// from. It carries the daily check-in prompt (AD-M3.2), the broadcast
@@ -30,7 +35,43 @@ import 'package:gainpath_domain/workout.dart';
 /// than in the app bar, matching the design direction's note that
 /// consulting it is usually prompted by something already on screen.
 class MemberHomeScreen extends StatefulWidget {
-  const MemberHomeScreen({super.key});
+  const MemberHomeScreen(
+      {super.key,
+      this.liveSession,
+      this.liveProfile,
+      this.publishedRoutine,
+      this.routineStatusMessage,
+      this.onStartWorkout,
+      this.localProgress,
+      this.progressError,
+      this.progressWarnings = const [],
+      this.onRefreshProgress,
+      this.onRefreshRoutines,
+      this.announcements,
+      this.onRefreshAnnouncements,
+      this.onOpenProgress,
+      this.onOpenHistory,
+      this.onOpenEquipment,
+      this.onOpenCoaches,
+      this.onOpenBookings,
+      this.onOpenWorkout});
+
+  final AuthSession? liveSession;
+  final FitnessProfile? liveProfile;
+  final PublishedRoutine? publishedRoutine;
+  final String? routineStatusMessage;
+  final VoidCallback? onStartWorkout;
+  final MemberLocalProgress? localProgress;
+  final String? progressError;
+  final List<String> progressWarnings;
+  final Future<void> Function()? onRefreshProgress;
+  final Future<void> Function()? onRefreshRoutines;
+  final Widget? announcements;
+  final Future<void> Function()? onRefreshAnnouncements;
+  final VoidCallback? onOpenProgress, onOpenHistory;
+  final VoidCallback? onOpenEquipment;
+  final VoidCallback? onOpenCoaches, onOpenBookings;
+  final void Function(LocalWorkoutProgressRecord)? onOpenWorkout;
 
   @override
   State<MemberHomeScreen> createState() => _MemberHomeScreenState();
@@ -39,6 +80,7 @@ class MemberHomeScreen extends StatefulWidget {
 class _MemberHomeScreenState extends State<MemberHomeScreen>
     with SingleTickerProviderStateMixin {
   bool _dismissedBroadcast = false;
+  final _homeScroll = ScrollController();
 
   late final AnimationController _claimController;
   late final Animation<double> _claimScale;
@@ -61,6 +103,7 @@ class _MemberHomeScreenState extends State<MemberHomeScreen>
 
   @override
   void dispose() {
+    _homeScroll.dispose();
     _claimController.dispose();
     super.dispose();
   }
@@ -75,6 +118,23 @@ class _MemberHomeScreenState extends State<MemberHomeScreen>
   Future<void> _refresh() async {
     await Future.delayed(const Duration(milliseconds: 900));
     if (mounted) showToast(context, 'Up to date.');
+  }
+
+  Future<void> _refreshLive() async {
+    await Future.wait<void>([
+      if (widget.onRefreshProgress != null) widget.onRefreshProgress!(),
+      if (widget.onRefreshRoutines != null) widget.onRefreshRoutines!(),
+      if (widget.onRefreshAnnouncements != null)
+        widget.onRefreshAnnouncements!(),
+    ]);
+  }
+
+  Future<void> _openAnnouncements() async {
+    if (_homeScroll.hasClients) {
+      await _homeScroll.animateTo(0,
+          duration: const Duration(milliseconds: 250), curve: Curves.easeOut);
+    }
+    if (mounted) await widget.onRefreshAnnouncements?.call();
   }
 
   String get _greeting {
@@ -97,18 +157,28 @@ class _MemberHomeScreenState extends State<MemberHomeScreen>
     return upcoming.isEmpty ? null : upcoming.first;
   }
 
-  void _go(Widget screen) {
-    Navigator.push(context, MaterialPageRoute(builder: (_) => screen));
+  Future<void> _go(Widget screen) async {
+    await Navigator.push(context, MaterialPageRoute(builder: (_) => screen));
+    if (mounted && widget.liveSession != null) {
+      await widget.onRefreshProgress?.call();
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final gamification = context.watch<GamificationBloc>().state;
-    final firstName =
-        context.read<MemberProfileRepository>().memberName.split(' ').first;
+    final live = widget.liveSession != null;
+    final gamification = live ? null : context.watch<GamificationBloc>().state;
+    final firstName = live
+        ? (widget.liveSession!.displayName?.trim().isNotEmpty == true
+            ? widget.liveSession!.displayName!.trim().split(' ').first
+            : widget.liveSession!.email.split('@').first)
+        : context.read<MemberProfileRepository>().memberName.split(' ').first;
+    final nextBooking = live ? null : _nextBooking;
     return Scaffold(
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _go(const ChatbotScreen()),
+        onPressed: live
+            ? () => _go(const ChatbotScreen(connected: true))
+            : () => _go(const ChatbotScreen()),
         backgroundColor: AppColors.primary,
         foregroundColor: Colors.white,
         icon: const Icon(Icons.auto_awesome_rounded, size: 20),
@@ -116,55 +186,120 @@ class _MemberHomeScreenState extends State<MemberHomeScreen>
       ),
       body: RefreshIndicator(
         color: AppColors.primary,
-        onRefresh: _refresh,
+        onRefresh: live ? _refreshLive : _refresh,
         child: CustomScrollView(
+          controller: _homeScroll,
           physics: const AlwaysScrollableScrollPhysics(),
           slivers: [
             _HeroHeader(
                 greeting: _greeting,
                 firstName: firstName,
-                points: gamification.points),
+                points: gamification?.points,
+                live: live,
+                onOpenAnnouncements: live && widget.announcements != null
+                    ? _openAnnouncements
+                    : null,
+                avatarText: live
+                    ? (firstName.isEmpty
+                        ? '?'
+                        : firstName.substring(0, 1).toUpperCase())
+                    : 'ZY'),
             SliverPadding(
               padding: const EdgeInsets.fromLTRB(16, 18, 16, 96),
               sliver: SliverList.list(
                 children: [
-                  if (!_dismissedBroadcast) ...[
+                  if (widget.announcements != null) ...[
+                    widget.announcements!,
+                    const SizedBox(height: 14),
+                  ] else if (!_dismissedBroadcast) ...[
                     _BroadcastBanner(
+                        live: live,
                         onDismiss: () =>
                             setState(() => _dismissedBroadcast = true)),
                     const SizedBox(height: 14),
                   ],
                   _StreakCard(
-                    claimed: gamification.checkedInToday,
+                    live: live,
+                    claimed: gamification?.checkedInToday ?? false,
                     scale: _claimScale,
-                    onClaim: _claim,
+                    onClaim: live ? () => showUnavailable(context) : _claim,
                     reward: RewardPolicy.dailyCheckIn,
                   ),
                   const SizedBox(height: 20),
                   const Eyebrow("Today's session"),
                   _TodayWorkoutCard(
-                      onStart: () => _go(const WorkoutPrepScreen())),
+                      live: live,
+                      publishedRoutine: widget.publishedRoutine,
+                      routineStatusMessage: widget.routineStatusMessage,
+                      onStart: live
+                          ? widget.onStartWorkout ??
+                              () => _go(WorkoutPrepRoute(
+                                  publishedRoutine: widget.publishedRoutine))
+                          : () => _go(const WorkoutPrepRoute(live: false))),
                   const SizedBox(height: 20),
                   const Eyebrow('This week'),
-                  const _RingStatsRow(),
+                  _RingStatsRow(live: live, progress: widget.localProgress),
+                  if (live) ...[
+                    const SizedBox(height: 8),
+                    if (widget.localProgress != null)
+                      LocalProgressPeriod(progress: widget.localProgress!),
+                    Text(widget.progressError ??
+                        (widget.localProgress == null
+                            ? 'Loading saved camera sessions…'
+                            : 'Saved local measurements · provisional; no rewards implied.')),
+                    if (widget.progressError != null)
+                      TextButton(
+                          onPressed: widget.onRefreshProgress,
+                          child: const Text('Retry local progress')),
+                    ...widget.progressWarnings.map((warning) => Text(warning)),
+                    const SizedBox(height: 16),
+                    const Eyebrow('Recent local workouts'),
+                    if (widget.localProgress?.records.isEmpty == true)
+                      const Panel(child: Text('No saved camera sessions yet.')),
+                    ...?widget.localProgress?.records.take(3).map((record) =>
+                        LocalProgressRecordTile(
+                            record: record,
+                            utcOffset: widget.localProgress!.utcOffset,
+                            onOpenWorkout: widget.onOpenWorkout)),
+                    TextButton(
+                        onPressed: widget.onOpenHistory,
+                        child: const Text('View local workout history')),
+                  ],
                   const SizedBox(height: 20),
-                  if (_nextBooking != null) ...[
+                  if (live || nextBooking != null) ...[
                     const Eyebrow('Next with a coach'),
                     _NextSessionCard(
-                      booking: _nextBooking!,
-                      onTap: () => _go(const BookingScheduleScreen()),
+                      booking: nextBooking,
+                      onTap: live
+                          ? widget.onOpenBookings ??
+                              () => showUnavailable(context)
+                          : () => _go(const BookingScheduleScreen()),
                     ),
                     const SizedBox(height: 20),
                   ],
                   const Eyebrow('Quick access'),
-                  _QuickActionsGrid(onSelect: _go),
+                  _QuickActionsGrid(
+                      onSelect: _go,
+                      enabled: !live,
+                      onOpenEquipment: widget.onOpenEquipment,
+                      onOpenCoaches: widget.onOpenCoaches,
+                      onOpenBookings: widget.onOpenBookings,
+                      onOpenProgress: widget.onOpenProgress),
                   const SizedBox(height: 20),
                   const Eyebrow('Goal progress'),
                   _GoalPreviewCard(
-                      onTap: () => _go(const GoalProgressScreen())),
+                      live: live,
+                      liveProfile: widget.liveProfile,
+                      onTap: live
+                          ? () => _go(const GoalProgressScreen(live: true))
+                          : () => _go(const GoalProgressScreen())),
                   const SizedBox(height: 20),
                   _MembershipStrip(
-                      onTap: () => _go(const MembershipDashboardScreen())),
+                      live: live,
+                      onTap: live
+                          ? () => _go(
+                              const MembershipDashboardScreen(connected: true))
+                          : () => _go(const MembershipDashboardScreen())),
                 ],
               ),
             ),
@@ -181,10 +316,18 @@ class _MemberHomeScreenState extends State<MemberHomeScreen>
 class _HeroHeader extends StatelessWidget {
   final String greeting;
   final String firstName;
-  final int points;
+  final int? points;
+  final bool live;
+  final String avatarText;
+  final VoidCallback? onOpenAnnouncements;
 
   const _HeroHeader(
-      {required this.greeting, required this.firstName, required this.points});
+      {required this.greeting,
+      required this.firstName,
+      required this.points,
+      required this.live,
+      this.onOpenAnnouncements,
+      this.avatarText = 'ZY'});
 
   @override
   Widget build(BuildContext context) {
@@ -201,9 +344,13 @@ class _HeroHeader extends StatelessWidget {
       title: const Text('GainPath'),
       actions: [
         IconButton(
-          tooltip: 'Notifications',
+          tooltip:
+              onOpenAnnouncements != null ? 'Announcements' : 'Notifications',
           icon: const Icon(Icons.notifications_none_rounded),
-          onPressed: () => showToast(context, 'No new notifications.'),
+          onPressed: onOpenAnnouncements ??
+              () => live
+                  ? showUnavailable(context)
+                  : showToast(context, 'No new notifications.'),
         ),
         const SizedBox(width: 4),
       ],
@@ -243,9 +390,9 @@ class _HeroHeader extends StatelessWidget {
                             border: Border.all(
                                 color: Colors.white.withValues(alpha: 0.3)),
                           ),
-                          child: const Center(
-                            child: Text('ZY',
-                                style: TextStyle(
+                          child: Center(
+                            child: Text(avatarText,
+                                style: const TextStyle(
                                     color: Colors.white,
                                     fontSize: 15,
                                     fontWeight: FontWeight.w700)),
@@ -291,7 +438,7 @@ class _HeroHeader extends StatelessWidget {
 /// Points balance. Animates between values so claiming the daily reward
 /// visibly lands on the balance rather than silently jumping.
 class _PointsPill extends StatelessWidget {
-  final int points;
+  final int? points;
   const _PointsPill({required this.points});
 
   @override
@@ -308,15 +455,22 @@ class _PointsPill extends StatelessWidget {
         children: [
           const Icon(Icons.stars_rounded, size: 16, color: AppColors.accent),
           const SizedBox(width: 6),
-          TweenAnimationBuilder<int>(
-            tween: IntTween(begin: points, end: points),
-            duration: const Duration(milliseconds: 600),
-            builder: (context, value, _) => Text('$value',
-                style: const TextStyle(
+          if (points == null)
+            const Text('—',
+                style: TextStyle(
                     color: Colors.white,
                     fontSize: 14,
-                    fontWeight: FontWeight.w800)),
-          ),
+                    fontWeight: FontWeight.w800))
+          else
+            TweenAnimationBuilder<int>(
+              tween: IntTween(begin: points!, end: points!),
+              duration: const Duration(milliseconds: 600),
+              builder: (context, value, _) => Text('$value',
+                  style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w800)),
+            ),
         ],
       ),
     );
@@ -325,7 +479,8 @@ class _PointsPill extends StatelessWidget {
 
 class _BroadcastBanner extends StatelessWidget {
   final VoidCallback onDismiss;
-  const _BroadcastBanner({required this.onDismiss});
+  final bool live;
+  const _BroadcastBanner({required this.onDismiss, this.live = false});
 
   @override
   Widget build(BuildContext context) {
@@ -341,12 +496,14 @@ class _BroadcastBanner extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('Public holiday hours',
+                Text(live ? 'Announcements' : 'Public holiday hours',
                     style:
                         TextStyle(fontSize: 14.5, fontWeight: FontWeight.w700)),
                 const SizedBox(height: 3),
                 Text(
-                  'The gym closes at 6pm this Friday. Book your session early.',
+                  live
+                      ? 'No announcements are available yet.'
+                      : 'The gym closes at 6pm this Friday. Book your session early.',
                   style: Theme.of(context)
                       .textTheme
                       .bodyMedium
@@ -369,12 +526,14 @@ class _BroadcastBanner extends StatelessWidget {
 /// AD-M3.2 — daily attendance reward, plus the seven-day strip that gives
 /// the streak number something concrete to refer to.
 class _StreakCard extends StatelessWidget {
+  final bool live;
   final bool claimed;
   final Animation<double> scale;
-  final VoidCallback onClaim;
+  final VoidCallback? onClaim;
   final int reward;
 
   const _StreakCard({
+    this.live = false,
     required this.claimed,
     required this.scale,
     required this.onClaim,
@@ -385,6 +544,7 @@ class _StreakCard extends StatelessWidget {
   /// from real history rather than hardcoded so the strip and the streak
   /// count never contradict each other.
   List<bool> _week(BuildContext context) {
+    if (live) return List.filled(7, false);
     final trained = context
         .read<WorkoutRepository>()
         .history
@@ -431,12 +591,16 @@ class _StreakCard extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                          '${context.watch<GamificationBloc>().state.streak}-day streak',
+                          live
+                              ? '- day streak'
+                              : '${context.watch<GamificationBloc>().state.streak}-day streak',
                           style: Theme.of(context).textTheme.titleMedium),
                       Text(
-                        claimed
-                            ? 'Checked in. Come back tomorrow.'
-                            : 'Claim $reward points for showing up.',
+                        live
+                            ? 'Check-in is not connected yet.'
+                            : claimed
+                                ? 'Checked in. Come back tomorrow.'
+                                : 'Claim $reward points for showing up.',
                         style: Theme.of(context).textTheme.bodyMedium,
                       ),
                     ],
@@ -505,8 +669,15 @@ class _StreakCard extends StatelessWidget {
 /// The single most important action on this screen, so it gets the full
 /// gradient treatment rather than sitting in a plain card.
 class _TodayWorkoutCard extends StatelessWidget {
-  final VoidCallback onStart;
-  const _TodayWorkoutCard({required this.onStart});
+  final VoidCallback? onStart;
+  final bool live;
+  final PublishedRoutine? publishedRoutine;
+  final String? routineStatusMessage;
+  const _TodayWorkoutCard(
+      {required this.onStart,
+      this.live = false,
+      this.publishedRoutine,
+      this.routineStatusMessage});
 
   @override
   Widget build(BuildContext context) {
@@ -532,14 +703,23 @@ class _TodayWorkoutCard extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Lower Body Strength',
+                    Text(
+                        live
+                            ? publishedRoutine?.title ??
+                                routineStatusMessage ??
+                                'No published routine yet'
+                            : 'Lower Body Strength',
                         style: Theme.of(context)
                             .textTheme
                             .titleLarge
                             ?.copyWith(color: Colors.white, fontSize: 20)),
                     const SizedBox(height: 4),
                     Text(
-                      '${context.read<WorkoutRepository>().routine.length} exercises  ·  about 45 min',
+                      live
+                          ? publishedRoutine == null
+                              ? 'Exercises and duration unavailable'
+                              : '${publishedRoutine!.exercises.length} exercises  ·  about ${publishedRoutine!.estimatedMinutes} min'
+                          : '${context.read<WorkoutRepository>().routine.length} exercises  ·  about 45 min',
                       style: TextStyle(
                           fontSize: 13,
                           color: Colors.white.withValues(alpha: 0.82)),
@@ -565,9 +745,11 @@ class _TodayWorkoutCard extends StatelessWidget {
           Wrap(
             spacing: 6,
             runSpacing: 6,
-            children: context
-                .read<WorkoutRepository>()
-                .routine
+            // Keep the exercise chips in the shared layout while the routine
+            // is unavailable, without implying that sample exercises exist.
+            children: (live
+                    ? publishedRoutine?.exercises ?? <Exercise>[]
+                    : context.read<WorkoutRepository>().routine)
                 .take(3)
                 .map((e) => Container(
                       padding: const EdgeInsets.symmetric(
@@ -584,6 +766,22 @@ class _TodayWorkoutCard extends StatelessWidget {
                     ))
                 .toList(),
           ),
+          if (live && publishedRoutine == null)
+            Wrap(
+              spacing: 6,
+              children: List.generate(
+                  3,
+                  (_) => Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.16),
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                        child: const Text('-',
+                            style: TextStyle(color: Colors.white)),
+                      )),
+            ),
           const SizedBox(height: 16),
           SizedBox(
             width: double.infinity,
@@ -605,37 +803,40 @@ class _TodayWorkoutCard extends StatelessWidget {
 }
 
 class _RingStatsRow extends StatelessWidget {
-  const _RingStatsRow();
+  const _RingStatsRow({this.live = false, this.progress});
+  final bool live;
+  final MemberLocalProgress? progress;
 
   @override
   Widget build(BuildContext context) {
     return Row(
-      children: const [
+      children: [
         Expanded(
           child: _RingStat(
-            value: 4 / 5,
+            value: live ? 0 : 4 / 5,
             label: 'Sessions',
-            display: '4/5',
+            display:
+                live ? (progress?.weeklySessions.toString() ?? '—') : '4/5',
             color: AppColors.primary,
             icon: Icons.fitness_center_rounded,
           ),
         ),
-        SizedBox(width: 10),
+        const SizedBox(width: 10),
         Expanded(
           child: _RingStat(
-            value: 0.84,
+            value: live ? 0 : 0.84,
             label: 'Avg form',
-            display: '84%',
+            display: live ? '-' : '84%',
             color: AppColors.success,
             icon: Icons.verified_rounded,
           ),
         ),
-        SizedBox(width: 10),
+        const SizedBox(width: 10),
         Expanded(
           child: _RingStat(
-            value: 12 / 14,
+            value: live ? 0 : 12 / 14,
             label: 'To badge',
-            display: '12/14',
+            display: live ? '-' : '12/14',
             color: AppColors.accent,
             icon: Icons.military_tech_rounded,
           ),
@@ -736,12 +937,12 @@ class _RingPainter extends CustomPainter {
 }
 
 class _NextSessionCard extends StatelessWidget {
-  final Booking booking;
+  final Booking? booking;
   final VoidCallback onTap;
   const _NextSessionCard({required this.booking, required this.onTap});
 
   String get _countdown {
-    final diff = booking.start.difference(DateTime.now());
+    final diff = booking!.start.difference(DateTime.now());
     if (diff.inDays >= 1) {
       return 'in ${diff.inDays} day${diff.inDays == 1 ? '' : 's'}';
     }
@@ -765,9 +966,10 @@ class _NextSessionCard extends StatelessWidget {
       'Nov',
       'Dec'
     ];
-    final d = booking.start;
-    final time =
-        '${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
+    final d = booking?.start;
+    final time = d == null
+        ? '-'
+        : '${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
 
     return Panel(
       onTap: onTap,
@@ -783,12 +985,12 @@ class _NextSessionCard extends StatelessWidget {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Text('${d.day}',
+                Text(d == null ? '-' : '${d.day}',
                     style: const TextStyle(
                         fontSize: 17,
                         fontWeight: FontWeight.w800,
                         color: AppColors.primary)),
-                Text(months[d.month - 1],
+                Text(d == null ? '-' : months[d.month - 1],
                     style: const TextStyle(
                         fontSize: 10,
                         fontWeight: FontWeight.w700,
@@ -801,15 +1003,15 @@ class _NextSessionCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('with ${booking.coachName}',
+                Text(booking == null ? 'with -' : 'with ${booking!.coachName}',
                     style: Theme.of(context).textTheme.titleMedium),
                 const SizedBox(height: 2),
-                Text('$time  ·  $_countdown',
+                Text(booking == null ? '-  ·  -' : '$time  ·  $_countdown',
                     style: Theme.of(context).textTheme.bodyMedium),
               ],
             ),
           ),
-          statusPill(booking.status.label),
+          statusPill(booking?.status.label ?? '-'),
           const SizedBox(width: 6),
           const Icon(Icons.arrow_forward_ios_rounded,
               size: 14, color: AppColors.inkSoft),
@@ -823,43 +1025,73 @@ class _NextSessionCard extends StatelessWidget {
 /// regularly, one tap from the landing screen instead of two or three.
 class _QuickActionsGrid extends StatelessWidget {
   final void Function(Widget) onSelect;
-  const _QuickActionsGrid({required this.onSelect});
+  final bool enabled;
+  final VoidCallback? onOpenProgress;
+  final VoidCallback? onOpenEquipment;
+  final VoidCallback? onOpenCoaches, onOpenBookings;
+  const _QuickActionsGrid(
+      {required this.onSelect,
+      this.enabled = true,
+      this.onOpenProgress,
+      this.onOpenCoaches,
+      this.onOpenBookings,
+      this.onOpenEquipment});
 
   @override
   Widget build(BuildContext context) {
     final actions = <_QuickAction>[
       _QuickAction(Icons.insights_rounded, 'Progress', AppColors.primary,
-          () => onSelect(const ProgressDashboardScreen())),
+          onOpenProgress ?? () => onSelect(const ProgressDashboardScreen())),
       _QuickAction(Icons.emoji_events_rounded, 'Rewards', AppColors.accent,
-          () => onSelect(const GamificationDashboardScreen())),
+          () => onSelect(GamificationDashboardScreen(live: !enabled))),
       _QuickAction(Icons.people_alt_rounded, 'Coaches', AppColors.info,
-          () => onSelect(const BrowseCoachesScreen())),
+          onOpenCoaches ?? () => onSelect(const BrowseCoachesScreen())),
       _QuickAction(Icons.event_note_rounded, 'Bookings', AppColors.success,
-          () => onSelect(const BookingScheduleScreen())),
+          onOpenBookings ?? () => onSelect(const BookingScheduleScreen())),
       _QuickAction(Icons.leaderboard_rounded, 'Ranking', AppColors.warning,
           () => onSelect(const LeaderboardScreen())),
       _QuickAction(Icons.sports_esports_rounded, 'Mini-games',
           AppColors.primarySoft, () => onSelect(const MiniGamesScreen())),
-      _QuickAction(Icons.card_membership_rounded, 'Membership',
-          AppColors.primary, () => onSelect(const MembershipDashboardScreen())),
+      _QuickAction(
+          Icons.card_membership_rounded,
+          'Membership',
+          AppColors.primary,
+          () => onSelect(MembershipDashboardScreen(connected: !enabled))),
       _QuickAction(Icons.bookmark_rounded, 'Saved tips', AppColors.info,
           () => onSelect(const SavedAdviceScreen())),
       _QuickAction(
           Icons.qr_code_scanner_rounded,
-          'Scan gear',
+          onOpenEquipment != null ? 'Equipment' : 'Scan gear',
           AppColors.primarySoft,
-          () => onSelect(const EquipmentScannerScreen())),
+          onOpenEquipment ?? () => onSelect(const EquipmentScannerScreen())),
     ];
 
-    return GridView.count(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      crossAxisCount: 4,
-      crossAxisSpacing: 10,
-      mainAxisSpacing: 10,
-      childAspectRatio: 0.82,
-      children: actions.map((a) => _QuickActionTile(action: a)).toList(),
-    );
+    return LayoutBuilder(builder: (context, constraints) {
+      final textScale = MediaQuery.textScalerOf(context).scale(11) / 11;
+      final columns =
+          (constraints.maxWidth / (72 * textScale)).floor().clamp(2, 4);
+      final tileWidth = (constraints.maxWidth - 10 * (columns - 1)) / columns;
+      return GridView.count(
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        crossAxisCount: columns,
+        crossAxisSpacing: 10,
+        mainAxisSpacing: 10,
+        childAspectRatio:
+            tileWidth / math.max(tileWidth / 0.82, 72 + 28 * textScale),
+        children: actions
+            .map((a) => _QuickActionTile(
+                action: a,
+                enabled: enabled ||
+                    a.label == 'Rewards' ||
+                    a.label == 'Membership' ||
+                    (a.label == 'Progress' && onOpenProgress != null) ||
+                    (a.label == 'Coaches' && onOpenCoaches != null) ||
+                    (a.label == 'Bookings' && onOpenBookings != null) ||
+                    (a.label == 'Equipment' && onOpenEquipment != null)))
+            .toList(),
+      );
+    });
   }
 }
 
@@ -873,7 +1105,8 @@ class _QuickAction {
 
 class _QuickActionTile extends StatelessWidget {
   final _QuickAction action;
-  const _QuickActionTile({required this.action});
+  final bool enabled;
+  const _QuickActionTile({required this.action, this.enabled = true});
 
   @override
   Widget build(BuildContext context) {
@@ -882,7 +1115,7 @@ class _QuickActionTile extends StatelessWidget {
       borderRadius: BorderRadius.circular(16),
       child: InkWell(
         borderRadius: BorderRadius.circular(16),
-        onTap: action.onTap,
+        onTap: enabled ? action.onTap : () => showUnavailable(context),
         child: Container(
           padding: const EdgeInsets.fromLTRB(4, 14, 4, 12),
           decoration: BoxDecoration(
@@ -905,7 +1138,7 @@ class _QuickActionTile extends StatelessWidget {
               Text(
                 action.label,
                 textAlign: TextAlign.center,
-                maxLines: 1,
+                maxLines: 2,
                 overflow: TextOverflow.ellipsis,
                 style:
                     const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
@@ -919,20 +1152,31 @@ class _QuickActionTile extends StatelessWidget {
 }
 
 class _GoalPreviewCard extends StatelessWidget {
-  final VoidCallback onTap;
-  const _GoalPreviewCard({required this.onTap});
+  final bool live;
+  final VoidCallback? onTap;
+  final FitnessProfile? liveProfile;
+  const _GoalPreviewCard(
+      {required this.onTap, this.liveProfile, this.live = false});
 
   @override
   Widget build(BuildContext context) {
     return Panel(
       onTap: onTap,
       child: Column(
-        children: const [
-          ProgressRow('Train 4x per week', 0.75, '3 of 4'),
-          ProgressRow('Hit 85% average form', 0.99, '84 of 85',
-              color: AppColors.accent),
-          SizedBox(height: 6),
-          Row(
+        children: [
+          if (!live) ...[
+            const ProgressRow('Train 4x per week', 0.75, '3 of 4'),
+            const ProgressRow('Hit 85% average form', 0.99, '84 of 85',
+                color: AppColors.accent),
+          ] else ...[
+            const ProgressRow('Train 4x per week', 0, '-'),
+            const ProgressRow('Hit 85% average form', 0, '-',
+                color: AppColors.accent),
+            if (liveProfile != null)
+              Text(liveProfile!.goals.map((goal) => goal.label).join(' · ')),
+          ],
+          const SizedBox(height: 6),
+          const Row(
             mainAxisAlignment: MainAxisAlignment.end,
             children: [
               Text('See all goals',
@@ -952,8 +1196,9 @@ class _GoalPreviewCard extends StatelessWidget {
 }
 
 class _MembershipStrip extends StatelessWidget {
-  final VoidCallback onTap;
-  const _MembershipStrip({required this.onTap});
+  final VoidCallback? onTap;
+  final bool live;
+  const _MembershipStrip({required this.onTap, this.live = false});
 
   @override
   Widget build(BuildContext context) {
@@ -970,12 +1215,17 @@ class _MembershipStrip extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                    '${context.read<MemberProfileRepository>().memberTier} membership',
+                    live
+                        ? '- membership'
+                        : '${context.read<MemberProfileRepository>().memberTier} membership',
                     style: Theme.of(context)
                         .textTheme
                         .titleMedium
                         ?.copyWith(fontSize: 14)),
-                Text('Renews 12 Oct  ·  28 days left',
+                Text(
+                    live
+                        ? 'Renews -  ·  - days left'
+                        : 'Renews 12 Oct  ·  28 days left',
                     style: Theme.of(context)
                         .textTheme
                         .bodyMedium

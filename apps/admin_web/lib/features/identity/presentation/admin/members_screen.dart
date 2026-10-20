@@ -1,7 +1,9 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:gainpath_domain/identity.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
 import 'user_action_dialogs.dart';
+import 'member_details_dialog.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 const _pageSize = 24;
@@ -39,9 +41,13 @@ class _InitialsAvatar extends StatelessWidget {
       width: _size,
       height: _size,
       alignment: Alignment.center,
-      decoration: BoxDecoration(color: palette.$1, borderRadius: BorderRadius.circular(_size * 0.28)),
+      decoration: BoxDecoration(
+          color: palette.$1, borderRadius: BorderRadius.circular(_size * 0.28)),
       child: Text(_initials,
-          style: TextStyle(fontSize: _size * 0.4, fontWeight: FontWeight.w700, color: palette.$2)),
+          style: TextStyle(
+              fontSize: _size * 0.4,
+              fontWeight: FontWeight.w700,
+              color: palette.$2)),
     );
   }
 }
@@ -51,7 +57,8 @@ class _InitialsAvatar extends StatelessWidget {
 /// hundreds of members need search + pagination over a dense table,
 /// while a handful of coaches (below) are grouped by branch instead.
 class MembersScreen extends StatefulWidget {
-  const MembersScreen({super.key});
+  const MembersScreen({super.key, this.live = false});
+  final bool live;
 
   @override
   State<MembersScreen> createState() => _MembersScreenState();
@@ -62,28 +69,137 @@ class _MembersScreenState extends State<MembersScreen> {
   String _query = '';
   int _page = 0;
 
+  // Live state
+  List<AdminMemberRecord> _liveItems = [];
+  final _liveCursors = <String?>[null];
+  String? _liveNext;
+  String? _liveError;
+  bool _liveLoading = true;
+  int _liveGeneration = 0;
+  Timer? _liveDebounce;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.live) {
+      _loadLive();
+    }
+  }
+
+  @override
+  void dispose() {
+    _liveDebounce?.cancel();
+    _liveGeneration++;
+    super.dispose();
+  }
+
+  Future<void> _loadLive() async {
+    _liveDebounce?.cancel();
+    final generation = ++_liveGeneration;
+    setState(() {
+      _liveLoading = true;
+      _liveError = null;
+      _liveItems = [];
+      _liveNext = null;
+    });
+    try {
+      final result = await context
+          .read<AdminMemberDirectoryRepository>()
+          .loadPage(
+            query: _query,
+            status: _status,
+            afterId: _liveCursors.last,
+          );
+      if (!mounted || generation != _liveGeneration) return;
+      setState(() {
+        _liveItems = result.items;
+        _liveNext = result.nextCursor;
+        _liveLoading = false;
+      });
+    } catch (_) {
+      if (!mounted || generation != _liveGeneration) return;
+      setState(() {
+        _liveLoading = false;
+        _liveError = 'Could not load members. Check your Admin access and retry.';
+      });
+    }
+  }
+
+  void _onSearch(String value) {
+    if (widget.live) {
+      _liveDebounce?.cancel();
+      _liveGeneration++;
+      setState(() {
+        _query = value;
+        _liveCursors
+          ..clear()
+          ..add(null);
+        _liveItems = [];
+        _liveNext = null;
+        _liveLoading = true;
+        _liveError = null;
+      });
+      _liveDebounce = Timer(const Duration(milliseconds: 300), _loadLive);
+    } else {
+      setState(() {
+        _query = value;
+        _page = 0;
+      });
+    }
+  }
+
+  void _onStatus(String s) {
+    if (widget.live) {
+      _liveDebounce?.cancel();
+      setState(() {
+        _status = s;
+        _liveCursors
+          ..clear()
+          ..add(null);
+      });
+      _loadLive();
+    } else {
+      setState(() {
+        _status = s;
+        _page = 0;
+      });
+    }
+  }
+
   void _refresh() => setState(() {});
 
-  List<UserAccount> get _members => context.read<UserAccountRepository>().users.where((u) => u.role == 'Member').toList();
+  List<UserAccount> get _members => context
+      .read<UserAccountRepository>()
+      .users
+      .where((u) => u.role == 'Member')
+      .toList();
 
   @override
   Widget build(BuildContext context) {
-    final all = _members;
-    final activeCount = all.where((u) => u.status == AccountStatus.active).length;
-    final suspendedCount = all.where((u) => u.status == AccountStatus.suspended).length;
+    final all = widget.live ? const <UserAccount>[] : _members;
+    final activeCount = widget.live
+        ? _liveItems.where((u) => u.status == 'active').length
+        : all.where((u) => u.status == AccountStatus.active).length;
+    final suspendedCount = widget.live
+        ? _liveItems.where((u) => u.status == 'suspended').length
+        : all.where((u) => u.status == AccountStatus.suspended).length;
 
-    final filtered = all.where((u) {
-      final matchesStatus = _status == 'All' || u.status.label == _status;
-      final matchesQuery = _query.isEmpty ||
-          u.name.toLowerCase().contains(_query.toLowerCase()) ||
-          u.email.toLowerCase().contains(_query.toLowerCase());
-      return matchesStatus && matchesQuery;
-    }).toList();
+    final filtered = widget.live
+        ? const <UserAccount>[]
+        : all.where((u) {
+            final matchesStatus = _status == 'All' || u.status.label == _status;
+            final matchesQuery = _query.isEmpty ||
+                u.name.toLowerCase().contains(_query.toLowerCase()) ||
+                u.email.toLowerCase().contains(_query.toLowerCase());
+            return matchesStatus && matchesQuery;
+          }).toList();
 
-    final pageCount = (filtered.length / _pageSize).ceil().clamp(1, 1 << 30);
+    final pageCount =
+        (filtered.length / _pageSize).ceil().clamp(1, 1 << 30);
     final page = _page.clamp(0, pageCount - 1);
     final start = page * _pageSize;
-    final pageItems = filtered.skip(start).take(_pageSize).toList();
+    final pageItems =
+        filtered.skip(start).take(_pageSize).toList();
 
     return Scaffold(
       backgroundColor: Colors.transparent,
@@ -96,28 +212,35 @@ class _MembersScreenState extends State<MembersScreen> {
               spacing: 12,
               runSpacing: 12,
               children: [
-                _StatChip(icon: Icons.groups_rounded, label: 'Total members', value: '${all.length}'),
                 _StatChip(
-                    icon: Icons.check_circle_outline_rounded,
-                    label: 'Active',
-                    value: '$activeCount',
-                    color: AppColors.success),
+                  icon: Icons.groups_rounded,
+                  label: widget.live ? 'Members on page' : 'Total members',
+                  value: widget.live ? '${_liveItems.length}' : '${all.length}',
+                ),
                 _StatChip(
-                    icon: Icons.block_rounded,
-                    label: 'Suspended',
-                    value: '$suspendedCount',
-                    color: AppColors.danger),
+                  icon: Icons.check_circle_outline_rounded,
+                  label: widget.live ? 'Active on page' : 'Active',
+                  value: '$activeCount',
+                  color: AppColors.success,
+                ),
+                _StatChip(
+                  icon: Icons.block_rounded,
+                  label: widget.live ? 'Suspended on page' : 'Suspended',
+                  value: '$suspendedCount',
+                  color: AppColors.danger,
+                ),
               ],
             ),
+            if (widget.live) ...[
+              const SizedBox(height: 12),
+              const Text('Organization membership records · Read-only directory'),
+            ],
             const SizedBox(height: 18),
             Row(
               children: [
                 Expanded(
                   child: TextField(
-                    onChanged: (v) => setState(() {
-                      _query = v;
-                      _page = 0;
-                    }),
+                    onChanged: _onSearch,
                     decoration: const InputDecoration(
                       isDense: true,
                       hintText: 'Search by name or email',
@@ -133,10 +256,7 @@ class _MembersScreenState extends State<MembersScreen> {
                     child: ChoiceChip(
                       label: Text(s),
                       selected: selected,
-                      onSelected: (_) => setState(() {
-                        _status = s;
-                        _page = 0;
-                      }),
+                      onSelected: (_) => _onStatus(s),
                       backgroundColor: AppColors.surface,
                       selectedColor: AppColors.primary,
                       labelStyle: TextStyle(
@@ -151,49 +271,156 @@ class _MembersScreenState extends State<MembersScreen> {
                     ),
                   );
                 }),
+                if (widget.live)
+                  Padding(
+                    padding: const EdgeInsets.only(left: 6),
+                    child: IconButton(
+                      tooltip: 'Refresh members',
+                      onPressed: _liveLoading
+                          ? null
+                          : () {
+                              _liveCursors
+                                ..clear()
+                                ..add(null);
+                              _loadLive();
+                            },
+                      icon: const Icon(Icons.refresh_rounded),
+                    ),
+                  ),
               ],
             ),
             const SizedBox(height: 14),
-            Container(
-              decoration: BoxDecoration(
-                color: AppColors.surface,
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: AppColors.hairline),
-              ),
-              child: Column(
-                children: [
-                  const _TableHeader(),
-                  const Divider(height: 1),
-                  if (pageItems.isEmpty)
-                    Padding(
-                      padding: const EdgeInsets.all(36),
-                      child: Center(
-                        child: Text('No members match that search.',
-                            style: Theme.of(context).textTheme.bodyMedium),
-                      ),
-                    )
-                  else
-                    ...List.generate(pageItems.length, (i) {
-                      final u = pageItems[i];
-                      return Column(
-                        children: [
+            if (widget.live && _liveLoading)
+              const LinearProgressIndicator()
+            else if (widget.live && _liveError != null)
+              Panel(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(_liveError!),
+                    TextButton(onPressed: _loadLive, child: const Text('Retry')),
+                  ],
+                ),
+              )
+            else
+              Container(
+                decoration: BoxDecoration(
+                  color: AppColors.surface,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: AppColors.hairline),
+                ),
+                child: Column(
+                  children: [
+                    const _TableHeader(),
+                    const Divider(height: 1),
+                    if (widget.live) ...[
+                      if (_liveItems.isEmpty)
+                        Padding(
+                          padding: const EdgeInsets.all(36),
+                          child: Center(
+                            child: Text(
+                              _liveNext != null
+                                  ? 'No matches in this batch. Continue to search more members.'
+                                  : _query.isNotEmpty || _status != 'All'
+                                      ? 'No members match that search.'
+                                      : 'No members found.',
+                              style: Theme.of(context).textTheme.bodyMedium,
+                            ),
+                          ),
+                        )
+                      else
+                        for (var i = 0; i < _liveItems.length; i++) ...[
                           if (i > 0) const Divider(height: 1),
-                          _MemberRow(user: u, onManage: () => _manage(context, u)),
+                          _MemberRow.member(
+                            _liveItems[i],
+                            onManage: () => showDialog<void>(
+                              context: context,
+                              builder: (_) => MemberDetailsDialog(
+                                memberId: _liveItems[i].id,
+                                repository: context.read<
+                                    AdminMemberDirectoryRepository>(),
+                              ),
+                            ),
+                          ),
                         ],
-                      );
-                    }),
+                    ] else ...[
+                      if (pageItems.isEmpty)
+                        Padding(
+                          padding: const EdgeInsets.all(36),
+                          child: Center(
+                            child: Text('No members match that search.',
+                                style: Theme.of(context).textTheme.bodyMedium),
+                          ),
+                        )
+                      else
+                        ...List.generate(pageItems.length, (i) {
+                          final u = pageItems[i];
+                          return Column(
+                            children: [
+                              if (i > 0) const Divider(height: 1),
+                              _MemberRow(
+                                  user: u, onManage: () => _manage(context, u)),
+                            ],
+                          );
+                        }),
+                    ],
+                  ],
+                ),
+              ),
+            const SizedBox(height: 12),
+            if (widget.live)
+              Wrap(
+                spacing: 12,
+                runSpacing: 8,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  Text(
+                    'Page ${_liveCursors.length} · ${_liveItems.length} matching members',
+                    style: Theme.of(context)
+                        .textTheme
+                        .bodyMedium
+                        ?.copyWith(fontSize: 12),
+                  ),
+                  TextButton(
+                    onPressed: _liveLoading || _liveCursors.length == 1
+                        ? null
+                        : () {
+                            _liveCursors.removeLast();
+                            _loadLive();
+                          },
+                    child: const Text('Previous'),
+                  ),
+                  TextButton(
+                    onPressed: _liveLoading || _liveNext == null
+                        ? null
+                        : () {
+                            _liveCursors.add(_liveNext);
+                            _loadLive();
+                          },
+                    child: Text(
+                      _query.isNotEmpty || _status != 'All'
+                          ? 'Continue search'
+                          : 'Next',
+                    ),
+                  ),
+                ],
+              )
+            else
+              Row(
+                children: [
+                  Text('${filtered.length} of ${all.length} members',
+                      style: Theme.of(context)
+                          .textTheme
+                          .bodyMedium
+                          ?.copyWith(fontSize: 12)),
+                  const Spacer(),
+                  if (pageCount > 1)
+                    _Pagination(
+                        page: page,
+                        pageCount: pageCount,
+                        onSelect: (p) => setState(() => _page = p)),
                 ],
               ),
-            ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Text('${filtered.length} of ${all.length} members',
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontSize: 12)),
-                const Spacer(),
-                if (pageCount > 1) _Pagination(page: page, pageCount: pageCount, onSelect: (p) => setState(() => _page = p)),
-              ],
-            ),
           ],
         ),
       ),
@@ -218,7 +445,9 @@ class _MembersScreenState extends State<MembersScreen> {
         RecordActionItem(
           icon: Icons.block_rounded,
           color: AppColors.danger,
-          label: user.status == AccountStatus.suspended ? 'Lift suspension' : 'Suspend account',
+          label: user.status == AccountStatus.suspended
+              ? 'Lift suspension'
+              : 'Suspend account',
           onTap: () {
             Navigator.pop(context);
             if (user.status == AccountStatus.suspended) {
@@ -237,16 +466,21 @@ class _Pagination extends StatelessWidget {
   final int page;
   final int pageCount;
   final ValueChanged<int> onSelect;
-  const _Pagination({required this.page, required this.pageCount, required this.onSelect});
+  const _Pagination(
+      {required this.page, required this.pageCount, required this.onSelect});
 
   @override
   Widget build(BuildContext context) {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        _pageButton(context, icon: Icons.chevron_left_rounded, onTap: page > 0 ? () => onSelect(page - 1) : null),
-        ...List.generate(pageCount, (i) => i).map((i) => _numberButton(context, i)),
-        _pageButton(context, icon: Icons.chevron_right_rounded,
+        _pageButton(context,
+            icon: Icons.chevron_left_rounded,
+            onTap: page > 0 ? () => onSelect(page - 1) : null),
+        ...List.generate(pageCount, (i) => i)
+            .map((i) => _numberButton(context, i)),
+        _pageButton(context,
+            icon: Icons.chevron_right_rounded,
             onTap: page < pageCount - 1 ? () => onSelect(page + 1) : null),
       ],
     );
@@ -278,9 +512,12 @@ class _Pagination extends StatelessWidget {
     );
   }
 
-  Widget _pageButton(BuildContext context, {required IconData icon, required VoidCallback? onTap}) {
+  Widget _pageButton(BuildContext context,
+      {required IconData icon, required VoidCallback? onTap}) {
     return IconButton(
-      icon: Icon(icon, size: 19, color: onTap == null ? AppColors.hairline : AppColors.inkSoft),
+      icon: Icon(icon,
+          size: 19,
+          color: onTap == null ? AppColors.hairline : AppColors.inkSoft),
       onPressed: onTap,
       constraints: const BoxConstraints(minWidth: 30, minHeight: 30),
       padding: EdgeInsets.zero,
@@ -293,7 +530,11 @@ class _StatChip extends StatelessWidget {
   final String label;
   final String value;
   final Color? color;
-  const _StatChip({required this.icon, required this.label, required this.value, this.color});
+  const _StatChip(
+      {required this.icon,
+      required this.label,
+      required this.value,
+      this.color});
 
   @override
   Widget build(BuildContext context) {
@@ -311,17 +552,24 @@ class _StatChip extends StatelessWidget {
           Container(
             width: 34,
             height: 34,
-            decoration: BoxDecoration(color: c.withValues(alpha: 0.13), borderRadius: BorderRadius.circular(10)),
+            decoration: BoxDecoration(
+                color: c.withValues(alpha: 0.13),
+                borderRadius: BorderRadius.circular(10)),
             child: Icon(icon, size: 17, color: c),
           ),
           const SizedBox(width: 10),
-          Column(
+          Expanded(
+              child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(value, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
-              Text(label, style: const TextStyle(fontSize: 11.5, color: AppColors.inkSoft)),
+              Text(value,
+                  style: const TextStyle(
+                      fontSize: 17, fontWeight: FontWeight.w800)),
+              Text(label,
+                  style: const TextStyle(
+                      fontSize: 11.5, color: AppColors.inkSoft)),
             ],
-          ),
+          )),
         ],
       ),
     );
@@ -333,7 +581,11 @@ class _TableHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const style = TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.inkSoft, letterSpacing: 0.4);
+    const style = TextStyle(
+        fontSize: 11,
+        fontWeight: FontWeight.w700,
+        color: AppColors.inkSoft,
+        letterSpacing: 0.4);
     return const Padding(
       padding: EdgeInsets.fromLTRB(14, 9, 12, 9),
       child: Row(
@@ -348,9 +600,19 @@ class _TableHeader extends StatelessWidget {
 }
 
 class _MemberRow extends StatelessWidget {
-  final UserAccount user;
-  final VoidCallback onManage;
-  const _MemberRow({required this.user, required this.onManage});
+  final String name, email, statusLabel;
+  final VoidCallback? onManage;
+  final bool readOnly;
+  _MemberRow({required UserAccount user, this.onManage})
+      : name = user.name,
+        email = user.email,
+        statusLabel = user.status.label,
+        readOnly = false;
+  _MemberRow.member(AdminMemberRecord member, {this.onManage})
+      : name = member.name,
+        email = member.email,
+        statusLabel = member.statusLabel,
+        readOnly = true;
 
   @override
   Widget build(BuildContext context) {
@@ -367,32 +629,45 @@ class _MemberRow extends StatelessWidget {
                 flex: 3,
                 child: Row(
                   children: [
-                    _InitialsAvatar(name: user.name),
+                    _InitialsAvatar(name: name),
                     const SizedBox(width: 10),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(user.name,
+                          Text(name,
                               overflow: TextOverflow.ellipsis,
-                              style: Theme.of(context).textTheme.titleMedium?.copyWith(fontSize: 13)),
-                          Text(user.email,
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .titleMedium
+                                  ?.copyWith(fontSize: 13)),
+                          Text(email,
                               overflow: TextOverflow.ellipsis,
-                              style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontSize: 11.5)),
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .bodyMedium
+                                  ?.copyWith(fontSize: 11.5)),
                         ],
                       ),
                     ),
                   ],
                 ),
               ),
-              SizedBox(width: 120, child: statusPill(user.status.label)),
+              SizedBox(width: 120, child: statusPill(statusLabel)),
               SizedBox(
                 width: 40,
-                child: IconButton(
-                  icon: const Icon(Icons.more_vert_rounded, size: 18),
-                  onPressed: onManage,
-                  padding: EdgeInsets.zero,
-                ),
+                child: onManage == null
+                    ? const SizedBox.shrink()
+                    : IconButton(
+                        tooltip: readOnly ? 'View details for $name' : null,
+                        icon: Icon(
+                            readOnly
+                                ? Icons.visibility_outlined
+                                : Icons.more_vert_rounded,
+                            size: 18),
+                        onPressed: onManage,
+                        padding: EdgeInsets.zero,
+                      ),
               ),
             ],
           ),

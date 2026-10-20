@@ -14,7 +14,12 @@ import 'package:gainpath_ui/gainpath_ui.dart';
 class BillplzCheckoutScreen extends StatefulWidget {
   final double amount;
   final String description;
-  const BillplzCheckoutScreen({super.key, required this.amount, required this.description});
+  const BillplzCheckoutScreen(
+      {super.key,
+      required this.amount,
+      required this.description,
+      this.connected = false});
+  final bool connected;
 
   @override
   State<BillplzCheckoutScreen> createState() => _BillplzCheckoutScreenState();
@@ -41,7 +46,7 @@ class _BillplzCheckoutScreenState extends State<BillplzCheckoutScreen> {
   bool _processing = false;
 
   Future<void> _confirm() async {
-    if (_method == null) return;
+    if (widget.connected || _method == null) return;
     setState(() => _processing = true);
     await Future.delayed(const Duration(milliseconds: 1700));
     if (!mounted) return;
@@ -62,7 +67,9 @@ class _BillplzCheckoutScreenState extends State<BillplzCheckoutScreen> {
               Expanded(
                 child: AnimatedSwitcher(
                   duration: const Duration(milliseconds: 220),
-                  child: _processing ? _processingView() : _checkoutBody(context, methods),
+                  child: _processing
+                      ? _processingView()
+                      : _checkoutBody(context, methods),
                 ),
               ),
             ],
@@ -92,14 +99,19 @@ class _BillplzCheckoutScreenState extends State<BillplzCheckoutScreen> {
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
-                children: const [
+                children: [
                   Icon(Icons.lock_rounded, size: 13, color: AppColors.success),
                   SizedBox(width: 6),
                   Flexible(
                     child: Text(
-                      'billplz.com/bill/checkout',
+                      widget.connected
+                          ? 'Payment service unavailable'
+                          : 'billplz.com/bill/checkout',
                       overflow: TextOverflow.ellipsis,
-                      style: TextStyle(fontSize: 12.5, color: AppColors.inkSoft, fontWeight: FontWeight.w600),
+                      style: TextStyle(
+                          fontSize: 12.5,
+                          color: AppColors.inkSoft,
+                          fontWeight: FontWeight.w600),
                     ),
                   ),
                 ],
@@ -128,37 +140,62 @@ class _BillplzCheckoutScreenState extends State<BillplzCheckoutScreen> {
               Container(
                 width: 34,
                 height: 34,
-                decoration: BoxDecoration(color: _billplzBlue, borderRadius: BorderRadius.circular(9)),
-                child: const Icon(Icons.bolt_rounded, color: _billplzAccent, size: 20),
+                decoration: BoxDecoration(
+                    color: _billplzBlue,
+                    borderRadius: BorderRadius.circular(9)),
+                child: const Icon(Icons.bolt_rounded,
+                    color: _billplzAccent, size: 20),
               ),
               const SizedBox(width: 10),
-              const Text('Billplz',
-                  style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: _billplzBlue)),
-              const Spacer(),
-              const Icon(Icons.verified_user_rounded, size: 15, color: AppColors.success),
+              const Expanded(
+                  child: Text('Billplz',
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                          fontSize: 17,
+                          fontWeight: FontWeight.w800,
+                          color: _billplzBlue))),
+              const SizedBox(width: 12),
+              const Icon(Icons.verified_user_rounded,
+                  size: 15, color: AppColors.success),
               const SizedBox(width: 4),
-              const Text('Secure', style: TextStyle(fontSize: 12, color: AppColors.success, fontWeight: FontWeight.w700)),
+              Flexible(
+                  child: Text(widget.connected ? 'Unavailable' : 'Secure',
+                      textAlign: TextAlign.end,
+                      style: const TextStyle(
+                          fontSize: 12,
+                          color: AppColors.success,
+                          fontWeight: FontWeight.w700))),
             ],
           ),
           const SizedBox(height: 20),
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14)),
+            decoration: BoxDecoration(
+                color: Colors.white, borderRadius: BorderRadius.circular(14)),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Amount due', style: Theme.of(context).textTheme.bodyMedium),
+                Text('Amount due',
+                    style: Theme.of(context).textTheme.bodyMedium),
                 const SizedBox(height: 4),
-                Text('RM ${widget.amount.toStringAsFixed(2)}',
-                    style: const TextStyle(fontSize: 30, fontWeight: FontWeight.w800, color: _billplzBlue)),
+                Text(
+                    widget.connected
+                        ? '-'
+                        : 'RM ${widget.amount.toStringAsFixed(2)}',
+                    style: const TextStyle(
+                        fontSize: 30,
+                        fontWeight: FontWeight.w800,
+                        color: _billplzBlue)),
                 const SizedBox(height: 4),
-                Text(widget.description, style: Theme.of(context).textTheme.bodyMedium),
+                Text(widget.description,
+                    style: Theme.of(context).textTheme.bodyMedium),
               ],
             ),
           ),
           const SizedBox(height: 20),
-          Text('Select payment method', style: Theme.of(context).textTheme.titleMedium),
+          Text('Select payment method',
+              style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 10),
           Row(
             children: [
@@ -178,21 +215,31 @@ class _BillplzCheckoutScreenState extends State<BillplzCheckoutScreen> {
                 borderRadius: BorderRadius.circular(12),
                 onTap: () => setState(() => _method = name),
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                   decoration: BoxDecoration(
                     color: Colors.white,
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: selected ? _billplzBlue : const Color(0xFFE2E5E9), width: selected ? 1.6 : 1),
+                    border: Border.all(
+                        color:
+                            selected ? _billplzBlue : const Color(0xFFE2E5E9),
+                        width: selected ? 1.6 : 1),
                   ),
                   child: Row(
                     children: [
                       Icon(icon, size: 19, color: AppColors.inkSoft),
                       const SizedBox(width: 12),
-                      Expanded(child: Text(name, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600))),
+                      Expanded(
+                          child: Text(name,
+                              style: const TextStyle(
+                                  fontSize: 14, fontWeight: FontWeight.w600))),
                       Icon(
-                        selected ? Icons.radio_button_checked_rounded : Icons.radio_button_unchecked_rounded,
+                        selected
+                            ? Icons.radio_button_checked_rounded
+                            : Icons.radio_button_unchecked_rounded,
                         size: 20,
-                        color: selected ? _billplzBlue : const Color(0xFFCBD0D6),
+                        color:
+                            selected ? _billplzBlue : const Color(0xFFCBD0D6),
                       ),
                     ],
                   ),
@@ -204,19 +251,30 @@ class _BillplzCheckoutScreenState extends State<BillplzCheckoutScreen> {
           SizedBox(
             width: double.infinity,
             child: FilledButton(
-              style: FilledButton.styleFrom(backgroundColor: _billplzBlue, minimumSize: const Size(0, 52)),
-              onPressed: _method == null ? null : _confirm,
-              child: Text('Pay RM ${widget.amount.toStringAsFixed(2)}'),
+              style: FilledButton.styleFrom(
+                  backgroundColor: _billplzBlue,
+                  minimumSize: const Size(0, 52)),
+              onPressed: widget.connected || _method == null ? null : _confirm,
+              child: Text(widget.connected
+                  ? 'Payment unavailable'
+                  : 'Pay RM ${widget.amount.toStringAsFixed(2)}'),
             ),
           ),
           const SizedBox(height: 14),
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
-            children: const [
-              Icon(Icons.lock_outline_rounded, size: 13, color: AppColors.inkSoft),
+            children: [
+              Icon(Icons.lock_outline_rounded,
+                  size: 13, color: AppColors.inkSoft),
               SizedBox(width: 6),
-              Text('Encrypted end-to-end. GainPath does not see your bank details.',
-                  style: TextStyle(fontSize: 11, color: AppColors.inkSoft)),
+              Flexible(
+                  child: Text(
+                      widget.connected
+                          ? 'Payment service unavailable. No payment will be collected.'
+                          : 'Encrypted end-to-end. GainPath does not see your bank details.',
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                          fontSize: 11, color: AppColors.inkSoft))),
             ],
           ),
         ],
@@ -237,13 +295,16 @@ class _BillplzCheckoutScreenState extends State<BillplzCheckoutScreen> {
         decoration: BoxDecoration(
           color: selected ? _billplzBlue : Colors.white,
           borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: selected ? _billplzBlue : const Color(0xFFE2E5E9)),
+          border: Border.all(
+              color: selected ? _billplzBlue : const Color(0xFFE2E5E9)),
         ),
         child: Text(
           label,
           textAlign: TextAlign.center,
           style: TextStyle(
-              fontSize: 12.5, fontWeight: FontWeight.w700, color: selected ? Colors.white : AppColors.inkSoft),
+              fontSize: 12.5,
+              fontWeight: FontWeight.w700,
+              color: selected ? Colors.white : AppColors.inkSoft),
         ),
       ),
     );
@@ -258,11 +319,15 @@ class _BillplzCheckoutScreenState extends State<BillplzCheckoutScreen> {
           SizedBox(
             width: 34,
             height: 34,
-            child: CircularProgressIndicator(strokeWidth: 3, color: _billplzBlue),
+            child:
+                CircularProgressIndicator(strokeWidth: 3, color: _billplzBlue),
           ),
           SizedBox(height: 18),
           Text('Confirming your payment…',
-              style: TextStyle(fontSize: 14.5, fontWeight: FontWeight.w700, color: _billplzBlue)),
+              style: TextStyle(
+                  fontSize: 14.5,
+                  fontWeight: FontWeight.w700,
+                  color: _billplzBlue)),
           SizedBox(height: 6),
           Text('Do not close this window.',
               style: TextStyle(fontSize: 12.5, color: AppColors.inkSoft)),

@@ -8,7 +8,14 @@ import 'package:gainpath_domain/identity.dart';
 class CoachCard extends StatelessWidget {
   final Coach coach;
   final VoidCallback onTap;
-  const CoachCard({super.key, required this.coach, required this.onTap});
+  final PublishedCoachProfile? published;
+  final Widget? photo;
+  const CoachCard(
+      {super.key,
+      required this.coach,
+      required this.onTap,
+      this.published,
+      this.photo});
 
   @override
   Widget build(BuildContext context) {
@@ -19,7 +26,10 @@ class CoachCard extends StatelessWidget {
         children: [
           ClipRRect(
             borderRadius: BorderRadius.circular(15),
-            child: SizedBox(width: 58, height: 58, child: networkAvatar(coach.imageUrl)),
+            child: SizedBox(
+                width: 58,
+                height: 58,
+                child: photo ?? networkAvatar(coach.imageUrl)),
           ),
           const SizedBox(width: 14),
           Expanded(
@@ -29,11 +39,13 @@ class CoachCard extends StatelessWidget {
                 Row(
                   children: [
                     Flexible(
-                      child: Text(coach.name, style: Theme.of(context).textTheme.titleMedium),
+                      child: Text(coach.name,
+                          style: Theme.of(context).textTheme.titleMedium),
                     ),
                     if (coach.verified) ...[
                       const SizedBox(width: 5),
-                      const Icon(Icons.verified_rounded, size: 15, color: AppColors.primary),
+                      const Icon(Icons.verified_rounded,
+                          size: 15, color: AppColors.primary),
                     ],
                   ],
                 ),
@@ -46,20 +58,32 @@ class CoachCard extends StatelessWidget {
                 Wrap(
                   spacing: 6,
                   runSpacing: 6,
-                  children: coach.specializationTags.take(2).map((t) => _Tag(t)).toList(),
+                  children: coach.specializationTags
+                      .take(2)
+                      .map((t) => _Tag(t))
+                      .toList(),
                 ),
                 const SizedBox(height: 8),
                 Row(
                   children: [
-                    const Icon(Icons.star_rounded, size: 15, color: AppColors.accent),
+                    const Icon(Icons.star_rounded,
+                        size: 15, color: AppColors.accent),
                     const SizedBox(width: 3),
-                    Text('${coach.rating}',
-                        style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
-                    Text('  (${coach.reviews})', style: Theme.of(context).textTheme.bodyMedium),
-                    const Spacer(),
-                    Text('RM ${coach.fee.toStringAsFixed(0)}/session',
+                    Text(published != null ? '-' : '${coach.rating}',
                         style: const TextStyle(
-                            fontSize: 12.5, fontWeight: FontWeight.w700, color: AppColors.primary)),
+                            fontSize: 13, fontWeight: FontWeight.w700)),
+                    Text(published != null ? '  (-)' : '  (${coach.reviews})',
+                        style: Theme.of(context).textTheme.bodyMedium),
+                    const Spacer(),
+                    Text(
+                        published != null &&
+                                published!.fields.consultationFeeMinor == null
+                            ? '-'
+                            : 'RM ${coach.fee.toStringAsFixed(0)}/session',
+                        style: const TextStyle(
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.primary)),
                   ],
                 ),
               ],
@@ -68,7 +92,8 @@ class CoachCard extends StatelessWidget {
           const SizedBox(width: 6),
           const Padding(
             padding: EdgeInsets.only(top: 4),
-            child: Icon(Icons.arrow_forward_ios_rounded, size: 13, color: AppColors.inkSoft),
+            child: Icon(Icons.arrow_forward_ios_rounded,
+                size: 13, color: AppColors.inkSoft),
           ),
         ],
       ),
@@ -84,9 +109,14 @@ class _Tag extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(color: AppColors.surfaceAlt, borderRadius: BorderRadius.circular(999)),
+      decoration: BoxDecoration(
+          color: AppColors.surfaceAlt,
+          borderRadius: BorderRadius.circular(999)),
       child: Text(label,
-          style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w600, color: AppColors.inkSoft)),
+          style: const TextStyle(
+              fontSize: 10.5,
+              fontWeight: FontWeight.w600,
+              color: AppColors.inkSoft)),
     );
   }
 }

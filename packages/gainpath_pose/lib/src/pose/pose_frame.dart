@@ -4,14 +4,38 @@
 /// vocabulary before any exercise rule sees a frame.
 enum PoseLandmark {
   nose,
+  leftEyeInner,
+  leftEye,
+  leftEyeOuter,
+  rightEyeInner,
+  rightEye,
+  rightEyeOuter,
+  leftEar,
+  rightEar,
+  leftMouth,
+  rightMouth,
   leftShoulder,
   rightShoulder,
+  leftElbow,
+  rightElbow,
+  leftWrist,
+  rightWrist,
+  leftPinky,
+  rightPinky,
+  leftIndex,
+  rightIndex,
+  leftThumb,
+  rightThumb,
   leftHip,
   rightHip,
   leftKnee,
   rightKnee,
   leftAnkle,
   rightAnkle,
+  leftHeel,
+  rightHeel,
+  leftFootIndex,
+  rightFootIndex,
 }
 
 class PosePoint {
@@ -20,12 +44,14 @@ class PosePoint {
     required this.y,
     required this.z,
     required this.visibility,
+    this.presence,
   });
 
   final double x;
   final double y;
   final double z;
   final double visibility;
+  final double? presence;
 }
 
 class PoseFrame {
@@ -35,13 +61,25 @@ class PoseFrame {
     required this.modelVersion,
     required Map<PoseLandmark, PosePoint> landmarks,
     this.isMirrored = false,
-  }) : landmarks = Map.unmodifiable(landmarks);
+    this.imageWidth = 1,
+    this.imageHeight = 1,
+    this.posePresence,
+    Map<PoseLandmark, PosePoint> worldLandmarks = const {},
+  }) : landmarks = Map.unmodifiable(landmarks),
+       worldLandmarks = Map.unmodifiable(worldLandmarks);
 
   final int capturedAtMicros;
   final String detectorId;
   final String modelVersion;
   final bool isMirrored;
   final Map<PoseLandmark, PosePoint> landmarks;
+  /// Upright image coordinates: x/width, y/height, z/width. Unmirrored in real
+  /// adapters; preview mirroring is a presentation transform, not anatomy.
+  final int imageWidth;
+  final int imageHeight;
+  final double? posePresence;
+  /// Model-estimated metres relative to hip centre; never image-normalized z.
+  final Map<PoseLandmark, PosePoint> worldLandmarks;
 
   PosePoint? landmark(PoseLandmark id) => landmarks[id];
 

@@ -7,7 +7,8 @@ import 'package:gainpath_ui/gainpath_ui.dart';
 /// a linear bar, which is why this report's characteristic differs from
 /// every other Progress screen.
 class GoalProgressScreen extends StatelessWidget {
-  const GoalProgressScreen({super.key});
+  const GoalProgressScreen({super.key, this.live = false});
+  final bool live;
 
   @override
   Widget build(BuildContext context) {
@@ -20,9 +21,10 @@ class GoalProgressScreen extends StatelessWidget {
           const SizedBox(height: 18),
           Panel(
             child: Row(
-              children: const [
+              children: [
                 Expanded(
                   child: _GoalGauge(
+                    unavailable: live,
                     label: 'Train 4x / week',
                     detail: '3 of 4',
                     value: 75,
@@ -31,6 +33,7 @@ class GoalProgressScreen extends StatelessWidget {
                 ),
                 Expanded(
                   child: _GoalGauge(
+                    unavailable: live,
                     label: 'Avg form',
                     detail: '84 of 85',
                     value: 99,
@@ -39,6 +42,7 @@ class GoalProgressScreen extends StatelessWidget {
                 ),
                 Expanded(
                   child: _GoalGauge(
+                    unavailable: live,
                     label: 'Squat 70kg×8',
                     detail: '60 of 70 kg',
                     value: 86,
@@ -54,11 +58,14 @@ class GoalProgressScreen extends StatelessWidget {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Icon(Icons.emoji_objects_rounded, color: AppColors.primary, size: 20),
+                const Icon(Icons.emoji_objects_rounded,
+                    color: AppColors.primary, size: 20),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Text(
-                    'One more session this week and you hit your frequency goal.',
+                    live
+                        ? '-'
+                        : 'One more session this week and you hit your frequency goal.',
                     style: Theme.of(context).textTheme.bodyLarge,
                   ),
                 ),
@@ -72,11 +79,13 @@ class GoalProgressScreen extends StatelessWidget {
 }
 
 class _GoalGauge extends StatelessWidget {
+  final bool unavailable;
   final String label;
   final String detail;
   final double value;
   final Color color;
   const _GoalGauge({
+    this.unavailable = false,
     required this.label,
     required this.detail,
     required this.value,
@@ -107,7 +116,7 @@ class _GoalGauge extends StatelessWidget {
                 ),
                 pointers: [
                   RangePointer(
-                    value: value,
+                    value: unavailable ? 0 : value,
                     width: 0.14,
                     sizeUnit: GaugeSizeUnit.factor,
                     color: color,
@@ -117,8 +126,9 @@ class _GoalGauge extends StatelessWidget {
                 annotations: [
                   GaugeAnnotation(
                     positionFactor: 0,
-                    widget: Text('${value.round()}%',
-                        style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800)),
+                    widget: Text(unavailable ? '-' : '${value.round()}%',
+                        style: const TextStyle(
+                            fontSize: 15, fontWeight: FontWeight.w800)),
                   ),
                 ],
               ),
@@ -126,10 +136,11 @@ class _GoalGauge extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 6),
-        Text(label,
+        Text(unavailable ? '-' : label,
             textAlign: TextAlign.center,
-            style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600)),
-        Text(detail,
+            style:
+                const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600)),
+        Text(unavailable ? '-' : detail,
             textAlign: TextAlign.center,
             style: const TextStyle(fontSize: 10.5, color: AppColors.inkSoft)),
       ],

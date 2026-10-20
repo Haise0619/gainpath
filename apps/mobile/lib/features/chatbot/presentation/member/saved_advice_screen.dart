@@ -8,7 +8,8 @@ import 'package:gainpath_domain/chatbot.dart';
 /// added from the chat screen shows up here immediately, and removing
 /// a tip here is reflected back in the chat bubbles' bookmark icons.
 class SavedAdviceScreen extends StatefulWidget {
-  const SavedAdviceScreen({super.key});
+  const SavedAdviceScreen({super.key, this.connected = false});
+  final bool connected;
 
   @override
   State<SavedAdviceScreen> createState() => _SavedAdviceScreenState();
@@ -17,7 +18,9 @@ class SavedAdviceScreen extends StatefulWidget {
 class _SavedAdviceScreenState extends State<SavedAdviceScreen> {
   @override
   Widget build(BuildContext context) {
-    final items = context.read<ChatRepository>().savedAdvice;
+    final items = widget.connected
+        ? <String>['-']
+        : context.read<ChatRepository>().savedAdvice;
     return Scaffold(
       appBar: AppBar(title: const Text('Saved advice')),
       body: items.isEmpty
@@ -56,17 +59,22 @@ class _SavedAdviceScreenState extends State<SavedAdviceScreen> {
                               IconButton(
                                 icon: const Icon(Icons.delete_outline_rounded,
                                     size: 19),
-                                onPressed: () async {
-                                  final ok = await confirmSheet(context,
-                                      title: 'Remove this tip?',
-                                      message:
-                                          'It will be deleted from your saved library.',
-                                      confirmLabel: 'Remove',
-                                      destructive: true);
-                                  if (ok) {
-                                    setState(() => context.read<ChatRepository>().savedAdvice.remove(t));
-                                  }
-                                },
+                                onPressed: widget.connected
+                                    ? null
+                                    : () async {
+                                        final ok = await confirmSheet(context,
+                                            title: 'Remove this tip?',
+                                            message:
+                                                'It will be deleted from your saved library.',
+                                            confirmLabel: 'Remove',
+                                            destructive: true);
+                                        if (ok) {
+                                          setState(() => context
+                                              .read<ChatRepository>()
+                                              .savedAdvice
+                                              .remove(t));
+                                        }
+                                      },
                               ),
                             ],
                           ),

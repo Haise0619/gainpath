@@ -9,12 +9,28 @@ import 'package:gainpath_domain/identity.dart';
 /// numbers for every coach; now each profile reflects that coach alone.
 class CoachProfileScreen extends StatelessWidget {
   final Coach coach;
-  const CoachProfileScreen({super.key, required this.coach});
+  final PublishedCoachProfile? published;
+  final Widget? photo;
+  final VoidCallback? onOpenBooking, onOpenSchedule, onRefresh;
+  const CoachProfileScreen(
+      {super.key,
+      required this.coach,
+      this.published,
+      this.photo,
+      this.onOpenBooking,
+      this.onOpenSchedule,
+      this.onRefresh});
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text(coach.name)),
+      appBar: AppBar(title: Text(coach.name), actions: [
+        if (onRefresh != null)
+          IconButton(
+              tooltip: 'Refresh profile',
+              onPressed: onRefresh,
+              icon: const Icon(Icons.refresh))
+      ]),
       body: PageBody(
         children: [
           Container(
@@ -33,7 +49,10 @@ class CoachProfileScreen extends StatelessWidget {
               children: [
                 ClipRRect(
                   borderRadius: BorderRadius.circular(24),
-                  child: SizedBox(width: 84, height: 84, child: networkAvatar(coach.imageUrl)),
+                  child: SizedBox(
+                      width: 84,
+                      height: 84,
+                      child: photo ?? networkAvatar(coach.imageUrl)),
                 ),
                 const SizedBox(height: 14),
                 Row(
@@ -42,27 +61,36 @@ class CoachProfileScreen extends StatelessWidget {
                     Flexible(
                       child: Text(coach.name,
                           style: const TextStyle(
-                              fontSize: 21, fontWeight: FontWeight.w800, color: Colors.white)),
+                              fontSize: 21,
+                              fontWeight: FontWeight.w800,
+                              color: Colors.white)),
                     ),
                     if (coach.verified) ...[
                       const SizedBox(width: 6),
-                      const Icon(Icons.verified_rounded, size: 19, color: Colors.white),
+                      const Icon(Icons.verified_rounded,
+                          size: 19, color: Colors.white),
                     ],
                   ],
                 ),
                 const SizedBox(height: 3),
-                Text(coach.specialty, style: const TextStyle(color: Colors.white70, fontSize: 14)),
+                Text(coach.specialty,
+                    style:
+                        const TextStyle(color: Colors.white70, fontSize: 14)),
                 const SizedBox(height: 10),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    const Icon(Icons.star_rounded, size: 17, color: AppColors.accent),
+                    const Icon(Icons.star_rounded,
+                        size: 17, color: AppColors.accent),
                     const SizedBox(width: 4),
-                    Text('${coach.rating}',
+                    Text(published != null ? '-' : '${coach.rating}',
                         style: const TextStyle(
-                            fontSize: 14.5, fontWeight: FontWeight.w700, color: Colors.white)),
+                            fontSize: 14.5,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.white)),
                     Text('  ·  ${coach.reviews} reviews  ·  ${coach.branch}',
-                        style: const TextStyle(color: Colors.white70, fontSize: 13)),
+                        style: const TextStyle(
+                            color: Colors.white70, fontSize: 13)),
                   ],
                 ),
               ],
@@ -72,13 +100,21 @@ class CoachProfileScreen extends StatelessWidget {
           Row(
             children: [
               Expanded(
-                  child: StatTile('${coach.yearsExperience}y', 'Experience')),
+                  child: StatTile(
+                      published != null &&
+                              published!.fields.yearsExperience == null
+                          ? '-'
+                          : '${coach.yearsExperience}y',
+                      'Experience')),
               const SizedBox(width: 10),
               Expanded(
-                  child: StatTile('${coach.sessionsCompleted}', 'Sessions run')),
+                  child: StatTile(
+                      published != null ? '-' : '${coach.sessionsCompleted}',
+                      'Sessions run')),
               const SizedBox(width: 10),
               Expanded(
-                  child: StatTile('${coach.reviews}', 'Reviews')),
+                  child: StatTile(
+                      published != null ? '-' : '${coach.reviews}', 'Reviews')),
             ],
           ),
           const SizedBox(height: 18),
@@ -86,10 +122,12 @@ class CoachProfileScreen extends StatelessWidget {
             background: AppColors.surfaceAlt,
             child: Row(
               children: [
-                const Icon(Icons.bolt_rounded, size: 18, color: AppColors.primary),
+                const Icon(Icons.bolt_rounded,
+                    size: 18, color: AppColors.primary),
                 const SizedBox(width: 10),
                 Expanded(
-                  child: Text(coach.responseTime, style: Theme.of(context).textTheme.bodyMedium),
+                  child: Text(coach.responseTime,
+                      style: Theme.of(context).textTheme.bodyMedium),
                 ),
               ],
             ),
@@ -101,30 +139,39 @@ class CoachProfileScreen extends StatelessWidget {
             runSpacing: 8,
             children: coach.specializationTags
                 .map((t) => Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 7),
                       decoration: BoxDecoration(
                         color: AppColors.primaryTint,
                         borderRadius: BorderRadius.circular(999),
                       ),
                       child: Text(t,
                           style: const TextStyle(
-                              fontSize: 12.5, fontWeight: FontWeight.w600, color: AppColors.primary)),
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.primary)),
                     ))
                 .toList(),
           ),
           const SizedBox(height: 18),
           const Eyebrow('About'),
           Panel(
-            child: Text(coach.bio, style: const TextStyle(fontSize: 14.5, height: 1.5)),
+            child: Text(coach.bio,
+                style: const TextStyle(fontSize: 14.5, height: 1.5)),
           ),
           const SizedBox(height: 18),
           const Eyebrow('Session'),
           Panel(
             child: Column(
               children: [
-                const DetailRow('Duration', '60 minutes'),
+                DetailRow('Duration', published != null ? '-' : '60 minutes'),
                 const Divider(height: 20),
-                DetailRow('Fee', 'RM ${coach.fee.toStringAsFixed(0)}'),
+                DetailRow(
+                    'Fee',
+                    published != null &&
+                            published!.fields.consultationFeeMinor == null
+                        ? '-'
+                        : 'RM ${coach.fee.toStringAsFixed(0)}'),
                 const Divider(height: 20),
                 DetailRow('Location', coach.branch),
               ],
@@ -132,6 +179,7 @@ class CoachProfileScreen extends StatelessWidget {
           ),
           const SizedBox(height: 18),
           const Eyebrow('What members say'),
+          if (coach.topReviews.isEmpty) const Panel(child: Text('-')),
           ...coach.topReviews.map((r) => Padding(
                 padding: const EdgeInsets.only(bottom: 10),
                 child: Panel(
@@ -141,13 +189,16 @@ class CoachProfileScreen extends StatelessWidget {
                       Row(
                         children: [
                           Expanded(
-                            child: Text(r.memberName, style: Theme.of(context).textTheme.titleMedium),
+                            child: Text(r.memberName,
+                                style: Theme.of(context).textTheme.titleMedium),
                           ),
                           Row(
                             children: List.generate(
                               5,
                               (i) => Icon(
-                                i < r.stars ? Icons.star_rounded : Icons.star_outline_rounded,
+                                i < r.stars
+                                    ? Icons.star_rounded
+                                    : Icons.star_outline_rounded,
                                 size: 15,
                                 color: AppColors.accent,
                               ),
@@ -156,15 +207,25 @@ class CoachProfileScreen extends StatelessWidget {
                         ],
                       ),
                       const SizedBox(height: 6),
-                      Text(r.reviewText, style: const TextStyle(fontSize: 13.5, height: 1.45)),
+                      Text(r.reviewText,
+                          style: const TextStyle(fontSize: 13.5, height: 1.45)),
                     ],
                   ),
                 ),
               )),
           const SizedBox(height: 18),
+          if (published != null)
+            OutlinedButton.icon(
+                onPressed: onOpenSchedule,
+                icon: const Icon(Icons.calendar_month_outlined),
+                label: const Text('View schedule')),
           FilledButton(
-            onPressed: () => Navigator.push(context,
-                MaterialPageRoute(builder: (_) => BookSessionScreen(coach: coach))),
+            onPressed: published != null
+                ? onOpenBooking
+                : () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                        builder: (_) => BookSessionScreen(coach: coach))),
             child: const Text('Book a session'),
           ),
         ],

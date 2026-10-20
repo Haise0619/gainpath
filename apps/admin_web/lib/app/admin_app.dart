@@ -9,17 +9,58 @@ import 'package:gainpath_ui/gainpath_ui.dart';
 import 'di/app_repositories.dart';
 import 'shells/admin_shell.dart';
 import '../infrastructure/firebase/firebase_auth_gateway.dart';
+import 'package:gainpath_domain/workout.dart';
+import 'package:gainpath_domain/content.dart' show FacilitySettingsRepository;
+import 'package:gainpath_domain/gamification.dart' show RewardCatalogRepository;
+import 'package:gainpath_domain/identity.dart' show CoachProfileAdminRepository;
+import 'package:gainpath_domain/identity.dart'
+    show AdminAccountContactRepository, AdminMemberDirectoryRepository;
+import 'package:gainpath_domain/coaching.dart' show CoachAvailabilityRepository;
+
+import 'di/admin_presentation_dependencies.dart';
 
 class GainPathAdminWebApp extends StatelessWidget {
   const GainPathAdminWebApp(
-      {super.key, this.authRepository, this.backendConfig});
+      {super.key,
+      this.authRepository,
+      this.backendConfig,
+      this.tutorialRepositoryFactory,
+      this.routineRepositoryFactory,
+      this.coachRepositoryFactory,
+      this.coachAvailabilityFactory,
+      this.bookingListFactory,
+      this.accountContactFactory,
+      this.memberDirectoryFactory,
+      this.rewardCatalogFactory,
+      this.facilitySettingsFactory,
+      this.reportingGatewayFactory,
+      this.passwordResetSender});
 
   final AuthRepository? authRepository;
   final BackendConfig? backendConfig;
+  final Future<void> Function(String)? passwordResetSender;
+  final ReportingGatewayFactory? reportingGatewayFactory;
+  final TutorialRepository Function(SessionScope)? tutorialRepositoryFactory;
+  final RoutineTemplateRepository Function(SessionScope, TutorialRepository)?
+      routineRepositoryFactory;
+  final CoachProfileAdminRepository Function(SessionScope, bool Function())?
+      coachRepositoryFactory;
+  final CoachAvailabilityRepository Function(SessionScope, bool Function())?
+      coachAvailabilityFactory;
+  final BookingListRepository Function(SessionScope, bool Function())?
+      bookingListFactory;
+  final AdminAccountContactRepository Function(SessionScope, bool Function())?
+      accountContactFactory;
+  final AdminMemberDirectoryRepository Function(SessionScope, bool Function())?
+      memberDirectoryFactory;
+  final RewardCatalogRepository Function(SessionScope, bool Function())?
+      rewardCatalogFactory;
+  final FacilitySettingsRepository Function(SessionScope, bool Function())?
+      facilitySettingsFactory;
 
   @override
   Widget build(BuildContext context) {
-    final config = backendConfig ?? BackendConfig.fromEnvironment();
+    final config = backendConfig ?? const BackendConfig(BackendMode.firebase);
     config.validate();
     return RepositoryProvider<AuthRepository>(
       create: (_) =>
@@ -44,12 +85,28 @@ class GainPathAdminWebApp extends StatelessWidget {
               title: 'GainPath Admin Console',
               debugShowCheckedModeBanner: false,
               theme: AppTheme.build(),
-              home: _AdminAuthGate(config: config),
+              home: _AdminAuthGate(
+                  config: config,
+                  passwordResetSender: config.isFirebase
+                      ? passwordResetSender ??
+                          (email) => FlutterFirebaseAuthGateway()
+                              .sendPasswordResetEmail(email)
+                      : null),
             );
-            if (config.isFirebase) return app;
             return AppRepositories(
-              key: ValueKey(state.session),
+              key: ValueKey((state.session, config.mode)),
               config: config,
+              session: state.session,
+              tutorialRepositoryFactory: tutorialRepositoryFactory,
+              routineRepositoryFactory: routineRepositoryFactory,
+              coachRepositoryFactory: coachRepositoryFactory,
+              coachAvailabilityFactory: coachAvailabilityFactory,
+              bookingListFactory: bookingListFactory,
+              accountContactFactory: accountContactFactory,
+              memberDirectoryFactory: memberDirectoryFactory,
+              rewardCatalogFactory: rewardCatalogFactory,
+              facilitySettingsFactory: facilitySettingsFactory,
+              reportingGatewayFactory: reportingGatewayFactory,
               child: app,
             );
           },
@@ -60,8 +117,9 @@ class GainPathAdminWebApp extends StatelessWidget {
 }
 
 class _AdminAuthGate extends StatelessWidget {
-  const _AdminAuthGate({required this.config});
+  const _AdminAuthGate({required this.config, this.passwordResetSender});
   final BackendConfig config;
+  final Future<void> Function(String)? passwordResetSender;
 
   @override
   Widget build(BuildContext context) {
@@ -76,12 +134,10 @@ class _AdminAuthGate extends StatelessWidget {
           return _AdminVerificationScreen(session: state.session!);
         }
         if (AuthRolePolicy.canEnter(state, allowed: const {AppRole.admin})) {
-          if (config.isFirebase) {
-            return _FirebaseAdminIdentityReadyScreen(session: state.session!);
-          }
-          return const AdminShell();
+          return AdminShell(
+              liveSession: config.isFirebase ? state.session : null);
         }
-        return const _AdminLoginScreen();
+        return _AdminLoginScreen(onPasswordReset: passwordResetSender);
       },
     );
   }
@@ -146,49 +202,9 @@ class _AdminVerificationScreen extends StatelessWidget {
   }
 }
 
-class _FirebaseAdminIdentityReadyScreen extends StatelessWidget {
-  const _FirebaseAdminIdentityReadyScreen({required this.session});
-  final AuthSession session;
-
-  @override
-  Widget build(BuildContext context) => Scaffold(
-        appBar: AppBar(
-          title: const Text('GainPath Admin'),
-          actions: [
-            TextButton(
-              onPressed: () => context.read<AuthBloc>().add(const LoggedOut()),
-              child: const Text('Sign out'),
-            ),
-          ],
-        ),
-        body: Center(
-          child: Card(
-            child: Padding(
-              padding: const EdgeInsets.all(28),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('Firebase administrator identity connected',
-                      style: Theme.of(context).textTheme.headlineSmall),
-                  const SizedBox(height: 12),
-                  Text(session.email),
-                  Text('Organization: ${session.organizationId}'),
-                  Text('Branches: ${session.branchIds.join(', ')}'),
-                  const SizedBox(height: 12),
-                  const Text(
-                    'Admin feature repositories are the next Firebase integration step.',
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      );
-}
-
 class _AdminLoginScreen extends StatefulWidget {
-  const _AdminLoginScreen();
+  const _AdminLoginScreen({this.onPasswordReset});
+  final Future<void> Function(String)? onPasswordReset;
 
   @override
   State<_AdminLoginScreen> createState() => _AdminLoginScreenState();
@@ -246,7 +262,7 @@ class _AdminLoginScreenState extends State<_AdminLoginScreen> {
                         ),
                         const SizedBox(height: 8),
                         const Text(
-                            'Only administrator and branch-staff roles can enter this console.'),
+                            'Only organization Admin and Staff roles can enter this console.'),
                         const SizedBox(height: 24),
                         TextField(
                           controller: _emailController,
@@ -281,6 +297,16 @@ class _AdminLoginScreenState extends State<_AdminLoginScreen> {
                         TextButton(
                             onPressed: () => showForgotPasswordSheet(context,
                                 initialEmail: _emailController.text,
+                                onSend: widget.onPasswordReset == null
+                                    ? null
+                                    : (email) async {
+                                        try {
+                                          await widget.onPasswordReset!(email);
+                                        } on AuthException catch (error) {
+                                          throw PasswordResetFailure(
+                                              error.message);
+                                        }
+                                      },
                                 asDialog: true),
                             child: const Text('Forgot password?')),
                       ],

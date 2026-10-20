@@ -20,6 +20,27 @@ import 'package:gainpath_data/recommendation.dart';
 import 'package:gainpath_domain/recommendation.dart';
 import 'package:gainpath_data/workout.dart';
 import 'package:gainpath_domain/workout.dart';
+import 'package:gainpath_domain/gainpath_domain.dart'
+    show AuthSession, SessionScope, BookingListRepository;
+import '../../infrastructure/firebase/firebase_booking_list_repository.dart';
+import '../../infrastructure/firebase/firebase_exercise_catalog_repository.dart';
+import '../../infrastructure/firebase/firebase_routine_template_repository.dart';
+import '../../infrastructure/firebase/firebase_coach_profile_admin_repository.dart';
+import '../../infrastructure/firebase/firebase_coach_availability_repository.dart';
+import 'package:gainpath_identity/gainpath_identity.dart';
+import 'catalog_edit_session_guard.dart';
+import '../../infrastructure/firebase/firebase_announcement_repository.dart';
+import '../../infrastructure/firebase/firebase_chatbot_disclaimer_repository.dart';
+import '../../infrastructure/firebase/firebase_compliance_document_repository.dart';
+import '../../infrastructure/firebase/firebase_admin_account_contact_repository.dart';
+import '../../infrastructure/firebase/firebase_equipment_repository.dart';
+import '../../infrastructure/local/equipment_image_picker.dart';
+import '../../infrastructure/local/account_photo_picker.dart';
+import '../../infrastructure/firebase/firebase_admin_member_directory_repository.dart';
+import '../../infrastructure/firebase/firebase_reward_catalog_repository.dart';
+import '../../infrastructure/firebase/firebase_facility_settings_repository.dart';
+import 'admin_presentation_dependencies.dart';
+import '../../features/analytics/application/admin_reporting_gateway.dart';
 
 /// Composition root for data access. Swap the in-memory implementations for
 /// Firebase-backed ones here without touching any screen.
@@ -28,28 +49,256 @@ class AppRepositories extends StatefulWidget {
     super.key,
     required this.child,
     this.config = const BackendConfig(BackendMode.mock),
+    this.session,
+    this.tutorialRepositoryFactory,
+    this.routineRepositoryFactory,
+    this.coachRepositoryFactory,
+    this.coachAvailabilityFactory,
+    this.bookingListFactory,
+    this.accountContactFactory,
+    this.memberDirectoryFactory,
+    this.rewardCatalogFactory,
+    this.facilitySettingsFactory,
+    this.reportingGatewayFactory,
   });
   final Widget child;
   final BackendConfig config;
+  final AuthSession? session;
+  final ReportingGatewayFactory? reportingGatewayFactory;
+  final TutorialRepository Function(SessionScope)? tutorialRepositoryFactory;
+  final RoutineTemplateRepository Function(SessionScope, TutorialRepository)?
+      routineRepositoryFactory;
+  final CoachProfileAdminRepository Function(SessionScope, bool Function())?
+      coachRepositoryFactory;
+  final CoachAvailabilityRepository Function(SessionScope, bool Function())?
+      coachAvailabilityFactory;
+  final BookingListRepository Function(SessionScope, bool Function())?
+      bookingListFactory;
+  final AdminAccountContactRepository Function(SessionScope, bool Function())?
+      accountContactFactory;
+  final AdminMemberDirectoryRepository Function(SessionScope, bool Function())?
+      memberDirectoryFactory;
+  final RewardCatalogRepository Function(SessionScope, bool Function())?
+      rewardCatalogFactory;
+  final FacilitySettingsRepository Function(SessionScope, bool Function())?
+      facilitySettingsFactory;
 
   @override
   State<AppRepositories> createState() => _AppRepositoriesState();
 }
 
 class _AppRepositoriesState extends State<AppRepositories> {
-  final MockDataSession session = MockDataSession();
+  late final MockDataSession session = MockDataSession();
+  CatalogEditSessionGuard? _catalogGuard;
+  CatalogEditSessionGuard? _routineGuard;
+  CatalogEditSessionGuard? _coachGuard;
+  CatalogEditSessionGuard? _availabilityGuard;
+  CatalogEditSessionGuard? _bookingGuard;
+  CatalogEditSessionGuard? _announcementGuard;
+  CatalogEditSessionGuard? _disclaimerGuard;
+  CatalogEditSessionGuard? _complianceGuard;
+  CatalogEditSessionGuard? _accountContactGuard;
+  CatalogEditSessionGuard? _memberDirectoryGuard;
+  CatalogEditSessionGuard? _rewardGuard;
+  CatalogEditSessionGuard? _facilityGuard;
+  CatalogEditSessionGuard _buildSessionGuard() {
+    AuthBloc? auth;
+    try {
+      auth = context.read<AuthBloc?>();
+    } catch (_) {
+      auth = null;
+    }
+    return CatalogEditSessionGuard(
+      expected: widget.session!,
+      current: () =>
+          auth?.state ?? const AuthState(status: AuthStatus.signedOut),
+      changes: auth?.stream ?? const Stream.empty(),
+    );
+  }
+
+  FacilitySettingsRepository _createFacilitySettings(SessionScope scope) {
+    _facilityGuard = _buildSessionGuard();
+    return widget.facilitySettingsFactory
+            ?.call(scope, _facilityGuard!.isCurrent) ??
+        FirebaseFacilitySettingsRepository(
+            scope: scope, isCurrent: _facilityGuard!.isCurrent);
+  }
+
+  RewardCatalogRepository _createRewardCatalog(SessionScope scope) {
+    _rewardGuard = _buildSessionGuard();
+    return widget.rewardCatalogFactory?.call(scope, _rewardGuard!.isCurrent) ??
+        FirebaseRewardCatalogRepository(
+            scope: scope, isCurrent: _rewardGuard!.isCurrent);
+  }
+
+  AdminMemberDirectoryRepository _createMemberDirectory(SessionScope scope) {
+    _memberDirectoryGuard = _buildSessionGuard();
+    return widget.memberDirectoryFactory
+            ?.call(scope, _memberDirectoryGuard!.isCurrent) ??
+        FirebaseAdminMemberDirectoryRepository(
+            scope: scope, isCurrent: _memberDirectoryGuard!.isCurrent);
+  }
+
+  AdminAccountContactRepository _createAccountContact(SessionScope scope) {
+    _accountContactGuard = _buildSessionGuard();
+    if (widget.accountContactFactory != null) {
+      return widget.accountContactFactory!(
+          scope, _accountContactGuard!.isCurrent);
+    }
+    return FirebaseAdminAccountContactRepository(
+        scope: scope, isCurrent: _accountContactGuard!.isCurrent);
+  }
+
+  ComplianceDocumentRepository _createCompliance(SessionScope scope) {
+    _complianceGuard = _buildSessionGuard();
+    return FirebaseComplianceDocumentRepository(
+        scope: scope, isCurrent: _complianceGuard!.isCurrent);
+  }
+
+  ChatbotDisclaimerRepository _createDisclaimer(SessionScope scope) {
+    _disclaimerGuard = _buildSessionGuard();
+    return FirebaseChatbotDisclaimerRepository(
+        scope: scope, isCurrent: _disclaimerGuard!.isCurrent);
+  }
+
+  CatalogEditSessionGuard? _equipmentGuard;
+  EquipmentRepository _createEquipment(SessionScope scope) {
+    _equipmentGuard = _buildSessionGuard();
+    return FirebaseEquipmentRepository(
+        scope: scope, isCurrent: _equipmentGuard!.isCurrent);
+  }
+
+  ContentRepository _createAnnouncements(SessionScope scope) {
+    _announcementGuard = _buildSessionGuard();
+    return FirebaseAnnouncementRepository(
+        scope: scope, isCurrent: _announcementGuard!.isCurrent);
+  }
+
+  BookingListRepository _createBookingList(SessionScope scope) {
+    _bookingGuard = _buildSessionGuard();
+    return widget.bookingListFactory?.call(scope, _bookingGuard!.isCurrent) ??
+        FirebaseBookingListRepository(
+            scope: scope, isCurrent: _bookingGuard!.isCurrent);
+  }
+
+  CoachAvailabilityRepository _createAvailability(SessionScope scope) {
+    _availabilityGuard = _buildSessionGuard();
+    return widget.coachAvailabilityFactory
+            ?.call(scope, _availabilityGuard!.isCurrent) ??
+        FirebaseCoachAvailabilityRepository(
+            scope: scope, isCurrent: _availabilityGuard!.isCurrent);
+  }
+
+  CoachProfileAdminRepository _createCoachDirectory(SessionScope scope) {
+    _coachGuard = _buildSessionGuard();
+    return widget.coachRepositoryFactory?.call(scope, _coachGuard!.isCurrent) ??
+        FirebaseCoachProfileAdminRepository(
+            scope: scope, isCurrent: _coachGuard!.isCurrent);
+  }
+
+  TutorialRepository _createCatalog(SessionScope scope) {
+    final factory = widget.tutorialRepositoryFactory;
+    if (factory != null) return factory(scope);
+    _catalogGuard = _buildSessionGuard();
+    return FirebaseExerciseCatalogRepository(
+        scope: scope, isSessionCurrent: _catalogGuard!.isCurrent);
+  }
+
+  RoutineTemplateRepository _createRoutines(
+      SessionScope scope, TutorialRepository catalog) {
+    final factory = widget.routineRepositoryFactory;
+    if (factory != null) return factory(scope, catalog);
+    _routineGuard = _buildSessionGuard();
+    return FirebaseRoutineTemplateRepository(
+        scope: scope,
+        exerciseCatalog: catalog,
+        isSessionCurrent: _routineGuard!.isCurrent);
+  }
+
+  @override
+  void dispose() {
+    _catalogGuard?.dispose();
+    _routineGuard?.dispose();
+    _coachGuard?.dispose();
+    _availabilityGuard?.dispose();
+    _bookingGuard?.dispose();
+    _announcementGuard?.dispose();
+    _disclaimerGuard?.dispose();
+    _complianceGuard?.dispose();
+    _accountContactGuard?.dispose();
+    _memberDirectoryGuard?.dispose();
+    _rewardGuard?.dispose();
+    _facilityGuard?.dispose();
+    _equipmentGuard?.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     widget.config.validate();
+    if (widget.config.isFirebase && widget.session == null) return widget.child;
+    final scope = widget.session?.scope;
     if (widget.config.isFirebase) {
-      throw UnsupportedError(
-        'Firebase backend adapters are not connected yet. '
-        'Run with --dart-define=BACKEND=mock until Phase 7 adapters are enabled.',
+      AuthBloc? auth;
+      try {
+        auth = context.read<AuthBloc?>();
+      } catch (_) {
+        auth = null;
+      }
+      bool isCurrent() => auth != null && auth.state.session == widget.session;
+      final deps = AdminPresentationDependencies.fromScope(
+        scope: scope!,
+        isCurrent: isCurrent,
+        session: widget.session,
+        reportingFactory: widget.reportingGatewayFactory,
       );
+      return MultiRepositoryProvider(providers: [
+        RepositoryProvider<AdminPresentationDependencies>.value(value: deps),
+        RepositoryProvider<AdminReportingGateway>.value(value: deps.reportingGateway),
+        RepositoryProvider<AnalyticsRepository>.value(value: deps.analytics),
+        RepositoryProvider<RecommendationRepository>.value(value: deps.recommendation),
+        RepositoryProvider<MembershipRepository>.value(value: deps.membership),
+        RepositoryProvider<BookingRepository>.value(value: deps.booking),
+        RepositoryProvider<AvailabilityRepository>.value(value: deps.availability),
+        RepositoryProvider<CoachRepository>.value(value: deps.coach),
+        RepositoryProvider<UserAccountRepository>.value(value: deps.userAccount),
+        RepositoryProvider<FacilitySettingsRepository>(
+            create: (_) => _createFacilitySettings(scope)),
+        RepositoryProvider<RewardCatalogRepository>(
+            create: (_) => _createRewardCatalog(scope)),
+        RepositoryProvider<AdminMemberDirectoryRepository>(
+            create: (_) => _createMemberDirectory(scope)),
+        RepositoryProvider<AccountPhotoPicker>(
+            create: (_) => LocalAccountPhotoPicker()),
+        RepositoryProvider<AdminAccountContactRepository>(
+            create: (_) => _createAccountContact(scope)),
+        RepositoryProvider<ComplianceDocumentRepository>(
+            create: (_) => _createCompliance(scope)),
+        RepositoryProvider<ChatbotDisclaimerRepository>(
+            create: (_) => _createDisclaimer(scope)),
+        RepositoryProvider<EquipmentImagePicker>(
+            create: (_) => LocalEquipmentImagePicker()),
+        RepositoryProvider<EquipmentRepository>(
+            create: (_) => _createEquipment(scope)),
+        RepositoryProvider<ContentRepository>(
+            create: (_) => _createAnnouncements(scope)),
+        RepositoryProvider<BookingListRepository>(
+            create: (_) => _createBookingList(scope)),
+        RepositoryProvider<CoachAvailabilityRepository>(
+            create: (_) => _createAvailability(scope)),
+        RepositoryProvider<CoachProfileAdminRepository>(
+            create: (_) => _createCoachDirectory(scope)),
+        RepositoryProvider<TutorialRepository>(
+            create: (_) => _createCatalog(scope)),
+        RepositoryProvider<RoutineTemplateRepository>(
+            create: (context) =>
+                _createRoutines(scope, context.read<TutorialRepository>())),
+      ], child: widget.child);
     }
     return MultiRepositoryProvider(
       providers: [
+        RepositoryProvider<AdminReportingGateway>(
+            create: (_) => const UnavailableAdminReportingGateway()),
         RepositoryProvider<MemberProfileRepository>(
             create: (_) => InMemoryMemberProfileRepository(session: session)),
         RepositoryProvider<CoachRepository>(
@@ -61,9 +310,15 @@ class _AppRepositoriesState extends State<AppRepositories> {
         RepositoryProvider<EquipmentRepository>(
             create: (_) => InMemoryEquipmentRepository(session: session)),
         RepositoryProvider<TutorialRepository>(
-            create: (_) => InMemoryTutorialRepository(session: session)),
+            create: (_) => widget.config.isFirebase
+                ? FirebaseExerciseCatalogRepository(scope: scope!)
+                : InMemoryTutorialRepository(session: session)),
         RepositoryProvider<RoutineTemplateRepository>(
-            create: (_) => InMemoryRoutineTemplateRepository(session: session)),
+            create: (context) => widget.config.isFirebase
+                ? FirebaseRoutineTemplateRepository(
+                    scope: scope!,
+                    exerciseCatalog: context.read<TutorialRepository>())
+                : InMemoryRoutineTemplateRepository(session: session)),
         RepositoryProvider<GamificationRepository>(
             create: (_) => InMemoryGamificationRepository(session: session)),
         RepositoryProvider<BookingRepository>(

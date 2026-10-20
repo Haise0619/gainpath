@@ -9,6 +9,7 @@ enum AuthStatus {
   signedOut,
   submitting,
   needsVerification,
+  pendingDeletion,
   signedIn
 }
 
@@ -18,6 +19,7 @@ class AuthState extends Equatable {
     this.status = AuthStatus.signedOut,
     this.email,
     this.session,
+    this.sessionRevision = 0,
     this.fieldErrors = CredentialErrors.none,
     this.message,
   });
@@ -26,6 +28,9 @@ class AuthState extends Equatable {
   final AuthStatus status;
   final String? email;
   final AuthSession? session;
+
+  /// Forces a new repository/UI lifetime after an authoritative session reload.
+  final int sessionRevision;
   final CredentialErrors fieldErrors;
   final String? message;
 
@@ -34,6 +39,7 @@ class AuthState extends Equatable {
     AuthStatus? status,
     String? email,
     AuthSession? session,
+    int? sessionRevision,
     CredentialErrors? fieldErrors,
     bool clearErrors = false,
     bool clearSession = false,
@@ -45,6 +51,7 @@ class AuthState extends Equatable {
       status: status ?? this.status,
       email: email ?? this.email,
       session: clearSession ? null : (session ?? this.session),
+      sessionRevision: sessionRevision ?? this.sessionRevision,
       fieldErrors: clearErrors
           ? CredentialErrors.none
           : (fieldErrors ?? this.fieldErrors),
@@ -54,7 +61,7 @@ class AuthState extends Equatable {
 
   @override
   List<Object?> get props =>
-      [role, status, email, session, fieldErrors, message];
+      [role, status, email, session, sessionRevision, fieldErrors, message];
 }
 
 sealed class AuthEvent extends Equatable {
@@ -136,6 +143,9 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     on<AuthRestoreRequested>(_onRestore);
     on<_SessionChanged>((event, emit) {
       if (event.revision != _revision || !_allowSessionEvents) return;
+      // The explicit restore owns its result/error; provider null events must
+      // not cancel it and erase an actionable disabled/membership message.
+      if (state.status == AuthStatus.checkingSession) return;
       if (event.session != null && state.status == AuthStatus.submitting) {
         return;
       }
@@ -158,6 +168,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
 
   static const termsError =
       'Agree to the Terms and Privacy Policy to continue.';
+  static const fieldsError = 'Check the highlighted fields and try again.';
   static const unknownError = 'Unable to complete authentication. Try again.';
 
   final AuthRepository _repository;
@@ -169,7 +180,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
 
   void _emitSession(AuthSession? session, Emitter<AuthState> emit) {
     if (session == null) {
-      emit(AuthState(role: state.role));
+      emit(const AuthState());
       return;
     }
     try {
@@ -178,9 +189,12 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
           role: session.role,
           email: session.email,
           session: session,
-          status: session.needsVerification
-              ? AuthStatus.needsVerification
-              : AuthStatus.signedIn));
+          sessionRevision: _revision,
+          status: session.accountLifecycleState == 'pendingDeletion'
+              ? AuthStatus.pendingDeletion
+              : session.needsVerification
+                  ? AuthStatus.needsVerification
+                  : AuthStatus.signedIn));
     } on ArgumentError {
       emit(AuthState(role: state.role, message: 'Invalid account scope.'));
     }
@@ -197,6 +211,10 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       final session =
           await (repository as AuthSessionLifecycle).restoreSession();
       if (revision == _revision && !emit.isDone) _emitSession(session, emit);
+    } on AuthException catch (error) {
+      if (revision == _revision && !emit.isDone) {
+        emit(AuthState(role: state.role, message: error.message));
+      }
     } catch (_) {
       if (revision == _revision && !emit.isDone) {
         emit(AuthState(role: state.role, message: unknownError));
@@ -208,6 +226,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     LoginSubmitted event,
     Emitter<AuthState> emit,
   ) async {
+    if (state.status == AuthStatus.submitting) return;
     final revision = ++_revision;
     _allowSessionEvents = true;
     final errors = _policy.validate(
@@ -221,7 +240,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       emit(state.copyWith(
         status: AuthStatus.signedOut,
         fieldErrors: errors,
-        clearMessage: true,
+        message: fieldsError,
       ));
       return;
     }
@@ -234,12 +253,6 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       return;
     }
     final role = state.role;
-    if (role == null) {
-      emit(state.copyWith(
-          status: AuthStatus.signedOut, message: 'Select a role to continue.'));
-      return;
-    }
-
     emit(state.copyWith(
       status: AuthStatus.submitting,
       fieldErrors: CredentialErrors.none,
@@ -248,7 +261,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     try {
       final session = event.registering
           ? await _repository.register(
-              role: role,
+              role: role ?? AppRole.member,
               email: event.email,
               password: event.password,
               name: event.name,
@@ -263,9 +276,11 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       session.scope;
       emit(state.copyWith(
         role: session.role,
-        status: session.needsVerification
-            ? AuthStatus.needsVerification
-            : AuthStatus.signedIn,
+        status: session.accountLifecycleState == 'pendingDeletion'
+            ? AuthStatus.pendingDeletion
+            : session.needsVerification
+                ? AuthStatus.needsVerification
+                : AuthStatus.signedIn,
         email: session.email,
         session: session,
       ));
@@ -289,13 +304,12 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
   Future<void> _onLoggedOut(LoggedOut event, Emitter<AuthState> emit) async {
     final revision = ++_revision;
     _allowSessionEvents = false;
-    emit(AuthState(role: state.role));
+    emit(const AuthState());
     try {
       await _repository.signOut();
     } catch (_) {
       if (revision == _revision && !emit.isDone) {
-        emit(AuthState(
-            role: state.role,
+        emit(const AuthState(
             message: 'Unable to sign out of the provider. Try again.'));
       }
     }
@@ -316,6 +330,7 @@ class AuthRolePolicy {
     final session = state.session;
     if (state.status != AuthStatus.signedIn ||
         session == null ||
+        session.accountLifecycleState != 'active' ||
         session.needsVerification ||
         state.role != session.role) {
       return false;

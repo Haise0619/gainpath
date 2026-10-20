@@ -69,13 +69,15 @@ class ReportPreviewTile extends StatelessWidget {
             SizedBox(
               width: 64,
               height: 34,
-              child: SfSparkAreaChart(
-                data: sparkData,
-                color: sparkColor.withValues(alpha: 0.85),
-                borderColor: sparkColor,
-                borderWidth: 1.6,
-                axisLineColor: Colors.transparent,
-              ),
+              child: sparkData.isEmpty
+                  ? const Center(child: Text('-'))
+                  : SfSparkAreaChart(
+                      data: sparkData,
+                      color: sparkColor.withValues(alpha: 0.85),
+                      borderColor: sparkColor,
+                      borderWidth: 1.6,
+                      axisLineColor: Colors.transparent,
+                    ),
             ),
             const SizedBox(width: 6),
             const Icon(Icons.arrow_forward_ios_rounded,

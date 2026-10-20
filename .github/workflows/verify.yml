@@ -19,21 +19,42 @@ jobs:
           distribution: temurin
           java-version: '17'
       - run: flutter pub get --enforce-lockfile
-      - run: dart run tool/check_architecture.dart
-      - run: dart analyze apps packages tool test
-      - name: Workspace tests
+      - name: Architecture boundaries
+        run: dart run tool/check_architecture.dart
+      - name: Analyze maintained workspace sources
         shell: bash
         run: |
           set -euo pipefail
-          flutter test --no-pub test
+          sources=(tool test)
+          for package in packages/* apps/*; do
+            for folder in lib bin test integration_test tool; do
+              if [ -d "$package/$folder" ]; then
+                sources+=("$package/$folder")
+              fi
+            done
+          done
+          dart analyze "${sources[@]}"
+      - name: Pure Dart tooling tests
+        run: dart test test
+      - name: Package and app tests
+        shell: bash
+        run: |
+          set -euo pipefail
           for package in packages/* apps/*; do
             if [ -d "$package/test" ]; then
-              (cd "$package" && flutter test --no-pub)
+              case "${package##*/}" in
+                gainpath_domain|gainpath_data|gainpath_pose)
+                  (cd "$package" && dart test) ;;
+                *)
+                  (cd "$package" && flutter test --no-pub) ;;
+              esac
             fi
           done
-      - run: flutter build web --debug --no-pub --dart-define=BACKEND=mock
+      - name: Build Admin Web
+        run: flutter build web --debug --no-pub --dart-define=BACKEND=mock
         working-directory: apps/admin_web
-      - run: flutter build apk --debug --no-pub --dart-define=BACKEND=mock
+      - name: Build Mobile APK
+        run: flutter build apk --debug --no-pub --dart-define=BACKEND=mock
         working-directory: apps/mobile
   backend:
     runs-on: ubuntu-latest

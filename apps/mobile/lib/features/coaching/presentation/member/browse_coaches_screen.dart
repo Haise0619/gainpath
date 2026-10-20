@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
 import 'booking_schedule_screen.dart';
 import '../shared/coach_profile_screen.dart';
+import '../shared/live_coach_directory_views.dart';
+import '../shared/published_coach_presentation.dart';
+import '../../application/coach_directory_cubit.dart';
 import 'widgets/coach_card.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:gainpath_domain/identity.dart';
@@ -12,7 +15,18 @@ enum _SortBy { rating, priceLow, experience }
 /// sort share one toolbar so narrowing the list to "the one coach I
 /// want" takes a couple of taps rather than scrolling the whole roster.
 class BrowseCoachesScreen extends StatefulWidget {
-  const BrowseCoachesScreen({super.key});
+  const BrowseCoachesScreen(
+      {super.key,
+      this.live = false,
+      this.liveRepository,
+      this.isCurrent,
+      this.onOpenPublished,
+      this.onOpenBookings});
+  final bool live;
+  final CoachDirectoryRepository? liveRepository;
+  final bool Function()? isCurrent;
+  final void Function(String)? onOpenPublished;
+  final VoidCallback? onOpenBookings;
 
   @override
   State<BrowseCoachesScreen> createState() => _BrowseCoachesScreenState();
@@ -24,18 +38,56 @@ class _BrowseCoachesScreenState extends State<BrowseCoachesScreen> {
   final _searchController = TextEditingController();
   String _query = '';
 
+  CoachDirectoryCubit? _directory;
+  @override
+  void initState() {
+    super.initState();
+    if (widget.liveRepository != null) {
+      _directory = CoachDirectoryCubit(
+          repository: widget.liveRepository!, isCurrent: widget.isCurrent!)
+        ..refresh();
+    }
+  }
+
   @override
   void dispose() {
+    _directory?.close();
     _searchController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final specialties = ['All', ...{for (final c in context.read<CoachRepository>().coaches) c.specialty}];
+    if (_directory != null) {
+      return BlocBuilder<CoachDirectoryCubit, CoachDirectoryState>(
+        bloc: _directory,
+        builder: (context, state) => _content(
+            context,
+            widget.isCurrent!()
+                ? state.items.map(publishedCoachPresentation).toList()
+                : [],
+            state),
+      );
+    }
+    return _content(
+        context,
+        widget.live ? <Coach>[] : context.read<CoachRepository>().coaches,
+        null);
+  }
 
-    var visible = context.read<CoachRepository>().coaches.where((c) {
-      final matchesSpecialty = _specialtyFilter == 'All' || c.specialty == _specialtyFilter;
+  Widget _content(
+      BuildContext context, List<Coach> coaches, CoachDirectoryState? state) {
+    final published = {
+      for (final c in state?.items ?? <PublishedCoachProfile>[]) c.id: c
+    };
+    final specialties = [
+      'All',
+      ...{for (final c in coaches) c.specialty}
+    ];
+
+    var visible = coaches.where((c) {
+      final matchesSpecialty =
+          _specialtyFilter == 'All' || c.specialty == _specialtyFilter;
       final q = _query.trim().toLowerCase();
       final matchesQuery = q.isEmpty ||
           c.name.toLowerCase().contains(q) ||
@@ -66,21 +118,35 @@ class _BrowseCoachesScreenState extends State<BrowseCoachesScreen> {
             initialValue: _sortBy,
             onSelected: (v) => setState(() => _sortBy = v),
             itemBuilder: (ctx) => const [
-              PopupMenuItem(value: _SortBy.rating, child: Text('Highest rated')),
-              PopupMenuItem(value: _SortBy.priceLow, child: Text('Price: low to high')),
-              PopupMenuItem(value: _SortBy.experience, child: Text('Most experienced')),
+              PopupMenuItem(
+                  value: _SortBy.rating, child: Text('Highest rated')),
+              PopupMenuItem(
+                  value: _SortBy.priceLow, child: Text('Price: low to high')),
+              PopupMenuItem(
+                  value: _SortBy.experience, child: Text('Most experienced')),
             ],
           ),
+          if (_directory != null)
+            IconButton(
+                tooltip: 'Refresh Coaches',
+                onPressed: state!.loading ? null : _directory!.refresh,
+                icon: const Icon(Icons.refresh)),
           IconButton(
             icon: const Icon(Icons.event_note_rounded),
             tooltip: 'My bookings',
-            onPressed: () => Navigator.push(context,
-                MaterialPageRoute(builder: (_) => const BookingScheduleScreen())),
+            onPressed: widget.live
+                ? widget.onOpenBookings
+                : () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                        builder: (_) => const BookingScheduleScreen())),
           ),
         ],
       ),
       body: Column(
         children: [
+          if (state?.loading == true) const LinearProgressIndicator(),
+          if (state?.message != null) Text(state!.message!),
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
             child: TextField(
@@ -130,6 +196,11 @@ class _BrowseCoachesScreenState extends State<BrowseCoachesScreen> {
               }).toList(),
             ),
           ),
+          if (state?.nextCursor != null)
+            TextButton(
+                onPressed: state!.loadingMore ? null : _directory!.loadMore,
+                child:
+                    Text(state.loadingMore ? 'Loading…' : 'Load more Coaches')),
           const SizedBox(height: 6),
           Expanded(
             child: visible.isEmpty
@@ -139,9 +210,13 @@ class _BrowseCoachesScreenState extends State<BrowseCoachesScreen> {
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          const Icon(Icons.search_off_rounded, size: 40, color: AppColors.hairline),
+                          const Icon(Icons.search_off_rounded,
+                              size: 40, color: AppColors.hairline),
                           const SizedBox(height: 14),
-                          Text('No coaches match that search.',
+                          Text(
+                              widget.live
+                                  ? 'No coaches available yet.'
+                                  : 'No coaches match that search.',
                               textAlign: TextAlign.center,
                               style: Theme.of(context).textTheme.bodyMedium),
                         ],
@@ -155,8 +230,21 @@ class _BrowseCoachesScreenState extends State<BrowseCoachesScreen> {
                               padding: const EdgeInsets.only(bottom: 10),
                               child: CoachCard(
                                 coach: c,
-                                onTap: () => Navigator.push(context,
-                                    MaterialPageRoute(builder: (_) => CoachProfileScreen(coach: c))),
+                                published: published[c.id],
+                                photo: published[c.id] == null
+                                    ? null
+                                    : PublishedCoachPhoto(
+                                        coach: published[c.id]!,
+                                        repository: widget.liveRepository!,
+                                        isCurrent: widget.isCurrent!,
+                                        size: 58),
+                                onTap: published[c.id] != null
+                                    ? () => widget.onOpenPublished?.call(c.id)
+                                    : () => Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                            builder: (_) =>
+                                                CoachProfileScreen(coach: c))),
                               ),
                             ))
                         .toList(),

@@ -15,6 +15,7 @@ void main() {
       () => CreateBookingHoldRequest(
         requestId: 'request-1',
         organizationId: const OrganizationId('org-1'),
+        memberId: const UserId('member-1'),
         branchId: const BranchId('branch-1'),
         coachId: const UserId('coach-1'),
         startAt: DateTime.utc(2030, 1, 1, 10),
@@ -28,6 +29,7 @@ void main() {
     final request = CreateBookingHoldRequest(
       requestId: 'request-1',
       organizationId: const OrganizationId('org-1'),
+      memberId: const UserId('member-1'),
       branchId: const BranchId('branch-1'),
       coachId: const UserId('coach-1'),
       startAt: DateTime.utc(2030, 1, 1, 10),
@@ -36,5 +38,34 @@ void main() {
 
     expect(request.startAt.isUtc, isTrue);
     expect(request.durationMinutes, 60);
+  });
+
+  test('booking request emits exact authenticated member wire contract', () {
+    final json = <String, dynamic>{
+      'schemaVersion': 1,
+      'requestId': 'request-1',
+      'organizationId': 'org-1',
+      'memberId': 'member-1',
+      'branchId': 'branch-1',
+      'coachId': 'coach-1',
+      'startAtMillis': 1893492000000,
+      'durationMinutes': 60,
+    };
+    final request = CreateBookingHoldRequest.fromJson(json);
+    expect(request.memberId, const UserId('member-1'));
+    expect(request.startAt, DateTime.utc(2030, 1, 1, 10));
+    expect(request.toJson(), json);
+    for (final invalid in [
+      {...json, 'extra': true},
+      {...json, 'memberId': 'bad/path'},
+      {...json, 'schemaVersion': 1.0},
+      {...json, 'startAtMillis': 1.0},
+      {...json, 'startAtMillis': 0},
+      {...json, 'startAtMillis': 8639999996400001},
+      {...json, 'startAtMillis': 1893492000001},
+    ]) {
+      expect(() => CreateBookingHoldRequest.fromJson(invalid),
+          throwsFormatException);
+    }
   });
 }

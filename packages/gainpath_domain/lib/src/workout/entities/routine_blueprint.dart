@@ -1,13 +1,13 @@
-/// One prescribed exercise within a `RoutineDay` — deliberately just a
-/// name/sets/reps triple rather than a reference to `Exercise`, since an
-/// admin-authored template routinely calls for movements (leg press,
-/// lat pulldown, curls) outside the small pose-tracked library the AI
-/// coach demo covers; the two are related but not the same catalogue.
+/// One prescribed catalog exercise within a `RoutineDay`. The blueprint
+/// persists [exerciseId], sets, and reps; [exerciseName] is joined from the
+/// catalog for display and is never copied into the Firebase blueprint.
 class RoutineExerciseRef {
+  final String exerciseId;
   final String exerciseName;
   final int sets;
   final int reps;
-  const RoutineExerciseRef(this.exerciseName, this.sets, this.reps);
+  const RoutineExerciseRef(this.exerciseName, this.sets, this.reps,
+      {this.exerciseId = ''});
 }
 
 class RoutineDay {
@@ -15,6 +15,10 @@ class RoutineDay {
   final List<RoutineExerciseRef> exercises;
   const RoutineDay(this.dayNumber, this.exercises);
 }
+
+/// Opaque, nonserialized original server snapshot for one editing session.
+/// Only its owning repository can validate it; it is never a Firestore field.
+abstract class RoutineEditBaseline {}
 
 /// AD-M11.4 — an admin-authored `RoutineBlueprint` a coach or member can
 /// be assigned. [assignedMembers] is illustrative — no assignment flow
@@ -24,6 +28,7 @@ class RoutineDay {
 /// simpler than mutating the nested day/exercise structure in place.
 class RoutineBlueprint {
   final String id;
+  final RoutineEditBaseline? editBaseline;
   String name;
   String level;
   final int assignedMembers;
@@ -35,6 +40,7 @@ class RoutineBlueprint {
   String imageUrl;
   RoutineBlueprint({
     required this.id,
+    this.editBaseline,
     required this.name,
     required this.level,
     required this.assignedMembers,

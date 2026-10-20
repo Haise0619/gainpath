@@ -27,15 +27,30 @@ dependencies:
   gainpath_identity:
     path: ../../packages/gainpath_identity
   firebase_core: ^4.15.0
+  firebase_app_check: 0.4.8
   firebase_auth: ^6.7.0
+  firebase_storage: ^13.6.0
+  file_selector: ^1.0.4
+  http: ^1.6.0
+  phone_numbers_parser: 9.0.28
+  country_picker: 2.0.28
   cloud_firestore: ^6.10.0
   cloud_functions: ^6.5.0
+  camera: 0.11.4
+  tflite_flutter: 0.12.1
+  crypto: 3.0.6
+  video_player: ^2.10.1
 
 dev_dependencies:
   flutter_lints: ^3.0.0
   bloc_test: ^10.0.0
   flutter_test:
     sdk: flutter
+  video_player_platform_interface: ^6.9.0
 
 flutter:
   uses-material-design: true
+  assets:
+    - assets/models/pose_detection.tflite
+    - assets/models/pose_landmark_full.tflite
+    - assets/models/LICENSE.mediapipe

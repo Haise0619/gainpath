@@ -3,7 +3,7 @@ import 'content_seed.dart';
 import 'package:gainpath_domain/content.dart';
 
 /// Session-scoped in-memory [ContentRepository] backed by [ContentSeed].
-class InMemoryContentRepository implements ContentRepository {
+class InMemoryContentRepository extends ContentRepository {
   InMemoryContentRepository({MockDataSession? session})
       : _seed = (session ?? MockDataSession()).content;
 

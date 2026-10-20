@@ -22,26 +22,40 @@ List<_WeekPoint> _weekSeries(List<int> values) =>
 
 class PostureAccuracySection extends StatelessWidget {
   final GlobalKey anchorKey;
-  const PostureAccuracySection({super.key, required this.anchorKey});
+  final bool live;
+  const PostureAccuracySection({super.key, required this.anchorKey, this.live = false});
 
   @override
   Widget build(BuildContext context) {
     final trend = _weekSeries(context.read<AnalyticsRepository>().postureWeeklyTrend);
+    final riskExercises = context.read<RecommendationRepository>().riskExercises;
 
     return ReportSection(
       anchorKey: anchorKey,
       title: 'Posture Accuracy Trend',
       subtitle: 'Which movements score worst',
-      live: false,
+      live: live,
+      tagLabel: live ? 'Unavailable' : null,
       exportFilename: 'posture_accuracy.csv',
-      exportRows: () => [
-        ['Week', 'Avg form score %'],
-        ...trend.map((p) => [p.label, p.value]),
-        [],
-        ['Exercise', 'Avg score', 'Category', 'Risk tier'],
-        ...context.read<RecommendationRepository>().riskExercises
-            .map((e) => [e[0], e[1], e[2], RiskPolicy(thresholdPct: context.read<RecommendationRepository>().postureRiskThreshold).tierFor(int.parse(e[1].replaceAll('%', '')))]),
-      ],
+      exportEnabled: !live,
+      exportRows: live
+          ? null
+          : () => [
+              ['Week', 'Avg form score %'],
+              ...trend.map((p) => [p.label, p.value]),
+              [],
+              ['Exercise', 'Avg score', 'Category', 'Risk tier'],
+              ...riskExercises.map((e) => [
+                    e[0],
+                    e[1],
+                    e[2],
+                    RiskPolicy(
+                            thresholdPct: context
+                                .read<RecommendationRepository>()
+                                .postureRiskThreshold)
+                        .tierFor(int.parse(e[1].replaceAll('%', '')))
+                  ]),
+            ],
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -54,32 +68,36 @@ class PostureAccuracySection extends StatelessWidget {
                 const SizedBox(height: 10),
                 SizedBox(
                   height: 170,
-                  child: SfCartesianChart(
-                    plotAreaBorderWidth: 0,
-                    primaryXAxis: const CategoryAxis(
-                      majorGridLines: MajorGridLines(width: 0),
-                      axisLine: AxisLine(width: 0),
-                      labelStyle: TextStyle(fontSize: 10, color: AppColors.inkSoft),
-                    ),
-                    primaryYAxis: const NumericAxis(
-                      minimum: 50,
-                      maximum: 100,
-                      majorGridLines: MajorGridLines(width: 0.6, color: AppColors.hairline),
-                      axisLine: AxisLine(width: 0),
-                      labelStyle: TextStyle(fontSize: 10, color: AppColors.inkSoft),
-                    ),
-                    trackballBehavior: TrackballBehavior(enable: true, activationMode: ActivationMode.singleTap),
-                    series: <CartesianSeries<_WeekPoint, String>>[
-                      SplineSeries<_WeekPoint, String>(
-                        dataSource: trend,
-                        xValueMapper: (d, _) => d.label,
-                        yValueMapper: (d, _) => d.value,
-                        color: AppColors.primary,
-                        width: 2.4,
-                        markerSettings: const MarkerSettings(isVisible: true, height: 6, width: 6),
-                      ),
-                    ],
-                  ),
+                  child: live || trend.isEmpty
+                      ? const NoFilteredData(
+                          message:
+                              'Posture accuracy trends are unavailable in this release.')
+                      : SfCartesianChart(
+                          plotAreaBorderWidth: 0,
+                          primaryXAxis: const CategoryAxis(
+                            majorGridLines: MajorGridLines(width: 0),
+                            axisLine: AxisLine(width: 0),
+                            labelStyle: TextStyle(fontSize: 10, color: AppColors.inkSoft),
+                          ),
+                          primaryYAxis: const NumericAxis(
+                            minimum: 50,
+                            maximum: 100,
+                            majorGridLines: MajorGridLines(width: 0.6, color: AppColors.hairline),
+                            axisLine: AxisLine(width: 0),
+                            labelStyle: TextStyle(fontSize: 10, color: AppColors.inkSoft),
+                          ),
+                          trackballBehavior: TrackballBehavior(enable: true, activationMode: ActivationMode.singleTap),
+                          series: <CartesianSeries<_WeekPoint, String>>[
+                            SplineSeries<_WeekPoint, String>(
+                              dataSource: trend,
+                              xValueMapper: (d, _) => d.label,
+                              yValueMapper: (d, _) => d.value,
+                              color: AppColors.primary,
+                              width: 2.4,
+                              markerSettings: const MarkerSettings(isVisible: true, height: 6, width: 6),
+                            ),
+                          ],
+                        ),
                 ),
               ],
             ),
@@ -87,22 +105,30 @@ class PostureAccuracySection extends StatelessWidget {
           const SizedBox(height: 14),
           const Eyebrow('Average form score by exercise'),
           Panel(
-            child: Column(
-              children: context.read<RecommendationRepository>().riskExercises.map((e) {
-                final pct = int.parse(e[1].replaceAll('%', ''));
-                final tier = RiskPolicy(thresholdPct: context.read<RecommendationRepository>().postureRiskThreshold).tierFor(pct);
-                return ProgressRow(
-                  e[0],
-                  pct / 100,
-                  e[1],
-                  color: tier == 'High'
-                      ? AppColors.danger
-                      : tier == 'Moderate'
-                          ? AppColors.warning
-                          : AppColors.success,
-                );
-              }).toList(),
-            ),
+            child: live || riskExercises.isEmpty
+                ? const NoFilteredData(
+                    message:
+                        'Movement form scores are unavailable in this release.')
+                : Column(
+                    children: riskExercises.map((e) {
+                      final pct = int.parse(e[1].replaceAll('%', ''));
+                      final tier = RiskPolicy(
+                              thresholdPct: context
+                                  .read<RecommendationRepository>()
+                                  .postureRiskThreshold)
+                          .tierFor(pct);
+                      return ProgressRow(
+                        e[0],
+                        pct / 100,
+                        e[1],
+                        color: tier == 'High'
+                            ? AppColors.danger
+                            : tier == 'Moderate'
+                                ? AppColors.warning
+                                : AppColors.success,
+                      );
+                    }).toList(),
+                  ),
           ),
         ],
       ),
@@ -112,74 +138,93 @@ class PostureAccuracySection extends StatelessWidget {
 
 class RetentionRiskSection extends StatelessWidget {
   final GlobalKey anchorKey;
-  const RetentionRiskSection({super.key, required this.anchorKey});
+  final bool live;
+  const RetentionRiskSection({super.key, required this.anchorKey, this.live = false});
 
   static const _sliceColors = [AppColors.success, AppColors.warning, AppColors.danger];
 
   @override
   Widget build(BuildContext context) {
+    final leads = context.read<RecommendationRepository>().atRiskLeads;
+    final riskMix = context.read<AnalyticsRepository>().retentionRiskMix;
+
     return ReportSection(
       anchorKey: anchorKey,
       title: 'Member Retention & Dropout Risk',
       subtitle: 'Members going quiet',
-      live: false,
+      live: live,
+      tagLabel: live ? 'Unavailable' : null,
       exportFilename: 'retention_risk.csv',
-      exportRows: () => [
-        ['Risk tier', 'Members'],
-        ...context.read<AnalyticsRepository>().retentionRiskMix.map((s) => [s.label, s.value.round()]),
-        [],
-        ['Member', 'Weakest movement', 'Score', 'Matched coach'],
-        ...context.read<RecommendationRepository>().atRiskLeads.map((l) => [l.memberName, l.weakCategory, l.score, l.suggestion]),
-      ],
+      exportEnabled: !live,
+      exportRows: live
+          ? null
+          : () => [
+              ['Risk tier', 'Members'],
+              ...riskMix.map((s) => [s.label, s.value.round()]),
+              [],
+              ['Member', 'Weakest movement', 'Score', 'Matched coach'],
+              ...leads.map((l) => [l.memberName, l.weakCategory, l.score, l.suggestion]),
+            ],
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Panel(
             child: SizedBox(
               height: 200,
-              child: SfCircularChart(
-                legend: const Legend(isVisible: true, position: LegendPosition.right, textStyle: TextStyle(fontSize: 12)),
-                series: <CircularSeries<ChartSlice, String>>[
-                  DoughnutSeries<ChartSlice, String>(
-                    dataSource: context.read<AnalyticsRepository>().retentionRiskMix,
-                    xValueMapper: (d, _) => d.label,
-                    yValueMapper: (d, _) => d.value,
-                    dataLabelMapper: (d, _) => '${d.value.round()}',
-                    innerRadius: '68%',
-                    cornerStyle: CornerStyle.bothCurve,
-                    dataLabelSettings: const DataLabelSettings(
-                      isVisible: true,
-                      labelPosition: ChartDataLabelPosition.outside,
-                      textStyle: TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+              child: live || riskMix.isEmpty
+                  ? const NoFilteredData(
+                      message:
+                          'Retention risk analysis is unavailable in this release.')
+                  : SfCircularChart(
+                      legend: const Legend(isVisible: true, position: LegendPosition.right, textStyle: TextStyle(fontSize: 12)),
+                      series: <CircularSeries<ChartSlice, String>>[
+                        DoughnutSeries<ChartSlice, String>(
+                          dataSource: riskMix,
+                          xValueMapper: (d, _) => d.label,
+                          yValueMapper: (d, _) => d.value,
+                          dataLabelMapper: (d, _) => '${d.value.round()}',
+                          innerRadius: '68%',
+                          cornerStyle: CornerStyle.bothCurve,
+                          dataLabelSettings: const DataLabelSettings(
+                            isVisible: true,
+                            labelPosition: ChartDataLabelPosition.outside,
+                            textStyle: TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+                          ),
+                          pointColorMapper: (d, i) => _sliceColors[i % _sliceColors.length],
+                        ),
+                      ],
                     ),
-                    pointColorMapper: (d, i) => _sliceColors[i % _sliceColors.length],
-                  ),
-                ],
-              ),
             ),
           ),
           const SizedBox(height: 14),
           const Eyebrow('Highest-priority members'),
-          ...context.read<RecommendationRepository>().atRiskLeads.map((l) => Padding(
-                padding: const EdgeInsets.only(bottom: 10),
-                child: Panel(
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(l.memberName, style: Theme.of(context).textTheme.titleMedium),
-                            Text('Weakest: ${l.weakCategory}  ·  matched to ${l.suggestion}',
-                                style: Theme.of(context).textTheme.bodyMedium),
-                          ],
+          if (live || leads.isEmpty)
+            const Panel(
+              child: NoFilteredData(
+                message: 'At-risk member leads are unavailable in this release.',
+              ),
+            )
+          else
+            ...leads.map((l) => Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: Panel(
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(l.memberName, style: Theme.of(context).textTheme.titleMedium),
+                              Text('Weakest: ${l.weakCategory}  ·  matched to ${l.suggestion}',
+                                  style: Theme.of(context).textTheme.bodyMedium),
+                            ],
+                          ),
                         ),
-                      ),
-                      statusPill('High'),
-                    ],
+                        statusPill('High'),
+                      ],
+                    ),
                   ),
-                ),
-              )),
+                )),
         ],
       ),
     );
@@ -188,7 +233,8 @@ class RetentionRiskSection extends StatelessWidget {
 
 class GamificationSection extends StatelessWidget {
   final GlobalKey anchorKey;
-  const GamificationSection({super.key, required this.anchorKey});
+  final bool live;
+  const GamificationSection({super.key, required this.anchorKey, this.live = false});
 
   static const _weeklyPoints = [12400, 13800, 12900, 15200, 16100, 15600, 17400];
   static const _badgesEarned = 418;
@@ -197,8 +243,9 @@ class GamificationSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final points = _weekSeries(_weeklyPoints);
-    final totalMembers = context.read<AnalyticsRepository>().streakDistribution.fold<double>(0, (sum, s) => sum + s.value);
-    final withStreak = context.read<AnalyticsRepository>().streakDistribution
+    final streakDistribution = context.read<AnalyticsRepository>().streakDistribution;
+    final totalMembers = streakDistribution.fold<double>(0, (sum, s) => sum + s.value);
+    final withStreak = streakDistribution
         .where((s) => s.label != '0-3 days')
         .fold<double>(0, (sum, s) => sum + s.value);
     final streakPct = totalMembers == 0 ? 0 : (withStreak / totalMembers * 100).round();
@@ -207,23 +254,27 @@ class GamificationSection extends StatelessWidget {
       anchorKey: anchorKey,
       title: 'Gamification Engagement',
       subtitle: 'Points, badges, and streaks',
-      live: false,
+      live: live,
+      tagLabel: live ? 'Unavailable' : null,
       exportFilename: 'gamification_engagement.csv',
-      exportRows: () => [
-        ['Week', 'Points earned'],
-        ...points.map((p) => [p.label, p.value]),
-        [],
-        ['Streak bucket', 'Members'],
-        ...context.read<AnalyticsRepository>().streakDistribution.map((s) => [s.label, s.value.round()]),
-      ],
+      exportEnabled: !live,
+      exportRows: live
+          ? null
+          : () => [
+              ['Week', 'Points earned'],
+              ...points.map((p) => [p.label, p.value]),
+              [],
+              ['Streak bucket', 'Members'],
+              ...streakDistribution.map((s) => [s.label, s.value.round()]),
+            ],
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Expanded(child: StatTile('$streakPct%', 'Members with a streak')),
+              Expanded(child: StatTile(live ? '—' : '$streakPct%', 'Members with a streak')),
               const SizedBox(width: 10),
-              Expanded(child: StatTile('$_badgesEarned', 'Badges earned')),
+              Expanded(child: StatTile(live ? '—' : '$_badgesEarned', 'Badges earned')),
             ],
           ),
           const SizedBox(height: 14),
@@ -231,30 +282,34 @@ class GamificationSection extends StatelessWidget {
           Panel(
             child: SizedBox(
               height: 160,
-              child: SfCartesianChart(
-                plotAreaBorderWidth: 0,
-                primaryXAxis: const CategoryAxis(
-                  majorGridLines: MajorGridLines(width: 0),
-                  axisLine: AxisLine(width: 0),
-                  labelStyle: TextStyle(fontSize: 10, color: AppColors.inkSoft),
-                ),
-                primaryYAxis: const NumericAxis(
-                  majorGridLines: MajorGridLines(width: 0.6, color: AppColors.hairline),
-                  axisLine: AxisLine(width: 0),
-                  labelStyle: TextStyle(fontSize: 10, color: AppColors.inkSoft),
-                ),
-                tooltipBehavior: TooltipBehavior(enable: true, header: '', format: 'point.x  ·  point.y pts'),
-                series: <CartesianSeries<_WeekPoint, String>>[
-                  ColumnSeries<_WeekPoint, String>(
-                    dataSource: points,
-                    xValueMapper: (d, _) => d.label,
-                    yValueMapper: (d, _) => d.value,
-                    color: AppColors.accent,
-                    width: 0.55,
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                ],
-              ),
+              child: live
+                  ? const NoFilteredData(
+                      message:
+                          'Weekly points analytics are unavailable in this release.')
+                  : SfCartesianChart(
+                      plotAreaBorderWidth: 0,
+                      primaryXAxis: const CategoryAxis(
+                        majorGridLines: MajorGridLines(width: 0),
+                        axisLine: AxisLine(width: 0),
+                        labelStyle: TextStyle(fontSize: 10, color: AppColors.inkSoft),
+                      ),
+                      primaryYAxis: const NumericAxis(
+                        majorGridLines: MajorGridLines(width: 0.6, color: AppColors.hairline),
+                        axisLine: AxisLine(width: 0),
+                        labelStyle: TextStyle(fontSize: 10, color: AppColors.inkSoft),
+                      ),
+                      tooltipBehavior: TooltipBehavior(enable: true, header: '', format: 'point.x  ·  point.y pts'),
+                      series: <CartesianSeries<_WeekPoint, String>>[
+                        ColumnSeries<_WeekPoint, String>(
+                          dataSource: points,
+                          xValueMapper: (d, _) => d.label,
+                          yValueMapper: (d, _) => d.value,
+                          color: AppColors.accent,
+                          width: 0.55,
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                      ],
+                    ),
             ),
           ),
           const SizedBox(height: 14),
@@ -262,20 +317,24 @@ class GamificationSection extends StatelessWidget {
           Panel(
             child: SizedBox(
               height: 190,
-              child: SfCircularChart(
-                legend: const Legend(isVisible: true, position: LegendPosition.right, textStyle: TextStyle(fontSize: 12)),
-                series: <CircularSeries<ChartSlice, String>>[
-                  DoughnutSeries<ChartSlice, String>(
-                    dataSource: context.read<AnalyticsRepository>().streakDistribution,
-                    xValueMapper: (d, _) => d.label,
-                    yValueMapper: (d, _) => d.value,
-                    innerRadius: '65%',
-                    cornerStyle: CornerStyle.bothCurve,
-                    pointColorMapper: (d, i) => _sliceColors[i % _sliceColors.length],
-                    dataLabelSettings: const DataLabelSettings(isVisible: false),
-                  ),
-                ],
-              ),
+              child: live || streakDistribution.isEmpty
+                  ? const NoFilteredData(
+                      message:
+                          'Streak distribution analytics are unavailable in this release.')
+                  : SfCircularChart(
+                      legend: const Legend(isVisible: true, position: LegendPosition.right, textStyle: TextStyle(fontSize: 12)),
+                      series: <CircularSeries<ChartSlice, String>>[
+                        DoughnutSeries<ChartSlice, String>(
+                          dataSource: streakDistribution,
+                          xValueMapper: (d, _) => d.label,
+                          yValueMapper: (d, _) => d.value,
+                          innerRadius: '65%',
+                          cornerStyle: CornerStyle.bothCurve,
+                          pointColorMapper: (d, i) => _sliceColors[i % _sliceColors.length],
+                          dataLabelSettings: const DataLabelSettings(isVisible: false),
+                        ),
+                      ],
+                    ),
             ),
           ),
         ],

@@ -1,21 +1,36 @@
 import 'dart:math' as math;
 
 import 'pose_frame.dart';
+import 'pose_image.dart';
 
 class PoseInput {
   const PoseInput({
     required this.timestampMicros,
     this.imageWidth = 1,
     this.imageHeight = 1,
+    this.image,
   });
 
   final int timestampMicros;
   final int imageWidth;
   final int imageHeight;
+  /// Mobile adapters supply a Dart-owned snapshot. Native/plugin types never
+  /// enter this port. Simulation callers may omit it as before.
+  final PoseCameraImage? image;
 }
 
 abstract interface class PoseDetector {
   Future<PoseFrame> detect(PoseInput input);
+}
+
+/// Optional lifecycle port for real adapters with per-stream/native resources.
+abstract interface class ManagedPoseDetector implements PoseDetector {
+  Future<void> reset();
+  Future<void> close();
+}
+
+abstract interface class PoseDetectorDiagnostics {
+  Map<String, Object> get diagnostics;
 }
 
 /// Deterministic detector used by development, tests and the UI prototype.

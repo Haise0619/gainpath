@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
-import 'role_select_screen.dart';
 
 class _Slide {
   final String image;
@@ -31,9 +30,7 @@ const _slides = [
   ),
 ];
 
-/// Pre-authentication onboarding carousel. Shown once, before the role
-/// select / login flow, so first-time visitors understand what GainPath
-/// does before being asked to commit to an account.
+/// Optional introduction opened from the shared login screen.
 class OnboardingScreen extends StatefulWidget {
   const OnboardingScreen({super.key});
 
@@ -60,7 +57,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   }
 
   void _done() {
-    Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const RoleSelectScreen()));
+    Navigator.pop(context);
   }
 
   @override

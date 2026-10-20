@@ -9,7 +9,8 @@ import 'package:gainpath_domain/membership.dart';
 /// pattern the rest of this console has already moved away from. The
 /// Dashboard's "refund requests pending" alert jumps straight here.
 class RefundsScreen extends StatefulWidget {
-  const RefundsScreen({super.key});
+  final bool live;
+  const RefundsScreen({super.key, this.live = false});
 
   @override
   State<RefundsScreen> createState() => RefundsScreenState();
@@ -22,6 +23,10 @@ class RefundsScreenState extends State<RefundsScreen> {
   String _query = '';
 
   Future<void> _approve(RefundClaim claim) async {
+    if (widget.live) {
+      showToast(context, 'Refund approval is unavailable in this release.');
+      return;
+    }
     setState(() => _processing = true);
     await Future.delayed(const Duration(milliseconds: 1200));
     if (!mounted) return;
@@ -57,6 +62,10 @@ class RefundsScreenState extends State<RefundsScreen> {
   }
 
   Future<void> _reject(RefundClaim claim) async {
+    if (widget.live) {
+      showToast(context, 'Refund rejection is unavailable in this release.');
+      return;
+    }
     final reason = await showDialog<String>(
       context: context,
       builder: (ctx) => _RejectClaimDialog(claim: claim),
@@ -93,14 +102,25 @@ class RefundsScreenState extends State<RefundsScreen> {
         children: [
           Text('Refund disputes', style: Theme.of(context).textTheme.headlineMedium),
           const SizedBox(height: 4),
-          Text('Pending refund claims, oldest first.', style: Theme.of(context).textTheme.bodyLarge),
+          Text(
+            widget.live
+                ? 'Dispute resolution is not connected to a live financial processor.'
+                : 'Pending refund claims, oldest first.',
+            style: Theme.of(context).textTheme.bodyLarge,
+          ),
           const SizedBox(height: 18),
           Row(
             children: [
-              Expanded(child: StatTile('${_claims.length}', 'Pending claims', valueColor: AppColors.danger)),
+              Expanded(
+                  child: StatTile(
+                      widget.live ? '—' : '${_claims.length}',
+                      'Pending claims',
+                      valueColor: widget.live ? AppColors.inkSoft : AppColors.danger)),
               const SizedBox(width: 10),
               Expanded(
-                  child: StatTile('RM ${totalDisputed.toStringAsFixed(0)}', 'Total amount disputed')),
+                  child: StatTile(
+                      widget.live ? '—' : 'RM ${totalDisputed.toStringAsFixed(0)}',
+                      'Total amount disputed')),
             ],
           ),
           const SizedBox(height: 18),
@@ -123,7 +143,9 @@ class RefundsScreenState extends State<RefundsScreen> {
                     const SizedBox(height: 14),
                     Text(
                         _claims.isEmpty
-                            ? 'No pending disputes. All caught up.'
+                            ? (widget.live
+                                ? 'Refund dispute processing is unavailable in this release.'
+                                : 'No pending disputes. All caught up.')
                             : 'No claims match that search.',
                         style: Theme.of(context).textTheme.bodyMedium),
                   ],

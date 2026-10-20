@@ -16,7 +16,7 @@ class _FakeChat implements ChatRepository {
   String buildProgressAuditReply() => 'Volume is up.';
 }
 
-class _FakeEquipment implements EquipmentRepository {
+class _FakeEquipment extends EquipmentRepository {
   @override
   List<GymEquipment> get gymEquipment => [
         GymEquipment(id: '1', name: 'Chest Press', category: 'Strength', description: '', howToUse: const [],

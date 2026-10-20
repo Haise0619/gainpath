@@ -6,8 +6,10 @@ class AuthSession {
     this.organizationId = 'demo-org',
     this.branchIds = const [],
     required this.email,
+    this.displayName,
     required this.role,
     this.needsVerification = false,
+    this.accountLifecycleState = 'active',
   });
 
   final String userId;
@@ -16,8 +18,12 @@ class AuthSession {
   SessionScope get scope =>
       SessionScope(userId: userId, organizationId: organizationId);
   final String email;
+  final String? displayName;
   final AppRole role;
   final bool needsVerification;
+
+  /// Pending deletion retains a narrow authenticated recovery session only.
+  final String accountLifecycleState;
 
   @override
   bool operator ==(Object other) =>
@@ -26,12 +32,21 @@ class AuthSession {
       other.organizationId == organizationId &&
       _sameStrings(other.branchIds, branchIds) &&
       other.email == email &&
+      other.displayName == displayName &&
       other.role == role &&
-      other.needsVerification == needsVerification;
+      other.needsVerification == needsVerification &&
+      other.accountLifecycleState == accountLifecycleState;
 
   @override
-  int get hashCode => Object.hash(userId, organizationId,
-      Object.hashAll(branchIds), email, role, needsVerification);
+  int get hashCode => Object.hash(
+      userId,
+      organizationId,
+      Object.hashAll(branchIds),
+      email,
+      displayName,
+      role,
+      needsVerification,
+      accountLifecycleState);
 }
 
 bool _sameStrings(List<String> left, List<String> right) {

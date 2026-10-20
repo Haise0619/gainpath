@@ -8,17 +8,51 @@ import 'package:gainpath_domain/workout.dart';
 import 'widgets/recalibration_overlay.dart';
 import 'widgets/skeleton_painter.dart';
 import 'workout_result_screen.dart';
+import '../../application/pose_preview_controller.dart';
+import 'pose_preview_view.dart';
+import '../../application/real_squat_session_controller.dart';
+import 'real_workout_view.dart';
+import '../../domain/workout_contracts.dart' show WorkoutSessionSummary;
 
 /// SD-M2.1 — AI-guided workout session. Provides a [WorkoutSessionBloc]
 /// scoped to this screen; the view below only drives the clock and the
 /// skeleton animation and renders whatever the Bloc says.
 class LiveWorkoutScreen extends StatelessWidget {
-  const LiveWorkoutScreen({super.key});
+  const LiveWorkoutScreen(
+      {super.key,
+      this.cameraSession,
+      this.cameraViewport,
+      this.realSession,
+      this.uploadNotice,
+      this.exerciseName = 'Bodyweight squat',
+      this.targetRepetitions = 10,
+      this.resultBuilder});
+  final Widget Function(WorkoutSessionSummary)? resultBuilder;
+  final RealSquatSessionController? realSession;
+  final String? uploadNotice;
+  final String exerciseName;
+  final int targetRepetitions;
+  final PosePreviewController? cameraSession;
+  final Widget? cameraViewport;
 
   @override
   Widget build(BuildContext context) {
+    if (realSession != null) {
+      return RealWorkoutView(
+          session: realSession!,
+          uploadNotice: uploadNotice,
+          viewport: cameraViewport!,
+          exerciseName: exerciseName,
+          targetRepetitions: targetRepetitions,
+          resultBuilder: resultBuilder);
+    }
+    if (cameraSession != null) {
+      return PosePreviewView(
+          controller: cameraSession!, viewport: cameraViewport!);
+    }
     return BlocProvider(
-      create: (context) => WorkoutSessionBloc(context.read<WorkoutRepository>()),
+      create: (context) =>
+          WorkoutSessionBloc(context.read<WorkoutRepository>()),
       child: const _LiveWorkoutView(),
     );
   }
@@ -31,19 +65,23 @@ class _LiveWorkoutView extends StatefulWidget {
   State<_LiveWorkoutView> createState() => _LiveWorkoutViewState();
 }
 
-class _LiveWorkoutViewState extends State<_LiveWorkoutView> with SingleTickerProviderStateMixin {
+class _LiveWorkoutViewState extends State<_LiveWorkoutView>
+    with SingleTickerProviderStateMixin {
   late final AnimationController _controller;
   Timer? _timer;
 
   @override
   void initState() {
     super.initState();
-    _controller = AnimationController(vsync: this, duration: const Duration(milliseconds: 2200))
+    _controller = AnimationController(
+        vsync: this, duration: const Duration(milliseconds: 2200))
       ..repeat(reverse: true);
     // In a real build the pose pipeline would dispatch ticks with measured
     // confidence; the prototype ticks once a second and lets the Bloc simulate.
     _timer = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (mounted) context.read<WorkoutSessionBloc>().add(const SessionTicked());
+      if (mounted) {
+        context.read<WorkoutSessionBloc>().add(const SessionTicked());
+      }
     });
   }
 
@@ -61,7 +99,8 @@ class _LiveWorkoutViewState extends State<_LiveWorkoutView> with SingleTickerPro
     final ok = await confirmSheet(
       context,
       title: 'End this session?',
-      message: 'Your ${bloc.state.reps} reps and form scores so far will be saved to your history.',
+      message:
+          'Your ${bloc.state.reps} reps and form scores so far will be saved to your history.',
       confirmLabel: 'End and save',
     );
     if (!mounted) return;
@@ -71,7 +110,8 @@ class _LiveWorkoutViewState extends State<_LiveWorkoutView> with SingleTickerPro
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(
-          builder: (_) => WorkoutResultScreen(reps: s.reps, accuracy: s.accuracy, seconds: s.elapsedSec),
+          builder: (_) => WorkoutResultScreen(
+              reps: s.reps, accuracy: s.accuracy, seconds: s.elapsedSec),
         ),
       );
     } else if (!wasPaused) {
@@ -94,11 +134,13 @@ class _LiveWorkoutViewState extends State<_LiveWorkoutView> with SingleTickerPro
                 Expanded(
                   child: Stack(
                     children: [
-                      Positioned.fill(child: Container(color: const Color(0xFF20302B))),
+                      Positioned.fill(
+                          child: Container(color: const Color(0xFF20302B))),
                       Positioned.fill(
                         child: AnimatedBuilder(
                           animation: _controller,
-                          builder: (_, __) => CustomPaint(painter: SkeletonPainter(_controller.value)),
+                          builder: (_, __) => CustomPaint(
+                              painter: SkeletonPainter(_controller.value)),
                         ),
                       ),
                       // Top bar
@@ -113,30 +155,41 @@ class _LiveWorkoutViewState extends State<_LiveWorkoutView> with SingleTickerPro
                               children: [
                                 _pill(Icons.timer_outlined, s.clock),
                                 const SizedBox(width: 8),
-                                _pill(Icons.check_circle_outline_rounded, '${s.accuracy}%'),
+                                _pill(Icons.check_circle_outline_rounded,
+                                    '${s.accuracy}%'),
                                 const Spacer(),
                                 IconButton(
-                                  style: IconButton.styleFrom(backgroundColor: Colors.black38),
+                                  style: IconButton.styleFrom(
+                                      backgroundColor: Colors.black38),
                                   tooltip: 'Simulate tracking loss (demo)',
-                                  icon: const Icon(Icons.sensors_off_rounded, color: Colors.white, size: 20),
-                                  onPressed: s.paused ? null : () => bloc.add(const TrackingIssueSimulated()),
+                                  icon: const Icon(Icons.sensors_off_rounded,
+                                      color: Colors.white, size: 20),
+                                  onPressed: s.paused
+                                      ? null
+                                      : () => bloc
+                                          .add(const TrackingIssueSimulated()),
                                 ),
                                 const SizedBox(width: 8),
                                 IconButton(
-                                  style: IconButton.styleFrom(backgroundColor: Colors.black38),
+                                  style: IconButton.styleFrom(
+                                      backgroundColor: Colors.black38),
                                   icon: Icon(
-                                    s.voiceOn ? Icons.volume_up_rounded : Icons.volume_off_rounded,
+                                    s.voiceOn
+                                        ? Icons.volume_up_rounded
+                                        : Icons.volume_off_rounded,
                                     color: Colors.white,
                                     size: 20,
                                   ),
-                                  onPressed: () => bloc.add(const VoiceToggled()),
+                                  onPressed: () =>
+                                      bloc.add(const VoiceToggled()),
                                 ),
                               ],
                             ),
                             const SizedBox(height: 8),
                             if (exercise != null)
                               Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 12, vertical: 7),
                                 decoration: BoxDecoration(
                                   color: Colors.black38,
                                   borderRadius: BorderRadius.circular(999),
@@ -144,7 +197,8 @@ class _LiveWorkoutViewState extends State<_LiveWorkoutView> with SingleTickerPro
                                 child: Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
-                                    const Icon(Icons.fitness_center_rounded, size: 14, color: AppColors.overlay),
+                                    const Icon(Icons.fitness_center_rounded,
+                                        size: 14, color: AppColors.overlay),
                                     const SizedBox(width: 6),
                                     Flexible(
                                       child: Text(
@@ -152,7 +206,9 @@ class _LiveWorkoutViewState extends State<_LiveWorkoutView> with SingleTickerPro
                                         '${exercise.name} · Set ${s.setNumber}/${exercise.sets}',
                                         overflow: TextOverflow.ellipsis,
                                         style: const TextStyle(
-                                            color: Colors.white, fontSize: 12, fontWeight: FontWeight.w700),
+                                            color: Colors.white,
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w700),
                                       ),
                                     ),
                                   ],
@@ -193,27 +249,36 @@ class _LiveWorkoutViewState extends State<_LiveWorkoutView> with SingleTickerPro
                           duration: const Duration(milliseconds: 250),
                           child: Container(
                             key: ValueKey(s.cue),
-                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 16, vertical: 13),
                             decoration: BoxDecoration(
                               color: Colors.black.withValues(alpha: 0.55),
                               borderRadius: BorderRadius.circular(14),
                             ),
                             child: Row(
                               children: [
-                                const Icon(Icons.graphic_eq_rounded, size: 18, color: AppColors.overlay),
+                                const Icon(Icons.graphic_eq_rounded,
+                                    size: 18, color: AppColors.overlay),
                                 const SizedBox(width: 12),
                                 Expanded(
                                   child: Text(s.cue,
                                       style: const TextStyle(
-                                          color: Colors.white, fontSize: 15, fontWeight: FontWeight.w600)),
+                                          color: Colors.white,
+                                          fontSize: 15,
+                                          fontWeight: FontWeight.w600)),
                                 ),
                               ],
                             ),
                           ),
                         ),
                       ),
-                      if (s.recalibrating) Positioned.fill(child: RecalibrationOverlay(confidence: s.confidence)),
-                      if (s.paused) Positioned.fill(child: _PauseMask(reason: s.pauseReason)),
+                      if (s.recalibrating)
+                        Positioned.fill(
+                            child:
+                                RecalibrationOverlay(confidence: s.confidence)),
+                      if (s.paused)
+                        Positioned.fill(
+                            child: _PauseMask(reason: s.pauseReason)),
                     ],
                   ),
                 ),
@@ -229,19 +294,26 @@ class _LiveWorkoutViewState extends State<_LiveWorkoutView> with SingleTickerPro
                             foregroundColor: Colors.white,
                             side: const BorderSide(color: Colors.white24),
                           ),
-                          onPressed: () =>
-                              bloc.add(s.paused ? const SessionResumed() : const SessionPaused()),
-                          icon: Icon(s.paused ? Icons.play_arrow_rounded : Icons.pause_rounded, size: 20),
+                          onPressed: () => bloc.add(s.paused
+                              ? const SessionResumed()
+                              : const SessionPaused()),
+                          icon: Icon(
+                              s.paused
+                                  ? Icons.play_arrow_rounded
+                                  : Icons.pause_rounded,
+                              size: 20),
                           label: FittedBox(
                             fit: BoxFit.scaleDown,
-                            child: Text(s.paused ? 'Resume' : 'Pause', maxLines: 1),
+                            child: Text(s.paused ? 'Resume' : 'Pause',
+                                maxLines: 1),
                           ),
                         ),
                       ),
                       const SizedBox(width: 10),
                       Expanded(
                         child: FilledButton(
-                          style: FilledButton.styleFrom(backgroundColor: AppColors.danger),
+                          style: FilledButton.styleFrom(
+                              backgroundColor: AppColors.danger),
                           onPressed: _end,
                           child: const FittedBox(
                             fit: BoxFit.scaleDown,
@@ -271,7 +343,11 @@ class _LiveWorkoutViewState extends State<_LiveWorkoutView> with SingleTickerPro
           children: [
             Icon(icon, size: 15, color: Colors.white70),
             const SizedBox(width: 6),
-            Text(text, style: const TextStyle(color: Colors.white, fontSize: 13.5, fontWeight: FontWeight.w700)),
+            Text(text,
+                style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.w700)),
           ],
         ),
       );
@@ -291,18 +367,23 @@ class _PauseMask extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             if (reason != null) ...[
-              const Icon(Icons.sensors_off_rounded, color: AppColors.warning, size: 30),
+              const Icon(Icons.sensors_off_rounded,
+                  color: AppColors.warning, size: 30),
               const SizedBox(height: 10),
             ],
             Text(reason != null ? 'Session paused' : 'Paused',
-                style: const TextStyle(color: Colors.white, fontSize: 26, fontWeight: FontWeight.w700)),
+                style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 26,
+                    fontWeight: FontWeight.w700)),
             if (reason != null) ...[
               const SizedBox(height: 8),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 40),
                 child: Text(reason!,
                     textAlign: TextAlign.center,
-                    style: const TextStyle(color: Colors.white70, fontSize: 14, height: 1.4)),
+                    style: const TextStyle(
+                        color: Colors.white70, fontSize: 14, height: 1.4)),
               ),
             ],
           ],

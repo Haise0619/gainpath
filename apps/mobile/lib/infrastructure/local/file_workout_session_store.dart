@@ -72,6 +72,9 @@ class FileWorkoutSessionStore implements WorkoutSessionStore {
     if (records.any((record) => record.summary.scope != scope)) {
       throw StateError('Stored workout account mismatch.');
     }
+    for (final record in records) {
+      record.validateForLocalStorage();
+    }
   }
 
   @override

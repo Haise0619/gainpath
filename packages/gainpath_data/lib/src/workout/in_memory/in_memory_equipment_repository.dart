@@ -3,7 +3,7 @@ import 'workout_seed.dart';
 import 'package:gainpath_domain/workout.dart';
 
 /// Session-scoped in-memory [EquipmentRepository] backed by [WorkoutSeed].
-class InMemoryEquipmentRepository implements EquipmentRepository {
+class InMemoryEquipmentRepository extends EquipmentRepository {
   InMemoryEquipmentRepository({MockDataSession? session})
       : _seed = (session ?? MockDataSession()).workout;
 

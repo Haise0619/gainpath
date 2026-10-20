@@ -18,6 +18,39 @@ service cloud.firestore {
         && get(/databases/$(database)/documents/orgs/$(orgId)/members/$(request.auth.uid)).data.role == 'admin';
     }
 
+    function contentAuthor(orgId) {
+      return activeMember(orgId)
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.organizationId == orgId
+        && get(/databases/$(database)/documents/orgs/$(orgId)/members/$(request.auth.uid)).data.organizationId == orgId
+        && get(/databases/$(database)/documents/orgs/$(orgId)/members/$(request.auth.uid)).data.role in ['admin', 'staff'];
+    }
+
+    function validExerciseCatalogEntry() {
+      let d = request.resource.data;
+      return d.keys().hasAll(['schemaVersion', 'exerciseName', 'muscleCategory', 'videoUrl', 'isActive', 'createdAt', 'updatedAt'])
+        && d.keys().hasOnly(['schemaVersion', 'exerciseName', 'muscleCategory', 'videoUrl', 'isActive', 'createdAt', 'updatedAt'])
+        && d.schemaVersion == 1
+        && d.exerciseName is string && d.exerciseName.size() > 0 && d.exerciseName.size() <= 100
+        && d.muscleCategory is string && d.muscleCategory.size() > 0 && d.muscleCategory.size() <= 80
+        && d.videoUrl is string && d.videoUrl.size() <= 2048
+        && d.isActive is bool
+        && d.createdAt is timestamp
+        && d.updatedAt == request.time;
+    }
+
+    function validRoutineBlueprint() {
+      let d = request.resource.data;
+      return d.keys().hasAll(['schemaVersion', 'name', 'sessionDurationMin', 'days', 'createdAt', 'updatedAt', 'updatedBy'])
+        && d.keys().hasOnly(['schemaVersion', 'name', 'sessionDurationMin', 'days', 'level', 'goal', 'tags', 'equipmentNeeded', 'imageUrl', 'createdAt', 'updatedAt', 'updatedBy'])
+        && d.schemaVersion == 1
+        && d.name is string && d.name.size() > 0 && d.name.size() <= 120
+        && d.sessionDurationMin is int && d.sessionDurationMin >= 5 && d.sessionDurationMin <= 240
+        && d.days is list && d.days.size() > 0 && d.days.size() <= 14
+        && d.updatedBy == request.auth.uid
+        && d.createdAt is timestamp
+        && d.updatedAt == request.time;
+    }
+
     function staffBranch(orgId, branchId) {
       return adminMember(orgId) || (activeMember(orgId)
         && get(/databases/$(database)/documents/orgs/$(orgId)/members/$(request.auth.uid)).data.role == 'staff'
@@ -30,28 +63,501 @@ service cloud.firestore {
         && branchIds.hasAny(get(/databases/$(database)/documents/orgs/$(orgId)/members/$(request.auth.uid)).data.branchIds));
     }
 
+    // FR-1.5 / UC-1.6: Member name changes keep existing identity copies consistent.
+    function validMemberDisplayNamePair(orgId, uid) {
+      let beforeUser = get(/databases/$(database)/documents/users/$(uid)).data;
+      let beforeMember = get(/databases/$(database)/documents/orgs/$(orgId)/members/$(uid)).data;
+      let afterUser = getAfter(/databases/$(database)/documents/users/$(uid)).data;
+      let afterMember = getAfter(/databases/$(database)/documents/orgs/$(orgId)/members/$(uid)).data;
+      return request.auth != null && request.auth.uid == uid
+        && request.auth.token.email_verified == true
+        && beforeUser.organizationId == orgId && beforeMember.organizationId == orgId
+        && beforeMember.role == 'member' && beforeMember.status == 'active'
+        && afterUser.diff(beforeUser).affectedKeys().hasOnly(['displayName', 'updatedAtMillis'])
+        && afterMember.diff(beforeMember).affectedKeys().hasOnly(['displayName', 'updatedAtMillis'])
+        && afterUser.displayName is string && afterUser.displayName.size() > 0 && afterUser.displayName.size() <= 120
+        && afterUser.displayName.matches('[\\s\\S]*[^\\s][\\s\\S]*')
+        && afterUser.displayName.matches('[^\\x00-\\x1f\\x7f]+')
+        && afterUser.displayName == afterMember.displayName
+        && afterUser.updatedAtMillis is int && afterUser.updatedAtMillis > 0
+        && afterUser.updatedAtMillis == afterMember.updatedAtMillis;
+    }
+    function memberDisplayNameUserGuard(uid) {
+      let orgId = resource.data.organizationId;
+      return !request.resource.data.diff(resource.data).affectedKeys().hasAny(['displayName'])
+        || get(/databases/$(database)/documents/orgs/$(orgId)/members/$(uid)).data.role != 'member'
+        || validMemberDisplayNamePair(orgId, uid);
+    }
+    function memberDisplayNameMembershipGuard(orgId, uid) {
+      return !request.resource.data.diff(resource.data).affectedKeys().hasAny(['displayName'])
+        || resource.data.role != 'member'
+        || validMemberDisplayNamePair(orgId, uid);
+    }
+
+    // Module 1 lifecycle metadata is server-owned. Legacy accounts have no barrier.
+    function memberSessionCurrent(uid) {
+      let user = get(/databases/$(database)/documents/users/$(uid)).data;
+      return !('accountLifecycle' in user) || (user.accountLifecycle is map
+        && user.accountLifecycle.schemaVersion == 1
+        && user.accountLifecycle.state in ['active', 'pendingDeletion']
+        && user.accountLifecycle.revision is int && user.accountLifecycle.revision >= 1
+        && user.accountLifecycle.requestedAtMillis is int && user.accountLifecycle.requestedAtMillis > 0
+        && user.accountLifecycle.sessionNotBeforeSeconds is int
+        && user.accountLifecycle.sessionNotBeforeSeconds == int(user.accountLifecycle.requestedAtMillis / 1000) + 1
+        && request.auth.token.auth_time is int
+        && request.auth.token.auth_time >= user.accountLifecycle.sessionNotBeforeSeconds);
+    }
+    function memberAccountActive(uid) {
+      let user = get(/databases/$(database)/documents/users/$(uid)).data;
+      return memberSessionCurrent(uid)
+        && (!('accountLifecycle' in user) || (user.accountLifecycle.state == 'active'
+          && user.accountLifecycle.revocationPending == false
+          && user.accountLifecycle.sessionRevokedAtMillis is int
+          && user.accountLifecycle.sessionRevokedAtMillis >= user.accountLifecycle.requestedAtMillis
+          && user.accountLifecycle.reactivatedAtMillis is int
+          && user.accountLifecycle.reactivatedAtMillis >= user.accountLifecycle.sessionRevokedAtMillis));
+    }
+    function module1Owner(orgId, uid) {
+      let user = get(/databases/$(database)/documents/users/$(uid)).data;
+      let member = get(/databases/$(database)/documents/orgs/$(orgId)/members/$(uid)).data;
+      return own(uid) && request.auth.token.email_verified == true
+        && user.organizationId == orgId && member.organizationId == orgId
+        && member.role == 'member' && member.status == 'active'
+        && memberAccountActive(uid);
+    }
+    // A fresh pending-deletion login may inspect its identity assignment only.
+    function ownIdentityReadable(uid) {
+      return own(uid) && (!exists(/databases/$(database)/documents/users/$(uid)) || memberSessionCurrent(uid));
+    }
+    function ownIdentityWritable(uid) {
+      let user = get(/databases/$(database)/documents/users/$(uid)).data;
+      let member = get(/databases/$(database)/documents/orgs/$(user.organizationId)/members/$(uid)).data;
+      return own(uid) && (member.role != 'member'
+        || (member.status == 'active' && member.organizationId == user.organizationId
+          && memberAccountActive(uid)));
+    }
+
     function own(uid) {
       return signedIn() && request.auth.uid == uid;
     }
 
+    // FR-1.7: private Member photo reference in the existing identity document.
+    // FR-1.5 / UC-1.6: optional own Member contact details only.
     match /users/{uid} {
-      allow read: if own(uid);
+      function memberContactOwner() {
+        let orgId = resource.data.organizationId;
+        let member = get(/databases/$(database)/documents/orgs/$(orgId)/members/$(uid)).data;
+        return request.auth != null && request.auth.uid == uid
+          && request.auth.token.email_verified == true
+          && member.organizationId == orgId && member.role == 'member' && member.status == 'active'
+          && memberAccountActive(uid);
+      }
+      allow update: if request.resource.data.diff(resource.data).affectedKeys().hasOnly(['contactDetails', 'updatedAtMillis'])
+        && memberContactOwner()
+        && request.resource.data.contactDetails is string
+        && request.resource.data.contactDetails.size() <= 200
+        && request.resource.data.contactDetails.matches('[^\\x00-\\x1f\\x7f]*')
+        && request.resource.data.updatedAtMillis is int && request.resource.data.updatedAtMillis > 0;
+    }
+
+    match /users/{uid} {
+      function memberPhotoOwner() {
+        let orgId = resource.data.organizationId;
+        let member = get(/databases/$(database)/documents/orgs/$(orgId)/members/$(uid)).data;
+        return request.auth != null && request.auth.uid == uid
+          && request.auth.token.email_verified == true
+          && member.organizationId == orgId && member.role == 'member' && member.status == 'active'
+          && memberAccountActive(uid);
+      }
+      function validMemberPhotoReference() {
+        let orgId = resource.data.organizationId;
+        let photo = request.resource.data.memberPhotoPath;
+        let parts = photo.split('/');
+        return photo is string && (photo == '' || (parts.size() == 5
+          && parts[0] == 'orgs' && parts[1] == orgId && parts[2] == 'memberProfilePhotos'
+          && parts[3] == uid && parts[4].matches('[a-f0-9]{32}')));
+      }
+      allow update: if request.resource.data.diff(resource.data).affectedKeys().hasOnly(['memberPhotoPath', 'updatedAtMillis'])
+        && memberPhotoOwner()
+        && validMemberPhotoReference()
+        && request.resource.data.updatedAtMillis is int && request.resource.data.updatedAtMillis > 0;
+    }
+
+    match /users/{uid} {
+      allow read: if ownIdentityReadable(uid);
       allow create: if false;
-      allow update: if own(uid)
+      allow update: if ownIdentityWritable(uid)
         && request.resource.data.diff(resource.data).affectedKeys()
-          .hasOnly(['displayName', 'avatarPath', 'updatedAtMillis']);
+          .hasOnly(['displayName', 'avatarPath', 'updatedAtMillis'])
+        && memberDisplayNameUserGuard(uid);
       allow delete: if false;
+    }
+
+    // Private Admin notification choices only; this does not authorize delivery.
+    match /users/{uid} {
+      function adminNotificationOwner() {
+        let orgId = resource.data.organizationId;
+        let member = get(/databases/$(database)/documents/orgs/$(orgId)/members/$(uid)).data;
+        return request.auth != null && request.auth.uid == uid
+          && request.auth.token.email_verified == true
+          && member.organizationId == orgId && member.role == 'admin' && member.status == 'active';
+      }
+      allow update: if adminNotificationOwner()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['notificationPreferences', 'updatedAtMillis'])
+        && request.resource.data.notificationPreferences is map
+        && request.resource.data.notificationPreferences.keys().hasAll(['pushAlerts', 'emailAlerts', 'weeklyDigest'])
+        && request.resource.data.notificationPreferences.keys().hasOnly(['pushAlerts', 'emailAlerts', 'weeklyDigest'])
+        && request.resource.data.notificationPreferences.pushAlerts is bool
+        && request.resource.data.notificationPreferences.emailAlerts is bool
+        && request.resource.data.notificationPreferences.weeklyDigest is bool
+        && request.resource.data.updatedAtMillis is int && request.resource.data.updatedAtMillis > 0;
+    }
+
+    // Facility display-name metadata only; operational organization fields stay immutable.
+    match /orgs/{orgId} {
+      function facilityNameAuthor() {
+        return request.auth != null && request.auth.token.email_verified == true
+          && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.organizationId == orgId
+          && get(/databases/$(database)/documents/orgs/$(orgId)/members/$(request.auth.uid)).data.organizationId == orgId
+          && get(/databases/$(database)/documents/orgs/$(orgId)/members/$(request.auth.uid)).data.status == 'active'
+          && get(/databases/$(database)/documents/orgs/$(orgId)/members/$(request.auth.uid)).data.role == 'admin'
+          && resource.data.organizationId == orgId && resource.data.status == 'active';
+      }
+      allow get: if facilityNameAuthor();
+      allow update: if facilityNameAuthor()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName', 'updatedAtMillis'])
+        && request.resource.data.displayName is string
+        && request.resource.data.displayName.size() > 0 && request.resource.data.displayName.size() <= 120
+        && request.resource.data.displayName.matches('[\\s\\S]*[^\\s][\\s\\S]*')
+        && request.resource.data.displayName.matches('[^\\x00-\\x1f\\x7f]+')
+        && request.resource.data.updatedAtMillis is int && request.resource.data.updatedAtMillis > 0;
+      allow list, create, delete: if false;
     }
 
     match /orgs/{orgId}/members/{uid} {
       // A signed-in account may read only its own assignment before email
       // verification so the client can show the verification gate.
-      allow read: if own(uid)
+      allow read: if ownIdentityReadable(uid)
         || (activeMember(orgId) && staffProfile(orgId, resource.data.branchIds));
-      allow update: if activeMember(orgId) && own(uid)
+      allow update: if activeMember(orgId) && ownIdentityWritable(uid)
         && request.resource.data.diff(resource.data).affectedKeys()
-          .hasOnly(['displayName', 'goals', 'updatedAtMillis']);
+          .hasOnly(['displayName', 'goals', 'updatedAtMillis'])
+          && memberDisplayNameMembershipGuard(orgId, uid);
       allow create, delete: if false;
+    }
+
+    match /orgs/{orgId}/profiles/{uid} {
+      function validProfile() {
+        let d = request.resource.data;
+        return d.keys().hasAll(['schemaVersion', 'gender', 'heightCm', 'weightKg',
+            'experience', 'activity', 'goals', 'updatedAt'])
+          && d.keys().hasOnly(['schemaVersion', 'gender', 'age', 'ageBracket', 'heightCm', 'weightKg',
+            'experience', 'activity', 'goals', 'updatedAt', 'createdAt', 'profileCompletedAt'])
+          && ((d.schemaVersion == 1 && 'age' in d && !('ageBracket' in d)
+              && d.age is int && d.age >= 13 && d.age <= 80)
+            || (d.schemaVersion == 2 && !('age' in d)
+              && d.ageBracket in ['teens', 'youngAdult', 'adult', 'midAdult', 'matureAdult', 'olderAdult', 'senior']))
+          && d.gender in ['female', 'male', 'unspecified']
+          && d.heightCm is int && d.heightCm >= 130 && d.heightCm <= 210
+          && d.weightKg is int && d.weightKg >= 35 && d.weightKg <= 160
+          && d.experience in ['beginner', 'intermediate', 'advanced']
+          && d.activity in ['sedentary', 'lightlyActive', 'moderatelyActive', 'veryActive', 'extremelyActive']
+          && d.goals is list && d.goals.size() > 0 && d.goals.size() <= 6
+          && d.goals.toSet().size() == d.goals.size()
+          && d.goals.hasOnly(['loseWeight', 'buildMuscle', 'improveEndurance',
+            'increaseFlexibility', 'generalFitness', 'reduceStress'])
+          && d.updatedAt == request.time;
+      }
+      allow get: if module1Owner(orgId, uid);
+      allow create: if module1Owner(orgId, uid) && validProfile()
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.profileCompletedAt == request.time;
+      allow update: if module1Owner(orgId, uid) && validProfile()
+        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['createdAt', 'profileCompletedAt'])
+        && (resource.data.schemaVersion == 1 || request.resource.data.schemaVersion == 2);
+      allow list, delete: if false;
+    }
+
+    // UC-1.11 numeric targets: immutable units/periods and atomic revision snapshots.
+    match /orgs/{orgId}/profiles/{uid}/goals/{goalId} {
+      function validGoal() {
+        let d = request.resource.data;
+        return goalId.matches('[A-Za-z0-9_-]{1,128}')
+          && d.keys().hasAll(['schemaVersion', 'category', 'targetValue', 'unit', 'evaluationPeriod',
+            'status', 'revision', 'createdAt', 'updatedAt'])
+          && d.keys().hasOnly(['schemaVersion', 'category', 'targetValue', 'unit', 'evaluationPeriod',
+            'status', 'revision', 'createdAt', 'updatedAt'])
+          && d.schemaVersion == 1 && d.revision is int && d.revision >= 1
+          && d.status in ['active', 'archived'] && d.createdAt is timestamp
+          && d.updatedAt == request.time
+          && ((d.category == 'bodyWeight' && d.unit == 'kg' && d.evaluationPeriod == 'latestMeasurement'
+              && d.targetValue is number && d.targetValue >= 35 && d.targetValue <= 160
+              && d.targetValue * 10 == int(d.targetValue * 10))
+            || (d.category == 'repetitions' && d.unit == 'repetitions' && d.evaluationPeriod == 'perSession'
+              && d.targetValue is int && d.targetValue >= 1 && d.targetValue <= 1000)
+            || (d.category == 'trainingFrequency' && d.unit == 'sessions' && d.evaluationPeriod == 'calendarWeek'
+              && d.targetValue is int && d.targetValue >= 1 && d.targetValue <= 14));
+      }
+      function revisionPair() {
+        let revision = string(request.resource.data.revision);
+        return !exists(/databases/$(database)/documents/orgs/$(orgId)/profiles/$(uid)/goals/$(goalId)/revisions/$(revision))
+          && getAfter(/databases/$(database)/documents/orgs/$(orgId)/profiles/$(uid)/goals/$(goalId)/revisions/$(revision)).data == request.resource.data;
+      }
+      allow get: if module1Owner(orgId, uid);
+      allow list: if module1Owner(orgId, uid) && request.query.limit <= 21;
+      allow create: if module1Owner(orgId, uid) && validGoal() && revisionPair()
+        && request.resource.data.status == 'active' && request.resource.data.revision == 1
+        && request.resource.data.createdAt == request.time;
+      allow update: if module1Owner(orgId, uid) && validGoal() && revisionPair()
+        && resource.data.status == 'active' && request.resource.data.revision == resource.data.revision + 1
+        && request.resource.data.createdAt == resource.data.createdAt
+        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['schemaVersion', 'category', 'unit', 'evaluationPeriod'])
+        && (request.resource.data.targetValue != resource.data.targetValue || request.resource.data.status != resource.data.status);
+      allow delete: if false;
+      match /revisions/{revision} {
+        allow get: if module1Owner(orgId, uid);
+        allow list: if module1Owner(orgId, uid) && request.query.limit <= 21;
+        allow create: if module1Owner(orgId, uid)
+          && revision == string(request.resource.data.revision)
+          && getAfter(/databases/$(database)/documents/orgs/$(orgId)/profiles/$(uid)/goals/$(goalId)).data == request.resource.data
+          && (!exists(/databases/$(database)/documents/orgs/$(orgId)/profiles/$(uid)/goals/$(goalId))
+            || get(/databases/$(database)/documents/orgs/$(orgId)/profiles/$(uid)/goals/$(goalId)).data.revision + 1 == request.resource.data.revision);
+        allow update, delete: if false;
+      }
+    }
+
+    match /orgs/{orgId}/memberLifecycleCommands/{uid}/{document=**} {
+      allow read, write: if false;
+    }
+
+    match /orgs/{orgId}/preferences/{uid} {
+      function preferenceOwner() {
+        return module1Owner(orgId, uid);
+      }
+      function validPreferences() {
+        let d = request.resource.data;
+        return d.keys().hasAll(['schemaVersion', 'pushNotifications', 'emailUpdates',
+            'voiceCoaching', 'updatedAt'])
+          && d.keys().hasOnly(['schemaVersion', 'pushNotifications', 'emailUpdates',
+            'voiceCoaching', 'updatedAt'])
+          && d.schemaVersion == 1
+          && d.pushNotifications is bool
+          && d.emailUpdates is bool
+          && d.voiceCoaching is bool
+          && d.updatedAt == request.time;
+      }
+      allow get: if preferenceOwner();
+      allow create, update: if preferenceOwner() && validPreferences();
+      allow list, delete: if false;
+    }
+
+    match /orgs/{orgId}/gymEquipment/{equipmentId} {
+      function currentEquipmentOrganization() {
+        return activeMember(orgId)
+          && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.organizationId == orgId
+          && get(/databases/$(database)/documents/orgs/$(orgId)/members/$(request.auth.uid)).data.organizationId == orgId;
+      }
+      function validStep(s) {
+        return s is string && s.size() > 0 && s.size() <= 400;
+      }
+      function validSteps(s) {
+        return s is list && s.size() <= 10
+          && (s.size() < 1 || validStep(s[0])) && (s.size() < 2 || validStep(s[1]))
+          && (s.size() < 3 || validStep(s[2])) && (s.size() < 4 || validStep(s[3]))
+          && (s.size() < 5 || validStep(s[4])) && (s.size() < 6 || validStep(s[5]))
+          && (s.size() < 7 || validStep(s[6])) && (s.size() < 8 || validStep(s[7]))
+          && (s.size() < 9 || validStep(s[8])) && (s.size() < 10 || validStep(s[9]));
+      }
+      function validEquipment() {
+        let d = request.resource.data;
+        return d.keys().hasAll(['schemaVersion', 'name', 'category', 'muscleGroup', 'description',
+            'imageUrl', 'howToUse', 'safetyTips', 'isActive', 'revision', 'createdAt', 'updatedAt', 'createdBy', 'updatedBy'])
+          && d.keys().hasOnly(['schemaVersion', 'name', 'category', 'muscleGroup', 'description',
+            'imageUrl', 'howToUse', 'safetyTips', 'isActive', 'revision', 'createdAt', 'updatedAt', 'createdBy', 'updatedBy'])
+          && d.schemaVersion == 1 && d.revision is int && d.revision > 0 && d.isActive is bool
+          && d.name is string && d.name.size() > 0 && d.name.size() <= 100
+          && d.category is string && d.category.size() > 0 && d.category.size() <= 80
+          && d.muscleGroup is string && d.muscleGroup.size() > 0 && d.muscleGroup.size() <= 80
+          && d.description is string && d.description.size() > 0 && d.description.size() <= 2000
+          && d.imageUrl is string && d.imageUrl.size() <= 2048
+          && (d.imageUrl == '' || d.imageUrl.matches('https://[^\\s]+'))
+          && validSteps(d.howToUse) && validSteps(d.safetyTips)
+          && d.createdAt is timestamp && d.createdBy is string
+          && d.updatedAt == request.time && d.updatedBy == request.auth.uid;
+      }
+      allow read: if currentEquipmentOrganization() && (resource.data.isActive == true || contentAuthor(orgId));
+      allow create: if currentEquipmentOrganization() && contentAuthor(orgId) && validEquipment()
+        && request.resource.data.revision == 1 && request.resource.data.createdAt == request.time
+        && request.resource.data.createdBy == request.auth.uid;
+      allow update: if currentEquipmentOrganization() && contentAuthor(orgId) && validEquipment()
+        && request.resource.data.revision == resource.data.revision + 1
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.createdBy == resource.data.createdBy;
+      allow delete: if false;
+    }
+
+    match /orgs/{orgId}/announcements/{announcementId} {
+      function currentOrganization() {
+        return activeMember(orgId)
+          && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.organizationId == orgId
+          && get(/databases/$(database)/documents/orgs/$(orgId)/members/$(request.auth.uid)).data.organizationId == orgId;
+      }
+      function validAnnouncement() {
+        let d = request.resource.data;
+        return d.keys().hasAll(['schemaVersion', 'title', 'body', 'status', 'revision',
+            'validFrom', 'validTo', 'createdAt', 'updatedAt', 'createdBy', 'updatedBy', 'publishedAt'])
+          && d.keys().hasOnly(['schemaVersion', 'title', 'body', 'status', 'revision',
+            'validFrom', 'validTo', 'createdAt', 'updatedAt', 'createdBy', 'updatedBy', 'publishedAt'])
+          && d.schemaVersion == 1
+          && d.title is string && d.title.size() > 0 && d.title.size() <= 120
+          && d.body is string && d.body.size() > 0 && d.body.size() <= 4000
+          && d.status in ['draft', 'published', 'inactive']
+          && d.revision is int && d.revision > 0
+          && d.validFrom is timestamp && d.validTo is timestamp && d.validTo > d.validFrom
+          && d.createdAt is timestamp && d.createdBy is string
+          && d.updatedAt == request.time && d.updatedBy == request.auth.uid
+          && (d.publishedAt == null || d.publishedAt is timestamp)
+          && (d.status != 'published' || d.publishedAt is timestamp);
+      }
+      allow read: if currentOrganization() && (resource.data.status == 'published' || contentAuthor(orgId));
+      allow create: if currentOrganization() && contentAuthor(orgId) && validAnnouncement()
+        && request.resource.data.revision == 1
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.createdBy == request.auth.uid
+        && (request.resource.data.publishedAt == null || request.resource.data.publishedAt == request.time);
+      allow update: if currentOrganization() && contentAuthor(orgId) && validAnnouncement()
+        && request.resource.data.revision == resource.data.revision + 1
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.createdBy == resource.data.createdBy
+        && (request.resource.data.publishedAt == resource.data.publishedAt || request.resource.data.publishedAt == request.time);
+      allow delete: if false;
+    }
+
+    // Authoring only: no member acknowledgement or chatbot access is granted.
+    match /orgs/{orgId}/chatbotDisclaimer/config {
+      function disclaimerAuthor() {
+        return request.auth != null
+          && request.auth.token.email_verified == true
+          && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.organizationId == orgId
+          && get(/databases/$(database)/documents/orgs/$(orgId)/members/$(request.auth.uid)).data.organizationId == orgId
+          && get(/databases/$(database)/documents/orgs/$(orgId)/members/$(request.auth.uid)).data.status == 'active'
+          && get(/databases/$(database)/documents/orgs/$(orgId)/members/$(request.auth.uid)).data.role in ['admin', 'staff'];
+      }
+      function validDisclaimer() {
+        let d = request.resource.data;
+        return d.keys().hasAll(['schemaVersion', 'text', 'isActive', 'revision', 'createdAt', 'createdBy', 'updatedAt', 'updatedBy'])
+          && d.keys().hasOnly(['schemaVersion', 'text', 'isActive', 'revision', 'createdAt', 'createdBy', 'updatedAt', 'updatedBy'])
+          && d.schemaVersion == 1
+          && d.text is string && d.text.size() > 0 && d.text.size() <= 4000
+          && d.text.matches('[\\s\\S]*[^\\s][\\s\\S]*')
+          && d.isActive is bool && d.revision is int && d.revision > 0
+          && d.createdAt is timestamp && d.createdBy is string
+          && d.updatedAt == request.time && d.updatedBy == request.auth.uid;
+      }
+      function pairedVersion() {
+        let revision = string(request.resource.data.revision);
+        return !exists(/databases/$(database)/documents/orgs/$(orgId)/chatbotDisclaimer/config/versions/$(revision))
+          && getAfter(/databases/$(database)/documents/orgs/$(orgId)/chatbotDisclaimer/config/versions/$(revision)).data == request.resource.data;
+      }
+      allow read: if disclaimerAuthor();
+      allow create: if disclaimerAuthor() && validDisclaimer() && pairedVersion()
+        && request.resource.data.revision == 1 && request.resource.data.isActive == false
+        && request.resource.data.createdAt == request.time && request.resource.data.createdBy == request.auth.uid;
+      allow update: if disclaimerAuthor() && validDisclaimer() && pairedVersion()
+        && request.resource.data.revision == resource.data.revision + 1
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.createdBy == resource.data.createdBy;
+      allow delete: if false;
+      match /versions/{version} {
+        allow read: if disclaimerAuthor();
+        allow create: if disclaimerAuthor()
+          && version == string(request.resource.data.revision)
+          && getAfter(/databases/$(database)/documents/orgs/$(orgId)/chatbotDisclaimer/config).data == request.resource.data
+          && (!exists(/databases/$(database)/documents/orgs/$(orgId)/chatbotDisclaimer/config)
+            || get(/databases/$(database)/documents/orgs/$(orgId)/chatbotDisclaimer/config).data.revision + 1 == request.resource.data.revision);
+        allow update, delete: if false;
+      }
+    }
+
+    // Reward Catalog metadata drafts only; no publication or redeemable inventory.
+    match /orgs/{orgId}/rewardCatalog/{rewardId} {
+      function rewardMetadataAuthor() {
+        return request.auth != null && request.auth.token.email_verified == true
+          && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.organizationId == orgId
+          && get(/databases/$(database)/documents/orgs/$(orgId)/members/$(request.auth.uid)).data.organizationId == orgId
+          && get(/databases/$(database)/documents/orgs/$(orgId)/members/$(request.auth.uid)).data.status == 'active'
+          && get(/databases/$(database)/documents/orgs/$(orgId)/members/$(request.auth.uid)).data.role == 'admin';
+      }
+      function validRewardMetadata() {
+        let d = request.resource.data;
+        return d.keys().hasAll(['schemaVersion', 'title', 'description', 'category', 'imageUrl', 'status', 'revision', 'createdAt', 'createdBy', 'updatedAt', 'updatedBy'])
+          && d.keys().hasOnly(['schemaVersion', 'title', 'description', 'category', 'imageUrl', 'status', 'revision', 'createdAt', 'createdBy', 'updatedAt', 'updatedBy'])
+          && d.schemaVersion == 1 && d.title is string && d.title.size() > 0 && d.title.size() <= 120
+          && d.title.matches('[\\s\\S]*[^\\s][\\s\\S]*')
+          && d.description is string && d.description.size() <= 2000
+          && d.category in ['Merchandise', 'Food & Drink', 'Apparel', 'Access Pass']
+          && d.imageUrl is string && d.imageUrl.size() <= 2048
+          && (d.imageUrl == '' || d.imageUrl.matches('https://[A-Za-z0-9.-]+(:[0-9]+)?([/?#][^\\s]*)?'))
+          && d.status in ['draft', 'archived'] && d.revision is int && d.revision > 0
+          && d.createdAt is timestamp && d.createdBy is string
+          && d.updatedAt == request.time && d.updatedBy == request.auth.uid;
+      }
+      allow read: if rewardMetadataAuthor();
+      allow create: if rewardMetadataAuthor() && validRewardMetadata()
+        && rewardId.matches('[A-Za-z0-9_-]{1,128}') && request.resource.data.status == 'draft'
+        && request.resource.data.revision == 1 && request.resource.data.createdAt == request.time
+        && request.resource.data.createdBy == request.auth.uid;
+      allow update: if rewardMetadataAuthor() && validRewardMetadata()
+        && request.resource.data.revision == resource.data.revision + 1
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.createdBy == resource.data.createdBy;
+      allow delete: if false;
+    }
+
+    // Compliance draft authoring only: no publication or consent changes.
+    match /orgs/{orgId}/complianceDocuments/config {
+      function complianceAuthor() {
+        return request.auth != null
+          && request.auth.token.email_verified == true
+          && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.organizationId == orgId
+          && get(/databases/$(database)/documents/orgs/$(orgId)/members/$(request.auth.uid)).data.organizationId == orgId
+          && get(/databases/$(database)/documents/orgs/$(orgId)/members/$(request.auth.uid)).data.status == 'active'
+          && get(/databases/$(database)/documents/orgs/$(orgId)/members/$(request.auth.uid)).data.role == 'admin';
+      }
+      function validCompliance() {
+        let d = request.resource.data;
+        return d.keys().hasAll(['schemaVersion', 'text', 'status', 'revision', 'createdAt', 'createdBy', 'updatedAt', 'updatedBy'])
+          && d.keys().hasOnly(['schemaVersion', 'text', 'status', 'revision', 'createdAt', 'createdBy', 'updatedAt', 'updatedBy'])
+          && d.schemaVersion == 1
+          && d.text is string && d.text.size() > 0 && d.text.size() <= 12000
+          && d.text.matches('[\\s\\S]*[^\\s][\\s\\S]*')
+          && d.status in ['draft', 'archived'] && d.revision is int && d.revision > 0
+          && d.createdAt is timestamp && d.createdBy is string
+          && d.updatedAt == request.time && d.updatedBy == request.auth.uid;
+      }
+      function pairedVersion() {
+        let revision = string(request.resource.data.revision);
+        return !exists(/databases/$(database)/documents/orgs/$(orgId)/complianceDocuments/config/versions/$(revision))
+          && getAfter(/databases/$(database)/documents/orgs/$(orgId)/complianceDocuments/config/versions/$(revision)).data == request.resource.data;
+      }
+      allow read: if complianceAuthor();
+      allow create: if complianceAuthor() && validCompliance() && pairedVersion()
+        && request.resource.data.revision == 1 && request.resource.data.status == 'draft'
+        && request.resource.data.createdAt == request.time && request.resource.data.createdBy == request.auth.uid;
+      allow update: if complianceAuthor() && validCompliance() && pairedVersion()
+        && request.resource.data.revision == resource.data.revision + 1
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.createdBy == resource.data.createdBy;
+      allow delete: if false;
+      match /versions/{version} {
+        allow read: if complianceAuthor();
+        allow create: if complianceAuthor()
+          && version == string(request.resource.data.revision)
+          && getAfter(/databases/$(database)/documents/orgs/$(orgId)/complianceDocuments/config).data == request.resource.data
+          && (!exists(/databases/$(database)/documents/orgs/$(orgId)/complianceDocuments/config)
+            || get(/databases/$(database)/documents/orgs/$(orgId)/complianceDocuments/config).data.revision + 1 == request.resource.data.revision);
+        allow update, delete: if false;
+      }
     }
 
     match /orgs/{orgId}/content/{documentId} {
@@ -59,19 +565,78 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    match /orgs/{orgId}/exerciseVideos/{exerciseId} {
+      allow read: if contentAuthor(orgId);
+      allow create: if contentAuthor(orgId) && validExerciseCatalogEntry()
+        && request.resource.data.createdAt == request.time;
+      allow update: if contentAuthor(orgId) && validExerciseCatalogEntry()
+        && request.resource.data.createdAt == resource.data.createdAt;
+      allow delete: if false;
+    }
+
+    match /orgs/{orgId}/routineBlueprints/{templateId} {
+      allow read: if contentAuthor(orgId);
+      allow create: if contentAuthor(orgId) && validRoutineBlueprint()
+        && request.resource.data.createdAt == request.time;
+      allow update: if contentAuthor(orgId) && validRoutineBlueprint()
+        && request.resource.data.createdAt == resource.data.createdAt;
+      allow delete: if false;
+    }
+
+    // B1 authority follows the current account assignment, not a stale active
+    // membership left behind in another organization. Other collections retain
+    // their existing contracts.
+    function coachDirectoryMember(orgId) {
+      return activeMember(orgId)
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.organizationId == orgId
+        && get(/databases/$(database)/documents/orgs/$(orgId)/members/$(request.auth.uid)).data.organizationId == orgId;
+    }
+    function coachOwner(orgId, coachId) {
+      return own(coachId)
+        && get(/databases/$(database)/documents/orgs/$(orgId)/members/$(request.auth.uid)).data.role == 'coach';
+    }
+    match /orgs/{orgId}/coachProfiles/{coachId} {
+      allow get: if coachDirectoryMember(orgId) && (coachOwner(orgId, coachId) || adminMember(orgId));
+      allow list: if coachDirectoryMember(orgId) && adminMember(orgId);
+      allow write: if false;
+    }
     match /orgs/{orgId}/coaches/{coachId} {
-      allow read: if activeMember(orgId) && (resource.data.status == 'published' || own(coachId) || adminMember(orgId));
+      allow read: if coachDirectoryMember(orgId) && (resource.data.status == 'published' || coachOwner(orgId, coachId) || adminMember(orgId));
       allow write: if false;
     }
 
     match /orgs/{orgId}/bookings/{bookingId} {
-      allow read: if activeMember(orgId)
-        && (resource.data.memberId == request.auth.uid
-          || resource.data.coachId == request.auth.uid
-          || staffBranch(orgId, resource.data.branchId));
+      // Booking scope is deliberately local: other product Rules retain their
+      // existing behavior. Stale memberships and coincidental owner UIDs do
+      // not grant access after a current account assignment changes.
+      function currentBookingReader() {
+        return activeMember(orgId)
+          && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.organizationId == orgId
+          && get(/databases/$(database)/documents/orgs/$(orgId)/members/$(request.auth.uid)).data.organizationId == orgId
+          && get(/databases/$(database)/documents/orgs/$(orgId)).data.status == 'active';
+      }
+      function currentBookingBranch() {
+        let member = get(/databases/$(database)/documents/orgs/$(orgId)/members/$(request.auth.uid)).data;
+        return member.branchIds is list && member.branchIds.size() <= 8
+          && resource.data.branchId in member.branchIds
+          && get(/databases/$(database)/documents/orgs/$(orgId)/branches/$(resource.data.branchId)).data.status == 'active';
+      }
+      function bookingRole() {
+        return get(/databases/$(database)/documents/orgs/$(orgId)/members/$(request.auth.uid)).data.role;
+      }
+      allow read: if currentBookingReader()
+        && ((bookingRole() == 'member' && resource.data.memberId == request.auth.uid)
+          || (bookingRole() == 'coach' && resource.data.coachId == request.auth.uid && currentBookingBranch())
+          || bookingRole() == 'admin'
+          || (bookingRole() == 'staff' && currentBookingBranch()));
       allow write: if false;
     }
 
+    match /orgs/{orgId}/workoutConsents/{uid} {
+      allow get: if own(uid) && activeMember(orgId) &&
+        get(/databases/$(database)/documents/orgs/$(orgId)/members/$(request.auth.uid)).data.role == 'member';
+      allow list, write: if false;
+    }
     match /orgs/{orgId}/workoutSessions/{sessionId} {
       allow read: if activeMember(orgId)
         && (resource.data.memberId == request.auth.uid || adminMember(orgId));
@@ -92,5 +657,25 @@ service cloud.firestore {
     match /system/{document=**} {
       allow read, write: if false;
     }
+    // Module 8: immutable private credentials, audit history and server-owned summary.
+    function module8CredentialReader(orgId, coachId) {
+      return coachDirectoryMember(orgId)
+        && (coachOwner(orgId, coachId) || adminMember(orgId));
+    }
+    match /orgs/{orgId}/coachProfiles/{coachId}/certifications/{certificationId} {
+      allow get: if module8CredentialReader(orgId, coachId);
+      allow list: if module8CredentialReader(orgId, coachId) && request.query.limit != null && request.query.limit <= 100;
+      allow write: if false;
+      match /history/{revisionId} {
+        allow get: if module8CredentialReader(orgId, coachId);
+        allow list: if module8CredentialReader(orgId, coachId) && request.query.limit != null && request.query.limit <= 20;
+        allow write: if false;
+      }
+    }
+    match /orgs/{orgId}/coachProfiles/{coachId}/certificationState/{stateId} {
+      allow get: if stateId == 'current' && module8CredentialReader(orgId, coachId);
+      allow list, write: if false;
+    }
+
   }
 }
