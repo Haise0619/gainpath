@@ -24,6 +24,8 @@ class CoachRosterScreen extends StatefulWidget {
       this.statusLabels = const {},
       this.details = const {},
       this.onMessage,
+      this.onNotes,
+      this.showAllDates = false,
       this.onOpenMessages,
       this.todayLocalDate,
       this.header});
@@ -32,6 +34,8 @@ class CoachRosterScreen extends StatefulWidget {
   final Map<String, Widget> details;
   final Widget? header;
   final void Function(Booking)? onMessage;
+  final void Function(Booking)? onNotes;
+  final bool showAllDates;
   final VoidCallback? onOpenMessages;
   final String? todayLocalDate;
 
@@ -122,7 +126,8 @@ class _CoachRosterScreenState extends State<CoachRosterScreen>
         ? DateTime.now()
         : DateTime.parse(widget.todayLocalDate!);
     final weekEnd = now.add(const Duration(days: 7));
-    final filtering = _statusFilter != 'All';
+    final filtering =
+        _statusFilter != 'All' || (widget.showAllDates && _pickedDate == null);
 
     final candidates = roster.where((b) => '${b.memberName} ${b.id}'
         .toLowerCase()
@@ -130,10 +135,11 @@ class _CoachRosterScreenState extends State<CoachRosterScreen>
     final visible = filtering
         ? (candidates
             .where((b) =>
+                _statusFilter == 'All' ||
                 (widget.statusLabels[b.id] ?? b.status.label)
-                    .replaceAll('_', ' ')
-                    .toLowerCase() ==
-                _statusFilter.toLowerCase())
+                        .replaceAll('_', ' ')
+                        .toLowerCase() ==
+                    _statusFilter.toLowerCase())
             .toList()
           ..sort((a, b) => a.start.compareTo(b.start)))
         : (candidates.where((b) => _isSameDay(b.start, selectedDay)).toList()
@@ -471,6 +477,9 @@ class _CoachRosterScreenState extends State<CoachRosterScreen>
                           onMessage: widget.onMessage == null
                               ? null
                               : () => widget.onMessage!(visible[i]),
+                          onNotes: widget.onNotes == null
+                              ? null
+                              : () => widget.onNotes!(visible[i]),
                           isLast: i == visible.length - 1,
                           showConnector: !filtering,
                         ),
@@ -498,6 +507,7 @@ class _TimelineRow extends StatelessWidget {
   final String? statusLabel;
   final Widget? details;
   final VoidCallback? onMessage;
+  final VoidCallback? onNotes;
   final bool isLast;
   final bool showConnector;
   const _TimelineRow(
@@ -506,6 +516,7 @@ class _TimelineRow extends StatelessWidget {
       this.statusLabel,
       this.details,
       this.onMessage,
+      this.onNotes,
       required this.isLast,
       required this.showConnector});
 
@@ -549,7 +560,8 @@ class _TimelineRow extends StatelessWidget {
                   live: live,
                   statusLabel: statusLabel,
                   details: details,
-                  onMessage: onMessage),
+                  onMessage: onMessage,
+                  onNotes: onNotes),
             ),
           ),
         ],
@@ -774,12 +786,14 @@ class _SessionCard extends StatelessWidget {
   final String? statusLabel;
   final Widget? details;
   final VoidCallback? onMessage;
+  final VoidCallback? onNotes;
   const _SessionCard(
       {required this.booking,
       this.live = false,
       this.statusLabel,
       this.details,
-      this.onMessage});
+      this.onMessage,
+      this.onNotes});
 
   @override
   Widget build(BuildContext context) {
@@ -975,14 +989,25 @@ class _SessionCard extends StatelessWidget {
                             ),
                           ),
                           const SizedBox(width: 8),
-                          if (isPast)
+                          if (isPast ||
+                              (live &&
+                                  booking.status == BookingStatus.completed))
                             Expanded(
                               child: _ActionButton(
                                 icon: Icons.edit_note_rounded,
-                                label: 'Write notes',
+                                label: live &&
+                                        booking.status ==
+                                            BookingStatus.completed
+                                    ? 'View notes'
+                                    : 'Write notes',
                                 filled: true,
                                 onPressed: live
-                                    ? null
+                                    ? (booking.status ==
+                                                BookingStatus.confirmed ||
+                                            booking.status ==
+                                                BookingStatus.completed
+                                        ? onNotes
+                                        : null)
                                     : () => Navigator.push(
                                         context,
                                         MaterialPageRoute(

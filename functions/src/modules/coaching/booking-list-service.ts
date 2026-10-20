@@ -63,7 +63,7 @@ export async function getBookingListService(store: DocumentStore, auth: { uid: s
   };
   const before = await store.transact(scope), today = localDate(serverNowMillis, before.policy.timeZone), horizon = plusDate(today, 30);
   const firstLocalDate = input.firstLocalDate === undefined ? today : input.firstLocalDate as string;
-  if (firstLocalDate < today || firstLocalDate > horizon) throw new InputValidationError('Choose today through 30 days ahead.');
+  if (firstLocalDate < plusDate(today, -90) || firstLocalDate > horizon) throw new InputValidationError('Choose the past 90 days through 30 days ahead.');
   const throughLocalDate = [plusDate(firstLocalDate, dayCount - 1), horizon].sort()[0];
   const firstStartAtMillis = dateGrid(firstLocalDate, before.policy.timeZone).slots[0], lastGrid = dateGrid(throughLocalDate, before.policy.timeZone);
   const throughStartAtMillis = lastGrid.slots.at(-1)! + SLOT;

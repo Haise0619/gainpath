@@ -187,6 +187,20 @@ class BookingListCubit extends Cubit<BookingListState> {
     return generation == _generation;
   }
 
+  String? _firstLocalDate, _todayLocalDate;
+  bool recentHistory = false;
+  Future<void> showRecentHistory(bool recent) async {
+    if (state.busy || _todayLocalDate == null) return;
+    recentHistory = recent;
+    _firstLocalDate = recent
+        ? DateTime.parse('${_todayLocalDate}T00:00:00Z')
+            .subtract(const Duration(days: 30))
+            .toIso8601String()
+            .substring(0, 10)
+        : null;
+    await _load(false);
+  }
+
   Future<void> refresh() => _load(false);
   Future<void> loadMore() => _load(true);
   Future<void> _load(bool more) async {
@@ -204,9 +218,11 @@ class BookingListCubit extends Cubit<BookingListState> {
     try {
       final page = await repository.load(
           coachId: coachId,
-          firstLocalDate: more ? previous.page!.firstLocalDate : null,
+          firstLocalDate:
+              more ? previous.page!.firstLocalDate : _firstLocalDate,
           cursor: more ? previous.page!.nextCursor : null);
       if (_current(generation)) {
+        if (!more && !recentHistory) _todayLocalDate = page.firstLocalDate;
         emit(BookingListState(
             page: page,
             records: List.unmodifiable(

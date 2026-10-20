@@ -23,6 +23,11 @@ beforeEach(() => {
   store.documents.set('orgs/org-1/members/admin-1', { organizationId: 'org-1', role: 'admin', status: 'active', branchIds: [] });
   store.documents.set('orgs/org-1/bookings/booking-1', structuredClone(record));
 });
+it('reads recent participant history while keeping a bounded history horizon', async () => {
+  const later = now + 20 * 86400000;
+  expect((await read('coach-1', { firstLocalDate: '2026-10-01' }, reader, later)).records).toHaveLength(1);
+  await expect(read('coach-1', { firstLocalDate: '2026-01-01' }, reader, later)).rejects.toThrow();
+});
 it('exposes only the related client display name, never their private contact fields', async () => {
   Object.assign(store.documents.get('orgs/org-1/members/member-1')!, { displayName: 'Fixture Client', email: 'private@example.invalid' });
   const result = await read('coach-1', { includeParticipantNames: true });
@@ -91,7 +96,7 @@ it('paginates 20+1 with document ID tie ordering and a stable last-row cursor', 
   const page = await read(); expect(page.records).toHaveLength(20); expect(page.nextCursor).toEqual({ startAtMillis: start, bookingId: 'b-19' });
   const next = await read('member-1', { cursor: page.nextCursor }); expect(next.records.map(r => r.bookingId)).toEqual(['b-20', 'b-21']); expect(next.nextCursor).toBeUndefined();
 });
-it.each([{ memberId: 'other' }, { role: 'admin' }, { coachId: 'other' }, { schemaVersion: 2 }, { dayCount: 32 }, { firstLocalDate: '2026-09-30' }, { firstLocalDate: '2026-11-01' }, { cursor: { startAtMillis: start + 1, bookingId: 'x' } }, { cursor: { startAtMillis: now - 86400000, bookingId: 'x' } }, { cursor: { startAtMillis: start, bookingId: 'x', extra: true } }])('rejects invalid request/cursor before querying: %j', async change => {
+it.each([{ memberId: 'other' }, { role: 'admin' }, { coachId: 'other' }, { schemaVersion: 2 }, { dayCount: 32 }, { firstLocalDate: '2026-06-01' }, { firstLocalDate: '2026-11-01' }, { cursor: { startAtMillis: start + 1, bookingId: 'x' } }, { cursor: { startAtMillis: now - 86400000, bookingId: 'x' } }, { cursor: { startAtMillis: start, bookingId: 'x', extra: true } }])('rejects invalid request/cursor before querying: %j', async change => {
   await expect(read('member-1', change)).rejects.toThrow(); expect(queries).toEqual([]);
 });
 it.each([{ status: 'expired' }, { status: ['confirmed'] }, { schemaVersion: 2 }, { memberId: 'other' }, { organizationId: 'other' }, { startAtMillis: start + 1 }, { endAtMillis: start + 1 }, { holdExpiresAtMillis: start + 1 }, { localDate: '2026-10-03' }, { timeZone: 'broken' }, { privateNotes: 'secret' }, { bookingId: 'different' }, { policyVersion: '' }])('fails closed on untrusted rows: %j', async change => {

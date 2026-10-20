@@ -3,7 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:gainpath_domain/gainpath_domain.dart';
 import 'package:gainpath_domain/coaching.dart'
-    show BookingCommunicationRepository;
+    show Booking, BookingCommunicationRepository, ConsultationNotesRepository;
+import '../coach/consultation_notes_screen.dart';
 import '../../application/live_booking_cubit.dart';
 import '../member/booking_schedule_screen.dart';
 import '../coach/roster_screen.dart';
@@ -20,6 +21,7 @@ class LiveBookingListView extends StatefulWidget {
       this.cancellation,
       this.onPayment,
       this.communication,
+      this.notes,
       this.loadCoachName,
       this.coachId,
       this.title = 'My bookings'});
@@ -28,6 +30,7 @@ class LiveBookingListView extends StatefulWidget {
   final bool Function() isCurrent;
   final BookingCancellationRepository? cancellation;
   final BookingCommunicationRepository? communication;
+  final ConsultationNotesRepository? notes;
   final Future<String?> Function(String coachId)? loadCoachName;
   final String? coachId;
   final String title;
@@ -90,6 +93,18 @@ class _LiveBookingListViewState extends State<LiveBookingListView> {
     }
   }
 
+  Future<void> _notes(Booking booking) async {
+    if (widget.notes == null || !widget.isCurrent()) return;
+    await Navigator.push(
+        context,
+        MaterialPageRoute<void>(
+            builder: (_) => ConsultationNotesScreen(
+                booking: booking,
+                repository: widget.notes,
+                isCurrent: widget.isCurrent)));
+    if (mounted && widget.isCurrent()) await controller.refresh();
+  }
+
   @override
   Widget build(BuildContext context) =>
       BlocBuilder<BookingCancellationCubit, BookingCancellationState>(
@@ -119,7 +134,16 @@ class _LiveBookingListViewState extends State<LiveBookingListView> {
                     '${state.page!.firstLocalDate} – ${state.page!.throughLocalDate} · ${state.page!.timeZone}'),
               const Text(
                   'Updates every 30 seconds. Counts and filters use loaded bookings; load more for the full date range.'),
-              Row(children: [
+              Wrap(children: [
+                TextButton.icon(
+                    onPressed: state.busy || action.busy || state.page == null
+                        ? null
+                        : () => controller
+                            .showRecentHistory(!controller.recentHistory),
+                    icon: const Icon(Icons.history),
+                    label: Text(controller.recentHistory
+                        ? 'Upcoming bookings'
+                        : 'Past 30 days')),
                 TextButton.icon(
                     onPressed:
                         action.busy || state.busy ? null : controller.refresh,
@@ -165,11 +189,19 @@ class _LiveBookingListViewState extends State<LiveBookingListView> {
                           'Time', '${record.startLabel} – ${record.endLabel}'),
                       DetailRow('Timezone', record.timeZone),
                       DetailRow('Hold expiry', record.expiryLabel),
+                      if (widget.coachId == null &&
+                          widget.notes != null &&
+                          record.rawStatus == 'completed')
+                        TextButton.icon(
+                            onPressed: () =>
+                                _notes(persistedBookingPresentation(record)),
+                            icon: const Icon(Icons.sticky_note_2_outlined),
+                            label: const Text('View consultation notes')),
                       if (widget.coachId != null) ...[
                         const Text(
                             'Form history: — · Confirmed booking and authorized cloud measurements required.'),
                         const Text(
-                            'Cancellation and consultation completion require an eligible confirmed session. Pending holds cannot be marked delivered.'),
+                            'Notes can be published after a confirmed session ends. Pending holds cannot be marked delivered. Confirmed cancellation remains unavailable.'),
                       ],
                       if (record.timeZone != state.page!.timeZone)
                         const Text(
@@ -178,6 +210,8 @@ class _LiveBookingListViewState extends State<LiveBookingListView> {
             };
             if (widget.coachId != null) {
               return CoachRosterScreen(
+                  showAllDates: controller.recentHistory,
+                  onNotes: widget.notes == null ? null : _notes,
                   onOpenMessages: widget.communication == null
                       ? null
                       : () => Navigator.push(

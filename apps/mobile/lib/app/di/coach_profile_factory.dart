@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import '../../infrastructure/firebase/firebase_consultation_notes_repository.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:gainpath_domain/gainpath_domain.dart'
     show AuthSession, SessionScope;
@@ -103,11 +104,12 @@ Widget buildFirebaseCoachShell(AuthSession session,
             initialIndex: 3,
             restrictUnsupportedWorkflows: true,
             liveRosterBuilder: (_) => LiveBookingListView(
+                notes:
+                    FirebaseConsultationNotesRepository(scope: session.scope, isCurrent: isCurrent),
                 communication: FirebaseBookingCommunicationRepository(scope: session.scope, isCurrent: isCurrent),
                 title: 'Roster',
                 coachId: session.userId,
-                repository:
-                    createBookingList(session, isCurrent, bookingListFactory),
+                repository: createBookingList(session, isCurrent, bookingListFactory),
                 isCurrent: isCurrent),
             liveAvailabilityBuilder: (_) => AvailabilityScreen(liveRepository: availabilityFactory?.call(session.scope, isCurrent) ?? FirebaseCoachAvailabilityRepository(scope: session.scope, isCurrent: isCurrent), coachId: session.userId, isCurrent: isCurrent)));
 Widget buildFirebaseCoachDirectory(AuthSession session,
