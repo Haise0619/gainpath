@@ -4,6 +4,7 @@ import '../../infrastructure/firebase/firebase_consultation_notes_repository.dar
 import '../../infrastructure/firebase/firebase_coach_booking_cancellation_repository.dart';
 import '../../infrastructure/firebase/firebase_client_posture_repository.dart';
 import '../../features/analytics/presentation/coach/live_coach_earnings_view.dart';
+import '../../features/coaching/presentation/shared/persisted_booking_presentation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:gainpath_domain/gainpath_domain.dart'
     show AuthSession, SessionScope;
@@ -123,7 +124,8 @@ Widget buildFirebaseCoachShell(AuthSession session,
                 scope: session.scope,
                 isCurrent: isCurrent,
                 coachId: session.userId,
-                bookingListRepo: createBookingList(session, isCurrent, bookingListFactory))));
+                bookingListRepo: createBookingList(session, isCurrent, bookingListFactory),
+                bookingMapper: persistedBookingPresentation)));
 Widget buildFirebaseCoachDirectory(AuthSession session,
         {CoachDirectoryFactory? factory,
         CoachAvailabilityFactory? availabilityFactory,

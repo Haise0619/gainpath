@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:gainpath_domain/coaching.dart';
 import 'package:gainpath_domain/gainpath_domain.dart'
-    show SessionScope, BookingListRepository;
+    show SessionScope, BookingListRepository, PersistedBookingRecord;
 import 'earnings_screen.dart';
-import '../../../../features/coaching/presentation/shared/persisted_booking_presentation.dart';
 
 class LiveCoachEarningsView extends StatefulWidget {
   const LiveCoachEarningsView({
@@ -12,12 +11,14 @@ class LiveCoachEarningsView extends StatefulWidget {
     required this.isCurrent,
     required this.coachId,
     required this.bookingListRepo,
+    required this.bookingMapper,
   });
 
   final SessionScope scope;
   final bool Function() isCurrent;
   final String coachId;
   final BookingListRepository bookingListRepo;
+  final Booking Function(PersistedBookingRecord) bookingMapper;
 
   @override
   State<LiveCoachEarningsView> createState() => _LiveCoachEarningsViewState();
@@ -54,7 +55,7 @@ class _LiveCoachEarningsViewState extends State<LiveCoachEarningsView> {
 
       if (!mounted || !widget.isCurrent()) return;
 
-      final list = page.records.map(persistedBookingPresentation).toList();
+      final list = page.records.map(widget.bookingMapper).toList();
       setState(() {
         _bookings = list;
         _loading = false;
@@ -95,9 +96,6 @@ class _LiveCoachEarningsViewState extends State<LiveCoachEarningsView> {
         ),
       );
     }
-
-    final completed =
-        _bookings.where((b) => b.status == BookingStatus.completed).toList();
 
     return EarningsScreen(
       connected: true,

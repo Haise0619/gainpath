@@ -1,4 +1,3 @@
-import '../../features/workout/presentation/member/equipment_scanner_screen.dart';
 import 'package:flutter/material.dart';
 import 'dart:async';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -180,15 +179,8 @@ class _MemberShellState extends State<MemberShell> {
               : () => Navigator.push(
                   context,
                   MaterialPageRoute(
-                      builder: (_) => EquipmentScannerScreen(
-                          connected: true,
-                          onBrowse: () => Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                  builder: (_) => buildMemberEquipmentCatalog(
-                                      session,
-                                      factory:
-                                          widget.equipmentReaderFactory)))))),
+                      builder: (_) => buildMemberEquipmentScanner(session,
+                          factory: widget.equipmentReaderFactory))),
           onOpenCoaches: () => setState(() {
                 _index = 3;
                 _directoryVisited = true;
@@ -218,15 +210,9 @@ class _MemberShellState extends State<MemberShell> {
               : () => Navigator.push(
                   context,
                   MaterialPageRoute(
-                      builder: (_) => EquipmentScannerScreen(
-                          connected: true,
-                          onBrowse: () => Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                  builder: (_) => buildMemberEquipmentCatalog(
-                                      session,
-                                      factory:
-                                          widget.equipmentReaderFactory))))))),
+                      builder: (_) => buildMemberEquipmentScanner(session,
+                          factory: widget.equipmentReaderFactory))),
+        ),
       GamificationDashboardScreen(live: connected),
       session == null
           ? const BrowseCoachesScreen()

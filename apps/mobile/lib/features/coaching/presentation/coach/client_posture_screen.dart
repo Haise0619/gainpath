@@ -4,7 +4,7 @@ import 'package:gainpath_ui/gainpath_ui.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:gainpath_domain/analytics.dart';
 import 'package:gainpath_domain/coaching.dart'
-    show ClientPostureRepository, ClientPostureResult, ClientPostureSession;
+    show ClientPostureRepository, ClientPostureResult;
 
 /// UC-9.5 — View Client Posture History. Uses the same Syncfusion chart
 /// language already established in the member-facing Progress module
