@@ -163,4 +163,92 @@ describe('client posture history service', () => {
     expect(result.measurementsStatus).toBe('measurements_pending_validation');
     expect(result.sessions).toEqual([]);
   });
+
+  it('returns consent_not_granted when member restricted coach sharing', async () => {
+    const store = setupStore();
+    store.documents.set(`orgs/${org}/workoutConsents/${memberUid}`, {
+      schemaVersion: 1,
+      organizationId: org,
+      memberId: memberUid,
+      consentVersion: WORKOUT_CONSENT_VERSION,
+      acknowledgementId: 'ack-1',
+      acknowledgedAtMillis: 1000,
+      revokedAtMillis: null,
+      shareWithAssignedCoach: false,
+    });
+
+    const result = await getClientPostureHistory(store, coachAuth, {
+      schemaVersion: 1,
+      organizationId: org,
+      memberId: memberUid,
+      bookingId: 'booking-1',
+    });
+
+    expect(result.authorized).toBe(false);
+    expect(result.sharingStatus).toBe('consent_not_granted');
+    expect(result.message).toContain('restricted workout sharing');
+    expect(result.sessions).toEqual([]);
+  });
+
+  it('returns available measurements and real sessions when reader returns accepted workouts', async () => {
+    const store = setupStore();
+    store.documents.set(`orgs/${org}/workoutConsents/${memberUid}`, {
+      schemaVersion: 1,
+      organizationId: org,
+      memberId: memberUid,
+      consentVersion: WORKOUT_CONSENT_VERSION,
+      acknowledgementId: 'ack-1',
+      acknowledgedAtMillis: 1000,
+      revokedAtMillis: null,
+    });
+
+    const mockReader = {
+      readMemberSessions: async () => [
+        {
+          sessionId: 'session-1',
+          exerciseId: 'bodyweight_squat',
+          endedAtMillis: 1729000000,
+          formScorePercent: 88.5,
+          status: 'accepted',
+        },
+        {
+          sessionId: 'session-2',
+          exerciseId: 'romanian_deadlift',
+          endedAtMillis: 1729100000,
+          formScorePercent: 92.0,
+          status: 'accepted',
+        },
+      ],
+    };
+
+    const result = await getClientPostureHistory(
+      store,
+      coachAuth,
+      {
+        schemaVersion: 1,
+        organizationId: org,
+        memberId: memberUid,
+        bookingId: 'booking-1',
+      },
+      mockReader
+    );
+
+    expect(result.authorized).toBe(true);
+    expect(result.sharingStatus).toBe('granted');
+    expect(result.measurementsStatus).toBe('available');
+    expect(result.sessions).toEqual([
+      {
+        sessionId: 'session-1',
+        exerciseId: 'bodyweight_squat',
+        completedAtMillis: 1729000000,
+        overallScore: 89,
+      },
+      {
+        sessionId: 'session-2',
+        exerciseId: 'romanian_deadlift',
+        completedAtMillis: 1729100000,
+        overallScore: 92,
+      },
+    ]);
+  });
 });

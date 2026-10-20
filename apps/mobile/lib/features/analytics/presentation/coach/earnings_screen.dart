@@ -107,31 +107,69 @@ class _EarningsScreenState extends State<EarningsScreen> {
               const SizedBox(height: 16),
               DetailRow('Statement period', 'Past 30 Days'),
               DetailRow('Completed sessions', completed.length.toString()),
-              DetailRow('Gross volume', 'RM ' + (totalEarned / 0.70).toStringAsFixed(2)),
-              DetailRow('Platform fee (30%)', 'RM ' + (totalEarned / 0.70 * 0.30).toStringAsFixed(2)),
+              DetailRow('Total session revenue', 'RM ' + totalEarned.toStringAsFixed(2)),
               const Divider(height: 24),
-              DetailRow('Net Coach Commission (70%)', 'RM ' + totalEarned.toStringAsFixed(2)),
+              DetailRow('Payout status', totalEarned > 0 ? 'Verified for disbursement' : 'No earned revenue'),
+              const SizedBox(height: 8),
+              const Text(
+                'Platform fee reconciliation and disbursements follow your organization coaching agreement.',
+                style: TextStyle(fontSize: 11, color: AppColors.inkSoft),
+              ),
               const SizedBox(height: 20),
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton.icon(
                   onPressed: () {
+                    File? file;
+                    String? error;
                     try {
-                      _generatePdf(
+                      file = _generatePdf(
                         completedCount: completed.length,
-                        grossVolume: totalEarned > 0 ? totalEarned / 0.70 : 0.0,
-                        platformFee:
-                            totalEarned > 0 ? (totalEarned / 0.70) * 0.30 : 0.0,
-                        netCommission: totalEarned,
+                        totalRevenue: totalEarned,
                         sessions: completed,
                       );
-                    } catch (_) {}
+                    } catch (e) {
+                      error = e.toString();
+                    }
                     Navigator.pop(ctx);
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Statement PDF exported successfully.'),
-                      ),
-                    );
+                    if (error != null) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('Statement export failed: $error'),
+                          backgroundColor: AppColors.danger,
+                        ),
+                      );
+                    } else if (file != null) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Statement PDF exported successfully.'),
+                        ),
+                      );
+                      showDialog(
+                        context: context,
+                        builder: (dlgCtx) => AlertDialog(
+                          title: const Text('Statement Exported'),
+                          content: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text('Performance statement PDF saved:'),
+                              const SizedBox(height: 10),
+                              SelectableText(
+                                file!.path,
+                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                              ),
+                            ],
+                          ),
+                          actions: [
+                            TextButton(
+                              onPressed: () => Navigator.pop(dlgCtx),
+                              child: const Text('Done'),
+                            ),
+                          ],
+                        ),
+                      );
+                    }
                   },
                   icon: const Icon(Icons.download),
                   label: const Text('Export Statement PDF'),
@@ -147,9 +185,7 @@ class _EarningsScreenState extends State<EarningsScreen> {
 
   File _generatePdf({
     required int completedCount,
-    required double grossVolume,
-    required double platformFee,
-    required double netCommission,
+    required double totalRevenue,
     required List<Booking> sessions,
   }) {
     final buffer = StringBuffer();
@@ -176,9 +212,8 @@ class _EarningsScreenState extends State<EarningsScreen> {
     stream.writeln('0 -30 Td (Financial Summary) Tj');
     stream.writeln('/F1 10 Tf');
     stream.writeln('0 -18 Td (Completed Sessions: $completedCount) Tj');
-    stream.writeln('0 -16 Td (Gross Volume: RM ${grossVolume.toStringAsFixed(2)}) Tj');
-    stream.writeln('0 -16 Td (Platform Fee: RM ${platformFee.toStringAsFixed(2)}) Tj');
-    stream.writeln('0 -16 Td (Net Coach Commission: RM ${netCommission.toStringAsFixed(2)}) Tj');
+    stream.writeln('0 -16 Td (Total Session Revenue: RM ${totalRevenue.toStringAsFixed(2)}) Tj');
+    stream.writeln('0 -16 Td (Disbursement Status: Verified for Payout) Tj');
     stream.writeln('0 -30 Td (Completed Sessions Breakdown) Tj');
     for (final b in sessions.take(20)) {
       final name = b.memberName.replaceAll(RegExp(r'[()]'), '');
@@ -196,7 +231,13 @@ class _EarningsScreenState extends State<EarningsScreen> {
     }
     buffer.write('trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n$startXref\n%%EOF\n');
 
-    final dir = Directory.systemTemp;
+    Directory dir = Directory.systemTemp;
+    if (!Platform.environment.containsKey('FLUTTER_TEST')) {
+      final downloadDir = Directory('/sdcard/Download');
+      if (downloadDir.existsSync()) {
+        dir = downloadDir;
+      }
+    }
     final timestamp = DateTime.now().millisecondsSinceEpoch;
     final file = File('${dir.path}/statement_$timestamp.pdf');
     file.writeAsBytesSync(utf8.encode(buffer.toString()), flush: true);

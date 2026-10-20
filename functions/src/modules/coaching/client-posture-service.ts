@@ -1,4 +1,4 @@
-import type { DocumentStore } from '../../platform/firestore/store';
+import type { DocumentData, DocumentStore } from '../../platform/firestore/store';
 import { requireVerifiedEmail } from '../../platform/auth-context';
 import { DomainError } from '../../platform/errors';
 import { InputValidationError, requiredIdentifier } from '../../platform/validation';
@@ -11,6 +11,10 @@ export interface ClientPostureSessionRecord {
   exerciseId: string;
   completedAtMillis: number;
   overallScore: number;
+}
+
+export interface WorkoutSessionQueryReader {
+  readMemberSessions(org: string, memberId: string, limit?: number): Promise<Record<string, unknown>[]>;
 }
 
 export interface ClientPostureResult {
@@ -26,7 +30,8 @@ export interface ClientPostureResult {
 export async function getClientPostureHistory(
   store: DocumentStore,
   auth: { uid: string; token: Record<string, unknown> } | undefined,
-  raw: unknown
+  raw: unknown,
+  sessionReader?: WorkoutSessionQueryReader
 ): Promise<ClientPostureResult> {
   requireVerifiedEmail(auth);
   const input = object(raw);
@@ -104,6 +109,40 @@ export async function getClientPostureHistory(
         measurementsStatus: 'measurements_pending_validation',
         message: 'Member has revoked workout sharing consent.',
         sessions: [],
+      };
+    }
+
+    if (consentDoc.shareWithAssignedCoach === false) {
+      return {
+        schemaVersion: 1,
+        memberId,
+        authorized: false,
+        sharingStatus: 'consent_not_granted',
+        measurementsStatus: 'measurements_pending_validation',
+        message: 'Member has restricted workout sharing with coaches.',
+        sessions: [],
+      };
+    }
+
+    const rawSessions = sessionReader ? await sessionReader.readMemberSessions(org, memberId, 20) : [];
+    const sessions: ClientPostureSessionRecord[] = rawSessions
+      .filter(s => s && s.sessionId && s.exerciseId && (s.endedAtMillis || s.acceptedAtMillis))
+      .map(s => ({
+        sessionId: String(s.sessionId),
+        exerciseId: String(s.exerciseId),
+        completedAtMillis: Number(s.endedAtMillis || s.acceptedAtMillis),
+        overallScore: Math.round(Number(s.formScorePercent ?? 0)),
+      }));
+
+    if (sessions.length > 0) {
+      return {
+        schemaVersion: 1,
+        memberId,
+        authorized: true,
+        sharingStatus: 'granted',
+        measurementsStatus: 'available',
+        message: 'Cloud posture measurements verified from completed workouts.',
+        sessions,
       };
     }
 

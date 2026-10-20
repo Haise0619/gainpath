@@ -35,6 +35,17 @@ it('exposes only the related client display name, never their private contact fi
   expect(result.records[0]).not.toHaveProperty('email');
   expect((await read('coach-1')).records[0]).not.toHaveProperty('memberDisplayName');
 });
+it('exposes feeMinor from transaction record when cleared or created', async () => {
+  store.documents.set('orgs/org-1/transactions/booking-1', {
+    schemaVersion: 1,
+    bookingId: 'booking-1',
+    amountMinor: 5000,
+    currency: 'MYR',
+    paymentStatus: 'cleared',
+  });
+  const result = await read('coach-1');
+  expect(result.records[0].feeMinor).toBe(5000);
+});
 it('projects the same persisted record for Member, Coach and canonical Admin without mutations', async () => {
   const before = structuredClone([...store.documents]);
   for (const [uid, changes] of [['member-1', {}], ['coach-1', {}], ['admin-1', { coachId: 'coach-1' }]] as const) {

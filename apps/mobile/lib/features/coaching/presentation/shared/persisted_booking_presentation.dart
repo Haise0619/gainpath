@@ -19,7 +19,7 @@ legacy.Booking persistedBookingPresentation(
       durationMin: record.durationMinutes,
       branch: record.branchId,
       status: status,
-      fee: 0,
+      fee: record.feeMinor != null ? (record.feeMinor! / 100.0) : 0.0,
       cancellationReason: record.resolution == 'hold_expired'
           ? 'Hold expired'
           : record.resolution == 'coach_cancelled'

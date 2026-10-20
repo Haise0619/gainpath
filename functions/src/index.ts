@@ -27,3 +27,6 @@ export { submitCoachCertificationCommand, archiveCoachCertificationCommand, revi
 export { getCoachPublishedPhotoCommand } from './modules/coaching/coach-management-callables';
 export { getClientPostureHistoryCommand } from './modules/coaching/client-posture-callable';
 export { submitBookingReviewCommand } from './modules/coaching/booking-review-callable';
+
+export { deliverBookingNotificationWorker } from './modules/coaching/booking-notification-worker';
+export { identifyEquipmentCommand } from './modules/workouts/equipment-scanner-callable';

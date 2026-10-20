@@ -17,6 +17,7 @@ export interface PersistedBookingRecord {
   memberDisplayName?: string;
   cancellationReason?: string;
   cancelledBy?: string;
+  feeMinor?: number;
 }
 export interface BookingPage { schemaVersion: 1; serverNowMillis: number; timeZone: string; firstLocalDate: string; throughLocalDate: string; records: PersistedBookingRecord[]; nextCursor?: BookingCursor }
 const review = () => new DomainError('failed-precondition', 'Stored bookings need authorized review.');
@@ -91,13 +92,19 @@ export async function getBookingListService(store: DocumentStore, auth: { uid: s
     ids.add(r.bookingId); previous = r;
   }
   const records = projected.slice(0, 20), last = records.at(-1);
-  // Related names only; private contact/account fields never enter the projection.
-  if (input.includeParticipantNames === true) await store.transact(async tx => {
+  // Related names and transaction fees; private contact/account fields never enter the projection.
+  await store.transact(async tx => {
     if (JSON.stringify(before) !== JSON.stringify(await scope(tx))) throw new DomainError('permission-denied', 'Booking access changed. Refresh the current account scope.');
     for (const record of records) {
-      const member = await tx.get(`orgs/${org}/members/${record.memberId}`);
-      const name = member?.organizationId === org ? member.displayName : undefined;
-      if (typeof name === 'string' && name.trim() && name.trim().length <= 120) record.memberDisplayName = name.trim();
+      if (input.includeParticipantNames === true) {
+        const member = await tx.get(`orgs/${org}/members/${record.memberId}`);
+        const name = member?.organizationId === org ? member.displayName : undefined;
+        if (typeof name === 'string' && name.trim() && name.trim().length <= 120) record.memberDisplayName = name.trim();
+      }
+      const txDoc = await tx.get(`orgs/${org}/transactions/${record.bookingId}`);
+      if (txDoc && Number.isSafeInteger(txDoc.amountMinor) && Number(txDoc.amountMinor) >= 0) {
+        record.feeMinor = Number(txDoc.amountMinor);
+      }
     }
   });
   return { schemaVersion: 1, serverNowMillis, timeZone: before.policy.timeZone, firstLocalDate, throughLocalDate, records,

@@ -202,7 +202,8 @@ class PersistedBookingRecord {
       required this.expiryLabel,
       this.memberDisplayName,
       this.cancellationReason,
-      this.cancelledBy}) {
+      this.cancelledBy,
+      this.feeMinor}) {
     if (memberDisplayName != null) bookingText(memberDisplayName, max: 120);
     for (final id in [
       bookingId,
@@ -281,6 +282,7 @@ class PersistedBookingRecord {
   final String? memberDisplayName;
   final String? cancellationReason;
   final String? cancelledBy;
+  final int? feeMinor;
   int get schemaVersion => 1;
   String get rawStatus => _rawStatus(status);
   DateTime get startAt =>
@@ -315,7 +317,8 @@ class PersistedBookingRecord {
       'resolution',
       'memberDisplayName',
       'cancellationReason',
-      'cancelledBy'
+      'cancelledBy',
+      'feeMinor'
     ]);
     if ((data.containsKey('resolvedAtMillis') &&
             data['resolvedAtMillis'] == null) ||
@@ -355,7 +358,8 @@ class PersistedBookingRecord {
                 max: 500, multiline: true),
         cancelledBy: data['cancelledBy'] == null
             ? null
-            : _bookingIdValue(data['cancelledBy']));
+            : _bookingIdValue(data['cancelledBy']),
+        feeMinor: data['feeMinor'] == null ? null : bookingInt(data['feeMinor']));
   }
   Map<String, dynamic> toJson() => {
         'bookingId': bookingId,
@@ -379,6 +383,7 @@ class PersistedBookingRecord {
         if (memberDisplayName != null) 'memberDisplayName': memberDisplayName,
         if (cancellationReason != null) 'cancellationReason': cancellationReason,
         if (cancelledBy != null) 'cancelledBy': cancelledBy,
+    if (feeMinor != null) 'feeMinor': feeMinor,
         'startLabel': startLabel,
         'endLabel': endLabel,
         'expiryLabel': expiryLabel
