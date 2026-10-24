@@ -33,11 +33,12 @@
         "durationMinutes": { "enum": [30, 60] }, "status": { "enum": ["pending_hold", "confirmed", "cancelled", "expired", "completed", "refunded"] },
         "holdExpiresAtMillis": { "$ref": "#/definitions/time" }, "localDate": { "$ref": "#/definitions/date" }, "timeZone": { "$ref": "#/definitions/zone" },
         "policyVersion": { "type": "string", "minLength": 1, "maxLength": 128 }, "createdAtMillis": { "$ref": "#/definitions/time" },
-        "resolvedAtMillis": { "$ref": "#/definitions/time" }, "resolution": { "enum": ["member_cancelled", "hold_expired"] },
+        "resolvedAtMillis": { "$ref": "#/definitions/time" }, "resolution": { "enum": ["member_cancelled", "hold_expired", "member_confirmed_cancelled", "coach_cancelled"] },
+        "cancellationReason": { "type": "string", "minLength": 1, "maxLength": 500 }, "cancelledBy": { "$ref": "#/definitions/id" }, "feeMinor": { "type": "integer", "minimum": 0 }, "reviewStars": { "type": "integer", "minimum": 1, "maximum": 5 },
         "memberDisplayName": { "type": "string", "minLength": 1, "maxLength": 120 },
         "startLabel": { "$ref": "#/definitions/label" }, "endLabel": { "$ref": "#/definitions/label" }, "expiryLabel": { "$ref": "#/definitions/label" }
       },
-      "allOf": [{"if":{"properties":{"status":{"const":"expired"}}},"then":{"required":["resolvedAtMillis","resolution"],"properties":{"resolution":{"const":"hold_expired"}}}},{"if":{"required":["resolution"]},"then":{"required":["resolvedAtMillis"],"oneOf":[{"properties":{"status":{"const":"expired"},"resolution":{"const":"hold_expired"}}},{"properties":{"status":{"const":"cancelled"},"resolution":{"const":"member_cancelled"}}}]}},{"if":{"required":["resolvedAtMillis"]},"then":{"required":["resolution"]}}]
+      "allOf": [{"if":{"properties":{"status":{"const":"expired"}}},"then":{"required":["resolvedAtMillis","resolution"],"properties":{"resolution":{"const":"hold_expired"}}}},{"if":{"required":["resolution"]},"then":{"required":["resolvedAtMillis"],"oneOf":[{"properties":{"status":{"const":"expired"},"resolution":{"const":"hold_expired"}}},{"properties":{"status":{"const":"cancelled"},"resolution":{"enum":["member_cancelled","member_confirmed_cancelled","coach_cancelled"]}}}]}},{"if":{"required":["resolvedAtMillis"]},"then":{"required":["resolution"]}}]
     }
   }
 }

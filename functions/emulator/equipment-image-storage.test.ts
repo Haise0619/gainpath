@@ -67,3 +67,15 @@ it.skipIf(!process.env.GAINPATH_EQUIPMENT_STORAGE_RULES_FILE)('activation candid
     await assertFails(uploadBytes(ref(storage('admin'), other), png, { contentType: 'image/png' }));
   }
 });
+
+it('equipment tutorial permits scoped MP4 upload and member read; denies other roles, type, overwrite, delete and cross-org', async () => {
+  const videoPath = 'orgs/o/equipmentVideos/admin/' + 'a'.repeat(32) + '.mp4';
+  await assertSucceeds(uploadBytes(ref(storage('admin'), videoPath), png, {contentType:'video/mp4'}));
+  await assertSucceeds(getMetadata(ref(storage('member'), videoPath)));
+  await assertFails(uploadBytes(ref(storage('member'), 'orgs/o/equipmentVideos/member/'+'b'.repeat(32)+'.mp4'), png, {contentType:'video/mp4'}));
+  await assertFails(uploadBytes(ref(storage('admin'), videoPath), png, {contentType:'video/mp4'}));
+  await assertFails(deleteObject(ref(storage('admin'), videoPath)));
+  await assertFails(uploadBytes(ref(storage('admin'), 'orgs/other/equipmentVideos/admin/'+'b'.repeat(32)+'.mp4'), png, {contentType:'video/mp4'}));
+  await assertFails(uploadBytes(ref(storage('admin'), 'orgs/o/equipmentVideos/admin/'+'b'.repeat(32)+'.mp4'), png, {contentType:'text/html'}));
+  await assertFails(listAll(ref(storage('member'), 'orgs/o/equipmentVideos')));
+});

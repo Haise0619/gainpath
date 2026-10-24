@@ -27,6 +27,7 @@ class Booking {
   final double fee;
   String? notes;
   bool rated;
+  int? reviewStars;
   String? cancellationReason;
   final List<BookingMessage> messages;
   Booking({
@@ -41,6 +42,7 @@ class Booking {
     required this.fee,
     this.notes,
     this.rated = false,
+    this.reviewStars,
     this.cancellationReason,
     List<BookingMessage>? messages,
   }) : messages = messages ?? [];

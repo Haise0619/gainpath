@@ -26,6 +26,7 @@ class GymEquipment {
   List<String> howToUse;
   List<String> safetyTips;
   String imageUrl;
+  String tutorialVideoUrl;
   String muscleGroup;
 
   /// Mutable so admin can unpublish a broken/removed machine without
@@ -43,6 +44,7 @@ class GymEquipment {
     required this.safetyTips,
     required this.imageUrl,
     required this.muscleGroup,
+    this.tutorialVideoUrl = '',
     this.isActive = true,
     this.revision = 0,
     this.editBaseline,
@@ -56,6 +58,7 @@ class GymEquipment {
       howToUse: List.of(howToUse),
       safetyTips: List.of(safetyTips),
       imageUrl: imageUrl,
+      tutorialVideoUrl: tutorialVideoUrl,
       muscleGroup: muscleGroup,
       isActive: isActive ?? this.isActive,
       revision: revision,
@@ -84,6 +87,16 @@ class GymEquipment {
       throw const FormatException(
           'Use a valid HTTPS image URL or leave it empty.');
     }
+    final video = Uri.tryParse(tutorialVideoUrl);
+    if (tutorialVideoUrl.isNotEmpty &&
+        (tutorialVideoUrl.length > 2048 ||
+            video == null ||
+            video.scheme != 'https' ||
+            video.host.isEmpty ||
+            video.userInfo.isNotEmpty ||
+            RegExp(r'\s').hasMatch(tutorialVideoUrl))) {
+      throw const FormatException('Use a valid HTTPS tutorial video URL.');
+    }
     for (final steps in [howToUse, safetyTips]) {
       if (steps.length > 10 ||
           steps.any((s) => s.trim().isEmpty || s.trim().length > 400)) {
@@ -110,6 +123,7 @@ class GymEquipment {
         muscleGroup: d['muscleGroup'] as String,
         description: d['description'] as String,
         imageUrl: d['imageUrl'] as String,
+        tutorialVideoUrl: d['tutorialVideoUrl'] as String? ?? '',
         howToUse: List<String>.from(d['howToUse'] as List),
         safetyTips: List<String>.from(d['safetyTips'] as List),
         isActive: d['isActive'] as bool,

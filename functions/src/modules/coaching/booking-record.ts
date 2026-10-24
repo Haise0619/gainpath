@@ -5,7 +5,7 @@ import { validBookingId, validBookingPolicyVersion, validBookingTime, validBooki
 
 export const bookingReview = () => new DomainError('failed-precondition', 'Stored booking resources need authorized review.');
 export type BookingState = 'pending_hold' | 'confirmed' | 'cancelled' | 'expired' | 'completed' | 'refunded';
-export type BookingResolution = 'member_cancelled' | 'hold_expired' | 'coach_cancelled';
+export type BookingResolution = 'member_cancelled' | 'hold_expired' | 'coach_cancelled' | 'member_confirmed_cancelled';
 export interface StoredBooking extends DocumentData {
   schemaVersion: 1; bookingId: string; organizationId: string; memberId: string; coachId: string; branchId: string; requestId: string; createdBy: string;
   startAtMillis: number; endAtMillis: number; durationMinutes: 30 | 60; status: BookingState;
@@ -33,6 +33,8 @@ export function storedBooking(data: DocumentData | undefined, org: string, id: s
       if (d.status === 'cancelled') {
         if (d.resolution === 'member_cancelled') {
           if (d.resolvedAtMillis >= Number(d.holdExpiresAtMillis)) throw bookingReview();
+        } else if (d.resolution === 'member_confirmed_cancelled') {
+          if (Number(d.startAtMillis) - d.resolvedAtMillis < 12 * 3600000 || d.cancelledBy !== d.memberId || typeof d.cancellationReason !== 'string' || !d.cancellationReason.trim() || d.cancellationReason.length > 500) throw bookingReview();
         } else if (d.resolution === 'coach_cancelled') {
           if (d.resolvedAtMillis > Number(d.startAtMillis)) throw bookingReview();
           if (d.cancellationReason !== undefined && (typeof d.cancellationReason !== 'string' || !d.cancellationReason.trim() || d.cancellationReason.length > 500)) throw bookingReview();

@@ -34,17 +34,17 @@ function deps(withSecrets = false): PaymentAdminDependencies {
         }
     };
 }
-export const listAdminBookingPaymentsCommand = onCall({ enforceAppCheck: true }, async (r) => { try {
+export const listAdminBookingPaymentsCommand = onCall({ enforceAppCheck: true, preserveExternalChanges: true }, async (r) => { try {
     check(r.data);
     return await listAdminBookingPayments(new FirestoreStore(getFirestore()), r.auth, r.data, deps());
 }
 catch (e) {
     throw coachCommandError(e);
 } });
-export const getAdminBookingPaymentCommand = onCall({ enforceAppCheck: true }, async (r) => { try {
+export const getAdminBookingPaymentCommand = onCall({ enforceAppCheck: true, preserveExternalChanges: true }, async (r) => { try {
     check(r.data);
     const result = await getAdminBookingPayment(new FirestoreStore(getFirestore()), r.auth, r.data, deps());
-    return { ...result, refundExecutionAvailable: refundConfigured() };
+    return { ...result, refundExecutionAvailable: !['MembershipPurchase', 'MembershipRenewal'].includes(String(result.payment.kind)) && refundConfigured() };
 }
 catch (e) {
     throw coachCommandError(e);

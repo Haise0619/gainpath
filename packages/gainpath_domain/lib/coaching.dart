@@ -13,3 +13,6 @@ export 'src/coaching/consultation_notes.dart';
 export 'src/coaching/coach_booking_cancellation.dart';
 export 'src/coaching/client_posture.dart';
 export 'src/coaching/booking_review.dart';
+export 'src/coaching/module9.dart';
+export 'src/coaching/member_booking_change.dart';
+export 'src/coaching/google_integration.dart';

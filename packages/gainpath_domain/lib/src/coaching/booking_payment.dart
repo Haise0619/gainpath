@@ -12,14 +12,60 @@ bool isBillplzSandboxCheckoutUrl(String value) {
       uri.path.length > 1;
 }
 
+class PremiumCoachVoucherOffer {
+  const PremiumCoachVoucherOffer({required this.status, this.discountMinor});
+  final String status;
+  final int? discountMinor;
+  bool get available => status == 'available';
+  factory PremiumCoachVoucherOffer.fromJson(Map<String, dynamic> json) {
+    final status =
+        json['status'] ?? (json['schemaVersion'] == 1 ? 'applied' : null);
+    if (!const [
+          'unavailable',
+          'ineligible',
+          'available',
+          'reserved',
+          'consumed',
+          'applied'
+        ].contains(status) ||
+        (json['discountMinor'] != null &&
+            (json['discountMinor'] is! int ||
+                (json['discountMinor'] as int) < 1 ||
+                (json['discountMinor'] as int) > 1500))) {
+      throw const FormatException('Invalid voucher offer');
+    }
+    if (const ['available', 'reserved', 'consumed', 'applied']
+            .contains(status) &&
+        (json['voucherId'] is! String ||
+            (json['voucherId'] as String).isEmpty ||
+            json['discountMinor'] is! int ||
+            json['cycleStartAtMillis'] is! int ||
+            json['cycleEndAtMillis'] is! int ||
+            (json['cycleStartAtMillis'] as int) < 1 ||
+            (json['cycleEndAtMillis'] as int) -
+                    (json['cycleStartAtMillis'] as int) !=
+                30 * 86400000)) {
+      throw const FormatException('Invalid voucher cycle');
+    }
+    return PremiumCoachVoucherOffer(
+        status: status as String, discountMinor: json['discountMinor'] as int?);
+  }
+}
+
 class BookingPaymentQuote {
   const BookingPaymentQuote(
       {required this.amountMinor,
       required this.coachName,
       required this.branchName,
-      required this.durationMinutes});
+      required this.durationMinutes,
+      this.grossAmountMinor,
+      this.discountMinor,
+      this.voucher});
   final int amountMinor, durationMinutes;
   final String coachName, branchName;
+  final int? grossAmountMinor, discountMinor;
+  final PremiumCoachVoucherOffer? voucher;
+  bool get voucherApplied => grossAmountMinor != null && discountMinor != null;
   String get formattedAmount => 'RM ${(amountMinor / 100).toStringAsFixed(2)}';
   factory BookingPaymentQuote.fromJson(Map<String, dynamic> json) {
     if (json['schemaVersion'] != 1 ||
@@ -34,11 +80,33 @@ class BookingPaymentQuote {
         (json['branchName'] as String).trim().isEmpty) {
       throw const FormatException('Invalid payment quote');
     }
+    final rawVoucher = json['premiumVoucher'];
+    if (rawVoucher != null && rawVoucher is! Map) {
+      throw const FormatException('Invalid voucher');
+    }
+    final voucher = rawVoucher == null
+        ? null
+        : PremiumCoachVoucherOffer.fromJson(
+            Map<String, dynamic>.from(rawVoucher as Map));
+    final gross = json['grossAmountMinor'], discount = json['discountMinor'];
+    if ((gross != null || discount != null) &&
+        (gross is! int ||
+            discount is! int ||
+            discount < 1 ||
+            discount > 1500 ||
+            gross - discount != json['amountMinor'] ||
+            voucher == null ||
+            voucher.discountMinor != discount)) {
+      throw const FormatException('Invalid discounted total');
+    }
     return BookingPaymentQuote(
         amountMinor: json['amountMinor'] as int,
         coachName: json['coachName'] as String,
         branchName: json['branchName'] as String,
-        durationMinutes: json['durationMinutes'] as int);
+        durationMinutes: json['durationMinutes'] as int,
+        grossAmountMinor: gross as int?,
+        discountMinor: discount as int?,
+        voucher: voucher);
   }
 }
 
@@ -72,8 +140,17 @@ class BookingPaymentView {
           'reconciliation_required'
         ].contains(json['status']) ||
         json['holdExpiresAtMillis'] is! int ||
-        (json['paymentStatus'] != null && !const ['pending','cleared'].contains(json['paymentStatus'])) ||
-        (json['refundStatus'] != null && !const ['approved','rejected','processing','uncertain','completed','failed'].contains(json['refundStatus'])) ||
+        (json['paymentStatus'] != null &&
+            !const ['pending', 'cleared'].contains(json['paymentStatus'])) ||
+        (json['refundStatus'] != null &&
+            !const [
+              'approved',
+              'rejected',
+              'processing',
+              'uncertain',
+              'completed',
+              'failed'
+            ].contains(json['refundStatus'])) ||
         [
           'startLabel',
           'endLabel',
@@ -109,4 +186,14 @@ abstract interface class BookingPaymentRepository {
       required int durationMinutes});
   Future<BookingPaymentView> create(String bookingId);
   Future<BookingPaymentView> get(String bookingId);
+}
+
+/// Additive capability; repositories without trusted voucher support retain their existing contract.
+abstract interface class PremiumVoucherBookingPaymentRepository {
+  Future<BookingPaymentQuote> loadVoucherQuote(
+      {required String coachId,
+      required String branchId,
+      required int durationMinutes,
+      required bool usePremiumVoucher});
+  Future<BookingPaymentView> createWithPremiumVoucher(String bookingId);
 }

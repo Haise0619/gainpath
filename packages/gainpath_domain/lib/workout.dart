@@ -9,3 +9,6 @@ export 'src/workout/repositories/equipment_repository.dart';
 export 'src/workout/repositories/routine_template_repository.dart';
 export 'src/workout/repositories/tutorial_repository.dart';
 export 'src/workout/repositories/workout_repository.dart';
+export 'src/workout/recognition/equipment_recognition.dart';
+
+export 'src/workout/entities/equipment_video.dart';

@@ -11,6 +11,14 @@ const cert=`orgs/o/coachProfiles/coach/certifications/${id}`,summary='orgs/o/coa
 let certPath='',photoPath='';
 beforeAll(async()=>{if(!process.env.FIRESTORE_EMULATOR_HOST||!process.env.FIREBASE_STORAGE_EMULATOR_HOST)throw Error('Local emulators required');const dir=process.env.MODULE8_RULES_DIR;env=await initializeTestEnvironment({projectId:'demo-gainpath',firestore:{rules:readFileSync(dir?join(dir,'firestore-module8.rules'):'../firebase/firestore.rules','utf8')},storage:{rules:readFileSync(dir?join(dir,'storage-module8.rules'):'../firebase/storage.rules','utf8')}});});
 beforeEach(async()=>{const objectId=(++sequence).toString(16).padStart(32,'0');certPath=`orgs/o/coachCertifications/coach/${objectId}`;photoPath=`orgs/o/coachProfilePhotos/coach/${objectId}`;await env.clearFirestore();await env.clearStorage();await env.withSecurityRulesDisabled(async c=>{for(const [uid,role]of[['coach','coach'],['other','coach'],['admin','admin'],['member','member'],['staff','staff']]){await setDoc(doc(c.firestore(),`users/${uid}`),{organizationId:'o'});await setDoc(doc(c.firestore(),`orgs/o/members/${uid}`),{organizationId:'o',status:'active',role,branchIds:['main']});}await setDoc(doc(c.firestore(),cert),{status:'pending',revision:1});await setDoc(doc(c.firestore(),`${cert}/history/1`),{status:'pending'});await setDoc(doc(c.firestore(),summary),{approvedCount:0});});});
+beforeEach(async () => env.withSecurityRulesDisabled(async c => {
+  await setDoc(doc(c.firestore(), 'orgs/o'), {organizationId: 'o', status: 'active'});
+  for (const [uid, role] of [['coach', 'coach'], ['other', 'coach'], ['admin', 'admin']]) {
+    await setDoc(doc(c.firestore(), `orgs/o/coachReadScopes/${uid}`), {
+      schemaVersion: 1, organizationId: 'o', userId: uid, role, validatedBranchIds: ['main'],
+    });
+  }
+}));
 afterAll(async()=>env?.cleanup());
 it('owner Coach creates immutable documents and Admin reads only without mutation',async()=>{for(const path of[certPath,photoPath]){await assertSucceeds(uploadBytes(ref(client().storage(bucket),path),png,{contentType:'image/png'}));await assertSucceeds(getMetadata(ref(client('admin').storage(bucket),path)));await assertFails(uploadBytes(ref(client().storage(bucket),path),png,{contentType:'image/png'}));await assertFails(deleteObject(ref(client().storage(bucket),path)));await assertFails(listAll(ref(client().storage(bucket),path.substring(0,path.lastIndexOf('/')))));}await assertFails(uploadBytes(ref(client('admin').storage(bucket),`orgs/o/coachCertifications/admin/${id}`),png,{contentType:'image/png'}));});
 it('denies Members, Staff, other Coach, anonymous and unverified Storage reads',async()=>{await uploadBytes(ref(client().storage(bucket),photoPath),png,{contentType:'image/png'});for(const ctx of[client('member'),client('staff'),client('other'),client('coach',false),env.unauthenticatedContext()])await assertFails(getMetadata(ref(ctx.storage(bucket),photoPath)));});

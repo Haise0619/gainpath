@@ -9,6 +9,31 @@ const order = { id: '11111111-1111-4111-8111-111111111111', collectionId: 'refun
 const deps = () => ({ bills: { create: async () => bill, get: async () => bill }, collectionId: 'collection', refunds: { create: async () => { creates++; return { ...order }; }, get: async () => ({ ...order }) }, refundCollectionId: 'refund-collection', readIdentity: async () => ({ exists: true, disabled: false, emailVerified: true }), reader: { list: async () => [{ id, data: store.documents.get(path)! }], events: async () => [] } });
 const input = (action: string, extra = {}) => ({ schemaVersion: 1, organizationId: org, bookingId: id, requestId: 'req-' + action, action, reason: 'Synthetic resolution test', ...extra });
 beforeEach(() => { store = new MemoryStore(); creates = 0; order.status = 'processing'; store.documents.set('users/admin', { organizationId: org }); store.documents.set(`orgs/${org}`, { status: 'active' }); store.documents.set(`orgs/${org}/members/admin`, { organizationId: org, role: 'admin', status: 'active', branchIds: [] }); store.documents.set(path, { schemaVersion: 1, environment: 'sandbox', provider: 'billplz', organizationId: org, bookingId: id, memberId: 'member', coachId: 'coach', coachName: 'Coach', branchName: 'Branch', amountMinor: 100, currency: 'MYR', durationMinutes: 60, localDate: '2026-10-20', startLabel: '10:00', endLabel: '11:00', holdExpiresAtMillis: 100, createdAtMillis: 1, updatedAtMillis: 1, paymentStatus: 'cleared', fulfilmentStatus: 'reconciliation_required', billId: 'bill', collectionId: 'collection' }); });
+it('includes invoice schedule and refund recovery metadata in both queue and detail without private fields', async () => {
+  Object.assign(store.documents.get(path)!, { refundStatus: 'uncertain', refundReference: 'refund-booking', refundProviderStatus: 'reviewing', reviewedAtMillis: 123, refundReservedAtMillis: 456, privateBankSecret: 'never-project' });
+  const page = await listAdminBookingPayments(store, auth, { schemaVersion: 1, organizationId: org }, deps());
+  const detail = await getAdminBookingPayment(store, auth, { schemaVersion: 1, organizationId: org, bookingId: id }, deps());
+  for (const row of [page.records[0], detail.payment]) {
+    expect(row).toMatchObject({ localDate: '2026-10-20', startLabel: '10:00', endLabel: '11:00', refundReference: 'refund-booking', reviewedAtMillis: 123, refundReservedAtMillis: 456, refundProviderStatus: 'reviewing' });
+    expect(row).not.toHaveProperty('privateBankSecret');
+  }
+});
+it('projects the approved gross fee, voucher discount and funding snapshot for financial review', async () => {
+  const premiumVoucher = { schemaVersion: 1, voucherId: 'synthetic', fundingSource: 'gym', coachCommissionBasis: 'gross_fee', policyVersion: 'fixture-only' };
+  Object.assign(store.documents.get(path)!, { grossAmountMinor: 110, discountMinor: 10, premiumVoucher });
+  const detail = await getAdminBookingPayment(store, auth, { schemaVersion: 1, organizationId: org, bookingId: id }, deps());
+  expect(detail.payment).toMatchObject({ amountMinor: 100, grossAmountMinor: 110, discountMinor: 10, premiumVoucher });
+});
+it('shows the canonical changed session separately from the original invoice and scopes its Member name', async () => {
+  const start=Date.parse('2026-10-23T04:00:00Z');
+  store.documents.set(`orgs/${org}/bookings/${id}`, { schemaVersion:1, bookingId:id, organizationId:org, memberId:'member', coachId:'coach', branchId:'branch', requestId:'hold', createdBy:'member', startAtMillis:start, endAtMillis:start+3600000, durationMinutes:60, status:'confirmed', holdExpiresAtMillis:start-86400000, createdAtMillis:start-172800000, localDate:'2026-10-23', timeZone:'Asia/Kuala_Lumpur', policyVersion:'v1' });
+  store.documents.set(`orgs/${org}/members/member`, {organizationId:org,displayName:'Fixture Member',email:'private@example.invalid'});
+  const detail=await getAdminBookingPayment(store,auth,{schemaVersion:1,organizationId:org,bookingId:id},deps());
+  expect(detail.payment).toMatchObject({localDate:'2026-10-20',sessionLocalDate:'2026-10-23',sessionStartLabel:'12:00 GMT+8',memberDisplayName:'Fixture Member'});
+  expect(detail.payment).not.toHaveProperty('email');
+  store.documents.get(`orgs/${org}/bookings/${id}`)!.memberId='another-member';
+  await expect(getAdminBookingPayment(store,auth,{schemaVersion:1,organizationId:org,bookingId:id},deps())).rejects.toMatchObject({code:'failed-precondition'});
+});
 it('rejects non Admin and scopes private list/detail/commands', async () => { await expect(listAdminBookingPayments(store, { uid: 'member', token: { email_verified: true } }, { schemaVersion: 1, organizationId: org }, deps())).rejects.toMatchObject({ code: 'permission-denied' }); await expect(getAdminBookingPayment(store, auth, { schemaVersion: 1, organizationId: 'other', bookingId: id }, deps())).rejects.toMatchObject({ code: 'permission-denied' }); });
 it('requires cleared reconciliation payment and a review reason; approve is not a refund', async () => { await expect(manageAdminBookingPayment(store, auth, input('approve_refund', { reason: '' }), deps())).rejects.toBeDefined(); await manageAdminBookingPayment(store, auth, input('approve_refund'), deps()); expect(store.documents.get(path)).toMatchObject({ refundStatus: 'approved', paymentStatus: 'cleared', fulfilmentStatus: 'reconciliation_required' }); expect(creates).toBe(0); store.documents.get(path)!.fulfilmentStatus = 'confirmed'; await expect(manageAdminBookingPayment(store, auth, input('reject_refund'), deps())).rejects.toMatchObject({ code: 'failed-precondition' }); });
 it('executes exactly one refund across concurrency/replay and confirms only provider completion', async () => { await manageAdminBookingPayment(store, auth, input('approve_refund'), deps()); await Promise.all([manageAdminBookingPayment(store, auth, input('execute_refund'), deps()), manageAdminBookingPayment(store, auth, input('execute_refund'), deps())]); expect(creates).toBe(1); expect(store.documents.get(path)!.refundStatus).toBe('processing'); order.status = 'completed'; await manageAdminBookingPayment(store, auth, input('check_refund'), deps()); expect(store.documents.get(path)).toMatchObject({ refundStatus: 'completed', paymentStatus: 'cleared' }); expect(store.documents.has(`orgs/${org}/bookings/${id}`)).toBe(false); });

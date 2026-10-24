@@ -8,15 +8,17 @@ import { bookingCoachScope, bookingDaySnapshot, coachEligibilityFailure, current
 import { storedBooking } from '../coaching/booking-record';
 import type { CoachIdentityReader } from '../coaching/coach-profile-service';
 import type { BillplzGateway, SandboxBill } from './billplz-sandbox';
+import { bookingVoucherProjection, premiumCoachVoucherOffer, preparePremiumCoachVoucherConsumption, preparePremiumCoachVoucherRelease, requireAvailablePremiumCoachVoucher, reservePremiumCoachVoucher, type PremiumCoachVoucherOffer } from './premium-coach-voucher';
 
 type Auth = { uid: string; token: Record<string, unknown> } | undefined;
 const txPath = (org: string, id: string) => `orgs/${org}/transactions/${id}`;
 const review = () => new DomainError('failed-precondition', 'Payment data requires authorized review.');
-function paymentInput(auth: Auth, raw: unknown) {
+function paymentInput(auth: Auth, raw: unknown, allowVoucher = false) {
   requireVerifiedEmail(auth);
-  const d = object(raw); allowed(d, ['schemaVersion', 'organizationId', 'bookingId']);
+  const d = object(raw); allowed(d, ['schemaVersion', 'organizationId', 'bookingId', ...(allowVoucher ? ['usePremiumVoucher'] : [])]);
   if (d.schemaVersion !== 1) throw new InputValidationError('schemaVersion 1 is required.');
-  return { org: requiredIdentifier(d.organizationId, 'organizationId'), id: requiredIdentifier(d.bookingId, 'bookingId'), uid: requiredIdentifier(auth!.uid, 'actorId') };
+  if (d.usePremiumVoucher !== undefined && typeof d.usePremiumVoucher !== 'boolean') throw new InputValidationError('Choose whether to apply the voucher.');
+  return { org: requiredIdentifier(d.organizationId, 'organizationId'), id: requiredIdentifier(d.bookingId, 'bookingId'), uid: requiredIdentifier(auth!.uid, 'actorId'), usePremiumVoucher: d.usePremiumVoucher === true };
 }
 async function authorizedBooking(tx: TransactionPort, org: string, id: string, uid: string, write = false) {
   const actor = await currentBookingMembership(tx, org, uid); await requireBookingOrganization(tx, org);
@@ -40,15 +42,31 @@ async function requireCredentials(tx: TransactionPort, org: string, coachId: str
   const certification = await tx.get(`orgs/${org}/coachProfiles/${coachId}/certificationState/current`);
   if (publication?.certificationVerified !== true || certification?.certificationVerified !== true || !Number.isSafeInteger(certification.approvedCount) || Number(certification.approvedCount) < 1 || Number(certification.approvedCount)>100) throw new DomainError('failed-precondition', 'Approved Coach credentials are required.');
 }
-export async function getBookingPaymentQuote(store: DocumentStore, auth: Auth, raw: unknown) {
+export interface BookingPaymentQuoteResult {
+  schemaVersion: number; amountMinor: number; currency: 'MYR'; coachName: string; branchName: string; durationMinutes: number;
+  grossAmountMinor?: number; discountMinor?: number; premiumVoucher?: PremiumCoachVoucherOffer;
+}
+export async function getBookingPaymentQuote(store: DocumentStore, auth: Auth, raw: unknown, clock = Date.now, readIdentity?: CoachIdentityReader): Promise<BookingPaymentQuoteResult> {
   requireVerifiedEmail(auth);
-  const d = object(raw); allowed(d, ['schemaVersion', 'organizationId', 'coachId', 'branchId', 'durationMinutes']);
+  const d = object(raw); allowed(d, ['schemaVersion', 'organizationId', 'coachId', 'branchId', 'durationMinutes', 'includePremiumVoucher', 'usePremiumVoucher']);
   if (d.schemaVersion !== 1 || ![30,60].includes(Number(d.durationMinutes)) || typeof d.durationMinutes !== 'number') throw new InputValidationError('Choose a supported duration.');
+  if (['includePremiumVoucher', 'usePremiumVoucher'].some(k => d[k] !== undefined && typeof d[k] !== 'boolean')) throw new InputValidationError('Invalid voucher selection.');
   const org = requiredIdentifier(d.organizationId, 'organizationId'), coachId = requiredIdentifier(d.coachId, 'coachId'), branchId = requiredIdentifier(d.branchId, 'branchId');
+  if (d.includePremiumVoucher === true || d.usePremiumVoucher === true) {
+    if (!readIdentity) throw new DomainError('unavailable', 'Current account verification is unavailable.');
+    const failure = await coachEligibilityFailure(readIdentity, auth!.uid); if (failure) throw failure;
+  }
   return store.transact(async tx => {
     const member = await currentBookingMembership(tx, org, auth!.uid); await requireBookingOrganization(tx, org);
     if (member.role !== 'member') throw new DomainError('permission-denied', 'Only Members may start checkout.');
-    return { schemaVersion: 1, ...await professionalQuote(tx, org, coachId, branchId, member.branchIds), durationMinutes: d.durationMinutes as number };
+    const quote = { schemaVersion: 1, ...await professionalQuote(tx, org, coachId, branchId, member.branchIds), durationMinutes: d.durationMinutes as number };
+    if (d.includePremiumVoucher !== true && d.usePremiumVoucher !== true) return quote;
+    const voucher = await premiumCoachVoucherOffer(tx, auth, org, { ...quote, coachId, branchId }, clock());
+    if (d.usePremiumVoucher === true) {
+      const snapshot = requireAvailablePremiumCoachVoucher(voucher);
+      return { ...quote, amountMinor: snapshot.amountMinor, grossAmountMinor: quote.amountMinor, discountMinor: snapshot.discountMinor, premiumVoucher: voucher.offer };
+    }
+    return { ...quote, premiumVoucher: voucher.offer };
   });
 }
 function payment(d: DocumentData | undefined, org: string, id: string): DocumentData {
@@ -60,7 +78,7 @@ function payment(d: DocumentData | undefined, org: string, id: string): Document
 function view(d: DocumentData) {
   return { schemaVersion: 1, bookingId: String(d.bookingId), status: String(d.fulfilmentStatus), amountMinor: Number(d.amountMinor), currency: 'MYR', coachName: String(d.coachName), branchName: String(d.branchName), startLabel: String(d.startLabel), endLabel: String(d.endLabel), localDate: String(d.localDate), durationMinutes: Number(d.durationMinutes), holdExpiresAtMillis: Number(d.holdExpiresAtMillis),
     ...(d.fulfilmentStatus === 'awaiting_payment' && typeof d.checkoutUrl === 'string' ? { checkoutUrl: d.checkoutUrl } : {}),
-    paymentStatus:String(d.paymentStatus),
+    paymentStatus:String(d.paymentStatus), ...bookingVoucherProjection(d),
     ...(typeof d.refundStatus === 'string' ? { refundStatus: d.refundStatus } : {}),
     ...(typeof d.resolutionReason === 'string' ? { resolutionReason: d.resolutionReason } : {}) };
 }
@@ -73,7 +91,8 @@ function closeUnpaidCheckout(tx: TransactionPort, org: string, id: string, d: Do
   tx.set(txPath(org,id),next); audit(tx,org,id,'checkout_closed',now); return next;
 }
 export async function createBookingPayment(store: DocumentStore, auth: Auth, raw: unknown, gateway: BillplzGateway, readIdentity: CoachIdentityReader, clock = Date.now) {
-  const {org,id,uid} = paymentInput(auth,raw);
+  const {org,id,uid,usePremiumVoucher} = paymentInput(auth,raw,true);
+  if (usePremiumVoucher) { const failure = await coachEligibilityFailure(readIdentity,uid); if (failure) throw failure; }
   const captured = await store.transact(async tx => {
     const b = await authorizedBooking(tx,org,id,uid,true);
     const prior = await tx.get(txPath(org,id));
@@ -91,12 +110,15 @@ export async function createBookingPayment(store: DocumentStore, auth: Auth, raw
     const member = await currentBookingMembership(tx,org,uid);
     const quote = await professionalQuote(tx,org,b.coachId,b.branchId,member.branchIds);
     const user = await tx.get(`users/${uid}`);
+    const voucher = usePremiumVoucher ? await premiumCoachVoucherOffer(tx,auth,org,{...quote,coachId:b.coachId,branchId:b.branchId,durationMinutes:b.durationMinutes},now) : undefined;
+    const snapshot = voucher ? requireAvailablePremiumCoachVoucher(voucher) : undefined;
     if (typeof user?.email !== 'string' || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(user.email) || user.email.length > 254) throw new DomainError('failed-precondition','A valid account email is required.');
     const format = new Intl.DateTimeFormat('en-GB',{timeZone:b.timeZone,hour:'2-digit',minute:'2-digit',hourCycle:'h23',timeZoneName:'shortOffset'});
     const d = { schemaVersion: 1, environment: 'sandbox', provider: 'billplz', type: 'CoachingBooking', organizationId: org, bookingId: id, memberId: uid, coachId: b.coachId, branchId: b.branchId,
-      ...quote, durationMinutes:b.durationMinutes, localDate:b.localDate, startLabel:format.format(b.startAtMillis), endLabel:format.format(b.endAtMillis), holdExpiresAtMillis:b.holdExpiresAtMillis,
+      ...quote, ...(snapshot ? {amountMinor:snapshot.amountMinor,grossAmountMinor:quote.amountMinor,discountMinor:snapshot.discountMinor,premiumVoucher:snapshot} : {}), durationMinutes:b.durationMinutes, localDate:b.localDate, startLabel:format.format(b.startAtMillis), endLabel:format.format(b.endAtMillis), holdExpiresAtMillis:b.holdExpiresAtMillis,
       paymentStatus:'pending', fulfilmentStatus:'creating', createdAtMillis:now, updatedAtMillis:now };
-    tx.create(txPath(org,id),d); audit(tx,org,id,'checkout_created',now,{amountMinor:quote.amountMinor,currency:'MYR'});
+    if (snapshot) reservePremiumCoachVoucher(tx,org,id,snapshot,voucher!.prior,now);
+    tx.create(txPath(org,id),d); audit(tx,org,id,'checkout_created',now,{amountMinor:d.amountMinor,currency:'MYR',...(snapshot ? {grossAmountMinor:quote.amountMinor,discountMinor:snapshot.discountMinor,voucherId:snapshot.voucherId} : {})});
     return { data:d, email:user.email, name:typeof user.displayName === 'string' ? user.displayName.slice(0,120) : 'GainPath Member' };
   });
   if (reservation.existing) return reservation.existing;
@@ -124,6 +146,16 @@ export async function createBookingPayment(store: DocumentStore, auth: Auth, raw
 export async function settleBookingPayment(store: DocumentStore, org: string, id: string, bill: SandboxBill, readIdentity: CoachIdentityReader, clock = Date.now) {
   const initial = await store.transact(async tx => payment(await tx.get(txPath(org,id)),org,id));
   if (initial.billId !== bill.id || initial.collectionId !== bill.collection_id || initial.amountMinor !== bill.amount || bill.reference_1 !== id || bill.reference_2 !== org) throw review();
+  if (initial.premiumVoucher !== undefined && initial.paymentStatus !== 'cleared' && bill.paid === false && bill.state === 'deleted' && bill.paid_amount === 0) {
+    return store.transact(async tx => {
+      const d = payment(await tx.get(txPath(org,id)),org,id);
+      if (d.paymentStatus === 'cleared' || d.voucherReleasedAtMillis !== undefined) return view(d);
+      if (d.billId !== bill.id || d.collectionId !== bill.collection_id || d.amountMinor !== bill.amount) throw review();
+      const now = integer(clock(),1), release = await preparePremiumCoachVoucherRelease(tx,org,id,d,now);
+      const next = {...d,fulfilmentStatus:'reconciliation_required',resolutionReason:'provider_verified_deleted',voucherReleasedAtMillis:now,updatedAtMillis:now};
+      release(); tx.set(txPath(org,id),next); audit(tx,org,id,'voucher_released',now,{billId:bill.id}); return view(next);
+    });
+  }
   if (bill.paid !== true || bill.state !== 'paid') return view(initial); // A late failed attempt never downgrades payment.
   if (bill.paid_amount !== initial.amountMinor) throw review();
   if (initial.paymentStatus === 'cleared') return view(initial);
@@ -165,6 +197,7 @@ export async function settleBookingPayment(store: DocumentStore, org: string, id
       else throw error;
     }
     const originalDay = !reason ? await tx.get(day!.dayPath) : undefined;
+    const consumeVoucher = await preparePremiumCoachVoucherConsumption(tx,org,id,d,now);
     const next = {...d,paymentStatus:'cleared',fulfilmentStatus:reason ? 'reconciliation_required' : 'confirmed',paymentVerifiedAtMillis:now,updatedAtMillis:now,...(reason ? {resolutionReason:reason} : {})};
     if (!reason) {
       tx.set(`orgs/${org}/bookings/${id}`,{...b,status:'confirmed'});
@@ -172,7 +205,7 @@ export async function settleBookingPayment(store: DocumentStore, org: string, id
       tx.set(day!.dayPath,{...originalDay,reservations:(originalDay!.reservations as DocumentData[]).map(r => r.bookingId === id ? {...r,status:'confirmed'} : r)});
       tx.set(`orgs/${org}/jobs/${keyOf('expireBookingHold',id)}`,{...job,status:'completed',outcome:'confirmed',processedAtMillis:now,attempts:Number(job!.attempts)+1});
     }
-    tx.set(txPath(org,id),next);
+    consumeVoucher(); tx.set(txPath(org,id),next);
     audit(tx,org,id,'payment_cleared',now,{billId:bill.id,amountMinor:d.amountMinor,currency:'MYR'});
     audit(tx,org,id,reason ? 'resolution_required' : 'booking_confirmed',now,reason ? {reason} : {});
     return view(next);

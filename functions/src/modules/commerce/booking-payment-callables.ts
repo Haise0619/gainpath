@@ -8,6 +8,7 @@ import { coachCommandError } from '../coaching/coach-profile-callables';
 import { readCoachIdentity } from '../coaching/coach-identity-reader';
 import { BillplzSandboxGateway, verifyBillplzCallback } from './billplz-sandbox';
 import { createBookingPayment, getBookingPaymentQuote, readBookingPayment, settleBookingPayment } from './booking-payment-service';
+import { settleMembershipPayment } from './membership-payment-service';
 
 const apiKey = defineSecret('BILLPLZ_SANDBOX_API_KEY');
 const signatureKey = defineSecret('BILLPLZ_SANDBOX_X_SIGNATURE_KEY');
@@ -25,7 +26,7 @@ function gateway() {
 }
 const store=()=>new FirestoreStore(getFirestore());
 export const getBookingPaymentQuoteCommand=onCall({enforceAppCheck:true},async r=>{
-  try { configured(r.data); return await getBookingPaymentQuote(store(),r.auth,r.data); } catch(e) {throw coachCommandError(e);}
+  try { configured(r.data); return await getBookingPaymentQuote(store(),r.auth,r.data,Date.now,readCoachIdentity); } catch(e) {throw coachCommandError(e);}
 });
 export const createBookingPaymentCommand=onCall({enforceAppCheck:true,secrets:[apiKey]},async r=>{
   try { configured(r.data); return await createBookingPayment(store(),r.auth,r.data,gateway(),readCoachIdentity); } catch(e) {throw coachCommandError(e);}
@@ -60,7 +61,11 @@ export const paymentWebhook=onRequest({secrets:[apiKey,signatureKey]},async(req,
     const bill=await gateway().get(fields.id); // Independent provider verification, never client status.
     if(bill.collection_id!==fields.collection_id || String(bill.amount)!==fields.amount)throw new DomainError('failed-precondition','Callback amount mismatch.');
     if(fields.paid==='true' && (!bill.paid || bill.state!=='paid'))throw new DomainError('unavailable','Provider status is not yet consistent.');
-    await settleBookingPayment(store(),organization.value(),row.id,bill,readCoachIdentity);
+    if (['MembershipPurchase', 'MembershipRenewal'].includes(String(record.kind))) {
+      await settleMembershipPayment(store(),organization.value(),row.id,bill,Date.now,readCoachIdentity);
+    } else {
+      await settleBookingPayment(store(),organization.value(),row.id,bill,readCoachIdentity);
+    }
     await db.runTransaction(async tx=>{
       const current=(await tx.get(ingress)).data();
       if(current?.status!=='processed')tx.set(ingress,{...current,status:'processed',processedAtMillis:Date.now(),processingUntilMillis:0});
@@ -74,5 +79,5 @@ export const paymentWebhook=onRequest({secrets:[apiKey,signatureKey]},async(req,
 });
 export const billplzSandboxReturn=onRequest((_req,res)=>{
   res.set('Cache-Control','no-store').set('Content-Security-Policy',"default-src 'none'; style-src 'unsafe-inline'")
-    .status(200).type('html').send('<!doctype html><html><head><meta name="viewport" content="width=device-width, initial-scale=1"><title>Return to GainPath</title></head><body style="font-family:system-ui;padding:32px"><h1>Return to GainPath</h1><p>Open GainPath to check your booking payment. This page does not confirm payment or a booking.</p></body></html>');
+    .status(200).type('html').send('<!doctype html><html><head><meta name="viewport" content="width=device-width, initial-scale=1"><title>Return to GainPath</title></head><body style="font-family:system-ui;padding:32px"><h1>Return to GainPath</h1><p>Open GainPath to check your payment. This page does not confirm payment or activation.</p></body></html>');
 });

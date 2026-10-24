@@ -101,6 +101,70 @@ void main() {
         certificationVerified: true,
         approvedCertificationCount: 1);
     expect(eligibleWithCert.canPublish, isTrue);
+    expect(eligibleWithCert.hasPublishableChanges, isTrue);
+
+    final publishedUpToDate = CoachPublicationReview(
+        coachId: 'coach',
+        draft: CoachProfessionalProfile(
+            id: 'coach',
+            fields: fields(),
+            revision: 2,
+            createdAtMillis: 1,
+            updatedAtMillis: 2),
+        publication: PublishedCoachProfile(
+            id: 'coach',
+            fields: fields(),
+            revision: 3,
+            sourceRevision: 2,
+            status: 'published',
+            branchIds: const ['b1'],
+            createdAtMillis: 1,
+            updatedAtMillis: 2,
+            publishedAtMillis: 2,
+            certificationVerified: true,
+            approvedCertificationCount: 1),
+        branchIds: ['b1'],
+        targetMembershipEligible: true,
+        certificationVerified: true,
+        approvedCertificationCount: 1);
+    expect(publishedUpToDate.canPublish, isTrue);
+    expect(publishedUpToDate.hasPublishableChanges, isFalse);
+
+    final publishedWithNewDraft = CoachPublicationReview(
+        coachId: 'coach',
+        draft: CoachProfessionalProfile(
+            id: 'coach',
+            fields: fields(),
+            revision: 3,
+            createdAtMillis: 1,
+            updatedAtMillis: 3),
+        publication: publishedUpToDate.publication,
+        branchIds: ['b1'],
+        targetMembershipEligible: true,
+        certificationVerified: true,
+        approvedCertificationCount: 1);
+    expect(publishedWithNewDraft.hasPublishableChanges, isTrue);
+
+    final publishedInactive = CoachPublicationReview(
+        coachId: 'coach',
+        draft: publishedUpToDate.draft,
+        publication: PublishedCoachProfile(
+            id: 'coach',
+            fields: fields(),
+            revision: 3,
+            sourceRevision: 2,
+            status: 'inactive',
+            branchIds: const ['b1'],
+            createdAtMillis: 1,
+            updatedAtMillis: 2,
+            publishedAtMillis: 2,
+            certificationVerified: true,
+            approvedCertificationCount: 1),
+        branchIds: ['b1'],
+        targetMembershipEligible: true,
+        certificationVerified: true,
+        approvedCertificationCount: 1);
+    expect(publishedInactive.hasPublishableChanges, isTrue);
 
     expect(
         const CoachRepositoryException('failed-precondition',

@@ -6,7 +6,7 @@ import { InputValidationError } from '../../platform/validation';
 import { getBookingListService } from './booking-list-service';
 import { FirestoreBookingQueryReader } from './booking-query-reader';
 
-export const getBookingListCommand = onCall(async request => {
+export const getBookingListCommand = onCall({ preserveExternalChanges: true }, async request => {
   try {
     const db = getFirestore();
     return await getBookingListService(new FirestoreStore(db), request.auth, request.data, new FirestoreBookingQueryReader(db));

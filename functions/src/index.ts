@@ -2,11 +2,16 @@ import { initializeApp } from 'firebase-admin/app';
 
 initializeApp();
 
+export { getMembershipOverviewCommand, getMembershipQuoteCommand, createMembershipPaymentCommand, getMembershipPaymentCommand, requestMembershipRefundCommand } from './modules/commerce/membership-payment-callables';
+export { getMembershipAccessCommand, verifyMemberMembershipCommand } from './modules/commerce/membership-access-callables';
+export { verifiedRewardsCommand } from './modules/gamification/verified-rewards-callables';
+
 export { bookingConsultationNotesCommand } from './modules/coaching/booking-consultation-callable';
 
 export { bookingCommunicationCommand } from './modules/coaching/booking-communication-callable';
 
 export { createBookingHold } from './modules/coaching/create-booking-hold';
+export { memberBookingChangeCommand } from './modules/coaching/member-booking-change-callable';
 export { getMemberBookingOptionsCommand } from './modules/coaching/member-booking-options-callable';
 export { getBookingListCommand } from './modules/coaching/booking-read-callables';
 export { cancelBookingHoldCommand } from './modules/coaching/booking-lifecycle-callable';
@@ -30,3 +35,17 @@ export { submitBookingReviewCommand } from './modules/coaching/booking-review-ca
 
 export { deliverBookingNotifications } from './modules/coaching/booking-notification-worker';
 export { identifyEquipmentCommand } from './modules/workouts/equipment-scanner-callable';
+
+export { module9MemberCommandCallable } from './modules/coaching/module9-member-callable';
+export { getCoachPerformanceCommand } from './modules/coaching/coach-performance-callable';
+export { getCoachRatingsCommand } from './modules/coaching/coach-rating-callable';
+// Local read-only regional pilot; deploy only this export after explicit approval.
+export { getCoachRatingsPilotCommand } from './modules/coaching/coach-rating-pilot-callable';
+export { getBookingListReadCommand, getCoachAvailabilityReadCommand } from './modules/coaching/regional-booking-reads';
+
+export { fitnessAssistantCommand } from './modules/chatbot/chatbot-callable';
+
+// Prepared only; deployment requires explicit owner approval.
+export {googleGymConnectionCommand,googleGymOAuthCallback,syncGymBookingCommand} from './modules/coaching/google-gym-callables';
+// Prepared locally; no automatic delivery until selective deployment and activation approval.
+export {synchronizeGoogleBooking} from './modules/coaching/automatic-google-worker';

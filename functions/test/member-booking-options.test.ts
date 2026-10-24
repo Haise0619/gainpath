@@ -39,6 +39,14 @@ it('reports the current daily limit, then recovers after hold expiry', async () 
   expect(await read()).toMatchObject({ options: [], unavailableReason: 'daily_limit' });
   expect((await read({}, hold.holdExpiresAtMillis)).options).toHaveLength(7);
 });
+it('keeps later same-day options available while hiding the Member’s overlapping sessions with another Coach', async () => {
+  store.documents.get('orgs/org-1/settings/booking')!.maxActiveBookingsPerMemberPerDay=32;
+  for(const [p,d]of Object.entries(seeds))if(p.includes('coach-1'))store.documents.set(p.replaceAll('coach-1','coach-2'),structuredClone(d));
+  await createBookingHoldService(store,auth.uid,command,eligibleCoach,()=>now);
+  const result=await read({coachId:'coach-2'});
+  expect(result.options.length).toBeGreaterThan(0);
+  expect(result.options.every(o=>o.startAtMillis>=start+3600000)).toBe(true);
+});
 it('defaults to server-local today and distinguishes no open times', async () => {
   expect(await read({ localDate: undefined })).toMatchObject({ localDate: '2026-10-01', options: [], unavailableReason: 'no_open_times' });
 });

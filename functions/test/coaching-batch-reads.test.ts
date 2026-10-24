@@ -52,13 +52,17 @@ it('batches all requested days and every lock while retaining revisions and rece
   const f = fixture();
   await saveCoachAvailabilityDayService(f.store, auth('coach'), save(), () => now);
   const slots = dateGrid('2026-10-16', 'Asia/Kuala_Lumpur').slots;
-  expect(f.batches[0]).toEqual(slots.map(s => `${root}/slotLocks/${keyOf('coach',s)}`));
+  const lockBatches = () => f.batches.filter(batch => batch.some(path => path.includes('/slotLocks/')));
+  expect(lockBatches()).toEqual([slots.map(s => `${root}/slotLocks/${keyOf('coach',s)}`)]);
   const context = await getCoachAvailabilityService(f.store, auth('coach'), read(), () => now);
   expect(context.days.find(d => d.localDate === '2026-10-16')?.revision).toBe(1);
-  expect(f.batches[1]).toEqual(context.days.map(d=>`${root}/coachAvailability/coach/days/${d.localDate}`));
+  const days = context.days.map(d=>`${root}/coachAvailability/coach/days/${d.localDate}`);
+  expect(f.batches.some(batch => days.every(day => batch.includes(day)))).toBe(true);
+  const beforeReplay = structuredClone([...f.memory.documents]);
   const replay = await saveCoachAvailabilityDayService(f.store, auth('coach'), save(), () => now);
   expect(replay.revision).toBe(1);
-  expect(f.batches).toHaveLength(2);
+  expect(lockBatches()).toHaveLength(1);
+  expect([...f.memory.documents]).toEqual(beforeReplay);
 });
 
 it('checks the final off-window lock in the batch and never writes after malformed lock data', async () => {

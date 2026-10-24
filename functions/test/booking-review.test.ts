@@ -32,6 +32,7 @@ describe('submitBookingReview', () => {
       timeZone: 'Asia/Kuala_Lumpur',
       policyVersion: 'booking-v1',
     });
+    store.documents.set(`orgs/${org}/bookings/${bookingId}/consultation/current`, { schemaVersion: 1, bookingId, memberId: memberUid, coachId: coachUid });
     return store;
   }
 

@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { memberBusySlots } from './member-booking-conflicts';
 import type { DocumentData, DocumentStore, TransactionPort } from '../../platform/firestore/store';
 import { parseCreateBookingHold, requiredIdentifier } from '../../platform/validation';
 import { DomainError } from '../../platform/errors';
@@ -54,6 +55,8 @@ export async function createBookingHoldService(store: DocumentStore, actorId: st
     const slots = Array.from({ length: input.durationMinutes / 30 }, (_, i) => input.startAtMillis + i * SLOT);
     if (slots.some(slot => day.blocked.has(slot))) throw new DomainError('aborted', 'The selected time is no longer available.');
     if (day.reservations.length >= policy.cap) throw new DomainError('resource-exhausted', 'Daily booking limit reached.');
+    const memberBlocked = await memberBusySlots(tx,input.organizationId,input.memberId,date,policy.timeZone,day.reservations);
+    if (slots.some(slot=>memberBlocked.has(slot))) throw new DomainError('aborted','You already have a session or active hold at this time. Choose a nonoverlapping time.');
     if (day.dailyCapacityMinutes !== undefined && day.blocked.size * 30 + input.durationMinutes > day.dailyCapacityMinutes) throw new DomainError('resource-exhausted', 'Coach daily booking hours reached.');
     const holdExpiresAtMillis = Math.min(now + policy.holdMillis, input.startAtMillis);
     const result: CreateBookingHoldResult = { schemaVersion: 1, bookingId, requestId: input.requestId, status: 'pending_hold', holdExpiresAtMillis };

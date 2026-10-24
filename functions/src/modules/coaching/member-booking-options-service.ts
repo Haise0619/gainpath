@@ -5,6 +5,8 @@ import { InputValidationError, requiredIdentifier } from '../../platform/validat
 import { allowed, dateEpoch, localDate, object, SLOT } from './coach-availability-contracts';
 import { bookingCoachScope, bookingDaySnapshot, coachEligibilityFailure, currentBookingMembership, currentBookingPolicy, requireBookingOrganization } from './booking-validation';
 import type { CoachIdentityReader } from './coach-profile-service';
+import { storedBooking } from './booking-record';
+import { memberBusySlots } from './member-booking-conflicts';
 
 export interface MemberBookingOption { branchId: string; startAtMillis: number; endAtMillis: number; startLabel: string; endLabel: string }
 export interface MemberBookingOptionsResult {
@@ -16,16 +18,21 @@ export async function getMemberBookingOptionsService(store: DocumentStore,
   auth: { uid: string; token: Record<string, unknown> } | undefined, raw: unknown,
   readIdentity: CoachIdentityReader, clock = Date.now): Promise<MemberBookingOptionsResult> {
   requireVerifiedEmail(auth);
-  const input = object(raw); allowed(input, ['schemaVersion', 'organizationId', 'coachId', 'localDate', 'durationMinutes']);
+  const input = object(raw); allowed(input, ['schemaVersion', 'organizationId', 'coachId', 'localDate', 'durationMinutes', 'rescheduleBookingId']);
   if (input.schemaVersion !== 1 || (input.durationMinutes !== 30 && input.durationMinutes !== 60)) throw new InputValidationError('schemaVersion 1 and a 30/60 minute duration are required.');
   const durationMinutes = input.durationMinutes, org = requiredIdentifier(input.organizationId, 'organizationId'), coachId = requiredIdentifier(input.coachId, 'coachId'), uid = requiredIdentifier(auth!.uid, 'actorId');
   const requestedDate = input.localDate;
+  const rescheduleId = input.rescheduleBookingId === undefined ? undefined : requiredIdentifier(input.rescheduleBookingId,'rescheduleBookingId');
   if (requestedDate !== undefined) dateEpoch(requestedDate);
   const scope = async (tx: TransactionPort) => {
     const member = await currentBookingMembership(tx, org, uid);
     if (member.role !== 'member') throw new DomainError('permission-denied', 'Only Members can request booking options.');
     await requireBookingOrganization(tx, org);
-    return bookingCoachScope(tx, org, coachId, member.branchIds);
+    const coach = await bookingCoachScope(tx, org, coachId, member.branchIds);
+    const original = rescheduleId ? storedBooking(await tx.get(`orgs/${org}/bookings/${rescheduleId}`),org,rescheduleId) : undefined;
+    if(original && (original.memberId!==uid || original.coachId!==coachId || original.durationMinutes!==durationMinutes))throw new DomainError('permission-denied','Only the owner can reschedule the original Coach and duration.');
+    if(original && (original.status!=='confirmed' || original.startAtMillis-clock()<24*3600000))throw new DomainError('failed-precondition','Rescheduling requires a confirmed session at least 24 hours ahead.');
+    return {...coach,original};
   };
   await store.transact(scope); // Authorize before querying another account's Auth record.
   const eligibilityFailure = await coachEligibilityFailure(readIdentity, coachId);
@@ -34,13 +41,15 @@ export async function getMemberBookingOptionsService(store: DocumentStore,
     if (eligibilityFailure) throw eligibilityFailure;
     const policy = currentBookingPolicy(await tx.get(`orgs/${org}/settings/booking`)), now = clock();
     const date = requestedDate === undefined ? localDate(now, policy.timeZone) : requestedDate as string;
-    const day = await bookingDaySnapshot(tx, org, coachId, uid, date, policy, coach.assigned, now);
+    const day = await bookingDaySnapshot(tx, org, coachId, uid, date, policy, coach.assigned, now,rescheduleId);
     const options: MemberBookingOption[] = [], labels = new Map(day.grid.boundaries.map(b => [b.atMillis, b.label]));
     const dailyLimit = day.reservations.length >= policy.cap || (day.dailyCapacityMinutes !== undefined && day.blocked.size * 30 + durationMinutes > day.dailyCapacityMinutes);
+    const memberBlocked = dailyLimit ? new Set<number>() : await memberBusySlots(tx,org,uid,date,policy.timeZone,day.reservations);
     if (!dailyLimit) for (const start of day.grid.slots) {
       const end = start + durationMinutes * 60000;
-      const window = day.windows.find(w => coach.permitted.includes(w.branchId) && w.startAtMillis <= start && w.endAtMillis >= end);
-      if (start <= now || !window || day.blocked.has(start) || (durationMinutes === 60 && day.blocked.has(start + SLOT))) continue;
+      const window = day.windows.find(w => coach.permitted.includes(w.branchId) && (!coach.original || w.branchId===coach.original.branchId) && w.startAtMillis <= start && w.endAtMillis >= end);
+      if(coach.original && (start===coach.original.startAtMillis || start<coach.original.holdExpiresAtMillis))continue;
+      if (start <= now || !window || day.blocked.has(start) || memberBlocked.has(start) || (durationMinutes === 60 && (day.blocked.has(start + SLOT) || memberBlocked.has(start+SLOT)))) continue;
       options.push({ branchId: window.branchId, startAtMillis: start, endAtMillis: end, startLabel: labels.get(start)!, endLabel: labels.get(end)! });
     }
     return { schemaVersion: 1, coachId, durationMinutes, serverNowMillis: now, todayLocalDate: day.today,

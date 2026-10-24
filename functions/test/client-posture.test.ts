@@ -10,6 +10,8 @@ describe('client posture history service', () => {
 
   function setupStore() {
     const store = new MemoryStore();
+    store.documents.set(`users/${memberUid}`, { schemaVersion: 1, organizationId: org });
+    store.documents.set(`orgs/${org}/members/${memberUid}`, { schemaVersion: 1, organizationId: org, role: 'member', status: 'active', branchIds: ['branch-1'] });
     store.documents.set(`orgs/${org}`, { schemaVersion: 1, status: 'active' });
     store.documents.set(`orgs/${org}/branches/branch-1`, { schemaVersion: 1, status: 'active' });
     store.documents.set(`users/${coachUid}`, { schemaVersion: 1, organizationId: org });
@@ -24,6 +26,7 @@ describe('client posture history service', () => {
       schemaVersion: 1,
       organizationId: org,
       coachId: coachUid,
+      branchId: 'branch-1',
       memberId: memberUid,
       status: 'confirmed',
     });
@@ -68,6 +71,9 @@ describe('client posture history service', () => {
 
   it('returns unauthorized_relationship when bookingId is missing or unverified', async () => {
     const store = setupStore();
+    if (store.documents.get(`orgs/${org}/workoutConsents/${memberUid}`)?.shareWithAssignedCoach === true) {
+      store.documents.set(`orgs/${org}/coachSharing/${memberUid}`, { schemaVersion: 1, organizationId: org, memberId: memberUid, enabled: true });
+    }
     const result = await getClientPostureHistory(store, coachAuth, {
       schemaVersion: 1,
       organizationId: org,
@@ -89,6 +95,9 @@ describe('client posture history service', () => {
       status: 'confirmed',
     });
 
+    if (store.documents.get(`orgs/${org}/workoutConsents/${memberUid}`)?.shareWithAssignedCoach === true) {
+      store.documents.set(`orgs/${org}/coachSharing/${memberUid}`, { schemaVersion: 1, organizationId: org, memberId: memberUid, enabled: true });
+    }
     const result = await getClientPostureHistory(store, coachAuth, {
       schemaVersion: 1,
       organizationId: org,
@@ -103,6 +112,9 @@ describe('client posture history service', () => {
 
   it('returns consent_not_granted when relationship is verified but member has no consent record', async () => {
     const store = setupStore();
+    if (store.documents.get(`orgs/${org}/workoutConsents/${memberUid}`)?.shareWithAssignedCoach === true) {
+      store.documents.set(`orgs/${org}/coachSharing/${memberUid}`, { schemaVersion: 1, organizationId: org, memberId: memberUid, enabled: true });
+    }
     const result = await getClientPostureHistory(store, coachAuth, {
       schemaVersion: 1,
       organizationId: org,
@@ -127,6 +139,9 @@ describe('client posture history service', () => {
       revokedAtMillis: 2000,
     });
 
+    if (store.documents.get(`orgs/${org}/workoutConsents/${memberUid}`)?.shareWithAssignedCoach === true) {
+      store.documents.set(`orgs/${org}/coachSharing/${memberUid}`, { schemaVersion: 1, organizationId: org, memberId: memberUid, enabled: true });
+    }
     const result = await getClientPostureHistory(store, coachAuth, {
       schemaVersion: 1,
       organizationId: org,
@@ -149,8 +164,12 @@ describe('client posture history service', () => {
       acknowledgementId: 'ack-1',
       acknowledgedAtMillis: 1000,
       revokedAtMillis: null,
+      shareWithAssignedCoach: true,
     });
 
+    if (store.documents.get(`orgs/${org}/workoutConsents/${memberUid}`)?.shareWithAssignedCoach === true) {
+      store.documents.set(`orgs/${org}/coachSharing/${memberUid}`, { schemaVersion: 1, organizationId: org, memberId: memberUid, enabled: true });
+    }
     const result = await getClientPostureHistory(store, coachAuth, {
       schemaVersion: 1,
       organizationId: org,
@@ -177,6 +196,9 @@ describe('client posture history service', () => {
       shareWithAssignedCoach: false,
     });
 
+    if (store.documents.get(`orgs/${org}/workoutConsents/${memberUid}`)?.shareWithAssignedCoach === true) {
+      store.documents.set(`orgs/${org}/coachSharing/${memberUid}`, { schemaVersion: 1, organizationId: org, memberId: memberUid, enabled: true });
+    }
     const result = await getClientPostureHistory(store, coachAuth, {
       schemaVersion: 1,
       organizationId: org,
@@ -190,6 +212,25 @@ describe('client posture history service', () => {
     expect(result.sessions).toEqual([]);
   });
 
+  it('does not query private sessions after Coach reassignment', async () => {
+    const store = setupStore();
+    store.documents.set(`orgs/${org}/members/${coachUid}`, { schemaVersion: 1, organizationId: org, role: 'coach', status: 'active', branchIds: ['branch-2'] });
+    const result = await getClientPostureHistory(store, coachAuth, { schemaVersion: 1, organizationId: org, memberId: memberUid, bookingId: 'booking-1' }, { readMemberSessions: async () => { throw new Error('must not read private sessions'); } });
+    expect(result.authorized).toBe(false);
+  });
+  it('denies missing coach-sharing permission without reading workouts', async () => {
+    const store = setupStore();
+    store.documents.set(`orgs/${org}/workoutConsents/${memberUid}`, {
+      schemaVersion: 1, consentVersion: WORKOUT_CONSENT_VERSION, revokedAtMillis: null,
+    });
+    if (store.documents.get(`orgs/${org}/workoutConsents/${memberUid}`)?.shareWithAssignedCoach === true) {
+      store.documents.set(`orgs/${org}/coachSharing/${memberUid}`, { schemaVersion: 1, organizationId: org, memberId: memberUid, enabled: true });
+    }
+    const result = await getClientPostureHistory(store, coachAuth, {
+      schemaVersion: 1, organizationId: org, memberId: memberUid, bookingId: 'booking-1',
+    }, { readMemberSessions: async () => { throw new Error('Private workouts must not be queried'); } });
+    expect(result.authorized).toBe(false);
+  });
   it('returns available measurements and real sessions when reader returns accepted workouts', async () => {
     const store = setupStore();
     store.documents.set(`orgs/${org}/workoutConsents/${memberUid}`, {
@@ -200,10 +241,12 @@ describe('client posture history service', () => {
       acknowledgementId: 'ack-1',
       acknowledgedAtMillis: 1000,
       revokedAtMillis: null,
+      shareWithAssignedCoach: true,
     });
 
     const mockReader = {
       readMemberSessions: async () => [
+        { sessionId: 'unscored', exerciseId: 'bodyweight_squat', endedAtMillis: 1729000000, formScorePercent: null },
         {
           sessionId: 'session-1',
           exerciseId: 'bodyweight_squat',
@@ -221,6 +264,9 @@ describe('client posture history service', () => {
       ],
     };
 
+    if (store.documents.get(`orgs/${org}/workoutConsents/${memberUid}`)?.shareWithAssignedCoach === true) {
+      store.documents.set(`orgs/${org}/coachSharing/${memberUid}`, { schemaVersion: 1, organizationId: org, memberId: memberUid, enabled: true });
+    }
     const result = await getClientPostureHistory(
       store,
       coachAuth,

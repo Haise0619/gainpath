@@ -47,6 +47,25 @@ it('atomically enforces the per-member organization-local daily cap for nonoverl
   expect(results.filter(r => r.status === 'fulfilled')).toHaveLength(1);
   expect([...store.documents.keys()].filter(p => p.includes('/bookings/'))).toHaveLength(1);
 });
+it('allows multiple nonoverlapping sessions while rejecting same-Member overlap across Coaches', async () => {
+  store.documents.get('orgs/org-1/settings/booking')!.maxActiveBookingsPerMemberPerDay = 32;
+  for (const [path, data] of Object.entries(seeds)) if (path.includes('coach-1')) {
+    store.documents.set(path.replaceAll('coach-1','coach-2'), structuredClone(data));
+  }
+  await execute();
+  await expect(execute({...command,coachId:'coach-2',requestId:'overlap',startAtMillis:start+1800000})).rejects.toMatchObject({code:'aborted'});
+  const second = await execute({...command,coachId:'coach-2',requestId:'second',startAtMillis:start+3600000});
+  expect(second.status).toBe('pending_hold');
+  expect([...store.documents.keys()].filter(p=>p.startsWith('orgs/org-1/bookings/'))).toHaveLength(2);
+});
+it('keeps later same-day booking available after an earlier session is completed', async () => {
+  store.documents.get('orgs/org-1/settings/booking')!.maxActiveBookingsPerMemberPerDay=32;
+  const first=await execute();
+  store.documents.get(`orgs/org-1/bookings/${first.bookingId}`)!.status='completed';
+  store.documents.get(`orgs/org-1/bookingDays/${keyOf('member-1','2026-10-02')}`)!.reservations=[{bookingId:first.bookingId,status:'confirmed',expiresAtMillis:now+900000}];
+  clock=start+5400000;
+  expect((await execute({...command,requestId:'after-completion',startAtMillis:start+7200000})).status).toBe('pending_hold');
+});
 it('prevents overlap even when the start slot differs', async () => {
   store.documents.set('orgs/org-1/settings/booking', { ...seeds['orgs/org-1/settings/booking'], maxActiveBookingsPerMemberPerDay: 4 });
   await execute();

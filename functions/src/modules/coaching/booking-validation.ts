@@ -79,7 +79,7 @@ export function activeBookingReservations(data: DocumentData | undefined, member
   return reservations.filter(r => r.status === 'confirmed' || r.expiresAtMillis > now);
 }
 export async function bookingDaySnapshot(tx: TransactionPort, org: string, coachId: string, memberId: string,
-  date: string, policy: ReturnType<typeof currentBookingPolicy>, assigned: readonly string[], now: number) {
+  date: string, policy: ReturnType<typeof currentBookingPolicy>, assigned: readonly string[], now: number, excludeBookingId?: string) {
   const root = `orgs/${org}`, roster = storedRoster(await tx.get(`${root}/coachAvailability/${coachId}`), policy.timeZone, assigned);
   const today = localDate(now, policy.timeZone), through = plusDate(today, roster.weeklyAvailability?.advanceBookingWindowDays ?? 30);
   if (date < today || date > through) throw new DomainError('invalid-argument', `Choose today through ${through}.`);
@@ -87,7 +87,7 @@ export async function bookingDaySnapshot(tx: TransactionPort, org: string, coach
   const day = resolveRosterDay(await tx.get(`${root}/coachAvailability/${coachId}/days/${date}`), date, policy.timeZone, assigned, roster);
   if (day.reviewRequired) throw new DomainError('failed-precondition', 'Legacy schedule requires authorized review.');
   const dayPath = `${root}/bookingDays/${keyOf(memberId, date)}`;
-  const reservations = activeBookingReservations(await tx.get(dayPath), memberId, date, policy.timeZone, now);
+  const reservations = activeBookingReservations(await tx.get(dayPath), memberId, date, policy.timeZone, now).filter(r => r.bookingId !== excludeBookingId);
   const blocked = new Set<number>();
   const locks = await readAll(tx, grid.slots.map(slot => `${root}/slotLocks/${keyOf(coachId, slot)}`));
   for (const [i, slot] of grid.slots.entries()) {
@@ -98,7 +98,7 @@ export async function bookingDaySnapshot(tx: TransactionPort, org: string, coach
       || (lock.status === 'pending_hold' && (!validBookingTime(lock.expiresAtMillis) || lock.expiresAtMillis > slot))) throw new DomainError('failed-precondition', 'Reservation lock needs authorized review.');
     if (lock.status === 'confirmed' || Number(lock.expiresAtMillis) > now) {
       if (day.windows.find(w => w.startAtMillis <= slot && w.endAtMillis >= slot + SLOT)?.branchId !== lock.branchId) throw new DomainError('failed-precondition', 'Stored schedule and reservation disagree.');
-      blocked.add(slot);
+      if (lock.bookingId !== excludeBookingId) blocked.add(slot);
     }
   }
   return { today, through, grid, windows: day.windows, reservations, dayPath, blocked, dailyCapacityMinutes: roster.weeklyAvailability ? roster.weeklyAvailability.dailyCapacityHours * 60 : undefined };

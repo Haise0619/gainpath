@@ -169,6 +169,7 @@ export async function cancelAssignedBookingService(
     tx.create(`orgs/${org}/bookingNotificationEvents/${notificationKey}`, {
       schemaVersion: 1,
       type: 'coach_cancellation',
+      delivered: false,
       bookingId,
       actorId: uid,
       recipientId: booking.memberId,

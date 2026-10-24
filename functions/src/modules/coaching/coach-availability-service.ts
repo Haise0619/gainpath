@@ -1,6 +1,7 @@
 import { requireActiveMembership, requireVerifiedEmail } from '../../platform/auth-context';
 import type { DocumentStore, TransactionPort } from '../../platform/firestore/store';
 import { readAll } from '../../platform/firestore/store';
+import { prefetchReads } from '../../platform/firestore/prefetch-reads';
 import { DomainError } from '../../platform/errors';
 import { keyOf } from '../../platform/idempotency';
 import { InputValidationError, requiredIdentifier } from '../../platform/validation';
@@ -25,8 +26,9 @@ async function membership(tx: TransactionPort, org: string, uid: string) {
 }
 async function activeBranches(tx: TransactionPort, root: string, ids: readonly string[], required: boolean) {
   const active: string[] = [];
-  for (const id of ids) {
-    if ((await tx.get(`${root}/branches/${id}`))?.status === 'active') active.push(id);
+  const records = await readAll(tx, ids.map(id => `${root}/branches/${id}`));
+  for (const [i, id] of ids.entries()) {
+    if (records[i]?.status === 'active') active.push(id);
     else if (required) throw new DomainError('failed-precondition', 'Assigned branch unavailable.');
   }
   return active;
@@ -35,30 +37,44 @@ export async function getCoachAvailabilityService(store: DocumentStore, auth: Au
   const { input, uid, org } = context(auth, raw, ['schemaVersion', 'organizationId', 'coachId', 'firstLocalDate', 'dayCount']);
   const coachId = requiredIdentifier(input.coachId, 'coachId'), count = integer(input.dayCount, 1, 7), root = `orgs/${org}`;
   return store.transact(async tx => {
-    const actor = await membership(tx, org, uid);
+    const facts = await prefetchReads(tx, [
+      `users/${uid}`, `${root}/members/${uid}`, root, `${root}/settings/booking`,
+      `users/${coachId}`, `${root}/members/${coachId}`,
+    ]);
+    const actor = await membership(facts, org, uid);
     if (!['member', 'coach', 'admin'].includes(actor.role) || (actor.role === 'coach' && uid !== coachId)) throw new DomainError('permission-denied', 'Schedule access is unavailable for this account.');
-    if ((await tx.get(root))?.status !== 'active') throw new DomainError('failed-precondition', 'Organization unavailable.');
-    const policy = bookingPolicy(await tx.get(`${root}/settings/booking`)), now = clock(), today = localDate(now, policy.timeZone);
+    if ((await facts.get(root))?.status !== 'active') throw new DomainError('failed-precondition', 'Organization unavailable.');
+    const policy = bookingPolicy(await facts.get(`${root}/settings/booking`)), now = clock(), today = localDate(now, policy.timeZone);
     const first = input.firstLocalDate === undefined ? today : String(input.firstLocalDate); dateEpoch(first);
     const through = plusDate(today, 30);
     if (first < today || first > through) throw new InputValidationError('Read a date within the scheduling horizon.');
     let coach;
-    try { coach = await membership(tx, org, coachId); }
+    // A self-reading Coach already passed these exact checks in this snapshot.
+    try { coach = actor.role === 'coach' ? actor : await membership(facts, org, coachId); }
     catch { throw new DomainError('failed-precondition', 'Coach schedule unavailable.'); }
     if (coach.role !== 'coach') throw new DomainError('failed-precondition', 'Coach schedule unavailable.');
-    const active = await activeBranches(tx, root, coach.branchIds, actor.role === 'coach');
+    const dates = Array.from({ length: count }, (_, i) => plusDate(first, i)).filter(date => date <= through);
+    const details = await prefetchReads(tx, [
+      ...coach.branchIds.map(id => `${root}/branches/${id}`),
+      ...(actor.role === 'member' ? [`${root}/coaches/${coachId}`] : []),
+      `${root}/coachAvailability/${coachId}`,
+      ...dates.map(date => `${root}/coachAvailability/${coachId}/days/${date}`),
+    ]);
+    const active = await activeBranches(details, root, coach.branchIds, actor.role === 'coach');
     let visible = active;
     if (actor.role === 'member') {
-      const publication = await tx.get(`${root}/coaches/${coachId}`);
+      const publication = await details.get(`${root}/coaches/${coachId}`);
       if (publication?.status !== 'published' || !Array.isArray(publication.branchIds)) throw new DomainError('failed-precondition', 'Coach schedule is not published.');
       const publishedBranches = publication.branchIds;
       visible = active.filter(id => actor.branchIds.includes(id) && publishedBranches.includes(id));
     }
     if (!visible.length) throw new DomainError('permission-denied', 'No permitted Coach branches are available.');
-    const rosterData = await tx.get(`${root}/coachAvailability/${coachId}`), roster = storedRoster(rosterData, policy.timeZone, coach.branchIds);
     const days: AvailabilityDayResult[] = [];
-    const dates = Array.from({ length: count }, (_, i) => plusDate(first, i)).filter(date => date <= through);
-    const records = await readAll(tx, dates.map(date => `${root}/coachAvailability/${coachId}/days/${date}`));
+    const [rosterData, ...records] = await readAll(details, [
+      `${root}/coachAvailability/${coachId}`,
+      ...dates.map(date => `${root}/coachAvailability/${coachId}/days/${date}`),
+    ]);
+    const roster = storedRoster(rosterData, policy.timeZone, coach.branchIds);
     for (const [i, date] of dates.entries()) {
       const stored = resolveRosterDay(records[i], date, policy.timeZone, coach.branchIds, roster);
       const beyondAdvanceWindow = actor.role === 'member' && date > plusDate(today, roster.weeklyAvailability?.advanceBookingWindowDays ?? 30);

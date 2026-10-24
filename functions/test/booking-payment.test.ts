@@ -6,6 +6,7 @@ import { getBookingPaymentQuote, createBookingPayment, readBookingPayment, settl
 import type { BillplzGateway, SandboxBill } from '../src/modules/commerce/billplz-sandbox';
 import { expireBookingHoldService } from '../src/modules/coaching/booking-lifecycle-service';
 import { keyOf } from '../src/platform/idempotency';
+import { memberBookingChange } from '../src/modules/coaching/member-booking-change-service';
 let store: MemoryStore, id: string, creates: number;
 const auth = (uid = 'member-1') => ({ uid, token: { email_verified: true } });
 const input = () => ({ schemaVersion: 1, organizationId: 'org-1', bookingId: id });
@@ -19,6 +20,23 @@ beforeEach(async () => {
   Object.assign(store.documents.get('users/member-1')!, { email: 'member@example.invalid', displayName: 'Fixture Member' });
   Object.assign(store.documents.get('orgs/org-1/branches/branch-1')!, { displayName: 'Fixture Branch' });
   id = (await createBookingHoldService(store, 'member-1', command, eligibleCoach, () => now)).bookingId;
+});
+it('preserves the original paid invoice across rescheduling and duplicate callbacks, then keeps cancellation in review', async () => {
+  store.documents.get('orgs/org-1/coaches/coach-1')!.approvedCertificationCount = 1;
+  await createBookingPayment(store, auth(), input(), gateway, eligibleCoach, () => now);
+  await readBookingPayment(store, auth(), input(), gateway, eligibleCoach, () => now + 1000);
+  const original = structuredClone(store.documents.get(`orgs/org-1/transactions/${id}`));
+  const oldStart = command.startAtMillis, newStart = oldStart + 2 * 3600000;
+  const base = { schemaVersion: 1, organizationId: 'org-1', bookingId: id, reason: 'Fixture availability change' };
+  await memberBookingChange(store, auth(), { ...base, action: 'reschedule', requestId: 'move-paid', expectedStartAtMillis: oldStart, newStartAtMillis: newStart }, eligibleCoach, () => now + 2000);
+  await settleBookingPayment(store, 'org-1', id, bill(true), eligibleCoach, () => now + 3000);
+  expect(store.documents.get(`orgs/org-1/transactions/${id}`)).toEqual(original);
+  expect((await readBookingPayment(store, auth(), input(), gateway, eligibleCoach, () => now + 4000)).status).toBe('confirmed');
+  await memberBookingChange(store, auth(), { ...base, action: 'cancel', requestId: 'cancel-paid', expectedStartAtMillis: newStart }, eligibleCoach, () => now + 5000);
+  await settleBookingPayment(store, 'org-1', id, bill(true), eligibleCoach, () => now + 6000);
+  expect((await readBookingPayment(store, auth(), input(), gateway, eligibleCoach, () => now + 7000)).status).toBe('reconciliation_required');
+  expect(creates).toBe(1);
+  expect(store.documents.get(`orgs/org-1/bookings/${id}`)).toMatchObject({ status: 'cancelled', startAtMillis: newStart });
 });
 it('quotes authoritative minor units and creates only one bill for concurrent/repeated checkout', async () => {
   const quote = await getBookingPaymentQuote(store, auth(), { schemaVersion: 1, organizationId: 'org-1', coachId: 'coach-1', branchId: 'branch-1', durationMinutes: 60 });

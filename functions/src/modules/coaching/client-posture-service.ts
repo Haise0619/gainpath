@@ -74,6 +74,7 @@ export async function getClientPostureHistory(
       bookingDoc.organizationId !== org ||
       bookingDoc.coachId !== coachUid ||
       bookingDoc.memberId !== memberId ||
+      !coachActor.branchIds.includes(String(bookingDoc.branchId)) ||
       (bookingDoc.status !== 'confirmed' && bookingDoc.status !== 'completed')
     ) {
       return {
@@ -87,6 +88,9 @@ export async function getClientPostureHistory(
       };
     }
 
+    const branch = await tx.get(`orgs/${org}/branches/${String(bookingDoc.branchId)}`);
+    const target = await currentBookingMembership(tx, org, memberId);
+    if (branch?.status !== 'active' || target.role !== 'member' || !target.branchIds.includes(String(bookingDoc.branchId))) throw new DomainError('permission-denied', 'Current coaching relationship is unavailable.');
     const consentDoc = await tx.get(`orgs/${org}/workoutConsents/${memberId}`);
     if (!consentDoc || consentDoc.schemaVersion !== 1 || consentDoc.consentVersion !== WORKOUT_CONSENT_VERSION) {
       return {
@@ -112,7 +116,8 @@ export async function getClientPostureHistory(
       };
     }
 
-    if (consentDoc.shareWithAssignedCoach === false) {
+    const sharing = await tx.get(`orgs/${org}/coachSharing/${memberId}`);
+    if (sharing?.schemaVersion !== 1 || sharing.organizationId !== org || sharing.memberId !== memberId || sharing.enabled !== true) {
       return {
         schemaVersion: 1,
         memberId,
@@ -126,7 +131,9 @@ export async function getClientPostureHistory(
 
     const rawSessions = sessionReader ? await sessionReader.readMemberSessions(org, memberId, 20) : [];
     const sessions: ClientPostureSessionRecord[] = rawSessions
-      .filter(s => s && s.sessionId && s.exerciseId && (s.endedAtMillis || s.acceptedAtMillis))
+      .filter(s => s && s.sessionId && s.exerciseId && (s.endedAtMillis || s.acceptedAtMillis)
+        && typeof s.formScorePercent === 'number' && Number.isFinite(s.formScorePercent)
+        && s.formScorePercent >= 0 && s.formScorePercent <= 100)
       .map(s => ({
         sessionId: String(s.sessionId),
         exerciseId: String(s.exerciseId),
@@ -141,7 +148,7 @@ export async function getClientPostureHistory(
         authorized: true,
         sharingStatus: 'granted',
         measurementsStatus: 'available',
-        message: 'Cloud posture measurements verified from completed workouts.',
+        message: 'Uploaded workout form summaries from accepted sessions.',
         sessions,
       };
     }

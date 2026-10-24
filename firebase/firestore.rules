@@ -373,7 +373,7 @@ service cloud.firestore {
         return d.keys().hasAll(['schemaVersion', 'name', 'category', 'muscleGroup', 'description',
             'imageUrl', 'howToUse', 'safetyTips', 'isActive', 'revision', 'createdAt', 'updatedAt', 'createdBy', 'updatedBy'])
           && d.keys().hasOnly(['schemaVersion', 'name', 'category', 'muscleGroup', 'description',
-            'imageUrl', 'howToUse', 'safetyTips', 'isActive', 'revision', 'createdAt', 'updatedAt', 'createdBy', 'updatedBy'])
+            'imageUrl', 'tutorialVideoUrl', 'howToUse', 'safetyTips', 'isActive', 'revision', 'createdAt', 'updatedAt', 'createdBy', 'updatedBy'])
           && d.schemaVersion == 1 && d.revision is int && d.revision > 0 && d.isActive is bool
           && d.name is string && d.name.size() > 0 && d.name.size() <= 100
           && d.category is string && d.category.size() > 0 && d.category.size() <= 80
@@ -381,6 +381,8 @@ service cloud.firestore {
           && d.description is string && d.description.size() > 0 && d.description.size() <= 2000
           && d.imageUrl is string && d.imageUrl.size() <= 2048
           && (d.imageUrl == '' || d.imageUrl.matches('https://[^\\s]+'))
+          && (!('tutorialVideoUrl' in d) || (d.tutorialVideoUrl is string && d.tutorialVideoUrl.size() <= 2048
+            && (d.tutorialVideoUrl == '' || d.tutorialVideoUrl.matches('https://firebasestorage[.]googleapis[.]com/v0/b/[^/]+/o/orgs%2F' + orgId + '%2FequipmentVideos%2F[^/]+%2F[a-f0-9]{32}[.]mp4[?][^\\s]+'))))
           && validSteps(d.howToUse) && validSteps(d.safetyTips)
           && d.createdAt is timestamp && d.createdBy is string
           && d.updatedAt == request.time && d.updatedBy == request.auth.uid;
@@ -658,8 +660,31 @@ service cloud.firestore {
       allow read, write: if false;
     }
     // Module 8: immutable private credentials, audit history and server-owned summary.
+    // LOCAL PREPARATION: production activation requires separately approved
+    // Rules + validated scope records + Firestore App Check enforcement.
+    // A scope is an attestation that every branch ID was validated by trusted
+    // tooling. Equality with live membership makes role/branch drift fail closed.
+    function module8DirectScopeReader(orgId) {
+      let uid = request.auth.uid;
+      let user = get(/databases/$(database)/documents/users/$(uid)).data;
+      let member = get(/databases/$(database)/documents/orgs/$(orgId)/members/$(uid)).data;
+      let scope = get(/databases/$(database)/documents/orgs/$(orgId)/coachReadScopes/$(uid)).data;
+      return signedIn() && request.auth.token.email_verified == true
+        && user.organizationId == orgId && member.organizationId == orgId
+        && member.status == 'active' && member.role in ['coach', 'admin']
+        && member.branchIds is list
+        && scope.schemaVersion == 1 && scope.organizationId == orgId
+        && scope.userId == uid && scope.role == member.role
+        && scope.validatedBranchIds is list && scope.validatedBranchIds == member.branchIds
+        && get(/databases/$(database)/documents/orgs/$(orgId)).data.status == 'active'
+        && memberSessionCurrent(uid);
+    }
+    match /orgs/{orgId}/coachReadScopes/{uid} {
+      allow get: if signedIn() && request.auth.uid == uid && module8DirectScopeReader(orgId);
+      allow list, write: if false;
+    }
     function module8CredentialReader(orgId, coachId) {
-      return coachDirectoryMember(orgId)
+      return module8DirectScopeReader(orgId)
         && (coachOwner(orgId, coachId) || adminMember(orgId));
     }
     match /orgs/{orgId}/coachProfiles/{coachId}/certifications/{certificationId} {

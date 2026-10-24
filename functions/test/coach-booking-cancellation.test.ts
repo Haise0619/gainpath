@@ -144,6 +144,7 @@ it('atomically cancels assigned booking, releases locks, routes payment to refun
   const notificationKey = keyOf('coachCancellation', bookingId, 'cancel-req-1');
   const notification = store.documents.get(`orgs/${org}/bookingNotificationEvents/${notificationKey}`);
   expect(notification?.type).toBe('coach_cancellation');
+  expect(notification?.delivered).toBe(false);
   expect(notification?.recipientId).toBe('member-1');
 });
 

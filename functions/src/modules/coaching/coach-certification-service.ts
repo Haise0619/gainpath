@@ -1,5 +1,7 @@
 import { DomainError } from '../../platform/errors';
 import type { DocumentData, DocumentStore } from '../../platform/firestore/store';
+import { readAll } from '../../platform/firestore/store';
+import { prefetchReads } from '../../platform/firestore/prefetch-reads';
 import { keyOf } from '../../platform/idempotency';
 import { InputValidationError, requiredIdentifier } from '../../platform/validation';
 import { boundedText, coachAuthority, commandContext, credentialGateEnabled, expectedRevision, receipt, replayReceipt, saveReceipt, type CoachAuth } from './coach-management-common';
@@ -52,20 +54,24 @@ export async function getCoachCertifications(store: DocumentStore, auth: CoachAu
   const afterId = data.afterId === undefined ? null : boundedText(data.afterId, 32);
   if ([selectedId, afterId].some(id => id !== null && !/^[a-f0-9]{32}$/.test(id)) || (selectedId && afterId)) throw new InputValidationError('Invalid certification cursor.');
   return store.transact(async tx => {
-    await coachAuthority(tx, org, uid, coachId === uid ? ['coach', 'admin'] : ['admin']);
-    const state = await tx.get(`orgs/${org}/coachProfiles/${coachId}/certificationState/current`);
+    const summaryPath = `orgs/${org}/coachProfiles/${coachId}/certificationState/current`;
+    const facts = await prefetchReads(tx, [`users/${uid}`, `orgs/${org}/members/${uid}`, `orgs/${org}`, summaryPath]);
+    await coachAuthority(facts, org, uid, coachId === uid ? ['coach', 'admin'] : ['admin']);
+    const state = await facts.get(summaryPath);
     const ids = Array.isArray(state?.certificationIds) ? (state.certificationIds as string[]).slice().sort() : [];
     if (ids.length > 100 || ids.some(id => !/^[a-f0-9]{32}$/.test(id))) throw new DomainError('failed-precondition', 'Certification summary requires review.');
     if (selectedId && !ids.includes(selectedId)) throw new DomainError('not-found', 'Certification unavailable.');
     const remaining = selectedId ? [selectedId] : ids.filter(id => !afterId || id > afterId);
     const page = remaining.slice(0, 20), certifications = [];
-    for (const id of page) {
-      const item = await tx.get(`orgs/${org}/coachProfiles/${coachId}/certifications/${id}`);
+    const items = await readAll(tx, page.map(id => `orgs/${org}/coachProfiles/${coachId}/certifications/${id}`));
+    for (const [index, id] of page.entries()) {
+      const item = items[index];
       if (!item) continue;
       const history = [], revision = Number(item.revision);
       if (!Number.isSafeInteger(revision) || revision < 1 || revision > 100) throw new DomainError('failed-precondition', 'Certification needs review.');
-      if (selectedId) for (let version = revision; version > Math.max(0, revision - 20); version--) {
-        const entry = await tx.get(`orgs/${org}/coachProfiles/${coachId}/certifications/${id}/history/${version}`); if (entry) history.push(entry);
+      if (selectedId) {
+        const paths = Array.from({ length: Math.min(20, revision) }, (_, i) => `orgs/${org}/coachProfiles/${coachId}/certifications/${id}/history/${revision - i}`);
+        for (const entry of await readAll(tx, paths)) if (entry) history.push(entry);
       }
       certifications.push({ ...item, history });
     }

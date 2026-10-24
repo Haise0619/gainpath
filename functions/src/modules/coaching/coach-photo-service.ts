@@ -1,5 +1,6 @@
 import { DomainError } from '../../platform/errors';
 import type { DocumentData, DocumentStore } from '../../platform/firestore/store';
+import { prefetchReads } from '../../platform/firestore/prefetch-reads';
 import { requiredIdentifier } from '../../platform/validation';
 import { coachAuthority, commandContext, type CoachAuth } from './coach-management-common';
 // The frozen lifecycle module keeps its decoder private. Mirror its persisted
@@ -31,10 +32,11 @@ export async function getCoachPublishedPhoto(store: DocumentStore, auth: CoachAu
   const { uid, org, data } = commandContext(auth, raw, ['schemaVersion', 'organizationId', 'coachId']);
   const coachId = requiredIdentifier(data.coachId, 'coachId'), publicPath = `orgs/${org}/coaches/${coachId}`;
   const read = () => store.transact(async tx => {
-    await coachAuthority(tx, org, uid, ['member', 'coach', 'admin']);
-    const member = await tx.get(`orgs/${org}/members/${uid}`);
-    if (member?.role === 'member') requireCurrentMemberSession((await tx.get(`users/${uid}`))!, auth!.token);
-    const profile = await tx.get(publicPath);
+    const facts = await prefetchReads(tx, [`users/${uid}`, `orgs/${org}/members/${uid}`, `orgs/${org}`, publicPath]);
+    await coachAuthority(facts, org, uid, ['member', 'coach', 'admin']);
+    const member = await facts.get(`orgs/${org}/members/${uid}`);
+    if (member?.role === 'member') requireCurrentMemberSession((await facts.get(`users/${uid}`))!, auth!.token);
+    const profile = await facts.get(publicPath);
     if (profile?.status !== 'published' || profile.certificationVerified !== true || !Number.isSafeInteger(profile.approvedCertificationCount) || Number(profile.approvedCertificationCount) < 1) throw new DomainError('not-found', 'Published Coach photo unavailable.');
     const path = profile.photoPath;
     if (path === null || path === undefined) return { path: null, revision: profile.revision };

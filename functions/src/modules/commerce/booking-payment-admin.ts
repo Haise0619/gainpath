@@ -1,4 +1,6 @@
 import type { DocumentData, DocumentStore, TransactionPort } from '../../platform/firestore/store';
+import { readAll } from '../../platform/firestore/store';
+import { prefetchReads } from '../../platform/firestore/prefetch-reads';
 import { requireVerifiedEmail } from '../../platform/auth-context';
 import { DomainError } from '../../platform/errors';
 import { requiredIdentifier } from '../../platform/validation';
@@ -8,6 +10,9 @@ import { currentBookingMembership, requireBookingOrganization } from '../coachin
 import type { CoachIdentityReader } from '../coaching/coach-profile-service';
 import type { BillplzGateway, SandboxBill } from './billplz-sandbox';
 import { settleBookingPayment } from './booking-payment-service';
+import { membershipPayment, settleMembershipPayment } from './membership-payment-service';
+import { storedBooking } from '../coaching/booking-record';
+import { bookingVoucherProjection } from './premium-coach-voucher';
 type Auth = {
     uid: string;
     token: Record<string, unknown>;
@@ -50,14 +55,58 @@ function context(auth: Auth, raw: unknown, keys: string[]) { requireVerifiedEmai
     throw invalid(); return { d, org: requiredIdentifier(d.organizationId, 'organizationId'), uid: auth!.uid }; }
 async function admin(tx: TransactionPort, org: string, uid: string) { const a = await currentBookingMembership(tx, org, uid); if (a.role !== 'admin')
     throw new DomainError('permission-denied', 'Current Admin access is required.'); await requireBookingOrganization(tx, org); }
-function payment(d: DocumentData | undefined, org: string, id: string): DocumentData { if (!d || d.schemaVersion !== 1 || d.environment !== 'sandbox' || d.provider !== 'billplz' || d.organizationId !== org || d.bookingId !== id || d.currency !== 'MYR' || !Number.isSafeInteger(d.amountMinor) || Number(d.amountMinor) < 1 || !['pending', 'cleared'].includes(String(d.paymentStatus)) || !['creating', 'awaiting_payment', 'confirmed', 'reconciliation_required'].includes(String(d.fulfilmentStatus)))
+// Read commands retain every authorization phase; cache only this transaction
+// attempt's independent documents. Mutation authorization stays unchanged.
+async function readScope(tx: TransactionPort, org: string, uid: string, extra: string[] = []) {
+    const facts = await prefetchReads(tx, [`users/${uid}`, `orgs/${org}/members/${uid}`, `orgs/${org}`, ...extra]);
+    await admin(facts, org, uid);
+    return facts;
+}
+async function readSnapshot(store: DocumentStore, org: string, id: string, uid: string) {
+    return store.transact(async tx => {
+        const facts = await readScope(tx, org, uid, [path(org, id)]);
+        return payment(await facts.get(path(org, id)), org, id);
+    });
+}
+function isMembership(d: DocumentData) { return ['MembershipPurchase', 'MembershipRenewal'].includes(String(d.kind)); }
+function settle(store: DocumentStore, org: string, id: string, d: DocumentData, b: SandboxBill, deps: PaymentAdminDependencies, clock: () => number) { return isMembership(d) ? settleMembershipPayment(store, org, id, b, clock, deps.readIdentity) : settleBookingPayment(store, org, id, b, deps.readIdentity, clock); }
+function payment(d: DocumentData | undefined, org: string, id: string): DocumentData { if (d && isMembership(d)) return membershipPayment(d, org, id); if (!d || d.schemaVersion !== 1 || d.environment !== 'sandbox' || d.provider !== 'billplz' || d.organizationId !== org || d.bookingId !== id || d.currency !== 'MYR' || !Number.isSafeInteger(d.amountMinor) || Number(d.amountMinor) < 1 || !['pending', 'cleared'].includes(String(d.paymentStatus)) || !['creating', 'awaiting_payment', 'confirmed', 'reconciliation_required'].includes(String(d.fulfilmentStatus)))
     throw invalid(); return d; }
-function projection(d: DocumentData) { return Object.fromEntries(['bookingId', 'memberId', 'coachName', 'branchName', 'amountMinor', 'currency', 'paymentStatus', 'fulfilmentStatus', 'createdAtMillis', 'updatedAtMillis', 'billId', 'resolutionReason', 'refundStatus', 'refundOrderId', 'reviewReason'].filter(k => d[k] !== undefined).map(k => [k, d[k]])); }
+function projection(d: DocumentData) { return Object.fromEntries(['transactionId', 'kind', 'planName', 'refundReason', 'refundNotes', 'bookingId', 'memberId', 'coachName', 'branchName', 'amountMinor', 'currency', 'paymentStatus', 'fulfilmentStatus', 'createdAtMillis', 'updatedAtMillis', 'billId', 'resolutionReason', 'refundStatus', 'refundOrderId', 'reviewReason', 'localDate', 'startLabel', 'endLabel', 'durationMinutes', 'reviewedAtMillis', 'refundReservedAtMillis', 'refundReference', 'refundProviderStatus'].filter(k => d[k] !== undefined).map(k => [k, d[k]])); }
 function audit(tx: TransactionPort, org: string, id: string, event: string, requestId: string, uid: string, now: number, extra: DocumentData = {}) { tx.create(`${path(org, id)}/events/${keyOf(event, requestId)}`, { schemaVersion: 1, environment: 'sandbox', event, atMillis: now, actorId: uid, ...extra }); }
+async function reviewRows(store: DocumentStore, org: string, uid: string, rows: DocumentData[]) {
+    return store.transact(async tx => {
+        // One transaction snapshot and one RPC for this bounded page. A Member
+        // may appear on many payments; read their display name only once.
+        const paths = [...new Set(rows.flatMap(d => [
+            ...(isMembership(d) ? [] : [`orgs/${org}/bookings/${d.bookingId}`]),
+            `orgs/${org}/members/${d.memberId}`,
+        ]))];
+        const facts = await readScope(tx, org, uid, paths);
+        const values = await readAll(facts, paths);
+        const related = new Map(paths.map((path, i) => [path, values[i]]));
+        const result: DocumentData[] = [];
+        for (const d of rows) {
+            const projected: DocumentData = { ...projection(d), ...bookingVoucherProjection(d), bookingId: d.bookingId ?? d.transactionId }; // Legacy Admin command routing key; kind remains explicit.
+            const raw = isMembership(d) ? undefined : related.get(`orgs/${org}/bookings/${d.bookingId}`);
+            if (raw && !isMembership(d)) {
+                const b = storedBooking(raw, org, String(d.bookingId));
+                if (b.memberId !== d.memberId || b.coachId !== d.coachId) throw invalid();
+                const format = new Intl.DateTimeFormat('en-GB', { timeZone: b.timeZone, hour: '2-digit', minute: '2-digit', hourCycle: 'h23', timeZoneName: 'shortOffset' });
+                Object.assign(projected, { sessionLocalDate: b.localDate, sessionStartLabel: format.format(b.startAtMillis), sessionEndLabel: format.format(b.endAtMillis), sessionTimeZone: b.timeZone, bookingStatus: b.status,
+                    ...(b.cancellationReason ? { cancellationReason: b.cancellationReason, cancelledAtMillis: b.resolvedAtMillis } : {}) });
+            }
+            const member = related.get(`orgs/${org}/members/${d.memberId}`);
+            if (member?.organizationId === org && typeof member.displayName === 'string' && member.displayName.trim().length > 0 && member.displayName.length <= 120) projected.memberDisplayName = member.displayName.trim();
+            result.push(projected);
+        }
+        return result;
+    });
+}
 async function snapshot(store: DocumentStore, org: string, id: string, uid: string) { return store.transact(async (tx) => { await admin(tx, org, uid); return payment(await tx.get(path(org, id)), org, id); }); }
-export async function listAdminBookingPayments(store: DocumentStore, auth: Auth, raw: unknown, deps: PaymentAdminDependencies) { const { d, org, uid } = context(auth, raw, ['schemaVersion', 'organizationId', 'afterId']); const afterId = d.afterId === undefined ? undefined : requiredIdentifier(d.afterId, 'afterId'); await store.transact(tx => admin(tx, org, uid)); const rows = await deps.reader.list(org, afterId); if (rows.length > 21)
-    throw invalid(); await store.transact(tx => admin(tx, org, uid)); return { schemaVersion: 1, records: rows.slice(0, 20).filter(r => r.data.environment === 'sandbox' && r.data.provider === 'billplz').map(r => projection(payment(r.data, org, r.id))), ...(rows.length > 20 ? { nextAfterId: rows[19].id } : {}) }; }
-export async function getAdminBookingPayment(store: DocumentStore, auth: Auth, raw: unknown, deps: PaymentAdminDependencies) { const { d, org, uid } = context(auth, raw, ['schemaVersion', 'organizationId', 'bookingId']); const id = requiredIdentifier(d.bookingId, 'bookingId'); await snapshot(store, org, id, uid); const events = await deps.reader.events(org, id); const p = await snapshot(store, org, id, uid); return { schemaVersion: 1, payment: projection(p), events: events.map(r => ({ id: r.id, ...Object.fromEntries(['event', 'atMillis', 'actorId', 'reason'].filter(k => r.data[k] !== undefined).map(k => [k, r.data[k]])) })), refundExecutionAvailable: !!deps.refunds && !!deps.refundCollectionId }; }
+export async function listAdminBookingPayments(store: DocumentStore, auth: Auth, raw: unknown, deps: PaymentAdminDependencies) { const { d, org, uid } = context(auth, raw, ['schemaVersion', 'organizationId', 'afterId']); const afterId = d.afterId === undefined ? undefined : requiredIdentifier(d.afterId, 'afterId'); await store.transact(tx => readScope(tx, org, uid)); const rows = await deps.reader.list(org, afterId); if (rows.length > 21)
+    throw invalid(); await store.transact(tx => readScope(tx, org, uid)); return { schemaVersion: 1, records: await reviewRows(store, org, uid, rows.slice(0, 20).filter(r => r.data.environment === 'sandbox' && r.data.provider === 'billplz').map(r => payment(r.data, org, r.id))), ...(rows.length > 20 ? { nextAfterId: rows[19].id } : {}) }; }
+export async function getAdminBookingPayment(store: DocumentStore, auth: Auth, raw: unknown, deps: PaymentAdminDependencies) { const { d, org, uid } = context(auth, raw, ['schemaVersion', 'organizationId', 'bookingId']); const id = requiredIdentifier(d.bookingId, 'bookingId'); await readSnapshot(store, org, id, uid); const events = await deps.reader.events(org, id); const p = await readSnapshot(store, org, id, uid); return { schemaVersion: 1, payment: (await reviewRows(store, org, uid, [p]))[0], events: events.map(r => ({ id: r.id, ...Object.fromEntries(['event', 'atMillis', 'actorId', 'reason'].filter(k => r.data[k] !== undefined).map(k => [k, r.data[k]])) })), refundExecutionAvailable: !isMembership(p) && !!deps.refunds && !!deps.refundCollectionId }; }
 function eligible(d: DocumentData) { if (d.paymentStatus !== 'cleared' || d.fulfilmentStatus !== 'reconciliation_required')
     throw invalid(); }
 function matchBill(b: SandboxBill, d: DocumentData, org: string, id: string, collectionId: string) { if (b.id !== d.billId || b.collection_id !== collectionId || b.amount !== d.amountMinor || b.reference_1 !== id || b.reference_2 !== org)
@@ -88,7 +137,7 @@ export async function manageAdminBookingPayment(store: DocumentStore, auth: Auth
             const b = await deps.bills.get(boundId);
             matchBill(b, initial.p, org, id, deps.collectionId);
             await snapshot(store, org, id, uid);
-            await settleBookingPayment(store, org, id, b, deps.readIdentity, clock);
+            await settle(store, org, id, initial.p, b, deps, clock);
         }
         return result();
     }
@@ -111,12 +160,13 @@ export async function manageAdminBookingPayment(store: DocumentStore, auth: Auth
         } matchBill(b, { ...p, billId }, org, id, deps.collectionId); if (action === 'recover_bill') {
             if (p.billId || p.paymentStatus !== 'pending' || p.fulfilmentStatus !== 'reconciliation_required' || p.resolutionReason !== 'bill_creation_uncertain')
                 throw invalid();
-            tx.set(path(org, id), { ...p, billId, collectionId: b.collection_id, updatedAtMillis: clock() });
+            tx.set(path(org, id), { ...p, billId, collectionId: b.collection_id, ...(isMembership(p) ? { checkoutUrl: b.url } : {}), updatedAtMillis: clock() });
         } tx.create(receipt, { fingerprint, atMillis: clock(), actorId: uid }); audit(tx, org, id, action === 'verify' ? 'provider_checked' : 'bill_recovered', requestId, uid, clock(), { reason }); });
         // Existing settlement performs all trusted hold/lock checks; recovery never creates another bill.
-        await settleBookingPayment(store, org, id, b, deps.readIdentity, clock);
+        await settle(store, org, id, initial.p, b, deps, clock);
         return result();
     }
+    if (isMembership(initial.p)) throw new DomainError('failed-precondition', 'Membership refund execution awaits provider resolution and entitlement reversal policy. No transfer was sent.');
     if (!deps.refunds || !deps.refundCollectionId)
         throw new DomainError('unavailable', 'Sandbox Payment Order collection is not configured. No refund was sent.');
     if (action === 'check_refund' || action === 'recover_refund') {

@@ -26,7 +26,7 @@ const store = () => new FirestoreStore(getFirestore());
 export const submitCoachCertificationCommand = onCall({ enforceAppCheck: true }, async r => { try { return await changeCoachCertification(store(), r.auth, r.data, 'submit', validateUpload); } catch (e) { throw coachCommandError(e); } });
 export const archiveCoachCertificationCommand = onCall({ enforceAppCheck: true }, async r => { try { return await changeCoachCertification(store(), r.auth, r.data, 'archive', validateUpload); } catch (e) { throw coachCommandError(e); } });
 export const reviewCoachCertificationCommand = onCall({ enforceAppCheck: true }, async r => { try { return await changeCoachCertification(store(), r.auth, r.data, 'review', validateUpload); } catch (e) { throw coachCommandError(e); } });
-export const getCoachCertificationsCommand = onCall({ enforceAppCheck: true }, async r => { try { return await getCoachCertifications(store(), r.auth, r.data); } catch (e) { throw coachCommandError(e); } });
+export const getCoachCertificationsCommand = onCall({ enforceAppCheck: true, preserveExternalChanges: true }, async r => { try { return await getCoachCertifications(store(), r.auth, r.data); } catch (e) { throw coachCommandError(e); } });
 export const getCoachAccountSettingsCommand = onCall({ enforceAppCheck: true }, async r => { try { return await getCoachAccountSettings(store(), r.auth, r.data); } catch (e) { throw coachCommandError(e); } });
 export const saveCoachAccountSettingsCommand = onCall({ enforceAppCheck: true }, async r => { try { return await saveCoachAccountSettings(store(), r.auth, r.data); } catch (e) { throw coachCommandError(e); } });
 
@@ -43,4 +43,4 @@ async function downloadPublishedPhoto(path: string) {
   if (!valid) throw new DomainError('failed-precondition', 'Invalid Coach photo format.');
   return { contentType, bytesBase64: bytes.toString('base64') };
 }
-export const getCoachPublishedPhotoCommand = onCall({ enforceAppCheck: true }, async r => { try { return await getCoachPublishedPhoto(store(), r.auth, r.data, downloadPublishedPhoto); } catch (e) { throw coachCommandError(e); } });
+export const getCoachPublishedPhotoCommand = onCall({ enforceAppCheck: true, preserveExternalChanges: true }, async r => { try { return await getCoachPublishedPhoto(store(), r.auth, r.data, downloadPublishedPhoto); } catch (e) { throw coachCommandError(e); } });

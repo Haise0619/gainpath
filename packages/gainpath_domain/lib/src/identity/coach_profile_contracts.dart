@@ -148,8 +148,16 @@ class PublishedCoachProfile {
       required this.updatedAtMillis,
       required this.publishedAtMillis,
       this.certificationVerified = false,
-      this.approvedCertificationCount = 0})
+      this.approvedCertificationCount = 0,
+      this.averageRating, this.reviewCount = 0})
       : branchIds = List.unmodifiable(branchIds);
+  final double? averageRating;
+  final int reviewCount;
+  PublishedCoachProfile withRatings(double? average, int count) => PublishedCoachProfile(
+    id: id, fields: fields, revision: revision, sourceRevision: sourceRevision, status: status,
+    branchIds: branchIds, createdAtMillis: createdAtMillis, updatedAtMillis: updatedAtMillis,
+    publishedAtMillis: publishedAtMillis, certificationVerified: certificationVerified,
+    approvedCertificationCount: approvedCertificationCount, averageRating: average, reviewCount: count);
   final String id, status;
   final bool certificationVerified;
   final int approvedCertificationCount;
@@ -240,6 +248,20 @@ class CoachPublicationReview {
       branchIds.isNotEmpty &&
       certificationVerified &&
       approvedCertificationCount > 0;
+
+  bool get hasPublishableChanges {
+    final pub = publication;
+    if (pub == null || !pub.isPublished) return true;
+    if (draft != null && draft!.revision > pub.sourceRevision) return true;
+    if (certificationVerified != pub.certificationVerified) return true;
+    if (approvedCertificationCount != pub.approvedCertificationCount) return true;
+    if (branchIds.length != pub.branchIds.length ||
+        !branchIds.toSet().containsAll(pub.branchIds)) {
+      return true;
+    }
+    return false;
+  }
+
   int get publicRevision => publication?.revision ?? 0;
 }
 

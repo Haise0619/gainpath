@@ -203,7 +203,7 @@ class PersistedBookingRecord {
       this.memberDisplayName,
       this.cancellationReason,
       this.cancelledBy,
-      this.feeMinor}) {
+      this.feeMinor, this.reviewStars}) {
     if (memberDisplayName != null) bookingText(memberDisplayName, max: 120);
     for (final id in [
       bookingId,
@@ -238,6 +238,8 @@ class PersistedBookingRecord {
       if (status == BookingStatus.cancelled) {
         if (resolution == 'member_cancelled') {
           if (resolvedAtMillis! >= holdExpiresAtMillis) invalidBookingData();
+        } else if (resolution == 'member_confirmed_cancelled') {
+          if (startAtMillis - resolvedAtMillis! < 12 * 3600000 || cancelledBy != memberId || cancellationReason == null || cancellationReason!.trim().isEmpty) invalidBookingData();
         } else if (resolution == 'coach_cancelled') {
           if (resolvedAtMillis! > startAtMillis) invalidBookingData();
         } else if (resolution != null) {
@@ -283,6 +285,7 @@ class PersistedBookingRecord {
   final String? cancellationReason;
   final String? cancelledBy;
   final int? feeMinor;
+  final int? reviewStars;
   int get schemaVersion => 1;
   String get rawStatus => _rawStatus(status);
   DateTime get startAt =>
@@ -318,7 +321,8 @@ class PersistedBookingRecord {
       'memberDisplayName',
       'cancellationReason',
       'cancelledBy',
-      'feeMinor'
+      'feeMinor',
+      'reviewStars'
     ]);
     if ((data.containsKey('resolvedAtMillis') &&
             data['resolvedAtMillis'] == null) ||
@@ -359,7 +363,8 @@ class PersistedBookingRecord {
         cancelledBy: data['cancelledBy'] == null
             ? null
             : _bookingIdValue(data['cancelledBy']),
-        feeMinor: data['feeMinor'] == null ? null : bookingInt(data['feeMinor']));
+        feeMinor: data['feeMinor'] == null ? null : bookingInt(data['feeMinor']),
+        reviewStars: data['reviewStars'] == null ? null : bookingInt(data['reviewStars'], min: 1, max: 5));
   }
   Map<String, dynamic> toJson() => {
         'bookingId': bookingId,
@@ -384,6 +389,7 @@ class PersistedBookingRecord {
         if (cancellationReason != null) 'cancellationReason': cancellationReason,
         if (cancelledBy != null) 'cancelledBy': cancelledBy,
     if (feeMinor != null) 'feeMinor': feeMinor,
+        if (reviewStars != null) 'reviewStars': reviewStars,
         'startLabel': startLabel,
         'endLabel': endLabel,
         'expiryLabel': expiryLabel

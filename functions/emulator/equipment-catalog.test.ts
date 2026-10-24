@@ -58,3 +58,13 @@ it('rejects stale revisions, malformed fields and changes to creation metadata',
   }
   expect((await getDoc(ref)).data()!.revision).toBe(1);
 });
+
+it('tutorial reference is optional, scoped, replaceable and removable without changing equipment identity',async()=>{
+ const ref=doc(dbFor('admin'),path); await setDoc(ref,item());
+ const url='https://firebasestorage.googleapis.com/v0/b/demo-gainpath.appspot.com/o/orgs%2Fo%2FequipmentVideos%2Fadmin%2F'+'a'.repeat(32)+'.mp4?alt=media&token=fixture';
+ await updateDoc(ref,{tutorialVideoUrl:url,revision:2,updatedAt:serverTimestamp()});
+ expect((await getDoc(ref)).data()!.tutorialVideoUrl).toBe(url);
+ for(const invalid of ['http://insecure/video.mp4',url.replace('%2Fo%2F','%2Fother%2F'),12]) await assertFails(updateDoc(ref,{tutorialVideoUrl:invalid,revision:3,updatedAt:serverTimestamp()}));
+ await updateDoc(ref,{tutorialVideoUrl:'',revision:3,updatedAt:serverTimestamp()});
+ expect((await getDoc(ref)).data()!.tutorialVideoUrl).toBe('');
+});

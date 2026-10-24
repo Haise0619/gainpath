@@ -20,6 +20,7 @@ describe('booking notification delivery service', () => {
       reason: 'Medical emergency',
     });
 
+    store.documents.set(`orgs/${org}/bookings/booking-1`, { organizationId: org, memberId: 'member-1', coachId: 'coach-1', status: 'cancelled', resolution: 'coach_cancelled' });
     // Communication thread initialized
     store.documents.set(`orgs/${org}/bookings/booking-1/communicationState/current`, {
       schemaVersion: 1,
@@ -36,7 +37,7 @@ describe('booking notification delivery service', () => {
     expect(updatedEvent?.deliveredAtMillis).toBe(2000);
 
     // Member inbox receives notification
-    const notification = store.documents.get(`orgs/${org}/members/member-1/notifications/${eventId}`);
+    const notification = store.documents.get(`orgs/${org}/notifications/${eventId}`);
     expect(notification).toMatchObject({
       schemaVersion: 1,
       type: 'coach_cancellation',

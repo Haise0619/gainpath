@@ -6,3 +6,6 @@ export 'src/membership/enums/transaction_status.dart';
 export 'src/membership/policies/promo_policy.dart';
 export 'src/membership/policies/refund_policy.dart';
 export 'src/membership/repositories/membership_repository.dart';
+export 'src/membership/membership_commerce.dart';
+export 'src/membership/membership_entitlement.dart';
+export 'src/membership/membership_access.dart';

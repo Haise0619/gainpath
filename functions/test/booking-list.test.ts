@@ -23,6 +23,19 @@ beforeEach(() => {
   store.documents.set('orgs/org-1/members/admin-1', { organizationId: 'org-1', role: 'admin', status: 'active', branchIds: [] });
   store.documents.set('orgs/org-1/bookings/booking-1', structuredClone(record));
 });
+it('keeps cancelled records compatible with old readers unless the new resolution is requested', async () => {
+  Object.assign(store.documents.get('orgs/org-1/bookings/booking-1')!, {
+    status: 'cancelled', resolution: 'member_confirmed_cancelled', resolvedAtMillis: now,
+    cancelledBy: 'member-1', cancellationReason: 'Cannot attend',
+  });
+  const legacy = (await read('member-1', { includeCancellationDetails: true })).records[0];
+  expect(legacy.status).toBe('cancelled');
+  expect(legacy).not.toHaveProperty('resolution');
+  expect(legacy).not.toHaveProperty('resolvedAtMillis');
+  expect((await read('member-1', { includeMemberChangeDetails: true })).records[0])
+    .toMatchObject({ resolution: 'member_confirmed_cancelled', cancelledBy: 'member-1' });
+  await expect(read('member-1', { includeMemberChangeDetails: 'yes' })).rejects.toThrow();
+});
 it('reads recent participant history while keeping a bounded history horizon', async () => {
   const later = now + 20 * 86400000;
   expect((await read('coach-1', { firstLocalDate: '2026-10-01' }, reader, later)).records).toHaveLength(1);
@@ -165,4 +178,9 @@ it('requires verified Auth and strict schemas', async () => {
   await expect(getBookingListService(store, { uid: 'member-1', token: {} }, input, reader, () => now)).rejects.toMatchObject({ code: 'permission-denied' });
   const ajv = new Ajv(); const request = ajv.compile(JSON.parse(readFileSync('../contracts/v1/get-booking-list.request.schema.json', 'utf8'))); const response = ajv.compile(JSON.parse(readFileSync('../contracts/v1/get-booking-list.response.schema.json', 'utf8')));
   expect(request(input)).toBe(true); expect(request({ ...input, role: 'admin' })).toBe(false); expect(response(await read())).toBe(true); expect(response({ ...await read(), total: 1 })).toBe(false);
+});
+it('returns saved review stars only for opted-in participants', async () => {
+  store.documents.set('orgs/org-1/bookings/booking-1/review/current', { schemaVersion: 1, bookingId: 'booking-1', coachId: 'coach-1', memberId: 'member-1', stars: 4 });
+  expect((await read('member-1', { includeReviewDetails: true })).records[0]).toHaveProperty('reviewStars', 4);
+  expect((await read()).records[0]).not.toHaveProperty('reviewStars');
 });

@@ -1,3 +1,5 @@
+import { readAll } from '../../platform/firestore/store';
+import { prefetchReads } from '../../platform/firestore/prefetch-reads';
 import type { DocumentData, DocumentStore, TransactionPort } from '../../platform/firestore/store';
 import { requireVerifiedEmail } from '../../platform/auth-context';
 import { DomainError } from '../../platform/errors';
@@ -18,18 +20,20 @@ export interface PersistedBookingRecord {
   cancellationReason?: string;
   cancelledBy?: string;
   feeMinor?: number;
+  reviewStars?: number;
 }
 export interface BookingPage { schemaVersion: 1; serverNowMillis: number; timeZone: string; firstLocalDate: string; throughLocalDate: string; records: PersistedBookingRecord[]; nextCursor?: BookingCursor }
 const review = () => new DomainError('failed-precondition', 'Stored bookings need authorized review.');
 function after(a: BookingCursor, b: BookingCursor) { return a.startAtMillis > b.startAtMillis || (a.startAtMillis === b.startAtMillis && a.bookingId > b.bookingId); }
-function project(row: { path: string; data: DocumentData }, q: BookingQuery, includeCancellationDetails = false): PersistedBookingRecord {
+function project(row: { path: string; data: DocumentData }, q: BookingQuery, includeCancellationDetails = false, includeMemberChangeDetails = false): PersistedBookingRecord {
   try {
     const d = storedBooking(row.data, q.organizationId, String(row.data.bookingId));
     if (row.path !== `orgs/${q.organizationId}/bookings/${d.bookingId}` || d[q.ownerField] !== q.ownerId
       || (q.branchIds && !q.branchIds.includes(d.branchId)) || d.startAtMillis < q.firstStartAtMillis || d.startAtMillis >= q.throughStartAtMillis) throw review();
     const formatter = new Intl.DateTimeFormat('en-GB', { timeZone: d.timeZone, hour: '2-digit', minute: '2-digit', hourCycle: 'h23', timeZoneName: 'shortOffset' });
     const { createdBy: _private, ...publicData } = d;
-    if (d.status === 'cancelled' && d.resolution === 'coach_cancelled' && !includeCancellationDetails) {
+    if (d.status === 'cancelled' && ((d.resolution === 'coach_cancelled' && !includeCancellationDetails)
+      || (d.resolution === 'member_confirmed_cancelled' && !includeMemberChangeDetails))) {
       delete (publicData as any).resolution;
       delete (publicData as any).resolvedAtMillis;
       delete (publicData as any).cancellationReason;
@@ -41,7 +45,9 @@ function project(row: { path: string; data: DocumentData }, q: BookingQuery, inc
 }
 export async function getBookingListService(store: DocumentStore, auth: { uid: string; token: Record<string, unknown> } | undefined, raw: unknown, reader: BookingQueryReader, clock = Date.now): Promise<BookingPage> {
   requireVerifiedEmail(auth);
-  const input = object(raw); allowed(input, ['schemaVersion', 'organizationId', 'coachId', 'firstLocalDate', 'dayCount', 'cursor', 'includeParticipantNames', 'includeCancellationDetails']);
+  const input = object(raw); allowed(input, ['schemaVersion', 'organizationId', 'coachId', 'firstLocalDate', 'dayCount', 'cursor', 'includeParticipantNames', 'includeCancellationDetails', 'includeReviewDetails', 'includeMemberChangeDetails']);
+  if (input.includeMemberChangeDetails !== undefined && typeof input.includeMemberChangeDetails !== 'boolean') throw new InputValidationError('includeMemberChangeDetails must be a boolean.');
+  if (input.includeReviewDetails !== undefined && typeof input.includeReviewDetails !== 'boolean') throw new InputValidationError('includeReviewDetails must be a boolean.');
   if (input.includeParticipantNames !== undefined && typeof input.includeParticipantNames !== 'boolean') throw new InputValidationError('includeParticipantNames must be a boolean.');
   if (input.includeCancellationDetails !== undefined && typeof input.includeCancellationDetails !== 'boolean') throw new InputValidationError('includeCancellationDetails must be a boolean.');
   if (input.schemaVersion !== 1) throw new InputValidationError('schemaVersion 1 is required.');
@@ -57,16 +63,19 @@ export async function getBookingListService(store: DocumentStore, auth: { uid: s
   }
   const serverNowMillis = integer(clock(), 1);
   const scope = async (tx: TransactionPort) => {
-    const actor = await currentBookingMembership(tx, org, uid);
-    await requireBookingOrganization(tx, org);
-    const policy = currentBookingPolicy(await tx.get(`orgs/${org}/settings/booking`));
+    const facts = await prefetchReads(tx, [
+      `users/${uid}`, `orgs/${org}/members/${uid}`, `orgs/${org}`, `orgs/${org}/settings/booking`,
+    ]);
+    const actor = await currentBookingMembership(facts, org, uid);
+    await requireBookingOrganization(facts, org);
+    const policy = currentBookingPolicy(await facts.get(`orgs/${org}/settings/booking`));
     let ownerField: 'memberId' | 'coachId', ownerId: string, activeBranches: string[] | undefined;
     if (actor.role === 'member') { ownerField = 'memberId'; ownerId = uid; if (selectedCoach !== undefined) throw new DomainError('permission-denied', 'Member scope uses the authenticated owner.'); }
     else if (actor.role === 'coach') {
       ownerField = 'coachId'; ownerId = uid;
       if (selectedCoach !== undefined && selectedCoach !== uid) throw new DomainError('permission-denied', 'Coach scope uses the authenticated owner.');
-      activeBranches = [];
-      for (const b of actor.branchIds) if ((await tx.get(`orgs/${org}/branches/${b}`))?.status === 'active') activeBranches.push(b);
+      const branches = await readAll(tx, actor.branchIds.map(b => `orgs/${org}/branches/${b}`));
+      activeBranches = actor.branchIds.filter((_b, i) => branches[i]?.status === 'active');
     } else if (actor.role === 'admin' && selectedCoach !== undefined) { ownerField = 'coachId'; ownerId = selectedCoach; }
     else throw new DomainError('permission-denied', 'A supported booking owner or selected Admin Coach is required.');
     return { role: actor.role, assignments: actor.branchIds, policy, ownerField, ownerId, activeBranches };
@@ -84,7 +93,7 @@ export async function getBookingListService(store: DocumentStore, auth: { uid: s
   if (JSON.stringify(before) !== JSON.stringify(current)) throw new DomainError('permission-denied', 'Booking access changed. Refresh the current account scope.');
   if (!Array.isArray(rows) || rows.length > 21) throw review();
   const includeCancellationDetails = input.includeCancellationDetails === true;
-  const projected = rows.map(r => project(r, q, includeCancellationDetails));
+  const projected = rows.map(r => project(r, q, includeCancellationDetails, input.includeMemberChangeDetails === true));
   const ids = new Set<string>();
   let previous = cursor;
   for (const r of projected) {
@@ -95,17 +104,22 @@ export async function getBookingListService(store: DocumentStore, auth: { uid: s
   // Related names and transaction fees; private contact/account fields never enter the projection.
   await store.transact(async tx => {
     if (JSON.stringify(before) !== JSON.stringify(await scope(tx))) throw new DomainError('permission-denied', 'Booking access changed. Refresh the current account scope.');
-    for (const record of records) {
-      if (input.includeParticipantNames === true) {
-        const member = await tx.get(`orgs/${org}/members/${record.memberId}`);
-        const name = member?.organizationId === org ? member.displayName : undefined;
-        if (typeof name === 'string' && name.trim() && name.trim().length <= 120) record.memberDisplayName = name.trim();
-      }
-      const txDoc = await tx.get(`orgs/${org}/transactions/${record.bookingId}`);
-      if (txDoc && Number.isSafeInteger(txDoc.amountMinor) && Number(txDoc.amountMinor) >= 0) {
-        record.feeMinor = Number(txDoc.amountMinor);
-      }
-    }
+    const memberIds = input.includeParticipantNames === true ? [...new Set(records.map(r => r.memberId))] : [];
+    const paths = [...memberIds.map(id => `orgs/${org}/members/${id}`),
+      ...records.map(r => `orgs/${org}/transactions/${r.bookingId}`),
+      ...(input.includeReviewDetails === true ? records.map(r => `orgs/${org}/bookings/${r.bookingId}/review/current`) : [])];
+    const values = await readAll(tx, paths);
+    const members = new Map(memberIds.map((id, i) => [id, values[i]]));
+    records.forEach((record, i) => {
+      const member = members.get(record.memberId);
+      const name = member?.organizationId === org ? member.displayName : undefined;
+      if (typeof name === 'string' && name.trim() && name.trim().length <= 120) record.memberDisplayName = name.trim();
+      const payment = values[memberIds.length + i];
+      if (payment && Number.isSafeInteger(payment.amountMinor) && Number(payment.amountMinor) >= 0) record.feeMinor = Number(payment.amountMinor);
+      const saved = input.includeReviewDetails === true ? values[memberIds.length + records.length + i] : undefined;
+      if (saved?.schemaVersion === 1 && saved.bookingId === record.bookingId && saved.coachId === record.coachId && saved.memberId === record.memberId
+          && Number.isInteger(saved.stars) && Number(saved.stars) >= 1 && Number(saved.stars) <= 5) record.reviewStars = Number(saved.stars);
+    });
   });
   return { schemaVersion: 1, serverNowMillis, timeZone: before.policy.timeZone, firstLocalDate, throughLocalDate, records,
     ...(projected.length > 20 && last ? { nextCursor: { startAtMillis: last.startAtMillis, bookingId: last.bookingId } } : {}) };

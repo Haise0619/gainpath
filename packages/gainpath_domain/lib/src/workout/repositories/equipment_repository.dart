@@ -1,5 +1,6 @@
 import '../entities/gym_equipment.dart';
 import '../entities/equipment_image.dart';
+import '../entities/equipment_video.dart';
 
 /// Data access contract for the workout feature. Implemented in-memory for the
 /// prototype; a Firebase implementation will sit behind the same interface.
@@ -29,8 +30,10 @@ abstract class EquipmentRepository implements EquipmentReader {
   Future<EquipmentPage> loadEquipment({String? afterId}) async =>
       EquipmentPage(afterId == null ? gymEquipment : []);
   Future<GymEquipment> saveEquipment(GymEquipment equipment,
-      {EquipmentImage? image}) async {
-    if (image != null) {
+      {EquipmentImage? image,
+      EquipmentVideo? video,
+      void Function(double)? onVideoProgress}) async {
+    if (image != null || video != null) {
       throw UnsupportedError('Image upload requires Firebase mode.');
     }
     equipment.validate();
@@ -48,6 +51,7 @@ abstract class EquipmentRepository implements EquipmentReader {
         muscleGroup: equipment.muscleGroup.trim(),
         description: equipment.description.trim(),
         imageUrl: equipment.imageUrl.trim(),
+        tutorialVideoUrl: equipment.tutorialVideoUrl,
         howToUse: equipment.howToUse.map((s) => s.trim()).toList(),
         safetyTips: equipment.safetyTips.map((s) => s.trim()).toList(),
         isActive: equipment.isActive,

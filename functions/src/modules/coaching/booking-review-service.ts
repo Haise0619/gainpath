@@ -78,6 +78,10 @@ export async function submitBookingReview(
       };
     }
 
+    const note = await tx.get(`${root}/consultation/current`);
+    if (note?.schemaVersion !== 1 || note.bookingId !== bookingId || note.memberId !== uid || note.coachId !== b.coachId) {
+      throw new DomainError('failed-precondition', 'Published consultation notes are required before reviewing this session.');
+    }
     const reviewPath = `${root}/review/current`;
     const existing = await tx.get(reviewPath);
     if (existing) {

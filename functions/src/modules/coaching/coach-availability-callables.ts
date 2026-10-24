@@ -13,7 +13,7 @@ export const saveCoachRosterCommand = onCall({ enforceAppCheck: true }, async re
   catch (error) { throw coachCommandError(error); }
 });
 
-export const getCoachAvailabilityCommand = onCall(async request => {
+export const getCoachAvailabilityCommand = onCall({ preserveExternalChanges: true }, async request => {
   try { return await getCoachAvailabilityService(new FirestoreStore(getFirestore()), request.auth, request.data); }
   catch (error) { throw coachCommandError(error); }
 });

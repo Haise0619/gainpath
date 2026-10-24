@@ -7,6 +7,9 @@
   "required": ["schemaVersion", "organizationId"],
   "properties": {
     "schemaVersion": { "const": 1 },
+    "includeReviewDetails": { "type": "boolean" },
+    "includeCancellationDetails": { "type": "boolean" },
+    "includeMemberChangeDetails": { "type": "boolean" },
     "includeParticipantNames": { "type": "boolean" },
     "organizationId": { "$ref": "#/definitions/id" },
     "coachId": { "$ref": "#/definitions/id" },
