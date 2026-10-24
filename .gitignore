@@ -22,6 +22,17 @@ android/.idea/
 *.keystore
 key.properties
 
+# Local identity, financial/provider configuration and private evidence
+.env
+.env.*
+!.env.example
+**/service-account*.json
+**/serviceAccount*.json
+**/*-firebase-adminsdk-*.json
+.tmp-appdata/
+__pycache__/
+*.pyc
+
 # Windows desktop (generated)
 windows/flutter/ephemeral/
 
