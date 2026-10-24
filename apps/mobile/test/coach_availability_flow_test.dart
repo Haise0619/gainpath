@@ -70,15 +70,19 @@ void main() {
         home: LiveCoachAvailabilityView(
             repository: repo, coachId: 'coach', isCurrent: () => true)));
     await tester.pumpAndSettle();
-    await tester.scrollUntilVisible(find.text('Edit specific date'), 300);
-    await tester.ensureVisible(find.text('Edit specific date'));
+    await tester.scrollUntilVisible(
+        find.text('Change hours for one date'), 300);
+    await tester.ensureVisible(find.text('Change hours for one date'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Edit specific date'));
+    await tester.ensureVisible(find.text('Change hours for one date'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Change hours for one date'));
     await tester.pumpAndSettle();
     expect(find.textContaining('Asia/Kuala_Lumpur'), findsWidgets);
     await tester.tap(find.text('Add window'));
     await tester.pumpAndSettle();
-    await tester.scrollUntilVisible(find.widgetWithText(FilledButton, 'Add'), 250,
+    await tester.scrollUntilVisible(
+        find.widgetWithText(FilledButton, 'Add'), 250,
         scrollable: find.byType(Scrollable).last);
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(FilledButton, 'Add'));
@@ -111,17 +115,19 @@ void main() {
         role: AppRole.coach,
         branchIds: ['main']);
     final auth = DriftingCoachAuth(session), repo = AvailabilityFake();
-    await tester.pumpWidget(GainPathMobileApp(
+    await tester.pumpWidget(GainPathMobileApp.injected(
         authRepository: auth,
-        backendConfig: const BackendConfig(BackendMode.firebase),
         bookingListFactory: (_, __) => Lists(),
         coachProfileFactory: (_, current) => ProfileFake(),
         coachAvailabilityFactory: (_, current) => repo));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Availability'));
     await tester.pumpAndSettle();
-    await tester.scrollUntilVisible(find.text('Edit specific date'), 300);
-    await tester.tap(find.text('Edit specific date'));
+    await tester.scrollUntilVisible(
+        find.text('Change hours for one date'), 300);
+    await tester.ensureVisible(find.text('Change hours for one date'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Change hours for one date'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Add window'));
     await tester.pumpAndSettle();
@@ -148,9 +154,8 @@ void main() {
         await auth.signIn(email: 'member@example.test', password: 'fixture');
     await profiles.repository(session.scope).save(sampleProfile());
     final repo = AvailabilityFake()..stored = [window];
-    await tester.pumpWidget(GainPathMobileApp(
+    await tester.pumpWidget(GainPathMobileApp.injected(
         authRepository: auth,
-        backendConfig: const BackendConfig(BackendMode.firebase),
         profileRepositoryFactory: profiles.repository,
         routineLoaderFactory: (_) async => null,
         coachDirectoryFactory: (scope, current) => DirectoryFake(scope),
@@ -184,10 +189,14 @@ void main() {
         home: LiveCoachAvailabilityView(
             repository: repo, coachId: 'coach', isCurrent: () => true)));
     await tester.pumpAndSettle();
-    await tester.scrollUntilVisible(find.text('Edit specific date'), 300);
-    await tester.tap(find.text('Edit specific date'));
+    await tester.scrollUntilVisible(
+        find.text('Change hours for one date'), 300);
+    await tester.ensureVisible(find.text('Change hours for one date'));
     await tester.pumpAndSettle();
-    await tester.scrollUntilVisible(find.byKey(const ValueKey('edit-window-1')), 250,
+    await tester.tap(find.text('Change hours for one date'));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+        find.byKey(const ValueKey('edit-window-1')), 250,
         scrollable: find.byType(Scrollable).last);
     await tester.tap(find.byKey(const ValueKey('edit-window-1')));
     await tester.pumpAndSettle();
@@ -206,7 +215,8 @@ void main() {
     await tester.tap(find.text('Update'));
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
-    await tester.scrollUntilVisible(find.byKey(const ValueKey('remove-window-1')), -250,
+    await tester.scrollUntilVisible(
+        find.byKey(const ValueKey('remove-window-1')), -250,
         scrollable: find.byType(Scrollable).last);
     await tester.tap(find.byKey(const ValueKey('remove-window-1')));
     await tester.pumpAndSettle();

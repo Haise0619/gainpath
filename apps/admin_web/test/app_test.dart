@@ -7,7 +7,7 @@ void main() {
   setUpAll(() => GoogleFonts.config.allowRuntimeFetching = false);
   testWidgets('admin web app host boots', (tester) async {
     await tester.pumpWidget(
-        GainPathAdminWebApp(authRepository: InMemoryAuthRepository()));
+        GainPathAdminWebApp.injected(authRepository: InMemoryAuthRepository()));
     await tester.pumpAndSettle();
     expect(find.text('GainPath Admin Web'), findsOneWidget);
     expect(find.text('Administrator sign-in'), findsOneWidget);

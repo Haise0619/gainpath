@@ -1,6 +1,6 @@
 import 'dart:typed_data';
 import 'dart:convert';
-import 'package:cloud_functions/cloud_functions.dart';
+import '../../../../infrastructure/firebase/firebase_function_transport.dart';
 import 'package:flutter/material.dart';
 import 'package:gainpath_domain/identity.dart';
 import '../member/browse_coaches_screen.dart';
@@ -161,9 +161,8 @@ class PublishedCoachPhotoState extends State<PublishedCoachPhoto> {
 extension on PublishedCoachPhotoState {
   Future<Uint8List?> _readPhoto(String path) async {
     if (!widget.isCurrent()) return null;
-    final result = await FirebaseFunctions.instance
-        .httpsCallable('getCoachPublishedPhotoCommand')
-        .call({
+    final result =
+        await firebaseCallable('getCoachPublishedPhotoCommand').call({
       'schemaVersion': 1,
       'organizationId': widget.repository.scope.organizationId,
       'coachId': widget.coach.id,

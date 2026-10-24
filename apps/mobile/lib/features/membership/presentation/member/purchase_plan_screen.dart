@@ -1,33 +1,55 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:gainpath_domain/membership.dart';
-import 'package:flutter_bloc/flutter_bloc.dart';
-import '../../application/membership_bloc.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
-import '../shared/billplz_checkout_screen.dart';
-import 'payment_confirmation_screen.dart';
+import 'package:url_launcher/url_launcher.dart';
+import '../../data/mock_membership_commerce.dart';
+import '../shared/membership_data_view.dart';
+import '../../../../app/di/membership_factory.dart';
 
-/// AD-M4.1 — Purchase Membership Plan (checkout step): pricing summary,
-/// a promo-code loop, and a simulated Billplz-style checkout — first-time
-/// purchase and plan switches both land here.
-class PurchasePlanScreen extends StatefulWidget {
-  final MembershipPlan plan;
+class PurchasePlanScreen extends StatelessWidget {
   const PurchasePlanScreen(
-      {super.key, required this.plan, this.connected = false});
-  final bool connected;
-
+      {super.key,
+      required this.plan,
+      this.connected = false,
+      this.repository,
+      this.renewal = false});
+  final MembershipPlan plan;
+  final bool connected, renewal;
+  final MembershipCommerceRepository? repository;
   @override
-  State<PurchasePlanScreen> createState() => _PurchasePlanScreenState();
+  Widget build(BuildContext context) => repository != null
+      ? MembershipRepositoryGuard(
+          repository: repository!, child: _body(repository!))
+      : MembershipFeatureHost(connected: connected, builder: _body);
+  Widget _body(MembershipCommerceRepository repo) =>
+      _PurchaseForm(repository: repo, plan: plan, renewal: renewal);
 }
 
-class _PurchasePlanScreenState extends State<PurchasePlanScreen> {
-  final _promo = TextEditingController();
-  String? _promoError;
-  bool _applying = false;
-  double? _discountPct;
+class _PurchaseForm extends StatefulWidget {
+  const _PurchaseForm(
+      {required this.repository, required this.plan, required this.renewal});
+  final MembershipCommerceRepository repository;
+  final MembershipPlan plan;
+  final bool renewal;
+  @override
+  State<_PurchaseForm> createState() => _PurchaseFormState();
+}
 
-  double get _total => _discountPct == null
-      ? widget.plan.price
-      : widget.plan.price * (1 - _discountPct!);
+class _PurchaseFormState extends State<_PurchaseForm> {
+  final _promo = TextEditingController();
+  late final String _requestId =
+      'membership-${DateTime.now().microsecondsSinceEpoch}';
+  Map<String, dynamic>? _quote;
+  String? _message;
+  bool _busy = false;
+  bool _submitted = false;
+  String _quotedCode = '';
+  @override
+  void initState() {
+    super.initState();
+    _apply();
+  }
 
   @override
   void dispose() {
@@ -35,197 +57,281 @@ class _PurchasePlanScreenState extends State<PurchasePlanScreen> {
     super.dispose();
   }
 
-  Future<void> _applyPromo() async {
-    if (widget.connected) {
-      showUnavailable(context);
-      return;
-    }
-    final code = _promo.text.trim().toUpperCase();
-    if (code.isEmpty) {
-      setState(() => _promoError = 'Enter a code first.');
-      return;
-    }
+  Future<void> _apply() async {
+    if (_busy || _submitted) return;
     setState(() {
-      _applying = true;
-      _promoError = null;
+      _busy = true;
+      _quote = null;
+      _message = null;
     });
-    await Future.delayed(const Duration(milliseconds: 500));
-    if (!mounted) return;
-    setState(() {
-      _applying = false;
-      _discountPct = const PromoPolicy().discountFor(code);
-      if (_discountPct == null) _promoError = 'Invalid or expired code.';
-    });
+    try {
+      final code = _promo.text.trim().toUpperCase();
+      final q = await widget.repository.quote(widget.plan.id, code);
+      if (mounted) {
+        setState(() {
+          _quote = q;
+          _quotedCode = code;
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() => _message =
+            'Price or promo could not be verified. Clear the code or retry.');
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
   }
 
   Future<void> _pay() async {
-    final success = await Navigator.push<bool>(
-      context,
-      MaterialPageRoute(
-        builder: (_) => BillplzCheckoutScreen(
-            connected: widget.connected,
-            amount: _total,
-            description: '${widget.plan.name} membership'),
-      ),
-    );
-    if (widget.connected || success != true || !mounted) return;
-    context.read<MembershipBloc>().add(PlanPurchased(widget.plan.id, _total));
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(
-        builder: (_) => PaymentConfirmationScreen(
-            planName: widget.plan.name, amountPaid: _total),
-      ),
-    );
+    if (_busy || _quote == null) return;
+    setState(() {
+      _busy = true;
+      _submitted = true;
+      _message = null;
+    });
+    try {
+      final p = await widget.repository.checkout(
+          widget.plan.id, _quotedCode, _requestId,
+          renewal: widget.renewal, quoteId: _quote!['quoteId'] as String?);
+      if (!mounted) return;
+      await Navigator.push(
+          context,
+          MaterialPageRoute<void>(
+              builder: (_) => MembershipPaymentScreen(
+                  repository: widget.repository, initial: p)));
+      if (mounted) Navigator.pop(context);
+    } catch (_) {
+      if (mounted) {
+        setState(() => _message =
+            'Checkout outcome is not confirmed. Retry this same request or check billing history before starting another payment.');
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+      appBar: AppBar(
+          title:
+              Text(widget.renewal ? 'Confirm renewal' : 'Confirm your plan')),
+      body: PageBody(children: [
+        Panel(
+            background: AppColors.primaryTint,
+            child:
+                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(widget.plan.name,
+                  style: Theme.of(context).textTheme.headlineSmall),
+              const SizedBox(height: 8),
+              Text(widget.plan.tagline),
+              ...widget.plan.perks.map((b) => ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(Icons.check_circle_outline),
+                  title: Text(b))),
+            ])),
+        const SizedBox(height: 18),
+        TextField(
+            controller: _promo,
+            enabled: !_busy && !_submitted,
+            decoration:
+                const InputDecoration(labelText: 'Promo code (optional)'),
+            onChanged: (_) => setState(() => _quote = null)),
+        TextButton(
+            onPressed: _busy || _submitted ? null : _apply,
+            child: const Text('Verify price / apply code')),
+        if (_busy) const LinearProgressIndicator(),
+        if (_message != null)
+          Padding(
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              child: Text(_message!)),
+        if (_quote != null)
+          Panel(
+              child: Column(children: [
+            DetailRow('Period', '${_quote!['durationDays']} days'),
+            DetailRow('Total', membershipMoney(_quote!['amountMinor']))
+          ])),
+        const SizedBox(height: 16),
+        Text(widget.repository.sandbox
+            ? 'Billplz Sandbox test checkout. No recurring billing. Membership activates only after server verification.'
+            : 'Mock preview. Payment is simulated.'),
+        const SizedBox(height: 16),
+        FilledButton(
+            onPressed: _busy || _quote == null ? null : _pay,
+            child: Text(_submitted
+                ? 'Recover checkout'
+                : 'Continue to secure checkout')),
+      ]));
+}
+
+class MembershipPaymentScreen extends StatefulWidget {
+  const MembershipPaymentScreen(
+      {super.key, required this.repository, required this.initial});
+  final MembershipCommerceRepository repository;
+  final Map<String, dynamic> initial;
+  @override
+  State<MembershipPaymentScreen> createState() =>
+      _MembershipPaymentScreenState();
+}
+
+class _MembershipPaymentScreenState extends State<MembershipPaymentScreen>
+    with WidgetsBindingObserver {
+  late Map<String, dynamic> _payment = Map.of(widget.initial);
+  bool _busy = false;
+  String? _message;
+  DateTime? _lastCheck;
+  Timer? _timer;
+  int _checks = 0;
+  bool _foreground = true;
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _check();
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    _timer?.cancel();
+    _foreground = state == AppLifecycleState.resumed;
+    if (state == AppLifecycleState.resumed) {
+      _checks = 0;
+      _check();
+    }
+  }
+
+  Future<void> _check() async {
+    if (_busy || !mounted || !_foreground || !widget.repository.current) return;
+    if (_lastCheck != null &&
+        DateTime.now().difference(_lastCheck!) < const Duration(seconds: 10)) {
+      _schedule();
+      return;
+    }
+    setState(() {
+      _busy = true;
+      _message = null;
+    });
+    _lastCheck = DateTime.now();
+    try {
+      final p =
+          await widget.repository.payment(_payment['transactionId'] as String);
+      if (mounted) setState(() => _payment = p);
+    } catch (_) {
+      if (mounted) {
+        setState(() => _message =
+            'Payment status is uncertain. Check again; do not pay twice.');
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _busy = false);
+        _schedule();
+      }
+    }
+  }
+
+  void _schedule() {
+    _timer?.cancel();
+    if (_checks >= 6 ||
+        _payment['paymentStatus'] == 'cleared' ||
+        !mounted ||
+        !_foreground ||
+        !widget.repository.current) {
+      return;
+    }
+    _checks++;
+    _timer = Timer(const Duration(seconds: 10), _check);
+  }
+
+  Future<void> _open() async {
+    final value = _payment['checkoutUrl'];
+    if (value is! String) return;
+    final url = Uri.tryParse(value);
+    if (url == null ||
+        url.scheme != 'https' ||
+        !['www.billplz-sandbox.com', 'billplz-sandbox.com']
+            .contains(url.host) ||
+        url.userInfo.isNotEmpty ||
+        (url.hasPort && url.port != 443)) {
+      return;
+    }
+    try {
+      final opened = await launchUrl(url, mode: LaunchMode.inAppBrowserView);
+      if (!opened && mounted) {
+        setState(() => _message =
+            'Checkout could not be opened. Retry from this payment record.');
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() => _message =
+            'Checkout could not be opened. Retry from this payment record.');
+      }
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final discounted = _discountPct != null;
-    return Scaffold(
-      appBar: AppBar(title: const Text('Confirm your plan')),
-      body: PageBody(
-        children: [
-          Panel(
-            background: AppColors.primaryTint,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(widget.plan.name,
-                    style: Theme.of(context).textTheme.titleLarge),
-                const SizedBox(height: 3),
-                Text(widget.plan.tagline,
-                    style: Theme.of(context).textTheme.bodyMedium),
-                const SizedBox(height: 10),
-                Text(
-                    widget.connected
-                        ? '-'
-                        : 'RM ${widget.plan.price.toStringAsFixed(0)} / month',
-                    style: const TextStyle(
-                        fontSize: 15, fontWeight: FontWeight.w700)),
-              ],
-            ),
-          ),
-          const SizedBox(height: 20),
-          const Eyebrow('Promo code'),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: _promo,
-                  textCapitalization: TextCapitalization.characters,
-                  onChanged: (_) {
-                    if (_promoError != null) setState(() => _promoError = null);
-                  },
-                  decoration: InputDecoration(
-                      hintText: 'Have a code?', errorText: _promoError),
-                ),
-              ),
-              const SizedBox(width: 10),
-              SizedBox(
-                height: 52,
-                child: OutlinedButton(
-                  onPressed: _applying ? null : _applyPromo,
-                  child: _applying
-                      ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2.2))
-                      : const Text('Apply'),
-                ),
-              ),
-            ],
-          ),
-          if (discounted) ...[
-            const SizedBox(height: 10),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-              decoration: BoxDecoration(
-                  color: AppColors.successTint,
-                  borderRadius: BorderRadius.circular(10)),
-              child: Row(
-                children: [
-                  const Icon(Icons.local_offer_rounded,
-                      size: 16, color: AppColors.success),
-                  const SizedBox(width: 8),
-                  Text('${(_discountPct! * 100).round()}% off applied',
-                      style: const TextStyle(
-                          fontSize: 12.5,
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.success)),
-                ],
-              ),
-            ),
-          ],
-          const SizedBox(height: 20),
-          Panel(
-            child: Column(
-              children: [
-                DetailRow('Plan', widget.plan.name),
-                const Divider(height: 20),
-                if (discounted) ...[
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text('Subtotal',
-                          style: Theme.of(context).textTheme.bodyMedium),
-                      Text('RM ${widget.plan.price.toStringAsFixed(2)}',
-                          style: const TextStyle(
-                              fontSize: 14,
-                              decoration: TextDecoration.lineThrough,
-                              color: AppColors.inkSoft)),
-                    ],
-                  ),
-                  const Divider(height: 20),
-                ],
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text('Total due today',
-                        style: Theme.of(context).textTheme.titleMedium),
-                    Text(
-                        widget.connected
-                            ? '-'
-                            : 'RM ${_total.toStringAsFixed(2)}',
-                        style: const TextStyle(
-                            fontSize: 17,
-                            fontWeight: FontWeight.w800,
-                            color: AppColors.primary)),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 18),
-          Panel(
-            background: AppColors.surfaceAlt,
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Icon(Icons.lock_outline_rounded,
-                    size: 18, color: AppColors.inkSoft),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    widget.connected
-                        ? 'Payment service unavailable. No payment will be collected.'
-                        : 'Payment is handled on the provider\'s secure page. GainPath never sees or stores your card details.',
-                    style: Theme.of(context).textTheme.bodyMedium,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 18),
-          FilledButton(
-            onPressed: _pay,
-            child: Text(widget.connected
-                ? 'View checkout'
-                : 'Pay RM ${_total.toStringAsFixed(2)}'),
-          ),
-        ],
-      ),
-    );
+    final status = _payment['fulfilmentStatus'];
+    return MembershipRepositoryGuard(
+        repository: widget.repository,
+        child: Scaffold(
+            appBar: AppBar(title: const Text('Membership payment')),
+            body: PageBody(children: [
+              Panel(
+                  background: AppColors.primaryTint,
+                  child: Column(children: [
+                    Text('${_payment['planName']}',
+                        style: Theme.of(context).textTheme.headlineSmall),
+                    Text(membershipMoney(_payment['amountMinor'])),
+                    const SizedBox(height: 12),
+                    Text(membershipPaymentLabel(_payment)),
+                    if (_payment['expiresAtMillis'] != null)
+                      Text(
+                          'Paid expiry: ${membershipDate(_payment['expiresAtMillis'])}'),
+                  ])),
+              const SizedBox(height: 16),
+              Text('Reference: ${_payment['transactionId']}'),
+              const SizedBox(height: 12),
+              if (status == 'expired' || status == 'failed')
+                const Text(
+                    'Checkout closed. You may start a fresh checkout from plans. A late cleared payment will require Admin review.'),
+              if (status == 'reconciliation_required')
+                const Text(
+                    'Admin review required. Do not make another payment for this checkout.'),
+              if (_payment['paymentStatus'] != 'cleared')
+                const Text(
+                    'Pending verification. Closing checkout does not confirm or cancel a bank payment. You can recover this record from billing history.'),
+              if (_message != null) Text(_message!),
+              if (_busy) const LinearProgressIndicator(),
+              if (status == 'awaiting_payment' &&
+                  _payment['checkoutUrl'] != null)
+                FilledButton(
+                    onPressed: _busy ? null : _open,
+                    child: const Text('Open Billplz Sandbox')),
+              if (widget.repository is MockMembershipCommerce &&
+                  _payment['paymentStatus'] != 'cleared')
+                FilledButton(
+                    onPressed: () async {
+                      await (widget.repository as MockMembershipCommerce)
+                          .simulate(_payment['transactionId'] as String);
+                      _lastCheck = null;
+                      await _check();
+                    },
+                    child: const Text('Simulate cleared payment (mock only)')),
+              TextButton(
+                  onPressed: _busy
+                      ? null
+                      : () {
+                          _checks = 0;
+                          _check();
+                        },
+                  child: const Text('Check trusted payment status')),
+            ])));
   }
 }

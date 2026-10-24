@@ -27,5 +27,6 @@ class MembershipState extends Equatable {
   final int revision;
 
   @override
-  List<Object?> get props => [currentPlanId, autoRenew, transactions, refundClaims, error, revision];
+  List<Object?> get props =>
+      [currentPlanId, autoRenew, transactions, refundClaims, error, revision];
 }

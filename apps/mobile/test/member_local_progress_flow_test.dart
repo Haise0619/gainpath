@@ -55,9 +55,8 @@ void main() {
     InMemoryWorkoutSessionStore store(SessionScope scope) => stores.putIfAbsent(
         scope, () => InMemoryWorkoutSessionStore(scope: scope));
     await store(first.scope).write([record(first.scope, 'first-camera')]);
-    await tester.pumpWidget(GainPathMobileApp(
+    await tester.pumpWidget(GainPathMobileApp.injected(
         authRepository: auth,
-        backendConfig: const BackendConfig(BackendMode.firebase),
         profileRepositoryFactory: profiles.repository,
         routineLoaderFactory: (_) async => null,
         progressRepositoryFactory: (scope, active) async =>

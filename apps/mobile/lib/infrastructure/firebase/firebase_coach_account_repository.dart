@@ -7,9 +7,12 @@ import 'package:firebase_storage/firebase_storage.dart';
 import 'package:http/http.dart' as http;
 import 'package:gainpath_domain/gainpath_domain.dart' show SessionScope;
 import 'package:gainpath_domain/identity.dart';
+import 'package:gainpath_data/coach_direct_reads.dart';
 import '../local/coach_avatar_image.dart';
 import '../../features/identity/application/coach_account_gateway.dart';
 import 'firebase_password_actions.dart';
+import 'firebase_coach_direct_reads.dart';
+import 'firebase_function_transport.dart';
 
 class FirebaseCoachAccountRepository implements CoachAccountGateway {
   FirebaseCoachAccountRepository(
@@ -17,10 +20,16 @@ class FirebaseCoachAccountRepository implements CoachAccountGateway {
       required this.isCurrent,
       FirebaseFunctions? functions,
       FirebaseAuth? auth,
-      FirebaseStorage? storage})
+      FirebaseStorage? storage,
+      CoachDirectReads? directReads})
       : _providedFunctions = functions,
         _providedAuth = auth,
-        _providedStorage = storage;
+        _providedStorage = storage,
+        _providedDirectReads = directReads {
+    if (directReads != null && directReads.scope != scope) {
+      throw const CoachRepositoryException('permission-denied');
+    }
+  }
   @override
   final SessionScope scope;
   @override
@@ -28,8 +37,12 @@ class FirebaseCoachAccountRepository implements CoachAccountGateway {
   final FirebaseFunctions? _providedFunctions;
   final FirebaseAuth? _providedAuth;
   final FirebaseStorage? _providedStorage;
-  FirebaseFunctions get _functions =>
-      _providedFunctions ?? FirebaseFunctions.instance;
+  final CoachDirectReads? _providedDirectReads;
+  late final CoachDirectReads? _directReads = _providedDirectReads ??
+      (directCoachReadsEnabled && _providedFunctions == null
+          ? firebaseCoachDirectReads(
+              scope: scope, checkSession: check, auth: _auth)
+          : null);
   FirebaseAuth get _auth => _providedAuth ?? FirebaseAuth.instance;
   FirebaseStorage get _storage => _providedStorage ?? FirebaseStorage.instance;
   bool _invalidated = false;
@@ -83,8 +96,7 @@ class FirebaseCoachAccountRepository implements CoachAccountGateway {
       [Map<String, dynamic> values = const {}]) async {
     check();
     try {
-      final result = await _functions
-          .httpsCallable(name)
+      final result = await firebaseCallable(name, functions: _providedFunctions)
           .call<Map<String, dynamic>>({
         'schemaVersion': 1,
         'organizationId': scope.organizationId,
@@ -97,10 +109,24 @@ class FirebaseCoachAccountRepository implements CoachAccountGateway {
     }
   }
 
+  Future<Map<String, dynamic>> _readCommand(String name,
+      [Map<String, dynamic> values = const {}]) async {
+    check();
+    final direct = _directReads;
+    if (direct == null) return command(name, values);
+    final result = name == 'getCoachAccountSettingsCommand'
+        ? await direct.loadSettings()
+        : await direct.loadCertifications(
+            afterId: values['afterId'] as String?,
+            certificationId: values['certificationId'] as String?);
+    check();
+    return result;
+  }
+
   @override
   Future<CoachAccountSettings> loadSettings() async =>
       CoachAccountSettings.fromJson(
-          await command('getCoachAccountSettingsCommand'));
+          await _readCommand('getCoachAccountSettingsCommand'));
   @override
   Future<CoachAccountSettings> saveSettings(
       CoachAccountSettings baseline,
@@ -130,7 +156,7 @@ class FirebaseCoachAccountRepository implements CoachAccountGateway {
   String? certificationCursor;
   @override
   Future<CoachCertificationSummary> loadCertificationSummary() async {
-    final data = await command('getCoachCertificationsCommand');
+    final data = await _readCommand('getCoachCertificationsCommand');
     final count = data['approvedCount'], entries = data['certifications'];
     if (data['schemaVersion'] != 1 ||
         count is! int ||
@@ -149,8 +175,8 @@ class FirebaseCoachAccountRepository implements CoachAccountGateway {
 
   @override
   Future<CoachCertificationDetail> loadCertificationDetail(String id) async {
-    final data =
-        await command('getCoachCertificationsCommand', {'certificationId': id});
+    final data = await _readCommand(
+        'getCoachCertificationsCommand', {'certificationId': id});
     final entries = data['certifications'];
     if (data['schemaVersion'] != 1 ||
         entries is! List ||
@@ -174,7 +200,7 @@ class FirebaseCoachAccountRepository implements CoachAccountGateway {
   @override
   Future<List<PrivateCoachCertification>> loadCertifications(
       {String? afterId}) async {
-    final data = await command('getCoachCertificationsCommand',
+    final data = await _readCommand('getCoachCertificationsCommand',
         {if (afterId != null) 'afterId': afterId});
     if (data['nextCursor'] != null && data['nextCursor'] is! String) {
       throw const FormatException('Unsupported certification cursor.');

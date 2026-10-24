@@ -6,13 +6,25 @@ import 'package:gainpath_ui/gainpath_ui.dart';
 import 'package:gainpath_domain/gamification.dart';
 import 'voucher_screen.dart';
 import 'widgets/game_media.dart';
+import '../../../../app/di/rewards_factory.dart';
+import 'verified_reward_shop_view.dart';
 
 class RewardShopScreen extends StatelessWidget {
-  const RewardShopScreen({super.key, this.connected = false});
+  const RewardShopScreen({super.key, this.connected = false, this.repository});
   final bool connected;
+  final VerifiedRewardsRepository? repository;
 
   @override
   Widget build(BuildContext context) {
+    if (repository != null) {
+      return RewardsRepositoryGuard(
+          repository: repository!,
+          child: VerifiedRewardShopView(repository: repository!));
+    }
+    if (connected) {
+      return RewardsFeatureHost(
+          builder: (repo) => VerifiedRewardShopView(repository: repo));
+    }
     return Scaffold(
       appBar: AppBar(title: const Text('Redeem points')),
       body: PageBody(
@@ -31,15 +43,11 @@ class RewardShopScreen extends StatelessWidget {
                 TweenAnimationBuilder<int>(
                   tween: IntTween(
                       begin: 0,
-                      end: connected
-                          ? 0
-                          : context.watch<GamificationBloc>().state.points),
+                      end: context.watch<GamificationBloc>().state.points),
                   duration: const Duration(milliseconds: 800),
                   curve: Curves.easeOutCubic,
                   builder: (context, value, _) => Text(
-                      connected
-                          ? '- points available'
-                          : '$value points available',
+                      '$value points available',
                       style: Theme.of(context)
                           .textTheme
                           .titleMedium
@@ -49,15 +57,11 @@ class RewardShopScreen extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 18),
-          ...(connected
-                  ? List.generate(4, (_) => RewardItem('-', 0, 0, ''))
-                  : context.read<GamificationRepository>().rewards)
-              .map((r) {
-            final affordable = !connected &&
+          ...context.read<GamificationRepository>().rewards.map((r) {
+            final affordable =
                 context.watch<GamificationBloc>().state.points >= r.points;
-            final needed = connected
-                ? 0
-                : r.points - context.watch<GamificationBloc>().state.points;
+            final needed =
+                r.points - context.watch<GamificationBloc>().state.points;
             return Padding(
               padding: const EdgeInsets.only(bottom: 10),
               child: Panel(
@@ -72,11 +76,7 @@ class RewardShopScreen extends StatelessWidget {
                         height: 74,
                         child: Opacity(
                             opacity: affordable ? 1 : 0.45,
-                            child: connected
-                                ? const DecoratedBox(
-                                    decoration: BoxDecoration(
-                                        gradient: AppColors.heroGradient))
-                                : gameHero(r.imageUrl)),
+                            child: gameHero(r.imageUrl)),
                       ),
                     ),
                     const SizedBox(width: 12),
@@ -87,17 +87,14 @@ class RewardShopScreen extends StatelessWidget {
                           Text(r.title,
                               style: Theme.of(context).textTheme.titleMedium),
                           const SizedBox(height: 2),
-                          Text(
-                              connected
-                                  ? '-'
-                                  : '${r.points} points  ·  ${r.stock} left',
+                          Text('${r.points} points  ·  ${r.stock} left',
                               style: Theme.of(context)
                                   .textTheme
                                   .bodyMedium
                                   ?.copyWith(fontSize: 12.5)),
                           if (!affordable) ...[
                             const SizedBox(height: 2),
-                            Text(connected ? '-' : '$needed more points needed',
+                            Text('$needed more points needed',
                                 style: const TextStyle(
                                     fontSize: 11.5,
                                     fontWeight: FontWeight.w700,
@@ -134,9 +131,7 @@ class RewardShopScreen extends StatelessWidget {
                 const SizedBox(width: 10),
                 Expanded(
                   child: Text(
-                    connected
-                        ? 'Rewards and redemption unavailable. -'
-                        : 'Show your voucher code at the front desk. Staff will confirm the reward and mark the code as used.',
+                    'Show your voucher code at the front desk. Staff will confirm the reward and mark the code as used.',
                     style: Theme.of(context).textTheme.bodyMedium,
                   ),
                 ),

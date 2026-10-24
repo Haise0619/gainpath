@@ -1,9 +1,11 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:gainpath_domain/coaching.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
 import '../../application/coach_availability_cubit.dart';
 import 'availability_page.dart';
+import 'availability_preview.dart';
 import 'coach_roster_editor.dart';
 import 'coach_time_exception_sheet.dart';
 import 'coach_specific_date_sheet.dart';
@@ -46,9 +48,10 @@ const _weekdayInitials = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
 /// Feeds both real Firebase and mock/test adapters through the same production widgets.
 class AvailabilityScreen extends StatefulWidget {
   const AvailabilityScreen(
-      {super.key, this.liveRepository, this.coachId, this.isCurrent});
+      {super.key, this.liveRepository, this.coachId, this.isCurrent, this.googleIntegration});
 
   final CoachAvailabilityRepository? liveRepository;
+  final GoogleIntegrationRepository? googleIntegration;
   final String? coachId;
   final bool Function()? isCurrent;
 
@@ -87,7 +90,6 @@ class _AvailabilityScreenState extends State<AvailabilityScreen> {
         coachId: _effectiveCoachId,
         isCurrent: _effectiveIsCurrent,
         onSaved: () {
-          availabilityCubit?.discardAndReload();
           if (mounted) setState(() {});
         },
       )
@@ -188,7 +190,8 @@ class _AvailabilityScreenState extends State<AvailabilityScreen> {
                       initialValue: branch,
                       decoration: const InputDecoration(labelText: 'Branch'),
                       items: baseline.assignedBranchIds
-                          .map((b) => DropdownMenuItem(value: b, child: Text(b)))
+                          .map(
+                              (b) => DropdownMenuItem(value: b, child: Text(b)))
                           .toList(),
                       onChanged: (v) => update(() {
                         branch = v!;
@@ -218,7 +221,9 @@ class _AvailabilityScreenState extends State<AvailabilityScreen> {
                     initialValue: end,
                     decoration: const InputDecoration(labelText: 'End time'),
                     items: [
-                      for (var minute = start + 30; minute <= 1440; minute += 30)
+                      for (var minute = start + 30;
+                          minute <= 1440;
+                          minute += 30)
                         DropdownMenuItem(
                           value: minute,
                           child: Text(rosterMinute(minute)),
@@ -369,8 +374,8 @@ class _AvailabilityScreenState extends State<AvailabilityScreen> {
         coachId: _effectiveCoachId,
         isCurrent: _effectiveIsCurrent,
         initialDate: date,
+        initialContext: availabilityCubit?.state.context,
         onSaved: () {
-          roster?.reload();
           availabilityCubit?.discardAndReload();
         },
       ),
@@ -388,9 +393,8 @@ class _AvailabilityScreenState extends State<AvailabilityScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(roster!.message!),
-          backgroundColor: roster?.uncertain == true
-              ? AppColors.warning
-              : AppColors.danger,
+          backgroundColor:
+              roster?.uncertain == true ? AppColors.warning : AppColors.danger,
           action: roster?.uncertain == true
               ? SnackBarAction(
                   label: 'Retry',
@@ -454,8 +458,8 @@ class _AvailabilityScreenState extends State<AvailabilityScreen> {
 
   List<CoachTimeException> _blocksForDate(CoachAvailabilityDay day) {
     if (day.boundaries.isEmpty) {
-      final dateStart =
-          DateTime.parse('${day.localDate}T00:00:00+08:00').millisecondsSinceEpoch;
+      final dateStart = DateTime.parse('${day.localDate}T00:00:00+08:00')
+          .millisecondsSinceEpoch;
       final dateEnd = dateStart + 86400000;
       return roster?.exceptions
               .where((block) =>
@@ -474,14 +478,14 @@ class _AvailabilityScreenState extends State<AvailabilityScreen> {
 
   String _formatBlockInterval(
       CoachAvailabilityDay day, CoachTimeException block) {
-    final start =
-        day.boundaries.isNotEmpty && block.startAtMillis < day.boundaries.first.atMillis
-            ? day.boundaries.first.atMillis
-            : block.startAtMillis;
-    final end =
-        day.boundaries.isNotEmpty && block.endAtMillis > day.boundaries.last.atMillis
-            ? day.boundaries.last.atMillis
-            : block.endAtMillis;
+    final start = day.boundaries.isNotEmpty &&
+            block.startAtMillis < day.boundaries.first.atMillis
+        ? day.boundaries.first.atMillis
+        : block.startAtMillis;
+    final end = day.boundaries.isNotEmpty &&
+            block.endAtMillis > day.boundaries.last.atMillis
+        ? day.boundaries.last.atMillis
+        : block.endAtMillis;
 
     final startDt = _toKualaLumpur(start);
     final endDt = _toKualaLumpur(end);
@@ -509,9 +513,15 @@ class _AvailabilityScreenState extends State<AvailabilityScreen> {
 
   List<DatedCoachWindow> _effectiveWindowsForDate(
       CoachAvailabilityDay day, CoachAvailabilityState cubitState) {
-    final base = (cubitState.day?.localDate == day.localDate
-        ? cubitState.windows
-        : day.windows);
+    final base = previewScheduledWindows(
+        day: day,
+        weeklyDay: roster?.dayFor(DateTime.parse(day.localDate).weekday),
+        weeklyChanged: roster != null &&
+            jsonEncode(roster!.schedule.map((d) => d.toJson()).toList()) !=
+                jsonEncode(roster!.baseline?.weeklyAvailability?.schedule
+                        .map((d) => d.toJson())
+                        .toList() ??
+                    []));
     if (base.isEmpty) return const [];
     final exceptions = _blocksForDate(day);
     return maskWindowsWithExceptions(base, exceptions);
@@ -528,382 +538,160 @@ class _AvailabilityScreenState extends State<AvailabilityScreen> {
     return '${hours % 1 == 0 ? hours.toInt() : hours.toStringAsFixed(1)}h';
   }
 
-  static const _monthNames = [
-    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
-  ];
-
-  Widget _weekAtGlance(CoachAvailabilityState cubitState) {
-    final data = cubitState.context;
-    final selected = cubitState.day;
-
-    if (data != null && selected != null) {
-      final selectedBlocks = _blocksForDate(selected);
-      final selectedEffective =
-          _effectiveWindowsForDate(selected, cubitState);
-      final selectedMinutes = selectedEffective.fold<int>(
-          0, (sum, w) => sum + (w.endAtMillis - w.startAtMillis) ~/ 60000);
-      final selectedHours = selectedMinutes / 60;
-      final selectedDt = DateTime.parse(selected.localDate);
-      final weekday = selectedDt.weekday;
-      final weeklyDay = roster?.dayFor(weekday);
-      final weeklyHoursStr = weeklyDay != null && weeklyDay.isActive
-          ? '${rosterMinute(weeklyDay.startMinute)} – ${rosterMinute(weeklyDay.endMinute)}'
-          : 'Off';
-
-      final selectedScheduledMinutes =
-          (cubitState.day?.localDate == selected.localDate
-                  ? cubitState.windows
-                  : selected.windows)
-              .fold<int>(0,
-                  (sum, w) => sum + (w.endAtMillis - w.startAtMillis) ~/ 60000);
-      final selectedScheduledHours = selectedScheduledMinutes / 60;
-      final selectedScheduledHoursStr = selectedScheduledMinutes == 0
-          ? 'Off'
-          : '${selectedScheduledHours % 1 == 0 ? selectedScheduledHours.toInt() : selectedScheduledHours.toStringAsFixed(1)}h';
-
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              for (final date in data.days)
-                Expanded(
-                  child: GestureDetector(
-                    onTap: () => availabilityCubit?.openDay(date.localDate),
-                    child: Container(
-                      margin: const EdgeInsets.only(right: 6),
-                      padding: const EdgeInsets.symmetric(vertical: 10),
-                      decoration: BoxDecoration(
-                        color: selected.localDate == date.localDate
-                            ? AppColors.primaryTint
-                            : AppColors.surface,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: selected.localDate == date.localDate
-                              ? AppColors.primary
-                              : AppColors.hairline,
-                          width: selected.localDate == date.localDate ? 1.5 : 1,
-                        ),
-                      ),
-                      child: Column(
-                        children: [
-                          Text(
-                            _weekdayInitials[DateTime.parse(date.localDate).weekday - 1],
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w700,
-                              color: selected.localDate == date.localDate
-                                  ? AppColors.primary
-                                  : AppColors.inkSoft,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            DateTime.parse(date.localDate).day.toString(),
-                            style: const TextStyle(
-                                fontSize: 13, fontWeight: FontWeight.w600),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            _formatDayDuration(date, cubitState),
-                            style: TextStyle(
-                              fontSize: 10.5,
-                              fontWeight: FontWeight.w600,
-                              color: _formatDayDuration(date, cubitState) == 'Off'
-                                  ? AppColors.inkSoft
-                                  : AppColors.ink,
-                            ),
-                          ),
-                          if (_blocksForDate(date).isNotEmpty)
-                            Tooltip(
-                              message:
-                                  '${_blocksForDate(date).length} blocked ${_blocksForDate(date).length == 1 ? 'period' : 'periods'}',
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  const Icon(Icons.block,
-                                      size: 11, color: AppColors.danger),
-                                  Text(
-                                    '${_blocksForDate(date).length}',
-                                    style: const TextStyle(
-                                        fontSize: 10.5,
-                                        color: AppColors.danger),
-                                  ),
-                                ],
-                              ),
-                            ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Panel(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      '${_weekdayNames[weekday - 1]}, ${selectedDt.day} ${_monthNames[selectedDt.month - 1]}',
-                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                            fontWeight: FontWeight.w700,
-                          ),
-                    ),
-                    Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 8, vertical: 3),
-                          decoration: BoxDecoration(
-                            color: selectedMinutes > 0
-                                ? AppColors.success.withValues(alpha: 0.12)
-                                : AppColors.hairline,
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Text(
-                            selectedMinutes > 0
-                                ? '${selectedHours % 1 == 0 ? selectedHours.toInt() : selectedHours.toStringAsFixed(1)}h bookable'
-                                : 'Off',
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                              color: selectedMinutes > 0
-                                  ? AppColors.success
-                                  : AppColors.inkSoft,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        TextButton(
-                          key: const ValueKey('edit-selected-date-btn'),
-                          style: TextButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(horizontal: 8),
-                            visualDensity: VisualDensity.compact,
-                          ),
-                          onPressed: enabled
-                              ? () => _openSpecificDateSheet(
-                                  date: selected.localDate)
-                              : null,
-                          child: const Text('Edit date',
-                              style: TextStyle(fontSize: 12.5)),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 6),
-                Row(
-                  children: [
-                    const Text('Scheduled: ',
-                        style: TextStyle(
-                            fontSize: 12.5, color: AppColors.inkSoft)),
-                    Text(
-                      selectedScheduledHoursStr,
-                      style: const TextStyle(
-                          fontSize: 12.5, fontWeight: FontWeight.w600),
-                    ),
-                    const SizedBox(width: 10),
-                    const Text('•  Bookable: ',
-                        style: TextStyle(
-                            fontSize: 12.5, color: AppColors.inkSoft)),
-                    Text(
-                      selectedMinutes == 0
-                          ? 'Off'
-                          : '${selectedHours % 1 == 0 ? selectedHours.toInt() : selectedHours.toStringAsFixed(1)}h',
-                      style: TextStyle(
-                        fontSize: 12.5,
-                        fontWeight: FontWeight.w600,
-                        color: selectedMinutes == 0
-                            ? AppColors.inkSoft
-                            : AppColors.success,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 6),
-                if (selectedEffective.isNotEmpty) ...[
-                  Text(
-                    'Effective bookable windows:',
-                    style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.inkSoft),
-                  ),
-                  const SizedBox(height: 2),
-                  for (final w in selectedEffective)
-                    Padding(
-                      padding: const EdgeInsets.only(left: 4, bottom: 2),
-                      child: Text(
-                        '• ${_formatKualaLumpurTime(w.startAtMillis)} – ${_formatKualaLumpurTime(w.endAtMillis)} · ${w.branchId}',
-                        style: const TextStyle(fontSize: 13),
-                      ),
-                    ),
-                ] else ...[
-                  const Text(
-                    'No bookable hours for this date.',
-                    style: TextStyle(fontSize: 12.5, color: AppColors.inkSoft),
-                  ),
-                ],
-                const SizedBox(height: 6),
-                if (selectedBlocks.isNotEmpty) ...[
-                  const Divider(height: 14),
-                  Text(
-                    'Blocked periods on ${selected.localDate}',
-                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                          fontSize: 12.5,
-                          fontWeight: FontWeight.w600,
-                        ),
-                  ),
-                  const SizedBox(height: 2),
-                  for (final block in selectedBlocks)
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 2),
-                      child: Row(
-                        children: [
-                          Icon(_blockIcon(block.type),
-                              size: 14, color: _blockColor(block.type)),
-                          const SizedBox(width: 6),
-                          Expanded(
-                            child: Row(
-                              children: [
-                                Text(
-                                  _formatBlockInterval(selected, block),
-                                  style: const TextStyle(fontSize: 12.5),
-                                ),
-                                if (block.reason.isNotEmpty) ...[
-                                  const SizedBox(width: 6),
-                                  Text(
-                                    '(${block.reason})',
-                                    style: const TextStyle(
-                                        fontSize: 12.5,
-                                        color: AppColors.inkSoft),
-                                  ),
-                                ],
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                ],
-                const Divider(height: 14),
-                Text(
-                  selectedBlocks.isNotEmpty
-                      ? 'Note: Weekly schedule ($weeklyHoursStr) adjusted by ${selectedBlocks.length} blocked period(s).'
-                      : (selected.windows.length !=
-                              (weeklyDay?.isActive == true ? 1 : 0)
-                          ? 'Note: Specific date override replaces weekly baseline ($weeklyHoursStr).'
-                          : 'Note: Matches recurring weekly schedule ($weeklyHoursStr).'),
-                  style: TextStyle(
-                    fontSize: 11.5,
-                    fontStyle: FontStyle.italic,
-                    color: AppColors.inkSoft,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      );
+  Widget _weekAtGlance(CoachAvailabilityState state) {
+    final data = state.context, selected = state.day;
+    if (data == null || selected == null) {
+      return Panel(
+          child: Text(state.loading
+              ? 'Loading your schedule…'
+              : state.message ??
+                  'Schedule preview is unavailable. Refresh to retry.'));
     }
-
-    final schedule = roster?.schedule ?? [];
-    return Row(
-      children: List.generate(7, (i) {
-        final dayOfWeek = i + 1;
-        final day = schedule.where((d) => d.dayOfWeek == dayOfWeek).firstOrNull;
-        final active = day?.isActive ?? false;
-        final durationMinutes =
-            day != null && active ? (day.endMinute - day.startMinute) : 0;
-        final hours = (durationMinutes / 60)
-            .toStringAsFixed(durationMinutes % 60 == 0 ? 0 : 1);
-
-        return Expanded(
-          child: GestureDetector(
-            onTap: () => _editDayHours(dayOfWeek),
-            child: Container(
-              margin: EdgeInsets.only(right: i == 6 ? 0 : 6),
-              padding: const EdgeInsets.symmetric(vertical: 10),
-              decoration: BoxDecoration(
-                color: AppColors.surface,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: AppColors.hairline),
-              ),
-              child: Column(
-                children: [
-                  Text(
-                    _weekdayInitials[i],
-                    style: const TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.inkSoft,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Container(
-                    width: 6,
-                    height: 6,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: active ? AppColors.success : AppColors.hairline,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    day == null ? '-' : active ? '${hours}h' : 'Off',
-                    style: TextStyle(
-                      fontSize: 10.5,
-                      fontWeight: FontWeight.w600,
-                      color: active ? AppColors.ink : AppColors.inkSoft,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        );
-      }),
-    );
+    final windows = _effectiveWindowsForDate(selected, state);
+    final minutes = windows.fold<int>(
+        0, (sum, w) => sum + (w.endAtMillis - w.startAtMillis) ~/ 60000);
+    final cap = roster?.dailyHours;
+    final blocks = _blocksForDate(selected);
+    final custom = (selected.revision ?? 0) > 0;
+    final limit = roster?.advanceDays;
+    final lastDate = limit == null
+        ? null
+        : DateTime.parse(data.todayLocalDate)
+            .add(Duration(days: limit))
+            .toIso8601String()
+            .substring(0, 10);
+    final outside =
+        lastDate != null && selected.localDate.compareTo(lastDate) > 0;
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      const Text(
+          'Read-only preview · select a day to see how your settings apply.',
+          style: TextStyle(color: AppColors.inkSoft, height: 1.5)),
+      const SizedBox(height: 12),
+      Row(children: [
+        for (final day in data.days)
+          Expanded(
+              child: Padding(
+            padding: const EdgeInsets.only(right: 4),
+            child: Tooltip(
+                message:
+                    '${day.localDate} · ${_formatDayDuration(day, state)} after breaks',
+                child: OutlinedButton(
+                  onPressed: state.loading
+                      ? null
+                      : () => availabilityCubit?.openDay(day.localDate),
+                  style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      minimumSize: const Size(0, 76),
+                      backgroundColor: selected.localDate == day.localDate
+                          ? AppColors.primaryTint
+                          : AppColors.surface,
+                      side: BorderSide(
+                          color: selected.localDate == day.localDate
+                              ? AppColors.primary
+                              : AppColors.hairline)),
+                  child: Column(children: [
+                    Text(_weekdayInitials[
+                        DateTime.parse(day.localDate).weekday - 1]),
+                    const SizedBox(height: 4),
+                    Text('${DateTime.parse(day.localDate).day}'),
+                    const SizedBox(height: 4),
+                    Text(_formatDayDuration(day, state),
+                        style: const TextStyle(fontSize: 11)),
+                    if (_blocksForDate(day).isNotEmpty)
+                      Tooltip(
+                          message:
+                              '${_blocksForDate(day).length} blocked ${_blocksForDate(day).length == 1 ? 'period' : 'periods'}',
+                          child: const Icon(Icons.block, size: 12)),
+                  ]),
+                )),
+          ))
+      ]),
+      const SizedBox(height: 12),
+      Panel(
+          child:
+              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text(selected.localDate,
+            style: Theme.of(context).textTheme.titleMedium),
+        const SizedBox(height: 8),
+        Wrap(spacing: 8, runSpacing: 8, children: [
+          Chip(label: Text(custom ? 'Custom date hours' : 'Weekly schedule')),
+          if (roster?.dirty == true) const Chip(label: Text('Unsaved preview'))
+        ]),
+        const SizedBox(height: 10),
+        Text(
+            'Open hours after breaks: ${minutes == 0 ? 'Off' : '${minutes / 60}h'}',
+            style: const TextStyle(fontWeight: FontWeight.w600)),
+        if (cap != null)
+          Text('Daily booking cap: ${cap}h total across all Members.'),
+        if (outside)
+          const Padding(
+              padding: EdgeInsets.only(top: 8),
+              child: Text(
+                  'Outside your advance-booking window. Members cannot book this date yet.',
+                  style: TextStyle(color: AppColors.danger))),
+        const SizedBox(height: 10),
+        for (final window in windows)
+          Padding(
+              padding: const EdgeInsets.only(bottom: 6),
+              child: Text(
+                  '${selected.labelFor(window.startAtMillis)} – ${selected.labelFor(window.endAtMillis)} · ${window.branchId}',
+                  style: const TextStyle(height: 1.5))),
+        if (windows.isEmpty)
+          const Text('No working windows remain on this date.'),
+        if (blocks.isNotEmpty) ...[
+          const Divider(height: 24),
+          Text('Blocked periods on ${selected.localDate}',
+              style: const TextStyle(fontWeight: FontWeight.w600)),
+          for (final block in blocks)
+            Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text(
+                    '${rosterExceptionType(block.type)} · ${_formatBlockInterval(selected, block)}${block.reason.isEmpty ? '' : '\n${block.reason}'}')),
+        ],
+        const Divider(height: 24),
+        Text(
+            custom
+                ? 'This date has its own hours; weekly changes do not replace them. Manage this under One-off date changes below.'
+                : 'Changes to weekly hours and breaks are previewed here immediately. Save changes to apply them to Member booking.',
+            style: const TextStyle(color: AppColors.inkSoft, height: 1.5)),
+        const SizedBox(height: 8),
+        const Text(
+            'Open hours are not remaining free slots. Existing bookings, active holds, the daily cap and advance window are checked by the server.',
+            style:
+                TextStyle(fontSize: 12, color: AppColors.inkSoft, height: 1.5)),
+      ])),
+    ]);
   }
+
+  Widget _oneOffSection() => Panel(
+          child:
+              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text('One-off date changes',
+            style: Theme.of(context).textTheme.titleMedium),
+        const SizedBox(height: 8),
+        const Text(
+            'Use different hours for one date only, including extra hours. This replaces that date’s schedule; your weekly hours stay unchanged. For a break or day off, use Time off and breaks instead.',
+            style: TextStyle(height: 1.5, color: AppColors.inkSoft)),
+        const SizedBox(height: 12),
+        OutlinedButton.icon(
+            key: const ValueKey('open-specific-date-btn'),
+            onPressed: enabled
+                ? () => _openSpecificDateSheet(
+                    date: availabilityCubit?.state.day?.localDate)
+                : null,
+            icon: const Icon(Icons.edit_calendar_outlined),
+            label: const Text('Change hours for one date')),
+        const SizedBox(height: 6),
+        const Text('Date changes are saved separately inside their editor.',
+            style: TextStyle(fontSize: 12, color: AppColors.inkSoft)),
+      ]));
 
   Widget _recurringHours() {
     if (roster?.loading == true && roster?.baseline == null) {
       return const Panel(child: Text('-'));
     }
     if (roster?.baseline == null && roster?.message != null) {
-      return Panel(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                const Icon(Icons.error_outline,
-                    color: AppColors.danger, size: 20),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    roster!.message!,
-                    style: const TextStyle(
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.danger),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            FilledButton.tonalIcon(
-              onPressed: () => roster!.reload(discard: true),
-              icon: const Icon(Icons.refresh, size: 18),
-              label: const Text('Retry loading roster'),
-            ),
-          ],
-        ),
-      );
+      return const SizedBox.shrink();
     }
     if (roster?.baseline == null) {
       return const Panel(child: Text('-'));
@@ -920,8 +708,7 @@ class _AvailabilityScreenState extends State<AvailabilityScreen> {
 
           return Column(
             children: [
-              if (i > 0)
-                const Divider(height: 1, indent: 16, endIndent: 16),
+              if (i > 0) const Divider(height: 1, indent: 16, endIndent: 16),
               ListTile(
                 contentPadding:
                     const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
@@ -941,9 +728,8 @@ class _AvailabilityScreenState extends State<AvailabilityScreen> {
                   children: [
                     Switch(
                       value: active,
-                      onChanged: enabled
-                          ? (v) => roster!.toggleDay(number, v)
-                          : null,
+                      onChanged:
+                          enabled ? (v) => roster!.toggleDay(number, v) : null,
                     ),
                     IconButton(
                       key: ValueKey('weekly-day-$number'),
@@ -962,36 +748,7 @@ class _AvailabilityScreenState extends State<AvailabilityScreen> {
   }
 
   List<Widget> _timeOffSection() {
-    if (roster?.baseline == null && roster?.message != null) {
-      return [
-        Panel(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Row(
-                children: [
-                  Icon(Icons.warning_amber_rounded,
-                      color: AppColors.danger, size: 18),
-                  SizedBox(width: 6),
-                  Expanded(
-                    child: Text(
-                      'Time off and breaks could not be loaded.',
-                      style: TextStyle(fontWeight: FontWeight.w500),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              TextButton.icon(
-                onPressed: () => roster!.reload(discard: true),
-                icon: const Icon(Icons.refresh, size: 16),
-                label: const Text('Retry loading roster'),
-              ),
-            ],
-          ),
-        ),
-      ];
-    }
+    if (roster?.baseline == null && roster?.message != null) return [];
     if (roster?.baseline == null) {
       return const [Panel(child: Text('-'))];
     }
@@ -1064,134 +821,81 @@ class _AvailabilityScreenState extends State<AvailabilityScreen> {
   }
 
   Widget _limitsSection() {
-    if (roster?.baseline == null && roster?.message != null) {
-      return Panel(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Row(
-              children: [
-                Icon(Icons.warning_amber_rounded,
-                    color: AppColors.danger, size: 18),
-                SizedBox(width: 6),
-                Expanded(
-                  child: Text(
-                    'Scheduling limits could not be loaded.',
-                    style: TextStyle(fontWeight: FontWeight.w500),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            TextButton.icon(
-              onPressed: () => roster!.reload(discard: true),
-              icon: const Icon(Icons.refresh, size: 16),
-              label: const Text('Retry loading roster'),
-            ),
-          ],
-        ),
-      );
-    }
     if (roster?.baseline == null) {
       return const Panel(
-        child: Column(
-          children: [
-            DetailRow('Maximum booking hours per day', '-'),
-            Divider(height: 20),
-            DetailRow('How far ahead members can book', '-'),
-          ],
-        ),
-      );
+          child: Text('Load your schedule to configure booking limits.'));
     }
-
-    final daily = roster!.dailyHours;
-    final advance = roster!.advanceDays;
-
+    final daily = roster!.dailyHours, advance = roster!.advanceDays;
+    final today = availabilityCubit?.state.context?.todayLocalDate;
+    final lastDate = today == null || advance == null
+        ? null
+        : DateTime.parse(today)
+            .add(Duration(days: advance))
+            .toIso8601String()
+            .substring(0, 10);
     return Panel(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                'Maximum booking hours per day',
-                style: Theme.of(context).textTheme.titleMedium,
-              ),
-              Text(
-                daily == null ? '-' : '${daily}h',
-                style:
-                    const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
-              ),
-            ],
-          ),
-          Slider(
-            value: (daily ?? 8).clamp(1, 24).toDouble(),
-            min: 1,
-            max: 24,
-            divisions: 23,
-            label: '${daily ?? 8} hours',
-            onChanged: enabled ? (v) => roster!.limits(hours: v.round()) : null,
-          ),
-          const Divider(height: 20),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                'How far ahead members can book',
-                style: Theme.of(context).textTheme.titleMedium,
-              ),
-              Text(
-                advance == null ? '-' : '${advance}d',
-                style:
-                    const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
-              ),
-            ],
-          ),
-          Slider(
-            value: (advance ?? 14).clamp(1, 30).toDouble(),
-            min: 1,
-            max: 30,
-            divisions: 29,
-            label: '${advance ?? 14} days',
-            onChanged: enabled ? (v) => roster!.limits(days: v.round()) : null,
-          ),
-        ],
-      ),
-    );
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Text('Daily coaching capacity',
+          style: Theme.of(context).textTheme.titleMedium),
+      const SizedBox(height: 8),
+      const Text(
+          'Limit the total booked coaching time across all Members, not per Member. Confirmed bookings and unexpired payment holds count toward this limit.',
+          style: TextStyle(height: 1.5, color: AppColors.inkSoft)),
+      const SizedBox(height: 14),
+      DropdownButtonFormField<int>(
+          key: ValueKey(('daily-capacity', daily)),
+          initialValue: daily,
+          decoration: const InputDecoration(
+              labelText: 'Maximum booked hours per day',
+              border: OutlineInputBorder()),
+          items: [
+            for (var n = 1; n <= 24; n++)
+              DropdownMenuItem(value: n, child: Text('$n hours total'))
+          ],
+          onChanged: enabled ? (v) => roster!.limits(hours: v) : null),
+      const SizedBox(height: 12),
+      const Text(
+          'Example: working 09:00–17:00 with a 6-hour cap allows at most 6 booked hours within those windows. A larger cap never adds working hours.',
+          style: TextStyle(fontSize: 13, height: 1.5)),
+      const Divider(height: 32),
+      Text('Advance-booking window',
+          style: Theme.of(context).textTheme.titleMedium),
+      const SizedBox(height: 8),
+      const Text(
+          'Choose how many days ahead Members can book. It does not change your weekly hours or the length of a session.',
+          style: TextStyle(height: 1.5, color: AppColors.inkSoft)),
+      const SizedBox(height: 14),
+      DropdownButtonFormField<int>(
+          key: ValueKey(('advance-window', advance)),
+          initialValue: advance,
+          decoration: const InputDecoration(
+              labelText: 'Days ahead Members can book',
+              border: OutlineInputBorder()),
+          items: [
+            for (var n = 1; n <= 30; n++)
+              DropdownMenuItem(value: n, child: Text('$n days ahead'))
+          ],
+          onChanged: enabled ? (v) => roster!.limits(days: v) : null),
+      if (lastDate != null)
+        Padding(
+            padding: const EdgeInsets.only(top: 12),
+            child: Text(
+                'Last bookable date: $lastDate (inclusive, organization time). Past times are not bookable.',
+                style: const TextStyle(fontSize: 13, height: 1.5))),
+      const SizedBox(height: 10),
+      const Text(
+          'Lowering a limit preserves existing reservations; it restricts new bookings.',
+          style:
+              TextStyle(fontSize: 12, color: AppColors.inkSoft, height: 1.5)),
+    ]));
   }
 
   List<Widget> _footerSection() {
     return [
-      const Eyebrow('Dated overrides'),
-      Panel(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  'Specific date overrides',
-                  style: Theme.of(context).textTheme.titleSmall,
-                ),
-                TextButton.icon(
-                  key: const ValueKey('open-specific-date-btn'),
-                  onPressed: enabled ? () => _openSpecificDateSheet() : null,
-                  icon: const Icon(Icons.edit_calendar_outlined, size: 16),
-                  label: const Text('Edit specific date'),
-                ),
-              ],
-            ),
-            const SizedBox(height: 4),
-            Text(
-              'Organization time: ${roster?.baseline?.timeZone ?? availabilityCubit?.state.context?.timeZone ?? 'Asia/Kuala_Lumpur'} · Advanced overrides replace recurring weekly hours for a specific date.',
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-          ],
-        ),
-      ),
-      const SizedBox(height: 16),
+      const Text(
+          'Save weekly hours, time off and booking limits together. One-off dates are saved separately in their editor.',
+          style: TextStyle(color: AppColors.inkSoft, height: 1.5)),
+      const SizedBox(height: 12),
       if (roster?.message != null && roster!.message!.isNotEmpty) ...[
         Panel(
           background: roster!.conflict
@@ -1278,9 +982,7 @@ class _AvailabilityScreenState extends State<AvailabilityScreen> {
                   ],
                 )
               : Text(
-                  roster?.uncertain == true
-                      ? 'Retry save'
-                      : 'Save changes',
+                  roster?.uncertain == true ? 'Retry save' : 'Save changes',
                 ),
         ),
       ),
@@ -1298,9 +1000,8 @@ class _AvailabilityScreenState extends State<AvailabilityScreen> {
             fontSize: 12.5,
             fontWeight:
                 roster?.dirty == true ? FontWeight.w600 : FontWeight.w500,
-            color: roster?.dirty == true
-                ? AppColors.primary
-                : AppColors.inkSoft,
+            color:
+                roster?.dirty == true ? AppColors.primary : AppColors.inkSoft,
           ),
         ),
       ),
@@ -1320,7 +1021,7 @@ class _AvailabilityScreenState extends State<AvailabilityScreen> {
           busy: busy,
           child: AvailabilityPage(
             workingHoursTitle:
-                roster == null ? 'Dated overrides' : 'Recurring working hours',
+                roster == null ? 'Date-specific hours' : 'Weekly working hours',
             limitsTitle: 'Booking limits',
             actions: [
               IconButton(
@@ -1330,19 +1031,37 @@ class _AvailabilityScreenState extends State<AvailabilityScreen> {
               ),
             ],
             header: [
+              if (roster?.baseline == null && roster?.message != null)
+                Panel(
+                    child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                      Text(roster!.message!,
+                          style: const TextStyle(color: AppColors.danger)),
+                      TextButton.icon(
+                          onPressed: () => roster!.reload(discard: true),
+                          icon: const Icon(Icons.refresh),
+                          label: const Text('Retry loading roster')),
+                    ])),
               if (busy || cubitState.loading || cubitState.saving)
                 const LinearProgressIndicator(),
+              if (cubitState.message != null)
+                Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: Text(cubitState.message!)),
             ],
             weekAtGlance: _weekAtGlance(cubitState),
             workingHours: [
               _recurringHours(),
+              const SizedBox(height: 16),
+              _oneOffSection(),
             ],
             onAddTimeOff: enabled ? _addException : null,
             timeOff: _timeOffSection(),
             limits: [
               _limitsSection(),
             ],
-            footer: _footerSection(),
+            footer: [..._footerSection(), const SizedBox(height: 16), GoogleIntegrationPanel(repository: widget.googleIntegration ?? const DisconnectedGoogleIntegrationRepository(), coachId: _effectiveCoachId)],
           ),
         );
       },

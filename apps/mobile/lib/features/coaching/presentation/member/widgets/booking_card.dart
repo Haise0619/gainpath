@@ -131,6 +131,9 @@ class BookingCard extends StatelessWidget {
                 const SizedBox(width: 6),
                 Text('You reviewed this session',
                     style: Theme.of(context).textTheme.bodyMedium),
+                if (booking.reviewStars != null)
+                  Text(' · ${booking.reviewStars}/5',
+                      style: Theme.of(context).textTheme.bodyMedium),
               ],
             ),
           ],

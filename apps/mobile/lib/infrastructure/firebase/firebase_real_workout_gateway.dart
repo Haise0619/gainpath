@@ -4,6 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:gainpath_domain/gainpath_domain.dart' show SessionScope;
 import '../../features/workout/domain/real_workout_contract.dart';
 import '../../features/workout/domain/real_workout_sync.dart';
+import 'firebase_function_transport.dart';
 
 /// Callable transport; local parsing never grants server acceptance.
 class FirebaseRealWorkoutGateway implements RealWorkoutGateway {
@@ -16,9 +17,8 @@ class FirebaseRealWorkoutGateway implements RealWorkoutGateway {
     if (invoke != null) {
       _invoke = invoke;
     } else {
-      final client = functions ?? FirebaseFunctions.instance;
-      _invoke = (name, payload) async => (await client
-              .httpsCallable(name,
+      _invoke = (name, payload) async => (await firebaseCallable(name,
+                  functions: functions,
                   options: HttpsCallableOptions(
                       timeout: const Duration(seconds: 20)))
               .call<Object?>(payload))

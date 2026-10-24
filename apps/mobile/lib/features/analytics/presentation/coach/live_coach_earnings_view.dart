@@ -1,7 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:gainpath_domain/coaching.dart';
 import 'package:gainpath_domain/gainpath_domain.dart'
-    show SessionScope, BookingListRepository, PersistedBookingRecord;
+    show
+        SessionScope,
+        BookingListRepository,
+        PersistedBookingRecord,
+        BookingCursor;
 import 'earnings_screen.dart';
 
 class LiveCoachEarningsView extends StatefulWidget {
@@ -12,9 +16,13 @@ class LiveCoachEarningsView extends StatefulWidget {
     required this.coachId,
     required this.bookingListRepo,
     required this.bookingMapper,
+    this.performance,
+    this.exportPdf,
   });
 
   final SessionScope scope;
+  final Module9Repository? performance;
+  final Future<bool> Function(List<String>)? exportPdf;
   final bool Function() isCurrent;
   final String coachId;
   final BookingListRepository bookingListRepo;
@@ -28,6 +36,7 @@ class _LiveCoachEarningsViewState extends State<LiveCoachEarningsView> {
   bool _loading = true;
   String? _error;
   List<Booking> _bookings = [];
+  CoachReport? _report;
 
   @override
   void initState() {
@@ -43,19 +52,38 @@ class _LiveCoachEarningsViewState extends State<LiveCoachEarningsView> {
     });
 
     try {
+      if (widget.performance != null) {
+        final report = await widget.performance!.loadPerformance();
+        if (!mounted || !widget.isCurrent()) return;
+        setState(() {
+          _report = report;
+          _bookings = report.sessions.map((s) => s.booking).toList();
+          _loading = false;
+        });
+        return;
+      }
       final now = DateTime.now();
       final thirtyDaysAgo = now.subtract(const Duration(days: 30));
       final dateStr =
           '${thirtyDaysAgo.year}-${thirtyDaysAgo.month.toString().padLeft(2, '0')}-${thirtyDaysAgo.day.toString().padLeft(2, '0')}';
 
-      final page = await widget.bookingListRepo.load(
-        coachId: widget.coachId,
-        firstLocalDate: dateStr,
-      );
-
-      if (!mounted || !widget.isCurrent()) return;
-
-      final list = page.records.map(widget.bookingMapper).toList();
+      final list = <Booking>[];
+      BookingCursor? cursor;
+      final seen = <String>{};
+      do {
+        final page = await widget.bookingListRepo.load(
+          coachId: widget.coachId,
+          firstLocalDate: dateStr,
+          cursor: cursor,
+        );
+        if (!mounted || !widget.isCurrent()) return;
+        list.addAll(page.records.map(widget.bookingMapper));
+        cursor = page.nextCursor;
+        if (cursor != null &&
+            !seen.add('${cursor.startAtMillis}:${cursor.bookingId}')) {
+          throw StateError('Unable to load complete report. Please retry.');
+        }
+      } while (cursor != null);
       setState(() {
         _bookings = list;
         _loading = false;
@@ -100,8 +128,10 @@ class _LiveCoachEarningsViewState extends State<LiveCoachEarningsView> {
     return EarningsScreen(
       connected: true,
       bookings: _bookings,
-      rating: null,
-      reviews: null,
+      rating: _report?.averageRating,
+      reviews: _report?.reviewCount,
+      report: _report,
+      exportPdf: widget.exportPdf,
     );
   }
 }

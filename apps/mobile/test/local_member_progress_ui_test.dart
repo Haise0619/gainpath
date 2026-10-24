@@ -227,10 +227,13 @@ void main() {
       }
     }
     expect(values, [0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 7, 4]);
-    expect(find.text('WEEKLY VOLUME (KG)'), findsOneWidget);
-    expect(find.text('MUSCLE GROUP SPLIT'), findsOneWidget);
+    expect(find.text('WEEKLY VOLUME (KG)'), findsNothing);
+    expect(find.text('MUSCLE GROUP SPLIT'), findsNothing);
+    expect(
+        find.textContaining('Weight and muscle-group volume are not recorded'),
+        findsOneWidget);
     expect(find.text('3,400'), findsNothing);
-    expect(find.byTooltip('Export'), findsOneWidget);
+    expect(find.byTooltip('Export'), findsNothing);
     await tester.pumpWidget(const SizedBox.shrink());
   });
 

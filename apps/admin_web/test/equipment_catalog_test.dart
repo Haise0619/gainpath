@@ -14,9 +14,13 @@ import 'dart:typed_data';
 import 'dart:convert';
 
 class _Picker implements EquipmentImagePicker {
+  bool fail = false;
   @override
-  Future<EquipmentImage?> pick() async => EquipmentImage(base64Decode(
-      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a/eUAAAAASUVORK5CYII='));
+  Future<EquipmentImage?> pick() async {
+    if (fail) throw const FormatException('Choose a valid replacement image.');
+    return EquipmentImage(base64Decode(
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a/eUAAAAASUVORK5CYII='));
+  }
 }
 
 class _Images implements EquipmentImageStore {
@@ -29,6 +33,28 @@ class _Images implements EquipmentImageStore {
     if (fail) throw const EquipmentImageUploadFailed();
     duringUpload?.call();
     return 'https://example.test/equipment-image.png';
+  }
+}
+
+class _VideoPicker implements EquipmentVideoPicker {
+  @override
+  Future<EquipmentVideo?> pick() async => EquipmentVideo(
+      Uint8List.fromList([0, 0, 0, 20, 102, 116, 121, 112, 109, 112, 52, 50]),
+      name: 'tutorial.mp4');
+}
+
+class _Videos implements EquipmentVideoStore {
+  int uploads = 0;
+  bool fail = false;
+  void Function()? duringUpload;
+  @override
+  Future<String> upload(EquipmentVideo video,
+      {void Function(double)? onProgress}) async {
+    uploads++;
+    if (fail) throw const EquipmentVideoUploadFailed();
+    onProgress?.call(1);
+    duringUpload?.call();
+    return 'https://example.test/tutorial.mp4';
   }
 }
 
@@ -264,6 +290,37 @@ void main() {
         db.records['orgs/o/gymEquipment/created']!['name'], 'Concurrent edit');
     expect(db.records['orgs/o/gymEquipment/created']!['revision'], 1);
   });
+  test(
+      'video replacement and removal persist; failed uploads and stale sessions do not save',
+      () async {
+    final videos = _Videos();
+    repo = FirebaseEquipmentRepository(
+        scope: SessionScope(userId: 'admin', organizationId: 'o'),
+        isCurrent: () => current,
+        firestore: db,
+        auth: _Auth(),
+        videoStore: videos);
+    final video = EquipmentVideo(
+        Uint8List.fromList([0, 0, 0, 20, 102, 116, 121, 112, 109, 112, 52, 50]),
+        name: 'tutorial.mp4');
+    final created = await repo.saveEquipment(equipment(), video: video);
+    expect(created.tutorialVideoUrl, 'https://example.test/tutorial.mp4');
+    videos.fail = true;
+    await expectLater(repo.saveEquipment(created, video: video),
+        throwsA(isA<EquipmentVideoUploadFailed>()));
+    expect(db.records['orgs/o/gymEquipment/created']!['revision'], 1);
+    videos.fail = false;
+    final removed =
+        await repo.saveEquipment(created.copyWith()..tutorialVideoUrl = '');
+    expect(removed.tutorialVideoUrl, '');
+    await expectLater(repo.saveEquipment(created, video: video),
+        throwsA(isA<EquipmentConflict>()));
+    videos.duringUpload = () => current = false;
+    await expectLater(repo.saveEquipment(removed, video: video),
+        throwsA(isA<EquipmentSessionChanged>()));
+    expect(db.records['orgs/o/gymEquipment/created']!['tutorialVideoUrl'], '');
+    expect(db.records['orgs/o/gymEquipment/created']!['revision'], 2);
+  });
   testWidgets(
       'existing Admin UI creates, edits, activates, deactivates and reloads persisted equipment',
       (tester) async {
@@ -271,16 +328,20 @@ void main() {
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
     final images = _Images();
+    final videos = _Videos();
+    final picker = _Picker();
     repo = FirebaseEquipmentRepository(
         scope: SessionScope(userId: 'admin', organizationId: 'o'),
         isCurrent: () => current,
         firestore: db,
         auth: _Auth(),
-        imageStore: images);
+        imageStore: images,
+        videoStore: videos);
     await tester.pumpWidget(MultiRepositoryProvider(
         providers: [
           RepositoryProvider<EquipmentRepository>.value(value: repo),
-          RepositoryProvider<EquipmentImagePicker>.value(value: _Picker()),
+          RepositoryProvider<EquipmentVideoPicker>.value(value: _VideoPicker()),
+          RepositoryProvider<EquipmentImagePicker>.value(value: picker),
         ],
         child: MaterialApp(
             theme: AppTheme.build(), home: const EquipmentCatalogScreen())));
@@ -309,10 +370,35 @@ void main() {
         'https://example.test/equipment-image.png');
     await tester.tap(find.byIcon(Icons.edit_outlined));
     await tester.pumpAndSettle();
+    final uploadsBeforeReplacement = images.uploads;
+    await tester.tap(find.text('Choose tutorial video'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Selected: tutorial.mp4'), findsOneWidget);
+    expect(videos.uploads, 0);
+    await tester.tap(find.text('Choose image'));
+    await tester.pumpAndSettle();
+    expect(find.text('New image selected. Save changes to apply it.'),
+        findsOneWidget);
+    expect(find.byKey(const ValueKey('equipment-selected-image-preview')),
+        findsOneWidget);
+    expect(images.uploads, uploadsBeforeReplacement);
+    picker.fail = true;
+    await tester.tap(find.text('Choose image'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('equipment-image-error')), findsOneWidget);
+    expect(find.text('Choose a valid replacement image.'), findsOneWidget);
+    expect(find.byKey(const ValueKey('equipment-selected-image-preview')),
+        findsOneWidget);
+    expect(images.uploads, uploadsBeforeReplacement);
+    picker.fail = false;
     await tester.enterText(
         find.byType(TextFormField).first, 'Edited equipment');
     await tester.tap(find.text('Save changes'));
     await tester.pumpAndSettle();
+    expect(images.uploads, uploadsBeforeReplacement + 1);
+    expect(videos.uploads, 1);
+    expect(db.records['orgs/o/gymEquipment/created']!['tutorialVideoUrl'],
+        'https://example.test/tutorial.mp4');
     expect(
         db.records['orgs/o/gymEquipment/created']!['name'], 'Edited equipment');
     await tester.tap(find.byType(Switch));

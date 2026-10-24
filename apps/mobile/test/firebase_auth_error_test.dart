@@ -6,7 +6,8 @@ import 'package:gainpath_data/gainpath_data.dart';
 import 'package:gainpath_mobile/main.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-class _FailingGateway implements FirebaseAuthGateway, FirebaseAuthSessionGateway {
+class _FailingGateway
+    implements FirebaseAuthGateway, FirebaseAuthSessionGateway {
   final _users = StreamController<FirebaseAuthUser?>.broadcast();
 
   @override
@@ -16,12 +17,15 @@ class _FailingGateway implements FirebaseAuthGateway, FirebaseAuthSessionGateway
   Future<FirebaseAuthUser?> restoreUser() async => null;
 
   @override
-  Future<FirebaseAuthUser> signIn({required String email, required String password}) async {
+  Future<FirebaseAuthUser> signIn(
+      {required String email, required String password}) async {
     throw const AuthException('Email or password is incorrect.');
   }
 
   @override
-  Future<FirebaseAuthUser> register({required String email, required String password,
+  Future<FirebaseAuthUser> register(
+      {required String email,
+      required String password,
       required String name}) async {
     throw const AuthException('This email is already registered.');
   }
@@ -40,18 +44,19 @@ class _FailingGateway implements FirebaseAuthGateway, FirebaseAuthSessionGateway
 void main() {
   setUpAll(() => GoogleFonts.config.allowRuntimeFetching = false);
 
-  testWidgets('Firebase sign-in failure stays visible after provider sign-out', (tester) async {
+  testWidgets('Firebase sign-in failure stays visible after provider sign-out',
+      (tester) async {
     tester.view.physicalSize = const Size(1000, 1600);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
     final gateway = _FailingGateway();
     final repository = FirebaseAuthRepository(gateway);
-    await tester.pumpWidget(GainPathMobileApp(
+    await tester.pumpWidget(GainPathMobileApp.injected(
       authRepository: repository,
-      backendConfig: const BackendConfig(BackendMode.firebase),
     ));
     await tester.pumpAndSettle();
-    expect(tester.widget<TextField>(find.byType(TextField).at(1)).controller!.text,
+    expect(
+        tester.widget<TextField>(find.byType(TextField).at(1)).controller!.text,
         isEmpty);
     await tester.enterText(find.byType(TextField).at(0), 'member@example.com');
     await tester.enterText(find.byType(TextField).at(1), 'password123');
@@ -69,9 +74,8 @@ void main() {
     addTearDown(tester.view.reset);
     final gateway = _FailingGateway();
     final repository = FirebaseAuthRepository(gateway);
-    await tester.pumpWidget(GainPathMobileApp(
+    await tester.pumpWidget(GainPathMobileApp.injected(
       authRepository: repository,
-      backendConfig: const BackendConfig(BackendMode.firebase),
     ));
     await tester.pumpAndSettle();
     final register = find.text('New here? Create an account');
@@ -84,9 +88,11 @@ void main() {
     await tester.enterText(find.byType(TextField).at(3), 'password123');
     await tester.tap(find.widgetWithText(FilledButton, 'Create account'));
     await tester.pumpAndSettle();
-    expect(find.text('Agree to the Terms and Privacy Policy to continue.'), findsOneWidget);
+    expect(find.text('Agree to the Terms and Privacy Policy to continue.'),
+        findsOneWidget);
     await tester.pump(const Duration(seconds: 6));
-    expect(find.text('Agree to the Terms and Privacy Policy to continue.'), findsOneWidget);
+    expect(find.text('Agree to the Terms and Privacy Policy to continue.'),
+        findsOneWidget);
     await tester.tap(find.byType(Checkbox));
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(FilledButton, 'Create account'));

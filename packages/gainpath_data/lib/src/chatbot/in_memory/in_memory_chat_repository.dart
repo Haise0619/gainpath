@@ -3,7 +3,7 @@ import 'chatbot_seed.dart';
 import 'package:gainpath_domain/chatbot.dart';
 
 /// Session-scoped in-memory [ChatRepository] backed by [ChatbotSeed].
-class InMemoryChatRepository implements ChatRepository {
+class InMemoryChatRepository extends ChatRepository {
   InMemoryChatRepository({MockDataSession? session})
       : _seed = (session ?? MockDataSession()).chatbot;
 

@@ -13,7 +13,7 @@ import '../../features/identity/presentation/shared/login_screen.dart';
 
 abstract final class AppRouteBuilders {
   static Map<String, WidgetBuilder> withLogin(WidgetBuilder loginBuilder,
-          {WidgetBuilder? coachBuilder}) =>
+          {WidgetBuilder? coachBuilder, WidgetBuilder? memberBuilder}) =>
       {
         ...builders,
         for (final route in [
@@ -26,7 +26,9 @@ abstract final class AppRouteBuilders {
         AppRoutes.member: (_) => _RoleGuard(
             role: AppRole.member,
             loginBuilder: loginBuilder,
-            child: const MemberShell()),
+            child: memberBuilder == null
+                ? const MemberShell()
+                : Builder(builder: memberBuilder)),
         AppRoutes.coach: (_) => _RoleGuard(
             role: AppRole.coach,
             loginBuilder: loginBuilder,

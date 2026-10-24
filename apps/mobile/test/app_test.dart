@@ -3,25 +3,42 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:gainpath_mobile/main.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:gainpath_data/gainpath_data.dart';
+import 'package:gainpath_domain/gainpath_domain.dart'
+    show AuthSession, SessionScope;
+import 'package:gainpath_mobile/app/shells/member_shell.dart';
+import 'package:gainpath_mobile/navigation/auth_navigation.dart';
 import 'package:gainpath_mobile/features/identity/presentation/member/profile_setup_screen.dart';
 import 'package:gainpath_mobile/features/identity/presentation/shared/login_screen.dart';
 import 'package:gainpath_mobile/features/identity/presentation/shared/onboarding_screen.dart';
 import 'support/fitness_profile_fake.dart';
+import 'support/test_mobile_app.dart';
 import 'coach_profile_state_test.dart' show ProfileFake;
+
+class ProviderVerificationAuth extends InMemoryAuthRepository {
+  bool verifiedByProvider = false;
+
+  @override
+  Future<AuthSession?> restoreSession() async {
+    final session = await super.restoreSession();
+    if (verifiedByProvider && session?.needsVerification == true) {
+      await verifyEmailForDemo();
+    }
+    return super.restoreSession();
+  }
+}
 
 void main() {
   setUpAll(() => GoogleFonts.config.allowRuntimeFetching = false);
 
   testWidgets(
-      'registration verifies the demo session and reaches profile setup',
+      'registration waits for provider verification before profile setup',
       (tester) async {
     tester.view.physicalSize = const Size(1000, 1600);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
-    final repository = InMemoryAuthRepository();
-    await tester.pumpWidget(GainPathMobileApp(
+    final repository = ProviderVerificationAuth();
+    await tester.pumpWidget(GainPathMobileApp.injected(
       authRepository: repository,
-      backendConfig: const BackendConfig(BackendMode.firebase),
       profileRepositoryFactory: FakeProfileGateway().repository,
     ));
     await tester.pumpAndSettle();
@@ -41,6 +58,8 @@ void main() {
     await tester.pump(const Duration(milliseconds: 300));
     expect(find.text('Check your inbox'), findsOneWidget);
     expect(find.text('Sign out'), findsOneWidget);
+    expect(find.byType(ProfileSetupScreen), findsNothing);
+    repository.verifiedByProvider = true;
     await tester.tap(find.text("I've verified my email"));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
@@ -50,8 +69,7 @@ void main() {
     await repository.dispose();
   });
   testWidgets('signed-out mobile app opens one login page', (tester) async {
-    await tester.pumpWidget(const GainPathMobileApp(
-        backendConfig: BackendConfig(BackendMode.mock)));
+    await tester.pumpWidget(const TestMobileApp());
     await tester.pumpAndSettle();
     expect(find.byType(LoginScreen), findsOneWidget);
     expect(find.text('Member or coach'), findsOneWidget);
@@ -64,8 +82,7 @@ void main() {
     tester.view.physicalSize = const Size(1000, 1600);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
-    await tester.pumpWidget(const GainPathMobileApp(
-        backendConfig: BackendConfig(BackendMode.mock)));
+    await tester.pumpWidget(const TestMobileApp());
     await tester.pumpAndSettle();
     await tester.tap(find.text('View introduction'));
     await tester.pumpAndSettle();
@@ -82,9 +99,8 @@ void main() {
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
     final repository = InMemoryAuthRepository();
-    await tester.pumpWidget(GainPathMobileApp(
+    await tester.pumpWidget(GainPathMobileApp.injected(
       authRepository: repository,
-      backendConfig: const BackendConfig(BackendMode.firebase),
     ));
     await tester.pumpAndSettle();
 
@@ -100,8 +116,7 @@ void main() {
 
   testWidgets('authenticated member can enter the local workout flow',
       (tester) async {
-    await tester.pumpWidget(const GainPathMobileApp(
-        backendConfig: BackendConfig(BackendMode.mock)));
+    await tester.pumpWidget(const TestMobileApp());
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField).at(0), 'member@example.com');
     await tester.enterText(find.byType(TextField).at(1), 'password123');
@@ -117,8 +132,7 @@ void main() {
     tester.view.physicalSize = const Size(1000, 1600);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
-    await tester.pumpWidget(const GainPathMobileApp(
-        backendConfig: BackendConfig(BackendMode.mock)));
+    await tester.pumpWidget(const TestMobileApp());
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField).at(0), 'coach@example.com');
     await tester.enterText(find.byType(TextField).at(1), 'password123');
@@ -141,12 +155,42 @@ void main() {
       email: 'coach@example.com',
       password: 'password123',
     );
-    await tester.pumpWidget(GainPathMobileApp(
-        authRepository: repository,
-        backendConfig: const BackendConfig(BackendMode.mock)));
+    await tester.pumpWidget(TestMobileApp(authRepository: repository));
     await tester.pumpAndSettle();
     expect(find.text('Roster'), findsWidgets);
     expect(find.byType(LoginScreen), findsNothing);
+    await tester.pumpWidget(const SizedBox());
+    await repository.dispose();
+  });
+
+  testWidgets('named member route retains scoped profile composition',
+      (tester) async {
+    final repository = InMemoryAuthRepository();
+    final session = await repository.signIn(
+        email: 'member@example.com', password: 'password123');
+    final profiles = FakeProfileGateway();
+    final profileScopes = <SessionScope>[];
+    await tester.pumpWidget(GainPathMobileApp.injected(
+      authRepository: repository,
+      profileRepositoryFactory: (scope) {
+        profileScopes.add(scope);
+        return profiles.repository(scope);
+      },
+    ));
+    await tester.pumpAndSettle();
+    expect(find.byType(ProfileSetupScreen), findsOneWidget);
+
+    tester
+        .state<NavigatorState>(find.byType(Navigator))
+        .pushNamed(AppRoutes.member);
+    await tester.pumpAndSettle();
+
+    expect(profileScopes.length, greaterThan(1));
+    expect(profileScopes, everyElement(session.scope));
+    expect(find.byType(ProfileSetupScreen), findsOneWidget);
+    expect(find.byType(MemberShell), findsNothing);
+    expect(find.byType(LoginScreen), findsNothing);
+    expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox());
     await repository.dispose();
   });
@@ -159,9 +203,8 @@ void main() {
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
       final repository = InMemoryAuthRepository();
-      await tester.pumpWidget(GainPathMobileApp(
+      await tester.pumpWidget(GainPathMobileApp.injected(
         authRepository: repository,
-        backendConfig: const BackendConfig(BackendMode.firebase),
         profileRepositoryFactory: FakeProfileGateway().repository,
         coachProfileFactory: (_, current) => ProfileFake(),
       ));

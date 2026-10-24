@@ -1,3 +1,5 @@
+import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -271,7 +273,37 @@ class _EquipmentFormDialogState extends State<_EquipmentFormDialog> {
   bool _saving = false, _reloadRequired = false;
   bool _picking = false;
   EquipmentImage? _selectedImage;
-  bool get _busy => _saving || _picking;
+  String? _imageError;
+  EquipmentVideo? _selectedVideo;
+  bool _pickingVideo = false, _removeVideo = false;
+  double? _videoProgress;
+  String? _videoError;
+  Future<void> _chooseVideo() async {
+    if (_busy || _reloadRequired) return;
+    setState(() {
+      _pickingVideo = true;
+      _videoError = null;
+    });
+    try {
+      final video = await context.read<EquipmentVideoPicker>().pick();
+      if (mounted && video != null) {
+        setState(() {
+          _selectedVideo = video;
+          _removeVideo = false;
+        });
+      }
+    } on FormatException catch (e) {
+      if (mounted) setState(() => _videoError = e.message);
+    } catch (_) {
+      if (mounted) {
+        setState(() => _videoError = 'Could not select a video. Try again.');
+      }
+    } finally {
+      if (mounted) setState(() => _pickingVideo = false);
+    }
+  }
+
+  bool get _busy => _saving || _picking || _pickingVideo;
   String? _error;
   final _formKey = GlobalKey<FormState>();
   late final _name = TextEditingController(text: widget.existing?.name ?? '');
@@ -294,16 +326,17 @@ class _EquipmentFormDialogState extends State<_EquipmentFormDialog> {
     if (_busy || _reloadRequired) return;
     setState(() {
       _picking = true;
-      _error = null;
+      _imageError = null;
     });
     try {
       final image = await context.read<EquipmentImagePicker>().pick();
       if (mounted && image != null) setState(() => _selectedImage = image);
     } on FormatException catch (e) {
-      if (mounted) setState(() => _error = e.message);
+      if (mounted) setState(() => _imageError = e.message);
     } catch (_) {
       if (mounted) {
-        setState(() => _error = 'Could not select an image. Please try again.');
+        setState(
+            () => _imageError = 'Could not select an image. Please try again.');
       }
     } finally {
       if (mounted) setState(() => _picking = false);
@@ -339,6 +372,8 @@ class _EquipmentFormDialogState extends State<_EquipmentFormDialog> {
       ..name = _name.text.trim()
       ..category = _category.text.trim()
       ..muscleGroup = _muscleGroup.text.trim()
+      ..tutorialVideoUrl =
+          _removeVideo ? '' : (widget.existing?.tutorialVideoUrl ?? '')
       ..imageUrl = _imageUrl.text.trim()
       ..description = _description.text.trim()
       ..howToUse = List.of(_howToUse)
@@ -351,8 +386,17 @@ class _EquipmentFormDialogState extends State<_EquipmentFormDialog> {
     }
     setState(() => _saving = true);
     try {
-      await repository.saveEquipment(entry, image: _selectedImage);
+      await repository.saveEquipment(entry,
+          image: _selectedImage,
+          video: _selectedVideo, onVideoProgress: (value) {
+        if (mounted) setState(() => _videoProgress = value);
+      });
       if (mounted) Navigator.pop(context, true);
+    } on EquipmentVideoUploadFailed {
+      if (mounted) {
+        setState(() => _error =
+            'Video upload failed. Equipment was not saved. Check your connection and retry.');
+      }
     } on EquipmentImageUploadFailed {
       if (mounted) {
         setState(() => _error =
@@ -401,12 +445,63 @@ class _EquipmentFormDialogState extends State<_EquipmentFormDialog> {
                   style: Theme.of(context).textTheme.titleLarge),
               if (context.read<EquipmentRepository>().isLive)
                 const Text(
-                    'Organization equipment information. New items start hidden; activation enables Member browsing. Recognition and video playback are not connected.'),
+                    'Organization equipment information. New items start hidden; activation enables Member browsing. Optional tutorials appear on Equipment Details.'),
               if (_error != null) Text(_error!),
               if (_reloadRequired)
                 TextButton(
                     onPressed: () => Navigator.pop(context, true),
                     child: const Text('Discard and reload')),
+              const SizedBox(height: 16),
+              const Text('Tutorial video (optional)'),
+              const Text(
+                  'MP4 · up to 100 MB. Use H.264 video with AAC audio for device compatibility. Uploaded when you save.'),
+              if (_selectedVideo != null)
+                Semantics(
+                    liveRegion: true,
+                    child: Text(
+                        'Selected: ${_selectedVideo!.name} (${(_selectedVideo!.bytes.length / 1048576).toStringAsFixed(1)} MB). Save to apply.'))
+              else if (_removeVideo)
+                const Text('Tutorial will be removed when you save.')
+              else if (widget.existing?.tutorialVideoUrl.isNotEmpty == true)
+                const Text('A tutorial video is attached.'),
+              Wrap(spacing: 8, children: [
+                OutlinedButton.icon(
+                    onPressed: _busy || _reloadRequired ? null : _chooseVideo,
+                    icon: const Icon(Icons.video_library_outlined),
+                    label: Text(_pickingVideo
+                        ? 'Opening video…'
+                        : 'Choose tutorial video')),
+                if (_selectedVideo != null ||
+                    (!_removeVideo &&
+                        widget.existing?.tutorialVideoUrl.isNotEmpty == true))
+                  TextButton(
+                      onPressed: _busy || _reloadRequired
+                          ? null
+                          : () => setState(() {
+                                _selectedVideo = null;
+                                _removeVideo = true;
+                              }),
+                      child: const Text('Remove tutorial')),
+                if (_removeVideo &&
+                    widget.existing?.tutorialVideoUrl.isNotEmpty == true)
+                  TextButton(
+                      onPressed: _busy || _reloadRequired
+                          ? null
+                          : () => setState(() => _removeVideo = false),
+                      child: const Text('Undo removal')),
+              ]),
+              if (_videoError != null)
+                Semantics(
+                    liveRegion: true,
+                    child: Text(_videoError!,
+                        style: TextStyle(
+                            color: Theme.of(context).colorScheme.error))),
+              if (_saving && _selectedVideo != null) ...[
+                LinearProgressIndicator(value: _videoProgress),
+                Text(_videoProgress == null
+                    ? 'Preparing video upload…'
+                    : 'Uploading tutorial: ${(_videoProgress! * 100).round()}%'),
+              ],
               const SizedBox(height: 16),
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -463,11 +558,23 @@ class _EquipmentFormDialogState extends State<_EquipmentFormDialog> {
                                       width: 160,
                                       child: _selectedImage == null
                                           ? _networkHero(_imageUrl.text)
-                                          : Image.memory(_selectedImage!.bytes,
-                                              fit: BoxFit.contain,
-                                              errorBuilder: (_, __, ___) =>
-                                                  const Icon(Icons
-                                                      .broken_image_outlined))),
+                                          : kIsWeb
+                                              ? Image.network(
+                                                  'data:${_selectedImage!.contentType};base64,${base64Encode(_selectedImage!.bytes)}',
+                                                  key: const ValueKey(
+                                                      'equipment-selected-image-preview'),
+                                                  webHtmlElementStrategy:
+                                                      WebHtmlElementStrategy
+                                                          .prefer,
+                                                  fit: BoxFit.contain)
+                                              : Image.memory(
+                                                  _selectedImage!.bytes,
+                                                  key: const ValueKey(
+                                                      'equipment-selected-image-preview'),
+                                                  fit: BoxFit.contain,
+                                                  errorBuilder: (_, __, ___) =>
+                                                      const Icon(Icons
+                                                          .broken_image_outlined))),
                                 OutlinedButton.icon(
                                     onPressed: _busy || _reloadRequired
                                         ? null
@@ -479,6 +586,22 @@ class _EquipmentFormDialogState extends State<_EquipmentFormDialog> {
                                         : 'Choose image')),
                                 const Text(
                                     'JPG, PNG or WebP · up to 5 MB. Uploaded when you save.'),
+                                if (_imageError != null)
+                                  Semantics(
+                                      liveRegion: true,
+                                      child: Text(_imageError!,
+                                          key: const ValueKey(
+                                              'equipment-image-error'),
+                                          style: TextStyle(
+                                              color: Theme.of(context)
+                                                  .colorScheme
+                                                  .error))),
+                                if (_selectedImage != null)
+                                  Semantics(
+                                      liveRegion: true,
+                                      child: Text(_isEdit
+                                          ? 'New image selected. Save changes to apply it.'
+                                          : 'Image selected. Save to upload it.')),
                                 if (_selectedImage != null)
                                   TextButton(
                                       onPressed: _busy

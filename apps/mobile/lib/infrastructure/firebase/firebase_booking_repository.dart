@@ -1,9 +1,11 @@
-import 'package:cloud_functions/cloud_functions.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:gainpath_domain/coaching.dart' show BookingChangeSource;
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:gainpath_data/gainpath_data.dart'
     show BookingRemoteDataSource, CreateBookingHoldRequestDto, BookingHoldDto;
 import 'package:gainpath_domain/gainpath_domain.dart';
 import 'firebase_app_check_readiness.dart';
+import 'firebase_function_transport.dart';
 
 typedef BookingCallable = Future<Map<String, dynamic>> Function(
     String, Map<String, dynamic>);
@@ -16,11 +18,13 @@ class BookingTransport {
       String? Function()? currentUid,
       BookingCallable? call})
       : _uid = currentUid ?? (() => FirebaseAuth.instance.currentUser?.uid),
-        _call = call ??
-            ((name, input) async => (await FirebaseFunctions.instance
-                    .httpsCallable(name)
-                    .call<Map<String, dynamic>>(input))
-                .data);
+        _call = call ?? _regionalCall;
+  static Future<Map<String, dynamic>> _regionalCall(
+      String name, Map<String, dynamic> input) async {
+    return (await firebaseCallable(name).call<Map<String, dynamic>>(input))
+        .data;
+  }
+
   final SessionScope scope;
   final bool Function() isCurrent;
   final String? Function() _uid;
@@ -141,7 +145,8 @@ class FirebaseBookingRepository
   }
 }
 
-class FirebaseBookingListRepository implements BookingListRepository {
+class FirebaseBookingListRepository
+    implements BookingListRepository, BookingChangeSource {
   FirebaseBookingListRepository(
       {required this.scope,
       required this.role,
@@ -161,6 +166,31 @@ class FirebaseBookingListRepository implements BookingListRepository {
   final List<String> _branches;
   final BookingTransport _transport;
   @override
+  Stream<void> watchBookingChanges() async* {
+    _transport.check();
+    if (role != AppRole.member && role != AppRole.coach) return;
+    if (role == AppRole.coach && _branches.isEmpty) return;
+    Query<Map<String, dynamic>> query = FirebaseFirestore.instance
+        .collection('orgs/${scope.organizationId}/bookings')
+        .where(role == AppRole.coach ? 'coachId' : 'memberId',
+            isEqualTo: scope.userId);
+    if (role == AppRole.coach) {
+      query = query.where('branchId', whereIn: _branches);
+    }
+    await for (final _ in query
+        .where('startAtMillis',
+            isGreaterThanOrEqualTo: DateTime.now()
+                .subtract(const Duration(days: 90))
+                .millisecondsSinceEpoch)
+        .orderBy('startAtMillis')
+        .limit(2000)
+        .snapshots()) {
+      _transport.check();
+      yield null;
+    }
+  }
+
+  @override
   Future<BookingPage> load(
       {String? coachId,
       String? firstLocalDate,
@@ -177,7 +207,9 @@ class FirebaseBookingListRepository implements BookingListRepository {
           await _transport.call('getBookingListCommand', {
             'schemaVersion': 1,
             'includeParticipantNames': true,
+            'includeReviewDetails': true,
             'includeCancellationDetails': true,
+            'includeMemberChangeDetails': true,
             'organizationId': scope.organizationId,
             if (coachId != null) 'coachId': coachId,
             if (firstLocalDate != null) 'firstLocalDate': firstLocalDate,

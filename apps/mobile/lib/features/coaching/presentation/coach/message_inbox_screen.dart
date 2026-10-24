@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:gainpath_domain/coaching.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
@@ -272,6 +273,7 @@ class CoachMessageThreadScreen extends StatefulWidget {
 }
 
 class _CoachMessageThreadScreenState extends State<CoachMessageThreadScreen> {
+  Timer? _refreshTimer;
   final _controller = TextEditingController();
   final _scroll = ScrollController();
   List<BookingMessage> _messages = [];
@@ -298,7 +300,12 @@ class _CoachMessageThreadScreenState extends State<CoachMessageThreadScreen> {
     if (widget.ownRole == 'Member' && widget.loadCoachName != null) {
       _resolveCoachName();
     }
-    if (widget.repository != null) _load();
+    if (widget.repository != null) {
+      _load();
+      _refreshTimer = Timer.periodic(const Duration(seconds: 5), (_) {
+        if (mounted && _current && !_busy && _pendingText == null && (ModalRoute.of(context)?.isCurrent ?? true)) _load();
+      });
+    }
   }
 
   Future<void> _resolveCoachName() async {
@@ -342,6 +349,7 @@ class _CoachMessageThreadScreenState extends State<CoachMessageThreadScreen> {
 
   @override
   void dispose() {
+    _refreshTimer?.cancel();
     _controller.dispose();
     _scroll.dispose();
     super.dispose();

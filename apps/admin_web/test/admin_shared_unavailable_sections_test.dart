@@ -5,7 +5,6 @@ import 'package:gainpath_admin_web/app/di/app_repositories.dart';
 import 'package:gainpath_admin_web/features/content/presentation/admin/system_settings_screen.dart';
 import 'package:gainpath_admin_web/features/membership/presentation/admin/refunds_screen.dart';
 import 'package:gainpath_admin_web/features/recommendation/presentation/admin/admin_recommendation_screens.dart';
-import 'package:gainpath_data/gainpath_data.dart';
 import 'package:gainpath_domain/gainpath_domain.dart';
 import 'package:gainpath_domain/content.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -42,7 +41,8 @@ class _FakeFacilitySettingsRepository implements FacilitySettingsRepository {
 
 class _FakeBaseline extends ComplianceDocumentEditBaseline {}
 
-class _FakeComplianceDocumentRepository implements ComplianceDocumentRepository {
+class _FakeComplianceDocumentRepository
+    implements ComplianceDocumentRepository {
   @override
   Future<ComplianceDocumentSnapshot> load() async {
     return ComplianceDocumentSnapshot(
@@ -121,7 +121,6 @@ void main() {
 
       await tester.pumpWidget(
         AppRepositories(
-          config: const BackendConfig(BackendMode.firebase),
           session: _testSession,
           child: const MaterialApp(
             home: RefundsScreen(live: true),
@@ -137,7 +136,8 @@ void main() {
       expect(find.text('Approve refund'), findsNothing);
     });
 
-    testWidgets('Recommendations screen displays honest unavailable metrics and prevents mutations',
+    testWidgets(
+        'Recommendations screen displays honest unavailable metrics and prevents mutations',
         (tester) async {
       tester.view.physicalSize = const Size(1600, 1000);
       tester.view.devicePixelRatio = 1;
@@ -145,7 +145,6 @@ void main() {
 
       await tester.pumpWidget(
         AppRepositories(
-          config: const BackendConfig(BackendMode.firebase),
           session: _testSession,
           child: const MaterialApp(
             home: RiskLeaderboardScreen(live: true),

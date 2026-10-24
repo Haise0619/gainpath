@@ -61,9 +61,8 @@ void main() {
     tester.view.physicalSize = const Size(1000, 1600);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
-    await tester.pumpWidget(GainPathMobileApp(
+    await tester.pumpWidget(GainPathMobileApp.injected(
       authRepository: auth,
-      backendConfig: const BackendConfig(BackendMode.firebase),
       profileRepositoryFactory: profiles.repository,
       routineLoaderFactory: (_) async => null,
       coachDirectoryFactory: (scope, current) =>

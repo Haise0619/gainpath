@@ -60,10 +60,15 @@ class CoachAvailabilityCubit extends Cubit<CoachAvailabilityState> {
       _message('Save or discard changes before changing dates.');
       return;
     }
+    final previous = state;
     final n = ++_generation;
     _intent = null;
     _request = null;
-    emit(const CoachAvailabilityState(loading: true));
+    emit(CoachAvailabilityState(
+        context: previous.context,
+        day: previous.day,
+        windows: previous.windows,
+        loading: true));
     try {
       final result = await repository.load(
           coachId: coachId, firstLocalDate: firstLocalDate);
@@ -71,8 +76,11 @@ class CoachAvailabilityCubit extends Cubit<CoachAvailabilityState> {
         if (!_allowed) invalidate();
         return;
       }
-      final day =
-          result.days.where((d) => d.editable).firstOrNull ?? result.days.first;
+      final day = result.days
+              .where((d) => d.localDate == previous.day?.localDate)
+              .firstOrNull ??
+          result.days.where((d) => d.editable).firstOrNull ??
+          result.days.first;
       emit(CoachAvailabilityState(
           context: result, day: day, windows: day.windows));
     } catch (e) {
@@ -80,8 +88,28 @@ class CoachAvailabilityCubit extends Cubit<CoachAvailabilityState> {
         if (!_allowed) invalidate();
         return;
       }
-      emit(CoachAvailabilityState(message: _error(e)));
+      emit(CoachAvailabilityState(
+          context: previous.context,
+          day: previous.day,
+          windows: previous.windows,
+          message: _error(e)));
     }
+  }
+
+  /// Reuse an already authorized screen snapshot. Saves still validate current
+  /// server revisions; this never authorizes writes from a cached result.
+  void useCachedContext(CoachAvailabilityContext value, {String? date}) {
+    if (isClosed ||
+        !_allowed ||
+        value.coachId != coachId ||
+        value.days.isEmpty) {
+      return;
+    }
+    final day = value.days.where((d) => d.localDate == date).firstOrNull ??
+        value.days.where((d) => d.editable).firstOrNull ??
+        value.days.first;
+    emit(
+        CoachAvailabilityState(context: value, day: day, windows: day.windows));
   }
 
   void openDay(String date) {
@@ -129,7 +157,9 @@ class CoachAvailabilityCubit extends Cubit<CoachAvailabilityState> {
         windows: List.unmodifiable(sorted)));
   }
 
-  Future<void> discardAndReload() => loadWeek(discard: true);
+  Future<void> discardAndReload() => loadWeek(
+      firstLocalDate: state.context?.days.firstOrNull?.localDate,
+      discard: true);
   Future<void> save() async {
     final original = state;
     if (isClosed ||

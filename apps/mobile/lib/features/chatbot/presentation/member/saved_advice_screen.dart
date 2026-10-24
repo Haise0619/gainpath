@@ -2,11 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:gainpath_domain/chatbot.dart';
+import '../../application/chat_bloc.dart';
 
-/// AD-M6.2 — View Bookmarked Advice Library. Reads and mutates
-/// `savedAdvice` directly (not a local copy) so a bookmark
-/// added from the chat screen shows up here immediately, and removing
-/// a tip here is reflected back in the chat bubbles' bookmark icons.
+/// Advice library shared with the active chat, with a standalone mock route.
 class SavedAdviceScreen extends StatefulWidget {
   const SavedAdviceScreen({super.key, this.connected = false});
   final bool connected;
@@ -18,9 +16,19 @@ class SavedAdviceScreen extends StatefulWidget {
 class _SavedAdviceScreenState extends State<SavedAdviceScreen> {
   @override
   Widget build(BuildContext context) {
-    final items = widget.connected
-        ? <String>['-']
-        : context.read<ChatRepository>().savedAdvice;
+    ChatBloc? bloc;
+    try {
+      bloc = context.read<ChatBloc>();
+    } catch (_) {/* Standalone mock library. */}
+    if (bloc != null) {
+      return BlocBuilder<ChatBloc, ChatState>(
+          builder: (context, state) =>
+              _build(context, state.savedAdvice, bloc));
+    }
+    return _build(context, context.read<ChatRepository>().savedAdvice, null);
+  }
+
+  Widget _build(BuildContext context, List<String> items, ChatBloc? bloc) {
     return Scaffold(
       appBar: AppBar(title: const Text('Saved advice')),
       body: items.isEmpty
@@ -59,22 +67,25 @@ class _SavedAdviceScreenState extends State<SavedAdviceScreen> {
                               IconButton(
                                 icon: const Icon(Icons.delete_outline_rounded,
                                     size: 19),
-                                onPressed: widget.connected
-                                    ? null
-                                    : () async {
-                                        final ok = await confirmSheet(context,
-                                            title: 'Remove this tip?',
-                                            message:
-                                                'It will be deleted from your saved library.',
-                                            confirmLabel: 'Remove',
-                                            destructive: true);
-                                        if (ok) {
-                                          setState(() => context
-                                              .read<ChatRepository>()
-                                              .savedAdvice
-                                              .remove(t));
-                                        }
-                                      },
+                                onPressed: () async {
+                                  final ok = await confirmSheet(context,
+                                      title: 'Remove this tip?',
+                                      message:
+                                          'It will be deleted from your saved library.',
+                                      confirmLabel: 'Remove',
+                                      destructive: true);
+                                  if (ok) {
+                                    if (!mounted) return;
+                                    if (bloc != null) {
+                                      bloc.add(AdviceBookmarkToggled(t));
+                                    } else {
+                                      await context
+                                          .read<ChatRepository>()
+                                          .setBookmarked(t, false);
+                                      if (mounted) setState(() {});
+                                    }
+                                  }
+                                },
                               ),
                             ],
                           ),

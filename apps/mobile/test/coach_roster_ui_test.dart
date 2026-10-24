@@ -60,8 +60,54 @@ CoachRosterEditor editor(RosterUiFake repo, {bool Function()? current}) =>
         coachId: 'coach',
         isCurrent: current ?? () => true,
         onSaved: () {});
+
+class CountingRosterFake extends RosterUiFake {
+  int loads = 0;
+  @override
+  Future<CoachAvailabilityContext> load(
+      {required String coachId, String? firstLocalDate, int dayCount = 7}) {
+    loads++;
+    return super.load(
+        coachId: coachId, firstLocalDate: firstLocalDate, dayCount: dayCount);
+  }
+}
+
 void main() {
   setUpAll(() => GoogleFonts.config.allowRuntimeFetching = false);
+  testWidgets(
+      'weekly save refreshes once; date editor reuses the current snapshot',
+      (tester) async {
+    final repo = CountingRosterFake();
+    await tester.pumpWidget(MaterialApp(
+        home: LiveCoachAvailabilityView(
+            repository: repo, coachId: 'coach', isCurrent: () => true)));
+    await tester.pumpAndSettle();
+    expect(repo.loads, 1);
+    expect(find.byKey(const ValueKey('edit-selected-date-btn')), findsNothing);
+    await tester.scrollUntilVisible(
+        find.byKey(const ValueKey('weekly-day-1')), 250);
+    await tester.tap(find.byType(Switch).first);
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+        find.byKey(const ValueKey('save-roster')), 350);
+    await tester.tap(find.byKey(const ValueKey('save-roster')));
+    await tester.pumpAndSettle();
+    expect(repo.loads, 2);
+    expect(repo.rosterRequests, hasLength(1));
+    await tester.scrollUntilVisible(
+        find.byKey(const ValueKey('open-specific-date-btn')), -250);
+    expect(
+        find.byKey(const ValueKey('open-specific-date-btn')), findsOneWidget);
+    // The expanded page can align ensureVisible behind the pinned app bar.
+    // Scroll to a hittable position before exercising the date editor.
+    await tester.drag(find.byType(Scrollable).first, const Offset(0, 100));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('open-specific-date-btn')));
+    await tester.pumpAndSettle();
+    expect(repo.loads, 2);
+    expect(find.text('Save day'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
   testWidgets(
       'calendar shows loaded working hours and selected blocked periods',
       (tester) async {
@@ -84,9 +130,9 @@ void main() {
         home: LiveCoachAvailabilityView(
             repository: repo, coachId: 'coach', isCurrent: () => true)));
     await tester.pumpAndSettle();
-    expect(find.text('1h'), findsOneWidget);
+    expect(find.text('0.5h'), findsOneWidget);
     expect(find.text('Blocked periods on 2026-10-16'), findsOneWidget);
-    expect(find.text('10:30 GMT+8 – 11:00 GMT+8'), findsOneWidget);
+    expect(find.textContaining('10:30 GMT+8 – 11:00 GMT+8'), findsOneWidget);
     expect(find.byTooltip('1 blocked period'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
@@ -222,10 +268,11 @@ void main() {
             coachId: 'coach',
             isCurrent: () => true)));
     await tester.pumpAndSettle();
-    expect(find.text('DATED OVERRIDES'), findsOneWidget);
+    expect(find.text('DATED OVERRIDES'), findsNothing);
     await tester.scrollUntilVisible(
-        find.text('Maximum booking hours per day'), 300);
-    expect(find.text('Maximum booking hours per day'), findsOneWidget);
+        find.text('Load your schedule to configure booking limits.'), 300);
+    expect(find.text('Load your schedule to configure booking limits.'),
+        findsOneWidget);
   });
   testWidgets(
       'loading and unset roster show hyphens then all seven editable cards',
@@ -240,6 +287,7 @@ void main() {
     expect(find.byType(LinearProgressIndicator), findsWidgets);
     repo.rosterPending!.complete(repo.snapshot());
     await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(find.text('Monday'), 250);
     expect(find.text('Monday'), findsOneWidget);
     expect(find.text('-'), findsWidgets);
     await tester.tap(find.byKey(const ValueKey('weekly-day-1')));
@@ -292,12 +340,14 @@ void main() {
         home: LiveCoachAvailabilityView(
             repository: repo, coachId: 'coach', isCurrent: () => true)));
     await tester.pumpAndSettle();
-    expect(find.textContaining('App Check or authentication verification failed'),
+    expect(
+        find.textContaining('App Check or authentication verification failed'),
         findsOneWidget);
     expect(find.text('Retry loading roster'), findsWidgets);
     fail = false;
     await tester.tap(find.text('Retry loading roster').first);
     await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(find.text('Monday'), 250);
     expect(find.text('Monday'), findsOneWidget);
   });
 }

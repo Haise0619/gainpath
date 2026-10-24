@@ -10,7 +10,8 @@ class PlanCard extends StatelessWidget {
   final bool connected;
   final MembershipPlan plan;
   final bool isCurrent;
-  final VoidCallback onSelect;
+  final VoidCallback? onSelect;
+  final String periodLabel;
 
   const PlanCard({
     super.key,
@@ -18,6 +19,7 @@ class PlanCard extends StatelessWidget {
     this.connected = false,
     required this.isCurrent,
     required this.onSelect,
+    this.periodLabel = '/ month',
   });
 
   @override
@@ -65,11 +67,12 @@ class PlanCard extends StatelessWidget {
               children: [
                 Row(
                   children: [
-                    Text(plan.name,
-                        style: Theme.of(context)
-                            .textTheme
-                            .headlineMedium
-                            ?.copyWith(fontSize: 22)),
+                    Expanded(
+                        child: Text(plan.name,
+                            style: Theme.of(context)
+                                .textTheme
+                                .headlineMedium
+                                ?.copyWith(fontSize: 22))),
                     if (isCurrent) ...[
                       const SizedBox(width: 8),
                       statusPill('Current'),
@@ -80,18 +83,17 @@ class PlanCard extends StatelessWidget {
                 Text(plan.tagline,
                     style: Theme.of(context).textTheme.bodyMedium),
                 const SizedBox(height: 14),
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.baseline,
-                  textBaseline: TextBaseline.alphabetic,
+                Wrap(
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: 4,
                   children: [
                     Text(
-                        connected ? '-' : 'RM ${plan.price.toStringAsFixed(0)}',
+                        connected ? '-' : 'RM ${plan.price.toStringAsFixed(2)}',
                         style: const TextStyle(
                             fontSize: 30,
                             fontWeight: FontWeight.w800,
                             letterSpacing: -1)),
-                    const SizedBox(width: 4),
-                    Text('/ month',
+                    Text(periodLabel,
                         style: Theme.of(context).textTheme.bodyMedium),
                   ],
                 ),

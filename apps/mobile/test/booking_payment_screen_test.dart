@@ -3,7 +3,9 @@ import 'live_booking_cubit_test.dart' show Options, Writer;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gainpath_domain/coaching.dart';
-import 'package:gainpath_domain/gainpath_domain.dart' show SessionScope;
+import 'package:gainpath_domain/chatbot.dart';
+import 'package:gainpath_domain/gainpath_domain.dart'
+    show SessionScope, BookingOptionsContext;
 import 'package:gainpath_mobile/features/coaching/presentation/member/booking_payment_screen.dart';
 import 'package:gainpath_mobile/features/coaching/presentation/member/booking_confirmed_screen.dart';
 
@@ -51,7 +53,214 @@ class Payments implements BookingPaymentRepository {
       value().quote;
 }
 
+class FutureOptions extends Options {
+  final start =
+      ((DateTime.now().millisecondsSinceEpoch ~/ 1800000) + 96) * 1800000;
+  String date(int millis) =>
+      DateTime.fromMillisecondsSinceEpoch(millis, isUtc: true)
+          .add(const Duration(hours: 8))
+          .toIso8601String()
+          .substring(0, 10);
+  @override
+  Future<BookingOptionsContext> load(
+          {required String coachId,
+          String? localDate,
+          required int durationMinutes}) async =>
+      BookingOptionsContext.fromJson({
+        'schemaVersion': 1,
+        'coachId': coachId,
+        'durationMinutes': durationMinutes,
+        'serverNowMillis': DateTime.now().millisecondsSinceEpoch,
+        'todayLocalDate': date(DateTime.now().millisecondsSinceEpoch),
+        'localDate': localDate ?? date(start),
+        'timeZone': 'Asia/Kuala_Lumpur',
+        'throughLocalDate': date(start + 14 * 86400000),
+        'permittedBranchIds': ['branch'],
+        'options': [
+          {
+            'branchId': 'branch',
+            'startAtMillis': start,
+            'endAtMillis': start + durationMinutes * 60000,
+            'startLabel': '08:00 GMT+8',
+            'endLabel': '08:30 GMT+8'
+          }
+        ],
+      });
+}
+
+class VoucherPayments extends Payments
+    implements PremiumVoucherBookingPaymentRepository {
+  String voucherStatus = 'available';
+  int voucherCreates = 0;
+  @override
+  Future<BookingPaymentQuote> loadVoucherQuote(
+          {required String coachId,
+          required String branchId,
+          required int durationMinutes,
+          required bool usePremiumVoucher}) async =>
+      BookingPaymentQuote(
+          amountMinor: usePremiumVoucher ? 11250 : 12500,
+          coachName: 'Real Coach',
+          branchName: 'Real Studio',
+          durationMinutes: durationMinutes,
+          grossAmountMinor: usePremiumVoucher ? 12500 : null,
+          discountMinor: usePremiumVoucher ? 1250 : null,
+          voucher: PremiumCoachVoucherOffer(
+              status: voucherStatus,
+              discountMinor: voucherStatus == 'available' ? 1250 : null));
+  @override
+  Future<BookingPaymentView> createWithPremiumVoucher(String id) async {
+    voucherCreates++;
+    return value();
+  }
+}
+
 void main() {
+  testWidgets(
+      'trusted voucher is opt-in, reloads total, and checkout keeps the selected choice',
+      (tester) async {
+    addTearDown(() => tester.pumpWidget(const SizedBox.shrink()));
+    tester.view.physicalSize = const Size(1000, 1800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final repo = VoucherPayments(), writer = Writer();
+    await tester.pumpWidget(MaterialApp(
+        home: BookSessionScreen(
+            options: Options(),
+            writer: writer,
+            coachId: 'coach',
+            payments: repo,
+            isCurrent: () => true,
+            onOpenBookings: () {})));
+    await tester.pumpAndSettle();
+    await tester.tap(find.textContaining('08:00 GMT+8').first);
+    await tester.pumpAndSettle();
+    expect(find.text('RM 125.00'), findsOneWidget);
+    expect(repo.voucherCreates, 0);
+    await tester.tap(find.byType(SwitchListTile));
+    await tester.pumpAndSettle();
+    expect(find.text('RM 112.50'), findsOneWidget);
+    await tester.ensureVisible(find.text('Continue to payment'));
+    await tester.tap(find.text('Continue to payment'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Retry same request'));
+    await tester.tap(find.text('Retry same request'));
+    await tester.pumpAndSettle();
+    expect(repo.voucherCreates, 1);
+    expect(repo.creates, 0);
+  });
+  testWidgets(
+      'missing voucher policy displays unavailable while preserving full-price checkout',
+      (tester) async {
+    addTearDown(() => tester.pumpWidget(const SizedBox.shrink()));
+    tester.view.physicalSize = const Size(1000, 1800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final repo = VoucherPayments()..voucherStatus = 'unavailable';
+    await tester.pumpWidget(MaterialApp(
+        home: BookSessionScreen(
+            options: Options(),
+            writer: Writer(),
+            coachId: 'coach',
+            payments: repo,
+            isCurrent: () => true,
+            onOpenBookings: () {})));
+    await tester.pumpAndSettle();
+    await tester.tap(find.textContaining('08:00 GMT+8').first);
+    await tester.pumpAndSettle();
+    expect(find.text('Premium Coach voucher unavailable.'), findsOneWidget);
+    expect(find.byType(SwitchListTile), findsNothing);
+    expect(find.text('RM 125.00'), findsOneWidget);
+  });
+  testWidgets(
+      'AI suggestion reloads trusted options and price without creating a hold or payment',
+      (tester) async {
+    final repo = Payments(), writer = Writer(), options = FutureOptions();
+    final suggestion = BookingSuggestionAttachment.fromJson({
+      'schemaVersion': 1,
+      'coachId': 'coach',
+      'coachName': 'Suggested Coach',
+      'branchId': 'branch',
+      'branchName': 'Studio',
+      'localDate': options.date(options.start),
+      'timeZone': 'Asia/Kuala_Lumpur',
+      'startAtMillis': options.start,
+      'endAtMillis': options.start + 1800000,
+      'startLabel': '08:00 GMT+8',
+      'endLabel': '08:30 GMT+8',
+      'durationMinutes': 30,
+      'amountMinor': 1,
+      'currency': 'MYR',
+      'expiresAtMillis': DateTime.now().millisecondsSinceEpoch + 60000,
+      'requiresConfirmation': true
+    });
+    await tester.pumpWidget(MaterialApp(
+        home: BookSessionScreen(
+            options: options,
+            writer: writer,
+            coachId: 'coach',
+            payments: repo,
+            isCurrent: () => true,
+            onOpenBookings: () {},
+            suggestion: suggestion)));
+    await tester.pumpAndSettle();
+    expect(find.text('RM 125.00'), findsOneWidget);
+    expect(writer.requests, isEmpty);
+    expect(repo.creates, 0);
+    await tester.pumpWidget(const SizedBox.shrink());
+    for (final invalid in [
+      {
+        ...suggestion.data,
+        'expiresAtMillis': DateTime.now().millisecondsSinceEpoch - 1
+      },
+      {
+        ...suggestion.data,
+        'startAtMillis': options.start + 7200000,
+        'endAtMillis': options.start + 9000000
+      },
+    ]) {
+      await tester.pumpWidget(MaterialApp(
+          home: BookSessionScreen(
+              options: options,
+              writer: writer,
+              coachId: 'coach',
+              payments: repo,
+              isCurrent: () => true,
+              onOpenBookings: () {},
+              suggestion: BookingSuggestionAttachment.fromJson(invalid))));
+      await tester.pumpAndSettle();
+      expect(
+          find.text(
+              'The suggested time expired or is no longer available. Choose a current time.'),
+          findsOneWidget);
+      expect(writer.requests, isEmpty);
+      expect(repo.creates, 0);
+      await tester.pumpWidget(const SizedBox.shrink());
+    }
+  });
+  testWidgets(
+      'approval and uncertain refund are never presented as a sent refund',
+      (tester) async {
+    final repo = Payments()
+      ..status = 'reconciliation_required'
+      ..refundStatus = 'approved';
+    await tester.pumpWidget(MaterialApp(
+        home: BookingPaymentScreen(
+            repository: repo, bookingId: 'booking', isCurrent: () => true)));
+    await tester.pumpAndSettle();
+    expect(find.text('Refund approved · not sent'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox.shrink());
+    repo.refundStatus = 'uncertain';
+    await tester.pumpWidget(MaterialApp(
+        home: BookingPaymentScreen(
+            repository: repo, bookingId: 'booking', isCurrent: () => true)));
+    await tester.pumpAndSettle();
+    expect(find.text('Refund outcome not confirmed'), findsOneWidget);
+    expect(find.text('Refund in progress'), findsNothing);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
   testWidgets(
       'real quote then uncertain hold retry keeps original intent before payment',
       (tester) async {

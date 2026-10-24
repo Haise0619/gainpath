@@ -48,6 +48,42 @@ void main() {
     await expectLater(repo.create('booking'), throwsA(isA<BookingException>()));
     payment['checkoutUrl'] = 'https://www.billplz-sandbox.com/bills/abc';
   });
+  test(
+      'voucher operations send only the explicit choice and trusted booking references',
+      () async {
+    final calls = <Map<String, dynamic>>[];
+    final repo = FirebaseBookingPaymentRepository(
+        scope: scope,
+        isCurrent: () => true,
+        currentUid: () => 'member',
+        readiness: ready(),
+        call: (name, input) async {
+          calls.add(input);
+          return payment;
+        });
+    await repo.loadVoucherQuote(
+        coachId: 'coach',
+        branchId: 'branch',
+        durationMinutes: 30,
+        usePremiumVoucher: false);
+    await repo.createWithPremiumVoucher('booking');
+    expect(calls, [
+      {
+        'schemaVersion': 1,
+        'organizationId': 'org',
+        'coachId': 'coach',
+        'branchId': 'branch',
+        'durationMinutes': 30,
+        'includePremiumVoucher': true
+      },
+      {
+        'schemaVersion': 1,
+        'organizationId': 'org',
+        'bookingId': 'booking',
+        'usePremiumVoucher': true
+      },
+    ]);
+  });
   test('response after account switch is discarded', () async {
     var current = true;
     final response = Completer<Map<String, dynamic>>();

@@ -1,6 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gainpath_admin_web/app/admin_app.dart';
-import 'package:gainpath_data/gainpath_data.dart';
 import 'package:gainpath_domain/gainpath_domain.dart';
 import 'package:google_fonts/google_fonts.dart';
 
@@ -53,9 +52,8 @@ void main() {
 
   testWidgets('unverified administrators receive verification actions',
       (tester) async {
-    await tester.pumpWidget(GainPathAdminWebApp(
+    await tester.pumpWidget(GainPathAdminWebApp.injected(
       authRepository: _UnverifiedAdminRepository(),
-      backendConfig: const BackendConfig(BackendMode.firebase),
     ));
     await tester.pumpAndSettle();
 

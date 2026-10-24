@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:gainpath_mobile/app/app.dart';
+import 'support/mock_app_scope.dart';
 import 'package:gainpath_mobile/app/shells/member_shell.dart';
 import 'package:gainpath_mobile/app/routing/pose_preview_route.dart';
 import 'package:gainpath_mobile/features/workout/presentation/member/workout_prep_screen.dart';
@@ -13,8 +13,8 @@ void main() {
     tester.view.physicalSize = const Size(1000, 1600);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
-    await tester
-        .pumpWidget(const AppScope(child: MaterialApp(home: MemberShell())));
+    await tester.pumpWidget(
+        const MockAppScope(child: MaterialApp(home: MemberShell())));
     await tester.pump(const Duration(milliseconds: 600));
     await tester.scrollUntilVisible(find.text('Start workout'), 300,
         scrollable: find.byType(Scrollable).first);
@@ -32,8 +32,8 @@ void main() {
   });
   testWidgets('mock shell retains an app-composed native preview destination',
       (tester) async {
-    await tester
-        .pumpWidget(const AppScope(child: MaterialApp(home: MemberShell())));
+    await tester.pumpWidget(
+        const MockAppScope(child: MaterialApp(home: MemberShell())));
     await tester.pump(const Duration(milliseconds: 600));
     await tester.tap(find.text('Workout').last);
     await tester.pumpAndSettle();

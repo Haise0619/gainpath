@@ -1,257 +1,114 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:gainpath_domain/membership.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
+import '../../../../app/di/membership_factory.dart';
+import '../shared/membership_data_view.dart';
+import 'purchase_plan_screen.dart';
 import 'refund_request_screen.dart';
-import 'package:flutter_bloc/flutter_bloc.dart';
 
-/// AD-M4.2 (billing history detail) — split out from the dashboard into
-/// its own screen so the full transaction list, filtering, and per-charge
-/// actions (invoice, refund) have room to breathe.
-class BillingHistoryScreen extends StatefulWidget {
-  const BillingHistoryScreen({super.key, this.connected = false});
+class BillingHistoryScreen extends StatelessWidget {
+  const BillingHistoryScreen(
+      {super.key, this.connected = false, this.repository});
   final bool connected;
-
+  final MembershipCommerceRepository? repository;
   @override
-  State<BillingHistoryScreen> createState() => _BillingHistoryScreenState();
-}
+  Widget build(BuildContext context) => repository != null
+      ? MembershipRepositoryGuard(
+          repository: repository!, child: _body(repository!))
+      : MembershipFeatureHost(connected: connected, builder: _body);
+  Widget _body(MembershipCommerceRepository repo) => MembershipDataView(
+      repository: repo,
+      title: 'Billing history',
+      builder: (context, data, refresh) {
+        final payments = membershipRows(data['transactions']);
+        Future<void> open(Widget page) async {
+          await Navigator.push(
+              context, MaterialPageRoute<void>(builder: (_) => page));
+          if (context.mounted) refresh();
+        }
 
-class _BillingHistoryScreenState extends State<BillingHistoryScreen> {
-  static const _filters = ['All', 'Membership', 'Coaching'];
-  String _filter = 'All';
-
-  bool _isEligible(Transaction t) => const RefundPolicy().isEligible(t.date);
-
-  String _date(DateTime d) {
-    const months = [
-      'Jan',
-      'Feb',
-      'Mar',
-      'Apr',
-      'May',
-      'Jun',
-      'Jul',
-      'Aug',
-      'Sep',
-      'Oct',
-      'Nov',
-      'Dec'
-    ];
-    return '${d.day} ${months[d.month - 1]} ${d.year}';
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final transactions = widget.connected
-        ? [Transaction('-', '-', 0, DateTime(1970), TransactionStatus.pending)]
-        : context.read<MembershipRepository>().transactions;
-    final visible = transactions.where((t) {
-      if (_filter == 'All') return true;
-      return t.type.toLowerCase().contains(_filter.toLowerCase());
-    }).toList();
-    final totalThisYear = transactions
-        .where((t) => t.date.year == DateTime.now().year)
-        .fold<double>(0, (sum, t) => sum + t.amount);
-
-    return Scaffold(
-      appBar: AppBar(title: const Text('Billing history')),
-      body: PageBody(
-        children: [
-          Panel(
-            background: AppColors.primaryTint,
-            child: Row(
-              children: [
-                const Icon(Icons.receipt_long_rounded,
-                    color: AppColors.primary),
-                const SizedBox(width: 12),
-                Text(
-                    widget.connected
-                        ? '- spent this year'
-                        : 'RM ${totalThisYear.toStringAsFixed(2)} spent this year',
-                    style: Theme.of(context).textTheme.titleMedium),
-              ],
-            ),
-          ),
+        return [
+          const Text(
+              'Membership payments only. Coaching payments remain in your bookings.'),
           const SizedBox(height: 16),
-          SizedBox(
-            height: 40,
-            child: ListView.separated(
-              scrollDirection: Axis.horizontal,
-              itemCount: _filters.length,
-              separatorBuilder: (_, __) => const SizedBox(width: 8),
-              itemBuilder: (context, i) {
-                final f = _filters[i];
-                final selected = f == _filter;
-                return ChoiceChip(
-                  label: Text(f),
-                  selected: selected,
-                  onSelected: (_) => setState(() => _filter = f),
-                  backgroundColor: AppColors.surface,
-                  selectedColor: AppColors.primary,
-                  labelStyle: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: selected ? Colors.white : AppColors.ink),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(999),
-                    side: const BorderSide(color: AppColors.hairline),
-                  ),
-                );
-              },
-            ),
-          ),
-          const SizedBox(height: 16),
-          if (visible.isEmpty)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 40),
-              child: Center(
-                child: Text('No transactions in this category.',
-                    style: Theme.of(context).textTheme.bodyMedium),
-              ),
-            )
-          else
-            ...visible.map((t) => Padding(
-                  padding: const EdgeInsets.only(bottom: 10),
-                  child: Panel(
-                    onTap: () => _openDetail(context, t),
-                    child: Row(
+          if (payments.isEmpty)
+            const Panel(child: Text('No membership transactions yet.')),
+          ...payments.map((p) => Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: Panel(
+                  child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Container(
-                          width: 40,
-                          height: 40,
-                          decoration: BoxDecoration(
-                            color: AppColors.surfaceAlt,
-                            borderRadius: BorderRadius.circular(11),
-                          ),
-                          child: Icon(
-                              t.type.contains('Coaching')
-                                  ? Icons.sports_rounded
-                                  : Icons.card_membership_rounded,
-                              size: 19,
-                              color: AppColors.primary),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(t.type,
-                                  style:
-                                      Theme.of(context).textTheme.titleMedium),
-                              Text(
-                                  widget.connected
-                                      ? '-'
-                                      : '${t.id}  ·  ${_date(t.date)}',
-                                  style:
-                                      Theme.of(context).textTheme.bodyMedium),
-                            ],
-                          ),
-                        ),
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.end,
-                          children: [
-                            Text(
-                                widget.connected
-                                    ? '-'
-                                    : 'RM ${t.amount.toStringAsFixed(2)}',
-                                style: const TextStyle(
-                                    fontSize: 15, fontWeight: FontWeight.w700)),
-                            const SizedBox(height: 4),
-                            statusPill(widget.connected ? '-' : t.status.label),
-                          ],
-                        ),
-                        const SizedBox(width: 4),
-                        const Icon(Icons.arrow_forward_ios_rounded,
-                            size: 13, color: AppColors.inkSoft),
-                      ],
-                    ),
-                  ),
-                )),
-        ],
-      ),
-    );
-  }
-
-  void _openDetail(BuildContext context, Transaction t) {
-    final eligible = !widget.connected && _isEligible(t);
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: AppColors.surface,
-      shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
-      builder: (ctx) => Padding(
-        padding: EdgeInsets.fromLTRB(
-            20, 20, 20, 20 + MediaQuery.of(ctx).padding.bottom),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Expanded(
-                    child: Text(t.type,
-                        style: Theme.of(ctx).textTheme.titleLarge)),
-                statusPill(widget.connected ? '-' : t.status.label),
-              ],
-            ),
-            const SizedBox(height: 16),
-            Panel(
-              child: Column(
-                children: [
-                  DetailRow('Reference', t.id),
-                  const Divider(height: 20),
-                  DetailRow('Date', widget.connected ? '-' : _date(t.date)),
-                  const Divider(height: 20),
-                  DetailRow(
-                      'Amount',
-                      widget.connected
-                          ? '-'
-                          : 'RM ${t.amount.toStringAsFixed(2)}'),
-                ],
-              ),
-            ),
-            const SizedBox(height: 16),
-            SizedBox(
-              width: double.infinity,
-              child: OutlinedButton.icon(
-                onPressed: () {
-                  Navigator.pop(ctx);
-                  showUnavailable(context);
-                },
-                icon: const Icon(Icons.download_rounded, size: 18),
-                label: const Text('Download invoice'),
-              ),
-            ),
-            const SizedBox(height: 10),
-            SizedBox(
-              width: double.infinity,
-              child: eligible
-                  ? OutlinedButton.icon(
-                      style: OutlinedButton.styleFrom(
-                          foregroundColor: AppColors.danger),
-                      onPressed: () {
-                        Navigator.pop(ctx);
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                              builder: (_) => RefundRequestScreen(
-                                  preselectedTransactionId: t.id)),
-                        );
-                      },
-                      icon: const Icon(Icons.receipt_long_rounded, size: 18),
-                      label: const Text('Request a refund'),
-                    )
-                  : Text(
-                      widget.connected
-                          ? 'Refund eligibility: -'
-                          : 'Outside the ${RefundPolicy.defaultWindowDays}-day refund window.',
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(
-                          fontSize: 12.5, color: AppColors.inkSoft),
-                    ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
+                    Text(
+                        '${p['planName']} · ${membershipMoney(p['amountMinor'])}',
+                        style: Theme.of(context).textTheme.titleMedium),
+                    Text(
+                        '${p['kind']} · ${membershipDate(p['createdAtMillis'])}'),
+                    Text(membershipPaymentLabel(p)),
+                    Text('${p['transactionId']}'),
+                    if (p['reviewReason'] != null)
+                      Text('Admin: ${p['reviewReason']}'),
+                    if (p['refundStatus'] != null)
+                      const Text(
+                          'Refund approval records a decision. Money is returned only after confirmed provider completion.'),
+                    Wrap(spacing: 8, children: [
+                      TextButton(
+                          onPressed: () => open(MembershipPaymentScreen(
+                              repository: repo, initial: p)),
+                          child: const Text('Payment details / recover')),
+                      if (p['paymentStatus'] == 'cleared' && repo.sandbox)
+                        TextButton(
+                            onPressed: () async {
+                              if (!repo.current) return;
+                              try {
+                                final saved = await const MethodChannel(
+                                        'gainpath/coach_statement')
+                                    .invokeMethod<bool>(
+                                        'saveInvoice', membershipInvoice(p));
+                                if (context.mounted && repo.current) {
+                                  ScaffoldMessenger.of(context)
+                                      .showSnackBar(SnackBar(
+                                    content: Text(saved == true
+                                        ? 'Invoice saved to your chosen location.'
+                                        : 'Invoice save cancelled.'),
+                                    action: saved != true
+                                        ? null
+                                        : SnackBarAction(
+                                            label: 'Open PDF',
+                                            onPressed: () async {
+                                              if (!repo.current) return;
+                                              try {
+                                                await const MethodChannel(
+                                                        'gainpath/coach_statement')
+                                                    .invokeMethod<bool>(
+                                                        'openInvoice');
+                                              } catch (_) {
+                                                if (context.mounted) {
+                                                  showToast(context,
+                                                      'Open the saved invoice from your Files app.');
+                                                }
+                                              }
+                                            }),
+                                  ));
+                                }
+                              } catch (_) {
+                                if (context.mounted) {
+                                  showToast(context,
+                                      'Invoice could not be saved. Retry on Android.');
+                                }
+                              }
+                            },
+                            child: const Text('Download PDF invoice')),
+                      if (p['paymentStatus'] == 'cleared')
+                        TextButton(
+                            onPressed: () => open(RefundRequestScreen(
+                                repository: repo,
+                                preselectedTransactionId:
+                                    p['transactionId'] as String)),
+                            child: const Text('Request / track refund')),
+                    ]),
+                  ])))),
+        ];
+      });
 }

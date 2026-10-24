@@ -212,8 +212,8 @@ class BookingListCubit extends Cubit<BookingListState> {
     final generation = ++_generation;
     final previous = state;
     emit(BookingListState(
-        page: more ? previous.page : null,
-        records: more ? previous.records : const [],
+        page: previous.page,
+        records: previous.records,
         busy: true));
     try {
       final page = await repository.load(
@@ -231,6 +231,7 @@ class BookingListCubit extends Cubit<BookingListState> {
     } catch (error) {
       if (_current(generation)) {
         emit(BookingListState(
+            page: previous.page, records: previous.records,
             message: error is BookingException
                 ? error.message
                 : const BookingException('unknown').message));

@@ -58,9 +58,9 @@ void main() {
         home: LiveCoachAvailabilityView(
             repository: repo, coachId: 'coach', isCurrent: () => true)));
     await tester.pumpAndSettle();
-    await tester.scrollUntilVisible(find.text('Edit specific date'), 300);
-    await tester.ensureVisible(find.text('Edit specific date'));
-    await tester.tap(find.text('Edit specific date'));
+    await tester.scrollUntilVisible(find.text('Change hours for one date'), 300);
+    await tester.ensureVisible(find.text('Change hours for one date'));
+    await tester.tap(find.text('Change hours for one date'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Add window'));
     await tester.pumpAndSettle();

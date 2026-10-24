@@ -83,7 +83,7 @@ class CoachProfileScreen extends StatelessWidget {
                     const Icon(Icons.star_rounded,
                         size: 17, color: AppColors.accent),
                     const SizedBox(width: 4),
-                    Text(published != null ? '-' : '${coach.rating}',
+                    Text(published != null ? (published!.averageRating?.toStringAsFixed(1) ?? 'Not rated') : '${coach.rating}',
                         style: const TextStyle(
                             fontSize: 14.5,
                             fontWeight: FontWeight.w700,
@@ -114,7 +114,7 @@ class CoachProfileScreen extends StatelessWidget {
               const SizedBox(width: 10),
               Expanded(
                   child: StatTile(
-                      published != null ? '-' : '${coach.reviews}', 'Reviews')),
+                      published != null ? '${published!.reviewCount}' : '${coach.reviews}', 'Reviews')),
             ],
           ),
           const SizedBox(height: 18),

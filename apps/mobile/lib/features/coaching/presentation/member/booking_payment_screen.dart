@@ -12,11 +12,13 @@ class BookingPaymentScreen extends StatefulWidget {
       required this.bookingId,
       required this.isCurrent,
       this.create = false,
+      this.usePremiumVoucher = false,
       this.now = DateTime.now});
   final BookingPaymentRepository repository;
   final String bookingId;
   final bool Function() isCurrent;
   final bool create;
+  final bool usePremiumVoucher;
   final DateTime Function() now;
   @override
   State<BookingPaymentScreen> createState() => _BookingPaymentScreenState();
@@ -99,7 +101,10 @@ class _BookingPaymentScreenState extends State<BookingPaymentScreen>
     });
     try {
       final result = await (shouldCreate
-          ? widget.repository.create(widget.bookingId)
+          ? widget.usePremiumVoucher
+              ? (widget.repository as PremiumVoucherBookingPaymentRepository)
+                  .createWithPremiumVoucher(widget.bookingId)
+              : widget.repository.create(widget.bookingId)
           : widget.repository.get(widget.bookingId));
       if (!mounted || !widget.isCurrent()) return;
       setState(() {
@@ -167,7 +172,9 @@ class _BookingPaymentScreenState extends State<BookingPaymentScreen>
     final title = switch (refund) {
       'completed' => 'Refund completed',
       'failed' => 'Refund needs attention',
-      'processing' || 'approved' || 'uncertain' => 'Refund in progress',
+      'approved' => 'Refund approved · not sent',
+      'uncertain' => 'Refund outcome not confirmed',
+      'processing' => 'Refund in progress',
       'rejected' => 'Refund request declined',
       _ => value?.status == 'reconciliation_required'
           ? 'Payment needs review'
@@ -178,9 +185,11 @@ class _BookingPaymentScreenState extends State<BookingPaymentScreen>
         'Your payment has been refunded. This booking is not confirmed.',
       'failed' =>
         'The refund could not be completed. Contact the gym for help.',
-      'processing' ||
-      'approved' ||
+      'approved' =>
+        'The gym approved your refund request. This approval does not mean a refund has been sent. Contact the gym for the next step.',
       'uncertain' =>
+        'The provider outcome could not be confirmed. Contact the gym to check the original refund attempt. Do not request another payment or refund for this booking.',
+      'processing' =>
         'Your refund is being processed. Contact the gym if you need help.',
       'rejected' =>
         'The gym declined this refund request. Contact the gym for details.',
@@ -205,9 +214,14 @@ class _BookingPaymentScreenState extends State<BookingPaymentScreen>
             if (value != null) ...[
               DetailRow('Coach', value.quote.coachName),
               DetailRow('Location', value.quote.branchName),
+              const Text(
+                  'Original checkout schedule. Check My bookings for the current session time after rescheduling.'),
               DetailRow('Date', value.localDate),
               DetailRow('Time', '${value.startLabel} – ${value.endLabel}'),
               DetailRow('Total', value.quote.formattedAmount),
+              if (value.quote.voucherApplied)
+                DetailRow('Premium Coach voucher',
+                    '- RM ${(value.quote.discountMinor! / 100).toStringAsFixed(2)}'),
               Text(detail),
               if (_lastChecked != null)
                 Text(

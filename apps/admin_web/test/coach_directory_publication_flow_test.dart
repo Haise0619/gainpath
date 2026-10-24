@@ -45,10 +45,11 @@ class AdminFake implements CoachProfileAdminRepository {
   Future<bool> canManageDirectory() async => allowed;
   @override
   Future<CoachDirectoryPage<CoachProfessionalProfile>> loadDraftPage(
-          {String? afterId}) async {
+      {String? afterId}) async {
     if (loadFailure != null) throw loadFailure!;
     return CoachDirectoryPage(draft == null ? [] : [draft!]);
   }
+
   @override
   Future<CoachDirectoryPage<PublishedCoachProfile>> loadPublicPage(
           {String? afterId}) async =>
@@ -81,7 +82,9 @@ class AdminFake implements CoachProfileAdminRepository {
         branchIds: ['main'],
         createdAtMillis: 1,
         updatedAtMillis: 3,
-        publishedAtMillis: 3);
+        publishedAtMillis: 3,
+        certificationVerified: baseline.certificationVerified,
+        approvedCertificationCount: baseline.approvedCertificationCount);
     return CoachCommandResult(
         requestId: requestId,
         coachId: baseline.coachId,
@@ -92,10 +95,12 @@ class AdminFake implements CoachProfileAdminRepository {
 
 void main() {
   setUpAll(() => GoogleFonts.config.allowRuntimeFetching = false);
-  test('unsupported stored schema directs Admin to the stable main entry', () async {
+  test('unsupported stored schema directs Admin to the stable main entry',
+      () async {
     final repo = AdminFake(SessionScope(userId: 'admin', organizationId: 'o'))
       ..seed()
-      ..loadFailure = const FormatException('Unsupported public Coach profile.');
+      ..loadFailure =
+          const FormatException('Unsupported public Coach profile.');
     final cubit = CoachDirectoryAdminCubit(repo);
     await cubit.refresh();
     expect(cubit.state.message, contains('http://localhost:7359/'));
@@ -147,24 +152,26 @@ void main() {
     final session = await auth.signIn(
         role: AppRole.admin, email: 'admin@example.test', password: 'fixture');
     final repo = AdminFake(session.scope)..seed();
-    await tester.pumpWidget(GainPathAdminWebApp(
+    await tester.pumpWidget(GainPathAdminWebApp.injected(
         authRepository: auth,
-        backendConfig: const BackendConfig(BackendMode.firebase),
         accountContactFactory: (_, __) => _EmptyPhotoAccount(),
         coachRepositoryFactory: (_, current) => repo));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Coaches').last);
     await tester.pumpAndSettle();
     expect(
-        tester.widget<FilledButton>(
-            find.byKey(const ValueKey('add-coach'))).onPressed,
+        tester
+            .widget<FilledButton>(find.byKey(const ValueKey('add-coach')))
+            .onPressed,
         isNull);
     await tester.tap(find.text('Review'));
     await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Publish profile'));
     await tester.tap(find.text('Publish profile'));
     await tester.pumpAndSettle();
     expect(repo.publication!.isPublished, isTrue);
     repo.draft = null;
+    await tester.ensureVisible(find.byTooltip('Refresh Coaches'));
     await tester.tap(find.byTooltip('Refresh Coaches'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Review'));
@@ -175,6 +182,7 @@ void main() {
                 find.widgetWithText(FilledButton, 'Publish profile'))
             .onPressed,
         isNull);
+    await tester.ensureVisible(find.text('Deactivate directory profile'));
     await tester.tap(find.text('Deactivate directory profile'));
     await tester.pumpAndSettle();
     expect(repo.publication!.status, 'inactive');
@@ -226,20 +234,76 @@ void main() {
     await cubit.review('coach');
 
     // Unsafe message with internal path or sensitive token is sanitized
-    repo.customException = const CoachRepositoryException(
-        'failed-precondition', 'Error at orgs/o1/coachProfiles/c1 with token secret_xyz');
+    repo.customException = const CoachRepositoryException('failed-precondition',
+        'Error at orgs/o1/coachProfiles/c1 with token secret_xyz');
     await cubit.setStatus(CoachDirectoryAction.publish);
     expect(cubit.state.message, isNot(contains('secret_xyz')));
     expect(cubit.state.message, isNot(contains('orgs/')));
     expect(cubit.state.message, 'Profile or account eligibility needs review.');
 
     // Allowlisted message is preserved verbatim
-    repo.customException = const CoachRepositoryException(
-        'failed-precondition', 'An approved certification is required for publication.');
+    repo.customException = const CoachRepositoryException('failed-precondition',
+        'An approved certification is required for publication.');
     await cubit.setStatus(CoachDirectoryAction.publish);
-    expect(
-        cubit.state.message, 'An approved certification is required for publication.');
+    expect(cubit.state.message,
+        'An approved certification is required for publication.');
 
     await cubit.close();
+  });
+
+  testWidgets(
+      'Publish profile button is disabled when profile is up to date and re-enables on draft changes',
+      (tester) async {
+    tester.view.physicalSize = const Size(1600, 1200);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final auth = InMemoryAuthRepository();
+    final session = await auth.signIn(
+        role: AppRole.admin, email: 'admin@example.test', password: 'fixture');
+    final repo = AdminFake(session.scope)..seed();
+    await tester.pumpWidget(GainPathAdminWebApp.injected(
+        authRepository: auth,
+        accountContactFactory: (_, __) => _EmptyPhotoAccount(),
+        coachRepositoryFactory: (_, current) => repo));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Coaches').last);
+    await tester.pumpAndSettle();
+
+    // Initially unpublished -> button is enabled
+    await tester.tap(find.text('Review'));
+    await tester.pumpAndSettle();
+    final publishButton = find.widgetWithText(FilledButton, 'Publish profile');
+    expect(tester.widget<FilledButton>(publishButton).onPressed, isNotNull);
+
+    // Publish the profile
+    await tester.ensureVisible(publishButton);
+    await tester.tap(publishButton);
+    await tester.pumpAndSettle();
+    expect(repo.publication!.isPublished, isTrue);
+
+    // Profile is now up to date -> button is disabled / greyed out
+    expect(tester.widget<FilledButton>(publishButton).onPressed, isNull);
+
+    // Coach updates draft revision
+    repo.draft = CoachProfessionalProfile(
+      id: repo.draft!.id,
+      fields: repo.draft!.fields,
+      revision: repo.draft!.revision + 1,
+      createdAtMillis: repo.draft!.createdAtMillis,
+      updatedAtMillis: repo.draft!.updatedAtMillis + 1000,
+    );
+    await tester.ensureVisible(find.byTooltip('Refresh Coaches'));
+    await tester.tap(find.byTooltip('Refresh Coaches'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Review'));
+    await tester.pumpAndSettle();
+
+    // Button re-enables because new changes are pending
+    expect(
+        tester
+            .widget<FilledButton>(
+                find.widgetWithText(FilledButton, 'Publish profile'))
+            .onPressed,
+        isNotNull);
   });
 }

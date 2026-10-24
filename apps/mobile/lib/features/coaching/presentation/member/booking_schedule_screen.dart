@@ -28,12 +28,14 @@ class BookingScheduleScreen extends StatefulWidget {
       this.statusLabels = const {},
       this.details = const {},
       this.onCancelHold,
+      this.onReview,
       this.onMessage,
       this.header});
   final List<Booking>? persistedBookings;
   final Map<String, String> statusLabels;
   final Map<String, Widget> details;
   final void Function(String)? onCancelHold;
+  final void Function(String)? onReview;
   final void Function(Booking)? onMessage;
   final Widget? header;
 
@@ -117,7 +119,9 @@ class _BookingScheduleScreenState extends State<BookingScheduleScreen> {
                             ? null
                             : () => widget.onMessage!(b))
                         : () => _message(b),
-                    onRate: live ? null : () => _rate(b),
+                    onRate: live
+                        ? (widget.onReview == null ? null : () => widget.onReview!(b.id))
+                        : () => _rate(b),
                   ),
                 )),
           const SizedBox(height: 14),

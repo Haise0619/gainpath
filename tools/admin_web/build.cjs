@@ -1,6 +1,7 @@
 // Rebuild the existing Admin application. Never registers credentials or deploys Firebase.
 const fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypto'),{spawn}=require('node:child_process');
 const {versionLocalCode}=require('./cache-policy.cjs');
+const {regionalBuildDefines}=require('./regional-options.cjs');
 const root=path.resolve(__dirname,'../..'),out=path.join(root,'build/admin-web/current');
 (async()=>{
  const fixturePath=process.env.GAINPATH_ADMIN_APP_CHECK_FIXTURE||path.join(root,'build/non-core-crud-sprint/module-8-activation/private/admin-web-app-check.json');
@@ -9,7 +10,7 @@ const root=path.resolve(__dirname,'../..'),out=path.join(root,'build/admin-web/c
  fs.mkdirSync(path.join(root,'build/admin-web'),{recursive:true});
  const log=fs.createWriteStream(path.join(root,'build/admin-web/build.log'));
  const flutter=process.env.FLUTTER_ROOT||'C:/flutter';
- const args=[path.join(flutter,'bin/cache/flutter_tools.snapshot'),'build','web','--release','--no-pub','--base-href=/','--output='+out,'--dart-define=BACKEND=firebase','--dart-define=APP_CHECK_MODE=debug','--dart-define=APP_CHECK_WEB_DEBUG_TOKEN='+fixture.token];
+ const args=[path.join(flutter,'bin/cache/flutter_tools.snapshot'),'build','web','--release','--no-pub','--base-href=/','--output='+out,...regionalBuildDefines(process.env),'--dart-define=APP_CHECK_MODE=debug','--dart-define=APP_CHECK_WEB_DEBUG_TOKEN='+fixture.token];
  const child=spawn(path.join(flutter,'bin/cache/dart-sdk/bin/dart.exe'),args,{cwd:path.join(root,'apps/admin_web'),windowsHide:true,stdio:['ignore','pipe','pipe']});
  const redact=data=>log.write(data.toString().split(fixture.token).join('[REDACTED]'));
  child.stdout.on('data',redact);child.stderr.on('data',redact);

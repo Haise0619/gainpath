@@ -1,0 +1,59 @@
+{
+  "approvalStatus": "APPROVED_INACTIVE_STAGING_ONLY",
+  "approvalDate": "2026-10-23",
+  "approvalInstruction": "approve, proceed, but the basic plan price change to RM89, and premium change to RM129",
+  "projectId": "gainpath-0619",
+  "organizationId": "gainpath",
+  "supersedesForThreeTierRollout": "module4-catalogue-proposal.json",
+  "free": { "tier": "free", "name": "Free", "priceDisplayMYR": 0, "derivedOnly": true, "firestorePlanRecord": null, "expiresAtMillis": null, "purchaseRequired": false },
+  "records": [
+    {
+      "path": "orgs/gainpath/membershipPlans/basic",
+      "precondition": { "exists": false },
+      "data": {
+        "active": false,
+        "name": "Basic",
+        "amountMinor": 8900,
+        "currency": "MYR",
+        "durationDays": 30,
+        "benefits": [
+          "Organization-wide GainPath membership",
+          "Membership dashboard with tier, status and expiry",
+          "Manual renewal that preserves remaining paid time",
+          "Membership billing history and cleared-payment PDF invoices",
+          "Refund request and review tracking under the existing seven-day policy"
+        ],
+        "version": "basic-three-tier-uat-v1"
+      }
+    },
+    {
+      "path": "orgs/gainpath/membershipPlans/premium",
+      "precondition": { "exists": false },
+      "data": {
+        "active": false,
+        "name": "Premium",
+        "amountMinor": 12900,
+        "currency": "MYR",
+        "durationDays": 30,
+        "benefits": [
+          "Organization-wide GainPath membership",
+          "Membership dashboard with tier, status and expiry",
+          "Manual renewal that preserves remaining paid time",
+          "Membership billing history and cleared-payment PDF invoices",
+          "Refund request and review tracking under the existing seven-day policy"
+        ],
+        "version": "premium-three-tier-uat-v1"
+      }
+    }
+  ],
+  "pricingAndDurationsApproved": true,
+  "writeScopeProposed": "Approved: create Basic RM89 and Premium RM129 as two inactive 30-day paid-plan documents only",
+  "activationRequiresSeparateApproval": true,
+  "promoRecords": [],
+  "manualRenewalSupported": true,
+  "automaticRecurringBillingSupported": false,
+  "newFeaturePoliciesWritten": false,
+  "newPremiumBenefitsAdvertised": false,
+  "accountMutationsAuthorized": false,
+  "financialUatAuthorized": false
+}

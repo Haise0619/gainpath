@@ -18,7 +18,7 @@ void main() {
     await auth.signIn(
         role: AppRole.coach, email: 'coach@example.test', password: 'fixture');
     var accountCompositions = 0;
-    await tester.pumpWidget(GainPathMobileApp(
+    await tester.pumpWidget(GainPathMobileApp.injected(
         authRepository: auth,
         bookingListFactory: (_, __) => Lists(),
         coachProfileFactory: (_, __) => ProfileFake(),
@@ -50,7 +50,7 @@ void main() {
     final auth = InMemoryAuthRepository();
     await auth.signIn(
         role: AppRole.coach, email: 'coach@example.test', password: 'fixture');
-    await tester.pumpWidget(GainPathMobileApp(
+    await tester.pumpWidget(GainPathMobileApp.injected(
         authRepository: auth,
         bookingListFactory: (_, __) => Lists(),
         coachProfileFactory: (_, __) => ProfileFake(),

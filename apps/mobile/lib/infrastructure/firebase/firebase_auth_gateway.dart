@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:gainpath_data/gainpath_data.dart';
+import 'firebase_function_transport.dart';
 
 String firebaseAuthFailureMessage(String code) => switch (code) {
       'invalid-credential' ||
@@ -76,11 +77,11 @@ class FlutterFirebaseAuthGateway
     FirebaseFunctions? functions,
   })  : _auth = auth ?? FirebaseAuth.instance,
         _firestore = firestore ?? FirebaseFirestore.instance,
-        _functions = functions ?? FirebaseFunctions.instance;
+        _functions = functions;
 
   final FirebaseAuth _auth;
   final FirebaseFirestore _firestore;
-  final FirebaseFunctions _functions;
+  final FirebaseFunctions? _functions;
   final Set<String> _suppressedRegistrationUsers = <String>{};
   bool _authMutationInProgress = false;
 
@@ -278,7 +279,9 @@ class FlutterFirebaseAuthGateway
 
   Future<void> _provision(String displayName) async {
     try {
-      await _functions.httpsCallable('provisionMemberRegistration').call<void>({
+      await firebaseCallable('provisionMemberRegistration',
+              functions: _functions)
+          .call<void>({
         'schemaVersion': 1,
         'displayName': displayName,
       });

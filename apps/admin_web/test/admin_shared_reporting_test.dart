@@ -6,7 +6,6 @@ import 'package:gainpath_admin_web/features/analytics/application/admin_reportin
 import 'package:gainpath_admin_web/features/analytics/application/admin_reporting_gateway.dart';
 import 'package:gainpath_admin_web/features/analytics/presentation/admin/admin_dashboard_screens.dart';
 import 'package:gainpath_admin_web/features/analytics/presentation/admin/reports_screen.dart';
-import 'package:gainpath_data/gainpath_data.dart';
 import 'package:gainpath_domain/gainpath_domain.dart';
 import 'package:google_fonts/google_fonts.dart';
 
@@ -47,13 +46,17 @@ void main() {
       cubit.close();
     });
 
-    test('stale generation protection discards outdated query results', () async {
+    test('stale generation protection discards outdated query results',
+        () async {
       final gateway = _ControlledReportingGateway();
       final cubit = AdminReportingCubit(gateway: gateway);
 
       final now = DateTime.now();
-      final range1 = DateTimeRange(start: now.subtract(const Duration(days: 14)), end: now.subtract(const Duration(days: 7)));
-      final range2 = DateTimeRange(start: now.subtract(const Duration(days: 30)), end: now);
+      final range1 = DateTimeRange(
+          start: now.subtract(const Duration(days: 14)),
+          end: now.subtract(const Duration(days: 7)));
+      final range2 = DateTimeRange(
+          start: now.subtract(const Duration(days: 30)), end: now);
 
       // Query 1 starts
       final completer1 = gateway.nextCompleter;
@@ -104,7 +107,6 @@ void main() {
 
       await tester.pumpWidget(
         AppRepositories(
-          config: const BackendConfig(BackendMode.firebase),
           session: _testSession,
           child: const MaterialApp(
             home: AdminDashboardScreen(
@@ -125,7 +127,8 @@ void main() {
 
       // Hourly sessions and revenue unavailable messages
       expect(
-        find.text('Hourly session metrics are unavailable in this environment.'),
+        find.text(
+            'Hourly session metrics are unavailable in this environment.'),
         findsOneWidget,
       );
       expect(
@@ -151,7 +154,8 @@ void main() {
       );
     });
 
-    testWidgets('Reports screen renders truthful unavailable states in live mode',
+    testWidgets(
+        'Reports screen renders truthful unavailable states in live mode',
         (tester) async {
       tester.view.physicalSize = const Size(1600, 1000);
       tester.view.devicePixelRatio = 1;
@@ -159,7 +163,6 @@ void main() {
 
       await tester.pumpWidget(
         AppRepositories(
-          config: const BackendConfig(BackendMode.firebase),
           session: _testSession,
           child: const MaterialApp(
             home: ReportsScreen(live: true),

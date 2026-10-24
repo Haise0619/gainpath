@@ -1,3 +1,4 @@
+import '../di/chatbot_factory.dart';
 import 'dart:math' as math;
 import 'package:gainpath_domain/analytics.dart';
 import '../../features/analytics/presentation/member/widgets/local_progress_widgets.dart';
@@ -38,6 +39,7 @@ class MemberHomeScreen extends StatefulWidget {
   const MemberHomeScreen(
       {super.key,
       this.liveSession,
+      this.onOpenCoachingUpdates,
       this.liveProfile,
       this.publishedRoutine,
       this.routineStatusMessage,
@@ -57,6 +59,7 @@ class MemberHomeScreen extends StatefulWidget {
       this.onOpenWorkout});
 
   final AuthSession? liveSession;
+  final VoidCallback? onOpenCoachingUpdates;
   final FitnessProfile? liveProfile;
   final PublishedRoutine? publishedRoutine;
   final String? routineStatusMessage;
@@ -177,7 +180,7 @@ class _MemberHomeScreenState extends State<MemberHomeScreen>
     return Scaffold(
       floatingActionButton: FloatingActionButton.extended(
         onPressed: live
-            ? () => _go(const ChatbotScreen(connected: true))
+            ? () => _go(buildMemberChatbot(widget.liveSession!))
             : () => _go(const ChatbotScreen()),
         backgroundColor: AppColors.primary,
         foregroundColor: Colors.white,
@@ -196,6 +199,7 @@ class _MemberHomeScreenState extends State<MemberHomeScreen>
                 firstName: firstName,
                 points: gamification?.points,
                 live: live,
+                onOpenCoachingUpdates: widget.onOpenCoachingUpdates,
                 onOpenAnnouncements: live && widget.announcements != null
                     ? _openAnnouncements
                     : null,
@@ -281,6 +285,7 @@ class _MemberHomeScreenState extends State<MemberHomeScreen>
                   _QuickActionsGrid(
                       onSelect: _go,
                       enabled: !live,
+                      onOpenSavedAdvice: live ? () => _go(buildMemberChatbot(widget.liveSession!, openSavedAdvice: true)) : null,
                       onOpenEquipment: widget.onOpenEquipment,
                       onOpenCoaches: widget.onOpenCoaches,
                       onOpenBookings: widget.onOpenBookings,
@@ -291,7 +296,7 @@ class _MemberHomeScreenState extends State<MemberHomeScreen>
                       live: live,
                       liveProfile: widget.liveProfile,
                       onTap: live
-                          ? () => _go(const GoalProgressScreen(live: true))
+                          ? () => _go(GoalProgressScreen(live: true, localProgress: widget.localProgress))
                           : () => _go(const GoalProgressScreen())),
                   const SizedBox(height: 20),
                   _MembershipStrip(
@@ -320,6 +325,7 @@ class _HeroHeader extends StatelessWidget {
   final bool live;
   final String avatarText;
   final VoidCallback? onOpenAnnouncements;
+  final VoidCallback? onOpenCoachingUpdates;
 
   const _HeroHeader(
       {required this.greeting,
@@ -327,6 +333,7 @@ class _HeroHeader extends StatelessWidget {
       required this.points,
       required this.live,
       this.onOpenAnnouncements,
+      this.onOpenCoachingUpdates,
       this.avatarText = 'ZY'});
 
   @override
@@ -343,6 +350,7 @@ class _HeroHeader extends StatelessWidget {
           ?.copyWith(color: Colors.white, fontSize: 18),
       title: const Text('GainPath'),
       actions: [
+        if (onOpenCoachingUpdates != null) IconButton(tooltip: 'Coaching updates and privacy', icon: const Icon(Icons.notifications_active_outlined), onPressed: onOpenCoachingUpdates),
         IconButton(
           tooltip:
               onOpenAnnouncements != null ? 'Announcements' : 'Notifications',
@@ -1028,6 +1036,7 @@ class _QuickActionsGrid extends StatelessWidget {
   final bool enabled;
   final VoidCallback? onOpenProgress;
   final VoidCallback? onOpenEquipment;
+  final VoidCallback? onOpenSavedAdvice;
   final VoidCallback? onOpenCoaches, onOpenBookings;
   const _QuickActionsGrid(
       {required this.onSelect,
@@ -1035,6 +1044,7 @@ class _QuickActionsGrid extends StatelessWidget {
       this.onOpenProgress,
       this.onOpenCoaches,
       this.onOpenBookings,
+      this.onOpenSavedAdvice,
       this.onOpenEquipment});
 
   @override
@@ -1058,7 +1068,7 @@ class _QuickActionsGrid extends StatelessWidget {
           AppColors.primary,
           () => onSelect(MembershipDashboardScreen(connected: !enabled))),
       _QuickAction(Icons.bookmark_rounded, 'Saved tips', AppColors.info,
-          () => onSelect(const SavedAdviceScreen())),
+          onOpenSavedAdvice ?? () => onSelect(const SavedAdviceScreen())),
       _QuickAction(
           Icons.qr_code_scanner_rounded,
           onOpenEquipment != null ? 'Equipment' : 'Scan gear',
@@ -1088,6 +1098,7 @@ class _QuickActionsGrid extends StatelessWidget {
                     (a.label == 'Progress' && onOpenProgress != null) ||
                     (a.label == 'Coaches' && onOpenCoaches != null) ||
                     (a.label == 'Bookings' && onOpenBookings != null) ||
+                    (a.label == 'Saved tips' && onOpenSavedAdvice != null) ||
                     (a.label == 'Equipment' && onOpenEquipment != null)))
             .toList(),
       );

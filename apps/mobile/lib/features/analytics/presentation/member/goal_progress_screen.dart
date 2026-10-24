@@ -1,17 +1,30 @@
 import 'package:flutter/material.dart';
 import 'package:syncfusion_flutter_gauges/gauges.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
+import 'package:gainpath_domain/analytics.dart';
+import 'goal_comparison_report.dart';
+import 'package:gainpath_domain/membership.dart';
+import '../../../membership/presentation/shared/membership_access_gate.dart';
+import '../../../../app/di/membership_factory.dart';
 
 /// AD-M5.3 — View Goal Progress Comparison. Each goal gets its own radial
 /// gauge: a dial reads as "progress toward a target" more directly than
 /// a linear bar, which is why this report's characteristic differs from
 /// every other Progress screen.
 class GoalProgressScreen extends StatelessWidget {
-  const GoalProgressScreen({super.key, this.live = false});
+  const GoalProgressScreen({super.key, this.live = false, this.localProgress});
   final bool live;
+  final MemberLocalProgress? localProgress;
 
   @override
   Widget build(BuildContext context) {
+    if (live) {
+      return MembershipAccessGate(
+          enabled: membershipAccessEnforcementEnabled,
+          feature: MembershipAccessFeature.advancedReport,
+          resourceId: 'goal_comparison',
+          child: GoalComparisonHost(progress: localProgress));
+    }
     return Scaffold(
       appBar: AppBar(title: const Text('Goal progress')),
       body: PageBody(

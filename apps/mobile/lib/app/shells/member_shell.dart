@@ -1,9 +1,14 @@
+import '../../infrastructure/firebase/firebase_module9_repository.dart';
+import '../../features/coaching/presentation/member/coaching_updates_screen.dart';
 import 'package:flutter/material.dart';
 import 'dart:async';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:gainpath_identity/gainpath_identity.dart';
 import 'package:gainpath_domain/gainpath_domain.dart';
 import 'package:gainpath_domain/content.dart';
+import 'package:gainpath_domain/membership.dart';
+import '../di/membership_factory.dart';
+import '../../features/membership/data/mock_membership_commerce.dart';
 import '../../features/analytics/application/member_progress_cubit.dart';
 import 'package:gainpath_domain/analytics.dart';
 import '../../features/content/presentation/member/member_announcements.dart';
@@ -64,6 +69,7 @@ class _MemberShellState extends State<MemberShell> {
   int _index = 0;
   bool _directoryVisited = false;
   PublishedRoutineCatalogCubit? _catalog;
+  MembershipCommerceRepository? _membership;
   AnnouncementReader? _announcements;
   final _announcementKey = GlobalKey<MemberAnnouncementsState>();
   AuthBloc? _auth;
@@ -90,7 +96,9 @@ class _MemberShellState extends State<MemberShell> {
       : null;
 
   void _createCatalog() {
-    final scope = widget.liveSession!.scope;
+    final session = widget.liveSession!;
+    final scope = session.scope;
+    _createMembership();
     _announcements =
         widget.announcementReaderFactory?.call(scope, _activeScope);
     final repository =
@@ -102,16 +110,29 @@ class _MemberShellState extends State<MemberShell> {
     unawaited(_catalog!.refresh());
   }
 
+  void _createMembership() {
+    final session = widget.liveSession!;
+    _membership = createMembershipCommerceRepository(
+        session.scope,
+        () =>
+            identical(_auth?.state.session, session) &&
+            _activeScope() == session.scope);
+  }
+
   @override
   void didUpdateWidget(MemberShell oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.liveSession?.scope != widget.liveSession?.scope) {
       unawaited(_catalog?.close());
       _catalog = null;
+      _membership = null;
       _announcements = null;
       if (widget.liveSession != null && _auth != null) _createCatalog();
       _index = 0;
       _directoryVisited = false;
+    } else if (!identical(oldWidget.liveSession, widget.liveSession) &&
+        widget.liveSession != null) {
+      _createMembership();
     }
   }
 
@@ -157,6 +178,11 @@ class _MemberShellState extends State<MemberShell> {
     return [
       MemberHomeScreen(
           liveSession: session,
+          onOpenCoachingUpdates: session == null ? null : () => Navigator.push(context, MaterialPageRoute(builder: (_) => CoachingUpdatesScreen(
+            repository: FirebaseModule9Repository(scope: session.scope, isCurrent: () => _activeScope() == session.scope),
+            isCurrent: () => _activeScope() == session.scope,
+            onOpenBookings: () => openBookingList(context, session, factory: widget.bookingListFactory),
+          ))),
           liveProfile: widget.liveProfile,
           localProgress: progress?.progress,
           progressError: progress?.error,
@@ -226,6 +252,10 @@ class _MemberShellState extends State<MemberShell> {
       MemberProfileScreen(
           liveSession: session,
           liveProfile: widget.liveProfile,
+          membershipRepository: session == null
+              ? MockMembershipCommerce.forRepository(
+                  context.read<MembershipRepository>())
+              : _membership,
           bodyMetricsBuilder: session == null
               ? null
               : (_) => BodyMetricsScreen(

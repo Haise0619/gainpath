@@ -34,6 +34,7 @@ Widget statusPill(String status) {
     case 'verified':
     case 'cleared':
     case 'completed':
+    case 'published':
       fg = AppColors.success;
       bg = AppColors.primaryTint;
       break;

@@ -163,7 +163,9 @@ class RefundsScreenState extends State<RefundsScreen> {
       return match &&
           (_filter == 'All' ||
               (_filter == 'Reconciliation' && r.needsReview) ||
-              (_filter == 'Refunds' && r.text('refundStatus').isNotEmpty) ||
+              (_filter == 'Refunds' &&
+                  (r.text('refundStatus').isNotEmpty ||
+                      r.needsReview && r.text('paymentStatus') == 'cleared')) ||
               (_filter == 'Pending payment' &&
                   r.text('paymentStatus') == 'pending'));
     }).toList();
@@ -172,7 +174,7 @@ class RefundsScreenState extends State<RefundsScreen> {
           style: Theme.of(context).textTheme.headlineMedium),
       const SizedBox(height: 4),
       Text(
-          '${widget.live ? 'Sandbox' : 'Not connected · Sandbox'} · Review booking payments, recover uncertain bills, and resolve refunds.',
+          '${widget.live ? 'Sandbox' : 'Not connected · Sandbox'} · Review membership and booking payments, recover uncertain bills, and resolve refunds.',
           style: Theme.of(context).textTheme.bodyLarge),
       const SizedBox(height: 18),
       Wrap(spacing: 10, runSpacing: 10, children: [
@@ -197,7 +199,7 @@ class RefundsScreenState extends State<RefundsScreen> {
           onChanged: (value) => setState(() => _query = value),
           decoration: const InputDecoration(
               labelText: 'Search this page',
-              hintText: 'Booking, member, coach, branch or bill ID',
+              hintText: 'Transaction, member, coach, branch or bill ID',
               prefixIcon: Icon(Icons.search_rounded))),
       const SizedBox(height: 12),
       Wrap(spacing: 8, runSpacing: 8, children: [
@@ -221,7 +223,7 @@ class RefundsScreenState extends State<RefundsScreen> {
       if (!_loading && _error == null && visible.isEmpty)
         Panel(
             child: Text(records.isEmpty
-                ? 'No booking payments on this page.'
+                ? 'No payments on this page.'
                 : 'No payments match this page’s search and filter.')),
       for (final record in visible)
         Padding(
@@ -245,7 +247,18 @@ class RefundsScreenState extends State<RefundsScreen> {
                         Text(record.id,
                             style: Theme.of(context).textTheme.titleMedium),
                         Text(
-                            '${record.text('memberId')} · ${record.text('coachName')}'),
+                            '${record.text('memberDisplayName').isEmpty ? record.text('memberId') : record.text('memberDisplayName')} · ${record.isMembership ? record.text('kind') : record.text('coachName')}'),
+                        Text(record.isMembership
+                            ? '${record.text('planName')} · Organization-wide'
+                            : record.sessionSchedule),
+                        Text(
+                            'Updated: ${_time(record.data['updatedAtMillis'])}'),
+                        if (record.text('cancellationReason').isNotEmpty ||
+                            record.text('reviewReason').isNotEmpty)
+                          Text(
+                              'Reason: ${record.text('cancellationReason').isEmpty ? record.text('reviewReason') : record.text('cancellationReason')}',
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis),
                         Text(_status(record),
                             style: Theme.of(context).textTheme.bodyMedium),
                       ])),
@@ -295,8 +308,17 @@ class RefundsScreenState extends State<RefundsScreen> {
       .map((word) =>
           word.isEmpty ? '' : '${word[0].toUpperCase()}${word.substring(1)}')
       .join(' ');
-  String _status(PaymentReviewRecord r) =>
-      '${_label(r.text('paymentStatus'))} · ${_label(r.text('fulfilmentStatus'))}${r.text('refundStatus').isEmpty ? '' : ' · Refund ${_label(r.text('refundStatus'))}'}';
+  String _status(PaymentReviewRecord r) => switch (r.text('refundStatus')) {
+        'uncertain' => 'Refund outcome unknown · needs reconciliation',
+        'approved' => 'Refund approved · not sent',
+        'processing' => 'Sandbox refund submitted · awaiting confirmation',
+        'completed' => 'Sandbox refund completed',
+        'rejected' => 'Refund declined',
+        'failed' => 'Sandbox refund needs attention',
+        _ => r.needsReview && r.text('paymentStatus') == 'cleared'
+            ? 'Paid · awaiting refund review'
+            : '${_label(r.text('paymentStatus'))} · ${_label(r.text('fulfilmentStatus'))}',
+      };
   List<Widget> _detail(BuildContext context, PaymentReviewDetail detail) {
     final r = detail.payment;
     return [
@@ -328,16 +350,62 @@ class RefundsScreenState extends State<RefundsScreen> {
                     Text(r.amount,
                         style: Theme.of(context).textTheme.titleLarge),
                     const SizedBox(height: 4),
-                    Text(_status(r))
+                    Text(_status(r)),
+                    const SizedBox(height: 8),
+                    Text(r.refundExplanation),
                   ])),
           const SizedBox(height: 16),
           const Eyebrow('Payment details'),
           Panel(
               child: Column(children: [
             DetailRow('Member ID', r.text('memberId')),
+            if (r.text('memberDisplayName').isNotEmpty)
+              DetailRow('Member', r.text('memberDisplayName')),
             const Divider(height: 20),
-            DetailRow('Coach / branch',
-                '${r.text('coachName')} / ${r.text('branchName')}'),
+            DetailRow(r.isMembership ? 'Membership plan' : 'Booked session',
+                r.isMembership ? r.text('planName') : r.sessionSchedule),
+            if (r.text('bookingStatus').isNotEmpty)
+              DetailRow('Booking status', _label(r.text('bookingStatus'))),
+            if (r.text('cancellationReason').isNotEmpty)
+              DetailRow('Cancellation reason', r.text('cancellationReason')),
+            if (r.data['cancelledAtMillis'] != null)
+              DetailRow('Cancelled', _time(r.data['cancelledAtMillis'])),
+            const Divider(height: 20),
+            DetailRow('Payment type',
+                r.isMembership ? r.text('kind') : 'CoachingBooking'),
+            if (r.hasPremiumVoucher) ...[
+              const Divider(height: 20),
+              DetailRow('Original booking fee', r.originalAmount),
+              DetailRow('Premium voucher discount', r.voucherDiscount),
+              DetailRow(
+                  r.text('paymentStatus') == 'cleared'
+                      ? 'Amount collected'
+                      : 'Checkout amount',
+                  r.amount),
+              DetailRow('Voucher finance', r.voucherFinanceReference),
+              const Text(
+                  'Refund review uses the amount collected. Voucher reinstatement is unavailable.'),
+            ],
+            const Divider(height: 20),
+            DetailRow('Last updated', _time(r.data['updatedAtMillis'])),
+            if (r.data['reviewedAtMillis'] != null)
+              DetailRow('Admin decision', _time(r.data['reviewedAtMillis'])),
+            if (r.data['refundReservedAtMillis'] != null)
+              DetailRow(
+                  'Refund attempted', _time(r.data['refundReservedAtMillis'])),
+            if (r.text('refundReference').isNotEmpty)
+              DetailRow('Refund reference', r.text('refundReference')),
+            if (r.text('refundProviderStatus').isNotEmpty)
+              DetailRow('Provider status', r.text('refundProviderStatus')),
+            const Divider(height: 20),
+            if (!r.isMembership)
+              DetailRow('Coach / branch',
+                  '${r.text('coachName')} / ${r.text('branchName')}'),
+            if (r.isMembership) DetailRow('Scope', 'Organization-wide'),
+            if (r.text('refundReason').isNotEmpty)
+              DetailRow('Member reason', r.text('refundReason')),
+            if (r.text('refundNotes').isNotEmpty)
+              DetailRow('Member notes', r.text('refundNotes')),
             const Divider(height: 20),
             DetailRow(
                 'Provider bill ID',
@@ -358,7 +426,7 @@ class RefundsScreenState extends State<RefundsScreen> {
                     : r.text('resolutionReason')),
             if (r.text('reviewReason').isNotEmpty) ...[
               const Divider(height: 20),
-              DetailRow('Admin reason', r.text('reviewReason'))
+              DetailRow('Review note', r.text('reviewReason'))
             ],
           ])),
           const SizedBox(height: 20),
@@ -367,20 +435,20 @@ class RefundsScreenState extends State<RefundsScreen> {
               _button(
                   'Verify payment',
                   () => _action('verify', 'Verify payment',
-                      'Read provider status and reconcile this booking. This does not create another bill.')),
+                      'Read provider status and reconcile this payment. This does not create another bill.')),
             if (r.text('billId').isEmpty &&
                 r.text('paymentStatus') == 'pending')
               _button(
                   'Recover bill',
                   () => _action('recover_bill', 'Recover bill',
-                      'Attach an existing provider bill only after the server verifies its booking reference, collection and amount. This never creates another bill.',
+                      'Attach an existing provider bill only after the server verifies its transaction reference, collection and amount. This never creates another bill.',
                       reason: true, identifier: 'Provider bill ID')),
             if (r.canDecide) ...[
               if (r.text('refundStatus') != 'approved')
                 _button(
                     'Approve refund',
                     () => _action('approve_refund', 'Approve refund',
-                        'Record approval for this paid reconciliation case. Approval alone does not issue a refund or restore the booking.',
+                        'Record approval for this paid reconciliation case. Approval alone does not issue a refund or change membership access.',
                         reason: true)),
               _button(
                   'Reject refund',
@@ -438,7 +506,7 @@ class RefundsScreenState extends State<RefundsScreen> {
                                     fontWeight: FontWeight.w600)),
                             Text(_time(event['atMillis'])),
                             if (event['actorId'] != null)
-                              Text('Admin: ${event['actorId']}'),
+                              Text('Actor: ${event['actorId']}'),
                             if (event['reason'] != null)
                               Text('${event['reason']}'),
                           ])),

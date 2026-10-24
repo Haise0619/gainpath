@@ -69,10 +69,10 @@ class CoachCard extends StatelessWidget {
                     const Icon(Icons.star_rounded,
                         size: 15, color: AppColors.accent),
                     const SizedBox(width: 3),
-                    Text(published != null ? '-' : '${coach.rating}',
+                    Text(published != null ? (published!.averageRating?.toStringAsFixed(1) ?? 'Not rated') : '${coach.rating}',
                         style: const TextStyle(
                             fontSize: 13, fontWeight: FontWeight.w700)),
-                    Text(published != null ? '  (-)' : '  (${coach.reviews})',
+                    Text(published != null ? '  (${published!.reviewCount})' : '  (${coach.reviews})',
                         style: Theme.of(context).textTheme.bodyMedium),
                     const Spacer(),
                     Builder(builder: (context) {

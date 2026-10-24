@@ -39,3 +39,23 @@ class AdviceBookmarkToggled extends ChatEvent {
 class HistoryCleared extends ChatEvent {
   const HistoryCleared();
 }
+
+class ChatStarted extends ChatEvent {
+  const ChatStarted();
+}
+
+class DisclaimerAcknowledged extends ChatEvent {
+  const DisclaimerAcknowledged();
+}
+
+class ChatRetried extends ChatEvent {
+  const ChatRetried();
+}
+
+class AdviceRated extends ChatEvent {
+  const AdviceRated(this.message, this.helpful);
+  final ChatMessage message;
+  final bool helpful;
+  @override
+  List<Object?> get props => [message, helpful];
+}

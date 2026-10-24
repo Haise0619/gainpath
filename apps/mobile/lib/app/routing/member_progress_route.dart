@@ -2,6 +2,9 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:gainpath_domain/analytics.dart';
+import 'package:gainpath_domain/membership.dart';
+import '../../features/membership/presentation/shared/membership_access_gate.dart';
+import '../di/membership_factory.dart';
 import 'package:gainpath_domain/gainpath_domain.dart'
     show AppRole, SessionScope;
 import 'package:gainpath_identity/gainpath_identity.dart';
@@ -310,6 +313,16 @@ Widget _progressContent(
               child: Padding(
                   padding: const EdgeInsets.all(8),
                   child: Text(warnings.join('\n'))))),
-    Expanded(child: screen)
+    Expanded(
+        child: view == MemberProgressView.performance ||
+                view == MemberProgressView.form
+            ? MembershipAccessGate(
+                enabled: membershipAccessEnforcementEnabled,
+                feature: MembershipAccessFeature.advancedReport,
+                resourceId: view == MemberProgressView.performance
+                    ? 'performance_trends'
+                    : 'form_trends',
+                child: screen)
+            : screen)
   ]);
 }

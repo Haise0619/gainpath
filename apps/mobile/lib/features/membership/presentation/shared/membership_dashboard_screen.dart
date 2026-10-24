@@ -1,248 +1,148 @@
 import 'package:flutter/material.dart';
-import '../../application/membership_bloc.dart';
+import 'package:gainpath_domain/membership.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
-import '../member/billing_history_screen.dart';
+import '../../../../app/di/membership_factory.dart';
 import '../member/browse_plans_screen.dart';
+import '../member/billing_history_screen.dart';
 import '../member/refund_request_screen.dart';
 import '../member/renew_screen.dart';
-import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:gainpath_domain/membership.dart';
+import 'membership_data_view.dart';
 
-/// AD-M4.2 — View Membership Dashboard. The hub for this module: current
-/// plan status and auto-renew control up top, then quick entry points into
-/// the three screens that used to be crammed into this same page (browse
-/// plans, billing history, refunds) — each now has room to be designed
-/// properly instead of fighting for space on one long scroll.
-class MembershipDashboardScreen extends StatefulWidget {
+class MembershipDashboardScreen extends StatelessWidget {
   const MembershipDashboardScreen(
-      {super.key, this.connected = false, this.planName, this.status});
+      {super.key,
+      this.connected = false,
+      this.planName,
+      this.status,
+      this.repository});
   final bool connected;
-  final String? planName;
-  final String? status;
-
+  final String? planName, status;
+  final MembershipCommerceRepository? repository;
   @override
-  State<MembershipDashboardScreen> createState() =>
-      _MembershipDashboardScreenState();
-}
+  Widget build(BuildContext context) => repository != null
+      ? MembershipRepositoryGuard(
+          repository: repository!, child: _body(repository!))
+      : MembershipFeatureHost(connected: connected, builder: _body);
+  Widget _body(MembershipCommerceRepository repo) => MembershipDataView(
+      repository: repo,
+      title: 'Membership',
+      builder: (context, data, refresh) {
+        final entitlement = MembershipEntitlement.fromOverview(data);
+        final tierName = entitlement.effectiveTier?.label;
+        final canAct = entitlement.canStartCheckout;
+        final isFree = entitlement.effectiveTier == MembershipTier.free;
+        final transactions = membershipRows(data['transactions']);
+        Future<void> open(Widget page) async {
+          await Navigator.push(
+              context, MaterialPageRoute<void>(builder: (_) => page));
+          if (context.mounted) refresh();
+        }
 
-class _MembershipDashboardScreenState extends State<MembershipDashboardScreen> {
-  MembershipPlan get _plan =>
-      context.read<MembershipRepository>().membershipPlans.firstWhere(
-          (p) => p.id == context.read<MembershipRepository>().currentPlanId);
-
-  Future<void> _toggleAutoRenew(bool value) async {
-    if (!value) {
-      final ok = await confirmSheet(
-        context,
-        title: 'Turn off auto-renewal?',
-        message:
-            'You keep full access until your renewal date. After that your plan will not renew automatically.',
-        confirmLabel: 'Turn off',
-        destructive: true,
-      );
-      if (!ok) return;
-    }
-    if (!mounted) return;
-    context.read<MembershipBloc>().add(AutoRenewToggled(value));
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final membership =
-        widget.connected ? null : context.watch<MembershipBloc>().state;
-    final plan = widget.connected ? null : _plan;
-    final recent = widget.connected
-        ? null
-        : context.read<MembershipRepository>().transactions.take(2).toList();
-
-    return Scaffold(
-      appBar: AppBar(title: const Text('Membership')),
-      body: PageBody(
-        children: [
+        return [
           Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              gradient: AppColors.heroGradient,
-              borderRadius: BorderRadius.circular(20),
-              boxShadow: [
-                BoxShadow(
-                    color: AppColors.primary.withValues(alpha: 0.28),
-                    blurRadius: 22,
-                    offset: const Offset(0, 10)),
-              ],
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text('CURRENT PLAN',
-                    style: TextStyle(
-                        fontSize: 11,
-                        letterSpacing: 1.4,
-                        fontWeight: FontWeight.w700,
-                        color: Colors.white70)),
-                const SizedBox(height: 6),
-                Text(widget.connected ? (widget.planName ?? '-') : plan!.name,
-                    style: const TextStyle(
-                        fontSize: 30,
-                        fontWeight: FontWeight.w800,
-                        color: Colors.white,
-                        letterSpacing: -1)),
-                const SizedBox(height: 4),
-                Text(
-                    widget.connected
-                        ? (widget.status ?? '-')
-                        : 'RM ${plan!.price.toStringAsFixed(0)} per month  ·  renews 12 Oct',
-                    style:
-                        const TextStyle(color: Colors.white70, fontSize: 14)),
-                const SizedBox(height: 16),
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.14),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.autorenew_rounded,
-                          size: 18, color: Colors.white),
-                      const SizedBox(width: 10),
-                      const Expanded(
-                        child: Text('Auto-renew',
-                            style: TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.w600)),
-                      ),
-                      Switch(
-                        value: membership?.autoRenew ?? false,
-                        onChanged: widget.connected ? null : _toggleAutoRenew,
-                        activeThumbColor: Colors.white,
-                        activeTrackColor: Colors.white.withValues(alpha: 0.4),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 14),
-                Row(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                  gradient: AppColors.heroGradient,
+                  borderRadius: BorderRadius.circular(20)),
+              child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Expanded(
-                      child: OutlinedButton(
-                        style: OutlinedButton.styleFrom(
-                          minimumSize: const Size(0, 42),
-                          padding: const EdgeInsets.symmetric(horizontal: 6),
-                          foregroundColor: Colors.white,
-                          side: const BorderSide(color: Colors.white38),
-                        ),
-                        onPressed: () => Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                                builder: (_) =>
-                                    RenewScreen(connected: widget.connected))),
-                        child: const _ActionButtonLabel('Renew now'),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: FilledButton(
-                        style: FilledButton.styleFrom(
-                          minimumSize: const Size(0, 42),
-                          padding: const EdgeInsets.symmetric(horizontal: 6),
-                          backgroundColor: Colors.white,
-                          foregroundColor: AppColors.primaryDark,
-                        ),
-                        onPressed: () => Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                                builder: (_) => BrowsePlansScreen(
-                                    connected: widget.connected))),
-                        child: const _ActionButtonLabel('Change plan'),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 20),
-          const Eyebrow('Recent billing'),
-          Panel(
-            padding: EdgeInsets.zero,
-            child: Column(
-              children: [
-                if (widget.connected)
-                  const ListTile(
-                      title: Text('-'),
-                      subtitle: Text('Billing data unavailable')),
-                ...?recent?.asMap().entries.map((entry) {
-                  final t = entry.value;
-                  return Column(
+                    const Text('CURRENT PLAN · ALL BRANCHES',
+                        style: TextStyle(
+                            color: Colors.white70,
+                            letterSpacing: 1.2,
+                            fontSize: 11)),
+                    const SizedBox(height: 8),
+                    Text(
+                        tierName == null
+                            ? 'Membership status unavailable'
+                            : entitlement.historicalOnly
+                                ? 'Last verified tier · $tierName'
+                                : tierName,
+                        style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 28,
+                            fontWeight: FontWeight.w800)),
+                    const SizedBox(height: 8),
+                    Text(
+                        !entitlement.isResolved
+                            ? 'Refresh online to verify your membership.'
+                            : isFree
+                                ? 'No expiry · No membership charge'
+                                : '${entitlement.historicalOnly ? 'Last recorded paid status' : 'Paid membership active'} · Expires ${membershipDate(entitlement.paidExpiresAtMillis)}',
+                        style: const TextStyle(color: Colors.white)),
+                    const SizedBox(height: 16),
+                    const Text(
+                        'Auto-renew unavailable. Renew manually; no recurring charge is scheduled.',
+                        style: TextStyle(color: Colors.white70)),
+                    const SizedBox(height: 16),
+                    Wrap(spacing: 12, runSpacing: 8, children: [
+                      FilledButton(
+                          onPressed: canAct
+                              ? () => open(BrowsePlansScreen(repository: repo))
+                              : null,
+                          child: Text(isFree ? 'Upgrade' : 'Browse plans')),
+                      if (entitlement.isResolved && entitlement.hasPaidPlan)
+                        OutlinedButton(
+                            style: OutlinedButton.styleFrom(
+                                foregroundColor: Colors.white),
+                            onPressed: canAct
+                                ? () => open(RenewScreen(repository: repo))
+                                : null,
+                            child: Text(entitlement.paidStatus ==
+                                    PaidMembershipStatus.expired
+                                ? 'Renew ${entitlement.paidTier!.label}'
+                                : 'Renew now')),
+                    ])
+                  ])),
+          const SizedBox(height: 16),
+          if (entitlement.paidStatus == PaidMembershipStatus.expired)
+            Panel(
+                child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      if (entry.key > 0) const Divider(height: 1, indent: 16),
-                      ListTile(
-                        title: Text(t.type,
-                            style: Theme.of(context).textTheme.titleMedium),
-                        subtitle: Text(t.id,
-                            style: Theme.of(context).textTheme.bodyMedium),
-                        trailing: Text('RM ${t.amount.toStringAsFixed(2)}',
-                            style: const TextStyle(
-                                fontSize: 14.5, fontWeight: FontWeight.w700)),
-                      ),
-                    ],
-                  );
-                }),
-                const Divider(height: 1, indent: 16),
+                  const Eyebrow('Previous paid membership'),
+                  Text(
+                      '${entitlement.paidTier!.label} · Expired ${membershipDate(entitlement.paidExpiresAtMillis)}'),
+                  const Text(
+                      'Your previous paid period and billing history are retained.'),
+                ])),
+          if (isFree)
+            const Panel(
+                child: Text(
+                    'Digital fitness access follows your existing account permissions.')),
+          if (entitlement.benefits.isNotEmpty)
+            Panel(
+                child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                  Eyebrow(entitlement.historicalOnly
+                      ? 'Last recorded benefits'
+                      : 'Your benefits'),
+                  ...((entitlement.benefits).map((p) => ListTile(
+                      leading: const Icon(Icons.check_circle_outline),
+                      title: Text(p))))
+                ])),
+          const SizedBox(height: 16),
+          const Eyebrow('Recent membership billing'),
+          Panel(
+              padding: EdgeInsets.zero,
+              child: Column(children: [
+                if (transactions.isEmpty)
+                  const ListTile(title: Text('No membership payments yet.')),
+                ...transactions.take(2).map((p) => ListTile(
+                    title: Text('${p['planName']}'),
+                    subtitle: Text(membershipPaymentLabel(p)),
+                    trailing: Text(membershipMoney(p['amountMinor'])))),
                 ListTile(
-                  title: const Text('View all billing history',
-                      style: TextStyle(
-                          color: AppColors.primary,
-                          fontWeight: FontWeight.w700,
-                          fontSize: 14)),
-                  trailing: const Icon(Icons.arrow_forward_ios_rounded,
-                      size: 13, color: AppColors.primary),
-                  onTap: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                          builder: (_) => BillingHistoryScreen(
-                              connected: widget.connected))),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 14),
-          Center(
-            child: TextButton.icon(
-              style: TextButton.styleFrom(foregroundColor: AppColors.danger),
-              onPressed: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                      builder: (_) =>
-                          RefundRequestScreen(connected: widget.connected))),
-              icon: const Icon(Icons.receipt_long_rounded, size: 18),
-              label: const Text('Request a refund'),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// Button label that shrinks to fit a single line rather than wrapping —
-/// so "Renew now" and "Change plan" always render at the same height next
-/// to each other, on any screen width, without ever clipping text.
-class _ActionButtonLabel extends StatelessWidget {
-  final String text;
-  const _ActionButtonLabel(this.text);
-
-  @override
-  Widget build(BuildContext context) {
-    return FittedBox(
-      fit: BoxFit.scaleDown,
-      child: Text(
-        text,
-        maxLines: 1,
-        style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.w600),
-      ),
-    );
-  }
+                    title: const Text('View all billing history'),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => open(BillingHistoryScreen(repository: repo))),
+              ])),
+          TextButton.icon(
+              onPressed: () => open(RefundRequestScreen(repository: repo)),
+              icon: const Icon(Icons.receipt_long),
+              label: const Text('Refund requests and status')),
+        ];
+      });
 }

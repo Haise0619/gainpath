@@ -5,10 +5,12 @@ import 'package:gainpath_ui/gainpath_ui.dart';
 class PaymentConfirmationScreen extends StatefulWidget {
   final String planName;
   final double amountPaid;
-  const PaymentConfirmationScreen({super.key, required this.planName, required this.amountPaid});
+  const PaymentConfirmationScreen(
+      {super.key, required this.planName, required this.amountPaid});
 
   @override
-  State<PaymentConfirmationScreen> createState() => _PaymentConfirmationScreenState();
+  State<PaymentConfirmationScreen> createState() =>
+      _PaymentConfirmationScreenState();
 }
 
 class _PaymentConfirmationScreenState extends State<PaymentConfirmationScreen>
@@ -19,7 +21,8 @@ class _PaymentConfirmationScreenState extends State<PaymentConfirmationScreen>
   @override
   void initState() {
     super.initState();
-    _entrance = AnimationController(vsync: this, duration: const Duration(milliseconds: 600));
+    _entrance = AnimationController(
+        vsync: this, duration: const Duration(milliseconds: 600));
     _scale = TweenSequence<double>([
       TweenSequenceItem(tween: Tween(begin: 0.7, end: 1.05), weight: 55),
       TweenSequenceItem(tween: Tween(begin: 1.05, end: 1.0), weight: 45),
@@ -36,7 +39,9 @@ class _PaymentConfirmationScreenState extends State<PaymentConfirmationScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Payment confirmed'), automaticallyImplyLeading: false),
+      appBar: AppBar(
+          title: const Text('Payment confirmed'),
+          automaticallyImplyLeading: false),
       body: PageBody(
         children: [
           ScaleTransition(
@@ -52,15 +57,23 @@ class _PaymentConfirmationScreenState extends State<PaymentConfirmationScreen>
                   Container(
                     width: 56,
                     height: 56,
-                    decoration: BoxDecoration(color: AppColors.overlay.withValues(alpha: 0.2), shape: BoxShape.circle),
-                    child: const Icon(Icons.check_rounded, size: 32, color: AppColors.overlay),
+                    decoration: BoxDecoration(
+                        color: AppColors.overlay.withValues(alpha: 0.2),
+                        shape: BoxShape.circle),
+                    child: const Icon(Icons.check_rounded,
+                        size: 32, color: AppColors.overlay),
                   ),
                   const SizedBox(height: 14),
                   Text('You are on ${widget.planName} now',
-                      style: Theme.of(context).textTheme.titleLarge?.copyWith(color: Colors.white)),
+                      style: Theme.of(context)
+                          .textTheme
+                          .titleLarge
+                          ?.copyWith(color: Colors.white)),
                   const SizedBox(height: 6),
                   Text('Your new tier is active immediately.',
-                      style: TextStyle(color: Colors.white.withValues(alpha: 0.85), fontSize: 13)),
+                      style: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.85),
+                          fontSize: 13)),
                 ],
               ),
             ),
@@ -71,7 +84,8 @@ class _PaymentConfirmationScreenState extends State<PaymentConfirmationScreen>
               children: [
                 DetailRow('Plan', widget.planName),
                 const Divider(height: 20),
-                DetailRow('Amount paid', 'RM ${widget.amountPaid.toStringAsFixed(2)}'),
+                DetailRow('Amount paid',
+                    'RM ${widget.amountPaid.toStringAsFixed(2)}'),
                 const Divider(height: 20),
                 const DetailRow('Billing cycle', 'Monthly'),
               ],

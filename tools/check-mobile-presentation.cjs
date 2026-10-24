@@ -7,10 +7,10 @@ const mobile = 'apps/mobile/lib/';
 const violations = [];
 for (const file of ['main.dart', 'app/mobile_app.dart']) {
   const source = read(mobile + file);
-  if (/BackendConfig\.fromEnvironment\(/.test(source)) {
+  if (/BackendConfig|BackendMode|\bBACKEND\b/.test(source)) {
     violations.push(`${file}: normal mobile startup must not select a separate sample product`);
   }
-  if (!source.includes('backendConfig ?? const BackendConfig(BackendMode.firebase)')) {
+  if (!source.includes(file === 'main.dart' ? 'initializeGainPathFirebase' : 'FlutterFirebaseAuthGateway()')) {
     violations.push(`${file}: retain connected startup and explicit dependency injection for tests`);
   }
 }

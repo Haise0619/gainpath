@@ -26,26 +26,33 @@ Widget _networkHero(String url, {BoxFit fit = BoxFit.cover}) {
 /// AD-M6.1 — Consult AI Fitness Coach. Provides a [ChatBloc] scoped to this
 /// screen; the view below renders [ChatState] and dispatches events.
 class ChatbotScreen extends StatelessWidget {
-  const ChatbotScreen({super.key, this.connected = false});
+  const ChatbotScreen(
+      {super.key,
+      this.connected = false,
+      this.openSavedAdvice = false,
+      this.onReviewBooking});
+  final ValueChanged<BookingSuggestionAttachment>? onReviewBooking;
   final bool connected;
+  final bool openSavedAdvice;
 
   @override
   Widget build(BuildContext context) {
-    if (connected) return const _ChatbotView(connected: true);
     return BlocProvider(
       create: (context) => ChatBloc(
         chat: context.read<ChatRepository>(),
-        equipment: context.read<EquipmentRepository>(),
-        analytics: context.read<AnalyticsRepository>(),
+        equipment: connected ? null : context.read<EquipmentRepository>(),
+        analytics: connected ? null : context.read<AnalyticsRepository>(),
       ),
-      child: const _ChatbotView(),
+      child: _ChatbotView(
+          openSavedAdvice: openSavedAdvice, onReviewBooking: onReviewBooking),
     );
   }
 }
 
 class _ChatbotView extends StatefulWidget {
-  const _ChatbotView({this.connected = false});
-  final bool connected;
+  const _ChatbotView({this.openSavedAdvice = false, this.onReviewBooking});
+  final ValueChanged<BookingSuggestionAttachment>? onReviewBooking;
+  final bool openSavedAdvice;
 
   @override
   State<_ChatbotView> createState() => _ChatbotViewState();
@@ -60,6 +67,21 @@ class _ChatbotViewState extends State<_ChatbotView> {
   final _controller = TextEditingController();
   final _scroll = ScrollController();
   bool _disclaimerShown = false;
+  bool _savedAdviceOpened = false;
+
+  void _openSavedAdvice() {
+    if (!mounted || !widget.openSavedAdvice || _savedAdviceOpened) return;
+    final bloc = context.read<ChatBloc>();
+    if (!bloc.state.acknowledged || bloc.state.isLoading || _disclaimerShown) {
+      return;
+    }
+    _savedAdviceOpened = true;
+    Navigator.push(
+        context,
+        MaterialPageRoute(
+            builder: (_) => BlocProvider.value(
+                value: bloc, child: const SavedAdviceScreen())));
+  }
 
   @override
   void initState() {
@@ -76,16 +98,28 @@ class _ChatbotViewState extends State<_ChatbotView> {
   }
 
   Future<void> _showFirstOpenDisclaimer() async {
-    if (_disclaimerShown || widget.connected) return;
+    final chat = context.read<ChatBloc>().state;
+    if (_disclaimerShown ||
+        chat.isLoading ||
+        !chat.acknowledged && chat.notice == null) {
+      return;
+    }
+    if (chat.notice != null && chat.acknowledged) {
+      _openSavedAdvice();
+      return;
+    }
     _disclaimerShown = true;
-    await showChatbotAboutSheet(context, dismissible: false);
+    await showChatbotAboutSheet(context,
+        dismissible: false, notice: chat.notice);
+    if (mounted && chat.notice != null) {
+      context.read<ChatBloc>().add(const DisclaimerAcknowledged());
+    }
+    _disclaimerShown = false;
+    _openSavedAdvice();
   }
 
   void _send() {
-    if (widget.connected) {
-      showUnavailable(context);
-      return;
-    }
+    if (!context.read<ChatBloc>().state.canSend) return;
     final text = _controller.text.trim();
     if (text.isEmpty) return;
     _controller.clear();
@@ -103,18 +137,23 @@ class _ChatbotViewState extends State<_ChatbotView> {
 
   @override
   Widget build(BuildContext context) {
-    if (widget.connected) return _buildChat(context, const ChatState());
     return BlocConsumer<ChatBloc, ChatState>(
-      listenWhen: (a, b) =>
-          a.messages.length != b.messages.length ||
-          a.isReplying != b.isReplying,
-      listener: (_, __) => _jump(),
+      listener: (_, chat) {
+        _jump();
+        _openSavedAdvice();
+        if (chat.notice != null &&
+            !chat.acknowledged &&
+            !chat.isLoading &&
+            chat.error == null) {
+          _showFirstOpenDisclaimer();
+        }
+      },
       builder: _buildChat,
     );
   }
 
   Widget _buildChat(BuildContext context, ChatState chat) {
-    final bloc = widget.connected ? null : context.read<ChatBloc>();
+    final bloc = context.read<ChatBloc>();
     return Scaffold(
       appBar: AppBar(
         title: const Text('AI coach'),
@@ -122,16 +161,15 @@ class _ChatbotViewState extends State<_ChatbotView> {
           IconButton(
             icon: const Icon(Icons.help_outline_rounded),
             tooltip: 'About this assistant',
-            onPressed: widget.connected
-                ? () => showUnavailable(context)
-                : () => showChatbotAboutSheet(context),
+            onPressed: () =>
+                showChatbotAboutSheet(context, notice: chat.notice),
           ),
           IconButton(
             icon: const Icon(Icons.auto_awesome_rounded),
             tooltip: 'Progress audit',
-            onPressed: widget.connected
-                ? () => showUnavailable(context)
-                : () => bloc?.add(const ProgressAuditRequested()),
+            onPressed: chat.canSend
+                ? () => bloc.add(const ProgressAuditRequested())
+                : null,
           ),
           IconButton(
             icon: const Icon(Icons.bookmark_border_rounded),
@@ -139,8 +177,8 @@ class _ChatbotViewState extends State<_ChatbotView> {
             onPressed: () => Navigator.push(
                 context,
                 MaterialPageRoute(
-                    builder: (_) =>
-                        SavedAdviceScreen(connected: widget.connected))),
+                    builder: (_) => BlocProvider.value(
+                        value: bloc, child: const SavedAdviceScreen()))),
           ),
           IconButton(
             icon: const Icon(Icons.delete_outline_rounded),
@@ -152,13 +190,24 @@ class _ChatbotViewState extends State<_ChatbotView> {
                       'Messages disappear from this screen. Anything you bookmarked stays saved.',
                   confirmLabel: 'Clear',
                   destructive: true);
-              if (ok) bloc?.add(const HistoryCleared());
+              if (ok) bloc.add(const HistoryCleared());
             },
           ),
         ],
       ),
       body: Column(
         children: [
+          if (chat.isLoading) const LinearProgressIndicator(),
+          if (chat.error != null)
+            MaterialBanner(content: Text(chat.error!), actions: [
+              TextButton(
+                  onPressed: () => bloc.add(const ChatRetried()),
+                  child: const Text('Retry'))
+            ]),
+          if (!chat.acknowledged && !chat.isLoading && chat.notice != null)
+            TextButton(
+                onPressed: () => _showFirstOpenDisclaimer(),
+                child: const Text('Review and accept the notice')),
           Expanded(
             child: chat.messages.isEmpty
                 ? Center(
@@ -170,10 +219,7 @@ class _ChatbotViewState extends State<_ChatbotView> {
                           const Icon(Icons.chat_bubble_outline_rounded,
                               size: 40, color: AppColors.hairline),
                           const SizedBox(height: 14),
-                          Text(
-                              widget.connected
-                                  ? 'AI coach unavailable. Conversation: -'
-                                  : 'Ask about form, programming, or nutrition.',
+                          Text('Ask about form, programming, or nutrition.',
                               textAlign: TextAlign.center,
                               style: Theme.of(context).textTheme.bodyMedium),
                           const SizedBox(height: 20),
@@ -194,16 +240,14 @@ class _ChatbotViewState extends State<_ChatbotView> {
                                         color: AppColors.accentDark,
                                         fontWeight: FontWeight.w600,
                                         fontSize: 12.5),
-                                    onPressed: widget.connected
-                                        ? () => showUnavailable(context)
-                                        : () => bloc?.add(MessageSent(q)),
+                                    onPressed: chat.canSend
+                                        ? () => bloc.add(MessageSent(q))
+                                        : null,
                                   )),
-                              ...?(widget.connected
-                                      ? null
-                                      : context
-                                          .read<ChatRepository>()
-                                          .faqPrompts)
-                                  ?.map((p) => ActionChip(
+                              ...context
+                                  .read<ChatRepository>()
+                                  .faqPrompts
+                                  .map((p) => ActionChip(
                                         label: Text(p.question),
                                         backgroundColor: AppColors.primaryTint,
                                         side: BorderSide.none,
@@ -211,8 +255,9 @@ class _ChatbotViewState extends State<_ChatbotView> {
                                             color: AppColors.primary,
                                             fontWeight: FontWeight.w600,
                                             fontSize: 12.5),
-                                        onPressed: () =>
-                                            bloc?.add(PromptSent(p)),
+                                        onPressed: chat.canSend
+                                            ? () => bloc.add(PromptSent(p))
+                                            : null,
                                       )),
                             ],
                           ),
@@ -231,13 +276,18 @@ class _ChatbotViewState extends State<_ChatbotView> {
                       }
                       final m = chat.messages[i];
                       return _Bubble(
+                        onReviewBooking: widget.onReviewBooking,
                         text: m.text,
                         fromUser: m.fromUser,
                         attachment: m.attachment,
                         isBookmarked: chat.isBookmarked(m),
+                        helpful: chat.ratings[m.id ?? m.text],
+                        onRate: m.fromUser
+                            ? null
+                            : (helpful) => bloc.add(AdviceRated(m, helpful)),
                         onToggleBookmark: m.fromUser
                             ? null
-                            : () => bloc?.add(AdviceBookmarkToggled(m.text)),
+                            : () => bloc.add(AdviceBookmarkToggled(m.text)),
                       );
                     },
                   ),
@@ -253,6 +303,7 @@ class _ChatbotViewState extends State<_ChatbotView> {
               children: [
                 Expanded(
                   child: TextField(
+                    enabled: chat.canSend,
                     controller: _controller,
                     textInputAction: TextInputAction.send,
                     onSubmitted: (_) => _send(),
@@ -265,7 +316,7 @@ class _ChatbotViewState extends State<_ChatbotView> {
                 ),
                 const SizedBox(width: 8),
                 IconButton.filled(
-                  onPressed: _send,
+                  onPressed: chat.canSend ? _send : null,
                   icon: const Icon(Icons.arrow_upward_rounded),
                 ),
               ],
@@ -278,17 +329,23 @@ class _ChatbotViewState extends State<_ChatbotView> {
 }
 
 class _Bubble extends StatelessWidget {
+  final ValueChanged<BookingSuggestionAttachment>? onReviewBooking;
   final String text;
   final bool fromUser;
   final ChatAttachment? attachment;
   final bool isBookmarked;
   final VoidCallback? onToggleBookmark;
+  final bool? helpful;
+  final ValueChanged<bool>? onRate;
   const _Bubble({
+    this.onReviewBooking,
     required this.text,
     required this.fromUser,
     this.attachment,
     this.isBookmarked = false,
     this.onToggleBookmark,
+    this.helpful,
+    this.onRate,
   });
 
   @override
@@ -323,6 +380,29 @@ class _Bubble extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.only(top: 8),
               child: switch (attachment!) {
+                BookingSuggestionAttachment suggestion => Panel(
+                      child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                        Text(
+                            '${suggestion.data['coachName']} · ${suggestion.durationMinutes} minutes',
+                            style:
+                                const TextStyle(fontWeight: FontWeight.w700)),
+                        Text(
+                            '${suggestion.localDate}\n${suggestion.data['startLabel']} – ${suggestion.data['endLabel']}\n${suggestion.data['timeZone']}\n${suggestion.data['branchName']}'),
+                        Text(
+                            'RM ${((suggestion.data['amountMinor'] as int) / 100).toStringAsFixed(2)}'),
+                        const Text(
+                            'Suggestion only. Not reserved or paid. Availability and price are checked again in checkout.'),
+                        FilledButton(
+                            onPressed:
+                                onReviewBooking == null || suggestion.expired
+                                    ? null
+                                    : () => onReviewBooking!(suggestion),
+                            child: Text(suggestion.expired
+                                ? 'Suggestion expired · ask for current times'
+                                : 'Review in checkout')),
+                      ])),
                 EquipmentAttachment(:final equipment) =>
                   _EquipmentCard(equipment: equipment),
                 ProgressChartAttachment(
@@ -348,8 +428,19 @@ class _Bubble extends StatelessWidget {
                     onToggleBookmark!,
                   ),
                   const SizedBox(width: 12),
-                  _tinyAction(Icons.thumb_up_outlined, 'Helpful',
-                      () => showToast(context, 'Thanks for the feedback.')),
+                  _tinyAction(
+                      helpful == true
+                          ? Icons.thumb_up
+                          : Icons.thumb_up_outlined,
+                      'Helpful',
+                      () => onRate?.call(true)),
+                  const SizedBox(width: 12),
+                  _tinyAction(
+                      helpful == false
+                          ? Icons.thumb_down
+                          : Icons.thumb_down_outlined,
+                      'Not helpful',
+                      () => onRate?.call(false)),
                 ],
               ),
             ),
@@ -401,8 +492,17 @@ class _EquipmentCard extends StatelessWidget {
             ClipRRect(
               borderRadius:
                   const BorderRadius.vertical(top: Radius.circular(16)),
-              child: AspectRatio(
-                  aspectRatio: 16 / 9, child: _networkHero(equipment.imageUrl)),
+              child: Container(
+                color: const Color(0xFFF3F4F8),
+                child: AspectRatio(
+                  aspectRatio: 16 / 9,
+                  child: Padding(
+                    padding: const EdgeInsets.all(6.0),
+                    child:
+                        _networkHero(equipment.imageUrl, fit: BoxFit.contain),
+                  ),
+                ),
+              ),
             ),
             Padding(
               padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),

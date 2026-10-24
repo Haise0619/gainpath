@@ -1,106 +1,65 @@
 import 'package:flutter/material.dart';
-import '../../application/membership_bloc.dart';
-import 'package:gainpath_ui/gainpath_ui.dart';
-import '../shared/billplz_checkout_screen.dart';
-import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:gainpath_domain/membership.dart';
+import '../../../../app/di/membership_factory.dart';
+import '../shared/membership_data_view.dart';
+import 'purchase_plan_screen.dart';
 
-/// AD-M4.3 — Renew Membership Subscription. Reads the member's actual
-/// current plan rather than a fixed sample, so this stays correct however
-/// many tiers exist or whichever one is active.
 class RenewScreen extends StatelessWidget {
-  const RenewScreen({super.key, this.connected = false});
+  const RenewScreen({super.key, this.connected = false, this.repository});
   final bool connected;
-
-  MembershipPlan _plan(BuildContext context) {
-    final repo = context.read<MembershipRepository>();
-    return repo.membershipPlans.firstWhere((p) => p.id == repo.currentPlanId);
-  }
-
-  String get _newExpiry {
-    const months = [
-      'Jan',
-      'Feb',
-      'Mar',
-      'Apr',
-      'May',
-      'Jun',
-      'Jul',
-      'Aug',
-      'Sep',
-      'Oct',
-      'Nov',
-      'Dec'
-    ];
-    final d = DateTime.now().add(const Duration(days: 30));
-    return '${d.day} ${months[d.month - 1]} ${d.year}';
-  }
-
+  final MembershipCommerceRepository? repository;
   @override
-  Widget build(BuildContext context) {
-    final plan =
-        connected ? const MembershipPlan('-', '-', 0, '-', []) : _plan(context);
-    return Scaffold(
-      appBar: AppBar(title: const Text('Renew membership')),
-      body: PageBody(
-        children: [
-          Panel(
-            child: Column(
-              children: [
-                DetailRow('Plan', plan.name),
-                const Divider(height: 20),
-                DetailRow('Period', connected ? '-' : '1 month'),
-                const Divider(height: 20),
-                DetailRow('New expiry', connected ? '-' : _newExpiry),
-                const Divider(height: 20),
-                DetailRow('Total',
-                    connected ? '-' : 'RM ${plan.price.toStringAsFixed(2)}'),
-              ],
-            ),
-          ),
-          const SizedBox(height: 18),
-          Panel(
-            background: AppColors.surfaceAlt,
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Icon(Icons.lock_outline_rounded,
-                    size: 18, color: AppColors.inkSoft),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    connected
-                        ? 'Payment service unavailable. No payment will be collected.'
-                        : 'Payment is handled on the provider\'s secure page. GainPath never sees or stores your card details.',
-                    style: Theme.of(context).textTheme.bodyMedium,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 18),
+  Widget build(BuildContext context) => repository != null
+      ? MembershipRepositoryGuard(
+          repository: repository!, child: _body(repository!))
+      : MembershipFeatureHost(connected: connected, builder: _body);
+  Widget _body(MembershipCommerceRepository repo) => MembershipDataView(
+      repository: repo,
+      title: 'Renew membership',
+      builder: (context, data, refresh) {
+        final entitlement = MembershipEntitlement.fromOverview(data);
+        if (!entitlement.isResolved || entitlement.historicalOnly) {
+          return [
+            const Text(
+                'Refresh online to verify your membership before renewal.')
+          ];
+        }
+        if (!entitlement.hasPaidPlan) {
+          return [
+            const Text(
+                'Free membership has no expiry. Choose a paid plan when you are ready to upgrade.')
+          ];
+        }
+        final plans = membershipRows(data['plans'])
+            .where((p) => p['planId'] == entitlement.paidPlanId);
+        if (plans.isEmpty) {
+          return [
+            const Text(
+                'Your current plan is not available for renewal. Contact your gym administrator.')
+          ];
+        }
+        final p = plans.first;
+        return [
+          Text(
+              '${entitlement.paidPlanName} · Paid expiry: ${membershipDate(entitlement.paidExpiresAtMillis)}'),
+          const SizedBox(height: 16),
+          Text(
+              'Add ${p['durationDays']} days for ${membershipMoney(p['amountMinor'])}. Any paid remaining time is preserved. Final expiry is calculated by the server when payment clears.'),
+          const SizedBox(height: 20),
           FilledButton(
-            onPressed: () async {
-              final success = await Navigator.push<bool>(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => BillplzCheckoutScreen(
-                      connected: connected,
-                      amount: plan.price,
-                      description: '${plan.name} renewal'),
-                ),
-              );
-              if (connected || success != true || !context.mounted) return;
-              context.read<MembershipBloc>().add(MembershipRenewed(plan.price));
-              Navigator.pop(context);
-              showToast(context, 'Membership renewed until $_newExpiry.');
-            },
-            child: Text(connected
-                ? 'View checkout'
-                : 'Pay RM ${plan.price.toStringAsFixed(2)}'),
-          ),
-        ],
-      ),
-    );
-  }
+              onPressed: () => Navigator.push(
+                  context,
+                  MaterialPageRoute<void>(
+                      builder: (_) => PurchasePlanScreen(
+                          plan: MembershipPlan(
+                              p['planId'] as String,
+                              p['name'] as String,
+                              (p['amountMinor'] as num) / 100,
+                              '${p['durationDays']} days',
+                              List<String>.from(p['benefits'] as List)),
+                          repository: repo,
+                          renewal: true))),
+              child: const Text('Review renewal')),
+        ];
+      });
 }

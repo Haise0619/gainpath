@@ -1,24 +1,13 @@
 import 'package:flutter/widgets.dart';
+import '../../infrastructure/firebase/firebase_google_integration.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:gainpath_data/gainpath_data.dart'
-    show BackendConfig, BackendMode, MockDataSession;
-import 'package:gainpath_data/analytics.dart';
 import 'package:gainpath_domain/analytics.dart';
-import 'package:gainpath_data/chatbot.dart';
-import 'package:gainpath_domain/chatbot.dart';
-import 'package:gainpath_data/coaching.dart';
 import 'package:gainpath_domain/coaching.dart';
-import 'package:gainpath_data/content.dart';
 import 'package:gainpath_domain/content.dart';
-import 'package:gainpath_data/gamification.dart';
 import 'package:gainpath_domain/gamification.dart';
-import 'package:gainpath_data/identity.dart';
 import 'package:gainpath_domain/identity.dart';
-import 'package:gainpath_data/membership.dart';
 import 'package:gainpath_domain/membership.dart';
-import 'package:gainpath_data/recommendation.dart';
 import 'package:gainpath_domain/recommendation.dart';
-import 'package:gainpath_data/workout.dart';
 import 'package:gainpath_domain/workout.dart';
 import 'package:gainpath_domain/gainpath_domain.dart'
     show AuthSession, SessionScope, BookingListRepository;
@@ -35,6 +24,7 @@ import '../../infrastructure/firebase/firebase_compliance_document_repository.da
 import '../../infrastructure/firebase/firebase_admin_account_contact_repository.dart';
 import '../../infrastructure/firebase/firebase_equipment_repository.dart';
 import '../../infrastructure/local/equipment_image_picker.dart';
+import '../../infrastructure/local/equipment_video_picker.dart';
 import '../../infrastructure/local/account_photo_picker.dart';
 import '../../infrastructure/firebase/firebase_admin_member_directory_repository.dart';
 import '../../infrastructure/firebase/firebase_reward_catalog_repository.dart';
@@ -42,13 +32,18 @@ import '../../infrastructure/firebase/firebase_facility_settings_repository.dart
 import 'admin_presentation_dependencies.dart';
 import '../../features/analytics/application/admin_reporting_gateway.dart';
 
-/// Composition root for data access. Swap the in-memory implementations for
-/// Firebase-backed ones here without touching any screen.
+/// Session-scoped Firebase data access with neutral unavailable capabilities.
 class AppRepositories extends StatefulWidget {
   const AppRepositories({
+    Key? key,
+    required Widget child,
+    AuthSession? session,
+  }) : this.injected(key: key, child: child, session: session);
+
+  /// Explicit test/development composition may deliberately supply fakes.
+  const AppRepositories.injected({
     super.key,
     required this.child,
-    this.config = const BackendConfig(BackendMode.mock),
     this.session,
     this.tutorialRepositoryFactory,
     this.routineRepositoryFactory,
@@ -62,7 +57,6 @@ class AppRepositories extends StatefulWidget {
     this.reportingGatewayFactory,
   });
   final Widget child;
-  final BackendConfig config;
   final AuthSession? session;
   final ReportingGatewayFactory? reportingGatewayFactory;
   final TutorialRepository Function(SessionScope)? tutorialRepositoryFactory;
@@ -88,7 +82,6 @@ class AppRepositories extends StatefulWidget {
 }
 
 class _AppRepositoriesState extends State<AppRepositories> {
-  late final MockDataSession session = MockDataSession();
   CatalogEditSessionGuard? _catalogGuard;
   CatalogEditSessionGuard? _routineGuard;
   CatalogEditSessionGuard? _coachGuard;
@@ -235,108 +228,69 @@ class _AppRepositoriesState extends State<AppRepositories> {
 
   @override
   Widget build(BuildContext context) {
-    widget.config.validate();
-    if (widget.config.isFirebase && widget.session == null) return widget.child;
-    final scope = widget.session?.scope;
-    if (widget.config.isFirebase) {
-      AuthBloc? auth;
-      try {
-        auth = context.read<AuthBloc?>();
-      } catch (_) {
-        auth = null;
-      }
-      bool isCurrent() => auth != null && auth.state.session == widget.session;
-      final deps = AdminPresentationDependencies.fromScope(
-        scope: scope!,
-        isCurrent: isCurrent,
-        session: widget.session,
-        reportingFactory: widget.reportingGatewayFactory,
-      );
-      return MultiRepositoryProvider(providers: [
-        RepositoryProvider<AdminPresentationDependencies>.value(value: deps),
-        RepositoryProvider<AdminReportingGateway>.value(value: deps.reportingGateway),
-        RepositoryProvider<AnalyticsRepository>.value(value: deps.analytics),
-        RepositoryProvider<RecommendationRepository>.value(value: deps.recommendation),
-        RepositoryProvider<MembershipRepository>.value(value: deps.membership),
-        RepositoryProvider<BookingRepository>.value(value: deps.booking),
-        RepositoryProvider<AvailabilityRepository>.value(value: deps.availability),
-        RepositoryProvider<CoachRepository>.value(value: deps.coach),
-        RepositoryProvider<UserAccountRepository>.value(value: deps.userAccount),
-        RepositoryProvider<FacilitySettingsRepository>(
-            create: (_) => _createFacilitySettings(scope)),
-        RepositoryProvider<RewardCatalogRepository>(
-            create: (_) => _createRewardCatalog(scope)),
-        RepositoryProvider<AdminMemberDirectoryRepository>(
-            create: (_) => _createMemberDirectory(scope)),
-        RepositoryProvider<AccountPhotoPicker>(
-            create: (_) => LocalAccountPhotoPicker()),
-        RepositoryProvider<AdminAccountContactRepository>(
-            create: (_) => _createAccountContact(scope)),
-        RepositoryProvider<ComplianceDocumentRepository>(
-            create: (_) => _createCompliance(scope)),
-        RepositoryProvider<ChatbotDisclaimerRepository>(
-            create: (_) => _createDisclaimer(scope)),
-        RepositoryProvider<EquipmentImagePicker>(
-            create: (_) => LocalEquipmentImagePicker()),
-        RepositoryProvider<EquipmentRepository>(
-            create: (_) => _createEquipment(scope)),
-        RepositoryProvider<ContentRepository>(
-            create: (_) => _createAnnouncements(scope)),
-        RepositoryProvider<BookingListRepository>(
-            create: (_) => _createBookingList(scope)),
-        RepositoryProvider<CoachAvailabilityRepository>(
-            create: (_) => _createAvailability(scope)),
-        RepositoryProvider<CoachProfileAdminRepository>(
-            create: (_) => _createCoachDirectory(scope)),
-        RepositoryProvider<TutorialRepository>(
-            create: (_) => _createCatalog(scope)),
-        RepositoryProvider<RoutineTemplateRepository>(
-            create: (context) =>
-                _createRoutines(scope, context.read<TutorialRepository>())),
-      ], child: widget.child);
+    if (widget.session == null) return widget.child;
+    final scope = widget.session!.scope;
+    AuthBloc? auth;
+    try {
+      auth = context.read<AuthBloc?>();
+    } catch (_) {
+      auth = null;
     }
-    return MultiRepositoryProvider(
-      providers: [
-        RepositoryProvider<AdminReportingGateway>(
-            create: (_) => const UnavailableAdminReportingGateway()),
-        RepositoryProvider<MemberProfileRepository>(
-            create: (_) => InMemoryMemberProfileRepository(session: session)),
-        RepositoryProvider<CoachRepository>(
-            create: (_) => InMemoryCoachRepository(session: session)),
-        RepositoryProvider<UserAccountRepository>(
-            create: (_) => InMemoryUserAccountRepository(session: session)),
-        RepositoryProvider<WorkoutRepository>(
-            create: (_) => InMemoryWorkoutRepository(session: session)),
-        RepositoryProvider<EquipmentRepository>(
-            create: (_) => InMemoryEquipmentRepository(session: session)),
-        RepositoryProvider<TutorialRepository>(
-            create: (_) => widget.config.isFirebase
-                ? FirebaseExerciseCatalogRepository(scope: scope!)
-                : InMemoryTutorialRepository(session: session)),
-        RepositoryProvider<RoutineTemplateRepository>(
-            create: (context) => widget.config.isFirebase
-                ? FirebaseRoutineTemplateRepository(
-                    scope: scope!,
-                    exerciseCatalog: context.read<TutorialRepository>())
-                : InMemoryRoutineTemplateRepository(session: session)),
-        RepositoryProvider<GamificationRepository>(
-            create: (_) => InMemoryGamificationRepository(session: session)),
-        RepositoryProvider<BookingRepository>(
-            create: (_) => InMemoryBookingRepository(session: session)),
-        RepositoryProvider<AvailabilityRepository>(
-            create: (_) => InMemoryAvailabilityRepository(session: session)),
-        RepositoryProvider<MembershipRepository>(
-            create: (_) => InMemoryMembershipRepository(session: session)),
-        RepositoryProvider<ChatRepository>(
-            create: (_) => InMemoryChatRepository(session: session)),
-        RepositoryProvider<AnalyticsRepository>(
-            create: (_) => InMemoryAnalyticsRepository(session: session)),
-        RepositoryProvider<RecommendationRepository>(
-            create: (_) => InMemoryRecommendationRepository(session: session)),
-        RepositoryProvider<ContentRepository>(
-            create: (_) => InMemoryContentRepository(session: session)),
-      ],
-      child: widget.child,
+    bool isCurrent() => auth != null && auth.state.session == widget.session;
+    final deps = AdminPresentationDependencies.fromScope(
+      scope: scope,
+      isCurrent: isCurrent,
+      session: widget.session,
+      reportingFactory: widget.reportingGatewayFactory,
     );
+    return MultiRepositoryProvider(providers: [
+      RepositoryProvider<AdminPresentationDependencies>.value(value: deps),
+      RepositoryProvider<AdminReportingGateway>.value(
+          value: deps.reportingGateway),
+      RepositoryProvider<AnalyticsRepository>.value(value: deps.analytics),
+      RepositoryProvider<RecommendationRepository>.value(
+          value: deps.recommendation),
+      RepositoryProvider<MembershipRepository>.value(value: deps.membership),
+      RepositoryProvider<BookingRepository>.value(value: deps.booking),
+      RepositoryProvider<AvailabilityRepository>.value(
+          value: deps.availability),
+      RepositoryProvider<CoachRepository>.value(value: deps.coach),
+      RepositoryProvider<UserAccountRepository>.value(value: deps.userAccount),
+      RepositoryProvider<GoogleIntegrationRepository>(
+          create: (_) => firebaseGoogleIntegration(scope, isCurrent)),
+      RepositoryProvider<FacilitySettingsRepository>(
+          create: (_) => _createFacilitySettings(scope)),
+      RepositoryProvider<RewardCatalogRepository>(
+          create: (_) => _createRewardCatalog(scope)),
+      RepositoryProvider<AdminMemberDirectoryRepository>(
+          create: (_) => _createMemberDirectory(scope)),
+      RepositoryProvider<AccountPhotoPicker>(
+          create: (_) => LocalAccountPhotoPicker()),
+      RepositoryProvider<AdminAccountContactRepository>(
+          create: (_) => _createAccountContact(scope)),
+      RepositoryProvider<ComplianceDocumentRepository>(
+          create: (_) => _createCompliance(scope)),
+      RepositoryProvider<ChatbotDisclaimerRepository>(
+          create: (_) => _createDisclaimer(scope)),
+      RepositoryProvider<EquipmentVideoPicker>(
+          create: (_) => LocalEquipmentVideoPicker()),
+      RepositoryProvider<EquipmentImagePicker>(
+          create: (_) => LocalEquipmentImagePicker()),
+      RepositoryProvider<EquipmentRepository>(
+          create: (_) => _createEquipment(scope)),
+      RepositoryProvider<ContentRepository>(
+          create: (_) => _createAnnouncements(scope)),
+      RepositoryProvider<BookingListRepository>(
+          create: (_) => _createBookingList(scope)),
+      RepositoryProvider<CoachAvailabilityRepository>(
+          create: (_) => _createAvailability(scope)),
+      RepositoryProvider<CoachProfileAdminRepository>(
+          create: (_) => _createCoachDirectory(scope)),
+      RepositoryProvider<TutorialRepository>(
+          create: (_) => _createCatalog(scope)),
+      RepositoryProvider<RoutineTemplateRepository>(
+          create: (context) =>
+              _createRoutines(scope, context.read<TutorialRepository>())),
+    ], child: widget.child);
   }
 }

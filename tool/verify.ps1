@@ -35,9 +35,9 @@ try {
   }
   if ($BuildApps) {
     Push-Location apps/admin_web
-    try { Invoke-Checked flutter @('build', 'web', '--debug', '--no-pub', '--dart-define=BACKEND=mock') } finally { Pop-Location }
+    try { Invoke-Checked flutter @('build', 'web', '--debug', '--no-pub') } finally { Pop-Location }
     Push-Location apps/mobile
-    try { Invoke-Checked flutter @('build', 'apk', '--debug', '--no-pub', '--dart-define=BACKEND=mock') } finally { Pop-Location }
+    try { Invoke-Checked flutter @('build', 'apk', '--debug', '--no-pub') } finally { Pop-Location }
   }
   if ($Backend -or $Emulators) {
     Push-Location functions

@@ -55,9 +55,8 @@ void main() {
     final store = InMemoryWorkoutSessionStore(scope: session.scope),
         sync = MemoryRealWorkoutSyncStore(scope: session.scope);
     final before = (await sync.read()).toJson();
-    await tester.pumpWidget(GainPathMobileApp(
+    await tester.pumpWidget(GainPathMobileApp.injected(
         authRepository: auth,
-        backendConfig: const BackendConfig(BackendMode.firebase),
         profileRepositoryFactory: profiles.repository,
         routineLoaderFactory: (_) async => null,
         equipmentReaderFactory: (scope, active) {

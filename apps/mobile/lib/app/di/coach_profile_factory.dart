@@ -1,3 +1,6 @@
+import '../../infrastructure/firebase/firebase_module9_repository.dart';
+import '../../infrastructure/firebase/firebase_google_integration.dart';
+import '../../infrastructure/android_coach_statement_exporter.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../infrastructure/firebase/firebase_consultation_notes_repository.dart';
@@ -119,8 +122,10 @@ Widget buildFirebaseCoachShell(AuthSession session,
                 coachId: session.userId,
                 repository: createBookingList(session, isCurrent, bookingListFactory),
                 isCurrent: isCurrent),
-            liveAvailabilityBuilder: (_) => AvailabilityScreen(liveRepository: availabilityFactory?.call(session.scope, isCurrent) ?? FirebaseCoachAvailabilityRepository(scope: session.scope, isCurrent: isCurrent), coachId: session.userId, isCurrent: isCurrent),
+            liveAvailabilityBuilder: (_) => AvailabilityScreen(googleIntegration: firebaseGoogleIntegration(session.scope, isCurrent), liveRepository: availabilityFactory?.call(session.scope, isCurrent) ?? FirebaseCoachAvailabilityRepository(scope: session.scope, isCurrent: isCurrent), coachId: session.userId, isCurrent: isCurrent),
             liveEarningsBuilder: (_) => LiveCoachEarningsView(
+                performance: FirebaseModule9Repository(scope: session.scope, isCurrent: isCurrent),
+                exportPdf: const AndroidCoachStatementExporter().save,
                 scope: session.scope,
                 isCurrent: isCurrent,
                 coachId: session.userId,

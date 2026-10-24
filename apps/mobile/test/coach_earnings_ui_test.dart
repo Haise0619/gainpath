@@ -14,6 +14,7 @@ void main() {
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
 
+    List<String>? exportedLines;
     final completedSession = Booking(
       id: 'bk-comp-1',
       coachId: 'coach-1',
@@ -30,7 +31,21 @@ void main() {
       MaterialApp(
         home: EarningsScreen(
           connected: true,
-          bookings: [completedSession],
+          exportPdf: (lines) async {
+            exportedLines = lines;
+            return true;
+          },
+          bookings: List.generate(
+              25,
+              (i) => Booking(
+                  id: 'bk-comp-${i + 1}',
+                  coachId: completedSession.coachId,
+                  coachName: completedSession.coachName,
+                  memberName: completedSession.memberName,
+                  start: completedSession.start,
+                  branch: completedSession.branch,
+                  status: BookingStatus.completed,
+                  fee: 50)),
           rating: 4.9,
           reviews: 8,
         ),
@@ -41,8 +56,8 @@ void main() {
 
     expect(find.text('TOTAL EARNED'), findsOneWidget);
     // 50.0 fee * 70% commission = 35 or 50 fee
-    expect(find.text('RM 50'), findsWidgets);
-    expect(find.text('1 sessions completed'), findsOneWidget);
+    expect(find.text('RM 1250.00'), findsWidgets);
+    expect(find.text('25 sessions completed'), findsOneWidget);
     expect(find.text('4.9'), findsOneWidget);
     expect(find.text('8'), findsOneWidget);
 
@@ -52,13 +67,14 @@ void main() {
     await tester.tap(exportIcon);
     await tester.pumpAndSettle();
 
-    expect(find.text('Performance Statement'), findsOneWidget);
-    expect(find.text('Statement period'), findsOneWidget);
-    expect(find.text('Export Statement PDF'), findsOneWidget);
-
-    await tester.tap(find.text('Export Statement PDF'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Statement PDF exported successfully.'), findsOneWidget);
+    expect(find.text('Statement PDF saved.'), findsOneWidget);
+    expect(exportedLines, isNotNull);
+    expect(
+        exportedLines!.where((line) => line.contains('bk-comp-')).length, 25);
+    expect(exportedLines!.any((line) => line.contains('bk-comp-1')), isTrue);
+    expect(exportedLines!.any((line) => line.contains('Verified for Payout')),
+        isFalse);
   });
 }

@@ -63,9 +63,8 @@ void main() {
     final auth = InMemoryAuthRepository();
     final session = await auth.signIn(
         role: AppRole.admin, email: 'admin@example.test', password: 'fixture');
-    await tester.pumpWidget(GainPathAdminWebApp(
+    await tester.pumpWidget(GainPathAdminWebApp.injected(
         authRepository: auth,
-        backendConfig: const BackendConfig(BackendMode.firebase),
         accountContactFactory: (_, __) => _EmptyPhotoAccount(),
         coachRepositoryFactory: (_, current) =>
             AdminFake(session.scope)..seed(),
@@ -75,6 +74,9 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Review'));
     await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('View schedule'));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
     await tester.tap(find.text('View schedule'));
     await tester.pumpAndSettle();
     expect(find.text('Organization time: Asia/Kuala_Lumpur'), findsOneWidget);

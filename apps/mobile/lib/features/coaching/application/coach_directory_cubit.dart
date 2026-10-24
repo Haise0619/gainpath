@@ -20,6 +20,7 @@ class CoachDirectoryCubit extends Cubit<CoachDirectoryState> {
   final bool Function() isCurrent;
   int _generation = 0;
   bool _invalidated = false;
+  Future<void>? _refreshing;
   bool get _allowed => !_invalidated && isCurrent();
   bool _current(int n) => !isClosed && _allowed && n == _generation;
   void invalidate() {
@@ -31,7 +32,23 @@ class CoachDirectoryCubit extends Cubit<CoachDirectoryState> {
         message: 'Coach directory unavailable for this session.'));
   }
 
-  Future<void> refresh() async {
+  Future<void> refresh() {
+    if (isClosed) return Future.value();
+    if (!_allowed) {
+      invalidate();
+      return Future.value();
+    }
+    final pending = _refreshing;
+    if (pending != null) return pending;
+    late final Future<void> operation;
+    operation = _refresh().whenComplete(() {
+      if (identical(_refreshing, operation)) _refreshing = null;
+    });
+    _refreshing = operation;
+    return operation;
+  }
+
+  Future<void> _refresh() async {
     if (isClosed) return;
     if (!_allowed) {
       invalidate();

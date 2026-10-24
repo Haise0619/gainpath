@@ -54,17 +54,15 @@ void main() {
             'safe message', 'Too many requests. Wait before trying again.')));
   });
 
-  Future<void> open(WidgetTester tester, Future<void> Function(String) sender,
-      {BackendMode mode = BackendMode.firebase}) async {
+  Future<void> open(
+      WidgetTester tester, Future<void> Function(String) sender) async {
     tester.view.physicalSize = const Size(1200, 1000);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
     final repository = InMemoryAuthRepository();
     addTearDown(repository.dispose);
-    await tester.pumpWidget(GainPathAdminWebApp(
-        authRepository: repository,
-        backendConfig: BackendConfig(mode),
-        passwordResetSender: sender));
+    await tester.pumpWidget(GainPathAdminWebApp.injected(
+        authRepository: repository, passwordResetSender: sender));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField).first, ' admin@example.com ');
     await tester.tap(find.text('Forgot password?'));
@@ -109,16 +107,6 @@ void main() {
     await tester.tap(find.text('Send reset link'));
     await tester.pumpAndSettle();
     expect(find.textContaining('If an account exists'), findsOneWidget);
-    await tester.pumpWidget(const SizedBox());
-  });
-
-  testWidgets('mock Admin reset remains explicitly simulated', (tester) async {
-    var sends = 0;
-    await open(tester, (_) async => sends++, mode: BackendMode.mock);
-    await tester.tap(find.text('Send reset link'));
-    await tester.pumpAndSettle();
-    expect(sends, 0);
-    expect(find.text('Demo only: no email was sent.'), findsOneWidget);
     await tester.pumpWidget(const SizedBox());
   });
 }

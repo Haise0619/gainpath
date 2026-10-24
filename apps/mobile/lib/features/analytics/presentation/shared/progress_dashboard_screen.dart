@@ -259,7 +259,7 @@ class _ProgressDashboardScreenState extends State<ProgressDashboardScreen>
                       context,
                       MaterialPageRoute(
                           builder: (_) =>
-                              GoalProgressScreen(live: local != null))),
+                              GoalProgressScreen(live: local != null, localProgress: local))),
                 ),
                 const SizedBox(height: 10),
                 ReportPreviewTile(

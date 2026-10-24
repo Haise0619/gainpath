@@ -2,23 +2,29 @@ import 'package:flutter/material.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
 import 'package:gainpath_domain/gamification.dart';
 import 'widgets/game_media.dart';
+import '../../../../app/di/rewards_factory.dart';
 
 class VoucherScreen extends StatefulWidget {
-  final RewardItem item;
-  const VoucherScreen({super.key, required this.item});
+  final RewardItem? item;
+  final VerifiedRewardRedemption? redemption;
+  final VerifiedRewardsRepository? repository;
+  const VoucherScreen({super.key, this.item, this.redemption, this.repository})
+      : assert(item != null || (redemption != null && repository != null));
 
   @override
   State<VoucherScreen> createState() => _VoucherScreenState();
 }
 
-class _VoucherScreenState extends State<VoucherScreen> with SingleTickerProviderStateMixin {
+class _VoucherScreenState extends State<VoucherScreen>
+    with SingleTickerProviderStateMixin {
   late final AnimationController _entrance;
   late final Animation<double> _scale;
 
   @override
   void initState() {
     super.initState();
-    _entrance = AnimationController(vsync: this, duration: const Duration(milliseconds: 600));
+    _entrance = AnimationController(
+        vsync: this, duration: const Duration(milliseconds: 600));
     _scale = TweenSequence<double>([
       TweenSequenceItem(tween: Tween(begin: 0.7, end: 1.05), weight: 55),
       TweenSequenceItem(tween: Tween(begin: 1.05, end: 1.0), weight: 45),
@@ -34,6 +40,35 @@ class _VoucherScreenState extends State<VoucherScreen> with SingleTickerProvider
 
   @override
   Widget build(BuildContext context) {
+    if (widget.redemption != null) {
+      return RewardsRepositoryGuard(
+          repository: widget.repository!,
+          child: Scaffold(
+              appBar: AppBar(title: const Text('Your reward voucher')),
+              body: PageBody(children: [
+                Panel(
+                    child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                      Text(widget.redemption!.title,
+                          style: Theme.of(context).textTheme.titleLarge),
+                      const SizedBox(height: 16),
+                      SelectableText(widget.redemption!.redemptionId),
+                      const SizedBox(height: 12),
+                      Text(widget.redemption!.status == 'fulfilled'
+                          ? 'Fulfilled'
+                          : 'Issued'),
+                      Text('${widget.redemption!.points} points redeemed'),
+                      const SizedBox(height: 12),
+                      const Text(
+                          'Show this reference at the front desk. Staff must verify its current status before fulfilment.'),
+                    ])),
+                const SizedBox(height: 16),
+                FilledButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('Done'))
+              ])));
+    }
     return Scaffold(
       appBar: AppBar(title: const Text('Your voucher')),
       body: PageBody(
@@ -45,10 +80,13 @@ class _VoucherScreenState extends State<VoucherScreen> with SingleTickerProvider
                 children: [
                   ClipRRect(
                     borderRadius: BorderRadius.circular(14),
-                    child: SizedBox(height: 110, width: double.infinity, child: gameHero(widget.item.imageUrl)),
+                    child: SizedBox(
+                        height: 110,
+                        width: double.infinity,
+                        child: gameHero(widget.item!.imageUrl)),
                   ),
                   const SizedBox(height: 16),
-                  Text(widget.item.title,
+                  Text(widget.item!.title,
                       style: Theme.of(context).textTheme.titleLarge),
                   const SizedBox(height: 20),
                   Container(

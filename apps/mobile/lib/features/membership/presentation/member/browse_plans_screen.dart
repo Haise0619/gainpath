@@ -1,52 +1,88 @@
 import 'package:flutter/material.dart';
+import 'package:gainpath_domain/membership.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
+import '../../../../app/di/membership_factory.dart';
+import '../shared/membership_data_view.dart';
 import 'purchase_plan_screen.dart';
 import 'widgets/plan_card.dart';
-import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:gainpath_domain/membership.dart';
 
-/// AD-M4.1 — Purchase Membership Plan (browse step). A dedicated screen
-/// for comparing tiers, split out from the dashboard so switching plans
-/// reads as a deliberate decision rather than one option buried in a long
-/// account page.
 class BrowsePlansScreen extends StatelessWidget {
-  const BrowsePlansScreen({super.key, this.connected = false});
+  const BrowsePlansScreen({super.key, this.connected = false, this.repository});
   final bool connected;
-
+  final MembershipCommerceRepository? repository;
   @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Membership plans')),
-      body: PageBody(
-        children: [
-          Text(
-              connected
-                  ? 'Plan catalogue unavailable. -'
-                  : 'Compare plans and switch anytime. Changes apply from your next billing date.',
-              style: Theme.of(context).textTheme.bodyLarge),
+  Widget build(BuildContext context) => repository != null
+      ? MembershipRepositoryGuard(
+          repository: repository!, child: _body(repository!))
+      : MembershipFeatureHost(connected: connected, builder: _body);
+  Widget _body(MembershipCommerceRepository repo) => MembershipDataView(
+      repository: repo,
+      title: 'Membership plans',
+      builder: (context, data, refresh) {
+        final entitlement = MembershipEntitlement.fromOverview(data);
+        final plans = membershipRows(data['plans'])
+            .where((p) => ['basic', 'premium'].contains(p['planId']))
+            .toList();
+        return [
+          const Text(
+              'Membership applies across GainPath branches. Paid prices and benefits come from the plan catalogue.'),
           const SizedBox(height: 20),
-          ...(connected
-                  ? const [MembershipPlan('-', '-', 0, '-', ['-', '-', '-', '-']), MembershipPlan('-', '-', 0, '-', ['-', '-', '-', '-'], popular: true), MembershipPlan('-', '-', 0, '-', ['-', '-', '-', '-'])]
-                  : context.read<MembershipRepository>().membershipPlans)
-              .map((plan) {
-            final isCurrent = !connected &&
-                plan.id == context.read<MembershipRepository>().currentPlanId;
-            return Padding(
+          const Panel(
+              child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                Text('Free',
+                    style:
+                        TextStyle(fontSize: 22, fontWeight: FontWeight.w700)),
+                SizedBox(height: 8),
+                Text('No membership charge · No expiry'),
+                SizedBox(height: 8),
+                Text(
+                    'Digital fitness access follows your existing account permissions. No purchase is needed.'),
+              ])),
+          const SizedBox(height: 16),
+          if (!entitlement.isResolved)
+            const Text(
+                'Membership status unavailable. Refresh online before choosing a paid plan.'),
+          if (entitlement.historicalOnly)
+            const Text(
+                'Refresh online to verify your current membership before checkout.'),
+          if (entitlement.paidStatus == PaidMembershipStatus.active)
+            const Text(
+                'You can renew your current plan. Switching paid tiers is available after expiry.'),
+          if (plans.isEmpty)
+            const Text(
+                'No membership plans are configured. Contact your gym administrator.'),
+          ...plans.map((p) => Padding(
               padding: const EdgeInsets.only(bottom: 14),
               child: PlanCard(
-                plan: plan,
-                connected: connected,
-                isCurrent: isCurrent,
-                onSelect: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                        builder: (_) => PurchasePlanScreen(
-                            plan: plan, connected: connected))),
-              ),
-            );
-          }),
-        ],
-      ),
-    );
-  }
+                plan: MembershipPlan(
+                    p['planId'] as String,
+                    p['name'] as String,
+                    (p['amountMinor'] as num) / 100,
+                    '${p['durationDays']} days',
+                    List<String>.from(p['benefits'] as List)),
+                periodLabel: '/ ${p['durationDays']} days',
+                isCurrent: false,
+                onSelect: !entitlement.canStartCheckout ||
+                        (entitlement.paidStatus ==
+                                PaidMembershipStatus.active &&
+                            p['planId'] != entitlement.paidPlanId)
+                    ? null
+                    : () => Navigator.push(
+                        context,
+                        MaterialPageRoute<void>(
+                            builder: (_) => PurchasePlanScreen(
+                                plan: MembershipPlan(
+                                    p['planId'] as String,
+                                    p['name'] as String,
+                                    (p['amountMinor'] as num) / 100,
+                                    '${p['durationDays']} days',
+                                    List<String>.from(p['benefits'] as List)),
+                                repository: repo,
+                                renewal:
+                                    entitlement.paidPlanId == p['planId']))),
+              ))),
+        ];
+      });
 }

@@ -1,5 +1,3 @@
-import 'dart:convert';
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:gainpath_domain/coaching.dart';
 import 'package:syncfusion_flutter_charts/charts.dart' hide CornerStyle;
@@ -70,10 +68,14 @@ class EarningsScreen extends StatefulWidget {
   const EarningsScreen(
       {super.key,
       this.connected = false,
+      this.report,
+      this.exportPdf,
       this.bookings,
       this.rating,
       this.reviews});
   final bool connected;
+  final CoachReport? report;
+  final Future<bool> Function(List<String>)? exportPdf;
   final List<Booking>? bookings;
   final double? rating;
   final int? reviews;
@@ -85,162 +87,46 @@ class EarningsScreen extends StatefulWidget {
 class _EarningsScreenState extends State<EarningsScreen> {
   int? _expandedWeek;
 
-  void _exportStatement(BuildContext context, List<Booking> completed, double totalEarned) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      builder: (ctx) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  const Icon(Icons.receipt_long, color: AppColors.primary),
-                  const SizedBox(width: 8),
-                  Text('Performance Statement', style: Theme.of(ctx).textTheme.titleLarge),
-                ],
-              ),
-              const SizedBox(height: 16),
-              DetailRow('Statement period', 'Past 30 Days'),
-              DetailRow('Completed sessions', completed.length.toString()),
-              DetailRow('Total session revenue', 'RM ' + totalEarned.toStringAsFixed(2)),
-              const Divider(height: 24),
-              DetailRow('Payout status', totalEarned > 0 ? 'Verified for disbursement' : 'No earned revenue'),
-              const SizedBox(height: 8),
-              const Text(
-                'Platform fee reconciliation and disbursements follow your organization coaching agreement.',
-                style: TextStyle(fontSize: 11, color: AppColors.inkSoft),
-              ),
-              const SizedBox(height: 20),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton.icon(
-                  onPressed: () {
-                    File? file;
-                    String? error;
-                    try {
-                      file = _generatePdf(
-                        completedCount: completed.length,
-                        totalRevenue: totalEarned,
-                        sessions: completed,
-                      );
-                    } catch (e) {
-                      error = e.toString();
-                    }
-                    Navigator.pop(ctx);
-                    if (error != null) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text('Statement export failed: $error'),
-                          backgroundColor: AppColors.danger,
-                        ),
-                      );
-                    } else if (file != null) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('Statement PDF exported successfully.'),
-                        ),
-                      );
-                      showDialog(
-                        context: context,
-                        builder: (dlgCtx) => AlertDialog(
-                          title: const Text('Statement Exported'),
-                          content: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text('Performance statement PDF saved:'),
-                              const SizedBox(height: 10),
-                              SelectableText(
-                                file!.path,
-                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
-                              ),
-                            ],
-                          ),
-                          actions: [
-                            TextButton(
-                              onPressed: () => Navigator.pop(dlgCtx),
-                              child: const Text('Done'),
-                            ),
-                          ],
-                        ),
-                      );
-                    }
-                  },
-                  icon: const Icon(Icons.download),
-                  label: const Text('Export Statement PDF'),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-
-  File _generatePdf({
-    required int completedCount,
-    required double totalRevenue,
-    required List<Booking> sessions,
-  }) {
-    final buffer = StringBuffer();
-    final objects = <int>[];
-
-    void addObj(String content) {
-      objects.add(buffer.length);
-      buffer.write('${objects.length} 0 obj\n$content\nendobj\n');
+  bool _exporting = false;
+  Future<void> _exportStatement(
+      BuildContext context, List<Booking> completed, double totalEarned) async {
+    if (_exporting) return;
+    if (widget.exportPdf == null) {
+      showUnavailable(context);
+      return;
     }
-
-    buffer.write('%PDF-1.4\n');
-    addObj('<< /Type /Catalog /Pages 2 0 R >>');
-    addObj('<< /Type /Pages /Kids [3 0 R] /Count 1 >>');
-    addObj('<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>');
-    addObj('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>');
-
-    final stream = StringBuffer();
-    stream.writeln('BT');
-    stream.writeln('/F1 18 Tf');
-    stream.writeln('50 740 Td (GainPath - Coach Performance Statement) Tj');
-    stream.writeln('/F1 11 Tf');
-    stream.writeln('0 -25 Td (Statement Period: Past 30 Days) Tj');
-    stream.writeln('0 -18 Td (Generated: ${DateTime.now().toIso8601String().split('T')[0]}) Tj');
-    stream.writeln('0 -30 Td (Financial Summary) Tj');
-    stream.writeln('/F1 10 Tf');
-    stream.writeln('0 -18 Td (Completed Sessions: $completedCount) Tj');
-    stream.writeln('0 -16 Td (Total Session Revenue: RM ${totalRevenue.toStringAsFixed(2)}) Tj');
-    stream.writeln('0 -16 Td (Disbursement Status: Verified for Payout) Tj');
-    stream.writeln('0 -30 Td (Completed Sessions Breakdown) Tj');
-    for (final b in sessions.take(20)) {
-      final name = b.memberName.replaceAll(RegExp(r'[()]'), '');
-      stream.writeln('0 -16 Td ($name | RM ${b.fee.toStringAsFixed(2)}) Tj');
+    final report = widget.report;
+    final lines = <String>[
+      'GainPath - Coach Performance Statement',
+      report == null
+          ? 'Statement period: Past 30 Days'
+          : 'Period: ${report.firstDate} to ${report.throughDate}',
+      if (report != null) 'Sandbox | MYR | Policy: ${report.policyVersion}',
+      'Completed sessions: ${completed.length}',
+      if (report != null)
+        'Eligible cleared session revenue: RM ${(report.grossMinor / 100).toStringAsFixed(2)}',
+      if (report != null)
+        'Platform share: RM ${(report.platformMinor / 100).toStringAsFixed(2)}',
+      'Coach earnings: RM ${totalEarned.toStringAsFixed(2)}',
+      if (report != null)
+        'Excluded/reversed earnings: RM ${(report.reversedMinor / 100).toStringAsFixed(2)}',
+      'Payout status: Not available. Calculated earnings do not confirm disbursement.',
+      'Average rating: ${widget.rating?.toStringAsFixed(2) ?? "Not rated"} | Reviews: ${widget.reviews ?? 0}',
+      '',
+      'Session breakdown: date | booking | Member | Coach earnings',
+      ...completed.map((b) =>
+          '${b.start.toIso8601String().split("T")[0]} | ${b.id} | ${b.memberName} | RM ${b.fee.toStringAsFixed(2)}'),
+    ];
+    setState(() => _exporting = true);
+    try {
+      final saved = await widget.exportPdf!(lines);
+      if (mounted && saved) showToast(context, 'Statement PDF saved.');
+    } catch (_) {
+      if (mounted)
+        showToast(context, 'Statement could not be saved. Please retry.');
+    } finally {
+      if (mounted) setState(() => _exporting = false);
     }
-    stream.writeln('ET');
-
-    final streamBytes = utf8.encode(stream.toString());
-    addObj('<< /Length ${streamBytes.length} >>\nstream\n${stream.toString()}endstream');
-
-    final startXref = buffer.length;
-    buffer.write('xref\n0 ${objects.length + 1}\n0000000000 65535 f \n');
-    for (final offset in objects) {
-      buffer.write(offset.toString().padLeft(10, '0') + ' 00000 n \n');
-    }
-    buffer.write('trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n$startXref\n%%EOF\n');
-
-    Directory dir = Directory.systemTemp;
-    if (!Platform.environment.containsKey('FLUTTER_TEST')) {
-      final downloadDir = Directory('/sdcard/Download');
-      if (downloadDir.existsSync()) {
-        dir = downloadDir;
-      }
-    }
-    final timestamp = DateTime.now().millisecondsSinceEpoch;
-    final file = File('${dir.path}/statement_$timestamp.pdf');
-    file.writeAsBytesSync(utf8.encode(buffer.toString()), flush: true);
-    return file;
   }
 
   List<_WeekBucket> _buildWeeks(List<Booking> completed) {
@@ -302,8 +188,8 @@ class _EarningsScreenState extends State<EarningsScreen> {
         actions: [
           IconButton(
             icon: const Icon(Icons.ios_share_rounded),
-            tooltip: 'Export statement',
-            onPressed: available && completed.isNotEmpty
+            tooltip: _exporting ? 'Saving statement' : 'Export statement',
+            onPressed: !_exporting && available && completed.isNotEmpty
                 ? () => _exportStatement(context, completed, totalEarned)
                 : () => showUnavailable(context),
           ),
@@ -312,7 +198,10 @@ class _EarningsScreenState extends State<EarningsScreen> {
       body: PageBody(
         children: [
           if (widget.connected && completed.isEmpty)
-            const Padding(padding: EdgeInsets.only(bottom: 12), child: Text('Ratings, commission earnings and statements reflect verified completed sessions. Pending holds and future bookings are not earned income.')),
+            const Padding(
+                padding: EdgeInsets.only(bottom: 12),
+                child: Text(
+                    'Ratings, commission earnings and statements reflect verified completed sessions. Pending holds and future bookings are not earned income.')),
           Panel(
             background: AppColors.primary,
             child: Column(
@@ -325,7 +214,7 @@ class _EarningsScreenState extends State<EarningsScreen> {
                         fontWeight: FontWeight.w700,
                         color: Colors.white70)),
                 const SizedBox(height: 6),
-                Text(available ? 'RM ${totalEarned.toStringAsFixed(0)}' : '-',
+                Text(available ? 'RM ${totalEarned.toStringAsFixed(2)}' : '-',
                     style: const TextStyle(
                         fontSize: 34,
                         fontWeight: FontWeight.w800,
@@ -362,7 +251,7 @@ class _EarningsScreenState extends State<EarningsScreen> {
               Expanded(
                   child: StatTile(
                       available
-                          ? 'RM ${avgPerSession.toStringAsFixed(0)}'
+                          ? 'RM ${avgPerSession.toStringAsFixed(2)}'
                           : '-',
                       'Avg / session',
                       compact: true)),
@@ -370,7 +259,7 @@ class _EarningsScreenState extends State<EarningsScreen> {
               Expanded(
                   child: StatTile(
                       available
-                          ? 'RM ${bestWeek.total.toStringAsFixed(0)}'
+                          ? 'RM ${bestWeek.total.toStringAsFixed(2)}'
                           : '-',
                       'Best week',
                       compact: true,
@@ -550,7 +439,7 @@ class _EarningsScreenState extends State<EarningsScreen> {
                           ],
                         ),
                       ),
-                      Text('RM ${revenue.toStringAsFixed(0)}',
+                      Text('RM ${revenue.toStringAsFixed(2)}',
                           style: const TextStyle(
                               fontSize: 14.5,
                               fontWeight: FontWeight.w700,
@@ -587,7 +476,7 @@ class _EarningsScreenState extends State<EarningsScreen> {
                             ],
                           ),
                         ),
-                        Text('RM ${b.fee.toStringAsFixed(0)}',
+                        Text('RM ${b.fee.toStringAsFixed(2)}',
                             style: const TextStyle(
                                 fontSize: 15,
                                 fontWeight: FontWeight.w700,
@@ -607,7 +496,9 @@ class _EarningsScreenState extends State<EarningsScreen> {
                 const SizedBox(width: 10),
                 Expanded(
                   child: Text(
-                    'Figures reflect recorded completed session fees. Payment clearance and payouts are unavailable.',
+                    widget.report == null
+                        ? 'Figures reflect recorded session fees. Payout status is unavailable.'
+                        : 'Sandbox earnings use verified cleared payments and completed sessions with notes. Coach share: 80%; platform share: 20%. Refunds and payment-review cases are excluded. Calculated earnings do not confirm payout.',
                     style: Theme.of(context).textTheme.bodyMedium,
                   ),
                 ),
@@ -663,7 +554,7 @@ class _WeekDetail extends StatelessWidget {
                   ],
                 ),
               ),
-              Text('RM ${week.total.toStringAsFixed(0)}',
+              Text('RM ${week.total.toStringAsFixed(2)}',
                   style: const TextStyle(
                       fontSize: 13.5,
                       fontWeight: FontWeight.w800,
@@ -691,7 +582,7 @@ class _WeekDetail extends StatelessWidget {
                             '${b.memberName}  ·  ${_shortDate(b.start)}',
                             style: const TextStyle(fontSize: 13)),
                       ),
-                      Text('RM ${b.fee.toStringAsFixed(0)}',
+                      Text('RM ${b.fee.toStringAsFixed(2)}',
                           style: const TextStyle(
                               fontSize: 13, fontWeight: FontWeight.w700)),
                     ],

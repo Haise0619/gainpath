@@ -12,6 +12,7 @@ class CoachSpecificDateSheet extends StatefulWidget {
     required this.coachId,
     required this.isCurrent,
     this.initialDate,
+    this.initialContext,
     this.onSaved,
   });
 
@@ -19,6 +20,7 @@ class CoachSpecificDateSheet extends StatefulWidget {
   final String coachId;
   final bool Function() isCurrent;
   final String? initialDate;
+  final CoachAvailabilityContext? initialContext;
   final VoidCallback? onSaved;
 
   @override
@@ -30,7 +32,20 @@ class _CoachSpecificDateSheetState extends State<CoachSpecificDateSheet> {
     repository: widget.repository,
     coachId: widget.coachId,
     isCurrent: widget.isCurrent,
-  )..loadWeek(firstLocalDate: widget.initialDate);
+  );
+
+  @override
+  void initState() {
+    super.initState();
+    final cached = widget.initialContext;
+    if (cached != null &&
+        cached.coachId == widget.coachId &&
+        cached.days.isNotEmpty) {
+      controller.useCachedContext(cached, date: widget.initialDate);
+    } else {
+      controller.loadWeek(firstLocalDate: widget.initialDate);
+    }
+  }
 
   String? _editingDay, _branch;
   int? _editingIndex, _start, _end;
@@ -68,8 +83,17 @@ class _CoachSpecificDateSheetState extends State<CoachSpecificDateSheet> {
       _editingDay = day.localDate;
       _editingIndex = index;
       _branch = old?.branchId ?? branches.first;
-      _start = old?.startAtMillis ?? boundaries.first.atMillis;
-      _end = old?.endAtMillis ?? boundaries[1].atMillis;
+      final lastEnd = state.windows.isEmpty
+          ? null
+          : state.windows
+              .map((w) => w.endAtMillis)
+              .reduce((a, b) => a > b ? a : b);
+      _start = old?.startAtMillis ??
+          (lastEnd != null && lastEnd < boundaries.last.atMillis
+              ? lastEnd
+              : boundaries.first.atMillis);
+      _end = old?.endAtMillis ??
+          boundaries.firstWhere((b) => b.atMillis > _start!).atMillis;
     });
   }
 

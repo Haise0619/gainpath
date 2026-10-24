@@ -108,8 +108,8 @@ class _ReviewState extends State<CoachCertificationReviewPanel> {
       {String? overrideReason}) async {
     final reason = overrideReason ?? (reasons[cert['id']]?.text.trim() ?? '');
     if (decision == 'reject' && reason.isEmpty) {
-      setState(() =>
-          message = 'A reason is required to reject or revoke a certification.');
+      setState(() => message =
+          'A reason is required to reject or revoke a certification.');
       return;
     }
     final key = '${cert['id']}:${cert['revision']}:$decision:$reason';
@@ -296,8 +296,8 @@ class _ReviewState extends State<CoachCertificationReviewPanel> {
         const Divider(),
         Row(children: [
           const Expanded(
-              child: Text('Certification review',
-                  style: TextStyle(fontWeight: FontWeight.bold))),
+              child: Text('3. Certification review',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16))),
           IconButton(
               onPressed: busy ? null : reload,
               tooltip: 'Refresh certifications',
@@ -382,6 +382,8 @@ class _ReviewState extends State<CoachCertificationReviewPanel> {
                                   ),
                                   const SizedBox(height: 4),
                                   Text('Revision: ${cert['revision']}'),
+                                  Text(
+                                      'Updated: ${_timestamp(cert['updatedAtMillis'])}'),
                                   if (cert['reason'] is String &&
                                       (cert['reason'] as String).isNotEmpty)
                                     Padding(
@@ -437,13 +439,14 @@ class _ReviewState extends State<CoachCertificationReviewPanel> {
                                               size: 16,
                                               color: Colors.green.shade700),
                                           const SizedBox(width: 6),
-                                          Text(
+                                          Flexible(
+                                              child: Text(
                                             'Certification verified and approved.',
                                             style: TextStyle(
                                               color: Colors.green.shade800,
                                               fontWeight: FontWeight.w500,
                                             ),
-                                          ),
+                                          )),
                                         ],
                                       ),
                                     ),
@@ -473,13 +476,14 @@ class _ReviewState extends State<CoachCertificationReviewPanel> {
                                               size: 16,
                                               color: Colors.red.shade700),
                                           const SizedBox(width: 6),
-                                          Text(
+                                          Flexible(
+                                              child: Text(
                                             'Certification rejected.',
                                             style: TextStyle(
                                               color: Colors.red.shade800,
                                               fontWeight: FontWeight.w500,
                                             ),
-                                          ),
+                                          )),
                                         ],
                                       ),
                                     ),

@@ -9,5 +9,6 @@ class MainActivity : FlutterActivity() {
         flutterEngine.plugins.add(BlazePoseGpuPlugin())
         flutterEngine.plugins.add(WorkoutAudioPlugin())
         flutterEngine.plugins.add(PrivatePdfPlugin())
+        flutterEngine.plugins.add(CoachStatementPlugin())
     }
 }

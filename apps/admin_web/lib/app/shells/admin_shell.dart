@@ -18,6 +18,7 @@ import '../../features/content/presentation/admin/system_settings_screen.dart';
 import '../../features/identity/presentation/admin/members_screen.dart';
 import '../../features/identity/presentation/admin/coaches_screen.dart';
 import '../../features/identity/presentation/admin/coach_review_discard_guard.dart';
+import '../../features/identity/presentation/admin/coach_review_notification_button.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:gainpath_domain/identity.dart';
 import 'package:gainpath_domain/gainpath_domain.dart'
@@ -71,6 +72,8 @@ class _AdminShellState extends State<AdminShell> {
   int _index = 0;
   String? _scopedCoachIdForBookings;
   String? _scopedCoachIdForSchedule;
+  String? _notificationCoachId;
+  int _notificationReviewGeneration = 0;
   final Set<int> _visited = {0};
   final Set<String> _expanded = {'Users & Coaches'};
 
@@ -156,7 +159,10 @@ class _AdminShellState extends State<AdminShell> {
           'The safety notice shown before first use',
           ChatbotDisclaimerScreen(live: widget.liveSession != null)),
     ]),
-    _NavPage(Icons.bar_chart_outlined, Icons.bar_chart_rounded, 'Reports',
+    _NavPage(
+        Icons.bar_chart_outlined,
+        Icons.bar_chart_rounded,
+        'Reports',
         'Sales, branch performance, and analytics',
         ReportsScreen(live: widget.liveSession != null)),
     _NavPage(
@@ -213,7 +219,8 @@ class _AdminShellState extends State<AdminShell> {
   /// page in this console can point to where it sits.
   List<_Crumb> _breadcrumbs() {
     final crumbs = <_Crumb>[
-      _Crumb('Home',
+      _Crumb(
+          'Home',
           _index == 0 &&
                   _scopedCoachIdForBookings == null &&
                   _scopedCoachIdForSchedule == null
@@ -267,6 +274,20 @@ class _AdminShellState extends State<AdminShell> {
     });
   }
 
+  Future<void> _openCoachAlert(String coachId) async {
+    if (!await _coachReviewGuard.canLeave() || !mounted) return;
+    final index = _indexOfLabel('Coaches');
+    setState(() {
+      _index = index;
+      _visited.add(index);
+      _expanded.add('Users & Coaches');
+      _scopedCoachIdForBookings = null;
+      _scopedCoachIdForSchedule = null;
+      _notificationCoachId = coachId;
+      _notificationReviewGeneration++;
+    });
+  }
+
   Future<void> _signOut() async {
     if (!await _coachReviewGuard.canLeave() || !mounted) return;
     final ok = await confirmDialog(context,
@@ -307,6 +328,7 @@ class _AdminShellState extends State<AdminShell> {
                 child: Column(
                   children: [
                     _TopBar(
+                        onOpenCoachAlert: _openCoachAlert,
                         liveSession: widget.liveSession,
                         breadcrumbs: _breadcrumbs(),
                         subtitle: current.subtitle,
@@ -338,16 +360,18 @@ class _AdminShellState extends State<AdminShell> {
                                   coachId: _scopedCoachIdForSchedule!);
                             }
                             return CoachesScreen(
+                                key: ValueKey(_notificationReviewGeneration),
+                                initialCoachId: _notificationCoachId,
                                 discardGuard: _coachReviewGuard,
                                 live: true,
                                 onOpenBookings: (id) => setState(() {
-                                  _scopedCoachIdForBookings = id;
-                                  _scopedCoachIdForSchedule = null;
-                                }),
+                                      _scopedCoachIdForBookings = id;
+                                      _scopedCoachIdForSchedule = null;
+                                    }),
                                 onOpenSchedule: (id) => setState(() {
-                                  _scopedCoachIdForSchedule = id;
-                                  _scopedCoachIdForBookings = null;
-                                }));
+                                      _scopedCoachIdForSchedule = id;
+                                      _scopedCoachIdForBookings = null;
+                                    }));
                           }
                           return d.page;
                         }).toList(),
@@ -374,12 +398,14 @@ class _Crumb {
 }
 
 class _TopBar extends StatelessWidget {
+  final ValueChanged<String> onOpenCoachAlert;
   final List<_Crumb> breadcrumbs;
   final String subtitle;
   final VoidCallback onSignOut;
   final AuthSession? liveSession;
   const _TopBar(
       {required this.breadcrumbs,
+      required this.onOpenCoachAlert,
       required this.subtitle,
       this.liveSession,
       required this.onSignOut});
@@ -409,7 +435,8 @@ class _TopBar extends StatelessWidget {
                           child: Icon(Icons.chevron_right_rounded,
                               size: 16, color: AppColors.inkSoft),
                         ),
-                      _BreadcrumbSegment(crumb: breadcrumbs[i]),
+                      Flexible(
+                          child: _BreadcrumbSegment(crumb: breadcrumbs[i])),
                     ],
                   ],
                 ),
@@ -453,6 +480,8 @@ class _TopBar extends StatelessWidget {
           ),
           const SizedBox(width: 14),
           if (liveSession == null) const _NotificationButton(),
+          if (liveSession != null)
+            CoachReviewNotificationButton(onOpenCoach: onOpenCoachAlert),
           const SizedBox(width: 6),
           _ProfileMenu(onSignOut: onSignOut, liveSession: liveSession),
         ],
@@ -470,6 +499,8 @@ class _BreadcrumbSegment extends StatelessWidget {
     final current = crumb.onTap == null;
     final text = Text(
       crumb.label,
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
       style: Theme.of(context).textTheme.titleLarge?.copyWith(
             fontSize: 18,
             color: current ? AppColors.ink : AppColors.inkSoft,

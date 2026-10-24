@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-import 'package:gainpath_mobile/app/app.dart';
+import '../../support/mock_app_scope.dart';
 import 'package:gainpath_mobile/app/shells/coach_shell.dart';
 import 'package:gainpath_mobile/app/shells/member_shell.dart';
 
@@ -17,7 +17,7 @@ void main() {
     tester.view.physicalSize = physicalSize;
     tester.view.devicePixelRatio = 2;
     addTearDown(tester.view.reset);
-    await tester.pumpWidget(AppScope(child: MaterialApp(home: shell)));
+    await tester.pumpWidget(MockAppScope(child: MaterialApp(home: shell)));
     await tester.pump();
   }
 
@@ -42,5 +42,4 @@ void main() {
     await tapEveryDestination(tester);
     expect(tester.takeException(), isNull);
   });
-
 }

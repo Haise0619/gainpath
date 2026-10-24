@@ -28,10 +28,16 @@ class CoachDirectoryAdminCubit extends Cubit<CoachDirectoryAdminState> {
       : super(const CoachDirectoryAdminState());
   final CoachProfileAdminRepository repository;
   int _generation = 0;
+  Future<void>? _refreshing;
   String? _intent, _request;
   bool _current(int n) => !isClosed && n == _generation;
-  Future<void> refresh() async {
-    if (isClosed || state.busy) return;
+  Future<void> refresh() {
+    if (isClosed || state.busy) return Future.value();
+    // Share only the active read; a later explicit refresh always reads again.
+    return _refreshing ??= _refresh().whenComplete(() => _refreshing = null);
+  }
+
+  Future<void> _refresh() async {
     final n = ++_generation;
     _intent = null;
     _request = null;
@@ -45,8 +51,12 @@ class CoachDirectoryAdminCubit extends Cubit<CoachDirectoryAdminState> {
         }
         return;
       }
-      final drafts = await repository.loadDraftPage(),
-          publicProfiles = await repository.loadPublicPage();
+      late final CoachDirectoryPage<CoachProfessionalProfile> drafts;
+      late final CoachDirectoryPage<PublishedCoachProfile> publicProfiles;
+      await Future.wait<void>([
+        repository.loadDraftPage().then((page) => drafts = page),
+        repository.loadPublicPage().then((page) => publicProfiles = page),
+      ]);
       if (_current(n)) {
         emit(CoachDirectoryAdminState(
             loading: false,
@@ -176,7 +186,10 @@ class CoachDirectoryAdminCubit extends Cubit<CoachDirectoryAdminState> {
       return;
     }
     final baseline = state.review!, original = state;
-    if (action == CoachDirectoryAction.publish && !baseline.canPublish) return;
+    if (action == CoachDirectoryAction.publish &&
+        (!baseline.canPublish || !baseline.hasPublishableChanges)) {
+      return;
+    }
     if (action == CoachDirectoryAction.deactivate &&
         baseline.publication == null) {
       return;

@@ -43,6 +43,7 @@ dependencies:
   url_launcher: ^6.3.2
 
 dev_dependencies:
+  camera_platform_interface: ^2.14.0
   flutter_lints: ^3.0.0
   bloc_test: ^10.0.0
   flutter_test:

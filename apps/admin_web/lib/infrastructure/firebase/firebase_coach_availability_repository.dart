@@ -2,6 +2,7 @@ import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:gainpath_domain/coaching.dart';
 import 'package:gainpath_domain/gainpath_domain.dart' show SessionScope;
+import 'firebase_function_transport.dart';
 
 class FirebaseCoachAvailabilityRepository
     implements CoachAvailabilityRepository, CoachRosterRepository {
@@ -10,12 +11,12 @@ class FirebaseCoachAvailabilityRepository
       required this.isCurrent,
       FirebaseFunctions? functions,
       FirebaseAuth? auth})
-      : _functions = functions ?? FirebaseFunctions.instance,
+      : _functions = functions,
         _auth = auth ?? FirebaseAuth.instance;
   @override
   final SessionScope scope;
   final bool Function() isCurrent;
-  final FirebaseFunctions _functions;
+  final FirebaseFunctions? _functions;
   final FirebaseAuth _auth;
   void _check() {
     if (!isCurrent() || _auth.currentUser?.uid != scope.userId) {
@@ -27,8 +28,7 @@ class FirebaseCoachAvailabilityRepository
       String name, Map<String, dynamic> input) async {
     _check();
     try {
-      final result = await _functions
-          .httpsCallable(name)
+      final result = await firebaseCallable(name, functions: _functions)
           .call<Map<String, dynamic>>(input);
       _check();
       return result.data;

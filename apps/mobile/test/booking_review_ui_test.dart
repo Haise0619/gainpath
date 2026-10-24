@@ -105,7 +105,8 @@ void main() {
 
     await tester.pumpAndSettle();
 
-    final rateButton = find.text('Rate session');
+    final rateButton = find.text('Leave a review');
+    expect(find.text('Rate session'), findsNothing);
     expect(rateButton, findsOneWidget);
 
     await tester.tap(rateButton);
@@ -121,6 +122,9 @@ void main() {
     await tester.tap(find.text('Submit review'));
     await tester.pumpAndSettle();
 
+    expect(find.text('Leave a review'), findsNothing);
+    expect(find.text('You reviewed this session'), findsOneWidget);
+    expect(find.text(' · 5/5'), findsOneWidget);
     expect(reviewRepo.calls, 1);
     expect(reviewRepo.lastBookingId, 'bk-completed-1');
     expect(reviewRepo.lastStars, 5);

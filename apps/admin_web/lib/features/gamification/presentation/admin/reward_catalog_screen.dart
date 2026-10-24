@@ -3,6 +3,10 @@ import 'package:gainpath_ui/gainpath_ui.dart';
 import '../../../../navigation/admin_breadcrumb.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:gainpath_domain/gamification.dart';
+import 'package:gainpath_domain/identity.dart';
+import 'package:gainpath_identity/gainpath_identity.dart';
+import '../../reward_fulfilment_repository.dart';
+import 'reward_fulfilment_panel.dart';
 
 Widget _networkHero(String url, {BoxFit fit = BoxFit.cover}) {
   if (url.trim().isEmpty) {
@@ -217,6 +221,34 @@ class _RewardCatalogScreenState extends State<RewardCatalogScreen> {
                 runSpacing: 12,
                 crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
+                  OutlinedButton.icon(
+                      onPressed: () {
+                        try {
+                          final source =
+                              context.read<AdminMemberDirectoryRepository>();
+                          final auth = context.read<AuthBloc>();
+                          if (source is! RewardFulfilmentRepository) {
+                            throw StateError('Unavailable');
+                          }
+                          showDialog<void>(
+                              context: context,
+                              builder: (_) => Dialog(
+                                  child: SizedBox(
+                                      width: 520,
+                                      child: BlocBuilder<AuthBloc, AuthState>(
+                                          bloc: auth,
+                                          builder: (_, __) => SingleChildScrollView(
+                                              child: RewardFulfilmentPanel(
+                                                  repository: source
+                                                      as RewardFulfilmentRepository))))));
+                        } catch (_) {
+                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                              content: Text(
+                                  'Reward fulfilment unavailable for this session.')));
+                        }
+                      },
+                      icon: const Icon(Icons.verified_outlined),
+                      label: const Text('Verify reward voucher')),
                   Text('${_drafts.length} metadata drafts loaded',
                       style: Theme.of(context).textTheme.bodyLarge),
                   IconButton(

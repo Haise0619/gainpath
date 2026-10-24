@@ -3,6 +3,7 @@ import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:gainpath_domain/gainpath_domain.dart' show SessionScope;
 import 'package:gainpath_domain/identity.dart';
+import 'firebase_function_transport.dart';
 
 class FirebaseCoachProfileAdminRepository
     implements CoachProfileAdminRepository {
@@ -13,13 +14,13 @@ class FirebaseCoachProfileAdminRepository
       FirebaseFunctions? functions,
       FirebaseAuth? auth})
       : _db = firestore ?? FirebaseFirestore.instance,
-        _functions = functions ?? FirebaseFunctions.instance,
+        _functions = functions,
         _auth = auth ?? FirebaseAuth.instance;
   @override
   final SessionScope scope;
   final bool Function() isCurrent;
   final FirebaseFirestore _db;
-  final FirebaseFunctions _functions;
+  final FirebaseFunctions? _functions;
   final FirebaseAuth _auth;
   void _check() {
     if (!isCurrent() || _auth.currentUser?.uid != scope.userId) {
@@ -113,7 +114,8 @@ class FirebaseCoachProfileAdminRepository
     }
     Map<String, dynamic>? certSummary;
     try {
-      certSummary = await _get('$root/coachProfiles/$coachId/certificationState/current');
+      certSummary =
+          await _get('$root/coachProfiles/$coachId/certificationState/current');
     } on CoachRepositoryException catch (e) {
       if (!['permission-denied', 'not-found'].contains(e.code)) rethrow;
     }
@@ -164,8 +166,8 @@ class FirebaseCoachProfileAdminRepository
       throw const CoachRepositoryException('failed-precondition');
     }
     try {
-      final response = await _functions
-          .httpsCallable('setCoachDirectoryStatusCommand')
+      final response = await firebaseCallable('setCoachDirectoryStatusCommand',
+              functions: _functions)
           .call<Map<String, dynamic>>({
         'schemaVersion': 1,
         'organizationId': scope.organizationId,

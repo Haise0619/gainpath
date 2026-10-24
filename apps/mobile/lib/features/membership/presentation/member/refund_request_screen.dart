@@ -1,54 +1,41 @@
 import 'package:flutter/material.dart';
-import '../../application/membership_bloc.dart';
 import 'package:gainpath_domain/membership.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
-import 'package:flutter_bloc/flutter_bloc.dart';
+import '../../../../app/di/membership_factory.dart';
+import '../shared/membership_data_view.dart';
 
-/// AD-M4.4 — Request Refund. Charges outside the policy window are shown
-/// but locked with an explanation rather than silently omitted or silently
-/// accepted, matching the design doc's explicit "form locks, policy
-/// warning shown" edge case.
-class RefundRequestScreen extends StatefulWidget {
-  /// When opened from a specific transaction row (e.g. Billing History),
-  /// that transaction is pre-selected if it is still eligible.
-  final String? preselectedTransactionId;
+class RefundRequestScreen extends StatelessWidget {
   const RefundRequestScreen(
-      {super.key, this.preselectedTransactionId, this.connected = false});
+      {super.key,
+      this.preselectedTransactionId,
+      this.connected = false,
+      this.repository});
+  final String? preselectedTransactionId;
   final bool connected;
-
+  final MembershipCommerceRepository? repository;
   @override
-  State<RefundRequestScreen> createState() => _RefundRequestScreenState();
+  Widget build(BuildContext context) => repository != null
+      ? MembershipRepositoryGuard(
+          repository: repository!, child: _body(repository!))
+      : MembershipFeatureHost(connected: connected, builder: _body);
+  Widget _body(MembershipCommerceRepository repo) =>
+      _RefundForm(repository: repo, selected: preselectedTransactionId);
 }
 
-class _RefundRequestScreenState extends State<RefundRequestScreen> {
-  String? _transactionId;
-  String? _reason;
-  final _notes = TextEditingController();
-
-  final _reasons = const [
-    'Coach cancelled the session',
-    'Charged twice for the same item',
-    'Charged after cancelling',
-    'Something else',
-  ];
-
+class _RefundForm extends StatefulWidget {
+  const _RefundForm({required this.repository, this.selected});
+  final MembershipCommerceRepository repository;
+  final String? selected;
   @override
-  void initState() {
-    super.initState();
-    final preselected = widget.preselectedTransactionId;
-    if (!widget.connected && preselected != null) {
-      final match = context
-          .read<MembershipRepository>()
-          .transactions
-          .where((t) => t.id == preselected);
-      if (match.isNotEmpty && _isEligible(match.first)) {
-        _transactionId = preselected;
-      }
-    }
-  }
+  State<_RefundForm> createState() => _RefundFormState();
+}
 
-  bool _isEligible(Transaction t) => const RefundPolicy().isEligible(t.date);
-
+class _RefundFormState extends State<_RefundForm> {
+  late String? _selected = widget.selected;
+  final _notes = TextEditingController();
+  String _reason = 'Charged twice for the same item';
+  bool _busy = false;
+  String? _message;
   @override
   void dispose() {
     _notes.dispose();
@@ -56,162 +43,105 @@ class _RefundRequestScreenState extends State<RefundRequestScreen> {
   }
 
   @override
-  Widget build(BuildContext context) {
-    final transactions = widget.connected
-        ? [Transaction('-', '-', 0, DateTime(1970), TransactionStatus.pending)]
-        : context.read<MembershipRepository>().transactions;
-    final eligible = transactions.where(_isEligible).toList();
-
-    return Scaffold(
-      appBar: AppBar(title: const Text('Request a refund')),
-      body: PageBody(
-        children: [
-          Panel(
-            background: AppColors.surfaceAlt,
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Icon(Icons.schedule_rounded,
-                    size: 18, color: AppColors.inkSoft),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    widget.connected
-                        ? 'Refund service and eligibility unavailable. -'
-                        : 'Refunds can be requested within ${RefundPolicy.defaultWindowDays} days of a charge. Staff review each request before any money is returned.',
-                    style: Theme.of(context).textTheme.bodyMedium,
-                  ),
-                ),
-              ],
-            ),
-          ),
+  Widget build(BuildContext context) => MembershipDataView(
+      repository: widget.repository,
+      title: 'Refund requests',
+      builder: (context, data, refresh) {
+        final payments = membershipRows(data['transactions'])
+            .where((p) => p['paymentStatus'] == 'cleared')
+            .toList();
+        final exists = payments.any((p) => p['transactionId'] == _selected);
+        final selected =
+            payments.where((p) => p['transactionId'] == _selected).firstOrNull;
+        final requested = selected?['refundStatus'] != null;
+        return [
+          const Panel(
+              child: Text(
+                  'Requests must be within seven days of payment clearance. Admin reviews each claim. Approval does not mean money has been returned.')),
           const SizedBox(height: 18),
-          const Eyebrow('Which charge?'),
-          if (eligible.isEmpty && !widget.connected)
-            Panel(
-              background: AppColors.dangerTint,
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: const [
-                  Icon(Icons.info_outline_rounded,
-                      size: 18, color: AppColors.danger),
-                  SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      'No charges in the last ${RefundPolicy.defaultWindowDays} days are eligible for a refund.',
-                      style: TextStyle(fontSize: 13.5, color: AppColors.danger),
-                    ),
-                  ),
-                ],
-              ),
-            )
-          else
-            ...transactions.map((t) {
-              final ok = !widget.connected && _isEligible(t);
-              final selected = _transactionId == t.id;
-              final daysAgo = DateTime.now().difference(t.date).inDays;
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 10),
-                child: Panel(
-                  onTap:
-                      ok ? () => setState(() => _transactionId = t.id) : null,
-                  background: selected ? AppColors.primaryTint : null,
-                  child: Opacity(
-                    opacity: ok ? 1 : 0.5,
-                    child: Row(
-                      children: [
-                        Icon(
-                            selected
-                                ? Icons.radio_button_checked_rounded
-                                : Icons.radio_button_unchecked_rounded,
-                            size: 20,
-                            color: selected
-                                ? AppColors.primary
-                                : AppColors.hairline),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(t.type,
-                                  style:
-                                      Theme.of(context).textTheme.titleMedium),
-                              Text(
-                                  widget.connected
-                                      ? '-'
-                                      : ok
-                                          ? '${t.id}  ·  $daysAgo days ago'
-                                          : '${t.id}  ·  Outside the ${RefundPolicy.defaultWindowDays}-day window',
-                                  style: ok
-                                      ? Theme.of(context).textTheme.bodyMedium
-                                      : Theme.of(context)
-                                          .textTheme
-                                          .bodyMedium
-                                          ?.copyWith(color: AppColors.danger)),
-                            ],
-                          ),
-                        ),
-                        Text(
-                            widget.connected
-                                ? '-'
-                                : 'RM ${t.amount.toStringAsFixed(2)}',
-                            style: const TextStyle(
-                                fontSize: 14.5, fontWeight: FontWeight.w700)),
-                      ],
-                    ),
-                  ),
-                ),
-              );
-            }),
-          const SizedBox(height: 14),
-          const Eyebrow('Why?'),
-          Panel(
-            padding: EdgeInsets.zero,
-            child: RadioGroup<String>(
-              groupValue: _reason,
-              onChanged: (v) => setState(() => _reason = v),
-              child: Column(
-                children: _reasons
-                    .map((r) => RadioListTile<String>(
-                          value: r,
-                          title:
-                              Text(r, style: const TextStyle(fontSize: 14.5)),
-                          dense: true,
-                        ))
+          if (payments.isEmpty)
+            const Text('No cleared membership payments available.'),
+          if (payments.isNotEmpty)
+            DropdownButtonFormField<String>(
+                initialValue: exists ? _selected : null,
+                decoration:
+                    const InputDecoration(labelText: 'Membership payment'),
+                items: payments
+                    .map((p) => DropdownMenuItem(
+                        value: p['transactionId'] as String,
+                        child: Text(
+                            '${p['planName']} · ${membershipMoney(p['amountMinor'])} · ${membershipDate(p['createdAtMillis'])}',
+                            overflow: TextOverflow.ellipsis)))
                     .toList(),
-              ),
-            ),
-          ),
-          const SizedBox(height: 14),
-          TextField(
-            controller: _notes,
-            maxLines: 4,
-            decoration: const InputDecoration(
-                hintText: 'Add any details that would help'),
-          ),
-          const SizedBox(height: 18),
-          FilledButton(
-            onPressed:
-                (widget.connected || _transactionId == null || _reason == null)
+                isExpanded: true,
+                onChanged: _busy
                     ? null
-                    : () {
-                        final bloc = context.read<MembershipBloc>();
-                        bloc.add(RefundRequested(
-                            transactionId: _transactionId!,
-                            reason: _reason!,
-                            notes: _notes.text.trim()));
-                        if (bloc.state.error != null) {
-                          showToast(context, bloc.state.error!);
-                          return;
-                        }
-                        Navigator.pop(context);
-                        showToast(context,
-                            'Request submitted. We will email you once it is reviewed.');
-                      },
-            child: const Text('Submit request'),
-          ),
-        ],
-      ),
-    );
-  }
+                    : (v) => setState(() {
+                          _selected = v;
+                          _message = null;
+                        })),
+          if (selected != null) ...[
+            const SizedBox(height: 16),
+            Text(membershipPaymentLabel(selected)),
+            if (selected['reviewReason'] != null)
+              Text('Admin decision: ${selected['reviewReason']}'),
+            if (!requested) ...[
+              const SizedBox(height: 16),
+              DropdownButtonFormField<String>(
+                  initialValue: _reason,
+                  decoration: const InputDecoration(labelText: 'Reason'),
+                  items: const [
+                    'Charged twice for the same item',
+                    'Incorrect membership charge',
+                    'Something else'
+                  ]
+                      .map((v) => DropdownMenuItem(value: v, child: Text(v)))
+                      .toList(),
+                  onChanged:
+                      _busy ? null : (v) => setState(() => _reason = v!)),
+              const SizedBox(height: 16),
+              TextField(
+                  controller: _notes,
+                  maxLength: 2000,
+                  maxLines: 4,
+                  decoration: const InputDecoration(labelText: 'Notes')),
+              if (_busy) const LinearProgressIndicator(),
+              FilledButton(
+                  onPressed: _busy
+                      ? null
+                      : () async {
+                          setState(() {
+                            _busy = true;
+                            _message = null;
+                          });
+                          try {
+                            await widget.repository
+                                .refund(_selected!, _reason, _notes.text);
+                            if (context.mounted) {
+                              setState(() => _message =
+                                  'Request submitted for Admin review. No refund transfer was made.');
+                              refresh();
+                            }
+                          } catch (_) {
+                            if (context.mounted) {
+                              setState(() => _message =
+                                  'Request not accepted. A cleared payment within seven days and a current verified account are required. Refresh before retrying.');
+                            }
+                          } finally {
+                            if (context.mounted) setState(() => _busy = false);
+                          }
+                        },
+                  child: const Text('Submit refund request')),
+            ],
+          ],
+          if (_message != null) Text(_message!),
+          const SizedBox(height: 24),
+          const Eyebrow('Your refund cases'),
+          ...payments.where((p) => p['refundStatus'] != null).map((p) => ListTile(
+              title: Text(
+                  '${p['planName']} · ${membershipMoney(p['amountMinor'])}'),
+              subtitle: Text(
+                  '${membershipPaymentLabel(p)}\n${p['reviewReason'] ?? 'Awaiting Admin review'}'))),
+        ];
+      });
 }

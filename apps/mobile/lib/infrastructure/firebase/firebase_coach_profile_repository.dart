@@ -3,6 +3,7 @@ import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:gainpath_domain/gainpath_domain.dart' show SessionScope;
 import 'package:gainpath_domain/identity.dart';
+import 'firebase_function_transport.dart';
 
 class FirebaseCoachProfileRepository implements CoachProfileRepository {
   FirebaseCoachProfileRepository(
@@ -12,13 +13,13 @@ class FirebaseCoachProfileRepository implements CoachProfileRepository {
       FirebaseFunctions? functions,
       FirebaseAuth? auth})
       : _db = firestore ?? FirebaseFirestore.instance,
-        _functions = functions ?? FirebaseFunctions.instance,
+        _functions = functions,
         _auth = auth ?? FirebaseAuth.instance;
   @override
   final SessionScope scope;
   final bool Function() isCurrent;
   final FirebaseFirestore _db;
-  final FirebaseFunctions _functions;
+  final FirebaseFunctions? _functions;
   final FirebaseAuth _auth;
   void _check() {
     if (!isCurrent() || _auth.currentUser?.uid != scope.userId) {
@@ -59,8 +60,8 @@ class FirebaseCoachProfileRepository implements CoachProfileRepository {
       required String requestId}) async {
     _check();
     try {
-      final response = await _functions
-          .httpsCallable('saveCoachProfileCommand')
+      final response = await firebaseCallable('saveCoachProfileCommand',
+              functions: _functions)
           .call<Map<String, dynamic>>({
         'schemaVersion': 1,
         'organizationId': scope.organizationId,

@@ -21,7 +21,7 @@ class LoginScreen extends StatefulWidget {
       this.initiallyRegistering = false,
       this.initialEmail = '',
       this.onPasswordReset,
-      this.prefillDemoPassword = true});
+      this.prefillDemoPassword = false});
   final bool initiallyRegistering;
   final String initialEmail;
   final bool prefillDemoPassword;

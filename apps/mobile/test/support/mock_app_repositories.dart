@@ -1,7 +1,6 @@
 import 'package:flutter/widgets.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:gainpath_data/gainpath_data.dart'
-    show BackendConfig, BackendMode, MockDataSession;
+import 'package:gainpath_data/gainpath_data.dart' show MockDataSession;
 import 'package:gainpath_data/analytics.dart';
 import 'package:gainpath_domain/analytics.dart';
 import 'package:gainpath_data/chatbot.dart';
@@ -21,33 +20,24 @@ import 'package:gainpath_domain/recommendation.dart';
 import 'package:gainpath_data/workout.dart';
 import 'package:gainpath_domain/workout.dart';
 
-/// Composition root for data access. Swap the in-memory implementations for
-/// Firebase-backed ones here without touching any screen.
-class AppRepositories extends StatefulWidget {
-  const AppRepositories({
+/// Seeded repository composition available only to widget tests.
+/// Runtime Firebase composition does not import this harness.
+class MockAppRepositories extends StatefulWidget {
+  const MockAppRepositories({
     super.key,
     required this.child,
-    this.config = const BackendConfig(BackendMode.mock),
   });
   final Widget child;
-  final BackendConfig config;
 
   @override
-  State<AppRepositories> createState() => _AppRepositoriesState();
+  State<MockAppRepositories> createState() => _MockAppRepositoriesState();
 }
 
-class _AppRepositoriesState extends State<AppRepositories> {
+class _MockAppRepositoriesState extends State<MockAppRepositories> {
   final MockDataSession session = MockDataSession();
 
   @override
   Widget build(BuildContext context) {
-    widget.config.validate();
-    if (widget.config.isFirebase) {
-      throw UnsupportedError(
-        'Firebase backend adapters are not connected yet. '
-        'Run with --dart-define=BACKEND=mock until Phase 7 adapters are enabled.',
-      );
-    }
     return MultiRepositoryProvider(
       providers: [
         RepositoryProvider<MemberProfileRepository>(

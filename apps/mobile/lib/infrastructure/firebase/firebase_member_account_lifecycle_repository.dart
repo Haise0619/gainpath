@@ -5,6 +5,7 @@ import 'package:gainpath_domain/gainpath_domain.dart';
 import 'package:gainpath_domain/identity.dart';
 import 'firebase_app_check_readiness.dart';
 import 'firebase_password_actions.dart';
+import 'firebase_function_transport.dart';
 
 typedef MemberLifecycleCallable = Future<Map<String, dynamic>> Function(
     String, Map<String, dynamic>);
@@ -21,10 +22,9 @@ class FirebaseMemberAccountLifecycleRepository
       : _readiness = readiness ?? FirebaseAppCheckReadiness.instance,
         _uid = currentUid ?? (() => FirebaseAuth.instance.currentUser?.uid),
         _call = call ??
-            ((name, data) async => (await FirebaseFunctions.instance
-                    .httpsCallable(name)
-                    .call<Map<String, dynamic>>(data))
-                .data),
+            ((name, data) async =>
+                (await firebaseCallable(name).call<Map<String, dynamic>>(data))
+                    .data),
         _verify = verifyCurrentPassword ??
             ((password) =>
                 FirebasePasswordActions(scope: scope).verifyCurrent(password));

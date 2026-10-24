@@ -5,6 +5,7 @@ import 'user_action_dialogs.dart';
 import '../../application/coach_directory_admin_cubit.dart';
 import 'coach_certification_review_panel.dart';
 import 'coach_review_discard_guard.dart';
+import 'coach_review_overview.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 Widget _networkHero(String url, {BoxFit fit = BoxFit.cover}) {
@@ -28,7 +29,9 @@ class CoachesScreen extends StatefulWidget {
       this.live = false,
       this.onOpenSchedule,
       this.onOpenBookings,
+      this.initialCoachId,
       this.discardGuard});
+  final String? initialCoachId;
   final CoachReviewDiscardGuard? discardGuard;
   final bool live;
   final void Function(String coachId)? onOpenSchedule;
@@ -53,8 +56,16 @@ class _CoachesScreenState extends State<CoachesScreen> {
     super.didChangeDependencies();
     if (widget.live && _cubit == null) {
       _cubit =
-          CoachDirectoryAdminCubit(context.read<CoachProfileAdminRepository>())
-            ..refresh();
+          CoachDirectoryAdminCubit(context.read<CoachProfileAdminRepository>());
+      _openInitialReview();
+    }
+  }
+
+  Future<void> _openInitialReview() async {
+    final cubit = _cubit!;
+    await cubit.refresh();
+    if (mounted && widget.initialCoachId != null) {
+      await cubit.review(widget.initialCoachId!);
     }
   }
 
@@ -126,12 +137,14 @@ class _CoachesScreenState extends State<CoachesScreen> {
               ? state.review!.branchIds
               : publications[id]?.branchIds ?? const [],
           statusLabel: publications[id] == null
-              ? 'Draft'
-              : drafts[id] == null
-                  ? (publications[id]!.isPublished ? 'Published' : 'Inactive')
-                  : (publications[id]!.isPublished
-                      ? 'Draft & Published'
-                      : 'Draft & Inactive'),
+              ? 'Unpublished'
+              : !publications[id]!.isPublished
+                  ? 'Inactive'
+                  : (drafts[id] != null &&
+                          drafts[id]!.revision !=
+                              publications[id]!.sourceRevision
+                      ? 'Pending Review'
+                      : 'Published'),
           pending: drafts[id] != null &&
               (publications[id] == null ||
                   drafts[id]!.revision != publications[id]!.sourceRevision),
@@ -173,37 +186,41 @@ class _CoachesScreenState extends State<CoachesScreen> {
       body: SingleChildScrollView(
         padding: const EdgeInsets.fromLTRB(28, 22, 28, 36),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Row(children: [
-            _StatChip(
-                icon: Icons.sports_rounded,
-                label:
-                    state == null ? 'Total coaches' : 'Total coaches (loaded)',
-                value: '${coaches.length}'),
-            const SizedBox(width: 12),
-            _StatChip(
-                icon: Icons.hourglass_top_rounded,
-                label: state == null
-                    ? 'Pending review'
-                    : 'Pending review (loaded)',
-                value: '$pendingCount',
-                color: AppColors.warning),
-            const Spacer(),
-            if (state != null)
-              IconButton(
-                  tooltip: 'Refresh Coaches',
-                  onPressed:
-                      state.busy ? null : () => _guarded(_cubit!.refresh),
-                  icon: const Icon(Icons.refresh)),
-            FilledButton.icon(
-              key: const ValueKey('add-coach'),
-              onPressed: state != null
-                  ? null
-                  : () => provisionCoachFlow(context, _refresh),
-              icon: const Icon(Icons.person_add_alt_rounded, size: 17),
-              label: const Text('Add a coach'),
-              style: FilledButton.styleFrom(minimumSize: const Size(0, 40)),
-            ),
-          ]),
+          Wrap(
+              spacing: 12,
+              runSpacing: 12,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                _StatChip(
+                    icon: Icons.sports_rounded,
+                    label: state == null
+                        ? 'Total coaches'
+                        : 'Total coaches (loaded)',
+                    value: '${coaches.length}'),
+                const SizedBox(width: 12),
+                _StatChip(
+                    icon: Icons.hourglass_top_rounded,
+                    label: state == null
+                        ? 'Pending review'
+                        : 'Pending review (loaded)',
+                    value: '$pendingCount',
+                    color: AppColors.warning),
+                if (state != null)
+                  IconButton(
+                      tooltip: 'Refresh Coaches',
+                      onPressed:
+                          state.busy ? null : () => _guarded(_cubit!.refresh),
+                      icon: const Icon(Icons.refresh)),
+                FilledButton.icon(
+                  key: const ValueKey('add-coach'),
+                  onPressed: state != null
+                      ? null
+                      : () => provisionCoachFlow(context, _refresh),
+                  icon: const Icon(Icons.person_add_alt_rounded, size: 17),
+                  label: const Text('Add a coach'),
+                  style: FilledButton.styleFrom(minimumSize: const Size(0, 40)),
+                ),
+              ]),
           const SizedBox(height: 22),
           if (state?.loading == true) const LinearProgressIndicator(),
           if (state?.message != null) Text(state!.message!),
@@ -212,6 +229,13 @@ class _CoachesScreenState extends State<CoachesScreen> {
               !state.loading &&
               coaches.isEmpty)
             const Text('No Coach profiles are available.'),
+          if (state?.review != null) ...[
+            _reviewDetails(context, state!),
+            const SizedBox(height: 28),
+            Text('Coach directory',
+                style: Theme.of(context).textTheme.titleLarge),
+            const SizedBox(height: 16),
+          ],
           for (final branchId in branchIds)
             Padding(
               key: ValueKey('coach-branch-$branchId'),
@@ -256,10 +280,6 @@ class _CoachesScreenState extends State<CoachesScreen> {
                         : () => _cubit!.loadMore(publicPage: true),
                     child: const Text('Load more public profiles')),
             ]),
-          if (state?.review != null) ...[
-            const SizedBox(height: 24),
-            _reviewDetails(context, state!)
-          ],
         ]),
       ),
     );
@@ -271,146 +291,8 @@ class _CoachesScreenState extends State<CoachesScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            'Review ${review.coachId}',
-            style: Theme.of(context).textTheme.titleMedium,
-          ),
-          const SizedBox(height: 8),
-          if (review.draft != null) ...[
-            Text(review.draft!.fields.displayName,
-                style: const TextStyle(fontWeight: FontWeight.bold)),
-            Text(review.draft!.fields.specialty),
-            Text(review.draft!.fields.bio),
-            Text(review.draft!.fields.specializationTags.join(' · ')),
-            if (review.draft!.fields.yearsExperience != null)
-              Text(
-                '${review.draft!.fields.yearsExperience} years (self-reported)',
-              ),
-            const SizedBox(height: 8),
-          ],
-          Builder(builder: (context) {
-            final draftFeeMinor = review.draft?.fields.consultationFeeMinor;
-            final draftFeeText = draftFeeMinor != null && draftFeeMinor > 0
-                ? 'RM ${(draftFeeMinor / 100).toStringAsFixed(2)} / session'
-                : '— (no fee set)';
-            final pubFeeMinor = review.publication?.fields.consultationFeeMinor;
-            final pubFeeText = pubFeeMinor != null && pubFeeMinor > 0
-                ? 'RM ${(pubFeeMinor / 100).toStringAsFixed(2)} / session'
-                : '— (no fee published)';
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Proposed fee (draft): $draftFeeText',
-                    style: const TextStyle(fontWeight: FontWeight.w600)),
-                Text('Published fee: $pubFeeText'),
-                if (review.draft != null &&
-                    (draftFeeMinor == null || draftFeeMinor <= 0))
-                  Padding(
-                    padding: const EdgeInsets.only(top: 4),
-                    child: Text(
-                      'Note: No valid consultation fee is set in draft. If published, members will see "—" and session checkout will be disabled.',
-                      style: TextStyle(
-                          fontSize: 12, color: Colors.amber.shade900),
-                    ),
-                  ),
-                if (review.draft != null &&
-                    review.publication != null &&
-                    draftFeeMinor != null &&
-                    draftFeeMinor > 0 &&
-                    draftFeeMinor != pubFeeMinor)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 4),
-                    child: Text(
-                      'Publishing will update public consultation fee from $pubFeeText to $draftFeeText. Existing bookings retain their snapshotted transaction prices.',
-                      style: TextStyle(
-                          fontSize: 12, color: Colors.blue.shade900),
-                    ),
-                  ),
-                const SizedBox(height: 6),
-              ],
-            );
-          }),
-          Text(
-            'Draft revision: ${review.draft?.revision ?? 'missing'} · Public revision: ${review.publicRevision}',
-          ),
-          Text(
-            'Directory: ${review.publication?.status ?? 'not published'} · Assigned branches: ${review.branchIds.join(', ')}',
-          ),
-          const SizedBox(height: 6),
-          Row(
-            children: [
-              Icon(
-                review.certificationVerified &&
-                        review.approvedCertificationCount > 0
-                    ? Icons.verified
-                    : Icons.gpp_maybe_outlined,
-                size: 16,
-                color: review.certificationVerified &&
-                        review.approvedCertificationCount > 0
-                    ? Colors.green.shade700
-                    : Colors.amber.shade900,
-              ),
-              const SizedBox(width: 6),
-              Text(
-                'Certification verification (BR-5): ${review.certificationVerified && review.approvedCertificationCount > 0 ? "Verified (${review.approvedCertificationCount} approved)" : "Unverified (0 approved)"}',
-                style: TextStyle(
-                  fontWeight: FontWeight.w600,
-                  color: review.certificationVerified &&
-                          review.approvedCertificationCount > 0
-                      ? Colors.green.shade800
-                      : Colors.amber.shade900,
-                ),
-              ),
-            ],
-          ),
-          if (!review.certificationVerified ||
-              review.approvedCertificationCount <= 0)
-            Padding(
-              padding: const EdgeInsets.only(top: 6),
-              child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                decoration: BoxDecoration(
-                  color: Colors.amber.shade50,
-                  border: Border.all(color: Colors.amber.shade300),
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: Row(
-                  children: [
-                    Icon(Icons.info_outline,
-                        size: 16, color: Colors.amber.shade900),
-                    const SizedBox(width: 8),
-                    const Expanded(
-                      child: Text(
-                        'Publication requires at least one approved certification (BR-5). Approve a submitted certification below to enable publication.',
-                        style: TextStyle(fontSize: 12.5),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          if (review.draft == null)
-            const Padding(
-              padding: EdgeInsets.only(top: 4),
-              child: Text(
-                'Draft missing. Existing public content can still be deactivated.',
-              ),
-            ),
-          if (review.draft != null && !review.targetMembershipEligible)
-            const Padding(
-              padding: EdgeInsets.only(top: 4),
-              child: Text(
-                'Current Coach membership is unavailable; publication is blocked.',
-              ),
-            ),
-          const Padding(
-            padding: EdgeInsets.only(top: 4),
-            child: Text(
-              'The server also checks current account and branch eligibility at publication.',
-            ),
-          ),
-          const SizedBox(height: 12),
+          CoachReviewOverview(review: review),
+          const SizedBox(height: 20),
           CoachCertificationReviewPanel(
             key: ValueKey(review.coachId),
             coachId: review.coachId,
@@ -459,12 +341,15 @@ class _CoachesScreenState extends State<CoachesScreen> {
                       style: TextStyle(
                         fontSize: 12.5,
                         fontWeight: FontWeight.w500,
-                        color:
-                            state.message!.toLowerCase().contains('failed') ||
-                                    state.message!.toLowerCase().contains('error') ||
-                                    state.message!.toLowerCase().contains('review')
-                                ? Colors.red.shade900
-                                : Colors.green.shade900,
+                        color: state.message!
+                                    .toLowerCase()
+                                    .contains('failed') ||
+                                state.message!
+                                    .toLowerCase()
+                                    .contains('error') ||
+                                state.message!.toLowerCase().contains('review')
+                            ? Colors.red.shade900
+                            : Colors.green.shade900,
                       ),
                     ),
                   ),
@@ -472,7 +357,22 @@ class _CoachesScreenState extends State<CoachesScreen> {
               ),
             ),
           ],
-          const SizedBox(height: 12),
+          const SizedBox(height: 24),
+          Text('4. Publication and directory actions',
+              style: Theme.of(context)
+                  .textTheme
+                  .titleMedium
+                  ?.copyWith(fontWeight: FontWeight.w700)),
+          const SizedBox(height: 6),
+          const Text(
+              'Publish the reviewed draft to update what Members see. Deactivation hides the listing and keeps existing bookings.',
+              style: TextStyle(color: AppColors.inkSoft, height: 1.5)),
+          if (state.conflict)
+            const Padding(
+                padding: EdgeInsets.only(top: 12),
+                child: Text(
+                    'This review is out of date. Discard and reload before making another publication change.')),
+          const SizedBox(height: 16),
           Wrap(
             spacing: 12,
             runSpacing: 8,
@@ -492,19 +392,27 @@ class _CoachesScreenState extends State<CoachesScreen> {
                 icon: const Icon(Icons.calendar_month_outlined),
                 label: const Text('View schedule'),
               ),
-              FilledButton(
-                onPressed: !state.busy && !state.conflict && review.canPublish
-                    ? () => _guarded(
-                        () => _cubit!.setStatus(CoachDirectoryAction.publish))
-                    : null,
-                child: state.busy
-                    ? const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(
-                            strokeWidth: 2, color: Colors.white),
-                      )
-                    : const Text('Publish profile'),
+              Tooltip(
+                message: review.canPublish && !review.hasPublishableChanges
+                    ? 'Published profile is already up to date'
+                    : '',
+                child: FilledButton(
+                  onPressed: !state.busy &&
+                          !state.conflict &&
+                          review.canPublish &&
+                          review.hasPublishableChanges
+                      ? () => _guarded(
+                          () => _cubit!.setStatus(CoachDirectoryAction.publish))
+                      : null,
+                  child: state.busy
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2, color: Colors.white),
+                        )
+                      : const Text('Publish profile'),
+                ),
               ),
               OutlinedButton(
                 onPressed:

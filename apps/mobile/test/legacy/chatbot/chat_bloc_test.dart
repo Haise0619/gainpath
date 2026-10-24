@@ -5,7 +5,7 @@ import 'package:gainpath_mobile/features/chatbot/application/chat_bloc.dart';
 import 'package:gainpath_domain/chatbot.dart';
 import 'package:gainpath_domain/workout.dart';
 
-class _FakeChat implements ChatRepository {
+class _FakeChat extends ChatRepository {
   @override
   List<ChatMessage> get chatSeed => const [ChatMessage('Hi! Ask me anything.', false)];
   @override

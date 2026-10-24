@@ -5,6 +5,7 @@ import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:gainpath_domain/workout.dart';
 import 'package:gainpath_domain/gainpath_domain.dart' show SessionScope;
+import 'firebase_function_transport.dart';
 
 String buildPublishRoutineRequestId({
   required int timestampMicros,
@@ -24,7 +25,7 @@ class FirebaseRoutineTemplateRepository implements RoutineTemplateRepository {
     bool Function()? isSessionCurrent,
   })  : _firestore = firestore ?? FirebaseFirestore.instance,
         _auth = auth ?? FirebaseAuth.instance,
-        _functions = functions ?? FirebaseFunctions.instance,
+        _functions = functions,
         _sessionGuard = isSessionCurrent {
     for (final id in [scope.userId, scope.organizationId]) {
       if (id.contains('/') || id == '.' || id == '..') {
@@ -37,7 +38,7 @@ class FirebaseRoutineTemplateRepository implements RoutineTemplateRepository {
   final TutorialRepository exerciseCatalog;
   final FirebaseFirestore _firestore;
   final FirebaseAuth _auth;
-  final FirebaseFunctions _functions;
+  final FirebaseFunctions? _functions;
   final bool Function()? _sessionGuard;
   final Object _lifetime = Object();
   bool _invalidated = false;
@@ -367,7 +368,8 @@ class FirebaseRoutineTemplateRepository implements RoutineTemplateRepository {
       timestampMicros: DateTime.now().microsecondsSinceEpoch,
     );
     try {
-      await _functions.httpsCallable('publishRoutineCommand').call({
+      await firebaseCallable('publishRoutineCommand', functions: _functions)
+          .call({
         'schemaVersion': 1,
         'requestId': requestId,
         'organizationId': scope.organizationId,

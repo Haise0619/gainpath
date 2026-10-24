@@ -4,12 +4,12 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gainpath_admin_web/app/admin_app.dart';
 import 'package:gainpath_admin_web/app/di/app_repositories.dart';
-import 'package:gainpath_data/gainpath_data.dart';
 import 'package:gainpath_domain/gainpath_domain.dart';
 import 'package:gainpath_domain/identity.dart';
 import 'package:gainpath_domain/gamification.dart';
 import 'package:gainpath_domain/workout.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'support/empty_coach_directory.dart';
 
 class _EmptyPhotoAccount extends Fake implements AdminAccountContactRepository {
   @override
@@ -123,10 +123,11 @@ void main() {
     addTearDown(tester.view.reset);
     final catalog = _Catalog(), blueprints = _Blueprints();
     final scopes = <SessionScope>[];
-    await tester.pumpWidget(GainPathAdminWebApp(
+    await tester.pumpWidget(GainPathAdminWebApp.injected(
+        coachRepositoryFactory: (scope, _) =>
+            EmptyCoachDirectoryRepository(scope),
         accountContactFactory: (_, __) => _EmptyPhotoAccount(),
         authRepository: _SignedInAuthRepository(),
-        backendConfig: const BackendConfig(BackendMode.firebase),
         tutorialRepositoryFactory: (scope) {
           scopes.add(scope);
           return catalog;
@@ -157,7 +158,6 @@ void main() {
   testWidgets('Firebase composition does not provide seeded accounts',
       (tester) async {
     await tester.pumpWidget(AppRepositories(
-      config: const BackendConfig(BackendMode.firebase),
       session: _session,
       child: MaterialApp(home: Builder(builder: (context) {
         UserAccountRepository? accounts;
@@ -166,10 +166,9 @@ void main() {
         } catch (_) {
           // Absence is the expected live-mode contract.
         }
-        return Text(
-            accounts == null || accounts.users.isEmpty
-                ? 'accounts unavailable'
-                : accounts.adminName);
+        return Text(accounts == null || accounts.users.isEmpty
+            ? 'accounts unavailable'
+            : accounts.adminName);
       })),
     ));
     expect(find.text('accounts unavailable'), findsOneWidget);
@@ -180,19 +179,21 @@ void main() {
     tester.view.physicalSize = const Size(1600, 1000);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
-    await tester.pumpWidget(GainPathAdminWebApp(
+    await tester.pumpWidget(GainPathAdminWebApp.injected(
+      coachRepositoryFactory: (scope, _) =>
+          EmptyCoachDirectoryRepository(scope),
       memberDirectoryFactory: (_, __) => _Members(),
       rewardCatalogFactory: (_, __) => _Rewards(),
       accountContactFactory: (_, __) => _EmptyPhotoAccount(),
       authRepository: _SignedInAuthRepository(),
-      backendConfig: const BackendConfig(BackendMode.firebase),
     ));
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
     expect(find.text(_session.email), findsWidgets);
     expect(find.text(_session.displayName!), findsWidgets);
     expect(find.text('GainPath, Kulim'), findsNothing);
-    expect(find.text('No recent activity recorded for this period.'), findsOneWidget);
+    expect(find.text('No recent activity recorded for this period.'),
+        findsOneWidget);
     await tester.tap(find.text('Members').first);
     await tester.pumpAndSettle();
     expect(find.text('Connected Member'), findsOneWidget);

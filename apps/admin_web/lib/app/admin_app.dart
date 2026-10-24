@@ -20,10 +20,13 @@ import 'package:gainpath_domain/coaching.dart' show CoachAvailabilityRepository;
 import 'di/admin_presentation_dependencies.dart';
 
 class GainPathAdminWebApp extends StatelessWidget {
-  const GainPathAdminWebApp(
+  /// Normal composition always uses Firebase and no repository overrides.
+  const GainPathAdminWebApp({Key? key}) : this.injected(key: key);
+
+  /// Explicit test/development composition may deliberately supply fakes.
+  const GainPathAdminWebApp.injected(
       {super.key,
       this.authRepository,
-      this.backendConfig,
       this.tutorialRepositoryFactory,
       this.routineRepositoryFactory,
       this.coachRepositoryFactory,
@@ -37,7 +40,6 @@ class GainPathAdminWebApp extends StatelessWidget {
       this.passwordResetSender});
 
   final AuthRepository? authRepository;
-  final BackendConfig? backendConfig;
   final Future<void> Function(String)? passwordResetSender;
   final ReportingGatewayFactory? reportingGatewayFactory;
   final TutorialRepository Function(SessionScope)? tutorialRepositoryFactory;
@@ -60,15 +62,11 @@ class GainPathAdminWebApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final config = backendConfig ?? const BackendConfig(BackendMode.firebase);
-    config.validate();
     return RepositoryProvider<AuthRepository>(
       create: (_) =>
           authRepository ??
           AuthRepositoryFactory.create(
-            config: config,
-            firebaseGateway:
-                config.isFirebase ? FlutterFirebaseAuthGateway() : null,
+            firebaseGateway: FlutterFirebaseAuthGateway(),
           ),
       dispose: (repository) {
         if (authRepository == null && repository is AuthSessionLifecycle) {
@@ -86,16 +84,12 @@ class GainPathAdminWebApp extends StatelessWidget {
               debugShowCheckedModeBanner: false,
               theme: AppTheme.build(),
               home: _AdminAuthGate(
-                  config: config,
-                  passwordResetSender: config.isFirebase
-                      ? passwordResetSender ??
-                          (email) => FlutterFirebaseAuthGateway()
-                              .sendPasswordResetEmail(email)
-                      : null),
+                  passwordResetSender: passwordResetSender ??
+                      (email) => FlutterFirebaseAuthGateway()
+                          .sendPasswordResetEmail(email)),
             );
-            return AppRepositories(
-              key: ValueKey((state.session, config.mode)),
-              config: config,
+            return AppRepositories.injected(
+              key: ValueKey(state.session),
               session: state.session,
               tutorialRepositoryFactory: tutorialRepositoryFactory,
               routineRepositoryFactory: routineRepositoryFactory,
@@ -117,8 +111,7 @@ class GainPathAdminWebApp extends StatelessWidget {
 }
 
 class _AdminAuthGate extends StatelessWidget {
-  const _AdminAuthGate({required this.config, this.passwordResetSender});
-  final BackendConfig config;
+  const _AdminAuthGate({this.passwordResetSender});
   final Future<void> Function(String)? passwordResetSender;
 
   @override
@@ -134,8 +127,7 @@ class _AdminAuthGate extends StatelessWidget {
           return _AdminVerificationScreen(session: state.session!);
         }
         if (AuthRolePolicy.canEnter(state, allowed: const {AppRole.admin})) {
-          return AdminShell(
-              liveSession: config.isFirebase ? state.session : null);
+          return AdminShell(liveSession: state.session);
         }
         return _AdminLoginScreen(onPasswordReset: passwordResetSender);
       },

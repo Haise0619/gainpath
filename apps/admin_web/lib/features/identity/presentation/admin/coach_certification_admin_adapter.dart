@@ -5,11 +5,26 @@ import 'package:firebase_app_check/firebase_app_check.dart';
 import 'package:http/http.dart' as http;
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:gainpath_domain/identity.dart';
+import 'package:gainpath_data/coach_direct_reads.dart';
+import '../../../../infrastructure/firebase/firebase_coach_direct_reads.dart';
+import '../../../../infrastructure/firebase/firebase_function_transport.dart';
 
 /// Private, scoped review access. Document bytes never use download URLs.
 class CoachCertificationAdminAdapter {
-  CoachCertificationAdminAdapter(this.repository);
+  CoachCertificationAdminAdapter(this.repository,
+      {CoachDirectReads? directReads})
+      : _providedDirectReads = directReads {
+    if (directReads != null && directReads.scope != repository.scope) {
+      throw const CoachRepositoryException('permission-denied');
+    }
+  }
   final CoachProfileAdminRepository repository;
+  final CoachDirectReads? _providedDirectReads;
+  late final CoachDirectReads? _directReads = _providedDirectReads ??
+      (directCoachReadsEnabled
+          ? firebaseCoachDirectReads(
+              scope: repository.scope, checkSession: () {})
+          : null);
   Future<void> _check() async {
     if (!await repository.canManageDirectory()) {
       throw const CoachRepositoryException('permission-denied');
@@ -20,9 +35,17 @@ class CoachCertificationAdminAdapter {
       {String? afterId, String? certificationId}) async {
     await _check();
     try {
-      final result = await FirebaseFunctions.instance
-          .httpsCallable('getCoachCertificationsCommand')
-          .call({
+      final direct = _directReads;
+      if (direct != null) {
+        final result = await direct.loadCertifications(
+            coachId: coachId,
+            afterId: afterId,
+            certificationId: certificationId);
+        await _check();
+        return result;
+      }
+      final result =
+          await firebaseCallable('getCoachCertificationsCommand').call({
         'schemaVersion': 1,
         'organizationId': repository.scope.organizationId,
         'coachId': coachId,
@@ -47,12 +70,14 @@ class CoachCertificationAdminAdapter {
       throw const CoachRepositoryException('invalid-argument');
     }
     final user = FirebaseAuth.instance.currentUser;
-    if (user?.uid != repository.scope.userId)
+    if (user?.uid != repository.scope.userId) {
       throw const CoachRepositoryException('permission-denied');
+    }
     final token = await user!.getIdToken();
     await _check();
-    if (token == null)
+    if (token == null) {
       throw const CoachRepositoryException('permission-denied');
+    }
     final client = http.Client();
     try {
       final uri = Uri(
@@ -78,13 +103,15 @@ class CoachCertificationAdminAdapter {
       final response =
           await client.send(request).timeout(const Duration(seconds: 20));
       if (response.statusCode != 200 ||
-          (response.contentLength ?? 0) > 5 * 1024 * 1024)
+          (response.contentLength ?? 0) > 5 * 1024 * 1024) {
         throw const CoachRepositoryException('unavailable');
+      }
       final bytes = BytesBuilder(copy: false);
       await for (final chunk
           in response.stream.timeout(const Duration(seconds: 20))) {
-        if (bytes.length + chunk.length > 5 * 1024 * 1024)
+        if (bytes.length + chunk.length > 5 * 1024 * 1024) {
           throw const CoachRepositoryException('resource-exhausted');
+        }
         bytes.add(chunk);
       }
       await _check();
@@ -102,13 +129,11 @@ class CoachCertificationAdminAdapter {
       required String requestId}) async {
     await _check();
     if (decision == 'reject' && reason.trim().isEmpty) {
-      throw const CoachRepositoryException(
-          'invalid-argument', 'A reason is required to reject a certification.');
+      throw const CoachRepositoryException('invalid-argument',
+          'A reason is required to reject a certification.');
     }
     try {
-      await FirebaseFunctions.instance
-          .httpsCallable('reviewCoachCertificationCommand')
-          .call({
+      await firebaseCallable('reviewCoachCertificationCommand').call({
         'schemaVersion': 1,
         'organizationId': repository.scope.organizationId,
         'coachId': coachId,

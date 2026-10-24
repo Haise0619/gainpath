@@ -1,0 +1,157 @@
+{
+  "project": "gainpath-0619",
+  "projectNumber": "879719977530",
+  "applied": true,
+  "approvalRequired": false,
+  "serviceAccount": {
+    "accountId": "gainpath-google-sync",
+    "email": "gainpath-google-sync@gainpath-0619.iam.gserviceaccount.com",
+    "displayName": "GainPath Google booking integration",
+    "userManagedKeys": 0
+  },
+  "customRoles": [
+    {
+      "id": "gainpathGoogleIdentityRead",
+      "title": "GainPath Google identity eligibility read",
+      "permissions": [
+        "firebaseauth.users.get"
+      ],
+      "scope": "project",
+      "condition": null
+    },
+    {
+      "id": "gainpathGoogleFirestore",
+      "title": "GainPath Google transaction metadata",
+      "permissions": [
+        "datastore.databases.get",
+        "datastore.entities.get",
+        "datastore.entities.create",
+        "datastore.entities.update"
+      ],
+      "scope": "project",
+      "condition": {
+        "title": "gainpath_default_database_only",
+        "expression": "resource.name == 'projects/gainpath-0619/databases/(default)'"
+      }
+    },
+    {
+      "id": "gainpathGoogleSecretCreate",
+      "title": "GainPath Google token secret creation",
+      "permissions": [
+        "secretmanager.secrets.create"
+      ],
+      "scope": "project",
+      "condition": null
+    },
+    {
+      "id": "gainpathGoogleTokenVault",
+      "title": "GainPath Google token secret lifecycle",
+      "permissions": [
+        "secretmanager.versions.add",
+        "secretmanager.versions.access",
+        "secretmanager.secrets.delete"
+      ],
+      "scope": "project",
+      "condition": {
+        "title": "gainpath_google_token_secrets_only",
+        "expression": "resource.service == 'secretmanager.googleapis.com' && (resource.type == 'secretmanager.googleapis.com/Secret' || resource.type == 'secretmanager.googleapis.com/SecretVersion') && resource.name.startsWith('projects/879719977530/secrets/gainpath-google-')"
+      }
+    }
+  ],
+  "bindings": [
+    {
+      "resource": "projects/gainpath-0619",
+      "role": "projects/gainpath-0619/roles/gainpathGoogleIdentityRead",
+      "members": [
+        "serviceAccount:gainpath-google-sync@gainpath-0619.iam.gserviceaccount.com"
+      ]
+    },
+    {
+      "resource": "projects/gainpath-0619",
+      "role": "projects/gainpath-0619/roles/gainpathGoogleFirestore",
+      "members": [
+        "serviceAccount:gainpath-google-sync@gainpath-0619.iam.gserviceaccount.com"
+      ],
+      "condition": {
+        "title": "gainpath_default_database_only",
+        "expression": "resource.name == 'projects/gainpath-0619/databases/(default)'"
+      }
+    },
+    {
+      "resource": "projects/gainpath-0619",
+      "role": "projects/gainpath-0619/roles/gainpathGoogleSecretCreate",
+      "members": [
+        "serviceAccount:gainpath-google-sync@gainpath-0619.iam.gserviceaccount.com"
+      ]
+    },
+    {
+      "resource": "projects/gainpath-0619",
+      "role": "projects/gainpath-0619/roles/gainpathGoogleTokenVault",
+      "members": [
+        "serviceAccount:gainpath-google-sync@gainpath-0619.iam.gserviceaccount.com"
+      ],
+      "condition": {
+        "title": "gainpath_google_token_secrets_only",
+        "expression": "resource.service == 'secretmanager.googleapis.com' && (resource.type == 'secretmanager.googleapis.com/Secret' || resource.type == 'secretmanager.googleapis.com/SecretVersion') && resource.name.startsWith('projects/879719977530/secrets/gainpath-google-')"
+      }
+    }
+  ],
+  "clientSecretBinding": {
+    "resource": "projects/879719977530/secrets/GOOGLE_GYM_CLIENT_SECRET",
+    "role": "roles/secretmanager.secretAccessor",
+    "members": [
+      "serviceAccount:gainpath-google-sync@gainpath-0619.iam.gserviceaccount.com"
+    ],
+    "condition": null,
+    "expandedRolePermissions": [
+      "resourcemanager.projects.get",
+      "resourcemanager.projects.list",
+      "secretmanager.versions.access"
+    ]
+  },
+  "deployer": {
+    "principal": "user:owner-google-account-redacted@example.invalid",
+    "resource": "projects/gainpath-0619/serviceAccounts/gainpath-google-sync@gainpath-0619.iam.gserviceaccount.com",
+    "proposedAdditionalBindings": [],
+    "note": "Check existing iam.serviceAccounts.actAs entitlement once the account exists. If absent, submit a separate service-account-only role proposal; do not grant Token Creator or project-wide actAs."
+  },
+  "oauth": {
+    "accountEmail": "owner-google-account-redacted@example.invalid",
+    "supportEmail": "owner-google-account-redacted@example.invalid",
+    "developerContact": "owner-google-account-redacted@example.invalid",
+    "clientType": "Web application",
+    "clientName": "GainPath gym booking integration",
+    "redirectUri": "https://us-central1-gainpath-0619.cloudfunctions.net/googleGymOAuthCallback",
+    "scopes": [
+      "openid",
+      "email",
+      "https://www.googleapis.com/auth/calendar.app.created",
+      "https://www.googleapis.com/auth/gmail.send"
+    ],
+    "audience": "External",
+    "publishingStatus": "Testing",
+    "testUsers": [
+      "owner-google-account-redacted@example.invalid"
+    ],
+    "configured": true,
+    "clientId": "879719977530-ifb9qd1nqogi0kf79vm5mcqbesno530j.apps.googleusercontent.com",
+    "ownerReportedConfigured": true,
+    "verificationStatus": "Console audience, test user, exact scopes, Web client, callback, support and developer contacts independently verified",
+    "consoleIndependentlyVerified": true
+  },
+  "deployment": {
+    "approved": true,
+    "region": "us-central1",
+    "runtime": "nodejs22",
+    "functions": [
+      "googleGymConnectionCommand",
+      "googleGymOAuthCallback",
+      "syncGymBookingCommand"
+    ],
+    "approvalNote": "Owner replied proceed after explicit selective three-Function deployment proposal; no OAuth connection or provider writes approved."
+  },
+  "approval": {
+    "ownerApproved": true,
+    "appliedAt": "2026-10-22T07:19:12.318Z"
+  }
+}

@@ -51,10 +51,10 @@ jobs:
             fi
           done
       - name: Build Admin Web
-        run: flutter build web --debug --no-pub --dart-define=BACKEND=mock
+        run: flutter build web --debug --no-pub
         working-directory: apps/admin_web
       - name: Build Mobile APK
-        run: flutter build apk --debug --no-pub --dart-define=BACKEND=mock
+        run: flutter build apk --debug --no-pub
         working-directory: apps/mobile
   backend:
     runs-on: ubuntu-latest

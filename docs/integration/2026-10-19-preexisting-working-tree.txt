@@ -1,0 +1,96 @@
+ M .run/main.dart.run.xml
+ M README.md
+ M apps/admin_web/lib/features/identity/application/coach_directory_admin_cubit.dart
+ M apps/admin_web/lib/features/identity/presentation/admin/coach_certification_admin_adapter.dart
+ M apps/admin_web/lib/features/identity/presentation/admin/coach_certification_review_panel.dart
+ M apps/admin_web/lib/features/identity/presentation/admin/coaches_screen.dart
+ M apps/admin_web/lib/infrastructure/firebase/firebase_coach_profile_admin_repository.dart
+ M apps/admin_web/test/admin_shared_people_test.dart
+ M apps/admin_web/test/coach_directory_publication_flow_test.dart
+ M apps/mobile/lib/features/coaching/presentation/coach/availability_page.dart
+ M apps/mobile/lib/features/coaching/presentation/coach/availability_screens.dart
+ M apps/mobile/lib/features/coaching/presentation/coach/coach_roster_editor.dart
+ M apps/mobile/lib/features/coaching/presentation/coach/coach_roster_sections.dart
+ M apps/mobile/lib/features/coaching/presentation/coach/live_coach_availability_view.dart
+ M apps/mobile/lib/features/coaching/presentation/member/book_session_screen.dart
+ M apps/mobile/lib/features/coaching/presentation/member/widgets/coach_card.dart
+ M apps/mobile/lib/features/coaching/presentation/shared/coach_profile_screen.dart
+ M apps/mobile/lib/features/identity/presentation/coach/coach_account_presentation.dart
+ M apps/mobile/lib/features/identity/presentation/coach/edit_coach_profile_screen.dart
+ M apps/mobile/lib/infrastructure/local/mock_coach_module8_repository.dart
+ M apps/mobile/test/coach_availability_flow_test.dart
+ M apps/mobile/test/coach_directory_flow_test.dart
+ M apps/mobile/test/coach_module8_route_composition_test.dart
+ M apps/mobile/test/coach_roster_ui_test.dart
+ M docs/planning/2026-10-15-coaching-read-performance.md
+ M docs/superpowers/plans/2026-10-13-p0-ci-recovery.md
+ M packages/gainpath_domain/lib/src/identity/coach_profile_contracts.dart
+ M packages/gainpath_domain/test/coach_profile_contracts_test.dart
+?? SUPERVISOR_DEMO_CHECKLIST.md
+?? apps/mobile/lib/features/coaching/presentation/coach/coach_specific_date_sheet.dart
+?? apps/mobile/lib/features/coaching/presentation/coach/mock_availability_repository_adapter.dart
+?? apps/mobile/tool/__pycache__/analyze_pose_blanks.cpython-312.pyc
+?? apps/mobile/tool/__pycache__/analyze_pose_joint_lag.cpython-312.pyc
+?? apps/mobile/tool/__pycache__/summarize_pose_quality.cpython-312.pyc
+?? apps/mobile/tool/__pycache__/test_analyze_pose_blanks.cpython-312.pyc
+?? apps/mobile/tool/__pycache__/test_analyze_pose_joint_lag.cpython-312.pyc
+?? devtools_options.yaml
+?? docs/architecture/2026-10-02-pose-phone-validation.md
+?? docs/architecture/2026-10-02-pose-quality-validation.md
+?? docs/architecture/2026-10-02-pose-rendering-diagnosis.md
+?? docs/architecture/2026-10-03-pose-dynamic-joint-lag.md
+?? docs/architecture/2026-10-03-pose-external-video-analysis.md
+?? docs/architecture/2026-10-03-pose-physical-latency-baseline.md
+?? docs/architecture/2026-10-03-pose-preprocessing-optimization.md
+?? docs/architecture/2026-10-03-pose-step2c-physical-comparison.md
+?? docs/architecture/2026-10-05-pose-beta-external-recording-protocol.md
+?? docs/architecture/2026-10-05-pose-beta-responsiveness-experiment.md
+?? docs/architecture/2026-10-05-pose-beta-screen-video-comparison.md
+?? docs/architecture/2026-10-05-pose-interpreter-thread-experiment.md
+?? docs/architecture/2026-10-05-pose-refined-lag-and-blanks.md
+?? docs/architecture/2026-10-05-pose-refined-screen-video-analysis.md
+?? docs/architecture/2026-10-05-pose-sampler-clamp-optimization.md
+?? docs/architecture/2026-10-06-pose-beta12-external-comparison.md
+?? docs/architecture/2026-10-06-pose-beta12-gpu-experiment.md
+?? docs/architecture/2026-10-06-pose-filter-responsiveness-screening.md
+?? docs/architecture/2026-10-06-pose-filtered-gpu-validation.md
+?? docs/architecture/2026-10-06-pose-gpu-feasibility-audit.md
+?? docs/architecture/2026-10-06-pose-held-bias-and-temporal-response.md
+?? docs/architecture/2026-10-06-pose-live-gpu-candidate.md
+?? docs/architecture/2026-10-06-pose-refined-skeleton-ablation.md
+?? docs/architecture/2026-10-06-pose-step2i-screen-comparison.md
+?? docs/architecture/2026-10-06-pose-step2k-screen-review.md
+?? docs/architecture/2026-10-06-pose-step2m-screen-comparison.md
+?? docs/architecture/2026-10-13-p0-ci-recovery.md
+?? docs/architecture/2026-10-13-p8-1a-source-integration-ci.md
+?? docs/architecture/2026-10-14-a1-source-integration-ci.md
+?? docs/architecture/2026-10-14-b1-source-integration-ci.md
+?? docs/architecture/2026-10-14-b2-source-integration-ci.md
+?? docs/architecture/2026-10-14-gate0a-source-integration-ci.md
+?? docs/architecture/2026-10-14-p8-1b-read-only-preflight.md
+?? docs/architecture/2026-10-14-p8-1br-exercise-rename-impact.md
+?? docs/architecture/2026-10-15-b3-b4-source-integration-ci.md
+?? docs/architecture/2026-10-15-firebase-demo-execution.md
+?? docs/architecture/2026-10-15-non-core-crud-execution.md
+?? docs/architecture/2026-10-16-agent-technical-handoff.md
+?? docs/architecture/AGENT_HANDOFF.md
+?? docs/planning/2026-10-14-b3-pending-booking-plan.md
+?? docs/planning/2026-10-14-crud-integration-matrix.md
+?? docs/planning/2026-10-14-mvp-vertical-slices.md
+?? docs/planning/2026-10-15-b1-b2-predeployment-repair-proposal.md
+?? docs/planning/2026-10-15-coordinated-firebase-activation-preflight.md
+?? docs/planning/current-project-audit.md
+?? docs/planning/master-implementation-roadmap.md
+?? docs/planning/next-implementation-handoff.md
+?? docs/planning/p8-1b-bodyweight-squat-activation-approval.md
+?? docs/planning/p8-1b-bodyweight-squat-rename-activation-plan.md
+?? docs/planning/p8-1b-live-activation-next-gate.md
+?? docs/planning/p8-1b-tutorial-activation-handoff.md
+?? docs/planning/pose-core-technology-assessment.md
+?? docs/planning/requirements-gap-matrix.md
+?? docs/superpowers/plans/2026-09-25-feature-implementation-roadmap.md
+?? docs/superpowers/plans/2026-10-01-workout-content-vertical-slice.md
+?? docs/superpowers/plans/2026-10-02-blazepose-foundation.md
+?? docs/superpowers/plans/2026-10-02-real-pose-workout-handoff.md
+?? docs/superpowers/plans/2026-10-03-dynamic-joint-lag.md
+?? docs/superpowers/plans/2026-10-18-unified-admin-web-integration.md

@@ -5,7 +5,7 @@ import 'package:gainpath_admin_web/features/membership/payment_review_repository
 import 'package:gainpath_admin_web/features/membership/presentation/admin/refunds_screen.dart';
 
 class ReviewFake implements PaymentReviewRepository {
-  final record = PaymentReviewRecord({
+  var record = PaymentReviewRecord({
     'bookingId': 'booking-1',
     'memberId': 'member',
     'coachName': 'Coach',
@@ -41,6 +41,66 @@ class ReviewFake implements PaymentReviewRepository {
 }
 
 void main() {
+  testWidgets(
+      'existing payment details show the saved voucher finance breakdown',
+      (tester) async {
+    final repo = ReviewFake();
+    repo.record = PaymentReviewRecord({
+      ...repo.record.data,
+      'amountMinor': 9000,
+      'grossAmountMinor': 10000,
+      'discountMinor': 1000,
+      'premiumVoucher': {
+        'schemaVersion': 1,
+        'voucherId': 'voucher',
+        'memberId': 'member',
+        'amountMinor': 9000,
+        'grossAmountMinor': 10000,
+        'discountMinor': 1000,
+        'policyVersion': 'policy',
+        'fundingSource': 'gym',
+        'coachCommissionBasis': 'gross_fee',
+        'financeApprovalId': 'finance',
+        'commissionPolicyVersion': 'sandbox-coach-80-v1'
+      },
+    });
+    await tester.pumpWidget(MaterialApp(
+        home: RefundsScreen(
+            live: true, repository: repo, isCurrent: () => true)));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('booking-1'));
+    await tester.pumpAndSettle();
+    expect(find.text('Original booking fee'), findsOneWidget);
+    expect(find.text('RM 100.00'), findsOneWidget);
+    expect(find.text('Premium voucher discount'), findsOneWidget);
+    expect(find.text('RM 10.00'), findsOneWidget);
+    expect(find.textContaining('Gym-funded'), findsOneWidget);
+    expect(repo.actions, 0);
+  });
+  testWidgets(
+      'queue shows schedule and uncertain detail explains safe recovery',
+      (tester) async {
+    final repo = ReviewFake();
+    repo.record = PaymentReviewRecord({
+      ...repo.record.data,
+      'localDate': '2026-10-23',
+      'startLabel': '10:00 GMT+8',
+      'endLabel': '11:00 GMT+8',
+      'refundStatus': 'uncertain',
+      'refundReference': 'refund-booking-1'
+    });
+    await tester.pumpWidget(MaterialApp(
+        home: RefundsScreen(
+            live: true, repository: repo, isCurrent: () => true)));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('2026-10-23'), findsWidgets);
+    await tester.tap(find.text('booking-1'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Do not execute again'), findsOneWidget);
+    expect(find.text('Execute sandbox refund'), findsNothing);
+    expect(find.text('refund-booking-1'), findsOneWidget);
+    expect(repo.actions, 0);
+  });
   testWidgets('requires reason, prevents duplicates and reloads after approval',
       (tester) async {
     final repo = ReviewFake();
@@ -109,11 +169,12 @@ void main() {
     await tester.pumpAndSettle();
     expect(repo.actions, 0);
   });
-  testWidgets('unconnected console shows no fabricated records or metrics', (tester) async {
+  testWidgets('unconnected console shows no fabricated records or metrics',
+      (tester) async {
     await tester.pumpWidget(const MaterialApp(home: RefundsScreen()));
     await tester.pumpAndSettle();
     expect(find.text('—'), findsNWidgets(2));
-    expect(find.text('No booking payments on this page.'), findsOneWidget);
+    expect(find.text('No payments on this page.'), findsOneWidget);
     expect(find.textContaining('DEMO-'), findsNothing);
-  });}
-
+  });
+}

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
-import 'package:gainpath_data/gainpath_data.dart';
+import 'package:gainpath_ui/gainpath_ui.dart';
 import 'app/mobile_app.dart';
 import 'infrastructure/firebase/firebase_bootstrap.dart';
 
@@ -8,18 +8,19 @@ export 'app/mobile_app.dart' show GainPathMobileApp;
 
 Future<void> main() => launchGainPathApp();
 
-Future<void> launchGainPathApp({BackendConfig? backendConfig}) async {
+Future<void> launchGainPathApp(
+    {Future<void> Function()? initializeFirebase}) async {
   WidgetsFlutterBinding.ensureInitialized();
-  final config = backendConfig ?? const BackendConfig(BackendMode.firebase);
-  if (config.isFirebase) {
-    try {
-      await initializeGainPathFirebase();
-    } on UnsupportedError {
-      runApp(FirebaseSetupRequiredApp(platform: defaultTargetPlatform.name));
-      return;
-    }
+  try {
+    await (initializeFirebase ?? initializeGainPathFirebase)();
+  } on UnsupportedError {
+    runApp(FirebaseSetupRequiredApp(platform: defaultTargetPlatform.name));
+    return;
+  } catch (_) {
+    runApp(const BackendStartupErrorApp());
+    return;
   }
-  runApp(GainPathMobileApp(backendConfig: config));
+  runApp(const GainPathMobileApp());
 }
 
 /// Keep a visible explanation when Firebase has no configuration for the
@@ -54,7 +55,7 @@ class FirebaseSetupRequiredApp extends StatelessWidget {
                     ),
                     const SizedBox(height: 16),
                     const SelectableText(
-                      'flutter run -d <android-device-id> --dart-define=BACKEND=firebase',
+                      'flutter run -d <android-device-id>',
                     ),
                     const SizedBox(height: 24),
                     const Text(

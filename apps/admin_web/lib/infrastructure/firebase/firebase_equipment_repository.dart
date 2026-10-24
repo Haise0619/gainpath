@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:gainpath_domain/workout.dart';
 import 'package:gainpath_domain/gainpath_domain.dart' show SessionScope;
 import 'firebase_equipment_image_store.dart';
+import 'firebase_equipment_video_store.dart';
 
 class FirebaseEquipmentRepository extends EquipmentRepository {
   FirebaseEquipmentRepository(
@@ -10,15 +11,18 @@ class FirebaseEquipmentRepository extends EquipmentRepository {
       required this.isCurrent,
       FirebaseFirestore? firestore,
       FirebaseAuth? auth,
-      EquipmentImageStore? imageStore})
+      EquipmentImageStore? imageStore,
+      EquipmentVideoStore? videoStore})
       : _db = firestore ?? FirebaseFirestore.instance,
         _auth = auth ?? FirebaseAuth.instance,
-        _imageStore = imageStore ?? FirebaseEquipmentImageStore(scope: scope);
+        _imageStore = imageStore ?? FirebaseEquipmentImageStore(scope: scope),
+        _videoStore = videoStore ?? FirebaseEquipmentVideoStore(scope: scope);
   final SessionScope scope;
   final bool Function() isCurrent;
   final FirebaseFirestore _db;
   final FirebaseAuth _auth;
   final EquipmentImageStore _imageStore;
+  final EquipmentVideoStore _videoStore;
   final Object _lifetime = Object();
   bool _invalidated = false;
   @override
@@ -80,7 +84,9 @@ class FirebaseEquipmentRepository extends EquipmentRepository {
 
   @override
   Future<GymEquipment> saveEquipment(GymEquipment equipment,
-      {EquipmentImage? image}) async {
+      {EquipmentImage? image,
+      EquipmentVideo? video,
+      void Function(double)? onVideoProgress}) async {
     equipment.validate();
     _check();
     final original = equipment.editBaseline;
@@ -94,7 +100,8 @@ class FirebaseEquipmentRepository extends EquipmentRepository {
     final baseline = original is _Baseline ? original : null;
     final ref = create ? _records.doc() : _records.doc(equipment.id);
     var imageUrl = equipment.imageUrl.trim();
-    if (image != null) {
+    var tutorialVideoUrl = equipment.tutorialVideoUrl;
+    if (image != null || video != null) {
       final user =
           (await _user.get(const GetOptions(source: Source.server))).data();
       final member =
@@ -111,7 +118,12 @@ class FirebaseEquipmentRepository extends EquipmentRepository {
         }
       }
       _check();
-      imageUrl = await _imageStore.upload(image);
+      if (image != null) imageUrl = await _imageStore.upload(image);
+      _check();
+      if (video != null) {
+        tutorialVideoUrl =
+            await _videoStore.upload(video, onProgress: onVideoProgress);
+      }
       _check();
     }
     final fields = <String, dynamic>{
@@ -120,6 +132,9 @@ class FirebaseEquipmentRepository extends EquipmentRepository {
       'muscleGroup': equipment.muscleGroup.trim(),
       'description': equipment.description.trim(),
       'imageUrl': imageUrl,
+      if (tutorialVideoUrl.isNotEmpty ||
+          baseline?.document.containsKey('tutorialVideoUrl') == true)
+        'tutorialVideoUrl': tutorialVideoUrl,
       'isActive': equipment.isActive,
       'howToUse':
           equipment.howToUse.map((s) => s.trim()).toList(growable: false),

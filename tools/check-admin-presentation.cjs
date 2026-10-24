@@ -9,10 +9,10 @@ const violations = [];
 // 1. Startup & Connected Default
 for (const file of ['main.dart', 'app/admin_app.dart']) {
   const source = read(adminWeb + file);
-  if (/BackendConfig\.fromEnvironment\(/.test(source)) {
+  if (/BackendConfig|BackendMode|\bBACKEND\b/.test(source)) {
     violations.push(`${file}: normal admin web startup must not select a separate sample product`);
   }
-  if (!source.includes('backendConfig ?? const BackendConfig(BackendMode.firebase)')) {
+  if (!source.includes(file === 'main.dart' ? 'initializeGainPathFirebase' : 'FlutterFirebaseAuthGateway()')) {
     violations.push(`${file}: retain connected startup and explicit dependency injection for tests`);
   }
 }

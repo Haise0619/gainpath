@@ -2,6 +2,9 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:gainpath_identity/gainpath_identity.dart';
 import 'package:gainpath_domain/gainpath_domain.dart' show SessionScope;
+import 'package:gainpath_domain/membership.dart';
+import '../../features/membership/presentation/shared/membership_access_gate.dart';
+import '../di/membership_factory.dart';
 import '../../features/workout/domain/published_routine_view.dart';
 import '../../features/workout/presentation/member/workout_prep_screen.dart';
 import '../../navigation/workout_navigation.dart';
@@ -54,13 +57,17 @@ class WorkoutPrepRoute extends StatelessWidget {
 }
 
 Widget _realSession(BuildContext context, RealWorkoutLaunch launch) =>
-    RealSquatRoute(
-        scope: launch.scope,
-        routineId: launch.routineId,
-        exercise: launch.exercise,
-        consented: launch.consented,
-        setupConfirmed: launch.setupConfirmed,
-        requestServerUpload: launch.requestServerUpload);
+    MembershipAccessGate(
+        enabled: membershipAccessEnforcementEnabled,
+        feature: MembershipAccessFeature.exercise,
+        resourceId: launch.exercise.exerciseId,
+        child: RealSquatRoute(
+            scope: launch.scope,
+            routineId: launch.routineId,
+            exercise: launch.exercise,
+            consented: launch.consented,
+            setupConfirmed: launch.setupConfirmed,
+            requestServerUpload: launch.requestServerUpload));
 
 Widget _savedSessions(BuildContext context, SessionScope scope) =>
     SavedSquatSessionsRoute(scope: scope);

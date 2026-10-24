@@ -5,7 +5,8 @@ import 'package:flutter/foundation.dart';
 class FirebaseAppCheckReadiness {
   FirebaseAppCheckReadiness({
     this.mode =
-        const String.fromEnvironment('APP_CHECK_MODE', defaultValue: 'off'),
+        const String.fromEnvironment('APP_CHECK_MODE',
+            defaultValue: kReleaseMode ? 'production' : 'debug'),
     this.release = kReleaseMode,
     bool? supported,
     Future<void> Function(String)? activate,

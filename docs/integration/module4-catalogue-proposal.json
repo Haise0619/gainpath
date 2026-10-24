@@ -1,0 +1,56 @@
+{
+  "approvalStatus": "PROPOSED_NOT_APPROVED",
+  "projectId": "gainpath-0619",
+  "organizationId": "gainpath",
+  "purpose": "Basic/Premium Sandbox UAT catalogue; proposed business values only",
+  "writeScopeProposed": "Create two inactive catalogue documents only; no account, transaction or promo writes",
+  "records": [
+    {
+      "path": "orgs/gainpath/membershipPlans/basic",
+      "precondition": { "exists": false },
+      "data": {
+        "active": false,
+        "name": "Basic",
+        "amountMinor": 4900,
+        "currency": "MYR",
+        "durationDays": 30,
+        "benefits": [
+          "Organization-wide GainPath membership",
+          "Membership dashboard with tier, status and expiry",
+          "Manual renewal that preserves remaining paid time",
+          "Membership billing history and cleared-payment PDF invoices",
+          "Refund request and review tracking under the existing seven-day policy"
+        ],
+        "version": "basic-uat-v1"
+      }
+    },
+    {
+      "path": "orgs/gainpath/membershipPlans/premium",
+      "precondition": { "exists": false },
+      "data": {
+        "active": false,
+        "name": "Premium",
+        "amountMinor": 8900,
+        "currency": "MYR",
+        "durationDays": 30,
+        "benefits": [
+          "Organization-wide GainPath membership",
+          "Membership dashboard with tier, status and expiry",
+          "Manual renewal that preserves remaining paid time",
+          "Membership billing history and cleared-payment PDF invoices",
+          "Refund request and review tracking under the existing seven-day policy"
+        ],
+        "version": "premium-uat-v1"
+      }
+    }
+  ],
+  "activationRequiresSeparateApproval": true,
+  "activationPatchPerDocument": { "active": true },
+  "activationPrecondition": "Both documents match the approved staged records and their captured updateTime; do not overwrite concurrent edits",
+  "promoRecords": [],
+  "recurringBillingSupported": false,
+  "manualRenewalSupported": true,
+  "newFeatureRestrictions": [],
+  "premiumExclusiveBenefits": [],
+  "financialUatAuthorized": false
+}

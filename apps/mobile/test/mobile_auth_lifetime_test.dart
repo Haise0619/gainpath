@@ -71,9 +71,8 @@ void main() {
     final auth = FirebaseAuthRepository(gateway);
     var profileLoads = 0;
     final guards = <bool Function()>[];
-    await tester.pumpWidget(GainPathMobileApp(
+    await tester.pumpWidget(GainPathMobileApp.injected(
       authRepository: auth,
-      backendConfig: const BackendConfig(BackendMode.firebase),
       profileRepositoryFactory: (scope) {
         profileLoads++;
         return _MissingProfile(scope);
@@ -107,9 +106,8 @@ void main() {
     final gateway = _Gateway();
     final auth = FirebaseAuthRepository(gateway);
     var creations = 0;
-    await tester.pumpWidget(GainPathMobileApp(
+    await tester.pumpWidget(GainPathMobileApp.injected(
       authRepository: auth,
-      backendConfig: const BackendConfig(BackendMode.firebase),
       profileRepositoryFactory: (scope) {
         creations++;
         return _MissingProfile(scope);
@@ -151,9 +149,8 @@ void main() {
     addTearDown(tester.view.reset);
     final gateway = _Gateway()..verified = false;
     final auth = FirebaseAuthRepository(gateway);
-    await tester.pumpWidget(GainPathMobileApp(
+    await tester.pumpWidget(GainPathMobileApp.injected(
       authRepository: auth,
-      backendConfig: const BackendConfig(BackendMode.firebase),
       profileRepositoryFactory: _MissingProfile.new,
     ));
     // Verification's pulse intentionally remains animated.

@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:gainpath_domain/content.dart';
+import 'package:gainpath_domain/coaching.dart';
+import 'package:gainpath_domain/identity.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 /// AD-M11.6 — System Settings. Mock mode retains all prototype tabs.
 /// Firebase mode supports facility names and compliance drafts; publication and member
@@ -26,7 +29,7 @@ class SystemSettingsScreen extends StatefulWidget {
 class _SystemSettingsScreenState extends State<SystemSettingsScreen>
     with SingleTickerProviderStateMixin {
   late final _tabs =
-      TabController(length: 3, initialIndex: 0, vsync: this);
+      TabController(length: 4, initialIndex: 0, vsync: this);
 
   @override
   void dispose() {
@@ -75,6 +78,7 @@ class _SystemSettingsScreenState extends State<SystemSettingsScreen>
                 Tab(text: 'General'),
                 Tab(text: 'Reward conversion'),
                 Tab(text: 'Legal & compliance'),
+                Tab(text: 'Google integration'),
               ],
             ),
           ),
@@ -85,6 +89,7 @@ class _SystemSettingsScreenState extends State<SystemSettingsScreen>
                 _GeneralPreferencesTab(live: widget.live),
                 _ConversionRateTab(live: widget.live),
                 _ComplianceDocumentTab(live: widget.live),
+                _GoogleIntegrationTab(live: widget.live),
               ],
             ),
           ),
@@ -830,4 +835,27 @@ class _ComplianceDocumentTabState extends State<_ComplianceDocumentTab> {
       ),
     );
   }
+}
+
+class _GoogleIntegrationTab extends StatelessWidget {
+ const _GoogleIntegrationTab({required this.live});
+ final bool live;
+ Future<Map<String,String>> _coaches(BuildContext context) async {
+  final repo = context.read<CoachProfileAdminRepository>();
+  final result = <String,String>{}, seen = <String>{};
+  String? cursor;
+  do {
+   final page = await repo.loadPublicPage(afterId: cursor);
+   for (final coach in page.items) { if (coach.isPublished) result[coach.id] = coach.fields.displayName; }
+   cursor = page.nextCursor;
+   if (cursor != null && !seen.add(cursor)) throw StateError('Coach directory cursor did not advance.');
+  } while (cursor != null);
+  return result;
+ }
+ @override
+ Widget build(BuildContext context) => SingleChildScrollView(padding: const EdgeInsets.all(24),child: GoogleIntegrationPanel(
+  repository: live ? context.read<GoogleIntegrationRepository>() : const DisconnectedGoogleIntegrationRepository(),
+  admin: true, demo: !live, loadCoaches: live ? () => _coaches(context) : null,
+  openAuthorization: (url) => launchUrl(url, mode: LaunchMode.externalApplication),
+ ));
 }

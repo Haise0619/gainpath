@@ -3,11 +3,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:gainpath_domain/gainpath_domain.dart';
 import 'package:gainpath_domain/coaching.dart'
-    show Booking, BookingCommunicationRepository, ConsultationNotesRepository, CoachBookingCancellationRepository, ClientPostureRepository, BookingReviewRepository;
+    show BookingChangeSource, Booking, BookingCommunicationRepository, ConsultationNotesRepository, CoachBookingCancellationRepository, ClientPostureRepository, BookingReviewRepository;
 import '../coach/client_posture_screen.dart';
 import '../coach/consultation_notes_screen.dart';
 import '../../application/live_booking_cubit.dart';
 import '../member/booking_schedule_screen.dart';
+import '../member/member_booking_change_screen.dart';
+import 'package:gainpath_domain/coaching.dart' show MemberBookingChangeRepository;
 import '../coach/roster_screen.dart';
 import 'persisted_booking_presentation.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
@@ -20,6 +22,7 @@ class LiveBookingListView extends StatefulWidget {
       required this.repository,
       required this.isCurrent,
       this.cancellation,
+      this.memberChanges,
       this.coachCancellation,
       this.onPayment,
       this.communication,
@@ -33,6 +36,7 @@ class LiveBookingListView extends StatefulWidget {
   final void Function(String bookingId)? onPayment;
   final bool Function() isCurrent;
   final BookingCancellationRepository? cancellation;
+  final MemberBookingChangeRepository? memberChanges;
   final CoachBookingCancellationRepository? coachCancellation;
   final BookingCommunicationRepository? communication;
   final ConsultationNotesRepository? notes;
@@ -46,22 +50,26 @@ class LiveBookingListView extends StatefulWidget {
 }
 
 class _LiveBookingListViewState extends State<LiveBookingListView> {
+  final Map<String, int> _reviewed = {};
   Timer? _updates;
+  StreamSubscription<void>? _liveUpdates;
   @override
   void initState() {
     super.initState();
+    final source = widget.repository;
+    if (source is BookingChangeSource) {
+      var firstSnapshot = true;
+      _liveUpdates = (source as BookingChangeSource).watchBookingChanges().listen((_) { if (firstSnapshot) { firstSnapshot = false; return; } _refreshCurrent(); }, onError: (_) { /* The periodic/manual refresh remains available. */ });
+    }
     _updates = Timer.periodic(const Duration(seconds: 30), (_) {
-      if (mounted &&
-          widget.isCurrent() &&
-          !cancellation.state.busy &&
-          !cancellation.state.uncertain &&
-          controller.state.records.length <= 20 &&
-          (ModalRoute.of(context)?.isCurrent ?? true)) {
-        controller.refresh();
-      }
+      _refreshCurrent();
     });
   }
 
+  void _refreshCurrent() {
+    if (mounted && widget.isCurrent() && !cancellation.state.busy && !cancellation.state.uncertain
+        && !controller.state.busy && (ModalRoute.of(context)?.isCurrent ?? true)) { controller.refresh(); }
+  }
   late final cancellation = BookingCancellationCubit(
       repository: widget.cancellation, isCurrent: widget.isCurrent);
   late final controller = BookingListCubit(
@@ -72,6 +80,7 @@ class _LiveBookingListViewState extends State<LiveBookingListView> {
   @override
   void dispose() {
     _updates?.cancel();
+    unawaited(_liveUpdates?.cancel());
     controller.close();
     cancellation.close();
     super.dispose();
@@ -98,6 +107,13 @@ class _LiveBookingListViewState extends State<LiveBookingListView> {
     if (await cancellation.cancel(bookingId) && mounted) {
       await controller.refresh();
     }
+  }
+
+  Future<void> _changeMemberBooking(PersistedBookingRecord record,{required bool reschedule})async{
+    final repository=widget.memberChanges;
+    if(repository==null||!widget.isCurrent()||controller.state.busy||cancellation.state.busy)return;
+    final changed=await Navigator.push<bool>(context,MaterialPageRoute(builder:(_)=>MemberBookingChangeScreen(repository:repository,booking:record,reschedule:reschedule,isCurrent:widget.isCurrent)));
+    if(changed==true&&mounted&&widget.isCurrent())await controller.refresh();
   }
 
   Future<void> _cancelCoachBooking(Booking booking) async {
@@ -268,6 +284,7 @@ class _LiveBookingListViewState extends State<LiveBookingListView> {
         reviewText: textController.text.trim(),
       );
       if (!mounted || !widget.isCurrent()) return;
+      setState(() => _reviewed[bookingId] = selectedStars);
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Review submitted. Thank you for your feedback!')),
       );
@@ -372,7 +389,7 @@ class _LiveBookingListViewState extends State<LiveBookingListView> {
               ],
             ]);
             final bookings =
-                state.records.map(persistedBookingPresentation).toList();
+                state.records.map((r) { final b = persistedBookingPresentation(r); b.rated = b.rated || _reviewed.containsKey(r.bookingId); b.reviewStars ??= _reviewed[r.bookingId]; return b; }).toList();
             final details = {
               for (final record in state.records)
                 record.bookingId: Column(
@@ -393,6 +410,14 @@ class _LiveBookingListViewState extends State<LiveBookingListView> {
                       DetailRow(
                           'Time', '${record.startLabel} – ${record.endLabel}'),
                       DetailRow('Timezone', record.timeZone),
+                      if(widget.coachId==null&&widget.memberChanges!=null&&record.rawStatus=='confirmed')...[
+                        const SizedBox(height:12),
+                        const Text('Member changes: cancellation needs 12 hours and rescheduling needs 24 hours before start. Refunds require Admin review.'),
+                        Wrap(spacing:12,runSpacing:8,children:[
+                          OutlinedButton.icon(onPressed:state.busy||record.startAtMillis-state.page!.serverNowMillis<24*3600000?null:()=>_changeMemberBooking(record,reschedule:true),icon:const Icon(Icons.edit_calendar_outlined),label:const Text('Reschedule confirmed session')),
+                          TextButton(onPressed:state.busy||record.startAtMillis-state.page!.serverNowMillis<12*3600000?null:()=>_changeMemberBooking(record,reschedule:false),child:const Text('Cancel confirmed session')),
+                        ]),
+                      ],
                       DetailRow('Hold expiry', record.expiryLabel),
                       if (widget.coachId == null &&
                           record.rawStatus == 'completed') ...[
@@ -402,12 +427,7 @@ class _LiveBookingListViewState extends State<LiveBookingListView> {
                                   _notes(persistedBookingPresentation(record)),
                               icon: const Icon(Icons.sticky_note_2_outlined),
                               label: const Text('View consultation notes')),
-                        if (widget.review != null)
-                          TextButton.icon(
-                              onPressed: () => _showReviewDialog(record.bookingId),
-                              icon: const Icon(Icons.star_rate_rounded),
-                              label: const Text('Rate session')),
-                      ],
+],
                       if (widget.coachId != null) ...[
                         const Text(
                             'Form history: — · Confirmed booking and authorized cloud measurements required.'),
@@ -453,6 +473,7 @@ class _LiveBookingListViewState extends State<LiveBookingListView> {
                   header: header);
             }
             return BookingScheduleScreen(
+                onReview: widget.review == null || state.busy ? null : _showReviewDialog,
                 onMessage: widget.communication == null
                     ? null
                     : (booking) => Navigator.push(

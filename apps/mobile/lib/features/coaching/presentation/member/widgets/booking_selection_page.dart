@@ -30,12 +30,14 @@ class BookingSelectionPage extends StatelessWidget {
       this.header = const [],
       this.footer = const [],
       this.actions,
+      this.emptyTimes,
       this.duration});
   final List<BookingDayOption> days;
   final List<BookingTimeOption> times;
   final List<Widget> details, header, footer;
   final List<Widget>? actions;
   final Widget? duration;
+  final Widget? emptyTimes;
   @override
   Widget build(BuildContext context) => Scaffold(
         appBar: AppBar(title: const Text('Book a session'), actions: actions),
@@ -126,7 +128,9 @@ class BookingSelectionPage extends StatelessWidget {
                                 : null))),
               )
           ]),
-          if (times.isEmpty) const Text('-'),
+          if (times.isEmpty)
+            emptyTimes ??
+                const Text('No available times. Choose another date.'),
           const SizedBox(height: 24),
           Panel(
               child: Column(children: [

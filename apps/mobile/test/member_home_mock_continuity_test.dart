@@ -57,7 +57,8 @@ void main() {
       )),
     ));
     await tester.pumpAndSettle();
-    expect(find.text('- member'), findsOneWidget);
+    expect(find.text('Membership unavailable'), findsOneWidget);
+    expect(find.text('- member'), findsNothing);
     expect(find.text('member@example.test'), findsOneWidget);
     expect(find.text('Physical profile'), findsOneWidget);
     expect(find.text('Fitness goals'), findsOneWidget);

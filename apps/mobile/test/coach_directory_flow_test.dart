@@ -87,9 +87,8 @@ void main() {
           email: 'fixture@example.test',
           role: AppRole.coach);
       final auth = DriftingCoachAuth(baseline), repo = ProfileFake();
-      await tester.pumpWidget(GainPathMobileApp(
+      await tester.pumpWidget(GainPathMobileApp.injected(
           authRepository: auth,
-          backendConfig: const BackendConfig(BackendMode.firebase),
           coachProfileFactory: (_, current) => repo,
           coachAccountFactory: (_, current) => CoachAccountGatewayFake()));
       await tester.pumpAndSettle();
@@ -129,9 +128,8 @@ void main() {
     await auth.signIn(
         role: AppRole.coach, email: 'coach@example.com', password: 'fixture');
     final repo = ProfileFake();
-    await tester.pumpWidget(GainPathMobileApp(
+    await tester.pumpWidget(GainPathMobileApp.injected(
         authRepository: auth,
-        backendConfig: const BackendConfig(BackendMode.firebase),
         coachProfileFactory: (_, current) => repo,
         coachAccountFactory: (_, current) => CoachAccountGatewayFake(),
         coachAvailabilityFactory: (_, current) => AvailabilityFake()));
@@ -181,9 +179,8 @@ void main() {
         store = InMemoryWorkoutSessionStore(scope: session.scope),
         sync = MemoryRealWorkoutSyncStore(scope: session.scope);
     final before = (await sync.read()).toJson();
-    await tester.pumpWidget(GainPathMobileApp(
+    await tester.pumpWidget(GainPathMobileApp.injected(
         authRepository: auth,
-        backendConfig: const BackendConfig(BackendMode.firebase),
         profileRepositoryFactory: profiles.repository,
         routineLoaderFactory: (_) async => null,
         coachDirectoryFactory: (_, current) => directory,

@@ -1,4 +1,5 @@
 import 'booking_payment_screen.dart';
+import 'package:gainpath_domain/chatbot.dart';
 import 'package:flutter/material.dart';
 import '../../application/booking_bloc.dart';
 import 'package:gainpath_domain/coaching.dart';
@@ -17,6 +18,7 @@ import 'widgets/booking_selection_page.dart';
 /// bookings" and on that coach's own roster — the two are filtered views
 /// over one shared list, not separate data.
 class BookSessionScreen extends StatefulWidget {
+  final BookingSuggestionAttachment? suggestion;
   final Coach? coach;
   final BookingPaymentRepository? payments;
   final persisted.MemberBookingOptionsRepository? options;
@@ -32,7 +34,8 @@ class BookSessionScreen extends StatefulWidget {
       this.writer,
       this.coachId,
       this.isCurrent,
-      this.onOpenBookings});
+      this.onOpenBookings,
+      this.suggestion});
 
   @override
   State<BookSessionScreen> createState() => _BookSessionScreenState();
@@ -53,7 +56,8 @@ class _BookSessionScreenState extends State<BookSessionScreen> {
           payments: widget.payments,
           coachId: widget.coachId!,
           isCurrent: widget.isCurrent!,
-          onOpenBookings: widget.onOpenBookings!);
+          onOpenBookings: widget.onOpenBookings!,
+          suggestion: widget.suggestion);
     }
     final days =
         List.generate(5, (i) => DateTime.now().add(Duration(days: i + 1)));
@@ -84,8 +88,11 @@ class _BookSessionScreenState extends State<BookSessionScreen> {
             'Date', '${dayNames[days[_day].weekday - 1]} ${days[_day].day}'),
         DetailRow('Time', _slot == null ? 'Not selected' : _slots[_slot!]),
         DetailRow('Location', widget.coach!.branch),
-        DetailRow('Total',
-            widget.coach!.fee > 0 ? 'RM ${widget.coach!.fee.toStringAsFixed(2)}' : '—')
+        DetailRow(
+            'Total',
+            widget.coach!.fee > 0
+                ? 'RM ${widget.coach!.fee.toStringAsFixed(2)}'
+                : '—')
       ],
       footer: [
         if (widget.coach!.fee <= 0)
@@ -148,25 +155,53 @@ class _PersistedBookSessionView extends StatefulWidget {
       this.payments,
       required this.coachId,
       required this.isCurrent,
-      required this.onOpenBookings});
+      required this.onOpenBookings,
+      this.suggestion});
   final persisted.MemberBookingOptionsRepository options;
   final persisted.BookingRepository writer;
   final BookingPaymentRepository? payments;
   final String coachId;
   final bool Function() isCurrent;
   final VoidCallback onOpenBookings;
+  final BookingSuggestionAttachment? suggestion;
   @override
   State<_PersistedBookSessionView> createState() =>
       __PersistedBookSessionViewState();
 }
 
 class __PersistedBookSessionViewState extends State<_PersistedBookSessionView> {
+  @override
+  void initState() {
+    super.initState();
+    _loadInitial();
+  }
+
+  Future<void> _loadInitial() async {
+    final suggestion = widget.suggestion;
+    await controller.refresh(
+        localDate: suggestion?.expired == false ? suggestion!.localDate : null,
+        durationMinutes: suggestion?.durationMinutes);
+    if (!mounted || !widget.isCurrent() || suggestion == null) return;
+    final match = controller.state.options?.options
+        .where((o) =>
+            o.branchId == suggestion.branchId &&
+            o.startAtMillis == suggestion.startAtMillis)
+        .firstOrNull;
+    if (suggestion.expired ||
+        suggestion.coachId != widget.coachId ||
+        match == null) {
+      setState(() => _suggestionMessage =
+          'The suggested time expired or is no longer available. Choose a current time.');
+      return;
+    }
+    await _select(match);
+  }
+
   late final controller = LiveBookingCubit(
       options: widget.options,
       writer: widget.writer,
       coachId: widget.coachId,
-      isCurrent: widget.isCurrent)
-    ..refresh();
+      isCurrent: widget.isCurrent);
   @override
   void dispose() {
     controller.close();
@@ -175,7 +210,9 @@ class __PersistedBookSessionViewState extends State<_PersistedBookSessionView> {
 
   BookingPaymentQuote? _quote;
   String? _quoteError;
+  String? _suggestionMessage;
   bool _quoteBusy = false;
+  bool _usePremiumVoucher = false;
   int _quoteGeneration = 0;
   Future<void> _refresh({String? localDate, int? durationMinutes}) async {
     _quoteGeneration++;
@@ -183,12 +220,16 @@ class __PersistedBookSessionViewState extends State<_PersistedBookSessionView> {
       _quote = null;
       _quoteBusy = false;
       _quoteError = null;
+      _usePremiumVoucher = false;
+      _suggestionMessage = null;
     });
     await controller.refresh(
         localDate: localDate, durationMinutes: durationMinutes);
   }
 
   Future<void> _select(persisted.BookingOption option) async {
+    _usePremiumVoucher = false;
+    if (_suggestionMessage != null) setState(() => _suggestionMessage = null);
     controller.select(option);
     await _loadQuote();
   }
@@ -204,19 +245,26 @@ class __PersistedBookSessionViewState extends State<_PersistedBookSessionView> {
       _quoteError = null;
     });
     try {
-      final result = await repo.loadQuote(
-          coachId: widget.coachId,
-          branchId: intent.branchId.value,
-          durationMinutes: intent.durationMinutes);
+      final result = repo is PremiumVoucherBookingPaymentRepository
+          ? await (repo as PremiumVoucherBookingPaymentRepository)
+              .loadVoucherQuote(
+                  coachId: widget.coachId,
+                  branchId: intent.branchId.value,
+                  durationMinutes: intent.durationMinutes,
+                  usePremiumVoucher: _usePremiumVoucher)
+          : await repo.loadQuote(
+              coachId: widget.coachId,
+              branchId: intent.branchId.value,
+              durationMinutes: intent.durationMinutes);
       if (mounted && widget.isCurrent() && generation == _quoteGeneration) {
         setState(() => _quote = result);
       }
     } catch (e) {
       if (mounted && widget.isCurrent() && generation == _quoteGeneration) {
-        setState(() => _quoteError =
-            (e is persisted.BookingException && e.code == 'failed-precondition')
-                ? 'The Coach has no valid published consultation fee. Booking checkout is unavailable.'
-                : 'Fee unavailable. Retry the quote before continuing.');
+        setState(() => _quoteError = (e is persisted.BookingException &&
+                e.code == 'failed-precondition')
+            ? 'The Coach has no valid published consultation fee. Booking checkout is unavailable.'
+            : 'Fee unavailable. Retry the quote before continuing.');
       }
     } finally {
       if (mounted && generation == _quoteGeneration) {
@@ -237,6 +285,7 @@ class __PersistedBookSessionViewState extends State<_PersistedBookSessionView> {
                 repository: widget.payments!,
                 bookingId: hold.bookingId,
                 isCurrent: widget.isCurrent,
+                usePremiumVoucher: _usePremiumVoucher && _quote!.voucherApplied,
                 create: true)));
   }
 
@@ -286,22 +335,38 @@ class __PersistedBookSessionViewState extends State<_PersistedBookSessionView> {
               }
             },
             child: BookingSelectionPage(
+              emptyTimes: Panel(
+                  child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                    Text(state.busy
+                        ? 'Loading available times…'
+                        : state.message != null
+                            ? 'Available times could not be loaded. Retry below.'
+                            : options?.unavailableReason == 'daily_limit'
+                                ? 'Daily booking limit reached for ${options?.localDate}. An existing confirmed session or active unpaid hold counts toward your daily limit across Coaches. The Coach may also have reached daily capacity.'
+                                : 'No open times on ${options?.localDate ?? 'this date'}. The Coach may be off or all times may be reserved. Choose another date.'),
+                    if (!state.busy)
+                      TextButton(
+                          onPressed: widget.onOpenBookings,
+                          child: const Text('View My bookings')),
+                  ])),
               actions: [
                 TextButton(
                     onPressed: state.busy ? null : widget.onOpenBookings,
                     child: const Text('My bookings'))
               ],
               header: [
-                const Text(
-                    'Available times are a snapshot. Requesting creates a pending hold only; no payment or confirmation is available.'),
+                Text(widget.payments == null
+                    ? 'Available times are a snapshot. Requesting creates a pending hold only.'
+                    : 'Choose an available time, then continue to secure payment. Your session is confirmed only after payment verification.'),
                 if (state.busy) const LinearProgressIndicator(),
                 if (state.message != null) Text(state.message!),
+                if (_suggestionMessage != null)
+                  Text(_suggestionMessage!,
+                      style: const TextStyle(color: AppColors.danger)),
                 if (options != null)
                   Text('Organization timezone: ${options.timeZone}'),
-                if (options != null && options.options.isEmpty)
-                  Text(options.unavailableReason == 'daily_limit'
-                      ? 'Daily booking limit reached.'
-                      : 'No open times on this date.'),
               ],
               days: options == null
                   ? []
@@ -353,6 +418,9 @@ class __PersistedBookSessionViewState extends State<_PersistedBookSessionView> {
                             '-'),
                 DetailRow('Location',
                     _quote?.branchName ?? state.intent?.branchId.value ?? '-'),
+                if (_quote?.voucherApplied == true)
+                  DetailRow('Voucher discount',
+                      'RM ${(_quote!.discountMinor! / 100).toStringAsFixed(2)}'),
                 DetailRow(
                     'Total',
                     _quoteBusy
@@ -360,6 +428,29 @@ class __PersistedBookSessionViewState extends State<_PersistedBookSessionView> {
                         : _quote?.formattedAmount ?? '—'),
               ],
               footer: [
+                if (_quote?.voucher?.available == true)
+                  SwitchListTile(
+                    title: const Text('Apply Premium Coach voucher'),
+                    subtitle: const Text(
+                        '10% off, up to RM15. Confirmed at checkout.'),
+                    value: _usePremiumVoucher,
+                    onChanged: locked || _quoteBusy
+                        ? null
+                        : (value) {
+                            _usePremiumVoucher = value;
+                            _loadQuote();
+                          },
+                  )
+                else if (_quote?.voucher != null)
+                  Text(switch (_quote!.voucher!.status) {
+                    'reserved' =>
+                      'Your voucher is reserved for an existing checkout.',
+                    'consumed' =>
+                      'Your voucher for this Premium cycle has been used.',
+                    'ineligible' =>
+                      'No Premium Coach voucher is eligible for this session.',
+                    _ => 'Premium Coach voucher unavailable.',
+                  }),
                 if (_quoteError != null)
                   Padding(
                     padding: const EdgeInsets.only(bottom: 8),

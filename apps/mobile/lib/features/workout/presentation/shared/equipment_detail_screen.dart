@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'equipment_tutorial_video.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
 import '../member/exercise_tutorial_screen.dart' show ExerciseTutorialScreen;
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -16,7 +17,7 @@ Widget _networkHero(String url, {BoxFit fit = BoxFit.cover}) {
     url,
     fit: fit,
     loadingBuilder: (context, child, progress) =>
-        progress == null ? child : Container(color: AppColors.ink),
+        progress == null ? child : const SizedBox.shrink(),
     errorBuilder: (context, error, stack) => const DecoratedBox(
         decoration: BoxDecoration(gradient: AppColors.heroGradient)),
   );
@@ -101,17 +102,26 @@ class _EquipmentDetailScreenState extends State<EquipmentDetailScreen>
         children: [
           ClipRRect(
             borderRadius: BorderRadius.circular(18),
-            child: AspectRatio(
-              aspectRatio: 16 / 10,
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  _networkHero(equipment.imageUrl),
-                  DecoratedBox(
-                    decoration: BoxDecoration(
-                        color: AppColors.ink
-                            .withValues(alpha: _playing ? 0.5 : 0.22)),
-                  ),
+            child: Container(
+              decoration: BoxDecoration(
+                color: const Color(0xFFF3F4F8),
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(color: AppColors.hairline),
+              ),
+              child: AspectRatio(
+                aspectRatio: 4 / 3,
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.all(10.0),
+                      child: _networkHero(equipment.imageUrl, fit: BoxFit.contain),
+                    ),
+                    if (!widget.live && _playing)
+                      DecoratedBox(
+                        decoration: BoxDecoration(
+                            color: AppColors.ink.withValues(alpha: 0.5)),
+                      ),
                   if (!widget.live)
                     Center(
                       child: GestureDetector(
@@ -145,7 +155,7 @@ class _EquipmentDetailScreenState extends State<EquipmentDetailScreen>
                       padding: const EdgeInsets.symmetric(
                           horizontal: 10, vertical: 5),
                       decoration: BoxDecoration(
-                        color: Colors.black.withValues(alpha: 0.4),
+                        color: AppColors.ink.withValues(alpha: 0.72),
                         borderRadius: BorderRadius.circular(999),
                       ),
                       child: Text(
@@ -199,6 +209,7 @@ class _EquipmentDetailScreenState extends State<EquipmentDetailScreen>
               ),
             ),
           ),
+        ),
           const SizedBox(height: 16),
           Text(equipment.name, style: Theme.of(context).textTheme.titleLarge),
           const SizedBox(height: 6),
@@ -221,6 +232,11 @@ class _EquipmentDetailScreenState extends State<EquipmentDetailScreen>
             ],
           ),
           const SizedBox(height: 18),
+          if (equipment.tutorialVideoUrl.isNotEmpty) ...[
+            const Eyebrow('Tutorial video'),
+            EquipmentTutorialVideo(key: ValueKey(equipment.tutorialVideoUrl), url: equipment.tutorialVideoUrl),
+            const SizedBox(height: 18),
+          ],
           const Eyebrow('Introduction'),
           Panel(
             child: Text(equipment.description,

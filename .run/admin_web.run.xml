@@ -1,0 +1,7 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="GainPath Admin Web" type="FlutterRunConfigurationType" factoryName="Flutter">
+    <option name="filePath" value="$PROJECT_DIR$/apps/admin_web/lib/main.dart" />
+    <option name="additionalArgs" value="--dart-define-from-file=$PROJECT_DIR$/build/local-run/admin.firebase.json --web-port=7360" />
+    <method v="2" />
+  </configuration>
+</component>

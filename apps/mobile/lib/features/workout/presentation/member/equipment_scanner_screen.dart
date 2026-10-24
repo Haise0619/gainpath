@@ -1,9 +1,12 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:camera/camera.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
 import 'equipment_browse_screen.dart';
 import '../shared/equipment_detail_screen.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:gainpath_domain/workout.dart';
+import '../../../../infrastructure/vision/smart_equipment_vision_classifier.dart';
 
 const _viewfinderHero =
     'https://images.unsplash.com/photo-1534438327276-14e5300c3a48?auto=format&fit=crop&w=1200&q=80';
@@ -22,21 +25,28 @@ Widget _networkHero(String url, {BoxFit fit = BoxFit.cover}) {
   );
 }
 
-/// UC-2.6 — Scan Gym Equipment. No real camera or on-device model is
-/// wired up yet — there's no backend to match against — so this
-/// simulates the recognition flow end to end: a viewfinder over a static
-/// "camera feed" image, an animated scan line, a brief scanning state,
-/// then a match against `gymEquipment` — including the honest
-/// case where nothing matches, roughly every fourth scan.
-///
-/// Swapping in a real camera preview and an on-device classifier later
-/// only touches `_runScan` below: everything downstream already expects
-/// a real `GymEquipment` and doesn't know or care how it was found.
+/// UC-2.6 — Scan Gym Equipment with Vision AI.
+/// Connects live CameraPreview, Gemini Vision AI model, and existing active
+/// Firebase Equipment records. Opens real EquipmentDetailScreen on match.
 class EquipmentScannerScreen extends StatefulWidget {
-  const EquipmentScannerScreen(
-      {super.key, this.connected = false, this.onBrowse});
+  const EquipmentScannerScreen({
+    super.key,
+    this.connected = false,
+    this.organizationId,
+    this.reader,
+    this.classifier,
+    this.matcher = const EquipmentMatcher(),
+    this.onBrowse,
+    this.enableCamera = true,
+  });
+
   final bool connected;
+  final String? organizationId;
+  final EquipmentReader? reader;
+  final EquipmentVisionClassifier? classifier;
+  final EquipmentMatcher matcher;
   final VoidCallback? onBrowse;
+  final bool enableCamera;
 
   @override
   State<EquipmentScannerScreen> createState() => _EquipmentScannerScreenState();
@@ -45,9 +55,17 @@ class EquipmentScannerScreen extends StatefulWidget {
 class _EquipmentScannerScreenState extends State<EquipmentScannerScreen>
     with TickerProviderStateMixin {
   late final AnimationController _scanLine;
+  CameraController? _cameraController;
+  late final EquipmentVisionClassifier _classifier;
+
   bool _scanning = false;
   bool _noMatch = false;
-  int _scanCount = 0;
+  String? _noMatchReason;
+  List<GymEquipment>? _multipleMatches;
+  String? _errorMessage;
+  bool _cameraFailed = false;
+  bool _initializingCamera = false;
+  GymEquipment? _suggestedMatch;
 
   static const _boxSize = 260.0;
 
@@ -56,72 +74,235 @@ class _EquipmentScannerScreenState extends State<EquipmentScannerScreen>
     super.initState();
     _scanLine = AnimationController(
         vsync: this, duration: const Duration(milliseconds: 1700));
-    if (!widget.connected) _scanLine.repeat();
+
+    _classifier = widget.classifier ??
+        SmartEquipmentVisionClassifier(
+            connected: widget.connected, organizationId: widget.organizationId);
+
+    if (widget.enableCamera) {
+      _initCamera();
+    }
+  }
+
+  Future<void> _initCamera() async {
+    if (_initializingCamera || !mounted) return;
+    _initializingCamera = true;
+    CameraController? controller;
+    setState(() {
+      _cameraFailed = false;
+      _errorMessage = null;
+    });
+    try {
+      final previous = _cameraController;
+      setState(() => _cameraController = null);
+      await previous?.dispose();
+      final cameras = await availableCameras();
+      if (!mounted) return;
+      if (cameras.isEmpty) throw CameraException('unavailable', 'No camera');
+
+      // Prefer back camera for scanning gym machines
+      final selectedCamera = cameras.firstWhere(
+        (c) => c.lensDirection == CameraLensDirection.back,
+        orElse: () => cameras.first,
+      );
+
+      controller = CameraController(
+        selectedCamera,
+        ResolutionPreset.medium,
+        enableAudio: false,
+      );
+
+      await controller.initialize();
+      if (!mounted) {
+        await controller.dispose();
+        return;
+      }
+      setState(() => _cameraController = controller);
+      _scanLine.repeat();
+    } catch (_) {
+      await controller?.dispose();
+      if (mounted) {
+        _scanLine.stop();
+        setState(() {
+          _cameraFailed = true;
+          _errorMessage =
+              'Camera access is unavailable. Allow camera permission in Settings, then retry or browse the catalogue.';
+        });
+      }
+    } finally {
+      _initializingCamera = false;
+    }
+  }
+
+  Future<void> _retry() async {
+    if (_cameraFailed || _cameraController == null) {
+      await _initCamera();
+    } else {
+      await _runScan();
+    }
   }
 
   @override
   void dispose() {
     _scanLine.dispose();
+    _cameraController?.dispose();
     super.dispose();
+  }
+
+  void _openBrowseCatalog() {
+    if (widget.onBrowse != null) {
+      widget.onBrowse!();
+    } else {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => EquipmentBrowseScreen(reader: widget.reader),
+        ),
+      );
+    }
   }
 
   Future<void> _runScan() async {
     if (_scanning) return;
-    if (widget.connected) {
-      showUnavailable(context);
+    if (_cameraController == null ||
+        !_cameraController!.value.isInitialized ||
+        _cameraController!.value.hasError) {
+      setState(() {
+        _cameraFailed = true;
+        _errorMessage =
+            'Camera is not ready. Retry camera access or browse the catalogue.';
+      });
       return;
     }
+
     setState(() {
       _scanning = true;
       _noMatch = false;
+      _noMatchReason = null;
+      _multipleMatches = null;
+      _errorMessage = null;
+      _suggestedMatch = null;
     });
-    await Future.delayed(const Duration(milliseconds: 1400));
-    if (!mounted) return;
 
-    _scanCount++;
-    final isNoMatch = _scanCount % 4 == 0;
-    setState(() => _scanning = false);
-
-    if (isNoMatch) {
-      setState(() => _noMatch = true);
-      return;
-    }
-
-    final active = context
-        .read<EquipmentRepository>()
-        .gymEquipment
-        .where((e) => e.isActive)
-        .toList();
-    if (active.isEmpty) {
+    try {
+      late final List<int> imageBytes;
+      try {
+        final xfile = await _cameraController!.takePicture();
+        try {
+          imageBytes = await xfile.readAsBytes();
+        } finally {
+          if (xfile.path.isNotEmpty) {
+            try {
+              await File(xfile.path).delete();
+            } catch (_) {}
+          }
+        }
+        if (imageBytes.isEmpty) throw CameraException('empty', 'Empty capture');
+      } catch (_) {
+        if (mounted) {
+          setState(() {
+            _scanning = false;
+            _cameraFailed = true;
+            _errorMessage =
+                'Could not capture a photo. Retry the camera or browse the catalogue.';
+          });
+        }
+        return;
+      }
       if (!mounted) return;
-      setState(() => _noMatch = true);
-      return;
+
+      // Identify via Vision AI
+      final recognition = await _classifier.identifyEquipment(imageBytes);
+
+      // Load active equipment catalog
+      List<GymEquipment> activeCatalog = [];
+      if (widget.reader != null) {
+        String? cursor;
+        final seen = <String>{};
+        do {
+          final page = await widget.reader!.loadEquipment(afterId: cursor);
+          if (!mounted) return;
+          activeCatalog.addAll(page.items.where((e) => e.isActive));
+          cursor = page.nextCursor;
+          if (cursor != null && !seen.add(cursor)) {
+            throw StateError('Catalog pagination did not advance.');
+          }
+        } while (cursor != null);
+      } else {
+        try {
+          activeCatalog = context
+              .read<EquipmentRepository>()
+              .gymEquipment
+              .where((e) => e.isActive)
+              .toList();
+        } catch (_) {
+          activeCatalog = [];
+        }
+      }
+
+      if (!mounted) return;
+
+      // Match recognition against catalog
+      final matchResult = widget.matcher.match(
+        recognition: recognition,
+        catalog: activeCatalog,
+      );
+
+      switch (matchResult) {
+        case SingleEquipmentMatch(:final equipment):
+          setState(() {
+            _scanning = false;
+            _suggestedMatch = equipment;
+          });
+        case MultipleEquipmentMatches(:final candidates):
+          setState(() {
+            _scanning = false;
+            _multipleMatches = candidates;
+          });
+        case NoEquipmentMatch(:final reason):
+          setState(() {
+            _scanning = false;
+            _noMatch = true;
+            _noMatchReason = reason;
+          });
+      }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _scanning = false;
+        _errorMessage =
+            'Network or scanner error. Check your connection or browse the catalog.';
+      });
     }
-    final equipment = active[(_scanCount - 1) % active.length];
-    if (!mounted) return;
-    Navigator.push(
-        context,
-        MaterialPageRoute(
-            builder: (_) => EquipmentDetailScreen(equipment: equipment)));
   }
 
   @override
   Widget build(BuildContext context) {
+    final cameraReady =
+        _cameraController != null && _cameraController!.value.isInitialized;
+
     return Scaffold(
       backgroundColor: AppColors.ink,
       body: Stack(
         fit: StackFit.expand,
         children: [
-          widget.connected
-              ? const DecoratedBox(
-                  decoration: BoxDecoration(gradient: AppColors.heroGradient))
-              : _networkHero(_viewfinderHero),
+          // Background: Camera Preview or Viewfinder Hero
+          if (cameraReady)
+            CameraPreview(_cameraController!)
+          else
+            _networkHero(_viewfinderHero),
+
+          // Tint overlay
           DecoratedBox(
-              decoration:
-                  BoxDecoration(color: AppColors.ink.withValues(alpha: 0.55))),
+            decoration: BoxDecoration(
+              color: AppColors.ink.withValues(alpha: cameraReady ? 0.35 : 0.55),
+            ),
+          ),
+
           SafeArea(
             child: Column(
               children: [
+                // Top App Bar
                 Padding(
                   padding: const EdgeInsets.fromLTRB(4, 4, 12, 0),
                   child: Row(
@@ -132,33 +313,26 @@ class _EquipmentScannerScreenState extends State<EquipmentScannerScreen>
                         onPressed: () => Navigator.pop(context),
                       ),
                       const Expanded(
-                        child: Text('Scan equipment',
-                            style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 17,
-                                fontWeight: FontWeight.w700)),
+                        child: Text(
+                          'Scan equipment',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 17,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
                       ),
                       IconButton(
                         icon: const Icon(Icons.grid_view_rounded,
                             color: Colors.white),
                         tooltip: 'Browse all equipment',
-                        onPressed: widget.onBrowse ??
-                            () => Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                    builder: (_) =>
-                                        const EquipmentBrowseScreen())),
+                        onPressed: _openBrowseCatalog,
                       ),
                     ],
                   ),
                 ),
-                if (widget.connected)
-                  const Padding(
-                      padding: EdgeInsets.all(16),
-                      child: Text(
-                          'Recognition: -\nUse Browse all equipment to view the published catalog.',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(color: Colors.white))),
+
+                // Viewfinder frame
                 Expanded(
                   child: Center(
                     child: SizedBox(
@@ -179,9 +353,10 @@ class _EquipmentScannerScreenState extends State<EquipmentScannerScreen>
                                   color: AppColors.overlay,
                                   boxShadow: [
                                     BoxShadow(
-                                        color: AppColors.overlay
-                                            .withValues(alpha: 0.7),
-                                        blurRadius: 10),
+                                      color: AppColors.overlay
+                                          .withValues(alpha: 0.7),
+                                      blurRadius: 10,
+                                    ),
                                   ],
                                 ),
                               ),
@@ -193,21 +368,200 @@ class _EquipmentScannerScreenState extends State<EquipmentScannerScreen>
                     ),
                   ),
                 ),
+
+                // Status message
                 Padding(
                   padding: const EdgeInsets.fromLTRB(32, 0, 32, 12),
                   child: Text(
-                    widget.connected
-                        ? '-'
-                        : _scanning
-                            ? 'Scanning…'
-                            : 'Point your camera at gym equipment',
+                    _scanning
+                        ? 'Identifying equipment…'
+                        : 'Point your camera at gym equipment',
                     textAlign: TextAlign.center,
                     style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 14.5,
-                        fontWeight: FontWeight.w600),
+                      color: Colors.white,
+                      fontSize: 14.5,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                 ),
+
+                // Error message card
+                if (_errorMessage != null)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(24, 0, 24, 16),
+                    child: Container(
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: Colors.red.withValues(alpha: 0.2),
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(
+                            color: Colors.redAccent.withValues(alpha: 0.4)),
+                      ),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Icon(Icons.wifi_off_rounded,
+                              color: Colors.white, size: 20),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  _cameraFailed
+                                      ? 'Camera unavailable'
+                                      : 'Scanning unavailable',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 13.5,
+                                  ),
+                                ),
+                                const SizedBox(height: 3),
+                                Text(
+                                  _errorMessage!,
+                                  style: const TextStyle(
+                                    color: Colors.white70,
+                                    fontSize: 12.5,
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                Row(
+                                  children: [
+                                    TextButton(
+                                      style: TextButton.styleFrom(
+                                        foregroundColor: AppColors.overlay,
+                                        padding: EdgeInsets.zero,
+                                      ),
+                                      onPressed: _openBrowseCatalog,
+                                      child: const Text('Browse catalogue'),
+                                    ),
+                                    const SizedBox(width: 16),
+                                    TextButton(
+                                      style: TextButton.styleFrom(
+                                        foregroundColor: Colors.white,
+                                        padding: EdgeInsets.zero,
+                                      ),
+                                      onPressed: _retry,
+                                      child: const Text('Retry'),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+
+                if (_suggestedMatch != null)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(24, 0, 24, 16),
+                    child: Column(children: [
+                      Text('Possible match: ${_suggestedMatch!.name}',
+                          style: const TextStyle(color: Colors.white)),
+                      const Text(
+                          'AI can be wrong. Confirm this is your equipment.',
+                          style: TextStyle(color: Colors.white70)),
+                      TextButton(
+                          onPressed: () => Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                  builder: (_) => EquipmentDetailScreen(
+                                      equipment: _suggestedMatch!,
+                                      live: widget.connected))),
+                          child: const Text('Confirm equipment')),
+                    ]),
+                  ),
+                // Disambiguation for multiple matches
+                if (_multipleMatches != null && _multipleMatches!.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(24, 0, 24, 16),
+                    child: Container(
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(color: Colors.white24),
+                      ),
+                      child: ConstrainedBox(
+                          constraints: BoxConstraints(
+                              maxHeight:
+                                  MediaQuery.sizeOf(context).height * 0.30),
+                          child: SingleChildScrollView(
+                              child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Row(
+                                children: [
+                                  Icon(Icons.fitness_center_rounded,
+                                      color: Colors.white, size: 20),
+                                  SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      'Confirm equipment',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.w700,
+                                        fontSize: 13.5,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 8),
+                              ..._multipleMatches!.map(
+                                (eq) => Padding(
+                                  padding: const EdgeInsets.only(bottom: 6),
+                                  child: InkWell(
+                                    borderRadius: BorderRadius.circular(8),
+                                    onTap: () => Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (_) => EquipmentDetailScreen(
+                                          equipment: eq,
+                                          live: widget.connected,
+                                        ),
+                                      ),
+                                    ),
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 12, vertical: 8),
+                                      decoration: BoxDecoration(
+                                        color:
+                                            Colors.white.withValues(alpha: 0.1),
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                      child: Row(
+                                        children: [
+                                          Expanded(
+                                            child: Text(
+                                              eq.name,
+                                              style: const TextStyle(
+                                                color: Colors.white,
+                                                fontWeight: FontWeight.w600,
+                                                fontSize: 13,
+                                              ),
+                                            ),
+                                          ),
+                                          const Icon(
+                                            Icons.arrow_forward_ios_rounded,
+                                            color: Colors.white70,
+                                            size: 14,
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ))),
+                    ),
+                  ),
+
+                // No match card
                 if (_noMatch)
                   Padding(
                     padding: const EdgeInsets.fromLTRB(24, 0, 24, 16),
@@ -228,27 +582,30 @@ class _EquipmentScannerScreenState extends State<EquipmentScannerScreen>
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                const Text("Couldn't recognise this equipment",
-                                    style: TextStyle(
-                                        color: Colors.white,
-                                        fontWeight: FontWeight.w700,
-                                        fontSize: 13.5)),
-                                const SizedBox(height: 3),
                                 const Text(
-                                    'Try moving closer, or browse the catalogue instead.',
-                                    style: TextStyle(
-                                        color: Colors.white70, fontSize: 12.5)),
+                                  "Couldn't recognise this equipment",
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 13.5,
+                                  ),
+                                ),
+                                const SizedBox(height: 3),
+                                Text(
+                                  _noMatchReason ??
+                                      'Try moving closer, or browse the catalogue instead.',
+                                  style: const TextStyle(
+                                    color: Colors.white70,
+                                    fontSize: 12.5,
+                                  ),
+                                ),
                                 const SizedBox(height: 8),
                                 TextButton(
                                   style: TextButton.styleFrom(
-                                      foregroundColor: AppColors.overlay,
-                                      padding: EdgeInsets.zero),
-                                  onPressed: widget.onBrowse ??
-                                      () => Navigator.push(
-                                          context,
-                                          MaterialPageRoute(
-                                              builder: (_) =>
-                                                  const EquipmentBrowseScreen())),
+                                    foregroundColor: AppColors.overlay,
+                                    padding: EdgeInsets.zero,
+                                  ),
+                                  onPressed: _openBrowseCatalog,
                                   child: const Text('Browse all equipment'),
                                 ),
                               ],
@@ -258,6 +615,8 @@ class _EquipmentScannerScreenState extends State<EquipmentScannerScreen>
                       ),
                     ),
                   ),
+
+                // Shutter button
                 Padding(
                   padding: const EdgeInsets.only(bottom: 36),
                   child: GestureDetector(
@@ -269,16 +628,22 @@ class _EquipmentScannerScreenState extends State<EquipmentScannerScreen>
                         shape: BoxShape.circle,
                         color: Colors.white,
                         border: Border.fromBorderSide(
-                            BorderSide(color: Colors.white54, width: 4)),
+                          BorderSide(color: Colors.white54, width: 4),
+                        ),
                       ),
                       child: _scanning
                           ? const Padding(
                               padding: EdgeInsets.all(22),
                               child: CircularProgressIndicator(
-                                  strokeWidth: 2.6, color: AppColors.primary),
+                                strokeWidth: 2.6,
+                                color: AppColors.primary,
+                              ),
                             )
-                          : const Icon(Icons.camera_alt_rounded,
-                              color: AppColors.primary, size: 30),
+                          : const Icon(
+                              Icons.camera_alt_rounded,
+                              color: AppColors.primary,
+                              size: 30,
+                            ),
                     ),
                   ),
                 ),

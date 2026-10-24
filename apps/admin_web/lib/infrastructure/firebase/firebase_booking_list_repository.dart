@@ -1,11 +1,11 @@
-import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:gainpath_domain/gainpath_domain.dart';
+import 'firebase_function_transport.dart';
 
 typedef BookingListCallable = Future<Map<String, dynamic>> Function(
     String, Map<String, dynamic>);
 
-/// Read-only Admin transport. App Check is intentionally not a list prerequisite.
+/// Read-only Admin transport. Regional reads require configured App Check.
 class FirebaseBookingListRepository implements BookingListRepository {
   FirebaseBookingListRepository(
       {required this.scope,
@@ -13,11 +13,13 @@ class FirebaseBookingListRepository implements BookingListRepository {
       String? Function()? currentUid,
       BookingListCallable? call})
       : _uid = currentUid ?? (() => FirebaseAuth.instance.currentUser?.uid),
-        _call = call ??
-            ((name, input) async => (await FirebaseFunctions.instance
-                    .httpsCallable(name)
-                    .call<Map<String, dynamic>>(input))
-                .data);
+        _call = call ?? _regionalCall;
+  static Future<Map<String, dynamic>> _regionalCall(
+      String name, Map<String, dynamic> input) async {
+    return (await firebaseCallable(name).call<Map<String, dynamic>>(input))
+        .data;
+  }
+
   @override
   final SessionScope scope;
   final bool Function() isCurrent;

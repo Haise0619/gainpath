@@ -4,7 +4,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:gainpath_admin_web/app/di/admin_presentation_dependencies.dart';
 import 'package:gainpath_admin_web/app/di/app_repositories.dart';
 import 'package:gainpath_admin_web/features/analytics/application/admin_reporting_gateway.dart';
-import 'package:gainpath_data/gainpath_data.dart';
 import 'package:gainpath_domain/analytics.dart';
 import 'package:gainpath_domain/gainpath_domain.dart';
 import 'package:gainpath_domain/identity.dart';
@@ -66,12 +65,12 @@ void main() {
         (tester) async {
       await tester.pumpWidget(
         AppRepositories(
-          config: const BackendConfig(BackendMode.firebase),
           session: _testSession,
           child: MaterialApp(
             home: Builder(
               builder: (context) {
-                final hasDeps = context.read<AdminPresentationDependencies?>() != null;
+                final hasDeps =
+                    context.read<AdminPresentationDependencies?>() != null;
                 final analytics = context.read<AnalyticsRepository>();
                 final recommendation = context.read<RecommendationRepository>();
                 final gateway = context.read<AdminReportingGateway>();

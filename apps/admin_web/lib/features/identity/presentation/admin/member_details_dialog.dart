@@ -1,12 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:gainpath_domain/identity.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
+import 'package:gainpath_domain/membership.dart';
+import 'member_membership_verification_panel.dart';
 
 class MemberDetailsDialog extends StatefulWidget {
   const MemberDetailsDialog(
-      {super.key, required this.memberId, required this.repository});
+      {super.key,
+      required this.memberId,
+      required this.repository,
+      this.verificationRepository});
   final String memberId;
   final AdminMemberDirectoryRepository repository;
+  final MembershipVerificationRepository? verificationRepository;
   @override
   State<MemberDetailsDialog> createState() => _MemberDetailsDialogState();
 }
@@ -60,6 +66,10 @@ class _MemberDetailsDialogState extends State<MemberDetailsDialog> {
   @override
   Widget build(BuildContext context) {
     final details = _details;
+    final verification = widget.verificationRepository ??
+        (widget.repository is MembershipVerificationRepository
+            ? widget.repository as MembershipVerificationRepository
+            : null);
     return AdminDialog(
         width: 540,
         child: ConstrainedBox(
@@ -107,6 +117,11 @@ class _MemberDetailsDialogState extends State<MemberDetailsDialog> {
                         'Joined (local time)', _date(details.createdAtMillis)),
                     _field('Last updated (local time)',
                         _date(details.updatedAtMillis)),
+                    if (verification != null)
+                      MemberMembershipVerificationPanel(
+                          key: ValueKey(details),
+                          memberId: widget.memberId,
+                          repository: verification),
                   ],
                   const SizedBox(height: 16),
                   Row(mainAxisAlignment: MainAxisAlignment.end, children: [

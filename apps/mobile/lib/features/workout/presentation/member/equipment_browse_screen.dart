@@ -16,7 +16,7 @@ Widget _networkHero(String url, {BoxFit fit = BoxFit.cover}) {
     url,
     fit: fit,
     loadingBuilder: (context, child, progress) =>
-        progress == null ? child : Container(color: AppColors.surfaceAlt),
+        progress == null ? child : const SizedBox.shrink(),
     errorBuilder: (context, error, stack) => const DecoratedBox(
         decoration: BoxDecoration(gradient: AppColors.heroGradient)),
   );
@@ -201,9 +201,15 @@ class _EquipmentCard extends StatelessWidget {
         children: [
           ClipRRect(
             borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-            child: AspectRatio(
-              aspectRatio: 16 / 11,
-              child: _networkHero(equipment.imageUrl),
+            child: Container(
+              color: const Color(0xFFF3F4F8),
+              child: AspectRatio(
+                aspectRatio: 16 / 11,
+                child: Padding(
+                  padding: const EdgeInsets.all(8.0),
+                  child: _networkHero(equipment.imageUrl, fit: BoxFit.contain),
+                ),
+              ),
             ),
           ),
           Padding(

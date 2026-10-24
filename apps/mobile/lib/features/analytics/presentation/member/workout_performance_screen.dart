@@ -25,6 +25,20 @@ class WorkoutPerformanceScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final local = localProgress;
+    if (local != null) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Measured workout trends')),
+        body: PageBody(children: [
+          const Text('Saved camera captures · provisional measurements'),
+          const SizedBox(height: 12),
+          const Panel(
+              child: Text(
+                  'Weight and muscle-group volume are not recorded by these captures. No lifted kilograms or muscle split is inferred.')),
+          const SizedBox(height: 16),
+          ..._localDetails(context, local),
+        ]),
+      );
+    }
 
     final volume = local == null
         ? context.read<AnalyticsRepository>().volumeTrend
