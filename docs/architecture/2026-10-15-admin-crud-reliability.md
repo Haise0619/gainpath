@@ -1,6 +1,6 @@
 # Existing Admin CRUD reliability repair — 2026-10-15
 
-Scope: [approved non-core sprint](../planning/2026-10-15-non-core-crud-sprint.md). Existing layouts, repositories, collections, stable IDs, targets and trusted publication are retained. This source repair introduces no Firebase schema, Function, index, migration, deletion/withdrawal capability or deployment. Tutorial activation remains frozen.
+Scope: [approved non-core sprint](2026-10-15-non-core-crud-execution.md). Existing layouts, repositories, collections, stable IDs, targets and trusted publication are retained. This source repair introduces no Firebase schema, Function, index, migration, deletion/withdrawal capability or deployment. Tutorial activation remains frozen.
 
 ## Confirmed defects and source changes
 

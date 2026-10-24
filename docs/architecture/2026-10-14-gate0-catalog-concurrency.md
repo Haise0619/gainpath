@@ -36,7 +36,7 @@ Creation retains generated IDs, the existing encoder and server creation/update 
 | [catalog_transaction_failure_test.dart](../../apps/admin_web/test/catalog_transaction_failure_test.dart) | Domain and Firebase authorization failure preservation under simulated web exception wrapping. |
 | [catalog_mock_regression_test.dart](../../apps/admin_web/test/catalog_mock_regression_test.dart) | Real in-memory create/edit, prototype metadata and session isolation. |
 | [catalog-edit-transactions.test.ts](../../functions/emulator/catalog-edit-transactions.test.ts) | Ten isolated web SDK/Rules transaction contract checks. No backend production changes. |
-| [implementation plan](../superpowers/plans/2026-10-14-gate0-catalog-concurrency.md) | Bounded implementation/verification plan. |
+| [implementation plan](2026-10-14-gate0-catalog-concurrency.md) | Bounded implementation/verification plan. |
 | This report | Behavior, evidence and remaining limitations. |
 
 ## Verification evidence

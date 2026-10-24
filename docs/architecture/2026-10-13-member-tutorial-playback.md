@@ -28,7 +28,7 @@ This is an additive optional field in the existing schema-1 projection. Older ro
 | Composition/navigation | new [exercise_tutorial_route.dart](../../apps/mobile/lib/app/routing/exercise_tutorial_route.dart), [workout_prep_route.dart](../../apps/mobile/lib/app/routing/workout_prep_route.dart), [workout_navigation.dart](../../apps/mobile/lib/navigation/workout_navigation.dart), [workout_prep_screen.dart](../../apps/mobile/lib/features/workout/presentation/member/workout_prep_screen.dart), [routine_screen.dart](../../apps/mobile/lib/features/workout/presentation/member/routine_screen.dart) |
 | Dependencies/network | [mobile pubspec](../../apps/mobile/pubspec.yaml), [workspace lockfile](../../pubspec.lock), [Android main manifest](../../apps/mobile/android/app/src/main/AndroidManifest.xml) |
 | Tests | updated [published_routine_test.dart](../../apps/mobile/test/published_routine_test.dart), new [published_tutorial_test.dart](../../apps/mobile/test/published_tutorial_test.dart), new [tutorial_navigation_test.dart](../../apps/mobile/test/tutorial_navigation_test.dart), new [video_tutorial_player_test.dart](../../apps/mobile/test/video_tutorial_player_test.dart), updated [publish-routine.test.ts](../../functions/test/publish-routine.test.ts) and [firestore-rules.test.ts](../../functions/emulator/firestore-rules.test.ts) |
-| Plan/evidence | [implementation plan and ledger](../superpowers/plans/2026-10-13-member-tutorial-playback.md), this report |
+| Plan/evidence | [implementation plan and ledger](2026-10-13-member-tutorial-playback.md), this report |
 
 ## Verification evidence
 

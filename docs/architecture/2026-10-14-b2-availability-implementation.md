@@ -1,6 +1,6 @@
 # B2 — Coach dated availability source implementation
 
-Date: 2026-10-14. Approved baseline: `a6b28bb4dcb722ca5606cbcc3fd112a27e7a9387`. Scope: [approved B2 plan](../planning/2026-10-14-b2-dated-availability-plan.md). Source implementation and isolated verification only. No push, deployment, live mutation, real Coach provisioning, APK installation or B3 implementation.
+Date: 2026-10-14. Approved baseline: `a6b28bb4dcb722ca5606cbcc3fd112a27e7a9387`. Scope: [approved B2 plan](2026-10-14-b2-availability-implementation.md). Source implementation and isolated verification only. No push, deployment, live mutation, real Coach provisioning, APK installation or B3 implementation.
 
 ## Completed user-visible behavior
 
@@ -61,8 +61,8 @@ This report is committed separately after the source checks. All B2 commits are 
 | Mobile views | [availability_screens.dart](../../apps/mobile/lib/features/coaching/presentation/coach/availability_screens.dart), [live_coach_availability_view.dart](../../apps/mobile/lib/features/coaching/presentation/coach/live_coach_availability_view.dart), [live_coach_schedule_view.dart](../../apps/mobile/lib/features/coaching/presentation/shared/live_coach_schedule_view.dart), [existing detail](../../apps/mobile/lib/features/coaching/presentation/shared/live_coach_directory_views.dart) |
 | Mobile tests | [B2 flow](../../apps/mobile/test/coach_availability_flow_test.dart), [fixture](../../apps/mobile/test/support/coach_availability_fake.dart), [existing B1 flow](../../apps/mobile/test/coach_directory_flow_test.dart) |
 | Admin composition | [admin_app.dart](../../apps/admin_web/lib/app/admin_app.dart), [app_repositories.dart](../../apps/admin_web/lib/app/di/app_repositories.dart), [coach_availability_factory.dart](../../apps/admin_web/lib/app/di/coach_availability_factory.dart), [admin_shell.dart](../../apps/admin_web/lib/app/shells/admin_shell.dart) |
-| Admin data/views/tests | [Firebase repository](../../apps/admin_web/lib/infrastructure/firebase/firebase_coach_availability_repository.dart), [coach_schedule_view.dart](../../apps/admin_web/lib/features/coaching/presentation/admin/coach_schedule_view.dart), [coaches_screen.dart](../../apps/admin_web/lib/features/identity/presentation/admin/coaches_screen.dart), [existing review](../../apps/admin_web/lib/features/identity/presentation/admin/live_coach_directory_admin_view.dart), [read-route test](../../apps/admin_web/test/coach_availability_read_test.dart) |
-| Documents | [approved plan](../planning/2026-10-14-b2-dated-availability-plan.md), this report |
+| Admin data/views/tests | [Firebase repository](../../apps/admin_web/lib/infrastructure/firebase/firebase_coach_availability_repository.dart), [coach_schedule_view.dart](../../apps/admin_web/lib/features/coaching/presentation/admin/coach_schedule_view.dart), [coaches_screen.dart](../../apps/admin_web/lib/features/identity/presentation/admin/coaches_screen.dart), [existing review](../../apps/admin_web/lib/features/identity/presentation/admin/coaches_screen.dart), [read-route test](../../apps/admin_web/test/coach_availability_read_test.dart) |
+| Documents | [approved plan](2026-10-14-b2-availability-implementation.md), this report |
 
 Total: **38 distinct committed paths** including this report. No pubspec/lockfile dependency changes; functions package change adds only the isolated smoke script. The legacy mock Availability screen received only its live entry branch/parameters, avoiding a cosmetic reformat.
 

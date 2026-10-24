@@ -154,7 +154,7 @@ The generated inventory below covers the seven reviewed code/test commits. This 
 - [apps/admin_web/lib/features/coaching/application/booking_list_cubit.dart](../../apps/admin_web/lib/features/coaching/application/booking_list_cubit.dart)
 - [apps/admin_web/lib/features/coaching/presentation/admin/booking_list_view.dart](../../apps/admin_web/lib/features/coaching/presentation/admin/booking_list_view.dart)
 - [apps/admin_web/lib/features/identity/presentation/admin/coaches_screen.dart](../../apps/admin_web/lib/features/identity/presentation/admin/coaches_screen.dart)
-- [apps/admin_web/lib/features/identity/presentation/admin/live_coach_directory_admin_view.dart](../../apps/admin_web/lib/features/identity/presentation/admin/live_coach_directory_admin_view.dart)
+- [current Admin coach management](../../apps/admin_web/lib/features/identity/presentation/admin/coaches_screen.dart)
 - [apps/admin_web/lib/infrastructure/firebase/firebase_booking_list_repository.dart](../../apps/admin_web/lib/infrastructure/firebase/firebase_booking_list_repository.dart)
 - [apps/admin_web/test/booking_list_test.dart](../../apps/admin_web/test/booking_list_test.dart)
 - [apps/mobile/lib/app/di/booking_factory.dart](../../apps/mobile/lib/app/di/booking_factory.dart)

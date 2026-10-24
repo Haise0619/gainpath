@@ -1,5 +1,7 @@
 # Firebase Forgot Password fix
 
+Privacy note: Personal and live fixture identifiers are redacted; exact originals remain in private local evidence.
+
 The user reported that Forgot Password never delivered an email in the installed Firebase APK. The cause was executable UI logic, not a demonstrated mail-delivery failure: `gainpath_ui`'s sheet delayed 900 ms and displayed a success message without any backend operation. It also asserted an unsupported 15-minute expiration.
 
 ## Bounded change
@@ -25,7 +27,7 @@ SDK tests use isolated injected callbacks/fake Firebase Auth objects. No account
 
 ## Phone update
 
-A fresh profile APK was built and installed with `adb install -r` on Xiaomi 23013RK75C (`7c4cbff`) at **2026-10-13 17:10:45 Malaysia time**. Installation returned Success and app launch was issued. Existing package first-install time remained 2026-10-01 19:09:19; no uninstall or app-data clearing occurred. Package version remains 0.1.0 / code 1, so the build is identified by artifact hash.
+A fresh profile APK was built and installed with `adb install -r` on Xiaomi 23013RK75C (`xiaomi-device-serial-redacted`) at **2026-10-13 17:10:45 Malaysia time**. Installation returned Success and app launch was issued. Existing package first-install time remained 2026-10-01 19:09:19; no uninstall or app-data clearing occurred. Package version remains 0.1.0 / code 1, so the build is identified by artifact hash.
 
 The APK retains the preceding phone's Firebase development/profile, performance logging, experimental GPU and direct-refined-preview defines. It does not enable decision/3D diagnostics or trusted workout tuples.
 

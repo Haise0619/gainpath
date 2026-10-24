@@ -1,6 +1,8 @@
 # Real Member Progress and Local Workout History — implementation report
 
-Date: 2026-10-13. Starting commit: `98d5dec` on the existing `codex/real-squat-flow` checkout. Scope: the explicitly approved local dashboard slice of [P3/P4](../planning/master-implementation-roadmap.md). Implementation plan: [local Member Progress](../superpowers/plans/2026-10-13-local-member-progress.md).
+Privacy note: Personal and live fixture identifiers are redacted; exact originals remain in private local evidence.
+
+Date: 2026-10-13. Starting commit: `98d5dec` on the existing `codex/real-squat-flow` checkout. Scope: the explicitly approved local dashboard slice of [P3/P4](../STATUS.md). Implementation plan: [local Member Progress](2026-10-13-local-member-progress.md).
 
 ## Result and boundaries
 
@@ -56,7 +58,7 @@ All paths below are relative to the repository root. They exclude pre-existing u
 | Existing profile composition/navigation | [fitness_profile_gate.dart](../../apps/mobile/lib/features/identity/presentation/member/fitness_profile_gate.dart); [member_profile_screen.dart](../../apps/mobile/lib/features/identity/presentation/member/member_profile_screen.dart) |
 | New tests | [local_member_progress_test.dart](../../packages/gainpath_domain/test/local_member_progress_test.dart); [local_member_progress_repository_test.dart](../../apps/mobile/test/local_member_progress_repository_test.dart); [member_progress_cubit_test.dart](../../apps/mobile/test/member_progress_cubit_test.dart); [local_member_progress_ui_test.dart](../../apps/mobile/test/local_member_progress_ui_test.dart); [member_progress_route_test.dart](../../apps/mobile/test/member_progress_route_test.dart); [member_local_progress_flow_test.dart](../../apps/mobile/test/member_local_progress_flow_test.dart) |
 | Existing test updated | [real_workout_ui_test.dart](../../apps/mobile/test/real_workout_ui_test.dart): inject status-store fixture and locate the reused history row; existing consent/save/retry/logout assertions remain. |
-| Documents | [implementation plan](../superpowers/plans/2026-10-13-local-member-progress.md); this report. |
+| Documents | [implementation plan](2026-10-13-local-member-progress.md); this report. |
 
 ## Verification evidence
 
@@ -81,7 +83,7 @@ These are software/integration-test results. At the initial implementation revie
 
 ### Subsequent user-authorized phone installation and CI diagnosis
 
-The user subsequently requested APK installation and an explanation of the red GitHub Actions runs. A fresh APK was built from this current working tree and installed successfully with `adb install -r` on Xiaomi 23013RK75C, serial `7c4cbff`, at 2026-10-13 16:17:31 Malaysia time. The app launched successfully; process `5397` and foreground `com.zyang.gainpath/.MainActivity` were verified. The captured screen showed the signed-in Firebase Workout page with its published routine. No uninstall, app-data clear or server change occurred. Package first-install time remained 2026-10-01 19:09:19; version remains `0.1.0` / code `1`.
+The user subsequently requested APK installation and an explanation of the red GitHub Actions runs. A fresh APK was built from this current working tree and installed successfully with `adb install -r` on Xiaomi 23013RK75C, serial `xiaomi-device-serial-redacted`, at 2026-10-13 16:17:31 Malaysia time. The app launched successfully; process `5397` and foreground `com.zyang.gainpath/.MainActivity` were verified. The captured screen showed the signed-in Firebase Workout page with its published routine. No uninstall, app-data clear or server change occurred. Package first-install time remained 2026-10-01 19:09:19; version remains `0.1.0` / code `1`.
 
 Build command from `apps/mobile`:
 

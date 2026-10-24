@@ -1,6 +1,6 @@
 # Non-core CRUD and role integration matrix — 2026-10-15
 
-Read-only source audit at baseline **`6dd91d90980dcd351b9f3aec297f0e885aa60b30`**. This document supersedes the status interpretation, not the historical evidence, of the [October 14 matrix](../planning/2026-10-14-crud-integration-matrix.md). The normative inventory remains Chapter 3 §3.5.1, `C:/Users/Ngzhe/Documents/A-FYP/Final Md file/c3.md:7185–7516`; the [87-FR traceability](../planning/requirements-gap-matrix.md) retains individual FR/UC statements. Grouped rows below do not remove any requirement or subclause.
+Read-only source audit at baseline **`6dd91d90980dcd351b9f3aec297f0e885aa60b30`**. This document supersedes the status interpretation, not the historical evidence, of the [October 14 matrix](../STATUS.md). The normative inventory remains Chapter 3 §3.5.1, `C:/Users/Ngzhe/Documents/A-FYP/Final Md file/c3.md:7185–7516`; the [87-FR traceability](../planning/requirements-gap-matrix.md) retains individual FR/UC statements. Grouped rows below do not remove any requirement or subclause.
 
 **Current sprint:** this audit performed no live reads/writes, deployment, device operation or test run. Earlier live evidence is the [October 15 execution record](2026-10-15-firebase-demo-execution.md), especially its “Current functional verification boundaries” table. Earlier live passes are not current-sprint UAT. The parent sprint will append its source changes and actual verification separately.
 

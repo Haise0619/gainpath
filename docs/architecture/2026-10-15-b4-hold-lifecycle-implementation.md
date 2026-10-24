@@ -121,7 +121,7 @@ The following inventory covers both implementation commits and the final handoff
 - [`contracts/v1/cancel-booking-hold.response.schema.json`](../../contracts/v1/cancel-booking-hold.response.schema.json)
 - [`contracts/v1/get-booking-list.response.schema.json`](../../contracts/v1/get-booking-list.response.schema.json)
 - [`docs/architecture/2026-10-15-b4-hold-lifecycle-implementation.md`](../../docs/architecture/2026-10-15-b4-hold-lifecycle-implementation.md)
-- [`docs/planning/2026-10-15-b4-hold-lifecycle-plan.md`](../../docs/planning/2026-10-15-b4-hold-lifecycle-plan.md)
+- [`docs/planning/2026-10-15-b4-hold-lifecycle-plan.md`](2026-10-15-b4-hold-lifecycle-implementation.md)
 - [`firebase/firestore.indexes.json`](../../firebase/firestore.indexes.json)
 - [`functions/emulator/booking-callable-smoke.cjs`](../../functions/emulator/booking-callable-smoke.cjs)
 - [`functions/emulator/booking-lifecycle.test.ts`](../../functions/emulator/booking-lifecycle.test.ts)

@@ -1,6 +1,6 @@
 # A1 — Member published routine browsing, selection and refresh
 
-Date: 2026-10-14. Approved baseline: `e14f877f8cf2eb333eab909891a1b4df0b0133ca`, branch `codex/real-squat-flow`. This bounded source increment implements A1 from the [approved MVP plan](../planning/2026-10-14-mvp-vertical-slices.md) and [CRUD integration matrix](../planning/2026-10-14-crud-integration-matrix.md). The matrix exists under `docs/planning`, rather than the architecture path in the request. Neither historical document was moved or overwritten.
+Date: 2026-10-14. Approved baseline: `e14f877f8cf2eb333eab909891a1b4df0b0133ca`, branch `codex/real-squat-flow`. This bounded source increment implements A1 from the [approved MVP plan](../STATUS.md) and [CRUD integration matrix](../STATUS.md). The matrix exists under `docs/planning`, rather than the architecture path in the request. Neither historical document was moved or overwritten.
 
 ## Result and read contract
 
