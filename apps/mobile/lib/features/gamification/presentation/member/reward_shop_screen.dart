@@ -6,7 +6,7 @@ import 'package:gainpath_ui/gainpath_ui.dart';
 import 'package:gainpath_domain/gamification.dart';
 import 'voucher_screen.dart';
 import 'widgets/game_media.dart';
-import '../../../../app/di/rewards_factory.dart';
+import '../../application/rewards_feature_host.dart';
 import 'verified_reward_shop_view.dart';
 
 class RewardShopScreen extends StatelessWidget {

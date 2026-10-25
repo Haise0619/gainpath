@@ -8,8 +8,6 @@ environment:
   sdk: '>=3.6.0 <4.0.0'
 
 dependencies:
-  gainpath_domain:
-    path: ../gainpath_domain
   google_fonts: ^6.2.1
   web: ^1.0.0
   flutter:

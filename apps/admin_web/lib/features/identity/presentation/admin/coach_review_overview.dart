@@ -53,14 +53,16 @@ class CoachReviewOverview extends StatelessWidget {
                 child: const Icon(Icons.fact_check_outlined,
                     color: AppColors.primary, size: 28)),
             Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Row(
+              Wrap(
+                spacing: 8,
+                runSpacing: 4,
+                crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
                   Text('Coach profile review',
                       style: Theme.of(context)
                           .textTheme
                           .titleLarge
                           ?.copyWith(fontWeight: FontWeight.w700)),
-                  const SizedBox(width: 8),
                   Text('Review ${review.coachId}',
                       style: const TextStyle(
                           color: AppColors.inkSoft,

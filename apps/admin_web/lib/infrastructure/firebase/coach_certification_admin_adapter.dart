@@ -6,8 +6,8 @@ import 'package:http/http.dart' as http;
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:gainpath_domain/identity.dart';
 import 'package:gainpath_data/coach_direct_reads.dart';
-import '../../../../infrastructure/firebase/firebase_coach_direct_reads.dart';
-import '../../../../infrastructure/firebase/firebase_function_transport.dart';
+import 'firebase_coach_direct_reads.dart';
+import 'firebase_function_transport.dart';
 
 /// Private, scoped review access. Document bytes never use download URLs.
 class CoachCertificationAdminAdapter {

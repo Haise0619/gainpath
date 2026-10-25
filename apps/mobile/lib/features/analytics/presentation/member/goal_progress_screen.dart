@@ -4,8 +4,7 @@ import 'package:gainpath_ui/gainpath_ui.dart';
 import 'package:gainpath_domain/analytics.dart';
 import 'goal_comparison_report.dart';
 import 'package:gainpath_domain/membership.dart';
-import '../../../membership/presentation/shared/membership_access_gate.dart';
-import '../../../../app/di/membership_factory.dart';
+import '../../../../navigation/membership_access_gate.dart';
 
 /// AD-M5.3 — View Goal Progress Comparison. Each goal gets its own radial
 /// gauge: a dial reads as "progress toward a target" more directly than

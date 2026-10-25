@@ -6,8 +6,10 @@ import { createBookingHoldService } from '../src/modules/coaching/booking-servic
 import { memberBookingChange } from '../src/modules/coaching/member-booking-change-service';
 import { seeds, now, start, command, eligibleCoach } from '../test/booking-fixture';
 import { keyOf } from '../src/platform/idempotency';
+import { localFirestoreEmulator } from './loopback-emulator';
 
 const projectId = 'demo-module7-uat';
+const emulator = localFirestoreEmulator();
 let app: App, db: Firestore, id: string;
 const auth = { uid: 'member-1', token: { email_verified: true } };
 const store = () => new FirestoreStore(db);
@@ -17,11 +19,10 @@ const change = (action: string, requestId: string, target?: number) => memberBoo
   ...(target === undefined ? {} : { newStartAtMillis: target }),
 }, eligibleCoach, () => now);
 beforeAll(() => {
-  if (process.env.FIRESTORE_EMULATOR_HOST !== '127.0.0.1:18386') throw Error('Dedicated local emulator required.');
   app = initializeApp({ projectId }, 'module7-changes'); db = getFirestore(app);
 });
 beforeEach(async () => {
-  const response = await fetch(`http://127.0.0.1:18386/emulator/v1/projects/${projectId}/databases/(default)/documents`, { method: 'DELETE' });
+  const response = await fetch(`http://${emulator.authority}/emulator/v1/projects/${projectId}/databases/(default)/documents`, { method: 'DELETE' });
   if (!response.ok) throw Error('Could not clear isolated fixture database.');
   const batch = db.batch();
   Object.entries(seeds).forEach(([p, d]) => batch.set(db.doc(p), d));

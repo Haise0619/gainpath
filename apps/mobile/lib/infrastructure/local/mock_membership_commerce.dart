@@ -1,7 +1,9 @@
 import 'package:gainpath_domain/membership.dart';
+import '../../features/membership/domain/membership_payment_preview.dart';
 
 /// Existing mock catalogue only. Never instantiated for a Firebase session.
-class MockMembershipCommerce implements MembershipCommerceRepository {
+class MockMembershipCommerce
+    implements MembershipCommerceRepository, MembershipPaymentPreview {
   MockMembershipCommerce._(this.source);
   static final _instances = Expando<MockMembershipCommerce>();
   static MockMembershipCommerce forRepository(MembershipRepository source) =>
@@ -117,6 +119,7 @@ class MockMembershipCommerce implements MembershipCommerceRepository {
   @override
   Future<Map<String, dynamic>> payment(String transactionId) async =>
       _payments.firstWhere((p) => p['transactionId'] == transactionId);
+  @override
   Future<void> simulate(String transactionId) async {
     final p = await payment(transactionId);
     if (p['paymentStatus'] == 'cleared') return;

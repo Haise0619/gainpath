@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:gainpath_domain/membership.dart';
-import '../../../../app/di/membership_factory.dart';
+import '../../application/membership_feature_host.dart';
 import '../shared/membership_data_view.dart';
 import 'purchase_plan_screen.dart';
 

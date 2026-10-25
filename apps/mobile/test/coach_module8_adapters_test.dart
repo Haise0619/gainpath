@@ -1,4 +1,6 @@
 import 'dart:typed_data';
+import 'package:cloud_functions/cloud_functions.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gainpath_data/identity.dart';
 import 'package:gainpath_domain/gainpath_domain.dart' show SessionScope;
@@ -6,10 +8,26 @@ import 'package:gainpath_domain/identity.dart';
 import 'package:gainpath_mobile/infrastructure/firebase/firebase_coach_account_repository.dart';
 import 'package:gainpath_mobile/infrastructure/local/mock_coach_module8_repository.dart';
 
+class _User extends Fake implements User {
+  @override
+  String get uid => 'coach';
+  @override
+  bool get emailVerified => true;
+}
+
+class _Auth extends Fake implements FirebaseAuth {
+  @override
+  User get currentUser => _User();
+}
+
+class _Functions extends Fake implements FirebaseFunctions {}
+
 class ScriptedFirebaseAccount extends FirebaseCoachAccountRepository {
   ScriptedFirebaseAccount()
       : super(
             scope: SessionScope(userId: 'coach', organizationId: 'o'),
+            auth: _Auth(),
+            functions: _Functions(),
             isCurrent: () => true);
   final calls = <String>[];
   Map<String, dynamic> response = {};

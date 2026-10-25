@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:gainpath_admin_web/features/identity/presentation/admin/coach_certification_admin_adapter.dart';
+import 'package:gainpath_admin_web/infrastructure/firebase/coach_certification_admin_adapter.dart';
 
 void main() {
   test(

@@ -1,7 +1,7 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:gainpath_domain/identity.dart';
-import 'coach_certification_admin_adapter.dart';
+import '../../../../infrastructure/firebase/coach_certification_admin_adapter.dart';
 import 'private_document_preview.dart';
 import 'coach_review_discard_guard.dart';
 

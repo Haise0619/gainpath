@@ -1,3 +1,4 @@
+import '../../../../navigation/google_integration.dart';
 import 'package:flutter/material.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -854,7 +855,7 @@ class _GoogleIntegrationTab extends StatelessWidget {
  }
  @override
  Widget build(BuildContext context) => SingleChildScrollView(padding: const EdgeInsets.all(24),child: GoogleIntegrationPanel(
-  repository: live ? context.read<GoogleIntegrationRepository>() : const DisconnectedGoogleIntegrationRepository(),
+  actions: googleIntegrationPanelActions(live ? context.read<GoogleIntegrationRepository>() : const DisconnectedGoogleIntegrationRepository()),
   admin: true, demo: !live, loadCoaches: live ? () => _coaches(context) : null,
   openAuthorization: (url) => launchUrl(url, mode: LaunchMode.externalApplication),
  ));

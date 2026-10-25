@@ -47,7 +47,9 @@ class ProbeEquipmentRepository extends EquipmentRepository {
       EquipmentPage([entry]);
   @override
   Future<GymEquipment> saveEquipment(GymEquipment equipment,
-      {EquipmentImage? image}) async {
+      {EquipmentImage? image,
+      EquipmentVideo? video,
+      void Function(double)? onVideoProgress}) async {
     entry = equipment;
     if (image != null) savedImages.value++;
     return entry;

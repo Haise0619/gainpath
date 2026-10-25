@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:gainpath_domain/gainpath_domain.dart';
+import 'package:gainpath_ui/gainpath_ui.dart';
 import 'package:gainpath_mobile/features/coaching/presentation/member/browse_coaches_screen.dart';
 import 'package:gainpath_mobile/features/coaching/presentation/member/widgets/coach_card.dart';
 import 'package:gainpath_mobile/features/coaching/presentation/shared/coach_profile_screen.dart';
@@ -50,7 +51,12 @@ void main() {
     expect(find.text('Sessions run'), findsOneWidget);
     expect(find.text('Response time'), findsNothing);
     expect(find.text('0y'), findsNothing);
-    expect(find.text('0'), findsNothing);
+    // Published review counts may truthfully be zero; unavailable experience
+    // and completed-session metrics retain their explicit missing values.
+    expect(find.descendant(of: find.byType(StatTile), matching: find.text('-')),
+        findsNWidgets(2));
+    expect(find.descendant(of: find.byType(StatTile), matching: find.text('0')),
+        findsOneWidget);
     await tester.scrollUntilVisible(find.text('WHAT MEMBERS SAY'), 300);
     expect(find.text('WHAT MEMBERS SAY'), findsOneWidget);
     expect(find.text('RM 0'), findsNothing);

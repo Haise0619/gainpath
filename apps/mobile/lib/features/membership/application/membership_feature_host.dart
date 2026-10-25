@@ -3,14 +3,9 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:gainpath_identity/gainpath_identity.dart';
 import 'package:gainpath_domain/membership.dart';
 import 'package:gainpath_domain/gainpath_domain.dart' show SessionScope;
-import '../../infrastructure/firebase/firebase_membership_repository.dart';
-import '../../features/membership/data/mock_membership_commerce.dart';
-import 'coach_profile_factory.dart';
-
-/// Rollout switch for new entry checks. Enable only alongside the deployed
-/// access commands and an explicitly approved trusted access policy.
-const membershipAccessEnforcementEnabled =
-    bool.fromEnvironment('MEMBERSHIP_ACCESS_ENFORCEMENT', defaultValue: false);
+import '../../../infrastructure/firebase/firebase_membership_repository.dart';
+import '../../../infrastructure/local/mock_membership_commerce.dart';
+import '../../../navigation/session_host.dart';
 
 MembershipCommerceRepository createMembershipCommerceRepository(
         SessionScope scope, bool Function() isCurrent) =>

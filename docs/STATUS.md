@@ -1,6 +1,10 @@
 # Current capability and acceptance status
 
-Updated 24 October 2026 from current source and retained verification records. This is the current status entrypoint; [the FYP progress report](PROGRESS_REPORT.md) details all 13 modules, evidence and unfinished features. Dated plans and deployment reports remain historical. No new cloud/provider/device UAT was performed during documentation Phase 1.
+Updated 25 October 2026 from current source and retained verification records. This is the current status entrypoint; [the FYP progress report](PROGRESS_REPORT.md) details all 13 modules, evidence and unfinished features. Dated plans and deployment reports remain historical. No new cloud/provider/device UAT was performed during documentation Phase 1.
+
+## Latest CI repair
+
+25 October: the unchanged architecture gate now passes, the fixed emulator-port assumption is removed, full Mobile/Admin suites and both Firebase-only builds pass locally. Backend full emulator verification passes 189 cases across 38 files (two existing skips). Shared UI now uses presentation callbacks; scoped repository authority and Singapore routing are unchanged. The next GitHub run verifies the pushed repair; no new cloud/provider/device UAT is claimed. See [the repair evidence and remaining limits](PROGRESS_REPORT.md#ci-repair--25-october-2026).
 
 ## Implemented versus accepted
 

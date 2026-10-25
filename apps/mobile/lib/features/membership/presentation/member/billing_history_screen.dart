@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:gainpath_domain/membership.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
-import '../../../../app/di/membership_factory.dart';
+import '../../application/membership_feature_host.dart';
 import '../shared/membership_data_view.dart';
 import 'purchase_plan_screen.dart';
 import 'refund_request_screen.dart';

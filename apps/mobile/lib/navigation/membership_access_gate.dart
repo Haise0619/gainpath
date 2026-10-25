@@ -2,8 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:gainpath_domain/membership.dart';
 import 'package:gainpath_identity/gainpath_identity.dart';
-import '../../../../app/di/coach_profile_factory.dart';
-import '../../../../infrastructure/firebase/firebase_membership_access_repository.dart';
+import 'session_host.dart';
+import '../infrastructure/firebase/firebase_membership_access_repository.dart';
+
+/// Enable only with deployed access commands and an approved trusted policy.
+const membershipAccessEnforcementEnabled =
+    bool.fromEnvironment('MEMBERSHIP_ACCESS_ENFORCEMENT', defaultValue: false);
 
 /// An outer entry gate only. Running workout guidance and stored data stay intact.
 class MembershipAccessGate extends StatelessWidget {

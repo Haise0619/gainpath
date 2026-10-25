@@ -2,7 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:gainpath_data/coach_direct_reads.dart';
 import 'package:gainpath_domain/gainpath_domain.dart' show SessionScope;
 import 'package:gainpath_domain/identity.dart';
-import 'package:gainpath_admin_web/features/identity/presentation/admin/coach_certification_admin_adapter.dart';
+import 'package:gainpath_admin_web/infrastructure/firebase/coach_certification_admin_adapter.dart';
 
 class _Repository extends Fake implements CoachProfileAdminRepository {
   @override

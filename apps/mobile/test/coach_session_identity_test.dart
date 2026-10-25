@@ -3,7 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gainpath_domain/gainpath_domain.dart';
 import 'package:gainpath_identity/gainpath_identity.dart';
-import 'package:gainpath_mobile/app/di/coach_profile_factory.dart';
+import 'package:gainpath_mobile/navigation/session_host.dart';
 import 'coach_directory_flow_test.dart' show DriftingCoachAuth;
 
 void main() {

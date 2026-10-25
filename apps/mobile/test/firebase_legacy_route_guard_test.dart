@@ -60,7 +60,7 @@ void main() {
   }
 
   testWidgets(
-      'Firebase membership retains the shared dashboard without seeded billing',
+      'Firebase membership fails closed when trusted billing is unavailable',
       (tester) async {
     await open(tester, const RouteSettings(name: FeatureNavigation.membership));
     expect(find.byType(MembershipDashboardScreen), findsOneWidget);
@@ -70,12 +70,13 @@ void main() {
                 find.byType(MembershipDashboardScreen))
             .connected,
         isTrue);
-    expect(find.text('CURRENT PLAN'), findsOneWidget);
-    expect(find.text('-'), findsWidgets);
-    expect(find.text('Billing data unavailable'), findsOneWidget);
-    expect(tester.widget<Switch>(find.byType(Switch)).onChanged, isNull);
-    expect(find.text('Renew now'), findsOneWidget);
-    expect(find.text('Change plan'), findsOneWidget);
+    expect(
+        find.textContaining('Membership could not be loaded.'), findsOneWidget);
+    expect(find.text('Retry'), findsOneWidget);
+    expect(find.text('Free'), findsNothing);
+    expect(find.text('Renew now'), findsNothing);
+    expect(find.text('Upgrade'), findsNothing);
+    expect(find.byType(Switch), findsNothing);
     expect(tester.takeException(), isNull);
   });
 

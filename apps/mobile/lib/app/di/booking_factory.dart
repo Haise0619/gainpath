@@ -9,7 +9,7 @@ import '../../infrastructure/firebase/firebase_booking_repository.dart';
 import '../../infrastructure/firebase/firebase_member_booking_change_repository.dart';
 import '../../features/coaching/presentation/member/live_member_booking_view.dart';
 import '../../features/coaching/presentation/shared/live_booking_list_view.dart';
-import 'coach_profile_factory.dart';
+import '../../navigation/session_host.dart';
 import '../../infrastructure/firebase/firebase_booking_communication_repository.dart';
 import '../../infrastructure/firebase/firebase_consultation_notes_repository.dart';
 import '../../infrastructure/firebase/firebase_booking_review_repository.dart';

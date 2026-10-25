@@ -1,3 +1,4 @@
+import '../../../../navigation/google_integration.dart';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -1061,7 +1062,7 @@ class _AvailabilityScreenState extends State<AvailabilityScreen> {
             limits: [
               _limitsSection(),
             ],
-            footer: [..._footerSection(), const SizedBox(height: 16), GoogleIntegrationPanel(repository: widget.googleIntegration ?? const DisconnectedGoogleIntegrationRepository(), coachId: _effectiveCoachId)],
+            footer: [..._footerSection(), const SizedBox(height: 16), GoogleIntegrationPanel(actions: googleIntegrationPanelActions(widget.googleIntegration ?? const DisconnectedGoogleIntegrationRepository()), coachId: _effectiveCoachId)],
           ),
         );
       },

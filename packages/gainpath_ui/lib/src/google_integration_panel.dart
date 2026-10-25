@@ -1,17 +1,56 @@
 import 'package:flutter/material.dart';
-import 'package:gainpath_domain/coaching.dart';
 
-/// One presentation for mock and Firebase; only the injected repository differs.
+/// Presentation state supplied by the owning application's integration adapter.
+class GoogleIntegrationPanelStatus {
+  const GoogleIntegrationPanelStatus(
+      {this.connectionStatus = 'disconnected',
+      this.calendarStatus = 'not_created',
+      this.syncStatus = 'not_synced',
+      this.senderEmail,
+      this.lastSyncedAtMillis,
+      this.automationEnabled = false,
+      this.automationStatus = 'not_started',
+      this.emailSyncStatus = 'not_sent',
+      this.revocationPending = false});
+  final String connectionStatus, calendarStatus, syncStatus;
+  final String? senderEmail;
+  final int? lastSyncedAtMillis;
+  final bool automationEnabled, revocationPending;
+  final String automationStatus, emailSyncStatus;
+  bool get connected => connectionStatus == 'connected';
+}
+
+/// UI callbacks only. Applications retain repositories, authority and transport.
+class GoogleIntegrationPanelActions {
+  const GoogleIntegrationPanelActions(
+      {this.identity,
+      required this.load,
+      required this.beginConnect,
+      required this.disconnect,
+      required this.acknowledgeRevocation,
+      required this.createCoachCalendar,
+      required this.syncBooking});
+  /// Keep stable while rebuilding callbacks for the same account repository.
+  final Object? identity;
+  Object get identityKey => identity ?? this;
+  final Future<GoogleIntegrationPanelStatus> Function({String? coachId}) load;
+  final Future<String> Function() beginConnect;
+  final Future<void> Function() disconnect, acknowledgeRevocation;
+  final Future<void> Function(String) createCoachCalendar;
+  final Future<String> Function(String, {required bool email}) syncBooking;
+}
+
+/// One presentation; applications supply account-scoped integration callbacks.
 class GoogleIntegrationPanel extends StatefulWidget {
   const GoogleIntegrationPanel(
       {super.key,
-      required this.repository,
+      required this.actions,
       this.admin = false,
       this.coachId,
       this.loadCoaches,
       this.openAuthorization,
       this.demo = false});
-  final GoogleIntegrationRepository repository;
+  final GoogleIntegrationPanelActions actions;
   final bool admin, demo;
   final String? coachId;
   final Future<Map<String, String>> Function()? loadCoaches;
@@ -21,7 +60,7 @@ class GoogleIntegrationPanel extends StatefulWidget {
 }
 
 class _GoogleIntegrationPanelState extends State<GoogleIntegrationPanel> {
-  GoogleIntegrationStatus? _status;
+  GoogleIntegrationPanelStatus? _status;
   String? _error, _message, _authorizationUrl, _coach;
   Map<String, String> _coaches = {};
   final _booking = TextEditingController();
@@ -37,7 +76,8 @@ class _GoogleIntegrationPanelState extends State<GoogleIntegrationPanel> {
   @override
   void didUpdateWidget(covariant GoogleIntegrationPanel old) {
     super.didUpdateWidget(old);
-    if (old.repository != widget.repository || old.coachId != widget.coachId) {
+    if (old.actions.identityKey != widget.actions.identityKey ||
+        old.coachId != widget.coachId) {
       _generation++;
       _status = null;
       _authorizationUrl = null;
@@ -61,7 +101,7 @@ class _GoogleIntegrationPanelState extends State<GoogleIntegrationPanel> {
       _status = null;
     });
     try {
-      final status = await widget.repository.load(coachId: _coach);
+      final status = await widget.actions.load(coachId: _coach);
       final coaches =
           widget.loadCoaches == null ? _coaches : await widget.loadCoaches!();
       if (!mounted || n != _generation) return;
@@ -131,7 +171,7 @@ class _GoogleIntegrationPanelState extends State<GoogleIntegrationPanel> {
       _authorizationUrl = null;
     });
     try {
-      final url = await widget.repository.beginConnect();
+      final url = await widget.actions.beginConnect();
       if (!mounted || n != _generation) return;
       setState(() {
         _authorizationUrl = url;
@@ -177,8 +217,8 @@ class _GoogleIntegrationPanelState extends State<GoogleIntegrationPanel> {
       return;
     }
     if (!mounted) return;
-    await _act(() async => _label(await widget.repository
-        .syncBooking(_booking.text.trim(), email: email)));
+    await _act(() async => _label(
+        await widget.actions.syncBooking(_booking.text.trim(), email: email)));
   }
 
   @override
@@ -234,8 +274,10 @@ class _GoogleIntegrationPanelState extends State<GoogleIntegrationPanel> {
                     Text(status.automationEnabled
                         ? 'Automatic delivery: Enabled for approved test recipients'
                         : 'Automatic delivery: Disabled'),
-                    if (['needs_review', 'email_needs_review'].contains(status.automationStatus))
-                      const Text('Automatic delivery needs Admin review. Check the delivery receipt before reconciliation; do not resend an uncertain email.'),
+                    if (['needs_review', 'email_needs_review']
+                        .contains(status.automationStatus))
+                      const Text(
+                          'Automatic delivery needs Admin review. Check the delivery receipt before reconciliation; do not resend an uncertain email.'),
                     if (status.senderEmail != null)
                       Text('Booking sender: ${status.senderEmail}'),
                     if (status.revocationPending)
@@ -274,7 +316,7 @@ class _GoogleIntegrationPanelState extends State<GoogleIntegrationPanel> {
                                           'First remove GainPath access in the gym Google account permissions. Confirm only after doing so. This records your confirmation; GainPath cannot independently verify that manual action.')) {
                                         if (mounted) {
                                           await _act(() async {
-                                            await widget.repository
+                                            await widget.actions
                                                 .acknowledgeRevocation();
                                             return 'Admin confirmed manual revocation. You can reconnect.';
                                           });
@@ -283,9 +325,9 @@ class _GoogleIntegrationPanelState extends State<GoogleIntegrationPanel> {
                                     }
                                   : null,
                               child: const Text('I revoked access in Google')),
-                          if (status.connected ||
-                              status.connectionStatus == 'connecting' ||
-                              status.connectionStatus == 'needs_reconnect')
+                        if (status.connected ||
+                            status.connectionStatus == 'connecting' ||
+                            status.connectionStatus == 'needs_reconnect')
                           OutlinedButton(
                               onPressed: enabled
                                   ? () async {
@@ -294,8 +336,7 @@ class _GoogleIntegrationPanelState extends State<GoogleIntegrationPanel> {
                                           'Stop Calendar and email synchronization for all Coaches. Existing GainPath bookings and Google calendars are kept.')) {
                                         if (mounted) {
                                           await _act(() async {
-                                            await widget.repository
-                                                .disconnect();
+                                            await widget.actions.disconnect();
                                             _authorizationUrl = null;
                                             return 'Gym Google account disconnected.';
                                           });
@@ -359,7 +400,7 @@ class _GoogleIntegrationPanelState extends State<GoogleIntegrationPanel> {
                                         'Create one secondary calendar owned by the gym Google account for this Coach.')) {
                                       if (mounted) {
                                         await _act(() async {
-                                          await widget.repository
+                                          await widget.actions
                                               .createCoachCalendar(_coach!);
                                           return 'Coach calendar created.';
                                         });
@@ -371,9 +412,9 @@ class _GoogleIntegrationPanelState extends State<GoogleIntegrationPanel> {
                         const Divider(height: 32),
                         Text('Booking delivery',
                             style: Theme.of(context).textTheme.titleSmall),
-                          Text(status.automationEnabled
-                              ? 'Confirmed paid bookings, reschedules and cancellations synchronize automatically for approved test recipients. Use manual Calendar reconciliation only when needed.'
-                              : 'After confirmation, rescheduling or cancellation, reconcile the current booking here. No automatic background delivery is enabled.'),
+                        Text(status.automationEnabled
+                            ? 'Confirmed paid bookings, reschedules and cancellations synchronize automatically for approved test recipients. Use manual Calendar reconciliation only when needed.'
+                            : 'After confirmation, rescheduling or cancellation, reconcile the current booking here. No automatic background delivery is enabled.'),
                         const SizedBox(height: 12),
                         TextField(
                             controller: _booking,

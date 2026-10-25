@@ -3,9 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:gainpath_domain/membership.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
 import 'package:url_launcher/url_launcher.dart';
-import '../../data/mock_membership_commerce.dart';
+import '../../domain/membership_payment_preview.dart';
 import '../shared/membership_data_view.dart';
-import '../../../../app/di/membership_factory.dart';
+import '../../application/membership_feature_host.dart';
 
 class PurchasePlanScreen extends StatelessWidget {
   const PurchasePlanScreen(
@@ -314,11 +314,11 @@ class _MembershipPaymentScreenState extends State<MembershipPaymentScreen>
                 FilledButton(
                     onPressed: _busy ? null : _open,
                     child: const Text('Open Billplz Sandbox')),
-              if (widget.repository is MockMembershipCommerce &&
+              if (widget.repository is MembershipPaymentPreview &&
                   _payment['paymentStatus'] != 'cleared')
                 FilledButton(
                     onPressed: () async {
-                      await (widget.repository as MockMembershipCommerce)
+                      await (widget.repository as MembershipPaymentPreview)
                           .simulate(_payment['transactionId'] as String);
                       _lastCheck = null;
                       await _check();

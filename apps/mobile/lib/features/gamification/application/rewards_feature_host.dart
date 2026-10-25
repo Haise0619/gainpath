@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:gainpath_domain/gamification.dart';
 import 'package:gainpath_identity/gainpath_identity.dart';
-import '../../infrastructure/firebase/firebase_verified_rewards_repository.dart';
-import 'coach_profile_factory.dart';
+import '../../../infrastructure/firebase/firebase_verified_rewards_repository.dart';
+import '../../../navigation/session_host.dart';
 
 class RewardsFeatureHost extends StatelessWidget {
   const RewardsFeatureHost({super.key, required this.builder});

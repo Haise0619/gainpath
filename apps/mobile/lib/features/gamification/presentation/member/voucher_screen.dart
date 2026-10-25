@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
 import 'package:gainpath_domain/gamification.dart';
 import 'widgets/game_media.dart';
-import '../../../../app/di/rewards_factory.dart';
+import '../../application/rewards_feature_host.dart';
 
 class VoucherScreen extends StatefulWidget {
   final RewardItem? item;

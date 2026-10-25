@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gainpath_data/src/membership/in_memory/in_memory_membership_repository.dart';
 import 'package:gainpath_domain/membership.dart';
-import 'package:gainpath_mobile/features/membership/data/mock_membership_commerce.dart';
+import 'package:gainpath_mobile/infrastructure/local/mock_membership_commerce.dart';
 
 void main() {
   test(

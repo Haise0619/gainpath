@@ -3,8 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:gainpath_domain/analytics.dart';
 import 'package:gainpath_domain/membership.dart';
-import '../../features/membership/presentation/shared/membership_access_gate.dart';
-import '../di/membership_factory.dart';
+import '../../navigation/membership_access_gate.dart';
 import 'package:gainpath_domain/gainpath_domain.dart'
     show AppRole, SessionScope;
 import 'package:gainpath_identity/gainpath_identity.dart';
