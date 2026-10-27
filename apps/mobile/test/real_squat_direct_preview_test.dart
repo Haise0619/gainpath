@@ -5,12 +5,11 @@ import 'package:gainpath_mobile/features/workout/application/pose_preview_contro
 import 'package:gainpath_mobile/infrastructure/pose/real_squat_performance.dart';
 import 'package:gainpath_mobile/infrastructure/pose/pose_quality_diagnostics.dart';
 
-const _candidate = bool.fromEnvironment('GAINPATH_SQUAT_PERFORMANCE') &&
-    bool.fromEnvironment('GAINPATH_SQUAT_REFINED_PREVIEW') &&
+const _responsiveAllowed =
     !bool.fromEnvironment('GAINPATH_POSE_QUALITY_DEBUG') &&
-    !bool.fromEnvironment('GAINPATH_POSE_JOINT_LAG_DEBUG') &&
-    !bool.fromEnvironment('GAINPATH_POSE_RENDER_DEBUG') &&
-    !bool.fromEnvironment('GAINPATH_POSE_BLANK_DEBUG');
+        !bool.fromEnvironment('GAINPATH_POSE_JOINT_LAG_DEBUG') &&
+        !bool.fromEnvironment('GAINPATH_POSE_RENDER_DEBUG') &&
+        !bool.fromEnvironment('GAINPATH_POSE_BLANK_DEBUG');
 
 class _Camera implements PoseCameraSource {
   void Function(PoseInput)? receive;
@@ -46,13 +45,14 @@ class _Detector implements ManagedPoseDetector {
 }
 
 void main() {
-  for (final (observed, legacy) in [
-    (true, false),
-    (false, false),
-    (true, true)
+  for (final (observed, legacy, responsive) in [
+    (true, false, true),
+    (false, false, true),
+    (true, true, true),
+    (false, false, false)
   ]) {
     testWidgets(
-        'direct preview requires isolated measurement: observer=$observed legacy=$legacy',
+        'preview source selection preserves analysis: observer=$observed legacy=$legacy responsive=$responsive',
         (tester) async {
       final scope = SessionScope(userId: 'fixture', organizationId: 'fixture');
       var now = 1;
@@ -71,6 +71,7 @@ void main() {
               enabled: legacy ||
                   bool.fromEnvironment('GAINPATH_POSE_QUALITY_DEBUG')),
           performance: metrics,
+          responsivePreview: responsive,
           onRefined: delivered.add);
       await controller.start(consented: true);
       camera.receive!(PoseInput(timestampMicros: now));
@@ -80,7 +81,7 @@ void main() {
       await tester.pump();
       expect(delivered, hasLength(2));
       expect(delivered.last.landmarks[PoseLandmark.leftWrist]!.y, .1);
-      final direct = observed && _candidate && !legacy;
+      final direct = responsive && _responsiveAllowed && !legacy;
       expect(controller.frame!.landmarks[PoseLandmark.leftWrist]!.y,
           direct ? .1 : inExclusiveRange(.4, .5));
       expect(

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:gainpath_domain/gainpath_domain.dart' show Money;
+import 'admin_operational_metrics.dart';
 
 /// Query for administrative reporting with time window and optional branch.
 @immutable
@@ -57,6 +58,7 @@ class AdminActivityRecord {
 /// Unknown or unsupported values are `null`, NEVER coerced to zero.
 @immutable
 class AdminReportingSnapshot {
+  final AdminOperationalMetrics? operations;
   final AdminReportQuery query;
   final DateTime capturedAt;
   final bool isAvailable;
@@ -79,6 +81,7 @@ class AdminReportingSnapshot {
   final List<ReportingPoint>? bookingsTimeline;
 
   const AdminReportingSnapshot({
+    this.operations,
     required this.query,
     required this.capturedAt,
     this.isAvailable = true,
@@ -131,6 +134,10 @@ class AdminReportingSnapshot {
 abstract class AdminReportingGateway {
   Future<AdminReportingSnapshot> load(AdminReportQuery query);
 }
+
+/// Marks the connected operational dataset without coupling UI to Firebase.
+abstract interface class OperationalAdminReportingGateway
+    implements AdminReportingGateway {}
 
 /// Default gateway representing an unconnected/unavailable reporting service.
 class UnavailableAdminReportingGateway implements AdminReportingGateway {

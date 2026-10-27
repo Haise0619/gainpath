@@ -18,8 +18,12 @@ class ReportFilter {
   bool get isDefault => days == null && branch == null;
 
   DateTime cutoff(List<DateTime> allDates) {
-    if (days != null) return DateTime.now().subtract(Duration(days: days!));
-    if (allDates.isEmpty) return DateTime.now().subtract(const Duration(days: 60));
+    if (days != null) {
+      return DateTime.now().subtract(Duration(days: days!));
+    }
+    if (allDates.isEmpty) {
+      return DateTime.now().subtract(const Duration(days: 60));
+    }
     final earliest = allDates.reduce((a, b) => a.isBefore(b) ? a : b);
     return earliest;
   }
@@ -78,15 +82,19 @@ class ReportSection extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(
+                    Wrap(
+                      spacing: 10,
+                      runSpacing: 8,
+                      crossAxisAlignment: WrapCrossAlignment.center,
                       children: [
-                        Text(title, style: Theme.of(context).textTheme.titleLarge),
-                        const SizedBox(width: 10),
+                        Text(title,
+                            style: Theme.of(context).textTheme.titleLarge),
                         _ProvenanceTag(live: live, label: tagLabel),
                       ],
                     ),
                     const SizedBox(height: 2),
-                    Text(subtitle, style: Theme.of(context).textTheme.bodyMedium),
+                    Text(subtitle,
+                        style: Theme.of(context).textTheme.bodyMedium),
                   ],
                 ),
               ),
@@ -121,14 +129,17 @@ class _ProvenanceTag extends StatelessWidget {
     final bg = live ? AppColors.successTint : AppColors.surfaceAlt;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(999)),
+      decoration:
+          BoxDecoration(color: bg, borderRadius: BorderRadius.circular(999)),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(live ? Icons.bolt_rounded : Icons.info_outline_rounded, size: 11, color: color),
+          Icon(live ? Icons.bolt_rounded : Icons.info_outline_rounded,
+              size: 11, color: color),
           const SizedBox(width: 3),
           Text(label ?? (live ? 'Live · filtered' : 'Illustrative'),
-              style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w700, color: color)),
+              style: TextStyle(
+                  fontSize: 10.5, fontWeight: FontWeight.w700, color: color)),
         ],
       ),
     );
@@ -140,7 +151,8 @@ class _ProvenanceTag extends StatelessWidget {
 /// or broken-looking chart.
 class NoFilteredData extends StatelessWidget {
   final String message;
-  const NoFilteredData({super.key, this.message = 'No data for this period or branch.'});
+  const NoFilteredData(
+      {super.key, this.message = 'No data for this period or branch.'});
 
   @override
   Widget build(BuildContext context) {
@@ -151,7 +163,8 @@ class NoFilteredData extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.filter_alt_off_rounded, size: 26, color: AppColors.hairline),
+              const Icon(Icons.filter_alt_off_rounded,
+                  size: 26, color: AppColors.hairline),
               const SizedBox(height: 8),
               Text(message, style: Theme.of(context).textTheme.bodyMedium),
             ],

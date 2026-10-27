@@ -1,4 +1,6 @@
 import 'dart:math' as math;
+import '../../application/app_check_in_cubit.dart';
+import 'app_check_in_dashboard.dart';
 import 'package:flutter/material.dart';
 import '../../application/gamification_bloc.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -7,11 +9,19 @@ import 'package:gainpath_domain/gamification.dart';
 import 'package:gainpath_domain/identity.dart';
 import 'badges_screen.dart';
 import 'leaderboard_screen.dart';
+import '../../application/rewards_feature_host.dart';
 import 'mini_games_screen.dart';
 import 'reward_shop_screen.dart';
 
 class GamificationDashboardScreen extends StatelessWidget {
-  const GamificationDashboardScreen({super.key, this.live = false});
+  const GamificationDashboardScreen(
+      {super.key,
+      this.live = false,
+      this.checkIn,
+      this.onClaim,
+      this.onRefreshCheckIn});
+  final AppCheckInState? checkIn;
+  final Future<void> Function()? onClaim, onRefreshCheckIn;
   final bool live;
 
   static const _activity = [
@@ -37,6 +47,12 @@ class GamificationDashboardScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (live && checkIn != null) {
+      return AppCheckInDashboard(
+          state: checkIn!,
+          onClaim: onClaim ?? () async {},
+          onRefresh: onRefreshCheckIn ?? () async {});
+    }
     final unlocked = live
         ? null
         : context
@@ -115,8 +131,11 @@ class GamificationDashboardScreen extends StatelessWidget {
                       onTap: () => Navigator.push(
                           context,
                           MaterialPageRoute(
-                              builder: (_) =>
-                                  LeaderboardScreen(connected: live))),
+                              builder: (_) => live
+                                  ? RewardsFeatureHost(
+                                      builder: (repo) => LeaderboardScreen(
+                                          connected: true, repository: repo))
+                                  : const LeaderboardScreen())),
                       child: Container(
                         padding: const EdgeInsets.symmetric(
                             horizontal: 12, vertical: 8),
@@ -269,7 +288,11 @@ class GamificationDashboardScreen extends StatelessWidget {
                   onTap: () => Navigator.push(
                       context,
                       MaterialPageRoute(
-                          builder: (_) => LeaderboardScreen(connected: live))),
+                          builder: (_) => live
+                              ? RewardsFeatureHost(
+                                  builder: (repo) => LeaderboardScreen(
+                                      connected: true, repository: repo))
+                              : const LeaderboardScreen())),
                 ),
               ],
             );

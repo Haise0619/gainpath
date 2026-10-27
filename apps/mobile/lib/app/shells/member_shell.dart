@@ -1,4 +1,6 @@
 import '../../infrastructure/firebase/firebase_module9_repository.dart';
+import '../routing/app_check_in_host.dart';
+import '../../features/gamification/application/app_check_in_cubit.dart';
 import '../../features/coaching/presentation/member/coaching_updates_screen.dart';
 import 'package:flutter/material.dart';
 import 'dart:async';
@@ -146,29 +148,40 @@ class _MemberShellState extends State<MemberShell> {
   @override
   Widget build(BuildContext context) {
     if (widget.liveSession == null) return _scaffold(_buildPages());
-    return MemberProgressHost(
-      key: ValueKey(widget.liveSession!.scope),
-      scope: widget.liveSession!.scope,
-      repositoryFactory: widget.progressRepositoryFactory ??
-          createLocalMemberProgressRepository,
-      builder: (context, progress, refresh, open, openWorkout) => BlocBuilder<
-              PublishedRoutineCatalogCubit, PublishedRoutineCatalogState>(
-          bloc: _catalog!,
-          builder: (context, catalog) => _scaffold(
-                  _buildPages(
-                      progress: progress,
-                      refresh: refresh,
-                      open: open,
-                      openWorkout: openWorkout,
-                      catalog: catalog), onTabChanged: (index) {
-                if (index == 0) refresh();
-              })),
-    );
+    return AppCheckInHost(
+        key: ValueKey(widget.liveSession!.scope),
+        scope: widget.liveSession!.scope,
+        builder: (checkIn, refreshCheckIn, claimCheckIn) => MemberProgressHost(
+              key: ValueKey(widget.liveSession!.scope),
+              scope: widget.liveSession!.scope,
+              repositoryFactory: widget.progressRepositoryFactory ??
+                  createLocalMemberProgressRepository,
+              builder: (context, progress, refresh, open, openWorkout) =>
+                  BlocBuilder<PublishedRoutineCatalogCubit,
+                          PublishedRoutineCatalogState>(
+                      bloc: _catalog!,
+                      builder: (context, catalog) => _scaffold(
+                              _buildPages(
+                                  progress: progress,
+                                  checkIn: checkIn,
+                                  refreshCheckIn: refreshCheckIn,
+                                  claimCheckIn: claimCheckIn,
+                                  refresh: refresh,
+                                  open: open,
+                                  openWorkout: openWorkout,
+                                  catalog: catalog), onTabChanged: (index) {
+                            if (index == 0) refresh();
+                            if (index == 0 || index == 2) refreshCheckIn();
+                          })),
+            ));
   }
 
   // A single presentation tree. Data hosts above supply scoped state/actions.
   List<Widget> _buildPages(
       {MemberProgressState? progress,
+      AppCheckInState? checkIn,
+      Future<void> Function()? refreshCheckIn,
+      Future<void> Function()? claimCheckIn,
       Future<void> Function()? refresh,
       void Function(MemberProgressView)? open,
       void Function(LocalWorkoutProgressRecord)? openWorkout,
@@ -178,13 +191,36 @@ class _MemberShellState extends State<MemberShell> {
     return [
       MemberHomeScreen(
           liveSession: session,
-          onOpenCoachingUpdates: session == null ? null : () => Navigator.push(context, MaterialPageRoute(builder: (_) => CoachingUpdatesScreen(
-            repository: FirebaseModule9Repository(scope: session.scope, isCurrent: () => _activeScope() == session.scope),
-            isCurrent: () => _activeScope() == session.scope,
-            onOpenBookings: () => openBookingList(context, session, factory: widget.bookingListFactory),
-          ))),
+          onOpenRewards: () {
+            setState(() => _index = 2);
+            refreshCheckIn?.call();
+          },
+          appCheckIn: checkIn,
+          onAppClaim: claimCheckIn,
+          onRefreshCheckIn: refreshCheckIn,
+          onOpenCoachingUpdates: session == null
+              ? null
+              : () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                      builder: (_) => CoachingUpdatesScreen(
+                            repository: FirebaseModule9Repository(
+                                scope: session.scope,
+                                isCurrent: () =>
+                                    _activeScope() == session.scope),
+                            isCurrent: () => _activeScope() == session.scope,
+                            onOpenBookings: () => openBookingList(
+                                context, session,
+                                factory: widget.bookingListFactory),
+                          ))),
           liveProfile: widget.liveProfile,
           localProgress: progress?.progress,
+          routineProgress: progress?.routines,
+          onOpenRoutineHistory:
+              open == null ? null : () => open(MemberProgressView.routines),
+          onOpenRoutine: refresh == null
+              ? null
+              : (a) => openRoutineAttempt(context, a, refresh),
           progressError: progress?.error,
           progressWarnings: progress?.snapshot?.warnings ?? const [],
           onRefreshProgress: refresh,
@@ -220,26 +256,30 @@ class _MemberShellState extends State<MemberShell> {
           routineStatusMessage: catalog == null ? null : _catalogLabel(catalog),
           onStartWorkout: () => setState(() => _index = 1)),
       WorkoutPrepRoute(
+        live: connected,
+        publishedRoutine: catalog?.selected,
+        routineStatusMessage: catalog == null ? null : _catalogLabel(catalog),
+        routineLoadFailed: catalog?.status == CatalogStatus.error,
+        routineCatalogControls: catalog == null
+            ? null
+            : PublishedRoutineCatalogControls(
+                state: catalog,
+                onRefresh: _catalog!.refresh,
+                onSelect: _catalog!.select,
+                onLoadMore: _catalog!.loadMore),
+        onOpenEquipment: session == null
+            ? null
+            : () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                    builder: (_) => buildMemberEquipmentScanner(session,
+                        factory: widget.equipmentReaderFactory))),
+      ),
+      GamificationDashboardScreen(
           live: connected,
-          publishedRoutine: catalog?.selected,
-          routineStatusMessage: catalog == null ? null : _catalogLabel(catalog),
-          routineLoadFailed: catalog?.status == CatalogStatus.error,
-          routineCatalogControls: catalog == null
-              ? null
-              : PublishedRoutineCatalogControls(
-                  state: catalog,
-                  onRefresh: _catalog!.refresh,
-                  onSelect: _catalog!.select,
-                  onLoadMore: _catalog!.loadMore),
-          onOpenEquipment: session == null
-              ? null
-              : () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                      builder: (_) => buildMemberEquipmentScanner(session,
-                          factory: widget.equipmentReaderFactory))),
-        ),
-      GamificationDashboardScreen(live: connected),
+          checkIn: checkIn,
+          onClaim: claimCheckIn,
+          onRefreshCheckIn: refreshCheckIn),
       session == null
           ? const BrowseCoachesScreen()
           : _directoryVisited

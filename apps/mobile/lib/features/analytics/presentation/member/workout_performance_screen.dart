@@ -10,9 +10,11 @@ import 'widgets/local_progress_widgets.dart';
 /// and doughnut are the two chart shapes that best carry this report's
 /// two questions: "how much, over time" and "what proportion, right now."
 class WorkoutPerformanceScreen extends StatelessWidget {
-  const WorkoutPerformanceScreen({super.key, this.localProgress});
+  const WorkoutPerformanceScreen(
+      {super.key, this.localProgress, this.onOpenReport});
 
   final MemberLocalProgress? localProgress;
+  final VoidCallback? onOpenReport;
 
   static const _weekLabels = ['W1', 'W2', 'W3', 'W4', 'W5', 'W6', 'W7'];
   static const _sliceColors = [
@@ -27,7 +29,13 @@ class WorkoutPerformanceScreen extends StatelessWidget {
     final local = localProgress;
     if (local != null) {
       return Scaffold(
-        appBar: AppBar(title: const Text('Measured workout trends')),
+        appBar: AppBar(title: const Text('Measured workout trends'), actions: [
+          if (onOpenReport != null)
+            IconButton(
+                tooltip: 'Filter and export report',
+                onPressed: onOpenReport,
+                icon: const Icon(Icons.picture_as_pdf_outlined)),
+        ]),
         body: PageBody(children: [
           const Text('Saved camera captures · provisional measurements'),
           const SizedBox(height: 12),

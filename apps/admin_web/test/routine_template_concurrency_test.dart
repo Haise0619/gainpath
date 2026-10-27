@@ -232,6 +232,28 @@ void main() {
     expect(db.records['orgs/o/routineBlueprints/r']!['futureField'],
         {'preserve': true});
   });
+  test('archive retains blueprint and excludes it from authoring load',
+      () async {
+    final original = (await repository.load()).single;
+    await repository.archive(original);
+    expect(db.records['orgs/o/routineBlueprints/r']!['archived'], true);
+    expect(db.records['orgs/o/routineBlueprints/r']!['name'], 'Original');
+    expect(await repository.load(), isEmpty);
+  });
+  test('archive rejects a concurrent template edit', () async {
+    final original = (await repository.load()).single;
+    db.records['orgs/o/routineBlueprints/r']!['name'] = 'Changed';
+    await expectLater(
+        repository.archive(original), throwsA(isA<RoutineEditConflict>()));
+    expect(db.patch, isNull);
+  });
+  test('archive rejects changed organization', () async {
+    final original = (await repository.load()).single;
+    db.records['users/admin']!['organizationId'] = 'other';
+    await expectLater(repository.archive(original),
+        throwsA(isA<RoutineEditAuthorizationChanged>()));
+    expect(db.patch, isNull);
+  });
   test('concurrent edit rejects original form rather than overwriting it',
       () async {
     final original = (await repository.load()).single..name = 'My edit';

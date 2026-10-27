@@ -11,6 +11,7 @@ import 'workout_result_screen.dart';
 import '../../application/pose_preview_controller.dart';
 import 'pose_preview_view.dart';
 import '../../application/real_squat_session_controller.dart';
+import '../../domain/routine_workout_context.dart';
 import 'real_workout_view.dart';
 import '../../domain/workout_contracts.dart' show WorkoutSessionSummary;
 
@@ -26,7 +27,9 @@ class LiveWorkoutScreen extends StatelessWidget {
       this.uploadNotice,
       this.exerciseName = 'Bodyweight squat',
       this.targetRepetitions = 10,
+      this.routineContext,
       this.resultBuilder});
+  final RoutineWorkoutContext? routineContext;
   final Widget Function(WorkoutSessionSummary)? resultBuilder;
   final RealSquatSessionController? realSession;
   final String? uploadNotice;
@@ -44,6 +47,7 @@ class LiveWorkoutScreen extends StatelessWidget {
           viewport: cameraViewport!,
           exerciseName: exerciseName,
           targetRepetitions: targetRepetitions,
+          routineContext: routineContext,
           resultBuilder: resultBuilder);
     }
     if (cameraSession != null) {

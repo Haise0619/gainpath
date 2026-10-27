@@ -7,7 +7,7 @@ abstract final class AdminFeatureAvailability {
   static const connected = {
     'Members',
     'Reward Catalog',
-    'Exercise Tutorials',
+    'Exercise Catalog',
     'Routine Templates',
     'Coaches',
     'Announcements',
@@ -35,7 +35,7 @@ abstract final class AdminFeatureAvailability {
               'Branches: ${session.branchIds.isEmpty ? 'None assigned' : session.branchIds.join(', ')}'),
           const SizedBox(height: 12),
           Text(feature == 'Dashboard'
-              ? 'Exercise Tutorials, Routine Templates, Coach Directory and Announcements are connected. Other operational modules are unavailable.'
+              ? 'Exercise Catalog, Routine Templates, Coach Directory and Announcements are connected. Other operational modules are unavailable.'
               : 'This module is not connected to Firebase yet.'),
         ])),
       ]);

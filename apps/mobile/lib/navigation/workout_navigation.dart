@@ -1,6 +1,7 @@
 import 'package:flutter/widgets.dart';
 import 'package:gainpath_domain/gainpath_domain.dart' show SessionScope;
 import '../features/workout/domain/published_routine_view.dart';
+import '../features/workout/domain/routine_workout_context.dart';
 
 abstract final class WorkoutNavigation {
   static const guided = '/workout/guided';
@@ -15,12 +16,18 @@ class RealWorkoutLaunch {
     required this.consented,
     required this.setupConfirmed,
     required this.requestServerUpload,
+    this.sessionId,
+    this.returnToRoutine = false,
+    this.routineContext,
   });
 
   final SessionScope scope;
   final String routineId;
   final PublishedRoutineExercise exercise;
   final bool consented, setupConfirmed, requestServerUpload;
+  final String? sessionId;
+  final bool returnToRoutine;
+  final RoutineWorkoutContext? routineContext;
 }
 
 /// Destinations supplied by app composition to the preparation screen.
@@ -30,6 +37,7 @@ class WorkoutPrepRoutes {
     this.savedSessionsBuilder,
     this.posePreviewBuilder,
     this.tutorialBuilder,
+    this.journeyBuilder,
   });
 
   final Widget Function(BuildContext, RealWorkoutLaunch)? realSessionBuilder;
@@ -37,4 +45,5 @@ class WorkoutPrepRoutes {
   final WidgetBuilder? posePreviewBuilder;
   final Widget Function(BuildContext, PublishedRoutineExercise)?
       tutorialBuilder;
+  final Widget Function(BuildContext, PublishedRoutine)? journeyBuilder;
 }

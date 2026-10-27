@@ -23,6 +23,8 @@ class EquipmentImage {
   }
   static const maxBytes = 5 * 1024 * 1024;
   final Uint8List bytes;
+  /// An independent native buffer for browser image and upload APIs.
+  Uint8List copyBytes() => Uint8List.fromList(bytes);
   late final String contentType;
   bool _starts(List<int> prefix) =>
       bytes.length >= prefix.length &&

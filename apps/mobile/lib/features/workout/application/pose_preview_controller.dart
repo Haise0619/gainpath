@@ -26,12 +26,32 @@ class PosePreviewController extends ChangeNotifier {
       this.onRefined,
       this.onGeometryInvalidated,
       this.performance,
+      bool responsivePreview = const bool.fromEnvironment(
+          'GAINPATH_RESPONSIVE_SKELETON',
+          defaultValue: true),
       PoseQualityDiagnostics? quality})
-      : quality = quality ?? PoseQualityDiagnostics(clockMicros: clockMicros);
+      : _responsivePreview = responsivePreview,
+        quality = quality ?? PoseQualityDiagnostics(clockMicros: clockMicros);
   final PoseQualityDiagnostics quality;
   final RealSquatPerformance? performance;
+  bool _responsivePreview;
+  bool get responsivePreview => _directPreview;
   bool get _directPreview =>
-      performance != null && realSquatRefinedPreviewEnabled && !quality.enabled;
+      _responsivePreview &&
+      !quality.enabled &&
+      !poseRenderDebugEnabled &&
+      !const bool.fromEnvironment('GAINPATH_POSE_JOINT_LAG_DEBUG') &&
+      !const bool.fromEnvironment('GAINPATH_POSE_BLANK_DEBUG');
+
+  void setResponsivePreview(bool enabled) {
+    if (!_active || _responsivePreview == enabled) return;
+    _responsivePreview = enabled;
+    // Do not relabel a previous filtered result as a fresh refined pose.
+    quality.overlayCleared('preview_mode_changed', frame);
+    frame = null;
+    _notify();
+  }
+
   final SessionScope scope;
   final SessionScope? Function() activeScope;
   final PoseCameraSource camera;
@@ -193,8 +213,8 @@ class PosePreviewController extends ChangeNotifier {
                 }
                 final filterTimer = Stopwatch()..start();
                 frame = _filter.filter(pose);
-                // Isolate preview smoothing in the non-release measurement
-                // build. Keep its state running; analysis still receives pose.
+                // Responsive drawing removes preview filter delay. Keep the
+                // filter warm for Smooth mode; analysis still receives pose.
                 if (_directPreview) frame = pose;
                 quality.delivered(frame!, filterTimer.elapsedMicroseconds,
                     refined: pose);

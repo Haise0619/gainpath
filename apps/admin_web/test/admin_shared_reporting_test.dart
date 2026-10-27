@@ -106,8 +106,10 @@ void main() {
       addTearDown(tester.view.reset);
 
       await tester.pumpWidget(
-        AppRepositories(
+        AppRepositories.injected(
           session: _testSession,
+          reportingGatewayFactory: (_, __) =>
+              const UnavailableAdminReportingGateway(),
           child: const MaterialApp(
             home: AdminDashboardScreen(
               live: true,
@@ -162,8 +164,10 @@ void main() {
       addTearDown(tester.view.reset);
 
       await tester.pumpWidget(
-        AppRepositories(
+        AppRepositories.injected(
           session: _testSession,
+          reportingGatewayFactory: (_, __) =>
+              const UnavailableAdminReportingGateway(),
           child: const MaterialApp(
             home: ReportsScreen(live: true),
           ),

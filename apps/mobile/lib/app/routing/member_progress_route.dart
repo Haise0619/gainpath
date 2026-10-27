@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:gainpath_domain/analytics.dart';
@@ -16,8 +17,22 @@ import '../../features/analytics/presentation/member/posture_accuracy_screen.dar
 import '../../features/analytics/presentation/member/widgets/local_progress_widgets.dart';
 import '../../features/workout/presentation/member/workout_result_screen.dart';
 import '../di/local_member_progress_factory.dart';
+import '../../features/workout/domain/routine_attempt.dart';
+import '../../features/workout/presentation/member/routine_history_screen.dart';
+import 'routine_journey_route.dart';
+import 'member_workout_report_route.dart';
+import '../di/workout_backup_factory.dart';
+import '../../features/workout/presentation/member/workout_backup_screen.dart';
+import '../../features/workout/application/workout_backup_coordinator.dart';
 
-enum MemberProgressView { dashboard, history, performance, form }
+enum MemberProgressView {
+  dashboard,
+  history,
+  performance,
+  form,
+  routines,
+  backup
+}
 
 typedef MemberProgressBuilder = Widget Function(
     BuildContext context,
@@ -33,12 +48,20 @@ class MemberProgressHost extends StatefulWidget {
       {super.key,
       required this.scope,
       required this.builder,
+      this.backupFactory,
       this.repositoryFactory = createLocalMemberProgressRepository});
   final SessionScope scope;
   final LocalMemberProgressRepositoryFactory repositoryFactory;
   final MemberProgressBuilder builder;
+  final WorkoutBackupFactory? backupFactory;
   @override
   State<MemberProgressHost> createState() => _MemberProgressHostState();
+}
+
+class _BackupPresentation {
+  const _BackupPresentation(this.coordinator, this.error);
+  final WorkoutBackupCoordinator? coordinator;
+  final String? error;
 }
 
 class _MemberProgressHostState extends State<MemberProgressHost>
@@ -48,6 +71,12 @@ class _MemberProgressHostState extends State<MemberProgressHost>
   StreamSubscription<AuthState>? _authSubscription;
   StreamSubscription<MemberProgressState>? _progressSubscription;
   Timer? _weekTimer;
+  Timer? _backupTimer;
+  WorkoutBackupLease? _backupLease;
+  final _backupPresentation =
+      ValueNotifier(const _BackupPresentation(null, null));
+  String? _backupError;
+  bool _foreground = true, _backupOpening = false;
   String? _initializationError;
   bool _initializing = false;
   bool _authorized(AuthState state) =>
@@ -62,7 +91,10 @@ class _MemberProgressHostState extends State<MemberProgressHost>
     if (_auth != null) return;
     WidgetsBinding.instance.addObserver(this);
     _auth = context.read<AuthBloc>();
-    _authSubscription = _auth!.stream.listen((_) => _cubit?.accountChanged());
+    _authSubscription = _auth!.stream.listen((_) {
+      _cubit?.accountChanged();
+      _backupLease?.coordinator.accountChanged();
+    });
     unawaited(_initialize());
   }
 
@@ -93,6 +125,7 @@ class _MemberProgressHostState extends State<MemberProgressHost>
         _cubit = cubit;
       });
       await cubit.load();
+      if (_backupConfigured) await _initializeBackup();
     } catch (_) {
       if (mounted && _activeScope() != null) {
         setState(() => _initializationError =
@@ -103,9 +136,72 @@ class _MemberProgressHostState extends State<MemberProgressHost>
     }
   }
 
+  bool get _backupConfigured =>
+      workoutCloudBackupEnabled || widget.backupFactory != null;
+  Future<void> _initializeBackup() async {
+    if (!mounted ||
+        _activeScope() == null ||
+        _backupLease != null ||
+        _backupOpening) {
+      return;
+    }
+    _backupOpening = true;
+    try {
+      _backupPresentation.value =
+          const _BackupPresentation(null, 'Opening backup…');
+      final lease = await (widget.backupFactory ?? acquireWorkoutBackup)(
+          widget.scope, _activeScope);
+      if (!mounted || _activeScope() == null) {
+        lease.release();
+        return;
+      }
+      _backupLease = lease;
+      await lease.coordinator.load();
+      if (!mounted || _activeScope() == null) {
+        lease.release();
+        _backupLease = null;
+        return;
+      }
+      if (mounted) setState(() => _backupError = null);
+      _backupPresentation.value = _BackupPresentation(lease.coordinator, null);
+      await _syncBackup();
+    } catch (_) {
+      _backupLease?.release();
+      _backupLease = null;
+      if (mounted && _activeScope() != null) {
+        setState(() => _backupError =
+            'Backup storage is unavailable. Your local history is retained.');
+        _backupPresentation.value = _BackupPresentation(null, _backupError);
+      }
+    } finally {
+      _backupOpening = false;
+    }
+  }
+
+  Future<void> _syncBackup() async {
+    _backupTimer?.cancel();
+    final c = _backupLease?.coordinator;
+    if (!_foreground || _activeScope() == null || c == null) return;
+    try {
+      await c.sync();
+    } catch (_) {
+      if (mounted && _activeScope() != null) {
+        setState(
+            () => _backupError = 'Backup status could not be saved. Retry.');
+      }
+    }
+    if (!mounted || !_foreground || _activeScope() == null) return;
+    _backupTimer = Timer(
+        Duration(seconds: c.state.lastError == null ? 60 : 120), () async {
+      await _syncBackup();
+      if (mounted && _activeScope() != null) await _cubit?.load();
+    });
+  }
+
   Future<void> _refresh() async {
     if (_activeScope() == null) return;
     if (_cubit != null) {
+      await _syncBackup();
       await _cubit!.load();
     } else {
       await _initialize();
@@ -114,7 +210,12 @@ class _MemberProgressHostState extends State<MemberProgressHost>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) unawaited(_refresh());
+    _foreground = state == AppLifecycleState.resumed;
+    if (_foreground) {
+      unawaited(_refresh());
+    } else {
+      _backupTimer?.cancel();
+    }
   }
 
   Future<void> _open(MemberProgressView view) async {
@@ -131,7 +232,9 @@ class _MemberProgressHostState extends State<MemberProgressHost>
                 view: view,
                 refresh: _refresh,
                 open: _open,
-                openWorkout: _openWorkout)));
+                openWorkout: _openWorkout,
+                backupState: _backupPresentation,
+                retryBackup: _backupConfigured ? _initializeBackup : null)));
     if (mounted) await _refresh();
   }
 
@@ -182,6 +285,9 @@ class _MemberProgressHostState extends State<MemberProgressHost>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _weekTimer?.cancel();
+    _backupTimer?.cancel();
+    _backupLease?.release();
+    _backupPresentation.dispose();
     _authSubscription?.cancel();
     _progressSubscription?.cancel();
     _cubit?.close();
@@ -232,7 +338,7 @@ class MemberProgressRoute extends StatelessWidget {
       scope: scope,
       repositoryFactory: repositoryFactory,
       builder: (context, state, refresh, open, openWorkout) =>
-          _progressContent(state, view, refresh, open, openWorkout));
+          _progressContent(context, state, view, refresh, open, openWorkout));
 }
 
 class _ScopedProgressPage extends StatelessWidget {
@@ -243,7 +349,9 @@ class _ScopedProgressPage extends StatelessWidget {
       required this.view,
       required this.refresh,
       required this.open,
-      required this.openWorkout});
+      required this.openWorkout,
+      required this.backupState,
+      this.retryBackup});
   final SessionScope scope;
   final AuthBloc auth;
   final MemberProgressCubit cubit;
@@ -251,29 +359,42 @@ class _ScopedProgressPage extends StatelessWidget {
   final Future<void> Function() refresh;
   final void Function(MemberProgressView) open;
   final void Function(LocalWorkoutProgressRecord) openWorkout;
+  final ValueListenable<_BackupPresentation> backupState;
+  final VoidCallback? retryBackup;
   @override
-  Widget build(BuildContext context) => BlocBuilder<AuthBloc, AuthState>(
-      bloc: auth,
-      builder: (context, state) {
-        if (state.session?.scope != scope ||
-            !AuthRolePolicy.canEnter(state, allowed: const {AppRole.member})) {
-          return const Scaffold(
-              body: Center(
-                  child: Text('Sign in to view this account’s progress.')));
-        }
-        return BlocBuilder<MemberProgressCubit, MemberProgressState>(
-            bloc: cubit,
-            builder: (context, state) =>
-                _progressContent(state, view, refresh, open, openWorkout));
-      });
+  Widget build(BuildContext context) => ValueListenableBuilder<
+          _BackupPresentation>(
+      valueListenable: backupState,
+      builder: (context, presentation, _) => BlocBuilder<AuthBloc, AuthState>(
+          bloc: auth,
+          builder: (context, state) {
+            if (state.session?.scope != scope ||
+                !AuthRolePolicy.canEnter(state,
+                    allowed: const {AppRole.member})) {
+              return const Scaffold(
+                  body: Center(
+                      child: Text('Sign in to view this account’s progress.')));
+            }
+            return BlocBuilder<MemberProgressCubit, MemberProgressState>(
+                bloc: cubit,
+                builder: (context, state) => _progressContent(
+                    context, state, view, refresh, open, openWorkout,
+                    backup: presentation.coordinator,
+                    backupError: presentation.error,
+                    retryBackup: retryBackup));
+          }));
 }
 
 Widget _progressContent(
+    BuildContext context,
     MemberProgressState state,
     MemberProgressView view,
     Future<void> Function() refresh,
     void Function(MemberProgressView) open,
-    void Function(LocalWorkoutProgressRecord) openWorkout) {
+    void Function(LocalWorkoutProgressRecord) openWorkout,
+    {WorkoutBackupCoordinator? backup,
+    String? backupError,
+    VoidCallback? retryBackup}) {
   final progress = state.progress;
   if (progress == null) {
     return Scaffold(
@@ -286,21 +407,46 @@ Widget _progressContent(
                 FilledButton(onPressed: refresh, child: const Text('Retry'))
               ])));
   }
+  void openReport() {
+    Navigator.push(
+        context,
+        MaterialPageRoute<void>(
+            builder: (_) => MemberWorkoutReportRoute(scope: progress.scope)));
+  }
+
   final screen = switch (view) {
     MemberProgressView.dashboard => ProgressDashboardScreen(
+        onOpenReport: openReport,
         localProgress: progress,
+        routineProgress: state.routines,
+        onOpenRoutineHistory: () => open(MemberProgressView.routines),
+        onOpenBackup: () => open(MemberProgressView.backup),
+        onOpenRoutine: (a) => openRoutineAttempt(context, a, refresh),
         onRefresh: refresh,
         onOpenWorkout: openWorkout,
         onOpenHistory: () => open(MemberProgressView.history),
         onOpenPerformance: () => open(MemberProgressView.performance),
         onOpenForm: () => open(MemberProgressView.form)),
     MemberProgressView.history => ActivityTimelineScreen(
+        onOpenReport: openReport,
         localProgress: progress,
         onRefresh: refresh,
         onOpenWorkout: openWorkout),
-    MemberProgressView.performance =>
-      WorkoutPerformanceScreen(localProgress: progress),
-    MemberProgressView.form => PostureAccuracyScreen(localProgress: progress),
+    MemberProgressView.performance => WorkoutPerformanceScreen(
+        localProgress: progress, onOpenReport: openReport),
+    MemberProgressView.form =>
+      PostureAccuracyScreen(localProgress: progress, onOpenReport: openReport),
+    MemberProgressView.routines => RoutineHistoryScreen(
+        attempts: state.routines?.records ?? const [],
+        available: state.routines != null,
+        onOpenBackup: () => open(MemberProgressView.backup),
+        onRefresh: refresh,
+        onOpenAttempt: (a) => openRoutineAttempt(context, a, refresh)),
+    MemberProgressView.backup => WorkoutBackupScreen(
+        coordinator: backup,
+        error: backupError,
+        onRetry: retryBackup,
+        onChanged: refresh),
   };
   final warnings = state.snapshot?.warnings ?? const <String>[];
   return Column(children: [
@@ -324,4 +470,58 @@ Widget _progressContent(
                 child: screen)
             : screen)
   ]);
+}
+
+/// The detail route remains guarded even if the account changes while it is open.
+Future<void> openRoutineAttempt(BuildContext context, RoutineAttempt attempt,
+    Future<void> Function() refresh) async {
+  final auth = context.read<AuthBloc>();
+  bool authorized() =>
+      auth.state.session?.scope == attempt.scope &&
+      AuthRolePolicy.canEnter(auth.state, allowed: const {AppRole.member});
+  if (!authorized()) return;
+  Future<void> continueAttempt(
+      BuildContext detailContext, RoutineJourneyAction action) async {
+    if (!authorized()) return;
+    await Navigator.pushReplacement(
+        detailContext,
+        MaterialPageRoute<void>(
+            builder: (_) => RoutineJourneyRoute(
+                scope: attempt.scope,
+                routine: attempt.routine,
+                attemptId: attempt.id,
+                action: action)));
+  }
+
+  await Navigator.push(
+      context,
+      MaterialPageRoute<void>(
+          builder: (detailContext) => BlocBuilder<AuthBloc, AuthState>(
+              bloc: auth,
+              builder: (_, state) {
+                if (!authorized()) {
+                  return const Scaffold(
+                      body: Center(
+                          child:
+                              Text('Sign in to view this account’s routine.')));
+                }
+                final hasNext = attempt.routine.exercises
+                    .any((e) => e.dayNumber > attempt.day);
+                return RoutineAttemptDetailScreen(
+                    attempt: attempt,
+                    onResume: () => continueAttempt(
+                        detailContext, RoutineJourneyAction.resume),
+                    onRepeat: () => continueAttempt(
+                        detailContext, RoutineJourneyAction.repeat),
+                    onNextDay: hasNext
+                        ? () => continueAttempt(
+                            detailContext, RoutineJourneyAction.nextDay)
+                        : null,
+                    onViewProgress: () => Navigator.push(
+                        detailContext,
+                        MaterialPageRoute<void>(
+                            builder: (_) =>
+                                MemberProgressRoute(scope: attempt.scope))));
+              })));
+  if (context.mounted && authorized()) await refresh();
 }

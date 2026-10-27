@@ -1,4 +1,5 @@
 import 'real_workout_contract.dart' show workoutConsentVersion;
+import 'curl_arm_metrics.dart';
 
 const _maximumMicros = 86400000000;
 const _maximumAttempts = 10000;
@@ -55,6 +56,7 @@ class WorkoutPoseMetrics {
     required this.consentVersion,
     required DateTime consentedAt,
     this.publishedRoutineId,
+    this.curlArms,
     Map<String, WorkoutDeviationAggregate> deviations = const {},
   })  : consentedAt = consentedAt.toUtc(),
         deviations = Map.unmodifiable(deviations) {
@@ -71,14 +73,30 @@ class WorkoutPoseMetrics {
                 formScorePercent! > 100)) ||
         (trackedDurationMicros == 0 &&
             (formScorePercent != null || partialRepetitions != 0)) ||
-        scoringVersion != 'bodyweight-squat-side-v1' ||
+        !const {
+          'bodyweight-squat-side-v1',
+          'single-arm-curl-side-v1',
+          'standing-calf-raise-side-v1',
+          'wall-push-up-side-v1'
+        }.contains(scoringVersion) ||
         cameraView != 'side' ||
         consentVersion != workoutConsentVersion ||
         !_metricId.hasMatch(detectorId) ||
         !_metricId.hasMatch(detectorVersion) ||
         (publishedRoutineId != null &&
             !_metricId.hasMatch(publishedRoutineId!)) ||
-        !deviations.keys.every(_supportedDeviations.contains)) {
+        !deviations.keys.every(_supportedDeviations.contains) ||
+        (scoringVersion != 'bodyweight-squat-side-v1' &&
+            deviations.isNotEmpty) ||
+        (curlArms != null &&
+            (scoringVersion != 'single-arm-curl-side-v1' ||
+                curlArms!.partialRepetitions != partialRepetitions ||
+                (curlArms!.formScorePercent != formScorePercent &&
+                    (curlArms!.formScorePercent == null ||
+                        formScorePercent == null ||
+                        (curlArms!.formScorePercent! - formScorePercent!)
+                                .abs() >
+                            .000001))))) {
       throw const FormatException('Invalid local pose metrics.');
     }
   }
@@ -93,9 +111,11 @@ class WorkoutPoseMetrics {
   final String? publishedRoutineId;
   final DateTime consentedAt;
   final Map<String, WorkoutDeviationAggregate> deviations;
+  final CurlArmMetrics? curlArms;
 
   Map<String, Object?> toJson() => {
-        'schemaVersion': 1,
+        'schemaVersion': curlArms == null ? 1 : 2,
+        if (curlArms != null) 'curlArms': curlArms!.toJson(),
         'partialRepetitions': partialRepetitions,
         'trackedDurationMicros': trackedDurationMicros,
         'rejectedDurationMicros': rejectedDurationMicros,
@@ -112,7 +132,7 @@ class WorkoutPoseMetrics {
       };
 
   factory WorkoutPoseMetrics.fromJson(Map<String, Object?> json) {
-    _fields(json, const {
+    _fields(json, {
       'schemaVersion',
       'partialRepetitions',
       'trackedDurationMicros',
@@ -125,9 +145,10 @@ class WorkoutPoseMetrics {
       'consentVersion',
       'consentedAt',
       'publishedRoutineId',
-      'deviations'
+      'deviations',
+      if (json['schemaVersion'] == 2) 'curlArms',
     });
-    if (json['schemaVersion'] != 1) {
+    if (json['schemaVersion'] != 1 && json['schemaVersion'] != 2) {
       throw const FormatException('Unsupported pose metrics version.');
     }
     final score = json['formScorePercent'];
@@ -144,6 +165,9 @@ class WorkoutPoseMetrics {
       throw const FormatException('Unsupported workout deviation.');
     }
     return WorkoutPoseMetrics(
+      curlArms: json['schemaVersion'] == 2
+          ? CurlArmMetrics.fromJson(_object(json['curlArms']))
+          : null,
       partialRepetitions: _integer(json, 'partialRepetitions'),
       trackedDurationMicros: _integer(json, 'trackedDurationMicros'),
       rejectedDurationMicros: _integer(json, 'rejectedDurationMicros'),
@@ -163,6 +187,7 @@ class WorkoutPoseMetrics {
   @override
   bool operator ==(Object other) =>
       other is WorkoutPoseMetrics &&
+      curlArms == other.curlArms &&
       partialRepetitions == other.partialRepetitions &&
       trackedDurationMicros == other.trackedDurationMicros &&
       rejectedDurationMicros == other.rejectedDurationMicros &&
@@ -192,7 +217,8 @@ class WorkoutPoseMetrics {
       consentedAt,
       publishedRoutineId,
       deviations['trunkLean'],
-      deviations['incompleteDepth']);
+      deviations['incompleteDepth'],
+      curlArms);
 }
 
 void _fields(Map<String, Object?> json, Set<String> fields) {

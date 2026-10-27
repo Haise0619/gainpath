@@ -79,6 +79,22 @@ class MemoryStore implements ExerciseCatalogStore, ExerciseCatalogTransaction {
   }
 }
 
+class _RegistryStore extends MemoryStore {
+  _RegistryStore(this.exerciseId) {
+    membership = {
+      'role': 'admin',
+      'status': 'active',
+      'organizationId': 'gainpath'
+    };
+    assignment = {'organizationId': 'gainpath'};
+  }
+  final String exerciseId;
+  @override
+  Future<Map<String, Map<String, dynamic>>> load() async => {
+        exerciseId: {...record!, 'aiSupported': true, 'poseTracking': true}
+      };
+}
+
 TutorialVideo edited(TutorialVideo original, {String title = 'Edited'}) =>
     TutorialVideo(
         id: original.id,
@@ -89,6 +105,30 @@ TutorialVideo edited(TutorialVideo original, {String title = 'Edited'}) =>
         editBaseline: original.editBaseline);
 
 void main() {
+  test(
+      'catalog capability is system-derived and never a writable catalog field',
+      () async {
+    for (final id in ['F3b8xIr8ynBDd3gEICKX', 'new-squat']) {
+      final repository = FirebaseExerciseCatalogRepository(
+          scope: SessionScope(userId: 'admin', organizationId: 'gainpath'),
+          store: _RegistryStore(id),
+          isSessionCurrent: () => true);
+      final item = (await repository.load()).single;
+      expect(item.trackingCapability.hasPoseTracking,
+          id == 'F3b8xIr8ynBDd3gEICKX');
+      expect(
+          FirebaseExerciseCatalogRepository.encodeCatalogFields(item)
+              .keys
+              .toSet(),
+          {
+            'schemaVersion',
+            'exerciseName',
+            'muscleCategory',
+            'videoUrl',
+            'isActive'
+          });
+    }
+  });
   late MemoryStore store;
   late FirebaseExerciseCatalogRepository repository;
   late bool authorized;
@@ -113,6 +153,30 @@ void main() {
     expect(store.record!['futureField'], {
       'preserve': [1, 2]
     });
+  });
+  test(
+      'rich tutorial details load, remain unchanged on rename and can be cleared',
+      () async {
+    store.record!.addAll({
+      'description': 'Control the movement.',
+      'coverImageUrl': 'https://media.example.test/cover.jpg',
+      'difficulty': 'Intermediate',
+      'equipment': 'Mat',
+      'tutorialSteps': [
+        {'title': 'Set up', 'description': 'Stand tall.', 'imageUrl': ''}
+      ],
+    });
+    final original = (await repository.load()).single;
+    expect(original.description, 'Control the movement.');
+    expect(original.thumbnailUrl, 'https://media.example.test/cover.jpg');
+    original.title = 'Renamed';
+    await repository.save(original);
+    expect(store.patch, {'exerciseName': 'Renamed'});
+    final reloaded = (await repository.load()).single;
+    reloaded.description = '';
+    await repository.save(reloaded);
+    expect(store.patch, {'description': ''});
+    expect(store.record!['tutorialSteps'], hasLength(1));
   });
   for (final change in {
     'exerciseName': 'Concurrent',

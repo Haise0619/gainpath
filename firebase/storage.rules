@@ -125,6 +125,50 @@ service firebase.storage {
       allow update, delete, list: if false;
     }
 
+    // Exercise catalog media use their own immutable paths. Existing equipment,
+    // account-photo and trusted content namespaces keep their original policy.
+    function currentExerciseMediaMember(orgId) {
+      return request.auth != null && request.auth.token.email_verified == true
+        && firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.organizationId == orgId
+        && firestore.get(/databases/(default)/documents/orgs/$(orgId)/members/$(request.auth.uid)).data.organizationId == orgId
+        && firestore.get(/databases/(default)/documents/orgs/$(orgId)/members/$(request.auth.uid)).data.status == 'active';
+    }
+    function exerciseMediaAuthor(orgId, uploaderUid) {
+      return currentExerciseMediaMember(orgId) && request.auth.uid == uploaderUid
+        && firestore.get(/databases/(default)/documents/orgs/$(orgId)/members/$(request.auth.uid)).data.role in ['admin', 'staff'];
+    }
+    match /orgs/{orgId}/exerciseImages/{uploaderUid}/{imageId} {
+      allow get: if currentExerciseMediaMember(orgId);
+      allow create: if exerciseMediaAuthor(orgId, uploaderUid) && resource == null
+        && imageId.matches('[a-f0-9]{32}')
+        && request.resource.size > 0 && request.resource.size <= 5 * 1024 * 1024
+        && request.resource.contentType in ['image/jpeg', 'image/png', 'image/webp'];
+      allow update, delete, list: if false;
+    }
+    match /orgs/{orgId}/exerciseVideos/{uploaderUid}/{videoId} {
+      allow get: if currentExerciseMediaMember(orgId);
+      allow create: if exerciseMediaAuthor(orgId, uploaderUid) && resource == null
+        && videoId.matches('[a-f0-9]{32}[.]mp4')
+        && request.resource.size > 0 && request.resource.size <= 100 * 1024 * 1024
+        && request.resource.contentType == 'video/mp4';
+      allow update, delete, list: if false;
+    }
+
+    // Reward covers have a separate immutable namespace, managed only by Admin.
+    match /orgs/{orgId}/rewardImages/{uploaderUid}/{imageId} {
+      function currentRewardMediaMember() {
+        return currentExerciseMediaMember(orgId) && memberSessionActive(request.auth.uid)
+          && firestore.get(/databases/(default)/documents/orgs/$(orgId)).data.status == 'active';
+      }
+      allow get: if currentRewardMediaMember();
+      allow create: if currentRewardMediaMember() && request.auth.uid == uploaderUid
+        && firestore.get(/databases/(default)/documents/orgs/$(orgId)/members/$(request.auth.uid)).data.role == 'admin'
+        && resource == null && imageId.matches('[a-f0-9]{32}')
+        && request.resource.size > 0 && request.resource.size <= 5 * 1024 * 1024
+        && request.resource.contentType in ['image/jpeg', 'image/png', 'image/webp'];
+      allow update, delete, list: if false;
+    }
+
     match /orgs/{orgId}/content/{filePath=**} {
       allow read: if activeMember(orgId);
       // Publication and media validation belong to trusted content commands.

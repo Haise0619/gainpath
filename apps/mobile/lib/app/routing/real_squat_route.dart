@@ -7,6 +7,9 @@ import 'package:gainpath_domain/gainpath_domain.dart'
     show AppRole, SessionScope;
 import 'package:gainpath_identity/gainpath_identity.dart';
 import '../../features/workout/application/real_squat_session_controller.dart';
+import '../../features/workout/application/guided_workout_progress.dart';
+import '../../features/workout/domain/routine_workout_context.dart';
+import '../../features/workout/domain/workout_audio_port.dart';
 import '../../features/workout/data/published_routine.dart';
 import '../../features/workout/data/workout_session_repository.dart';
 import '../../features/workout/domain/real_workout_contract.dart';
@@ -35,12 +38,18 @@ class RealSquatRoute extends StatefulWidget {
       required this.consented,
       required this.setupConfirmed,
       this.requestServerUpload = false,
+      this.sessionId,
+      this.returnToRoutine = false,
+      this.routineContext,
       this.storeFactory = createWorkoutStore});
+  final RoutineWorkoutContext? routineContext;
   final String routineId;
   final PublishedRoutineExercise exercise;
   final SessionScope scope;
   final bool consented, setupConfirmed;
   final bool requestServerUpload;
+  final String? sessionId;
+  final bool returnToRoutine;
   final Future<WorkoutSessionStore> Function(SessionScope) storeFactory;
   @override
   State<RealSquatRoute> createState() => _RealSquatRouteState();
@@ -52,6 +61,7 @@ class _RealSquatRouteState extends State<RealSquatRoute>
   RealSquatSessionController? _session;
   AndroidPoseCamera? _camera;
   WorkoutSessionRepository? _repository;
+  WorkoutVoicePreferences? _voicePreferences;
   RealWorkoutOutboxRepository? _outbox;
   WorkoutConsentAcknowledgement? _acknowledgement;
   String? _uploadNotice;
@@ -100,6 +110,12 @@ class _RealSquatRouteState extends State<RealSquatRoute>
       }
       final store = await widget.storeFactory(widget.scope);
       if (!mounted || !authorized()) return;
+      try {
+        _voicePreferences = await createWorkoutVoicePreferences(widget.scope);
+      } catch (_) {
+        /* Session audio still works without local preference storage. */
+      }
+      if (!mounted || !authorized()) return;
       if (widget.requestServerUpload) {
         try {
           final syncStore = await createRealWorkoutSyncStore(widget.scope);
@@ -125,9 +141,13 @@ class _RealSquatRouteState extends State<RealSquatRoute>
       _camera =
           AndroidPoseCamera(clockMicros: () => _clock.elapsedMicroseconds);
       final random = Random.secure();
-      final id = List.generate(
-              16, (_) => random.nextInt(256).toRadixString(16).padLeft(2, '0'))
-          .join();
+      final id = widget.sessionId ??
+          List.generate(16,
+                  (_) => random.nextInt(256).toRadixString(16).padLeft(2, '0'))
+              .join();
+      if (!RegExp(r'^[A-Za-z0-9_-]{1,128}$').hasMatch(id)) {
+        throw StateError('Invalid capture identity');
+      }
       if (_acknowledgement != null) {
         try {
           if (!await _outbox!.prepareCapture(id, _acknowledgement!)) {
@@ -156,6 +176,15 @@ class _RealSquatRouteState extends State<RealSquatRoute>
           detectorId: 'blazepose-tflite',
           detectorVersion: BlazePoseModelContract.version,
           performance: _performance,
+          guidance: GuidedWorkoutProgress(
+              sets: widget.exercise.sets, repetitions: widget.exercise.reps),
+          saveVoiceMode: (mode) async {
+            final preferences = _voicePreferences;
+            if (preferences == null) {
+              throw StateError('Local preferences unavailable');
+            }
+            await preferences.write(mode);
+          },
           onSaved: _outbox == null
               ? null
               : (summary) async {
@@ -190,6 +219,11 @@ class _RealSquatRouteState extends State<RealSquatRoute>
 
   Future<void> _preferences(RealSquatSessionController c) async {
     try {
+      final localMode = await _voicePreferences?.read();
+      if (localMode != null) {
+        c.applySavedVoiceMode(localMode);
+        return;
+      }
       final preferences =
           await FirebaseMemberPreferencesRepository(scope: widget.scope).load();
       c.applyPreferences(preferences);
@@ -243,8 +277,10 @@ class _RealSquatRouteState extends State<RealSquatRoute>
         realSession: _session,
         exerciseName: widget.exercise.name,
         targetRepetitions: widget.exercise.reps,
+        routineContext: widget.routineContext,
         resultBuilder: (summary) => ScopedSquatResult(
             summary: summary,
+            returnToRoutine: widget.returnToRoutine,
             auth: auth,
             syncEnabled: true,
             acknowledgement: _acknowledgement),
@@ -263,10 +299,12 @@ class ScopedSquatResult extends StatelessWidget {
       required this.summary,
       required this.auth,
       this.syncEnabled = false,
+      this.returnToRoutine = false,
       this.acknowledgement});
   final WorkoutSessionSummary summary;
   final AuthBloc auth;
   final bool syncEnabled;
+  final bool returnToRoutine;
   final WorkoutConsentAcknowledgement? acknowledgement;
   @override
   Widget build(BuildContext context) => BlocBuilder<AuthBloc, AuthState>(
@@ -277,8 +315,14 @@ class ScopedSquatResult extends StatelessWidget {
               ? SquatResultSync(
                   summary: summary,
                   auth: auth,
+                  returnToRoutine: returnToRoutine,
                   acknowledgement: acknowledgement)
-              : WorkoutResultScreen.measured(summary: summary)
+              : WorkoutResultScreen.measured(
+                  summary: summary,
+                  onContinue:
+                      returnToRoutine ? () => Navigator.pop(context) : null,
+                  continueLabel:
+                      returnToRoutine ? 'Continue routine' : 'Back to home')
           : const Scaffold(
               body: Center(
                   child: Text('Sign in to view this account’s result.'))));

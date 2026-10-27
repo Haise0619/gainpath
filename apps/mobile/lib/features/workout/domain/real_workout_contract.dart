@@ -1,4 +1,6 @@
 import 'package:gainpath_domain/gainpath_domain.dart' show SessionScope;
+import 'package:gainpath_domain/workout.dart'
+    show ExerciseTrackingRegistry, ExerciseTrackingCapability;
 
 const workoutConsentVersion = 'pose-local-summary-v1';
 const _maxTimestamp = 8639999996400000;
@@ -93,7 +95,10 @@ class DevelopmentSquatBinding {
       required String exerciseId,
       required int sets,
       required int reps}) {
-    if (organizationId != 'gainpath' || exerciseId != 'F3b8xIr8ynBDd3gEICKX') {
+    if (ExerciseTrackingRegistry.resolve(
+                organizationId: organizationId, exerciseId: exerciseId)
+            .trackerId !=
+        ExerciseTrackingCapability.sideViewSquat.trackerId) {
       return null;
     }
     if (sets <= 0 || reps <= 0) {

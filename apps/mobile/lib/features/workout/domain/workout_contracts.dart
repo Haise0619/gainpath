@@ -111,6 +111,8 @@ class WorkoutSessionSummary {
         (metrics.trackedDurationMicros == 0 && repetitions != 0) ||
         (attempts == 0 && metrics.formScorePercent != null) ||
         metrics.deviations.values.any((value) => value.count > attempts) ||
+        (metrics.curlArms != null &&
+            metrics.curlArms!.repetitions != repetitions) ||
         (provenance == WorkoutProvenance.realCamera &&
             {'simulated', 'demo', 'fixture', 'unknown'}
                 .contains(metrics.detectorId))) {

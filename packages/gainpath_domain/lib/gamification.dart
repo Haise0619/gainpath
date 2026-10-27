@@ -1,7 +1,16 @@
 export 'src/gamification/entities/achievement_badge.dart';
 export 'src/gamification/entities/mini_game.dart';
+export 'src/gamification/mini_game_content.dart';
+export 'src/gamification/mini_game_rewards.dart';
+export 'src/gamification/mini_game_rounds.dart';
+export 'src/gamification/mini_game_participation.dart';
 export 'src/gamification/entities/reward_item.dart';
 export 'src/gamification/policies/reward_policy.dart';
 export 'src/gamification/repositories/gamification_repository.dart';
 export 'src/gamification/repositories/reward_catalog_repository.dart';
 export 'src/gamification/verified_rewards.dart';
+export 'src/gamification/points_history.dart';
+export 'src/gamification/workout_rewards.dart';
+export 'src/gamification/repositories/reward_publishing_repository.dart';
+export 'src/gamification/repositories/reward_media_repository.dart';
+export 'src/gamification/earned_points_leaderboard.dart';

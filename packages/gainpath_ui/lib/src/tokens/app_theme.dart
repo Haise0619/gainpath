@@ -37,6 +37,8 @@ class AppColors {
   static const warning = Color(0xFFD97706);
   static const info = Color(0xFF2563EB);
   static const infoTint = Color(0xFFE6EEFD);
+  static const membershipFreeInk = Color(0xFF475569);
+  static const membershipFreeTint = Color(0xFFF1F5F9);
 
   static const heroGradient = LinearGradient(
     begin: Alignment.topLeft,

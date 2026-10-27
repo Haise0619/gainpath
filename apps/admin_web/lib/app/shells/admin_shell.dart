@@ -11,6 +11,9 @@ import '../../features/workout/presentation/admin/routine_templates_screen.dart'
 import '../../features/workout/presentation/admin/equipment_catalog_screen.dart';
 import '../../features/gamification/presentation/admin/reward_catalog_screen.dart';
 import '../../features/content/presentation/admin/announcements_screen.dart';
+import '../../features/content/presentation/admin/mini_game_content_screen.dart';
+import '../../infrastructure/local/equipment_video_picker.dart';
+import 'package:gainpath_domain/gamification.dart' show MiniGameContent;
 import '../../features/chatbot/presentation/admin/chatbot_disclaimer_screen.dart';
 import '../../features/membership/presentation/admin/refunds_screen.dart';
 import '../../features/analytics/presentation/admin/reports_screen.dart';
@@ -60,7 +63,12 @@ class _NavGroup {
 /// ever pushes a new screen or shows a back button; the sidebar is the
 /// only way to move between areas, exactly like a real admin website.
 class AdminShell extends StatefulWidget {
-  const AdminShell({super.key, this.liveSession});
+  const AdminShell(
+      {super.key,
+      this.liveSession,
+      this.allowContentRemoval =
+          const bool.fromEnvironment('ADMIN_CONTENT_REMOVAL_ENABLED')});
+  final bool allowContentRemoval;
   final AuthSession? liveSession;
 
   @override
@@ -125,15 +133,23 @@ class _AdminShellState extends State<AdminShell> {
       _NavPage(
           Icons.video_library_outlined,
           Icons.video_library_rounded,
-          'Exercise Tutorials',
+          'Exercise Catalog',
           'Manage the tutorial video library',
-          const ExerciseTutorialsScreen()),
+          ExerciseTutorialsScreen(allowRemoval: widget.allowContentRemoval)),
       _NavPage(
           Icons.list_alt_outlined,
           Icons.list_alt_rounded,
           'Routine Templates',
           'Author and assign workout blueprints',
-          const RoutineTemplatesScreen()),
+          RoutineTemplatesScreen(allowRemoval: widget.allowContentRemoval)),
+      _NavPage(
+          Icons.sports_esports_outlined,
+          Icons.sports_esports_rounded,
+          'Mini-games',
+          'Edit introductions, instructions and media for supported games',
+          MiniGameContentScreen(
+              videoPicker: LocalEquipmentVideoPicker(
+                  maxBytes: MiniGameContent.maxPreviewBytes))),
     ]),
     _NavPage(
         Icons.fitness_center_outlined,
@@ -147,7 +163,7 @@ class _AdminShellState extends State<AdminShell> {
           Icons.card_giftcard_rounded,
           'Reward Catalog',
           widget.liveSession != null
-              ? 'Author and archive reward metadata drafts'
+              ? 'Manage the reward shop, reward details and voucher collection'
               : 'Points-shop inventory and stock',
           RewardCatalogScreen(live: widget.liveSession != null)),
       _NavPage(Icons.campaign_outlined, Icons.campaign_rounded, 'Announcements',

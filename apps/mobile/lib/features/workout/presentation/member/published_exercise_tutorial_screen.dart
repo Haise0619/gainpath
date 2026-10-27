@@ -5,6 +5,7 @@ import 'package:gainpath_ui/gainpath_ui.dart';
 import '../../domain/published_routine_view.dart';
 import '../../domain/tutorial_media.dart';
 import '../../domain/tutorial_player.dart';
+import 'widgets/exercise_tutorial_image.dart';
 
 /// Published content viewer. Viewing never creates a measured workout record.
 class PublishedExerciseTutorialScreen extends StatefulWidget {
@@ -12,7 +13,9 @@ class PublishedExerciseTutorialScreen extends StatefulWidget {
       {super.key,
       required this.exercise,
       required this.playerFactory,
-      this.authorized});
+      this.authorized,
+      this.perArmTargets = false});
+  final bool perArmTargets;
   final PublishedRoutineExercise exercise;
   final TutorialPlayerFactory playerFactory;
   final ValueListenable<bool>? authorized;
@@ -195,43 +198,45 @@ class _PublishedExerciseTutorialScreenState
     return Scaffold(
         appBar: AppBar(title: Text(e.name)),
         body: PageBody(children: [
-          ClipRRect(
-              borderRadius: BorderRadius.circular(18),
-              child: AspectRatio(
-                aspectRatio: ready &&
-                        player!.aspectRatio.isFinite &&
-                        player.aspectRatio > 0
-                    ? player.aspectRatio
-                    : 16 / 10,
-                child: ColoredBox(
-                    color: AppColors.ink,
-                    child: missing
-                        ? const Center(
-                            child: Text('Tutorial video unavailable',
-                                style: TextStyle(color: Colors.white)))
-                        : _failed
-                            ? Center(
-                                child: Column(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                    const Text(
-                                        'Could not play this tutorial.\nCheck your connection or try again later.',
-                                        textAlign: TextAlign.center,
-                                        style: TextStyle(color: Colors.white)),
-                                    TextButton(
-                                        onPressed: () => setState(_open),
-                                        child: const Text('Retry')),
-                                  ]))
-                            : !ready
-                                ? const Center(
-                                    child: Text('Loading tutorial…',
-                                        style: TextStyle(color: Colors.white)))
-                                : Stack(alignment: Alignment.center, children: [
-                                    player!.buildVideo(),
-                                    if (player.buffering)
-                                      const CircularProgressIndicator(),
-                                  ])),
-              )),
+          if (e.imageUrl.isNotEmpty) ...[
+            ExerciseTutorialImage(
+                url: e.imageUrl, label: '${e.name} cover', isCover: true),
+            const SizedBox(height: 12),
+          ],
+          if (!missing)
+            ClipRRect(
+                borderRadius: BorderRadius.circular(18),
+                child: AspectRatio(
+                  aspectRatio: ready &&
+                          player!.aspectRatio.isFinite &&
+                          player.aspectRatio > 0
+                      ? player.aspectRatio
+                      : 16 / 10,
+                  child: ColoredBox(
+                      color: AppColors.ink,
+                      child: _failed
+                          ? Center(
+                              child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                  const Text(
+                                      'Could not play this tutorial.\nCheck your connection or try again later.',
+                                      textAlign: TextAlign.center,
+                                      style: TextStyle(color: Colors.white)),
+                                  TextButton(
+                                      onPressed: () => setState(_open),
+                                      child: const Text('Retry')),
+                                ]))
+                          : !ready
+                              ? const Center(
+                                  child: Text('Loading tutorial…',
+                                      style: TextStyle(color: Colors.white)))
+                              : Stack(alignment: Alignment.center, children: [
+                                  player!.buildVideo(),
+                                  if (player.buffering)
+                                    const CircularProgressIndicator(),
+                                ])),
+                )),
           if (ready && !_failed) ...[
             Row(children: [
               IconButton(
@@ -274,16 +279,77 @@ class _PublishedExerciseTutorialScreenState
           const SizedBox(height: 16),
           Text(e.name, style: Theme.of(context).textTheme.titleLarge),
           if (e.category.isNotEmpty) Text(e.category),
+          const SizedBox(height: 8),
+          Wrap(spacing: 8, runSpacing: 4, children: [
+            Chip(
+                label: Text(e.tutorial.difficulty),
+                side: BorderSide.none,
+                backgroundColor: AppColors.primaryTint),
+            if (e.tutorial.steps.isNotEmpty)
+              Chip(
+                  label: Text('${e.tutorial.steps.length} tutorial steps'),
+                  side: BorderSide.none),
+          ]),
+          if (e.tutorial.description.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Text(e.tutorial.description),
+          ],
+          if (e.tutorial.equipment.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            const Eyebrow('Equipment & setup'),
+            Text(e.tutorial.equipment),
+          ],
           if (missing)
-            const Text(
-                'No supported video was included in this published routine.'),
+            const Padding(
+                padding: EdgeInsets.only(top: 12),
+                child: Text('Tutorial video unavailable')),
+          if (e.tutorial.steps.isNotEmpty) ...[
+            const SizedBox(height: 18),
+            const Eyebrow('How to perform'),
+            for (var i = 0; i < e.tutorial.steps.length; i++)
+              Padding(
+                  padding: const EdgeInsets.only(top: 12),
+                  child: Panel(
+                      child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                        Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              CircleAvatar(
+                                  radius: 17,
+                                  backgroundColor: AppColors.primaryTint,
+                                  child: Text('${i + 1}',
+                                      style: const TextStyle(
+                                          color: AppColors.primary,
+                                          fontWeight: FontWeight.bold))),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                  child: Text(e.tutorial.steps[i].title,
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .titleMedium)),
+                            ]),
+                        if (e.tutorial.steps[i].imageUrl.isNotEmpty) ...[
+                          const SizedBox(height: 12),
+                          ExerciseTutorialImage(
+                              url: e.tutorial.steps[i].imageUrl,
+                              label:
+                                  'Step ${i + 1}: ${e.tutorial.steps[i].title}'),
+                        ],
+                        const SizedBox(height: 10),
+                        Text(e.tutorial.steps[i].description),
+                      ]))),
+          ],
           const SizedBox(height: 18),
           const Eyebrow('Published target'),
           Panel(
               child: Column(children: [
             DetailRow('Day', '${e.dayNumber}'),
             DetailRow('Sets', '${e.sets}'),
-            DetailRow('Reps per set', '${e.reps}')
+            DetailRow(
+                widget.perArmTargets ? 'Reps per arm per set' : 'Reps per set',
+                '${e.reps}')
           ])),
           if (e.cue.trim().isNotEmpty) ...[
             const SizedBox(height: 18),

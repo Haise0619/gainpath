@@ -94,6 +94,59 @@ void main() {
   setUpAll(() => GoogleFonts.config.allowRuntimeFetching = false);
 
   testWidgets(
+      'published instructions remain useful without a video on a small screen',
+      (tester) async {
+    tester.view.physicalSize = const Size(360, 740);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final exercise = PublishedRoutine.fromDocument('routine', {
+      'schemaVersion': 1,
+      'kind': 'routine',
+      'status': 'published',
+      'sourceBlueprintId': 'blueprint',
+      'title': 'Routine',
+      'estimatedMinutes': 10,
+      'exercises': [
+        {
+          'exerciseId': 'exercise',
+          'name': 'Movement',
+          'sets': 2,
+          'reps': 8,
+          'description': 'Move slowly with control.',
+          'difficulty': 'Beginner',
+          'equipment': 'Exercise mat',
+          'tutorialSteps': [
+            {
+              'title': 'Set up',
+              'description': 'Stand tall and prepare.',
+              'imageUrl': ''
+            },
+            {'title': 'Move', 'description': 'Lower slowly.', 'imageUrl': ''},
+          ],
+        }
+      ],
+    }).exercises.single;
+    var playerCalls = 0;
+    await tester.pumpWidget(MaterialApp(
+        home: PublishedExerciseTutorialScreen(
+      exercise: exercise,
+      playerFactory: (_) {
+        playerCalls++;
+        return FakePlayer();
+      },
+    )));
+    await tester.pumpAndSettle();
+    expect(find.text('Move slowly with control.'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('Stand tall and prepare.'), 220);
+    expect(find.text('Stand tall and prepare.'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('Lower slowly.'), 220);
+    expect(find.text('Lower slowly.'), findsOneWidget);
+    expect(playerCalls, 0);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets(
       'pending control times out with retry and ignores late completion',
       (tester) async {
     final player = PendingControlPlayer();
@@ -335,7 +388,7 @@ void main() {
   });
 
   testWidgets(
-      'app composition carries account guard into pushed routine tutorial',
+      'app composition carries account guard into pushed exercise tutorial',
       (tester) async {
     late AuthBloc auth;
     await tester.runAsync(() async {
@@ -361,9 +414,7 @@ void main() {
           home: WorkoutPrepRoute(publishedRoutine: routine),
         )));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('View routine'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Published exercise'));
+    await tester.tap(find.text('Watch tutorial'));
     await tester.pumpAndSettle();
     final route = tester
         .widget<ExerciseTutorialRoute>(find.byType(ExerciseTutorialRoute));

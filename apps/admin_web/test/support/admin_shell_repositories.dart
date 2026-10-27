@@ -1,4 +1,6 @@
 import 'package:flutter/widgets.dart';
+import 'dart:typed_data';
+import 'package:gainpath_domain/gainpath_domain.dart' show SessionScope;
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:gainpath_data/gainpath_data.dart';
 import 'package:gainpath_data/analytics.dart';
@@ -33,6 +35,8 @@ class TestAdminShellRepositories extends StatelessWidget {
     return MultiRepositoryProvider(providers: [
       RepositoryProvider<AdminReportingGateway>(
           create: (_) => const UnavailableAdminReportingGateway()),
+      RepositoryProvider<MiniGameContentRepository>(
+          create: (_) => _MiniGameContentFixture()),
       RepositoryProvider<MemberProfileRepository>(
           create: (_) => InMemoryMemberProfileRepository(session: session)),
       RepositoryProvider<CoachRepository>(
@@ -65,4 +69,28 @@ class TestAdminShellRepositories extends StatelessWidget {
           create: (_) => InMemoryContentRepository(session: session)),
     ], child: child);
   }
+}
+
+class _MiniGameContentFixture implements MiniGameContentRepository {
+  @override
+  final scope = SessionScope(userId: 'shell-admin', organizationId: 'test');
+  @override
+  bool get current => true;
+  @override
+  Future<List<MiniGameContent>> load() async =>
+      [MiniGameContent.defaults(scope.organizationId)];
+  @override
+  Future<MiniGameContent> save(
+          {required String requestId,
+          required int baseRevision,
+          required MiniGameContent content}) async =>
+      throw UnsupportedError('Read-only shell fixture');
+  @override
+  Future<String> upload(
+          {required String gameId,
+          required String kind,
+          required String uploadId,
+          required Uint8List bytes,
+          required String contentType}) async =>
+      throw UnsupportedError('Read-only shell fixture');
 }

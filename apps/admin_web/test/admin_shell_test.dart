@@ -18,4 +18,20 @@ void main() {
     expect(find.text('Members'), findsWidgets);
     expect(tester.takeException(), isNull);
   });
+  testWidgets('Content opens the edit-only supported Mini-games page',
+      (tester) async {
+    tester.view.physicalSize = const Size(1440, 1000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(const TestAdminShellRepositories(
+        child: MaterialApp(home: AdminShell())));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Content').first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Mini-games').first);
+    await tester.pumpAndSettle();
+    expect(find.text('Edit content'), findsOneWidget);
+    expect(find.text('Add game'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
 }

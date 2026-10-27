@@ -10,9 +10,11 @@ import 'widgets/local_progress_widgets.dart';
 /// needs work right now." Two different questions get two different
 /// chart shapes rather than reusing one chart for both.
 class PostureAccuracyScreen extends StatelessWidget {
-  const PostureAccuracyScreen({super.key, this.localProgress});
+  const PostureAccuracyScreen(
+      {super.key, this.localProgress, this.onOpenReport});
 
   final MemberLocalProgress? localProgress;
+  final VoidCallback? onOpenReport;
 
   static const _sessionLabels = ['S1', 'S2', 'S3', 'S4', 'S5', 'S6', 'S7'];
 
@@ -35,12 +37,12 @@ class PostureAccuracyScreen extends StatelessWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Posture accuracy'),
+        title: Text(local == null ? 'Posture accuracy' : 'Estimated form'),
         actions: [
           IconButton(
             icon: const Icon(Icons.ios_share_rounded),
             tooltip: 'Export',
-            onPressed: () => showUnavailable(context),
+            onPressed: onOpenReport ?? () => showUnavailable(context),
           ),
         ],
       ),

@@ -74,6 +74,33 @@ void main() {
       controller.consume(cues,
           nowMicros: timestamp, trackingAvailable: tracking);
 
+  test('alerts only suppresses encouragement and retains corrective warnings',
+      () async {
+    controller.setVoiceMode(WorkoutVoiceMode.alertsOnly);
+    consume([encouragement], 0);
+    await flush();
+    expect(port.played, isEmpty);
+    consume([correction], 1);
+    await flush();
+    expect(port.played, [correction]);
+    controller.setVoiceMode(WorkoutVoiceMode.muted);
+    consume([warning], 2);
+    await flush();
+    expect(port.played, [correction]);
+  });
+
+  test('switching to alerts cancels encouragement already speaking', () async {
+    controller.setVoiceMode(WorkoutVoiceMode.fullCoaching);
+    consume([encouragement], 0);
+    await flush();
+    controller.setVoiceMode(WorkoutVoiceMode.alertsOnly);
+    await flush();
+    expect(controller.activeCue, isNull);
+    consume([warning], 1);
+    await flush();
+    expect(port.played, [encouragement, warning]);
+  });
+
   test('default silent; existing voice preference enables playback', () async {
     consume([correction], 0);
     await flush();

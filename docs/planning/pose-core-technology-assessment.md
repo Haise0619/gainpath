@@ -2,6 +2,8 @@
 
 Date: 2026-10-12. Scope: an audit of the current working tree and retained evidence, plus a proposed validation plan. This document does not authorize tuning, installation, device operation, deployment, or server enablement.
 
+**Subsequent local source change, 25 October:** At the owner's request to prioritize skeleton responsiveness, normal sessions now prefer GPU initialization with validated CPU fallback and draw fresh refined landmarks by default, with a Smooth option. The audit and measurements below describe their dated baseline; current implementation and remaining physical acceptance limits are recorded in [M2 progress](../PROGRESS_REPORT.md#m2--ai-guided-workout-and-instructional-content). This local change does not convert historical GPU/filter experiments into physical acceptance evidence.
+
 ## Assessment
 
 GainPath has a real Android camera → custom BlazePose TFLite → landmark overlay pipeline, a provisional side-view squat analyzer, offline audio arbitration, durable account-scoped local results/history, and optional consent/outbox/callable integration. These software boundaries are implemented. **Anatomical accuracy, real-human squat/correction accuracy, satisfactory dynamic response, sustained device performance, and end-to-end real acceptance are not quantitatively established.** The backend's empty enabled-tuple policy deliberately preserves that distinction.

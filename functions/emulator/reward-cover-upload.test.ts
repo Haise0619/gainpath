@@ -1,0 +1,21 @@
+import {beforeAll,afterAll,it,expect} from 'vitest';
+import {initializeApp,deleteApp,type App} from 'firebase-admin/app';
+import {getStorage} from 'firebase-admin/storage';
+import {randomBytes} from 'node:crypto';
+import {uploadRewardCover} from '../src/modules/gamification/reward-cover-upload';
+import {FirebaseRewardCoverStore} from '../src/modules/gamification/reward-cover-storage';
+import {seed,org,adminAuth,now} from '../test/reward-journey-fixture';
+let app:App;
+beforeAll(()=>{if(process.env.FIREBASE_STORAGE_EMULATOR_HOST!=='127.0.0.1:19200')throw Error('Local Storage emulator required');app=initializeApp({projectId:'demo-gainpath'});});
+afterAll(async()=>{if(app)await deleteApp(app);});
+it('trusted cover upload stores image metadata and retries without overwrite in the real local Storage API',async()=>{
+ const uploadId=randomBytes(16).toString('hex'),bytes=Buffer.from([137,80,78,71,13,10,26,10,0]);
+ const input={schemaVersion:1,organizationId:org,action:'uploadCover',uploadId,contentType:'image/png',dataBase64:bytes.toString('base64')};
+ const store=seed(),media=new FirebaseRewardCoverStore();
+ const first=await uploadRewardCover(store,adminAuth,input,media,()=>now);
+ expect(await uploadRewardCover(store,adminAuth,input,media,()=>now)).toEqual(first);
+ const file=getStorage().bucket('gainpath-0619.firebasestorage.app').file(`orgs/${org}/rewardImages/admin/${uploadId}`),[meta]=await file.getMetadata();
+ expect(meta.contentType).toBe('image/png');expect(Number(meta.size)).toBe(bytes.length);expect(meta.metadata?.gainpathSha256).toHaveLength(64);
+ await expect(uploadRewardCover(store,adminAuth,{...input,dataBase64:Buffer.from([137,80,78,71,13,10,26,10,1]).toString('base64')},media,()=>now)).rejects.toMatchObject({code:'already-exists'});
+ expect((await file.download())[0]).toEqual(bytes);
+});

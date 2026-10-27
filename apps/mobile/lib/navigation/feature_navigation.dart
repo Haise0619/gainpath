@@ -1,5 +1,6 @@
 /// Cross-feature navigation contracts. Only the application builds destinations.
 abstract final class FeatureNavigation {
+  static const moveAndCatch = '/mini-games/move-and-catch';
   static const equipment = '/equipment/details';
   static const coach = '/coaches/profile';
   static const membership = '/membership';

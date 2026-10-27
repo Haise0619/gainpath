@@ -8,6 +8,9 @@ import 'package:gainpath_ui/gainpath_ui.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:gainpath_admin_web/features/gamification/presentation/admin/reward_catalog_screen.dart';
 import 'package:gainpath_domain/gamification.dart';
+import 'package:gainpath_domain/workout.dart' show EquipmentImage;
+import 'dart:typed_data';
+import 'dart:convert';
 import 'package:gainpath_domain/gainpath_domain.dart';
 import 'package:gainpath_admin_web/infrastructure/firebase/firebase_reward_catalog_repository.dart';
 
@@ -162,19 +165,265 @@ class _MockRewards extends Fake implements GamificationRepository {
   List<RewardItem> get rewards => [];
 }
 
+class _DraftOnly implements RewardCatalogRepository {
+  _DraftOnly(this.source);
+  final RewardCatalogRepository source;
+  @override
+  RewardCatalogDraft beginCreate() => source.beginCreate();
+  @override
+  Future<RewardCatalogPage> loadPage({String? afterId}) =>
+      source.loadPage(afterId: afterId);
+  @override
+  Future<RewardCatalogDraft> save(RewardCatalogDraft draft) =>
+      source.save(draft);
+}
+
 void main() {
   setUpAll(() => GoogleFonts.config.allowRuntimeFetching = false);
   late _Db db;
   late FirebaseRewardCatalogRepository repo;
+  late List<Map<String, dynamic>> calls;
+  late Map<String, dynamic> response;
   var current = true;
   setUp(() {
     db = _Db();
+    calls = [];
+    response = {'schemaVersion': 1, 'organizationId': 'o', 'items': []};
     current = true;
     repo = FirebaseRewardCatalogRepository(
         scope: SessionScope(userId: 'admin', organizationId: 'o'),
         isCurrent: () => current,
         firestore: db,
-        auth: _Auth());
+        auth: _Auth(),
+        catalogCall: (name, input) async {
+          expect(name, 'rewardCatalogCommand');
+          calls.add(input);
+          return response;
+        });
+  });
+  test('workout draft commands preserve disabled hold and exact save fields',
+      () async {
+    const draft = WorkoutRewardDraft(revision: 3, version: 'v3');
+    response.addAll({
+      'hold': true,
+      'draft': {
+        'schemaVersion': 1,
+        'revision': 3,
+        'version': 'v3',
+        ...draft.toFields(),
+        'enabled': false,
+        'difficultyMultipliersEnabled': false,
+        'eligibilityMode': 'verified_ai_only',
+        'timezone': 'Asia/Kuala_Lumpur'
+      }
+    });
+    expect((await repo.loadWorkoutRewardDraft()).revision, 3);
+    expect(calls.single, {
+      'schemaVersion': 1,
+      'organizationId': 'o',
+      'action': 'workoutRewardOverview'
+    });
+    response['confirmed'] = true;
+    await repo.saveWorkoutRewardDraft(
+        requestId: 'stable', baseRevision: 3, draft: draft);
+    expect(calls.last, {
+      'schemaVersion': 1,
+      'organizationId': 'o',
+      'action': 'saveWorkoutRewardDraft',
+      'requestId': 'stable',
+      'baseRevision': 3,
+      ...draft.toFields()
+    });
+    expect(calls.last.containsKey('enabled'), false);
+    expect(calls.last.containsKey('difficultyMultipliersEnabled'), false);
+    response['hold'] = false;
+    await expectLater(repo.loadWorkoutRewardDraft(), throwsFormatException);
+    current = false;
+    await expectLater(
+        repo.saveWorkoutRewardDraft(
+            requestId: 'stable', baseRevision: 3, draft: draft),
+        throwsA(isA<RewardCatalogSessionChanged>()));
+  });
+  test(
+      'cover bytes go through the trusted scoped callable rather than Storage client Rules',
+      () async {
+    response = {
+      'schemaVersion': 1,
+      'organizationId': 'o',
+      'url': 'https://media.example.test/cover'
+    };
+    final bytes = Uint8List.fromList([255, 216, 255, 0]);
+    expect(await repo.uploadRewardCover(EquipmentImage(bytes)),
+        'https://media.example.test/cover');
+    expect(calls.single.keys.toSet(), {
+      'schemaVersion',
+      'organizationId',
+      'action',
+      'uploadId',
+      'contentType',
+      'dataBase64'
+    });
+    expect(calls.single['action'], 'uploadCover');
+    expect(calls.single['uploadId'], matches(RegExp(r'^[a-f0-9]{32}$')));
+    expect(calls.single['dataBase64'], base64Encode(bytes));
+    expect(calls.single['contentType'], 'image/jpeg');
+  });
+  test('points overview parses rewards without monetary fields or policy',
+      () async {
+    response['items'] = [
+      {
+        'itemId': 'towel',
+        'title': 'Towel',
+        'pointCost': 50,
+        'stock': 2,
+        'revision': 1,
+        'active': true,
+        'validityDays': 30,
+        'conditions': 'In person',
+        'collectionInstructions': 'Reception',
+        'imageUrl': '',
+        'description': 'Cotton'
+      }
+    ];
+    final shop = await repo.shopOverview();
+    expect(calls.single, {
+      'schemaVersion': 1,
+      'organizationId': 'o',
+      'action': 'pointsOverview'
+    });
+    expect(shop.policy, null);
+    expect(shop.items.single.pointCost, 50);
+    expect(shop.items.single.valueMinor, 0);
+    expect(shop.items.single.category, 'Merchandise');
+    response['organizationId'] = 'foreign';
+    await expectLater(repo.shopOverview(), throwsFormatException);
+  });
+  test('publication commands use exact saved revision and scoped protocol',
+      () async {
+    await repo.configureShop(
+        requestId: 'stable-config',
+        pointsPerUnit: 50,
+        unitValueMinor: 100,
+        enabled: true);
+    expect(calls.single, {
+      'schemaVersion': 1,
+      'organizationId': 'o',
+      'action': 'configure',
+      'requestId': 'stable-config',
+      'pointsPerUnit': 50,
+      'unitValueMinor': 100,
+      'enabled': true
+    });
+    final fresh = repo.beginCreate().copyWith(title: 'Real draft');
+    await expectLater(
+        repo.publishReward(
+            draft: fresh,
+            requestId: 'pub',
+            pointCost: 50,
+            valueMinor: 100,
+            stockToAdd: 2,
+            validityDays: 30,
+            conditions: 'Terms',
+            collectionInstructions: 'Reception'),
+        throwsA(isA<RewardCatalogConflict>()));
+    expect(calls.length, 1);
+    final saved = await repo.save(fresh);
+    await repo.publishReward(
+        draft: saved,
+        requestId: 'pub',
+        pointCost: 50,
+        valueMinor: 100,
+        stockToAdd: 2,
+        validityDays: 30,
+        conditions: 'Terms',
+        collectionInstructions: 'Reception',
+        baseItemRevision: 3);
+    expect(calls.last, {
+      'schemaVersion': 1,
+      'organizationId': 'o',
+      'action': 'publish',
+      'requestId': 'pub',
+      'itemId': saved.id,
+      'draftRevision': 1,
+      'baseItemRevision': 3,
+      'pointCost': 50,
+      'valueMinor': 100,
+      'stockToAdd': 2,
+      'validityDays': 30,
+      'conditions': 'Terms',
+      'collectionInstructions': 'Reception'
+    });
+    await repo.retireReward(
+        itemId: saved.id, requestId: 'retire', baseItemRevision: 4);
+    expect(calls.last, {
+      'schemaVersion': 1,
+      'organizationId': 'o',
+      'action': 'retirePoints',
+      'requestId': 'retire',
+      'itemId': saved.id,
+      'baseItemRevision': 4
+    });
+    current = false;
+    await expectLater(
+        repo.shopOverview(), throwsA(isA<RewardCatalogSessionChanged>()));
+    expect(calls.length, 3);
+  });
+  test(
+      'direct save allocates without writing metadata and sends exact scoped fields',
+      () async {
+    final before = db.records.length;
+    final id = repo.newItemId();
+    expect(db.records.length, before);
+    expect(calls, isEmpty);
+    await repo.saveReward(
+        requestId: 'stable',
+        itemId: id,
+        baseItemRevision: 0,
+        title: ' Towel ',
+        description: ' Cotton ',
+        category: 'Apparel',
+        imageUrl: 'https://example.test/towel.png',
+        pointCost: 50,
+        stockToAdd: 2,
+        validityDays: 30,
+        conditions: ' In person ',
+        collectionInstructions: ' Reception ');
+    expect(calls.single, {
+      'schemaVersion': 1,
+      'organizationId': 'o',
+      'action': 'savePoints',
+      'requestId': 'stable',
+      'itemId': id,
+      'baseItemRevision': 0,
+      'title': 'Towel',
+      'description': 'Cotton',
+      'category': 'Apparel',
+      'imageUrl': 'https://example.test/towel.png',
+      'pointCost': 50,
+      'stockToAdd': 2,
+      'validityDays': 30,
+      'conditions': 'In person',
+      'collectionInstructions': 'Reception'
+    });
+    expect(db.records.length, before);
+    current = false;
+    expect(() => repo.newItemId(), throwsA(isA<RewardCatalogSessionChanged>()));
+    await expectLater(
+        repo.saveReward(
+            requestId: 'stable',
+            itemId: id,
+            baseItemRevision: 0,
+            title: 'Towel',
+            description: '',
+            category: 'Apparel',
+            imageUrl: '',
+            pointCost: 50,
+            stockToAdd: 2,
+            validityDays: 30,
+            conditions: 'Terms',
+            collectionInstructions: 'Reception'),
+        throwsA(isA<RewardCatalogSessionChanged>()));
+    expect(calls.length, 1);
   });
   test(
       'creates metadata draft, edits, archives and reloads with stable identity',
@@ -246,14 +495,14 @@ void main() {
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
     await tester.pumpWidget(RepositoryProvider<RewardCatalogRepository>.value(
-        value: repo,
+        value: _DraftOnly(repo),
         child: MaterialApp(
             theme: AppTheme.build(),
             home: const RewardCatalogScreen(live: true))));
     await tester.pumpAndSettle();
-    expect(find.text('No reward drafts yet. Add a draft to get started.'),
+    expect(find.text('No rewards yet. Select Add reward to get started.'),
         findsOneWidget);
-    await tester.tap(find.text('Add draft'));
+    await tester.tap(find.text('Add reward'));
     await tester.pumpAndSettle();
     expect(find.text('Points cost'), findsNothing);
     expect(find.text('Stock'), findsNothing);
@@ -261,7 +510,7 @@ void main() {
     await tester.tap(find.text('Save draft'));
     await tester.pumpAndSettle();
     expect(find.text('Fixture draft'), findsOneWidget);
-    expect(find.text('Draft'), findsOneWidget);
+    expect(find.text('Saved details'), findsOneWidget);
     await tester.tap(find.byTooltip('Edit Fixture draft'));
     await tester.pumpAndSettle();
     await tester.enterText(

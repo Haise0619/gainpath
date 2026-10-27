@@ -10,7 +10,7 @@ import 'package:gainpath_mobile/app/routing/real_squat_route.dart';
 import 'package:gainpath_mobile/features/workout/domain/published_routine_catalog_repository.dart';
 import 'package:gainpath_mobile/features/workout/domain/published_routine_view.dart';
 import 'package:gainpath_mobile/features/workout/presentation/member/workout_prep_screen.dart';
-import 'package:gainpath_mobile/features/workout/presentation/member/routine_screen.dart';
+import 'package:gainpath_mobile/app/routing/routine_journey_route.dart';
 import 'package:gainpath_mobile/features/analytics/data/local_member_progress_repository.dart';
 import 'package:gainpath_mobile/features/workout/data/workout_session_repository.dart';
 import 'package:gainpath_mobile/features/workout/domain/real_workout_sync.dart';
@@ -143,14 +143,16 @@ void main() {
         'Updated B');
     await tester.ensureVisible(find.text('View routine'));
     await tester.tap(find.text('View routine'));
-    await tester.pumpAndSettle();
+    // App-owned journey initialization uses native storage, outside this injected UI test.
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
     expect(
         tester
-            .widget<RoutineScreen>(find.byType(RoutineScreen))
-            .publishedRoutine!
+            .widget<RoutineJourneyRoute>(find.byType(RoutineJourneyRoute))
+            .routine
             .id,
         'b');
-    await tester.pageBack();
+    Navigator.of(tester.element(find.byType(RoutineJourneyRoute))).pop();
     await tester.pumpAndSettle();
     await tester.ensureVisible(find.text('Watch tutorial'));
     await tester.tap(find.text('Watch tutorial'));
@@ -166,7 +168,9 @@ void main() {
     final start = find.text('Start guided session');
     await tester.ensureVisible(start);
     await tester.tap(start);
-    await tester.pumpAndSettle();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.byType(RoutineJourneyRoute), findsOneWidget);
     expect(find.byType(RealSquatRoute), findsNothing);
     expect(await store.read(), isEmpty);
     expect((await sync.read()).toJson(), before);

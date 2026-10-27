@@ -5,13 +5,16 @@ import '../../features/workout/domain/workout_contracts.dart';
 import '../../features/workout/domain/real_workout_sync.dart';
 import 'workout_store_factory.dart';
 import 'real_workout_sync_store_factory.dart';
+import '../../features/workout/domain/routine_journey.dart';
 
 Future<LocalMemberProgressRepository> createLocalMemberProgressRepository(
     SessionScope scope, SessionScope? Function() activeScope,
     {Future<WorkoutSessionStore> Function(SessionScope) storeFactory =
         createWorkoutStore,
     Future<RealWorkoutSyncStore> Function(SessionScope) syncStoreFactory =
-        createRealWorkoutSyncStore}) async {
+        createRealWorkoutSyncStore,
+    Future<RoutineJourneyStore> Function(SessionScope) routineStoreFactory =
+        createRoutineJourneyStore}) async {
   final workoutStore = await storeFactory(scope);
   RealWorkoutSyncStore syncStore;
   try {
@@ -19,10 +22,17 @@ Future<LocalMemberProgressRepository> createLocalMemberProgressRepository(
   } catch (_) {
     syncStore = _UnreadableSyncStore(scope);
   }
+  RoutineJourneyStore routineStore;
+  try {
+    routineStore = await routineStoreFactory(scope);
+  } catch (_) {
+    routineStore = _UnreadableRoutineStore(scope);
+  }
   return StoredLocalMemberProgressRepository(
       scope: scope,
       workoutStore: workoutStore,
       syncStore: syncStore,
+      routineStore: routineStore,
       activeScope: activeScope);
 }
 
@@ -38,5 +48,17 @@ class _UnreadableSyncStore implements RealWorkoutSyncStore {
       Future.error(StateError('Upload status storage unavailable'));
   @override
   Future<void> write(RealWorkoutSyncState state) =>
+      Future.error(UnsupportedError('Read-only progress'));
+}
+
+class _UnreadableRoutineStore implements RoutineJourneyStore {
+  _UnreadableRoutineStore(this.scope);
+  @override
+  final SessionScope scope;
+  @override
+  Future<List<RoutineCheckpoint>> load() =>
+      Future.error(StateError('Routine storage unavailable'));
+  @override
+  Future<void> save(RoutineCheckpoint checkpoint) =>
       Future.error(UnsupportedError('Read-only progress'));
 }

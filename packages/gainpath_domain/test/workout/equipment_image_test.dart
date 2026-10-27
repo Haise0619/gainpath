@@ -9,6 +9,10 @@ void main() {
     expect(image.contentType, 'image/png');
     bytes[0] = 0;
     expect(image.bytes.first, 137);
+    final copy = image.copyBytes();
+    copy[0] = 0;
+    expect(image.bytes.first, 137);
+    expect(() => image.bytes[0] = 0, throwsUnsupportedError);
     expect(() => EquipmentImage(Uint8List(0)), throwsFormatException);
     expect(() => EquipmentImage(Uint8List.fromList('not an image'.codeUnits)),
         throwsFormatException);

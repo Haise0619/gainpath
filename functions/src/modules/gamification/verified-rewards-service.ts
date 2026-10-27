@@ -5,6 +5,8 @@ import { requiredIdentifier, InputValidationError } from '../../platform/validat
 import { readAll, type DocumentData, type DocumentStore, type TransactionPort } from '../../platform/firestore/store';
 import type { CoachIdentityReader } from '../coaching/coach-profile-service';
 import { resolveMembershipEntitlement } from '../commerce/membership-entitlement';
+import {rewardItemDetails, rewardVoucherDetails} from './reward-details';
+import {parsePointsRewardShop,pointsRewardItem,POINTS_SHOP_VERSION} from './points-reward-shop';
 type Auth = { uid: string; token: Record<string, unknown> } | undefined;
 const DAY = 86400000;
 const integer = (v: unknown, min = 0): v is number => Number.isSafeInteger(v) && Number(v) >= min;
@@ -47,24 +49,32 @@ function item(d: DocumentData | undefined, itemId: string, org: string, p: Polic
       || !Number.isSafeInteger(d.valueMinor * p.exchangeRate.pointsPerUnit)
       || !Number.isSafeInteger(d.pointCost * p.exchangeRate.unitValueMinor)
       || d.valueMinor * p.exchangeRate.pointsPerUnit !== d.pointCost * p.exchangeRate.unitValueMinor) throw fail();
-  return { itemId, title: d.title, pointCost: d.pointCost, stock: d.stock, premiumOnly: d.premiumOnly };
+  const details = rewardItemDetails(d);
+  if (details && !integer(d.revision, 1)) throw fail();
+  return { itemId, title: d.title, pointCost: d.pointCost, stock: d.stock, premiumOnly: d.premiumOnly, ...(details ? {...details, revision: d.revision} : {}) };
 }
 function redemption(d: DocumentData | undefined, org: string, redemptionId: string) {
   if (!d || d.schemaVersion !== 1 || d.organizationId !== org || d.redemptionId !== redemptionId || !id(d.memberId)
       || !id(d.itemId) || !text(d.title) || !integer(d.points, 1) || !time(d.issuedAtMillis)
       || !['issued', 'fulfilled'].includes(String(d.status)) || !id(d.policyVersion) || !id(d.exchangeRateVersion)
       || (d.status === 'fulfilled' && (!id(d.fulfilledBy) || !time(d.fulfilledAtMillis)))) throw fail();
+  rewardVoucherDetails(d);
   return d;
+}
+function visibleRedemption(d: DocumentData, now: number) {
+  return {...d, status: d.status === 'issued' && d.rewardDetailsVersion === 1 && now >= Number(d.expiresAtMillis) ? 'expired' : d.status};
 }
 async function admin(tx: TransactionPort, auth: NonNullable<Auth>, org: string) {
   const [u, m, o] = await readAll(tx, [`users/${auth.uid}`, `orgs/${org}/members/${auth.uid}`, `orgs/${org}`]);
-  if (requireActiveMembership(m).role !== 'admin' || o?.status !== 'active' || u?.organizationId !== org || m?.organizationId !== org
+  if (requireActiveMembership(m).role !== 'admin' || o?.status !== 'active' || u?.organizationId !== org || (u.role !== undefined && u.role !== 'admin') || m?.organizationId !== org
       || (m.userId !== undefined && m.userId !== auth.uid)) throw deny();
   const l = u.accountLifecycle as DocumentData | undefined;
   if (l !== undefined && (!l || l.schemaVersion !== 1 || l.state !== 'active' || l.revocationPending !== false
       || !integer(l.sessionNotBeforeSeconds) || (l.sessionNotBeforeSeconds > 0
         && (!integer(auth.token.auth_time) || auth.token.auth_time < l.sessionNotBeforeSeconds)))) throw deny();
 }
+export {policy as parseRewardPolicy, admin as authorizeRewardsAdmin};
+export interface RewardsHistoryReader {page(uid: string, after: string | null, limit: number): Promise<{id: string; data: DocumentData}[]>}
 /** A latest account cannot prove a past earning tier. Verify a specific durable cleared grant interval. */
 function historicalPremium(p: DocumentData | undefined, org: string, uid: string, transactionId: unknown, at: number) {
   if (!p || !id(transactionId) || p.schemaVersion !== 1 || p.organizationId !== org || p.memberId !== uid
@@ -76,49 +86,82 @@ function historicalPremium(p: DocumentData | undefined, org: string, uid: string
   const starts = p.expiresAtMillis - p.durationDays * DAY;
   return time(starts) && p.clearedAtMillis <= starts && starts <= at;
 }
-export async function rewardsCommand(store: DocumentStore, auth: Auth, raw: unknown, identity: CoachIdentityReader, clock = Date.now): Promise<Record<string, any>> {
+export async function rewardsCommand(store: DocumentStore, auth: Auth, raw: unknown, identity: CoachIdentityReader, clock = Date.now, historyReader?: RewardsHistoryReader): Promise<Record<string, any>> {
   requireVerifiedEmail(auth);
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw new InputValidationError('Command object required.');
   const d = raw as DocumentData, action = d.action;
-  const actions: Record<string, string[]> = { overview: [], award: ['eventId'], redeem: ['itemId', 'requestId'], inspect: ['redemptionId'], fulfil: ['redemptionId'] };
+  const actions: Record<string, string[]> = { overview: [], award: ['eventId'], redeem: ['itemId', 'requestId'], inspect: ['redemptionId'], fulfil: ['redemptionId'], voucher: ['redemptionId'], history: ['afterId'] };
   if (d.schemaVersion !== 1 || typeof action !== 'string' || !Object.hasOwn(actions, action)
-      || Object.keys(d).some(k => !['schemaVersion', 'organizationId', 'action', ...actions[action]].includes(k))) throw new InputValidationError('Invalid rewards command.');
-  for (const k of actions[action]) requiredIdentifier(d[k], k);
+      || Object.keys(d).some(k => !['schemaVersion', 'organizationId', 'action', ...actions[action], ...(action === 'redeem' ? ['expectedPointCost', 'expectedItemRevision'] : [])].includes(k))) throw new InputValidationError('Invalid rewards command.');
+  for (const k of actions[action]) {if (k === 'afterId' && d[k] === null) continue; requiredIdentifier(d[k], k);}
+  if (Object.hasOwn(d, 'expectedPointCost') && !integer(d.expectedPointCost, 1)) throw new InputValidationError('Invalid expected reward cost.');
+  if (Object.hasOwn(d, 'expectedItemRevision') && !integer(d.expectedItemRevision, 1)) throw new InputValidationError('Invalid expected reward publication.');
   const org = requiredIdentifier(d.organizationId, 'organizationId'), uid = requiredIdentifier(auth!.uid, 'uid');
   // External identity reads must never be repeated inside transaction retries.
   const current = await identity(uid);
   if (!current.exists || current.disabled || !current.emailVerified) throw deny();
   const now = clock(); if (!time(now)) throw fail();
   const path = (collection: string, key: string) => `orgs/${org}/${collection}/${key}`;
+  if (action === 'history') {
+    if (!historyReader) throw fail();
+    await store.transact(tx => resolveMembershipEntitlement(tx, auth, org, clock()));
+    const after = d.afterId as string | null, rows = await historyReader.page(uid, after, 26);
+    if (!Array.isArray(rows) || rows.length > 26) throw fail();
+    let previous = after;
+    for (const row of rows) {if (!row || !id(row.id) || (previous !== null && row.id <= previous)) throw fail();
+      const r = redemption(row.data, org, row.id); if (r.memberId !== uid) throw fail(); previous = row.id;}
+    await store.transact(tx => resolveMembershipEntitlement(tx, auth, org, clock()));
+    const resolvedAtMillis = clock(); if (!time(resolvedAtMillis) || resolvedAtMillis < now) throw fail();
+    return {schemaVersion: 1, organizationId: org, memberId: uid, redemptions: rows.slice(0, 25).map(row => visibleRedemption(row.data, resolvedAtMillis)),
+      nextCursor: rows.length > 25 ? rows[24].id : null, resolvedAtMillis};
+  }
   return store.transact(async tx => {
+    // Expiry and issuance are checked against fresh time on transaction retries.
+    const now = clock(); if (!time(now)) throw fail();
     if (action === 'fulfil' || action === 'inspect') {
       await admin(tx, auth!, org);
       const key = String(d.redemptionId), r = redemption(await tx.get(path('rewardRedemptions', key)), org, key);
-      if (action === 'inspect') return { schemaVersion: 1, redemption: r };
+      if (action === 'inspect') return { schemaVersion: 1, redemption: visibleRedemption(r, now) };
       if (r.status === 'fulfilled') return { schemaVersion: 1, redemption: r };
+      if (r.rewardDetailsVersion === 1 && now >= Number(r.expiresAtMillis)) throw new DomainError('failed-precondition', 'This reward voucher has expired. Points remain spent.');
       const next = { ...r, status: 'fulfilled', fulfilledBy: uid, fulfilledAtMillis: now };
       tx.set(path('rewardRedemptions', key), next);
       return { schemaVersion: 1, redemption: next };
     }
     const entitlement = await resolveMembershipEntitlement(tx, auth, org, now);
-    const [configured, balanceDoc] = await readAll(tx, [path('rewardPolicies', 'current'), path('rewardBalances', uid)]);
+    if (action === 'voucher') {
+      const key = String(d.redemptionId), r = redemption(await tx.get(path('rewardRedemptions', key)), org, key);
+      if (r.memberId !== uid) throw deny();
+      return {schemaVersion: 1, redemption: visibleRedemption(r, now), resolvedAtMillis: now};
+    }
+    const [configured, balanceDoc,shopDoc] = await readAll(tx, [path('rewardPolicies', 'current'), path('rewardBalances', uid),path('rewardShops','current')]);
     const p = policy(configured, org, now), b = balance(balanceDoc, org, uid);
+    let shop=action==='overview'?parsePointsRewardShop(shopDoc,org):null;
     if (action === 'overview') {
-      const items = p ? await readAll(tx, p.itemIds.map(i => path('rewardItems', i))) : [];
+      const ids=shop?.itemIds??p?.itemIds??[];
+      const items = await readAll(tx,ids.map(i => path('rewardItems',i)));
       const history = await readAll(tx, b.recentRedemptionIds.map(i => path('rewardRedemptions', i)));
       const redemptions = history.map((r, i) => {
-        const parsed = redemption(r, org, b.recentRedemptionIds[i]); if (parsed.memberId !== uid) throw fail(); return parsed;
+        const parsed = redemption(r, org, b.recentRedemptionIds[i]); if (parsed.memberId !== uid) throw fail(); return visibleRedemption(parsed, now);
       });
       let catalog: ReturnType<typeof item>[] = [];
-      let available = !!p;
-      try { catalog = p ? items.map((r, i) => item(r, p.itemIds[i], org, p)) : []; } catch { available = false; }
-      return { schemaVersion: 1, organizationId: org, memberId: uid, available, policyVersion: available ? p!.version : null,
+      let available = !!(shop??p);
+      try { catalog = shop ? items.map((r,i)=>{const value=pointsRewardItem(r,ids[i],org);if(r?.active!==true)throw fail();return value;}) : p ? items.map((r, i) => item(r, p.itemIds[i], org, p)) : []; } catch { available = false; }
+      return { schemaVersion: 1, organizationId: org, memberId: uid, available, policyVersion: available ? (shop?.version??p!.version) : null,
         balance: b.points, effectiveTier: entitlement.status === 'resolved' ? entitlement.effectiveTier : null,
         canRedeem: available && entitlement.status === 'resolved' && ['basic', 'premium'].includes(String(entitlement.effectiveTier)),
         items: available ? catalog : [], redemptions, resolvedAtMillis: now };
     }
-    if (!p) throw fail();
+    if (action === 'redeem') {
+      const priorId = digest(uid, String(d.requestId)), prior = await tx.get(path('rewardRedemptions', priorId));
+      if (prior) {const r = redemption(prior, org, priorId);
+        if (r.memberId !== uid || r.itemId !== d.itemId || r.requestId !== d.requestId) throw new DomainError('already-exists', 'Request already used for another reward.');
+        return {schemaVersion: 1, redemption: visibleRedemption(r, now)};}
+      shop=parsePointsRewardShop(shopDoc,org);
+    }
+    if (!p&&!shop) throw fail();
     if (action === 'award') {
+      if(!p)throw fail();
       const eventId = String(d.eventId), awardId = digest(uid, eventId);
       const [e, prior] = await readAll(tx, [path('rewardEvents', eventId), path('rewardAwards', awardId)]);
       if (prior) {
@@ -151,18 +194,24 @@ export async function rewardsCommand(store: DocumentStore, auth: Auth, raw: unkn
       return { schemaVersion: 1, award: receipt };
     }
     const itemId = String(d.itemId), requestId = String(d.requestId), redemptionId = digest(uid, requestId);
-    const prior = await tx.get(path('rewardRedemptions', redemptionId));
-    if (prior) {
-      const r = redemption(prior, org, redemptionId);
-      if (r.memberId !== uid || r.itemId !== itemId || r.requestId !== requestId) throw new DomainError('already-exists', 'Request already used for another reward.');
-      return { schemaVersion: 1, redemption: r };
-    }
     if (entitlement.status !== 'resolved' || !['basic', 'premium'].includes(String(entitlement.effectiveTier))) throw deny();
-    const itemDoc = await tx.get(path('rewardItems', itemId)), selected = item(itemDoc, itemId, org, p);
+    const itemDoc = await tx.get(path('rewardItems', itemId));
+    if(shop&&(!shop.itemIds.includes(itemId)||itemDoc?.active!==true))throw fail();
+    const selected = shop?pointsRewardItem(itemDoc,itemId,org):item(itemDoc,itemId,org,p!);
+    if ((selected.rewardDetailsVersion === 1 && d.expectedPointCost === undefined) ||
+        (d.expectedPointCost !== undefined && d.expectedPointCost !== selected.pointCost)) {
+      throw new DomainError('aborted', 'Reward cost changed. Refresh and confirm the displayed cost before redeeming.');
+    }
+    if (selected.rewardDetailsVersion === 1 && d.expectedItemRevision !== selected.revision) {
+      throw new DomainError('aborted', 'Reward information changed. Refresh and review its conditions and validity before redeeming.');
+    }
     if (selected.premiumOnly && entitlement.effectiveTier !== 'premium') throw deny();
     if (selected.stock < 1 || b.points === null || b.points < selected.pointCost) throw new DomainError('failed-precondition', 'Insufficient points or reward stock.');
+    const details = rewardItemDetails(itemDoc!), expiresAtMillis = details ? now + details.validityDays * DAY : null;
+    if (expiresAtMillis !== null && !time(expiresAtMillis)) throw fail();
     const issued = { schemaVersion: 1, organizationId: org, memberId: uid, redemptionId, requestId, itemId, title: selected.title,
-      points: selected.pointCost, status: 'issued', issuedAtMillis: now, policyVersion: p.version, exchangeRateVersion: p.exchangeRate.version };
+      ...(details ? {...details, expiresAtMillis, expiredPointsPolicy: 'remain_spent', publishedItemRevision: itemDoc!.revision} : {}),
+      points: selected.pointCost, status: 'issued', issuedAtMillis: now, policyVersion: shop?.version??p!.version, exchangeRateVersion: shop?POINTS_SHOP_VERSION:p!.exchangeRate.version };
     tx.create(path('rewardRedemptions', redemptionId), issued);
     tx.set(path('rewardItems', itemId), { ...itemDoc, stock: selected.stock - 1 });
     // Ledger is immutable; only the bounded display index drops older IDs.

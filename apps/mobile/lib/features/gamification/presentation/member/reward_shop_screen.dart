@@ -10,20 +10,27 @@ import '../../application/rewards_feature_host.dart';
 import 'verified_reward_shop_view.dart';
 
 class RewardShopScreen extends StatelessWidget {
-  const RewardShopScreen({super.key, this.connected = false, this.repository});
+  const RewardShopScreen(
+      {super.key,
+      this.connected = false,
+      this.repository,
+      this.onBalanceChanged});
   final bool connected;
   final VerifiedRewardsRepository? repository;
+  final Future<void> Function()? onBalanceChanged;
 
   @override
   Widget build(BuildContext context) {
     if (repository != null) {
       return RewardsRepositoryGuard(
           repository: repository!,
-          child: VerifiedRewardShopView(repository: repository!));
+          child: VerifiedRewardShopView(
+              repository: repository!, onBalanceChanged: onBalanceChanged));
     }
     if (connected) {
       return RewardsFeatureHost(
-          builder: (repo) => VerifiedRewardShopView(repository: repo));
+          builder: (repo) => VerifiedRewardShopView(
+              repository: repo, onBalanceChanged: onBalanceChanged));
     }
     return Scaffold(
       appBar: AppBar(title: const Text('Redeem points')),

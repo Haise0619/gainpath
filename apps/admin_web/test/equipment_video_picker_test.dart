@@ -4,6 +4,14 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:gainpath_admin_web/infrastructure/local/equipment_video_picker.dart';
 
 void main() {
+  test('a stricter preview limit rejects the selection before decoding',
+      () async {
+    final picker = LocalEquipmentVideoPicker(
+        maxBytes: 8,
+        selectFile: () async => XFile.fromData(Uint8List(12),
+            name: 'preview.mp4', path: 'preview.mp4'));
+    await expectLater(picker.pick(), throwsFormatException);
+  });
   test('video selection handles cancellation and rejects spoofed MP4',
       () async {
     expect(await LocalEquipmentVideoPicker(selectFile: () async => null).pick(),

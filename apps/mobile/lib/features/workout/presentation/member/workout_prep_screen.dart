@@ -1,5 +1,5 @@
 import 'dart:async';
-import '../../domain/real_workout_contract.dart';
+import '../../domain/exercise_tracker_dispatcher.dart';
 import '../../domain/published_routine_view.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -23,6 +23,7 @@ class WorkoutPrepScreen extends StatelessWidget {
       this.routineStatusMessage,
       this.routineCatalogControls,
       this.onOpenEquipment,
+      this.trackers = const ExerciseTrackerDispatcher(),
       this.routes = const WorkoutPrepRoutes()});
   final bool live;
   final PublishedRoutine? publishedRoutine;
@@ -31,6 +32,7 @@ class WorkoutPrepScreen extends StatelessWidget {
   final Widget? routineCatalogControls;
   final VoidCallback? onOpenEquipment;
   final WorkoutPrepRoutes routes;
+  final ExerciseTrackerDispatcher trackers;
 
   @override
   Widget build(BuildContext context) {
@@ -177,12 +179,15 @@ class WorkoutPrepScreen extends StatelessWidget {
                   onTap: live
                       ? publishedRoutine == null
                           ? () => showUnavailable(context)
-                          : () => Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                  builder: (_) => RoutineScreen(
-                                      publishedRoutine: publishedRoutine,
-                                      tutorialBuilder: routes.tutorialBuilder)))
+                          : routes.journeyBuilder != null
+                              ? () => _openRoutineJourney(context)
+                              : () => Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                      builder: (_) => RoutineScreen(
+                                          publishedRoutine: publishedRoutine,
+                                          tutorialBuilder:
+                                              routes.tutorialBuilder)))
                       : () => Navigator.push(
                           context,
                           MaterialPageRoute(
@@ -285,33 +290,68 @@ class WorkoutPrepScreen extends StatelessWidget {
   }
 
   Future<void> _startRealSession(BuildContext context) async {
-    final candidates = publishedRoutine?.exercises
-            .where((e) => e.exerciseId == 'F3b8xIr8ynBDd3gEICKX')
-            .toList() ??
-        [];
-    if (candidates.isEmpty) {
-      showUnavailable(context);
+    if (routes.journeyBuilder != null) {
+      _openRoutineJourney(context);
       return;
     }
     final auth = context.read<AuthBloc>();
     final scope = auth.state.session?.scope;
-    final exercise = candidates.first;
-    if (scope == null ||
-        DevelopmentSquatBinding.resolve(
-                organizationId: scope.organizationId,
-                exerciseId: exercise.exerciseId,
-                sets: exercise.sets,
-                reps: exercise.reps) ==
-            null) {
+    if (scope == null) {
       showUnavailable(context);
       return;
     }
+    final candidates = publishedRoutine?.exercises
+            .where((e) =>
+                trackers
+                    .resolve(
+                        organizationId: scope.organizationId,
+                        exerciseId: e.exerciseId)
+                    .tracker !=
+                null)
+            .toList() ??
+        [];
+    if (candidates.isEmpty) {
+      final exercises = publishedRoutine?.exercises;
+      final tutorial = routes.tutorialBuilder;
+      if (exercises != null && exercises.isNotEmpty && tutorial != null) {
+        await Navigator.push<void>(
+            context,
+            MaterialPageRoute(
+              builder: (context) => BlocProvider.value(
+                value: auth,
+                child: Builder(
+                    builder: (context) => tutorial(context, exercises.first)),
+              ),
+            ));
+        return;
+      }
+      showUnavailable(context);
+      return;
+    }
+    final exercise = candidates.first;
     var uploadRequested = false;
+    final tracker = trackers
+        .resolve(
+            organizationId: scope.organizationId,
+            exerciseId: exercise.exerciseId)
+        .tracker;
     final consented = await showModalBottomSheet<bool>(
         context: context,
         isScrollControlled: true,
         builder: (_) => _ConsentSheet(
             realWorkout: true,
+            allowUpload: tracker == ExerciseTracker.sideViewSquat,
+            exerciseInstruction: switch (tracker) {
+              ExerciseTracker.sideViewCurl => curlCaptureInstruction,
+              ExerciseTracker.sideViewCalfRaise => calfRaiseCaptureInstruction,
+              ExerciseTracker.sideViewWallPushUp =>
+                wallPushUpCaptureInstruction,
+              _ => null,
+            },
+            setupConfirmationLabel:
+                tracker == ExerciseTracker.sideViewWallPushUp
+                    ? wallPushUpSetupConfirmation
+                    : null,
             onUploadChanged: (value) => uploadRequested = value));
     if (consented != true ||
         !context.mounted ||
@@ -337,6 +377,26 @@ class WorkoutPrepScreen extends StatelessWidget {
                 value: auth,
                 child: Builder(
                     builder: (context) => destination(context, launch)))));
+  }
+
+  void _openRoutineJourney(BuildContext context) {
+    final routine = publishedRoutine, destination = routes.journeyBuilder;
+    if (routine == null || destination == null) {
+      showUnavailable(context);
+      return;
+    }
+    final auth = context.read<AuthBloc>();
+    if (auth.state.session == null) {
+      showUnavailable(context);
+      return;
+    }
+    Navigator.push(
+        context,
+        MaterialPageRoute<void>(
+            builder: (_) => BlocProvider.value(
+                value: auth,
+                child: Builder(
+                    builder: (context) => destination(context, routine)))));
   }
 
   Future<void> _startPosePreview(BuildContext context) async {
@@ -448,11 +508,43 @@ class _DetourCard extends StatelessWidget {
   }
 }
 
+Future<bool?> showWorkoutCaptureConsent(BuildContext context,
+        {required ValueChanged<bool> onUploadChanged,
+        bool allowUpload = true,
+        String? exerciseInstruction,
+        String? setupConfirmationLabel}) =>
+    showModalBottomSheet<bool>(
+        context: context,
+        isScrollControlled: true,
+        builder: (_) => _ConsentSheet(
+            realWorkout: true,
+            onUploadChanged: onUploadChanged,
+            allowUpload: allowUpload,
+            exerciseInstruction: exerciseInstruction,
+            setupConfirmationLabel: setupConfirmationLabel));
+
+const curlCaptureInstruction =
+    'Choose both arms, left only or right only before the camera starts. Reps are per selected arm per set. Keep the selected arm closest to the camera, lower it to calibrate, and switch only when prompted. Keep the shoulder, elbow, wrist and hip visible. Results stay on this device; upload and rewards are unavailable.';
+
+const calfRaiseCaptureInstruction =
+    'Stand side-on on level ground, with both feet flat to calibrate. Keep your hips, knees, heels and toes fully visible. Raise both heels, hold briefly, then lower with control; do not jump. Only the visible leg is measured; equal work on both legs, balance and load are not assessed. Results stay on this device; upload and rewards are unavailable.';
+
+const wallPushUpCaptureInstruction =
+    'Face a wall with palms at chest height, then extend your arms to start. Place the phone at your side and keep your shoulder, elbow, wrist, hip and knee visible. Bend toward the wall with your body in line, then push back with control. Keep palms in place. Wall contact is user-confirmed; force, load and equal work by both arms are not assessed. Results stay on this device; upload and rewards are unavailable.';
+const wallPushUpSetupConfirmation =
+    'My palms are on the wall at chest height, my body is side-on to the camera, and my shoulder, elbow, wrist, hip and knee are visible.';
+
 class _ConsentSheet extends StatefulWidget {
   const _ConsentSheet(
       {this.previewOnly = false,
       this.realWorkout = false,
+      this.allowUpload = true,
+      this.exerciseInstruction,
+      this.setupConfirmationLabel,
       this.onUploadChanged});
+  final bool allowUpload;
+  final String? exerciseInstruction;
+  final String? setupConfirmationLabel;
   final ValueChanged<bool>? onUploadChanged;
   final bool previewOnly;
   final bool realWorkout;
@@ -510,8 +602,10 @@ class _ConsentSheetState extends State<_ConsentSheet> {
                         ? 'This preview does not save activity or count reps.'
                         : 'Only your movement scores are saved.'),
                 if (widget.realWorkout)
-                  _point(context,
-                      'This session tracks only the supported squat. Results are saved on this device. Upload is optional and awards no rewards.'),
+                  _point(
+                      context,
+                      widget.exerciseInstruction ??
+                          'This session tracks only the supported squat. Results are saved on this device. Upload is optional and awards no rewards.'),
                 if (widget.realWorkout)
                   _point(context,
                       'Form guidance is provisional. Use a side view with the camera upright and stationary, and keep your full body in view.'),
@@ -546,7 +640,7 @@ class _ConsentSheetState extends State<_ConsentSheet> {
                 value: _setupChecked,
                 onChanged: (value) =>
                     setState(() => _setupChecked = value ?? false),
-                title: const Text(
+                title: Text(widget.setupConfirmationLabel ??
                     'My full body is visible from the side and the camera is upright and stationary.'),
                 controlAffinity: ListTileControlAffinity.leading,
                 contentPadding: EdgeInsets.zero),
@@ -557,7 +651,7 @@ class _ConsentSheetState extends State<_ConsentSheet> {
                 : null,
             child: const Text('Accept and start'),
           ),
-          if (widget.realWorkout)
+          if (widget.realWorkout && widget.allowUpload)
             CheckboxListTile(
                 value: _uploadChecked,
                 onChanged: (value) {

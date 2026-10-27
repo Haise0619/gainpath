@@ -10,6 +10,7 @@ import 'package:gainpath_mobile/features/membership/presentation/shared/billplz_
 import 'package:gainpath_mobile/features/membership/presentation/shared/membership_dashboard_screen.dart';
 import 'package:gainpath_mobile/navigation/feature_navigation.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:gainpath_mobile/features/gamification/presentation/member/move_and_catch_view.dart';
 
 void main() {
   setUpAll(() => GoogleFonts.config.allowRuntimeFetching = false);
@@ -49,6 +50,16 @@ void main() {
         name: FeatureNavigation.equipment,
         arguments: InMemoryEquipmentRepository().gymEquipment.first),
   ];
+  testWidgets('Firebase motion game opens consent without starting camera',
+      (tester) async {
+    await open(
+        tester, const RouteSettings(name: FeatureNavigation.moveAndCatch));
+    expect(find.byType(MoveAndCatchView), findsOneWidget);
+    expect(find.text('Enable camera'), findsOneWidget);
+    expect(find.textContaining('No video is saved'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump();
+  });
   for (final settings in routes) {
     testWidgets('Firebase ${settings.name} cannot enter a prototype flow',
         (tester) async {

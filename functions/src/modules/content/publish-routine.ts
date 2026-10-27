@@ -4,6 +4,7 @@ import { keyOf } from '../../platform/idempotency';
 import { requireActiveMembership, requireVerifiedEmail } from '../../platform/auth-context';
 import { InputValidationError, requiredIdentifier } from '../../platform/validation';
 import { tutorialMediaUrl } from './tutorial-media';
+import { exerciseTutorialProjection } from './exercise-tutorial';
 
 export interface PublishRoutineInputV1 {
   readonly schemaVersion: 1;
@@ -43,9 +44,10 @@ interface SourceRoutineExercise { exerciseId: string; sets: number; reps: number
 interface SourceRoutineDay { dayNumber: number; exercises: SourceRoutineExercise[]; }
 
 function parseBlueprint(data: DocumentData | undefined): {
-  name: string; estimatedMinutes: number; days: SourceRoutineDay[];
+  name: string; estimatedMinutes: number; days: SourceRoutineDay[]; difficulty?:string;
 } {
   if (!data) throw new DomainError('not-found', 'Routine blueprint not found.');
+  if (data.archived === true) throw new DomainError('failed-precondition', 'Archived routine templates cannot be published.');
   if (data.schemaVersion !== 1 || typeof data.name !== 'string' || !data.name.trim()
     || !Number.isInteger(data.sessionDurationMin) || Number(data.sessionDurationMin) < 5
     || Number(data.sessionDurationMin) > 240 || !Array.isArray(data.days)
@@ -90,7 +92,8 @@ function parseBlueprint(data: DocumentData | undefined): {
   });
   if (totalExercises > 50) throw new DomainError('failed-precondition', 'Routine is too large to publish.');
   days.sort((a, b) => a.dayNumber - b.dayNumber);
-  return { name: data.name.trim(), estimatedMinutes: Number(data.sessionDurationMin), days };
+  if(data.level!==undefined&&!['Beginner','Intermediate','Advanced'].includes(String(data.level)))throw new DomainError('failed-precondition','Invalid routine difficulty.');
+  return { name: data.name.trim(), estimatedMinutes: Number(data.sessionDurationMin), days,...(data.level!==undefined?{difficulty:String(data.level)}:{}) };
 }
 
 export async function publishRoutine(
@@ -152,8 +155,13 @@ export async function publishRoutine(
         reps: exercise.reps,
         dayNumber: day.dayNumber,
         ...(videoUrl ? { videoUrl } : {}),
+        ...exerciseTutorialProjection(source),
       };
     }));
+    // Leave room for Firestore's field/map overhead and the routine envelope.
+    if (Buffer.byteLength(JSON.stringify(exercises), 'utf8') > 800_000) {
+      throw new DomainError('failed-precondition', 'Routine tutorial content is too large. Reduce images or instructions before publishing.');
+    }
     const publishedAtMillis = clock();
     const result: PublishRoutineResultV1 = {
       schemaVersion: 1,
@@ -170,6 +178,7 @@ export async function publishRoutine(
       sourceBlueprintId: input.blueprintId,
       title: blueprint.name,
       estimatedMinutes: blueprint.estimatedMinutes,
+      ...(blueprint.difficulty?{difficulty:blueprint.difficulty}:{}),
       exercises,
       publishedAtMillis,
       updatedAtMillis: publishedAtMillis,

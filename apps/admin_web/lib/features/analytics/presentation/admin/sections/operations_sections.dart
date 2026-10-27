@@ -5,6 +5,7 @@ import 'package:gainpath_ui/gainpath_ui.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:gainpath_domain/analytics.dart';
 import 'package:gainpath_domain/identity.dart';
+import '../../../application/admin_reporting_gateway.dart';
 
 /// The three report sections genuinely derivable from `allBookings`
 /// — each `Booking` carries a real `start` date and `branch`, so these are
@@ -29,16 +30,28 @@ class UsageEngagementSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final allDates = context.read<BookingRepository>().allBookings.map((b) => b.start).toList();
+    final allDates = context
+        .read<BookingRepository>()
+        .allBookings
+        .map((b) => b.start)
+        .toList();
     var bookings = context.read<BookingRepository>().allBookings.toList();
-    if (filter.branch != null) bookings = bookings.where((b) => b.branch == filter.branch).toList();
-    bookings = bookings.where((b) => b.start.isAfter(filter.cutoff(allDates))).toList();
+    if (filter.branch != null) {
+      bookings = bookings.where((b) => b.branch == filter.branch).toList();
+    }
+    bookings = bookings
+        .where((b) => b.start.isAfter(filter.cutoff(allDates)))
+        .toList();
 
     final weekday = bookings.where((b) => b.start.weekday <= 5).length;
     final weekend = bookings.length - weekday;
-    final weekendPct = bookings.isEmpty ? 0 : (weekend / bookings.length * 100).round();
+    final weekendPct =
+        bookings.isEmpty ? 0 : (weekend / bookings.length * 100).round();
 
-    final hourData = List.generate(24, (h) => _HourPoint('$h', context.read<AnalyticsRepository>().usageByHour[h]));
+    final hourData = List.generate(
+        24,
+        (h) => _HourPoint(
+            '$h', context.read<AnalyticsRepository>().usageByHour[h]));
 
     return ReportSection(
       anchorKey: anchorKey,
@@ -51,9 +64,9 @@ class UsageEngagementSection extends StatelessWidget {
       exportRows: live
           ? null
           : () => [
-              ['Hour', 'Sessions'],
-              ...hourData.map((h) => [h.label, h.count]),
-            ],
+                ['Hour', 'Sessions'],
+                ...hourData.map((h) => [h.label, h.count]),
+              ],
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -79,14 +92,20 @@ class UsageEngagementSection extends StatelessWidget {
                             majorGridLines: MajorGridLines(width: 0),
                             axisLine: AxisLine(width: 0),
                             interval: 3,
-                            labelStyle: TextStyle(fontSize: 10, color: AppColors.inkSoft),
+                            labelStyle: TextStyle(
+                                fontSize: 10, color: AppColors.inkSoft),
                           ),
                           primaryYAxis: const NumericAxis(
-                            majorGridLines: MajorGridLines(width: 0.6, color: AppColors.hairline),
+                            majorGridLines: MajorGridLines(
+                                width: 0.6, color: AppColors.hairline),
                             axisLine: AxisLine(width: 0),
-                            labelStyle: TextStyle(fontSize: 10, color: AppColors.inkSoft),
+                            labelStyle: TextStyle(
+                                fontSize: 10, color: AppColors.inkSoft),
                           ),
-                          tooltipBehavior: TooltipBehavior(enable: true, header: '', format: 'point.x h  ·  point.y sessions'),
+                          tooltipBehavior: TooltipBehavior(
+                              enable: true,
+                              header: '',
+                              format: 'point.x h  ·  point.y sessions'),
                           series: <CartesianSeries<_HourPoint, String>>[
                             ColumnSeries<_HourPoint, String>(
                               dataSource: hourData,
@@ -106,15 +125,13 @@ class UsageEngagementSection extends StatelessWidget {
           Row(
             children: [
               Expanded(
-                  child: StatTile(
-                      live ? '—' : '${bookings.length}',
+                  child: StatTile(live ? '—' : '${bookings.length}',
                       'Coaching sessions in this period',
                       valueColor: AppColors.primary)),
               const SizedBox(width: 10),
               Expanded(
                   child: StatTile(
-                      live ? '—' : '$weekendPct%',
-                      'Fall on a weekend')),
+                      live ? '—' : '$weekendPct%', 'Fall on a weekend')),
             ],
           ),
         ],
@@ -124,6 +141,7 @@ class UsageEngagementSection extends StatelessWidget {
 }
 
 class CoachBookingUtilizationSection extends StatelessWidget {
+  final AdminReportingSnapshot? snapshot;
   final GlobalKey anchorKey;
   final ReportFilter filter;
   final bool live;
@@ -132,22 +150,69 @@ class CoachBookingUtilizationSection extends StatelessWidget {
     required this.anchorKey,
     required this.filter,
     this.live = false,
+    this.snapshot,
   });
 
   @override
   Widget build(BuildContext context) {
-    final allDates = context.read<BookingRepository>().allBookings.map((b) => b.start).toList();
+    final ops = snapshot?.operations;
+    if (ops != null) {
+      final total = snapshot!.totalBookingsCount!;
+      return ReportSection(
+          anchorKey: anchorKey,
+          title: 'Coach Booking Utilization',
+          subtitle:
+              'Recorded booking activity · capacity-based utilization remains unavailable',
+          live: true,
+          tagLabel: 'Booking activity',
+          exportFilename: 'booking_activity.csv',
+          exportRows: () => ops.toCsv(snapshot!),
+          child:
+              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Row(children: [
+              Expanded(child: StatTile('$total', 'Bookings created in range')),
+              const SizedBox(width: 10),
+              Expanded(
+                  child: StatTile('${ops.scheduledStarts}',
+                      'Confirmed/completed starts in range'))
+            ]),
+            const SizedBox(height: 14),
+            Panel(
+                child: Column(children: [
+              for (final e in ops.statuses.entries)
+                ProgressRow(e.key.replaceAll('_', ' '),
+                    total == 0 ? 0 : e.value / total, '${e.value} bookings'),
+            ])),
+            const SizedBox(height: 10),
+            const Text(
+                'Current statuses of bookings created in the selected period. Scheduled starts include upcoming confirmed appointments; these counts are not utilization percentages.'),
+          ]));
+    }
+    final allDates = context
+        .read<BookingRepository>()
+        .allBookings
+        .map((b) => b.start)
+        .toList();
     final cutoff = filter.cutoff(allDates);
     final rangeDays = filter.rangeDays(allDates);
     var coaches = context.read<CoachRepository>().coaches.toList();
-    if (filter.branch != null) coaches = coaches.where((c) => c.branch == filter.branch).toList();
+    if (filter.branch != null) {
+      coaches = coaches.where((c) => c.branch == filter.branch).toList();
+    }
 
     final rows = coaches.map((c) {
-      final sessions = context.read<BookingRepository>().allBookings
-          .where((b) => b.coachId == c.id && b.start.isAfter(cutoff) && b.status != BookingStatus.cancelled)
+      final sessions = context
+          .read<BookingRepository>()
+          .allBookings
+          .where((b) =>
+              b.coachId == c.id &&
+              b.start.isAfter(cutoff) &&
+              b.status != BookingStatus.cancelled)
           .length;
-      final capacity = context.read<AvailabilityRepository>().dailyBookingCap * rangeDays;
-      final utilization = capacity == 0 ? 0.0 : (sessions / capacity).clamp(0.0, 1.0);
+      final capacity =
+          context.read<AvailabilityRepository>().dailyBookingCap * rangeDays;
+      final utilization =
+          capacity == 0 ? 0.0 : (sessions / capacity).clamp(0.0, 1.0);
       return (coach: c, sessions: sessions, utilization: utilization);
     }).toList();
 
@@ -162,9 +227,14 @@ class CoachBookingUtilizationSection extends StatelessWidget {
       exportRows: live && rows.isEmpty
           ? null
           : () => [
-              ['Coach', 'Branch', 'Sessions', 'Utilization %'],
-              ...rows.map((r) => [r.coach.name, r.coach.branch, r.sessions, (r.utilization * 100).round()]),
-            ],
+                ['Coach', 'Branch', 'Sessions', 'Utilization %'],
+                ...rows.map((r) => [
+                      r.coach.name,
+                      r.coach.branch,
+                      r.sessions,
+                      (r.utilization * 100).round()
+                    ]),
+              ],
       child: rows.isEmpty
           ? NoFilteredData(
               message: live
@@ -203,14 +273,24 @@ class CoachPerformanceSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final allDates = context.read<BookingRepository>().allBookings.map((b) => b.start).toList();
+    final allDates = context
+        .read<BookingRepository>()
+        .allBookings
+        .map((b) => b.start)
+        .toList();
     final cutoff = filter.cutoff(allDates);
     var coaches = context.read<CoachRepository>().coaches.toList();
-    if (filter.branch != null) coaches = coaches.where((c) => c.branch == filter.branch).toList();
+    if (filter.branch != null) {
+      coaches = coaches.where((c) => c.branch == filter.branch).toList();
+    }
 
     final sessionsInPeriod = {
       for (final c in coaches)
-        c.id: context.read<BookingRepository>().allBookings.where((b) => b.coachId == c.id && b.start.isAfter(cutoff)).length,
+        c.id: context
+            .read<BookingRepository>()
+            .allBookings
+            .where((b) => b.coachId == c.id && b.start.isAfter(cutoff))
+            .length,
     };
 
     return ReportSection(
@@ -224,10 +304,21 @@ class CoachPerformanceSection extends StatelessWidget {
       exportRows: live && coaches.isEmpty
           ? null
           : () => [
-              ['Coach', 'Rating', 'Reviews', 'Sessions in period', 'Response time'],
-              ...coaches.map((c) =>
-                  [c.name, c.rating, c.reviews, sessionsInPeriod[c.id], c.responseTime]),
-            ],
+                [
+                  'Coach',
+                  'Rating',
+                  'Reviews',
+                  'Sessions in period',
+                  'Response time'
+                ],
+                ...coaches.map((c) => [
+                      c.name,
+                      c.rating,
+                      c.reviews,
+                      sessionsInPeriod[c.id],
+                      c.responseTime
+                    ]),
+              ],
       child: coaches.isEmpty
           ? NoFilteredData(
               message: live
@@ -243,17 +334,23 @@ class CoachPerformanceSection extends StatelessWidget {
                       primaryXAxis: const CategoryAxis(
                         majorGridLines: MajorGridLines(width: 0),
                         axisLine: AxisLine(width: 0),
-                        labelStyle: TextStyle(fontSize: 10, color: AppColors.inkSoft),
+                        labelStyle:
+                            TextStyle(fontSize: 10, color: AppColors.inkSoft),
                         labelIntersectAction: AxisLabelIntersectAction.wrap,
                       ),
                       primaryYAxis: const NumericAxis(
                         minimum: 0,
                         maximum: 5,
-                        majorGridLines: MajorGridLines(width: 0.6, color: AppColors.hairline),
+                        majorGridLines: MajorGridLines(
+                            width: 0.6, color: AppColors.hairline),
                         axisLine: AxisLine(width: 0),
-                        labelStyle: TextStyle(fontSize: 10, color: AppColors.inkSoft),
+                        labelStyle:
+                            TextStyle(fontSize: 10, color: AppColors.inkSoft),
                       ),
-                      tooltipBehavior: TooltipBehavior(enable: true, header: '', format: 'point.x  ·  point.y ★'),
+                      tooltipBehavior: TooltipBehavior(
+                          enable: true,
+                          header: '',
+                          format: 'point.x  ·  point.y ★'),
                       series: <CartesianSeries<Coach, String>>[
                         ColumnSeries<Coach, String>(
                           dataSource: coaches,
@@ -278,16 +375,23 @@ class CoachPerformanceSection extends StatelessWidget {
                           if (i > 0) const Divider(height: 1, indent: 16),
                           ListTile(
                             dense: true,
-                            title: Text(c.name, style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600)),
-                            subtitle: Text('${c.reviews} reviews  ·  ${sessionsInPeriod[c.id]} sessions this period',
+                            title: Text(c.name,
+                                style: const TextStyle(
+                                    fontSize: 13.5,
+                                    fontWeight: FontWeight.w600)),
+                            subtitle: Text(
+                                '${c.reviews} reviews  ·  ${sessionsInPeriod[c.id]} sessions this period',
                                 style: const TextStyle(fontSize: 12)),
                             trailing: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                const Icon(Icons.star_rounded, size: 16, color: AppColors.accent),
+                                const Icon(Icons.star_rounded,
+                                    size: 16, color: AppColors.accent),
                                 const SizedBox(width: 3),
                                 Text('${c.rating}',
-                                    style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),
+                                    style: const TextStyle(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w700)),
                               ],
                             ),
                           ),

@@ -1,20 +1,268 @@
+import 'dart:convert';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:gainpath_domain/gamification.dart';
+import 'package:gainpath_domain/workout.dart' show EquipmentImage;
 import 'package:gainpath_domain/gainpath_domain.dart' show SessionScope;
+import 'firebase_function_transport.dart';
+import 'firebase_reward_media_store.dart';
 
-class FirebaseRewardCatalogRepository implements RewardCatalogRepository {
+class FirebaseRewardCatalogRepository
+    implements
+        RewardCatalogRepository,
+        RewardManagementRepository,
+        RewardMediaRepository,
+        WorkoutRewardConfigurationRepository {
   FirebaseRewardCatalogRepository(
       {required this.scope,
       required this.isCurrent,
       FirebaseFirestore? firestore,
-      FirebaseAuth? auth})
+      FirebaseAuth? auth,
+      Future<Map<String, dynamic>> Function(String, Map<String, dynamic>)?
+          catalogCall})
       : _db = firestore ?? FirebaseFirestore.instance,
-        _auth = auth ?? FirebaseAuth.instance;
+        _auth = auth ?? FirebaseAuth.instance,
+        _catalogCall = catalogCall ??
+            ((name, input) async => (await firebaseRewardCallable(name)
+                    .call<Map<String, dynamic>>(input))
+                .data);
   final SessionScope scope;
   final bool Function() isCurrent;
   final FirebaseFirestore _db;
   final FirebaseAuth _auth;
+  @override
+  Future<WorkoutRewardDraft> loadWorkoutRewardDraft() async {
+    final response = await _command('workoutRewardOverview', {});
+    if (response['hold'] != true || response['draft'] is! Map) {
+      throw const FormatException('Workout reward draft unavailable.');
+    }
+    return WorkoutRewardDraft.fromJson(
+        Map<String, dynamic>.from(response['draft'] as Map));
+  }
+
+  @override
+  Future<void> saveWorkoutRewardDraft(
+      {required String requestId,
+      required int baseRevision,
+      required WorkoutRewardDraft draft}) async {
+    final response = await _command('saveWorkoutRewardDraft', {
+      'requestId': requestId,
+      'baseRevision': baseRevision,
+      ...draft.toFields()
+    });
+    if (response['confirmed'] != true) {
+      throw const FormatException('Workout reward draft save not confirmed.');
+    }
+  }
+
+  late final _mediaStore = FirebaseRewardMediaStore(
+      scope: scope,
+      isCurrent: isCurrent,
+      upload: (path, bytes, type) async {
+        final response = await _command('uploadCover', {
+          'uploadId': path.split('/').last,
+          'contentType': type,
+          'dataBase64': base64Encode(bytes)
+        });
+        final url = response['url'];
+        if (url is! String) throw const RewardMediaUploadFailed();
+        return url;
+      });
+  @override
+  Future<String> uploadRewardCover(EquipmentImage image) async {
+    _check();
+    final url = await _mediaStore.upload(image);
+    _check();
+    return url;
+  }
+
+  final Future<Map<String, dynamic>> Function(String, Map<String, dynamic>)
+      _catalogCall;
+  @override
+  bool get current {
+    try {
+      _check();
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  @override
+  String newItemId() {
+    _check();
+    return _records.doc().id;
+  }
+
+  @override
+  Future<void> saveReward(
+      {required String requestId,
+      required String itemId,
+      required int baseItemRevision,
+      required String title,
+      required String description,
+      required String category,
+      required String imageUrl,
+      required int pointCost,
+      required int stockToAdd,
+      required int validityDays,
+      required String conditions,
+      required String collectionInstructions}) async {
+    _check();
+    _id(itemId);
+    RewardCatalogDraft(
+            id: itemId,
+            title: title,
+            description: description,
+            category: category,
+            imageUrl: imageUrl)
+        .validate();
+    await _command('savePoints', {
+      'requestId': requestId,
+      'itemId': itemId,
+      'baseItemRevision': baseItemRevision,
+      'title': title.trim(),
+      'description': description.trim(),
+      'category': category,
+      'imageUrl': imageUrl.trim(),
+      'pointCost': pointCost,
+      'stockToAdd': stockToAdd,
+      'validityDays': validityDays,
+      'conditions': conditions.trim(),
+      'collectionInstructions': collectionInstructions.trim()
+    });
+  }
+
+  Future<Map<String, dynamic>> _command(
+      String action, Map<String, dynamic> fields) async {
+    _check();
+    final response = await _catalogCall('rewardCatalogCommand', {
+      'schemaVersion': 1,
+      'organizationId': scope.organizationId,
+      'action': action,
+      ...fields,
+    }).timeout(const Duration(seconds: 30));
+    _check();
+    if (response['schemaVersion'] != 1 ||
+        response['organizationId'] != scope.organizationId) {
+      throw const FormatException('Invalid reward publication response.');
+    }
+    return response;
+  }
+
+  @override
+  Future<RewardShopAdministration> shopOverview() async {
+    final response = await _command('pointsOverview', {});
+    if (response['items'] is! List) {
+      throw const FormatException('Invalid reward shop response.');
+    }
+    int number(Map d, String key, [int minimum = 0]) {
+      final value = d[key];
+      if (value is! int || value < minimum) {
+        throw const FormatException('Invalid reward shop number.');
+      }
+      return value;
+    }
+
+    String string(Map d, String key) {
+      final value = d[key];
+      if (value is! String) {
+        throw const FormatException('Invalid reward shop details.');
+      }
+      return value;
+    }
+
+    bool boolean(Map d, String key) {
+      final value = d[key];
+      if (value is! bool) {
+        throw const FormatException('Invalid reward shop state.');
+      }
+      return value;
+    }
+
+    return RewardShopAdministration(
+        items: (response['items'] as List).map((raw) {
+      if (raw is! Map) {
+        throw const FormatException('Invalid published reward.');
+      }
+      return PublishedReward(
+          category:
+              raw['category'] == null ? 'Merchandise' : string(raw, 'category'),
+          itemId: string(raw, 'itemId'),
+          title: string(raw, 'title'),
+          pointCost: number(raw, 'pointCost', 1),
+          stock: number(raw, 'stock'),
+          revision: number(raw, 'revision', 1),
+          active: boolean(raw, 'active'),
+          validityDays: number(raw, 'validityDays', 1),
+          conditions: string(raw, 'conditions'),
+          collectionInstructions: string(raw, 'collectionInstructions'),
+          imageUrl: string(raw, 'imageUrl'),
+          description: string(raw, 'description'));
+    }).toList());
+  }
+
+  @override
+  Future<void> configureShop(
+      {required String requestId,
+      required int pointsPerUnit,
+      required int unitValueMinor,
+      required bool enabled}) async {
+    await _command('configure', {
+      'requestId': requestId,
+      'pointsPerUnit': pointsPerUnit,
+      'unitValueMinor': unitValueMinor,
+      'enabled': enabled
+    });
+  }
+
+  @override
+  Future<void> publishReward(
+      {required RewardCatalogDraft draft,
+      required String requestId,
+      required int pointCost,
+      required int valueMinor,
+      required int stockToAdd,
+      required int validityDays,
+      required String conditions,
+      required String collectionInstructions,
+      int baseItemRevision = 0}) async {
+    draft.validate();
+    final baseline = draft.editBaseline;
+    if (draft.revision < 1 ||
+        draft.isArchived ||
+        baseline is! _Baseline ||
+        !identical(baseline.lifetime, _lifetime) ||
+        baseline.id != draft.id ||
+        baseline.document?['revision'] != draft.revision) {
+      throw const RewardCatalogConflict();
+    }
+    await _command('publish', {
+      'requestId': requestId,
+      'itemId': draft.id,
+      'draftRevision': draft.revision,
+      'baseItemRevision': baseItemRevision,
+      'pointCost': pointCost,
+      'valueMinor': valueMinor,
+      'stockToAdd': stockToAdd,
+      'validityDays': validityDays,
+      'conditions': conditions.trim(),
+      'collectionInstructions': collectionInstructions.trim()
+    });
+  }
+
+  @override
+  Future<void> retireReward(
+      {required String itemId,
+      required String requestId,
+      required int baseItemRevision}) async {
+    await _command('retirePoints', {
+      'requestId': requestId,
+      'itemId': itemId,
+      'baseItemRevision': baseItemRevision
+    });
+  }
+
   final Object _lifetime = Object();
   bool _invalidated = false;
   CollectionReference<Map<String, dynamic>> get _records => _db

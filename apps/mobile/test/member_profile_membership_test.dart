@@ -168,6 +168,9 @@ void main() {
             body: const SizedBox()));
     await tester.pumpAndSettle();
     await tester.scrollUntilVisible(find.text('Membership'), 300);
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Membership'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Membership'));
     await tester.pumpAndSettle();
     repo.overview = {

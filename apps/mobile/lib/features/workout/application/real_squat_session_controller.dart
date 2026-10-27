@@ -9,12 +9,15 @@ import '../domain/workout_audio_port.dart';
 import 'pose_preview_controller.dart';
 import 'squat_processing_controller.dart';
 import 'workout_audio_controller.dart';
+import 'guided_workout_progress.dart';
+import 'measured_workout_session.dart';
 import '../../../infrastructure/pose/real_squat_performance.dart';
 
 enum RealSquatSessionPhase { idle, active, saving, saveFailed, saved, closed }
 
 /// Owns one local camera session. It never constructs an upload submission.
-class RealSquatSessionController extends ChangeNotifier {
+class RealSquatSessionController extends ChangeNotifier
+    implements MeasuredWorkoutSession {
   RealSquatSessionController(
       {required this.scope,
       required this.activeScope,
@@ -29,6 +32,8 @@ class RealSquatSessionController extends ChangeNotifier {
       required this.detectorId,
       required this.detectorVersion,
       this.onSaved,
+      this.guidance,
+      this.saveVoiceMode,
       RealSquatPerformance? performance,
       this.provenance = WorkoutProvenance.realCamera}) {
     if (repository.scope != scope) {
@@ -70,15 +75,82 @@ class RealSquatSessionController extends ChangeNotifier {
       detectorVersion;
   final WorkoutProvenance provenance;
   final Future<void> Function(WorkoutSessionSummary)? onSaved;
+  @override
+  final GuidedWorkoutProgress? guidance;
+  final Future<void> Function(WorkoutVoiceMode)? saveVoiceMode;
+  @override
   late final PosePreviewController preview;
   late final SquatProcessingController processing;
   RealSquatSessionPhase phase = RealSquatSessionPhase.idle;
   SquatUpdate? latest;
   WorkoutSessionSummary? summary;
   String? _error;
+  @override
   String? get errorMessage => _error ?? preview.errorMessage;
+  @override
   bool get isPaused => processing.isPaused;
+  @override
   bool get voiceEnabled => processing.audio.voiceEnabled;
+  @override
+  WorkoutVoiceMode get voiceMode => processing.audio.voiceMode;
+  @override
+  bool get isManuallyPaused => _manualPaused;
+  @override
+  bool get isRecalibrating => _recalibrating;
+  @override
+  MeasuredWorkoutPhase get viewPhase => switch (phase) {
+        RealSquatSessionPhase.idle => MeasuredWorkoutPhase.idle,
+        RealSquatSessionPhase.active => MeasuredWorkoutPhase.active,
+        RealSquatSessionPhase.saving => MeasuredWorkoutPhase.saving,
+        RealSquatSessionPhase.saveFailed => MeasuredWorkoutPhase.saveFailed,
+        RealSquatSessionPhase.saved => MeasuredWorkoutPhase.saved,
+        RealSquatSessionPhase.closed => MeasuredWorkoutPhase.closed,
+      };
+  @override
+  WorkoutAnalysisView? get analysis {
+    final u = latest;
+    return u == null
+        ? null
+        : WorkoutAnalysisView(
+            repetitions: u.repetitions,
+            partialRepetitions: u.partialRepetitions,
+            trackedDurationMicros: u.trackedDurationMicros,
+            rejectedDurationMicros: u.rejectedDurationMicros,
+            formScorePercent: u.formScorePercent,
+            needsCalibration: u.needsCalibration,
+            health: u.health,
+            cues: u.cues);
+  }
+
+  @override
+  bool get analysisAvailable => processing.update != null;
+  @override
+  String get calibrationCue => 'Stand tall, side-on, to calibrate';
+  @override
+  String get formGuidance =>
+      'Stand side-on with your whole body visible. Stand tall to calibrate before each set. Form estimates are provisional.';
+  @override
+  String get movementCue => switch (latest?.phase) {
+        SquatPhase.eccentric => 'Lower with control',
+        SquatPhase.inflection => 'Bottom position',
+        SquatPhase.concentric => 'Rise to standing',
+        _ => 'Ready · keep your whole body in view',
+      };
+  @override
+  bool get canConfirmRecalibration {
+    final frame = preview.frame;
+    if (!_active || !_foreground || !_recalibrating || frame == null) {
+      return false;
+    }
+    final age = clockMicros() - frame.capturedAtMicros;
+    final rules = SquatRuleSet();
+    return age >= 0 &&
+        age <= rules.maximumFrameGapMicros &&
+        SquatSide.values.any((side) =>
+            SquatGeometry.confidence(frame, side) >= rules.minimumConfidence &&
+            SquatGeometry.fromFrame(frame, side) != null);
+  }
+
   bool get _active =>
       !_disposed &&
       phase != RealSquatSessionPhase.closed &&
@@ -88,7 +160,10 @@ class RealSquatSessionController extends ChangeNotifier {
       _startDeferred = false,
       _hasFrame = false,
       _modelChanged = false,
-      _voiceOverridden = false;
+      _voiceOverridden = false,
+      _manualPaused = false,
+      _recalibrating = false;
+  Timer? _guidedTimer;
   DateTime? _startedAt;
   int? _startedMicros;
   int _lastAttempt = 0;
@@ -113,10 +188,20 @@ class RealSquatSessionController extends ChangeNotifier {
     _startedAt = DateTime.now().toUtc();
     _startedMicros = clockMicros();
     phase = RealSquatSessionPhase.active;
+    if (guidance != null) {
+      _guidedTimer = Timer.periodic(const Duration(milliseconds: 250), (_) {
+        if (!_active || phase != RealSquatSessionPhase.active) return;
+        if (guidance!.stage == GuidedWorkoutStage.resting) {
+          guidance!.tick(clockMicros());
+          _notify();
+        }
+      });
+    }
     _foreground = foreground ?? _foreground;
     if (!_foreground) {
       _startDeferred = true;
       processing.setForeground(false);
+      guidance?.suspend(clockMicros());
       _notify();
       return;
     }
@@ -154,6 +239,9 @@ class RealSquatSessionController extends ChangeNotifier {
                       : old.maximumDegrees);
         }
       }
+      final previousStage = guidance?.stage;
+      guidance?.observe(update.repetitions, nowMicros: clockMicros());
+      if (guidance?.stage != previousStage) _syncProcessingState();
     }
     _notify();
   }
@@ -181,15 +269,40 @@ class RealSquatSessionController extends ChangeNotifier {
   }
 
   void setVoiceEnabled(bool enabled) {
+    setVoiceMode(
+        enabled ? WorkoutVoiceMode.fullCoaching : WorkoutVoiceMode.muted);
+  }
+
+  void applySavedVoiceMode(WorkoutVoiceMode mode) {
+    if (!_voiceOverridden && _active && phase == RealSquatSessionPhase.active) {
+      processing.audio.setVoiceMode(mode);
+      _notify();
+    }
+  }
+
+  @override
+  void setVoiceMode(WorkoutVoiceMode mode, {bool persist = true}) {
     _voiceOverridden = true;
     if (_active && phase == RealSquatSessionPhase.active) {
-      processing.setVoiceEnabled(enabled);
+      processing.audio.setVoiceMode(mode);
+      if (persist && saveVoiceMode != null) {
+        unawaited(saveVoiceMode!(mode).catchError((Object _) {
+          if (_active) {
+            _error =
+                'Voice mode applies now, but could not be saved for next time.';
+            _notify();
+          }
+        }));
+      }
     }
     _notify();
   }
 
+  @override
   Future<void> pause() async {
     if (!_active || phase != RealSquatSessionPhase.active) return;
+    _manualPaused = true;
+    guidance?.suspend(clockMicros());
     processing.pause();
     try {
       await preview.pause();
@@ -202,18 +315,82 @@ class RealSquatSessionController extends ChangeNotifier {
     }
   }
 
+  @override
   Future<void> resume() async {
     if (!_active || phase != RealSquatSessionPhase.active || _modelChanged) {
       return;
     }
     _error = null;
-    processing.resume();
+    _manualPaused = false;
+    if (_foreground && !_recalibrating) guidance?.resumeClock(clockMicros());
+    _syncProcessingState();
     await preview.resume();
+  }
+
+  void _syncProcessingState() {
+    if (_manualPaused ||
+        _recalibrating ||
+        (guidance != null && guidance!.stage != GuidedWorkoutStage.working)) {
+      processing.pause();
+    } else {
+      processing.resume();
+    }
+  }
+
+  @override
+  void setRestSeconds(int seconds) {
+    if (!_active || phase != RealSquatSessionPhase.active) return;
+    guidance?.setRestSeconds(seconds);
+    _notify();
+  }
+
+  @override
+  void startNextSet({bool skipRest = false}) {
+    if (!_active ||
+        !_foreground ||
+        _manualPaused ||
+        _recalibrating ||
+        phase != RealSquatSessionPhase.active) {
+      return;
+    }
+    if (guidance?.startNextSet(nowMicros: clockMicros(), skipRest: skipRest) ==
+        true) {
+      _syncProcessingState();
+      _notify();
+    }
+  }
+
+  @override
+  void beginRecalibration() {
+    if (!_active ||
+        !_foreground ||
+        _manualPaused ||
+        phase != RealSquatSessionPhase.active) {
+      return;
+    }
+    _recalibrating = true;
+    guidance?.suspend(clockMicros());
+    _syncProcessingState();
+    _notify();
+  }
+
+  @override
+  void finishRecalibration() {
+    if (!canConfirmRecalibration) return;
+    _recalibrating = false;
+    if (!_manualPaused) guidance?.resumeClock(clockMicros());
+    _syncProcessingState();
+    _notify();
   }
 
   Future<void> setForeground(bool foreground) async {
     _foreground = foreground;
     if (!_active || phase != RealSquatSessionPhase.active) return;
+    if (!foreground) {
+      guidance?.suspend(clockMicros());
+    } else if (!_manualPaused && !_recalibrating) {
+      guidance?.resumeClock(clockMicros());
+    }
     processing.setForeground(foreground);
     if (_startDeferred) {
       if (foreground) {
@@ -241,6 +418,7 @@ class RealSquatSessionController extends ChangeNotifier {
     if (activeScope() != scope) unawaited(close());
   }
 
+  @override
   Future<WorkoutSessionSummary?> endAndSave() {
     if (_saving != null) return _saving!;
     if (!_active || phase == RealSquatSessionPhase.idle) {
@@ -292,6 +470,7 @@ class RealSquatSessionController extends ChangeNotifier {
                 deviations: _deviations));
       }
       phase = RealSquatSessionPhase.saving;
+      _guidedTimer?.cancel();
       _error = null;
       unawaited(
           _save().then(completion.complete, onError: completion.completeError));
@@ -343,9 +522,11 @@ class RealSquatSessionController extends ChangeNotifier {
     }
   }
 
+  @override
   Future<void> close() {
     if (_closing != null) return _closing!;
     phase = RealSquatSessionPhase.closed;
+    _guidedTimer?.cancel();
     latest = null;
     summary = null;
     processing.removeListener(_analysisChanged);

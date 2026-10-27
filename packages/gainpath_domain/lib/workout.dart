@@ -1,4 +1,6 @@
 export 'src/workout/entities/exercise.dart';
+export 'src/workout/exercise_tracking.dart';
+export 'src/workout/exercise_tutorial_details.dart';
 export 'src/workout/entities/gym_equipment.dart';
 export 'src/workout/entities/equipment_image.dart';
 export 'src/workout/entities/routine_blueprint.dart';
@@ -8,6 +10,7 @@ export 'src/workout/enums/tutorial_status.dart';
 export 'src/workout/repositories/equipment_repository.dart';
 export 'src/workout/repositories/routine_template_repository.dart';
 export 'src/workout/repositories/tutorial_repository.dart';
+export 'src/workout/repositories/tutorial_media_repository.dart';
 export 'src/workout/repositories/workout_repository.dart';
 export 'src/workout/recognition/equipment_recognition.dart';
 

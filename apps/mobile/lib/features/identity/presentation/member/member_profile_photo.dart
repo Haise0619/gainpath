@@ -172,21 +172,32 @@ class _MemberProfilePhotoState extends State<MemberProfilePhoto> {
                       errorBuilder: (_, __, ___) =>
                           const Icon(Icons.person, color: Colors.white))),
           Positioned(
-              right: -4,
-              bottom: -4,
+              right: -10,
+              bottom: -10,
               child: Material(
-                  color: AppColors.surface,
+                  color: Colors.transparent,
                   shape: const CircleBorder(),
-                  elevation: 1,
                   child: IconButton(
                       tooltip: 'Edit profile picture',
-                      visualDensity: VisualDensity.compact,
+                      constraints:
+                          const BoxConstraints.tightFor(width: 48, height: 48),
+                      padding: EdgeInsets.zero,
+                      visualDensity: VisualDensity.standard,
                       onPressed:
                           _loading || _invalidated || _initializationFailed
                               ? null
                               : _edit,
-                      icon: const Icon(Icons.camera_alt_rounded,
-                          size: 16, color: AppColors.primary)))),
+                      icon: Container(
+                        width: 28,
+                        height: 28,
+                        decoration: BoxDecoration(
+                          color: AppColors.surface,
+                          shape: BoxShape.circle,
+                          border: Border.all(color: AppColors.hairline),
+                        ),
+                        child: const Icon(Icons.camera_alt_rounded,
+                            size: 14, color: AppColors.primary),
+                      )))),
         ]),
         if (_loading)
           const SizedBox(width: 60, child: LinearProgressIndicator()),

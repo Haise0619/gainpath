@@ -3,6 +3,8 @@ import 'package:syncfusion_flutter_charts/charts.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:gainpath_domain/analytics.dart';
+import '../../../application/admin_reporting_gateway.dart';
+import '../original_report_data_widgets.dart';
 
 class _WeekPoint {
   final String label;
@@ -11,40 +13,68 @@ class _WeekPoint {
 }
 
 class RevenueSection extends StatelessWidget {
+  final AdminReportingSnapshot? snapshot;
   final GlobalKey anchorKey;
   final bool live;
-  const RevenueSection({super.key, required this.anchorKey, this.live = false});
+  const RevenueSection(
+      {super.key, required this.anchorKey, this.live = false, this.snapshot});
 
-  static const _tierSplit = [ChartSlice('Premium', 176), ChartSlice('Basic', 108)];
+  static const _tierSplit = [
+    ChartSlice('Premium', 176),
+    ChartSlice('Basic', 108)
+  ];
 
   @override
   Widget build(BuildContext context) {
+    final ops = snapshot?.operations;
     return ReportSection(
       anchorKey: anchorKey,
       title: 'Membership & Revenue',
-      subtitle: 'Income and tier split',
+      subtitle: ops == null
+          ? 'Income and tier split'
+          : 'Confirmed Sandbox receipts · original clearance dates',
       live: live,
-      tagLabel: live ? 'Unavailable' : null,
+      tagLabel: ops != null
+          ? 'Sandbox · filtered'
+          : live
+              ? 'Unavailable'
+              : null,
       exportFilename: 'membership_revenue.csv',
-      exportEnabled: !live,
-      exportRows: live
-          ? null
-          : () => [
-              ['Metric', 'Value'],
-              ['Monthly revenue', 'RM 24,180'],
-              ['Paying members', '284'],
-              [],
-              ['Tier', 'Members'],
-              ..._tierSplit.map((s) => [s.label, s.value.round()]),
-            ],
+      exportEnabled: ops != null || !live,
+      exportRows: ops != null
+          ? () => ops.toCsv(snapshot!)
+          : live
+              ? null
+              : () => [
+                    ['Metric', 'Value'],
+                    ['Monthly revenue', 'RM 24,180'],
+                    ['Paying members', '284'],
+                    [],
+                    ['Tier', 'Members'],
+                    ..._tierSplit.map((s) => [s.label, s.value.round()]),
+                  ],
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Expanded(child: StatTile(live ? '—' : 'RM 24,180', 'This month')),
+              Expanded(
+                  child: StatTile(
+                      ops != null
+                          ? reportMoney(ops.membershipMinor)
+                          : live
+                              ? '—'
+                              : 'RM 24,180',
+                      ops != null ? 'Membership receipts' : 'This month')),
               const SizedBox(width: 10),
-              Expanded(child: StatTile(live ? '—' : '284', 'Paying members')),
+              Expanded(
+                  child: StatTile(
+                      ops != null
+                          ? reportMoney(ops.coachingMinor)
+                          : live
+                              ? '—'
+                              : '284',
+                      ops != null ? 'Coaching receipts' : 'Paying members')),
             ],
           ),
           const SizedBox(height: 14),
@@ -54,7 +84,8 @@ class RevenueSection extends StatelessWidget {
               height: 170,
               child: live
                   ? const NoFilteredData(
-                      message: 'Membership tier split is unavailable in this release.')
+                      message:
+                          'Membership tier split is unavailable in this release.')
                   : SfCircularChart(
                       legend: const Legend(
                           isVisible: true,
@@ -85,11 +116,14 @@ class RevenueSection extends StatelessWidget {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Icon(Icons.info_outline_rounded, size: 18, color: AppColors.inkSoft),
+                const Icon(Icons.info_outline_rounded,
+                    size: 18, color: AppColors.inkSoft),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Text(
-                    'Per-coach and per-branch revenue is broken down in the Overview section above.',
+                    ops != null
+                        ? 'These are Sandbox receipts, not net revenue or payouts. Membership-tier and per-branch financial splits remain unavailable.'
+                        : 'Per-coach and per-branch revenue is broken down in the Overview section above.',
                     style: Theme.of(context).textTheme.bodyMedium,
                   ),
                 ),
@@ -107,12 +141,19 @@ class RewardsSection extends StatelessWidget {
   final bool live;
   const RewardsSection({super.key, required this.anchorKey, this.live = false});
 
-  static const _sliceColors = [AppColors.primary, AppColors.accent, AppColors.success, AppColors.info];
+  static const _sliceColors = [
+    AppColors.primary,
+    AppColors.accent,
+    AppColors.success,
+    AppColors.info
+  ];
 
   @override
   Widget build(BuildContext context) {
-    final trend = List.generate(context.read<AnalyticsRepository>().rewardWeeklyRedemptions.length,
-        (i) => _WeekPoint('W${i + 1}', context.read<AnalyticsRepository>().rewardWeeklyRedemptions[i]));
+    final trend = List.generate(
+        context.read<AnalyticsRepository>().rewardWeeklyRedemptions.length,
+        (i) => _WeekPoint('W${i + 1}',
+            context.read<AnalyticsRepository>().rewardWeeklyRedemptions[i]));
 
     return ReportSection(
       anchorKey: anchorKey,
@@ -125,12 +166,15 @@ class RewardsSection extends StatelessWidget {
       exportRows: live
           ? null
           : () => [
-              ['Week', 'Redemptions'],
-              ...trend.map((p) => [p.label, p.value]),
-              [],
-              ['Reward', 'Redeemed'],
-              ...context.read<AnalyticsRepository>().rewardRedemptionMix.map((s) => [s.label, s.value.round()]),
-            ],
+                ['Week', 'Redemptions'],
+                ...trend.map((p) => [p.label, p.value]),
+                [],
+                ['Reward', 'Redeemed'],
+                ...context
+                    .read<AnalyticsRepository>()
+                    .rewardRedemptionMix
+                    .map((s) => [s.label, s.value.round()]),
+              ],
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -148,20 +192,26 @@ class RewardsSection extends StatelessWidget {
               height: 150,
               child: live || trend.isEmpty
                   ? const NoFilteredData(
-                      message: 'Weekly redemptions reporting is unavailable in this release.')
+                      message:
+                          'Weekly redemptions reporting is unavailable in this release.')
                   : SfCartesianChart(
                       plotAreaBorderWidth: 0,
                       primaryXAxis: const CategoryAxis(
                         majorGridLines: MajorGridLines(width: 0),
                         axisLine: AxisLine(width: 0),
-                        labelStyle: TextStyle(fontSize: 10, color: AppColors.inkSoft),
+                        labelStyle:
+                            TextStyle(fontSize: 10, color: AppColors.inkSoft),
                       ),
                       primaryYAxis: const NumericAxis(
-                        majorGridLines: MajorGridLines(width: 0.6, color: AppColors.hairline),
+                        majorGridLines: MajorGridLines(
+                            width: 0.6, color: AppColors.hairline),
                         axisLine: AxisLine(width: 0),
-                        labelStyle: TextStyle(fontSize: 10, color: AppColors.inkSoft),
+                        labelStyle:
+                            TextStyle(fontSize: 10, color: AppColors.inkSoft),
                       ),
-                      trackballBehavior: TrackballBehavior(enable: true, activationMode: ActivationMode.singleTap),
+                      trackballBehavior: TrackballBehavior(
+                          enable: true,
+                          activationMode: ActivationMode.singleTap),
                       series: <CartesianSeries<_WeekPoint, String>>[
                         SplineSeries<_WeekPoint, String>(
                           dataSource: trend,
@@ -169,7 +219,8 @@ class RewardsSection extends StatelessWidget {
                           yValueMapper: (d, _) => d.value,
                           color: AppColors.success,
                           width: 2.4,
-                          markerSettings: const MarkerSettings(isVisible: true, height: 6, width: 6),
+                          markerSettings: const MarkerSettings(
+                              isVisible: true, height: 6, width: 6),
                         ),
                       ],
                     ),
@@ -180,20 +231,32 @@ class RewardsSection extends StatelessWidget {
           Panel(
             child: SizedBox(
               height: 190,
-              child: live || context.read<AnalyticsRepository>().rewardRedemptionMix.isEmpty
+              child: live ||
+                      context
+                          .read<AnalyticsRepository>()
+                          .rewardRedemptionMix
+                          .isEmpty
                   ? const NoFilteredData(
-                      message: 'Reward redemption distribution is unavailable in this release.')
+                      message:
+                          'Reward redemption distribution is unavailable in this release.')
                   : SfCircularChart(
-                      legend: const Legend(isVisible: true, position: LegendPosition.right, textStyle: TextStyle(fontSize: 12)),
+                      legend: const Legend(
+                          isVisible: true,
+                          position: LegendPosition.right,
+                          textStyle: TextStyle(fontSize: 12)),
                       series: <CircularSeries<ChartSlice, String>>[
                         DoughnutSeries<ChartSlice, String>(
-                          dataSource: context.read<AnalyticsRepository>().rewardRedemptionMix,
+                          dataSource: context
+                              .read<AnalyticsRepository>()
+                              .rewardRedemptionMix,
                           xValueMapper: (d, _) => d.label,
                           yValueMapper: (d, _) => d.value,
                           innerRadius: '65%',
                           cornerStyle: CornerStyle.bothCurve,
-                          pointColorMapper: (d, i) => _sliceColors[i % _sliceColors.length],
-                          dataLabelSettings: const DataLabelSettings(isVisible: false),
+                          pointColorMapper: (d, i) =>
+                              _sliceColors[i % _sliceColors.length],
+                          dataLabelSettings:
+                              const DataLabelSettings(isVisible: false),
                         ),
                       ],
                     ),

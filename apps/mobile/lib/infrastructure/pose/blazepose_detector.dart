@@ -48,10 +48,10 @@ class BlazePoseDetector
   Map<String, Object> get diagnostics => {
         if (poseRenderDebugEnabled) 'renderDecoder': _renderDecoder,
         'modelVersion': BlazePoseModelContract.version,
-        'inferenceBackend':
-            poseGpuDebugEnabled ? 'opencl_required' : 'cpu_2_threads',
-        if (poseGpuDebugEnabled)
+        'inferenceBackend': _gpuDiagnostics['backend'] ?? 'initializing',
+        if (_gpuDiagnostics['backend'] == 'opencl_required')
           'gpuOwnerThread': _gpuDiagnostics['ownerThread'] ?? 0,
+        if (_gpuDiagnostics['gpuFallback'] == true) 'gpuFallback': true,
         'runtimeTensorContractVerified': true,
         'averageInferenceMillis': averageInferenceMillis,
         'averagePipelineMillis': averagePipelineMillis,
@@ -87,7 +87,7 @@ class BlazePoseDetector
         });
         assets.add(file.path);
       }
-      if (poseGpuDebugEnabled) {
+      if (poseGpuPreferred) {
         detector._gpuSessionId =
             'pose-${DateTime.now().microsecondsSinceEpoch}';
       }
@@ -154,7 +154,9 @@ class BlazePoseDetector
     if (pending == null) return;
     if (values[0] == 'error') {
       pending.completeError(StateError(values[2] as String));
-      if (_gpuSessionId != null) _fail(StateError(values[2] as String));
+      if (_gpuDiagnostics['backend'] == 'opencl_required') {
+        _fail(StateError(values[2] as String));
+      }
     } else {
       if (values.length > 3) {
         nativeInferenceMicros += values[3] as int;
@@ -254,9 +256,15 @@ void _blazePoseWorker(
   final options = InterpreterOptions()..threads = 2;
   try {
     if (boot.$3 != null) {
-      if (boot.$4 == null) throw StateError('Missing root isolate messenger');
-      BackgroundIsolateBinaryMessenger.ensureInitialized(boot.$4!);
-      gpu = await BlazePoseGpuSession.create(boot.$3!, boot.$2);
+      if (boot.$4 == null) {
+        if (poseGpuDebugEnabled) {
+          throw StateError('Missing root isolate messenger');
+        }
+      } else {
+        BackgroundIsolateBinaryMessenger.ensureInitialized(boot.$4!);
+        gpu = await BlazePoseGpuSession.createPreferred(boot.$3!, boot.$2,
+            requireGpu: poseGpuDebugEnabled);
+      }
     }
     if (gpu == null || poseGpuCompareEnabled) {
       detector = Interpreter.fromFile(File(boot.$2[0]), options: options);
@@ -283,7 +291,7 @@ void _blazePoseWorker(
       commands.close();
       replies.send([
         'failure',
-        boot.$3 == null
+        !poseGpuDebugEnabled
             ? 'BlazePose native initialization or tensor validation failed.'
             : 'BlazePose OpenCL initialization failed: $error'
       ]);
@@ -301,12 +309,12 @@ void _blazePoseWorker(
   replies.send([
     'ready',
     commands.sendPort,
-    if (gpu != null)
-      {
-        'backend': 'opencl_required',
-        'ownerThread': gpu.ownerThread,
-        'sameInputComparisonEnabled': poseGpuCompareEnabled
-      }
+    {
+      'backend': gpu == null ? 'cpu_2_threads' : 'opencl_required',
+      if (gpu != null) 'ownerThread': gpu.ownerThread,
+      if (gpu == null && boot.$3 != null) 'gpuFallback': true,
+      'sameInputComparisonEnabled': poseGpuCompareEnabled && gpu != null
+    }
   ]);
   commands.listen((dynamic message) async {
     final values = message as List;

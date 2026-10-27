@@ -2,14 +2,20 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:gainpath_domain/analytics.dart';
 import 'package:gainpath_domain/gainpath_domain.dart' show SessionScope;
 import '../domain/local_member_progress_repository.dart';
+import '../../workout/domain/routine_attempt.dart';
 
 enum MemberProgressStatus { loading, ready, failure, inactive }
 
 class MemberProgressState {
   const MemberProgressState(
-      {required this.status, this.progress, this.snapshot, this.error});
+      {required this.status,
+      this.progress,
+      this.snapshot,
+      this.routines,
+      this.error});
   final MemberProgressStatus status;
   final MemberLocalProgress? progress;
+  final RoutineProgress? routines;
   final LocalMemberProgressSnapshot? snapshot;
   final String? error;
 }
@@ -48,6 +54,12 @@ class MemberProgressCubit extends Cubit<MemberProgressState> {
       emit(MemberProgressState(
           status: MemberProgressStatus.ready,
           progress: progress,
+          routines: snapshot.routineHistoryAvailable
+              ? RoutineProgress(
+                  scope: repository.scope,
+                  attempts: snapshot.attempts,
+                  asOf: clock())
+              : null,
           snapshot: snapshot));
     } catch (_) {
       if (isClosed || generation != _generation) return;

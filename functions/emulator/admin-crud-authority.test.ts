@@ -67,3 +67,19 @@ it('denies authoring through a malformed membership organization', async () => {
   await assertFails(getDoc(doc(db, 'orgs/o/exerciseVideos/e')));
   await assertFails(getDoc(doc(db, 'orgs/o/routineBlueprints/r')));
 });
+
+it('allows scoped archives and rejects active archived exercises and invalid flags', async () => {
+  const db = dbFor();
+  await assertFails(updateDoc(doc(db, 'orgs/o/exerciseVideos/e'), {archived: true, updatedAt: serverTimestamp()}));
+  await assertSucceeds(updateDoc(doc(db, 'orgs/o/exerciseVideos/e'), {archived: true, isActive: false, updatedAt: serverTimestamp()}));
+  await assertSucceeds(updateDoc(doc(db, 'orgs/o/routineBlueprints/r'), {archived: true, updatedAt: serverTimestamp(), updatedBy: 'author'}));
+  await assertFails(updateDoc(doc(db, 'orgs/o/routineBlueprints/r'), {archived: 'true', updatedAt: serverTimestamp(), updatedBy: 'author'}));
+});
+it('denies archive writes for Members', async () => {
+  await env.withSecurityRulesDisabled(async context => {
+    await updateDoc(doc(context.firestore(), 'orgs/o/members/author'), {role: 'member'});
+  });
+  const db = dbFor();
+  await assertFails(updateDoc(doc(db, 'orgs/o/exerciseVideos/e'), {archived: true, isActive: false, updatedAt: serverTimestamp()}));
+  await assertFails(updateDoc(doc(db, 'orgs/o/routineBlueprints/r'), {archived: true, updatedAt: serverTimestamp(), updatedBy: 'author'}));
+});

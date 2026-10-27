@@ -15,7 +15,8 @@ String buildPublishRoutineRequestId({
   return '$timestampMicros-$suffix';
 }
 
-class FirebaseRoutineTemplateRepository implements RoutineTemplateRepository {
+class FirebaseRoutineTemplateRepository
+    implements RoutineTemplateRepository, RoutineArchivingRepository {
   FirebaseRoutineTemplateRepository({
     required this.scope,
     required this.exerciseCatalog,
@@ -80,6 +81,7 @@ class FirebaseRoutineTemplateRepository implements RoutineTemplateRepository {
       };
       _requireCurrentUser();
       final result = docs.docs
+          .where((doc) => doc.data()['archived'] != true)
           .map((doc) => _decode(doc.id, doc.data(), exercises,
               baseline: _RoutineBaseline(_lifetime, doc.id, doc.data(),
                   assignment.data()!, membership.data()!)))
@@ -193,7 +195,9 @@ class FirebaseRoutineTemplateRepository implements RoutineTemplateRepository {
           final current = await transaction.get(reference);
           if (isCreate
               ? current.exists
-              : !current.exists || !_same(current.data(), original!.document)) {
+              : !current.exists ||
+                  current.data()?['archived'] == true ||
+                  !_same(current.data(), original!.document)) {
             throw const RoutineEditConflict();
           }
           for (final id in _exerciseIds(data)) {
@@ -254,6 +258,72 @@ class FirebaseRoutineTemplateRepository implements RoutineTemplateRepository {
       // A write may already be committed. Never classify a malformed read-back
       // as a retryable form validation failure (especially for creates).
       throw const RoutineSaveFailed();
+    }
+  }
+
+  @override
+  Future<void> archive(RoutineBlueprint blueprint) async {
+    if (_saving) throw const RoutineSaveFailed();
+    _saving = true;
+    Object? domainFailure;
+    try {
+      _requireCurrentUser();
+      final baseline = blueprint.editBaseline;
+      if (baseline is! _RoutineBaseline ||
+          !identical(baseline.lifetime, _lifetime) ||
+          baseline.id != blueprint.id) {
+        throw const RoutineEditConflict();
+      }
+      final reference = _collection().doc(blueprint.id);
+      try {
+        await _firestore.runTransaction<void>((transaction) async {
+          if (domainFailure != null) throw StateError('Archive aborted.');
+          try {
+            _requireCurrentUser();
+            final assignment = (await transaction.get(_assignment)).data();
+            final membership = (await transaction.get(_member)).data();
+            _requireAuthor(assignment, membership);
+            if (!_same(assignment, baseline.assignment) ||
+                !_same(membership, baseline.membership)) {
+              throw const RoutineEditAuthorizationChanged();
+            }
+            final current = await transaction.get(reference);
+            _requireCurrentUser();
+            if (!current.exists || !_same(current.data(), baseline.document)) {
+              throw const RoutineEditConflict();
+            }
+            transaction.update(reference, {
+              'archived': true,
+              'updatedAt': FieldValue.serverTimestamp(),
+              'updatedBy': scope.userId
+            });
+          } on RoutineEditConflict catch (error) {
+            domainFailure = error;
+            throw StateError('Archive aborted.');
+          } on RoutineEditAuthorizationChanged catch (error) {
+            domainFailure = error;
+            throw StateError('Archive aborted.');
+          }
+        });
+      } catch (_) {
+        if (domainFailure != null) throw domainFailure!;
+        rethrow;
+      }
+      final saved =
+          await reference.get(const GetOptions(source: Source.server));
+      _requireCurrentUser();
+      if (saved.data()?['archived'] != true) throw const RoutineSaveFailed();
+    } on RoutineEditConflict {
+      rethrow;
+    } on RoutineEditAuthorizationChanged {
+      rethrow;
+    } on FirebaseException catch (error) {
+      _translateAuthorization(error);
+      throw const RoutineSaveFailed();
+    } catch (_) {
+      throw const RoutineSaveFailed();
+    } finally {
+      _saving = false;
     }
   }
 

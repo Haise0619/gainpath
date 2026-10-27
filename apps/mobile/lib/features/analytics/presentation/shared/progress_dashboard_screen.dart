@@ -11,6 +11,8 @@ import '../member/workout_performance_screen.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:gainpath_domain/analytics.dart';
 import 'package:gainpath_domain/gamification.dart';
+import '../../../workout/domain/routine_attempt.dart';
+import '../member/widgets/routine_progress_card.dart';
 
 /// AD-M5.1 — View Personalized Progress Dashboard. The hub for every
 /// Progress & Report screen: a computed highlight up top, four tappable
@@ -23,6 +25,11 @@ class ProgressDashboardScreen extends StatefulWidget {
   const ProgressDashboardScreen(
       {super.key,
       this.localProgress,
+      this.routineProgress,
+      this.onOpenRoutineHistory,
+      this.onOpenBackup,
+      this.onOpenReport,
+      this.onOpenRoutine,
       this.onRefresh,
       this.onOpenWorkout,
       this.onOpenHistory,
@@ -30,6 +37,11 @@ class ProgressDashboardScreen extends StatefulWidget {
       this.onOpenForm});
 
   final MemberLocalProgress? localProgress;
+  final RoutineProgress? routineProgress;
+  final VoidCallback? onOpenRoutineHistory;
+  final VoidCallback? onOpenBackup;
+  final VoidCallback? onOpenReport;
+  final void Function(RoutineAttempt)? onOpenRoutine;
   final Future<void> Function()? onRefresh;
   final void Function(LocalWorkoutProgressRecord)? onOpenWorkout;
   final VoidCallback? onOpenHistory;
@@ -119,6 +131,23 @@ class _ProgressDashboardScreenState extends State<ProgressDashboardScreen>
       ]),
       body: PageBody(
         children: [
+          if (local != null) ...[
+            if (widget.onOpenReport != null)
+              FilledButton.icon(
+                  onPressed: widget.onOpenReport,
+                  icon: const Icon(Icons.picture_as_pdf_outlined),
+                  label: const Text('Workout report & PDF')),
+            RoutineProgressCard(
+                progress: widget.routineProgress,
+                onOpenHistory: widget.onOpenRoutineHistory,
+                onOpenAttempt: widget.onOpenRoutine),
+            if (widget.onOpenBackup != null)
+              TextButton.icon(
+                  onPressed: widget.onOpenBackup,
+                  icon: const Icon(Icons.cloud_upload_outlined),
+                  label: const Text('Workout backup')),
+            const SizedBox(height: 16),
+          ],
           _reveal(
             _HighlightCard(
               isRecordWeek: isRecordWeek,
@@ -258,8 +287,8 @@ class _ProgressDashboardScreenState extends State<ProgressDashboardScreen>
                   onTap: () => Navigator.push(
                       context,
                       MaterialPageRoute(
-                          builder: (_) =>
-                              GoalProgressScreen(live: local != null, localProgress: local))),
+                          builder: (_) => GoalProgressScreen(
+                              live: local != null, localProgress: local))),
                 ),
                 const SizedBox(height: 10),
                 ReportPreviewTile(

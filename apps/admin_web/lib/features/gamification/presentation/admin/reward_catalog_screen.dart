@@ -7,6 +7,8 @@ import 'package:gainpath_domain/identity.dart';
 import 'package:gainpath_identity/gainpath_identity.dart';
 import '../../reward_fulfilment_repository.dart';
 import 'reward_fulfilment_panel.dart';
+import 'reward_publication_panel.dart';
+import 'reward_management_screen.dart';
 
 Widget _networkHero(String url, {BoxFit fit = BoxFit.cover}) {
   if (url.trim().isEmpty) {
@@ -16,6 +18,7 @@ Widget _networkHero(String url, {BoxFit fit = BoxFit.cover}) {
   return Image.network(
     url,
     fit: fit,
+    webHtmlElementStrategy: WebHtmlElementStrategy.prefer,
     loadingBuilder: (context, child, progress) =>
         progress == null ? child : Container(color: AppColors.surfaceAlt),
     errorBuilder: (context, error, stack) => const DecoratedBox(
@@ -47,7 +50,11 @@ class _RewardCatalogScreenState extends State<RewardCatalogScreen> {
   @override
   void initState() {
     super.initState();
-    if (widget.live) _load();
+    if (widget.live &&
+        context.read<RewardCatalogRepository>()
+            is! RewardManagementRepository) {
+      _load();
+    }
   }
 
   Future<void> _load({bool append = false}) async {
@@ -109,6 +116,18 @@ class _RewardCatalogScreenState extends State<RewardCatalogScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (widget.live &&
+        context.read<RewardCatalogRepository>() is RewardManagementRepository) {
+      final repository =
+          context.read<RewardCatalogRepository>() as RewardManagementRepository;
+      final changes = context.read<AuthBloc?>()?.stream;
+      return StreamBuilder<Object?>(
+          stream: changes,
+          builder: (_, __) => RewardManagementScreen(
+              repository: repository,
+              sessionChanges: changes,
+              onVerify: _verifyReward));
+    }
     if (_creating || _editing != null || _draftEditing != null) {
       return _RewardFormPage(
           existing: _editing,
@@ -210,6 +229,28 @@ class _RewardCatalogScreenState extends State<RewardCatalogScreen> {
     );
   }
 
+  void _verifyReward() {
+    try {
+      final source = context.read<AdminMemberDirectoryRepository>();
+      final auth = context.read<AuthBloc>();
+      if (source is! RewardFulfilmentRepository) {
+        throw StateError('Unavailable');
+      }
+      showDialog<void>(
+          context: context,
+          builder: (_) => Dialog(
+              child: SizedBox(
+                  width: 520,
+                  child: BlocBuilder<AuthBloc, AuthState>(
+                      bloc: auth,
+                      builder: (_, __) => RewardFulfilmentPanel(
+                          repository: source as RewardFulfilmentRepository)))));
+    } catch (_) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Reward fulfilment unavailable for this session.')));
+    }
+  }
+
   Widget _liveCatalog(BuildContext context) => Scaffold(
       backgroundColor: Colors.transparent,
       body: SingleChildScrollView(
@@ -249,8 +290,6 @@ class _RewardCatalogScreenState extends State<RewardCatalogScreen> {
                       },
                       icon: const Icon(Icons.verified_outlined),
                       label: const Text('Verify reward voucher')),
-                  Text('${_drafts.length} metadata drafts loaded',
-                      style: Theme.of(context).textTheme.bodyLarge),
                   IconButton(
                       tooltip: 'Refresh reward drafts',
                       onPressed: _loading ? null : () => _load(),
@@ -258,12 +297,25 @@ class _RewardCatalogScreenState extends State<RewardCatalogScreen> {
                   FilledButton.icon(
                       onPressed: _loading ? null : _openCreate,
                       icon: const Icon(Icons.add_rounded, size: 18),
-                      label: const Text('Add draft')),
+                      label: const Text('Add reward')),
                 ]),
             const SizedBox(height: 12),
+            if (context.read<RewardCatalogRepository>()
+                is RewardPublishingRepository) ...[
+              RewardPublicationPanel(
+                repository: context.read<RewardCatalogRepository>()
+                    as RewardPublishingRepository,
+                drafts: _drafts,
+                sessionChanges: context.read<AuthBloc?>()?.stream,
+              ),
+              const SizedBox(height: 20),
+            ],
+            Text('Reward information',
+                style: Theme.of(context).textTheme.titleLarge),
+            const SizedBox(height: 4),
             const Text(
-                'Admin metadata only. Drafts are not published or redeemable.'),
-            const SizedBox(height: 20),
+                'Edit details here, then publish or update the reward above to change the Member shop.'),
+            const SizedBox(height: 12),
             if (_loading) const LinearProgressIndicator(),
             if (_error != null)
               Panel(
@@ -274,7 +326,7 @@ class _RewardCatalogScreenState extends State<RewardCatalogScreen> {
             if (!_loading && _error == null && _drafts.isEmpty)
               const Panel(
                   child: Text(
-                      'No reward drafts yet. Add a draft to get started.')),
+                      'No rewards yet. Select Add reward to get started.')),
             for (final draft in _drafts)
               Padding(
                   padding: const EdgeInsets.only(bottom: 10),
@@ -297,10 +349,10 @@ class _RewardCatalogScreenState extends State<RewardCatalogScreen> {
                               Text(draft.title,
                                   style:
                                       Theme.of(context).textTheme.titleMedium),
-                              Text(
-                                  '${draft.category} · Revision ${draft.revision}'),
+                              Text(draft.category),
                             ])),
-                        statusPill(draft.isArchived ? 'Archived' : 'Draft'),
+                        statusPill(
+                            draft.isArchived ? 'Archived' : 'Saved details'),
                         IconButton(
                             tooltip: 'Edit ${draft.title}',
                             onPressed: _loading
@@ -731,7 +783,7 @@ class _RewardFormPageState extends State<_RewardFormPage> {
               Expanded(
                 child: Text(
                   widget.live
-                      ? 'Metadata preview only. Points, stock, redemption, and publication are unavailable.'
+                      ? 'Save this metadata draft, then use the catalog publication controls to set points, stock, validity and collection terms.'
                       : 'At 200 pts = RM 1.00, this costs members roughly RM ${((points ?? 0) / 200).toStringAsFixed(2)}.',
                   style: Theme.of(context).textTheme.bodyMedium,
                 ),

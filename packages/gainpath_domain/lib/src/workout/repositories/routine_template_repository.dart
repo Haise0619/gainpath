@@ -42,3 +42,8 @@ abstract class RoutineTemplateRepository {
         'This repository does not support publishing routines.');
   }
 }
+
+/// Archives a blueprint without modifying published Member snapshots.
+abstract interface class RoutineArchivingRepository {
+  Future<void> archive(RoutineBlueprint blueprint);
+}

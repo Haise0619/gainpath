@@ -1,11 +1,13 @@
 import 'dart:typed_data';
 import 'package:gainpath_domain/analytics.dart';
 import 'package:gainpath_domain/coaching.dart';
-import 'package:gainpath_domain/gainpath_domain.dart' show SessionScope, AuthSession;
+import 'package:gainpath_domain/gainpath_domain.dart'
+    show SessionScope, AuthSession;
 import 'package:gainpath_domain/identity.dart';
 import 'package:gainpath_domain/membership.dart';
 import 'package:gainpath_domain/recommendation.dart';
 import '../../features/analytics/application/admin_reporting_gateway.dart';
+import '../../infrastructure/firebase/firebase_admin_reporting_gateway.dart';
 
 typedef ReportingGatewayFactory = AdminReportingGateway Function(
     SessionScope scope, bool Function() isCurrent);
@@ -41,7 +43,7 @@ class AdminPresentationDependencies {
     ReportingGatewayFactory? reportingFactory,
   }) {
     final gateway = reportingFactory?.call(scope, isCurrent) ??
-        const UnavailableAdminReportingGateway();
+        FirebaseAdminReportingGateway(scope: scope, isCurrent: isCurrent);
 
     return AdminPresentationDependencies(
       reportingGateway: gateway,

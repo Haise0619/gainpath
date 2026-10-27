@@ -35,3 +35,8 @@ abstract class TutorialRepository {
 
   bool get requiresCatalogSelection => false;
 }
+
+/// Archives authoring content while retaining stable references.
+abstract interface class TutorialArchivingRepository {
+  Future<void> archive(TutorialVideo tutorial);
+}

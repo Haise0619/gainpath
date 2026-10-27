@@ -31,6 +31,11 @@ class _ExerciseCatalog implements TutorialRepository {
       category: tutorial.category,
       status: tutorial.status,
       videoUrl: tutorial.videoUrl,
+      description: tutorial.description,
+      thumbnailUrl: tutorial.thumbnailUrl,
+      difficulty: tutorial.difficulty,
+      equipment: tutorial.equipment,
+      tutorialSteps: tutorial.tutorialSteps,
     );
     final index = entries.indexWhere((entry) => entry.id == saved.id);
     if (index == -1) {
@@ -69,6 +74,59 @@ class _RoutineRepository implements RoutineTemplateRepository {
 }
 
 void main() {
+  testWidgets('catalog authors overview and ordered tutorial steps',
+      (tester) async {
+    GoogleFonts.config.allowRuntimeFetching = false;
+    tester.view.physicalSize = const Size(1200, 1100);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final catalog = _ExerciseCatalog()..entries.clear();
+    await tester.pumpWidget(RepositoryProvider<TutorialRepository>.value(
+        value: catalog,
+        child: MaterialApp(
+            theme: AppTheme.build(), home: const ExerciseTutorialsScreen())));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Add exercise'));
+    await tester.pumpAndSettle();
+    Finder field(String label) => find.widgetWithText(TextFormField, label);
+    await tester.enterText(field('Title'), 'Cable row');
+    await tester.ensureVisible(field('Exercise overview'));
+    await tester.enterText(
+        field('Exercise overview'), 'A controlled pulling movement.');
+    final add = find.text('Add tutorial step');
+    for (final title in ['Prepare', 'Pull']) {
+      await tester.ensureVisible(add);
+      await tester.tap(add);
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(field('Step title').last);
+      await tester.enterText(field('Step title').last, title);
+      await tester.ensureVisible(field('Step description').last);
+      await tester.enterText(
+          field('Step description').last, '$title with control.');
+    }
+    await tester.ensureVisible(find.byTooltip('Move step 2 up'));
+    await tester.tap(find.byTooltip('Move step 2 up'));
+    await tester.pumpAndSettle();
+    expect(
+        tester
+            .widget<TextFormField>(field('Step title').first)
+            .controller!
+            .text,
+        'Pull');
+    await tester.ensureVisible(find.byTooltip('Remove step 2'));
+    await tester.tap(find.byTooltip('Remove step 2'));
+    await tester.pumpAndSettle();
+    expect(field('Step title'), findsOneWidget);
+    final save = find.widgetWithText(FilledButton, 'Create exercise');
+    await tester.ensureVisible(save);
+    await tester.tap(save);
+    await tester.pumpAndSettle();
+    expect(
+        catalog.entries.single.description, 'A controlled pulling movement.');
+    expect(catalog.entries.single.tutorialSteps.single.title, 'Pull');
+    expect(catalog.entries.single.tutorialSteps.single.description,
+        'Pull with control.');
+  });
   setUpAll(() => GoogleFonts.config.allowRuntimeFetching = false);
 
   testWidgets('stale routine disables Save until explicit discard and reload',
@@ -189,6 +247,29 @@ void main() {
     expect(exercises.entries.single.title, 'Goblet Squat');
   });
 
+  testWidgets(
+      'guided-only exercise can be registered without a video or an AI toggle',
+      (tester) async {
+    final exercises = _ExerciseCatalog()..entries.clear();
+    await tester.pumpWidget(RepositoryProvider<TutorialRepository>.value(
+        value: exercises,
+        child: MaterialApp(
+            theme: AppTheme.build(), home: const ExerciseTutorialsScreen())));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Add exercise'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextFormField).first, 'Cable row');
+    expect(find.text('Guided only'), findsOneWidget);
+    expect(find.byType(Switch), findsNothing);
+    final save = find.widgetWithText(FilledButton, 'Create exercise');
+    await tester.ensureVisible(save);
+    await tester.tap(save);
+    await tester.pumpAndSettle();
+    expect(exercises.entries.single.title, 'Cable row');
+    expect(exercises.entries.single.videoUrl, isEmpty);
+    expect(exercises.entries.single.trackingCapability.hasPoseTracking, false);
+  });
+
   testWidgets('Exercise Catalog lets staff activate an exercise for routines',
       (tester) async {
     final exercises = _ExerciseCatalog()..entries.clear();
@@ -215,11 +296,14 @@ void main() {
     await tester.enterText(
         find.byType(TextFormField).at(1), 'https://example.test/squat');
     final dropdowns = find.byType(DropdownButtonFormField<String>);
-    expect(dropdowns, findsNWidgets(2));
+    expect(dropdowns, findsNWidgets(3));
+    await tester.ensureVisible(dropdowns.last);
     await tester.tap(dropdowns.last);
     await tester.pumpAndSettle();
     await tester.tap(find.text('Active').last);
     await tester.pumpAndSettle();
+    await tester
+        .ensureVisible(find.widgetWithText(FilledButton, 'Create exercise'));
     await tester.tap(find.widgetWithText(FilledButton, 'Create exercise'));
     await tester.pumpAndSettle();
     expect(exercises.entries.single.status, TutorialStatus.active);

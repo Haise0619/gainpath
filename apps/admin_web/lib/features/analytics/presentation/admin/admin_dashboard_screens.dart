@@ -7,6 +7,9 @@ import 'package:gainpath_domain/gainpath_domain.dart' show AuthSession;
 import '../../application/admin_reporting_cubit.dart';
 import 'admin_reporting_feedback.dart';
 import '../../application/admin_reporting_gateway.dart';
+import '../../application/admin_operational_metrics.dart';
+import 'original_report_data_widgets.dart';
+import 'admin_workout_analytics.dart';
 
 /// AD-M12.1 — View Admin Dashboard.
 class AdminDashboardScreen extends StatefulWidget {
@@ -29,6 +32,7 @@ class AdminDashboardScreen extends StatefulWidget {
 }
 
 class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
+  bool _operational = false;
   static const _ranges = ['Today', 'This week', 'This month'];
   String _range = 'Today';
   AdminReportingCubit? _reportingCubit;
@@ -82,8 +86,12 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     if (_reportingCubit == null && widget.live) {
       try {
         final gateway = context.read<AdminReportingGateway>();
+        _operational = gateway is OperationalAdminReportingGateway;
         _reportingCubit = AdminReportingCubit(
-            gateway: gateway, initialQuery: _rangeQuery(_range))
+            gateway: gateway,
+            initialQuery: _operational
+                ? operationalDateQuery(DateTime.now(), days: 1)
+                : _rangeQuery(_range))
           ..load();
       } catch (_) {}
     }
@@ -96,6 +104,15 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   }
 
   AdminReportQuery _rangeQuery(String range) {
+    if (_operational) {
+      final local = DateTime.now().toUtc().add(adminReportZone);
+      final days = range == 'Today'
+          ? 1
+          : range == 'This week'
+              ? local.weekday
+              : local.day;
+      return operationalDateQuery(DateTime.now(), days: days);
+    }
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     final start = range == 'Today'
@@ -117,7 +134,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     }
     final totalRev = snapshot?.totalRevenue;
     final revenue = totalRev != null
-        ? '${totalRev.currency} ${(totalRev.minorUnits / 100).toStringAsFixed(0)}'
+        ? '${totalRev.currency} ${(totalRev.minorUnits / 100).toStringAsFixed(2)}'
         : 'RM —';
     final members = snapshot?.activeMembersCount != null
         ? '${snapshot!.activeMembersCount}'
@@ -129,8 +146,16 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         ? '${(snapshot!.avgPostureAccuracy! * 100).round()}%'
         : '—';
     return [
-      ['Total revenue', revenue, '—'],
-      ['Active members', members, '—'],
+      [
+        _operational ? 'Confirmed Sandbox receipts' : 'Total revenue',
+        revenue,
+        '—'
+      ],
+      [
+        _operational ? 'Current active Members' : 'Active members',
+        members,
+        '—'
+      ],
       ['Bookings in range', bookings, '—'],
       ['Avg accuracy', posture, '—'],
     ];
@@ -250,6 +275,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                   ],
                 ),
                 const SizedBox(height: 22),
+                if (snapshot?.operations != null)
+                  OriginalReportContext(snapshot: snapshot!),
                 Wrap(
                   spacing: 14,
                   runSpacing: 14,
@@ -266,14 +293,16 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                           Expanded(
                               flex: 2, child: _leftColumn(context, snapshot)),
                           const SizedBox(width: 20),
-                          Expanded(flex: 1, child: _rightColumn(context)),
+                          Expanded(
+                              flex: 1,
+                              child: _rightColumn(context, snapshot: snapshot)),
                         ],
                       )
                     : Column(
                         children: [
                           _leftColumn(context, snapshot),
                           const SizedBox(height: 20),
-                          _rightColumn(context),
+                          _rightColumn(context, snapshot: snapshot),
                         ],
                       ),
               ],
@@ -290,27 +319,38 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     final totalRev = snapshot?.totalRevenue;
     final displayRevenue = widget.live
         ? (totalRev != null
-            ? '${totalRev.currency} ${(totalRev.minorUnits / 100).toStringAsFixed(0)}'
+            ? '${totalRev.currency} ${(totalRev.minorUnits / 100).toStringAsFixed(2)}'
             : 'RM —')
         : 'RM ${_revenueTrend.last}';
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Eyebrow('Sessions today, by hour'),
+        Eyebrow(_operational
+            ? 'Bookings created by day'
+            : 'Sessions today, by hour'),
         Panel(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Stack(alignment: Alignment.center, children: [
-                BarChart(hourlySessions, height: 150),
-                if (widget.live && hourlySessions.isEmpty) const Text('—')
+                if (_operational)
+                  OriginalBookingBars(days: snapshot?.operations?.daily ?? [])
+                else
+                  BarChart(hourlySessions, height: 150),
+                if (widget.live &&
+                    (_operational
+                        ? snapshot?.operations?.daily.isEmpty ?? true
+                        : hourlySessions.isEmpty))
+                  const Text('—')
               ]),
               const SizedBox(height: 10),
               Text(
                 widget.live
-                    ? (hourlySessions.isNotEmpty
-                        ? 'Tracked session volume for this reporting window.'
-                        : 'Hourly session metrics are unavailable in this environment.')
+                    ? (_operational && snapshot?.operations != null
+                        ? '${snapshot!.totalBookingsCount} bookings created · ${snapshot.operations!.scheduledStarts} confirmed/completed scheduled starts in range. Not gym occupancy.'
+                        : hourlySessions.isNotEmpty
+                            ? 'Tracked session volume for this reporting window.'
+                            : 'Hourly session metrics are unavailable in this environment.')
                     : 'Peak demand sits between 5pm and 8pm on weekdays.',
                 style: Theme.of(context).textTheme.bodyMedium,
               ),
@@ -318,7 +358,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           ),
         ),
         const SizedBox(height: 20),
-        const Eyebrow('Revenue trend'),
+        Eyebrow(_operational ? 'Confirmed Sandbox receipts' : 'Revenue trend'),
         Panel(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -349,11 +389,14 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                   ),
                 ],
               ),
-              Stack(alignment: Alignment.center, children: [
-                TrendChart(trend),
-                if (widget.live && trend.isEmpty) const Text('—')
-              ]),
-              if (widget.live) ...[
+              if (snapshot?.operations != null)
+                OriginalReceiptTrend(snapshot: snapshot!)
+              else
+                Stack(alignment: Alignment.center, children: [
+                  TrendChart(trend),
+                  if (widget.live && trend.isEmpty) const Text('—')
+                ]),
+              if (widget.live && !_operational) ...[
                 const SizedBox(height: 10),
                 Text(
                   trend.isNotEmpty
@@ -362,22 +405,31 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                   style: Theme.of(context).textTheme.bodyMedium,
                 ),
               ],
+              if (snapshot?.operations != null) ...[
+                const SizedBox(height: 16),
+                OriginalReceiptBreakdown(snapshot: snapshot!),
+              ],
             ],
           ),
         ),
         const SizedBox(height: 20),
+        if (_operational && _reportingCubit != null)
+          AdminWorkoutAnalytics(
+              query: _reportingCubit!.state.query, compact: true),
         const Eyebrow('Recent activity'),
         Panel(
           padding: EdgeInsets.zero,
           child: (widget.live &&
                   (snapshot?.recentActivity == null ||
                       snapshot!.recentActivity!.isEmpty))
-              ? const Padding(
+              ? Padding(
                   padding: EdgeInsets.symmetric(vertical: 36, horizontal: 20),
                   child: Center(
                     child: Text(
-                      'No recent activity recorded for this period.',
-                      style: TextStyle(color: AppColors.inkSoft),
+                      _operational
+                          ? 'Individual activity feed is unavailable. This report contains aggregates only.'
+                          : 'No recent activity recorded for this period.',
+                      style: const TextStyle(color: AppColors.inkSoft),
                     ),
                   ),
                 )
@@ -429,7 +481,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     );
   }
 
-  Widget _rightColumn(BuildContext context) {
+  Widget _rightColumn(BuildContext context,
+      {AdminReportingSnapshot? snapshot}) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -495,6 +548,20 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         ),
         const SizedBox(height: 20),
         const Eyebrow('Quick actions'),
+        if (snapshot?.operations != null) ...[
+          Panel(
+              child: Row(children: [
+            const Icon(Icons.people_alt_outlined, color: AppColors.primary),
+            const SizedBox(width: 12),
+            Expanded(
+                child: Text('Current active Coach accounts',
+                    style: Theme.of(context).textTheme.bodyMedium)),
+            const SizedBox(width: 8),
+            Text('${snapshot!.activeCoachesCount}',
+                style: Theme.of(context).textTheme.titleLarge),
+          ])),
+          const SizedBox(height: 12),
+        ],
         Panel(
           padding: EdgeInsets.zero,
           child: Column(

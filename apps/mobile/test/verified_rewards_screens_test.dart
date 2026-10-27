@@ -10,6 +10,9 @@ class RewardsFake extends VerifiedRewardsRepository {
   bool get connected => false;
   bool fail = false;
   final requests = <String>[];
+  VerifiedRewardRedemption? saved;
+  @override
+  Future<VerifiedRewardRedemption> voucher(String redemptionId) async => saved!;
   VerifiedRewardsSnapshot value = const VerifiedRewardsSnapshot(
       available: false,
       balance: null,
@@ -23,10 +26,13 @@ class RewardsFake extends VerifiedRewardsRepository {
   Future<void> award(String eventId) async {}
   @override
   Future<VerifiedRewardRedemption> redeem(
-      {required String itemId, required String requestId}) async {
+      {required String itemId,
+      required String requestId,
+      int? expectedPointCost,
+      int? expectedItemRevision}) async {
     requests.add(requestId);
     if (fail) throw StateError('Synthetic failure');
-    return const VerifiedRewardRedemption(
+    return saved = const VerifiedRewardRedemption(
         redemptionId: 'trusted-server-voucher',
         itemId: 'item',
         title: 'Synthetic reward',
@@ -68,7 +74,7 @@ void main() {
         MaterialApp(home: RewardShopScreen(connected: true, repository: repo)));
     await tester.pumpAndSettle();
     expect(find.text('25 verified points'), findsOneWidget);
-    expect(find.textContaining('Basic or Premium'), findsOneWidget);
+    expect(find.textContaining('Basic or Premium'), findsWidgets);
     expect(
         tester
             .widget<FilledButton>(find.widgetWithText(FilledButton, 'Redeem'))
@@ -91,16 +97,22 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(FilledButton, 'Redeem'));
     await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(find.text('Confirm redemption'), 300);
+    await tester.tap(find.text('Confirm redemption'));
+    await tester.pumpAndSettle();
     expect(find.textContaining('Redemption could not be confirmed'),
         findsOneWidget);
     expect(find.text('GP-4K7M-92XA'), findsNothing);
     repo.fail = false;
     await tester.tap(find.widgetWithText(FilledButton, 'Redeem'));
     await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(find.text('Confirm redemption'), 300);
+    await tester.tap(find.text('Confirm redemption'));
+    await tester.pumpAndSettle();
     expect(repo.requests.length, 2);
     expect(repo.requests[0], repo.requests[1]);
     expect(find.text('trusted-server-voucher'), findsOneWidget);
-    expect(find.text('Issued'), findsOneWidget);
+    expect(find.text('Available'), findsOneWidget);
     expect(find.byIcon(Icons.qr_code_2_rounded), findsNothing);
   });
 }

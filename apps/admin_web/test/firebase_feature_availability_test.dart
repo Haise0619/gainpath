@@ -142,7 +142,7 @@ void main() {
     expect(blueprints.loads, 0);
     await tester.tap(find.text('Content'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Exercise Tutorials').first);
+    await tester.tap(find.text('Exercise Catalog').first);
     await tester.pumpAndSettle();
     expect(find.text('Isolated catalog row'), findsOneWidget);
     expect(catalog.loads, 1);
@@ -192,7 +192,9 @@ void main() {
     expect(find.text(_session.email), findsWidgets);
     expect(find.text(_session.displayName!), findsWidgets);
     expect(find.text('GainPath, Kulim'), findsNothing);
-    expect(find.text('No recent activity recorded for this period.'),
+    expect(
+        find.text(
+            'Individual activity feed is unavailable. This report contains aggregates only.'),
         findsOneWidget);
     await tester.tap(find.text('Members').first);
     await tester.pumpAndSettle();
@@ -209,9 +211,9 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Reward Catalog').first);
     await tester.pumpAndSettle();
-    expect(find.text('No reward drafts yet. Add a draft to get started.'),
+    expect(find.text('No rewards yet. Select Add reward to get started.'),
         findsOneWidget);
-    expect(find.text('Add reward'), findsNothing);
+    expect(find.text('Add reward'), findsOneWidget);
     await tester.pumpWidget(const SizedBox());
   });
 }

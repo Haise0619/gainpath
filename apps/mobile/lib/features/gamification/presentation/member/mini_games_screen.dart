@@ -2,15 +2,32 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
 import 'package:gainpath_domain/gamification.dart';
+import 'package:gainpath_identity/gainpath_identity.dart';
 import 'live_mini_game_screen.dart';
 import 'widgets/game_media.dart';
+import '../../domain/move_catch_ports.dart';
+import 'mini_game_details_screen.dart';
 
 class MiniGamesScreen extends StatelessWidget {
-  const MiniGamesScreen({super.key, this.connected = false});
+  const MiniGamesScreen(
+      {super.key,
+      this.connected = false,
+      this.reader,
+      this.bestScoreStore,
+      this.rewardStatus});
   final bool connected;
+  final MiniGameContentReader? reader;
+  final MoveCatchBestScoreStore? bestScoreStore;
+  final Widget? rewardStatus;
 
   @override
   Widget build(BuildContext context) {
+    if (connected) {
+      return _MotionGames(
+          reader: reader,
+          bestScoreStore: bestScoreStore,
+          rewardStatus: rewardStatus);
+    }
     final games = connected
         ? List.generate(4,
             (_) => const MiniGame('-', '-', '', '-', 0, MiniGameIcon.bolt, 0))
@@ -47,6 +64,273 @@ class MiniGamesScreen extends StatelessWidget {
       ),
     );
   }
+}
+
+class _MotionGames extends StatefulWidget {
+  const _MotionGames({this.reader, this.bestScoreStore, this.rewardStatus});
+  final MiniGameContentReader? reader;
+  final MoveCatchBestScoreStore? bestScoreStore;
+  final Widget? rewardStatus;
+  @override
+  State<_MotionGames> createState() => _MotionGamesState();
+}
+
+class _MotionGamesState extends State<_MotionGames> {
+  MiniGameContent? _content;
+  bool _loading = false, _unavailable = false;
+  int _generation = 0, _bestRevision = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  @override
+  void didUpdateWidget(covariant _MotionGames oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!identical(oldWidget.reader, widget.reader)) _load();
+  }
+
+  Future<void> _load() async {
+    final reader = widget.reader, generation = ++_generation;
+    _content = null;
+    _unavailable = false;
+    _loading = reader != null && reader.current;
+    if (reader == null || !reader.current) return;
+    try {
+      final rows = await reader.load();
+      if (!mounted || generation != _generation) return;
+      MiniGameContent? content;
+      if (reader.current) {
+        for (final row in rows) {
+          if (row.gameId == MiniGameContent.supportedId &&
+              row.organizationId == reader.scope.organizationId) {
+            content = row;
+            break;
+          }
+        }
+      }
+      setState(() {
+        _content = content;
+        _unavailable = content == null;
+        _loading = false;
+      });
+    } catch (_) {
+      if (!mounted || generation != _generation) return;
+      setState(() {
+        _unavailable = true;
+        _loading = false;
+      });
+    }
+  }
+
+  void _refresh() {
+    setState(() => _bestRevision++);
+    _load();
+  }
+
+  Future<void> _details(MiniGameContent content) async {
+    if (widget.reader != null && !widget.reader!.current) {
+      setState(() {});
+      return;
+    }
+    await Navigator.of(context).push(MaterialPageRoute<void>(
+        builder: (_) => MiniGameDetailsScreen(
+            content: content,
+            reader: widget.reader,
+            bestScoreStore: widget.bestScoreStore,
+            rewardStatus: widget.rewardStatus)));
+    if (mounted && (widget.reader?.current ?? true)) {
+      setState(() => _bestRevision++);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => StreamBuilder<AuthState>(
+      stream: context.read<AuthBloc?>()?.stream,
+      builder: (context, _) => _buildCatalog(context));
+
+  Widget _buildCatalog(BuildContext context) {
+    final reader = widget.reader;
+    if (reader != null && !reader.current) {
+      return Scaffold(
+          appBar: AppBar(title: const Text('Mini-games')),
+          body:
+              const Center(child: Text('This game guide session has ended.')));
+    }
+    final content = _content ??
+        MiniGameContent.defaults(reader?.scope.organizationId ?? 'built-in');
+    return Scaffold(
+        backgroundColor: AppColors.bg,
+        appBar: AppBar(title: const Text('Mini-games'), actions: [
+          if (reader != null)
+            IconButton(
+                tooltip: 'Refresh game guide',
+                onPressed: _loading ? null : _refresh,
+                icon: const Icon(Icons.refresh)),
+        ]),
+        body: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(16, 4, 16, 32),
+            child:
+                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text('Camera-tracked challenges that score your movement.',
+                  style: Theme.of(context).textTheme.bodyLarge),
+              const SizedBox(height: 16),
+              if (_loading) ...[
+                const LinearProgressIndicator(),
+                const SizedBox(height: 8),
+                const Text('Loading latest game guide…'),
+              ] else if (_unavailable) ...[
+                const Text('Built-in game guide · latest content unavailable'),
+                TextButton(onPressed: _refresh, child: const Text('Retry')),
+              ] else if (content.revision == 0)
+                const Text('Built-in game guide'),
+              const SizedBox(height: 16),
+              Text('Featured challenge',
+                  style: Theme.of(context).textTheme.titleLarge),
+              const SizedBox(height: 10),
+              _MotionFeaturedCard(
+                  content: content, onTap: () => _details(content)),
+              const SizedBox(height: 16),
+              MiniGamePersonalBest(
+                  reader: reader,
+                  store: widget.bestScoreStore,
+                  revision: _bestRevision),
+              const SizedBox(height: 24),
+              Text('All challenges',
+                  style: Theme.of(context).textTheme.titleLarge),
+              const SizedBox(height: 12),
+              LayoutBuilder(
+                  builder: (context, constraints) =>
+                      Wrap(spacing: 12, runSpacing: 12, children: [
+                        SizedBox(
+                            width: (constraints.maxWidth - 12) / 2,
+                            child: _MotionChallengeCard(
+                                content: content,
+                                onTap: () => _details(content)))
+                      ])),
+            ])));
+  }
+}
+
+class _MotionFeaturedCard extends StatelessWidget {
+  const _MotionFeaturedCard({required this.content, required this.onTap});
+  final MiniGameContent content;
+  final VoidCallback onTap;
+  @override
+  Widget build(BuildContext context) => Material(
+      borderRadius: BorderRadius.circular(24),
+      clipBehavior: Clip.antiAlias,
+      color: AppColors.primary,
+      child: InkWell(
+          onTap: onTap,
+          child: Stack(children: [
+            Positioned.fill(child: MiniGameCover(content: content)),
+            Positioned.fill(
+                child: DecoratedBox(
+                    decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            colors: [
+                  Colors.black.withValues(alpha: .08),
+                  const Color(0xFF251344).withValues(alpha: .96)
+                ])))),
+            Container(
+                constraints: const BoxConstraints(minHeight: 310),
+                padding: const EdgeInsets.all(22),
+                child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Wrap(spacing: 8, runSpacing: 8, children: [
+                        _GameLabel('Camera'),
+                        _GameLabel('All levels')
+                      ]),
+                      const SizedBox(height: 88),
+                      Text(content.title,
+                          style: Theme.of(context)
+                              .textTheme
+                              .headlineMedium
+                              ?.copyWith(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w800)),
+                      const SizedBox(height: 8),
+                      Text(content.introduction,
+                          style: const TextStyle(
+                              color: Colors.white, fontSize: 16)),
+                      const SizedBox(height: 16),
+                      Align(
+                          alignment: Alignment.centerRight,
+                          child: IconButton.filled(
+                              tooltip: 'View Move & Catch details',
+                              onPressed: onTap,
+                              style: IconButton.styleFrom(
+                                  backgroundColor: Colors.white,
+                                  foregroundColor: AppColors.primary,
+                                  minimumSize: const Size(56, 56)),
+                              icon: const Icon(Icons.play_arrow_rounded,
+                                  size: 32))),
+                    ])),
+          ])));
+}
+
+class _GameLabel extends StatelessWidget {
+  const _GameLabel(this.label);
+  final String label;
+  @override
+  Widget build(BuildContext context) => Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: .2),
+          borderRadius: BorderRadius.circular(10)),
+      child: Text(label,
+          style: const TextStyle(
+              color: Colors.white, fontWeight: FontWeight.w700, fontSize: 12)));
+}
+
+class _MotionChallengeCard extends StatelessWidget {
+  const _MotionChallengeCard({required this.content, required this.onTap});
+  final MiniGameContent content;
+  final VoidCallback onTap;
+  @override
+  Widget build(BuildContext context) => Material(
+      color: Colors.white,
+      shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(18),
+          side: const BorderSide(color: AppColors.hairline)),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+          key: const Key('move-catch-challenge-card'),
+          onTap: onTap,
+          child:
+              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            AspectRatio(
+                aspectRatio: 1.2,
+                child: Stack(fit: StackFit.expand, children: [
+                  MiniGameCover(content: content),
+                  const Center(
+                      child: Icon(Icons.play_circle_fill_rounded,
+                          size: 42, color: Colors.white)),
+                ])),
+            Padding(
+                padding: const EdgeInsets.all(12),
+                child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(content.title,
+                          style: Theme.of(context)
+                              .textTheme
+                              .titleMedium
+                              ?.copyWith(fontWeight: FontWeight.w800)),
+                      const SizedBox(height: 6),
+                      const Text('40 seconds · Camera',
+                          style: TextStyle(color: AppColors.inkSoft)),
+                      const SizedBox(height: 4),
+                      const Text('All levels',
+                          style: TextStyle(color: AppColors.primary)),
+                    ])),
+          ])));
 }
 
 Color _difficultyColor(String difficulty) {

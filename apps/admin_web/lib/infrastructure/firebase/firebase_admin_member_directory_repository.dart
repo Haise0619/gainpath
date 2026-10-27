@@ -21,6 +21,10 @@ class FirebaseAdminMemberDirectoryRepository
           membershipCall})
       : _db = firestore ?? FirebaseFirestore.instance,
         _auth = auth ?? FirebaseAuth.instance,
+        _rewardCall = membershipCall ??
+            ((name, input) async => (await firebaseRewardCallable(name)
+                    .call<Map<String, dynamic>>(input))
+                .data),
         _membershipCall = membershipCall ??
             ((name, input) async =>
                 (await firebaseCallable(name).call<Map<String, dynamic>>(input))
@@ -31,6 +35,8 @@ class FirebaseAdminMemberDirectoryRepository
   final FirebaseAuth _auth;
   final Future<Map<String, dynamic>> Function(String, Map<String, dynamic>)
       _membershipCall;
+  final Future<Map<String, dynamic>> Function(String, Map<String, dynamic>)
+      _rewardCall;
   @override
   bool get current {
     try {
@@ -48,12 +54,11 @@ class FirebaseAdminMemberDirectoryRepository
   Future<AdminRewardVoucher> fulfil(String redemptionId) =>
       _rewardVoucher('fulfil', redemptionId);
   Future<AdminRewardVoucher> _rewardVoucher(
-      String action, String redemptionId) async {
+      String action, String rawReference) async {
     _check();
-    if (!RegExp(r'^[A-Za-z0-9_-]{1,128}$').hasMatch(redemptionId)) {
-      throw const FormatException('Invalid reward reference.');
-    }
-    final response = await _membershipCall('verifiedRewardsCommand', {
+    final redemptionId = RewardVoucherCode.reference(rawReference,
+        organizationId: scope.organizationId);
+    final response = await _rewardCall('verifiedRewardsCommand', {
       'schemaVersion': 1,
       'organizationId': scope.organizationId,
       'action': action,

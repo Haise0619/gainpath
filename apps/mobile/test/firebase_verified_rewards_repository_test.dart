@@ -36,6 +36,120 @@ void main() {
       supported: true,
       activate: (_) async {},
       token: () async => 'synthetic-token');
+  Map<String, dynamic> voucher([String id = 'r']) => {
+        'schemaVersion': 1,
+        'organizationId': 'gainpath',
+        'memberId': 'member',
+        'redemptionId': id,
+        'itemId': 'item',
+        'title': 'Towel',
+        'points': 50,
+        'status': 'issued',
+        'issuedAtMillis': 1800000000000,
+        'policyVersion': 'test',
+        'exchangeRateVersion': 'test'
+      };
+  test(
+      'voucher uses dedicated read and validates requested reference and owner',
+      () async {
+    for (final patch in [
+      <String, dynamic>{},
+      {'redemptionId': 'foreign'},
+      {'memberId': 'foreign'}
+    ]) {
+      final repo = FirebaseVerifiedRewardsRepository(
+          scope: scope,
+          isCurrent: () => true,
+          currentUid: () => 'member',
+          readiness: ready(),
+          call: (_, input) async {
+            expect(input['action'], 'voucher');
+            expect(input['redemptionId'], 'r');
+            return {
+              'schemaVersion': 1,
+              'redemption': {...voucher(), ...patch},
+              'resolvedAtMillis': 1800000000001
+            };
+          });
+      if (patch.isEmpty) {
+        expect((await repo.voucher('r')).redemptionId, 'r');
+      } else {
+        await expectLater(repo.voucher('r'), throwsA(isA<BookingException>()));
+      }
+    }
+  });
+  test('history validates owner, sorted unique page and bounded cursor',
+      () async {
+    final page = <String, dynamic>{
+      'schemaVersion': 1,
+      'organizationId': 'gainpath',
+      'memberId': 'member',
+      'redemptions': [voucher('b'), voucher('c')],
+      'nextCursor': 'c',
+      'resolvedAtMillis': 1800000000001
+    };
+    for (final patch in [
+      <String, dynamic>{},
+      {'memberId': 'foreign'},
+      {'nextCursor': 'other'},
+      {
+        'redemptions': [voucher('b'), voucher('b')]
+      },
+      {
+        'redemptions': [voucher('c'), voucher('b')]
+      },
+      {'resolvedAtMillis': 0}
+    ]) {
+      final repo = FirebaseVerifiedRewardsRepository(
+          scope: scope,
+          isCurrent: () => true,
+          currentUid: () => 'member',
+          readiness: ready(),
+          call: (_, input) async {
+            expect(input['action'], 'history');
+            expect(input['afterId'], 'a');
+            return {...page, ...patch};
+          });
+      if (patch.isEmpty) {
+        final result = await repo.history(afterId: 'a');
+        expect(result.nextCursor, 'c');
+        expect(result.redemptions.length, 2);
+      } else {
+        await expectLater(
+            repo.history(afterId: 'a'), throwsA(isA<BookingException>()));
+      }
+    }
+  });
+  test('voucher and history discard late responses after account change',
+      () async {
+    for (final history in [true, false]) {
+      var current = true;
+      final entered = Completer<void>(),
+          response = Completer<Map<String, dynamic>>();
+      final repo = FirebaseVerifiedRewardsRepository(
+          scope: scope,
+          isCurrent: () => current,
+          currentUid: () => 'member',
+          readiness: ready(),
+          call: (_, __) {
+            entered.complete();
+            return response.future;
+          });
+      final pending = history ? repo.history() : repo.voucher('r');
+      await entered.future;
+      current = false;
+      response.complete({
+        'schemaVersion': 1,
+        'organizationId': 'gainpath',
+        'memberId': 'member',
+        'redemption': voucher(),
+        'redemptions': [voucher()],
+        'nextCursor': null,
+        'resolvedAtMillis': 1800000000001
+      });
+      await expectLater(pending, throwsA(isA<BookingException>()));
+    }
+  });
   test(
       'unconfigured overview retains unknown balance and no synthetic catalogue',
       () async {
@@ -134,6 +248,40 @@ void main() {
       'action': 'redeem',
       'itemId': 'item',
       'requestId': 'retry'
+    });
+  });
+  test(
+      'new reward redemption sends the exact cost and revision accepted by the Member',
+      () async {
+    Map<String, dynamic>? sent;
+    final repo = FirebaseVerifiedRewardsRepository(
+        intents: intents(),
+        scope: scope,
+        isCurrent: () => true,
+        currentUid: () => 'member',
+        readiness: ready(),
+        call: (_, input) async {
+          sent = input;
+          return {
+            'schemaVersion': 1,
+            'redemption': {...voucher(), 'requestId': 'accepted-price'}
+          };
+        });
+    await repo.redeem(
+        itemId: 'item',
+        requestId: 'accepted-price',
+        expectedPointCost: 50,
+        expectedItemRevision: 1);
+    expect(sent!['expectedPointCost'], 50);
+    expect(sent!['expectedItemRevision'], 1);
+    expect(sent!.keys.toSet(), {
+      'schemaVersion',
+      'organizationId',
+      'action',
+      'itemId',
+      'requestId',
+      'expectedPointCost',
+      'expectedItemRevision'
     });
   });
   test('new repository retries uncertain redemption with the persisted request',

@@ -13,6 +13,8 @@ class EquipmentVideo {
     }
   }
   final Uint8List bytes;
+  /// An independent native buffer for platform upload APIs.
+  Uint8List copyBytes() => Uint8List.fromList(bytes);
   final String name;
 }
 

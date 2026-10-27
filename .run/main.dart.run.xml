@@ -1,6 +1,7 @@
 <component name="ProjectRunConfigurationManager">
   <configuration default="false" name="main.dart" type="FlutterRunConfigurationType" factoryName="Flutter">
     <option name="filePath" value="$PROJECT_DIR$/apps/mobile/lib/main.dart" />
+    <option name="additionalArgs" value="--dart-define=WORKOUT_CLOUD_BACKUP_ENABLED=true --dart-define=APP_CHECK_IN_ENABLED=true" />
     <method v="2" />
   </configuration>
 </component>

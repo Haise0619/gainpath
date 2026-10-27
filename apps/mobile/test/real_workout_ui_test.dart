@@ -15,6 +15,7 @@ import 'package:gainpath_mobile/features/workout/data/workout_session_repository
 import 'package:gainpath_mobile/features/workout/presentation/member/real_workout_view.dart';
 import 'real_squat_session_test.dart' as support;
 import 'squat_processing_controller_test.dart' as poses;
+import 'routine_journey_controller_test.dart' show MemoryJourneyStore;
 import 'package:gainpath_mobile/features/workout/presentation/member/workout_prep_screen.dart';
 import 'package:gainpath_mobile/features/workout/data/published_routine.dart';
 import 'package:gainpath_mobile/navigation/workout_navigation.dart';
@@ -283,7 +284,7 @@ void main() {
             viewport: const ColoredBox(color: Colors.black),
             exerciseName: 'Squat',
             targetRepetitions: 8)));
-    await tester.tap(find.text('End session'));
+    await tester.tap(find.byTooltip('End session'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Save result'));
     await tester.pumpAndSettle();
@@ -341,6 +342,7 @@ void main() {
             home: SavedSquatSessionsRoute(
                 scope: scope,
                 storeFactory: (_) async => store,
+                routineStoreFactory: (_) async => MemoryJourneyStore(scope),
                 syncStoreFactory: (_) async =>
                     MemoryRealWorkoutSyncStore(scope: scope)))));
     await tester.pumpAndSettle();

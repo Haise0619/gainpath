@@ -2,6 +2,10 @@
 
 23 October 2026. This is the Task 2 source contract from the remaining three-tier roadmap. No configuration, event producer, stock, exchange rate, account, deployed Function or Rules has been published. No prototype points are migrated. The synthetic values in tests are test fixtures only.
 
+## 26 October local journey extension
+
+The owner selected and separately approved deployment/activation of Basic/Premium redemption, persistent My Rewards with snapshotted details/conditions/expiry and QR/manual reference, Admin scan-to-inspect then explicit collection confirmation, and no refund/restock for unused expiry. New publication and history/voucher paths, exact price/publication revision consent, QR rendering/scanning and current-session guards are active after exact two-Function/private Admin/Xiaomi approval. Existing 50-point app check-in balances are reused; no earning producer/rate/stock is invented. This supersedes the earlier latest-50 UI limitation with owner-scoped 25-document history pages. New rich vouchers have per-item 1–365-day validity; legacy vouchers keep unknown expiry. See STATUS and build/module3-reward-journey-20261026/release-review.json for exact artifacts, checks, deployed source/installed/served hashes and remaining UAT boundaries. No live central rate/stock was populated. Historical Premium earning and Coach vouchers remain held.
+
 ## Integration and callable
 
 Export `verifiedRewardsCommand` from `functions/src/modules/gamification/verified-rewards-callables.ts` through the root Functions entry point. It is one App Check-enforced callable and also explicitly checks `request.app`, verified Auth, current Auth user status, current organization membership, lifecycle and session revocation. Set `VERIFIED_REWARDS_ORGANIZATION_ID` explicitly at any future authorized deployment; its empty default disables access. No deployment is included here.

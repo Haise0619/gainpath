@@ -21,7 +21,7 @@ class WorkoutAudioController {
 
   /// Audio request validity while waiting to start; unrelated to pose freshness.
   final Duration pendingStartTimeout;
-  bool _voiceEnabled = false;
+  WorkoutVoiceMode _voiceMode = WorkoutVoiceMode.muted;
   bool _paused = false;
   bool _foreground = true;
   bool _trackingAvailable = true;
@@ -36,19 +36,25 @@ class WorkoutAudioController {
   Future<void>? _closeFuture;
 
   CueRequest? get activeCue => _activeCue;
-  bool get voiceEnabled => _voiceEnabled;
+  bool get voiceEnabled => _voiceMode != WorkoutVoiceMode.muted;
+  WorkoutVoiceMode get voiceMode => _voiceMode;
   bool get isClosed => _closed;
   AudioPlaybackOutcome? lastOutcome;
   Object? lastError;
-  bool get _canPlay => !_closed && _voiceEnabled && !_paused && _foreground;
+  bool get _canPlay => !_closed && voiceEnabled && !_paused && _foreground;
 
   void applyPreferences(MemberPreferences preferences) =>
       setVoiceEnabled(preferences.voiceCoaching);
 
-  void setVoiceEnabled(bool enabled) {
-    if (_closed || _voiceEnabled == enabled) return;
-    _voiceEnabled = enabled;
-    if (!enabled) {
+  void setVoiceEnabled(bool enabled) => setVoiceMode(
+      enabled ? WorkoutVoiceMode.fullCoaching : WorkoutVoiceMode.muted);
+
+  void setVoiceMode(WorkoutVoiceMode mode) {
+    if (_closed || _voiceMode == mode) return;
+    _voiceMode = mode;
+    if (!voiceEnabled ||
+        (mode == WorkoutVoiceMode.alertsOnly &&
+            _activeCue?.priority == CuePriority.encouragement)) {
       _cancel();
     } else if (_canPlay && _port is PreparedWorkoutAudioPort) {
       unawaited(_warm());
@@ -111,6 +117,10 @@ class WorkoutAudioController {
     if (!_canPlay) return;
     for (final cue in batch) {
       if (cue.id.isEmpty || cue.text.trim().isEmpty) continue;
+      if (_voiceMode == WorkoutVoiceMode.alertsOnly &&
+          cue.priority == CuePriority.encouragement) {
+        continue;
+      }
       if (!trackingAvailable && cue.priority != CuePriority.warning) continue;
       final active = _activeCue;
       if (active != null &&

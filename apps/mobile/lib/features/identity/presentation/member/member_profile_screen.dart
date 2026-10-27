@@ -165,6 +165,16 @@ class _MemberProfileScreenState extends State<MemberProfileScreen>
             : cached
                 ? 'Last verified · ${tier!.label}'
                 : '${tier!.label} member';
+    final badgeBackground = switch (resolved && !cached ? tier : null) {
+      MembershipTier.basic => AppColors.infoTint,
+      MembershipTier.premium => AppColors.accentTint,
+      _ => AppColors.membershipFreeTint,
+    };
+    final badgeForeground = switch (resolved && !cached ? tier : null) {
+      MembershipTier.basic => AppColors.info,
+      MembershipTier.premium => AppColors.accentDark,
+      _ => AppColors.membershipFreeInk,
+    };
     final expiry = entitlement?.paidExpiresAtMillis;
     final expiryLabel = expiry == null
         ? null
@@ -205,7 +215,7 @@ class _MemberProfileScreenState extends State<MemberProfileScreen>
                       children: [
                         MemberProfilePhoto(
                             key: ValueKey(liveSession), session: liveSession),
-                        const SizedBox(width: 20),
+                        const SizedBox(width: 16),
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -213,12 +223,23 @@ class _MemberProfileScreenState extends State<MemberProfileScreen>
                               Text(name,
                                   style:
                                       Theme.of(context).textTheme.titleLarge),
+                              const SizedBox(height: 4),
+                              Tooltip(
+                                message: email,
+                                child: Text(email,
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .bodyMedium
+                                        ?.copyWith(fontSize: 13)),
+                              ),
                               const SizedBox(height: 8),
                               Container(
                                 padding: const EdgeInsets.symmetric(
-                                    horizontal: 10, vertical: 6),
+                                    horizontal: 10, vertical: 4),
                                 decoration: BoxDecoration(
-                                  color: AppColors.primaryTint,
+                                  color: badgeBackground,
                                   borderRadius: BorderRadius.circular(8),
                                 ),
                                 child: Text(badge,
@@ -227,7 +248,7 @@ class _MemberProfileScreenState extends State<MemberProfileScreen>
                                         .labelLarge
                                         ?.copyWith(
                                             fontWeight: FontWeight.w700,
-                                            color: AppColors.primaryDark)),
+                                            color: badgeForeground)),
                               ),
                             ],
                           ),
@@ -235,19 +256,11 @@ class _MemberProfileScreenState extends State<MemberProfileScreen>
                       ],
                     ),
                     const SizedBox(height: 16),
-                    Tooltip(
-                      message: email,
-                      child: Text(email,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: Theme.of(context).textTheme.bodyMedium),
-                    ),
-                    const SizedBox(height: 16),
                     const Divider(height: 1, color: AppColors.hairline),
                     const SizedBox(height: 14),
                     Wrap(
-                      spacing: 10,
-                      runSpacing: 10,
+                      spacing: 8,
+                      runSpacing: 8,
                       children: [
                         _QuickStat(Icons.wc_rounded, gender),
                         _QuickStat(Icons.cake_outlined, ageLabel),
@@ -447,7 +460,7 @@ class _QuickStat extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
       decoration: BoxDecoration(
         color: AppColors.surfaceAlt,
         borderRadius: BorderRadius.circular(10),
@@ -455,10 +468,14 @@ class _QuickStat extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 15, color: AppColors.inkSoft),
-          const SizedBox(width: 6),
+          Icon(icon, size: 13, color: AppColors.inkSoft),
+          const SizedBox(width: 4),
           Flexible(
-            child: Text(label, style: Theme.of(context).textTheme.labelLarge),
+            child: Text(label,
+                style: Theme.of(context)
+                    .textTheme
+                    .labelLarge
+                    ?.copyWith(fontSize: 12, fontWeight: FontWeight.w500)),
           ),
         ],
       ),

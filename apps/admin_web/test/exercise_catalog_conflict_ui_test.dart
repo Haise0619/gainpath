@@ -76,6 +76,7 @@ void main() {
                 find.widgetWithText(FilledButton, 'Save changes'))
             .onPressed,
         isNull);
+    await tester.ensureVisible(find.text('Discard edits and reload catalog'));
     await tester.tap(find.text('Discard edits and reload catalog'));
     await tester.pumpAndSettle();
     expect(catalog.loads, 2);

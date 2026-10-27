@@ -26,7 +26,9 @@ class _Detector implements ManagedPoseDetector {
           landmarks: {
             PoseLandmark.leftWrist: PosePoint(
                 x: .5,
-                y: input.timestampMicros == 1 ? .85 : .1,
+                y: input.timestampMicros == 1 || input.timestampMicros == 200001
+                    ? .85
+                    : .1,
                 z: -.1,
                 visibility: .9,
                 presence: .95)
@@ -41,7 +43,8 @@ void main() {
   const experiment = !kReleaseMode &&
       bool.fromEnvironment('GAINPATH_POSE_QUALITY_DEBUG') &&
       bool.fromEnvironment('GAINPATH_POSE_BETA12_EXPERIMENT');
-  testWidgets('preview arm-step response selects isolated diagnostic beta only',
+  testWidgets(
+      'normal preview draws current landmarks, smooth mode remains available',
       (tester) async {
     final camera = _Camera();
     var time = 1;
@@ -51,7 +54,8 @@ void main() {
         activeScope: () => scope,
         camera: camera,
         detectorFactory: () async => _Detector(),
-        clockMicros: () => time);
+        clockMicros: () => time,
+        responsivePreview: true);
     await c.start(consented: true);
     camera.receive!(PoseInput(timestampMicros: time));
     await tester.pump();
@@ -60,10 +64,16 @@ void main() {
     camera.receive!(PoseInput(timestampMicros: time));
     await tester.pump();
     final point = c.frame!.landmarks[PoseLandmark.leftWrist]!;
-    // A single step, not a physical-latency assertion. Candidate must move
-    // farther toward the target while continuing to smooth; default is control.
-    expect(point.y,
-        experiment ? inExclusiveRange(.1, .33) : inExclusiveRange(.4, .5));
+    // A single step, not physical latency: normal drawing uses the current
+    // point, while legacy diagnostics retain their original filtered control.
+    const qualityDebug = bool.fromEnvironment('GAINPATH_POSE_QUALITY_DEBUG');
+    expect(
+        point.y,
+        qualityDebug
+            ? (experiment
+                ? inExclusiveRange(.1, .33)
+                : inExclusiveRange(.4, .5))
+            : .1);
     expect(point.x, .5);
     expect(point.z, closeTo(-.1, 1e-12));
     expect(point.visibility, .9);
@@ -71,6 +81,19 @@ void main() {
     expect(c.frame!.capturedAtMicros, time);
     expect(c.frame!.imageWidth, 480);
     expect(c.frame!.imageHeight, 720);
+    if (!qualityDebug) {
+      c.setResponsivePreview(false);
+      expect(c.frame, isNull);
+      time = 200001;
+      camera.receive!(PoseInput(timestampMicros: time));
+      await tester.pump();
+      expect(c.diagnostics['previewSource'], 'filtered');
+      time = 300001;
+      camera.receive!(PoseInput(timestampMicros: time));
+      await tester.pump();
+      expect(c.frame!.landmarks[PoseLandmark.leftWrist]!.y,
+          inExclusiveRange(.1, .85));
+    }
     await c.close();
   });
   test('bounded provenance identifies actual preview filter settings', () {

@@ -25,14 +25,55 @@ service cloud.firestore {
         && get(/databases/$(database)/documents/orgs/$(orgId)/members/$(request.auth.uid)).data.role in ['admin', 'staff'];
     }
 
+    function validExerciseImage(value) {
+      return value.size() <= 2048
+        && (value == '' || value.matches('https://[a-zA-Z0-9.-]+(:[0-9]{1,5})?([/?][^\\s#\\\\]*)?'));
+    }
+
+    function validExerciseTutorialStep(s) {
+      let image = s.get('imageUrl', '');
+      // Wrong scalar/container types fail closed on the string/map operations.
+      return s.keys().hasOnly(['title', 'description', 'imageUrl'])
+        // Client/publisher trim first. Bound length and require visible text in
+        // one match per field, keeping 12 steps below the Rules expression cap.
+        && s.title.matches('\\S[\\s\\S]{0,79}')
+        && s.description.matches('\\S[\\s\\S]{0,999}[\\s\\S]{0,200}')
+        && image.size() <= 2048
+        && (image == '' || image.matches('https://[a-zA-Z0-9.-]+(:[0-9]{1,5})?([/?][^\\s#\\\\]*)?'));
+    }
+
+    function validExerciseTutorialSteps(steps) {
+      let n = steps.size();
+      return steps is list && n <= 12
+        && (n < 1 || validExerciseTutorialStep(steps[0]))
+        && (n < 2 || validExerciseTutorialStep(steps[1]))
+        && (n < 3 || validExerciseTutorialStep(steps[2]))
+        && (n < 4 || validExerciseTutorialStep(steps[3]))
+        && (n < 5 || validExerciseTutorialStep(steps[4]))
+        && (n < 6 || validExerciseTutorialStep(steps[5]))
+        && (n < 7 || validExerciseTutorialStep(steps[6]))
+        && (n < 8 || validExerciseTutorialStep(steps[7]))
+        && (n < 9 || validExerciseTutorialStep(steps[8]))
+        && (n < 10 || validExerciseTutorialStep(steps[9]))
+        && (n < 11 || validExerciseTutorialStep(steps[10]))
+        && (n < 12 || validExerciseTutorialStep(steps[11]));
+    }
+
     function validExerciseCatalogEntry() {
       let d = request.resource.data;
       return d.keys().hasAll(['schemaVersion', 'exerciseName', 'muscleCategory', 'videoUrl', 'isActive', 'createdAt', 'updatedAt'])
-        && d.keys().hasOnly(['schemaVersion', 'exerciseName', 'muscleCategory', 'videoUrl', 'isActive', 'createdAt', 'updatedAt'])
+        && d.keys().hasOnly(['schemaVersion', 'exerciseName', 'muscleCategory', 'videoUrl', 'isActive', 'createdAt', 'updatedAt', 'description', 'coverImageUrl', 'difficulty', 'equipment', 'tutorialSteps', 'archived'])
         && d.schemaVersion == 1
         && d.exerciseName is string && d.exerciseName.size() > 0 && d.exerciseName.size() <= 100
         && d.muscleCategory is string && d.muscleCategory.size() > 0 && d.muscleCategory.size() <= 80
         && d.videoUrl is string && d.videoUrl.size() <= 2048
+        && d.get('description', '') is string && d.get('description', '').size() <= 2000
+        && d.get('equipment', '') is string && d.get('equipment', '').size() <= 300
+        && d.get('difficulty', 'Beginner') in ['Beginner', 'Intermediate', 'Advanced']
+        && validExerciseImage(d.get('coverImageUrl', ''))
+        && validExerciseTutorialSteps(d.get('tutorialSteps', []))
+        && d.get('archived', false) is bool
+        && (!d.get('archived', false) || d.isActive == false)
         && d.isActive is bool
         && d.createdAt is timestamp
         && d.updatedAt == request.time;
@@ -41,9 +82,10 @@ service cloud.firestore {
     function validRoutineBlueprint() {
       let d = request.resource.data;
       return d.keys().hasAll(['schemaVersion', 'name', 'sessionDurationMin', 'days', 'createdAt', 'updatedAt', 'updatedBy'])
-        && d.keys().hasOnly(['schemaVersion', 'name', 'sessionDurationMin', 'days', 'level', 'goal', 'tags', 'equipmentNeeded', 'imageUrl', 'createdAt', 'updatedAt', 'updatedBy'])
+        && d.keys().hasOnly(['schemaVersion', 'name', 'sessionDurationMin', 'days', 'level', 'goal', 'tags', 'equipmentNeeded', 'imageUrl', 'createdAt', 'updatedAt', 'updatedBy', 'archived'])
         && d.schemaVersion == 1
         && d.name is string && d.name.size() > 0 && d.name.size() <= 120
+        && d.get('archived', false) is bool
         && d.sessionDurationMin is int && d.sessionDurationMin >= 5 && d.sessionDurationMin <= 240
         && d.days is list && d.days.size() > 0 && d.days.size() <= 14
         && d.updatedBy == request.auth.uid

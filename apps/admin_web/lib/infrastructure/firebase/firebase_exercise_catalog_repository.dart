@@ -3,17 +3,24 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:gainpath_domain/workout.dart';
 import 'package:gainpath_domain/gainpath_domain.dart' show SessionScope;
 import 'exercise_catalog_store.dart';
+import 'firebase_exercise_media_store.dart';
 
-class FirebaseExerciseCatalogRepository implements TutorialRepository {
+class FirebaseExerciseCatalogRepository
+    implements
+        TutorialRepository,
+        TutorialMediaRepository,
+        TutorialArchivingRepository {
   FirebaseExerciseCatalogRepository({
     required this.scope,
     FirebaseFirestore? firestore,
     FirebaseAuth? auth,
     ExerciseCatalogStore? store,
+    TutorialMediaStore? mediaStore,
     bool Function()? isSessionCurrent,
   })  : _firestore = firestore,
         _auth = auth,
         _injectedStore = store,
+        _injectedMediaStore = mediaStore,
         _sessionGuard = isSessionCurrent {
     if (store != null && isSessionCurrent == null) {
       throw ArgumentError(
@@ -30,6 +37,18 @@ class FirebaseExerciseCatalogRepository implements TutorialRepository {
   final FirebaseFirestore? _firestore;
   final FirebaseAuth? _auth;
   final ExerciseCatalogStore? _injectedStore;
+  final TutorialMediaStore? _injectedMediaStore;
+  late final TutorialMediaStore _mediaStore = _injectedMediaStore ??
+      FirebaseExerciseMediaStore(
+          scope: scope,
+          isCurrent: () {
+            try {
+              _requireCurrentUser();
+              return true;
+            } catch (_) {
+              return false;
+            }
+          });
   final bool Function()? _sessionGuard;
   final Object _lifetime = Object();
   bool _invalidated = false;
@@ -50,6 +69,94 @@ class FirebaseExerciseCatalogRepository implements TutorialRepository {
 
   @override
   bool get requiresCatalogSelection => true;
+
+  @override
+  Future<TutorialVideo> saveWithMedia(TutorialVideo tutorial,
+      {EquipmentImage? cover,
+      EquipmentVideo? video,
+      void Function(double)? onVideoProgress}) async {
+    if (cover == null && video == null) return save(tutorial);
+    _requireCurrentUser();
+    encodeCatalogFields(tutorial); // Validate text before sending any bytes.
+    final baseline = tutorial.editBaseline;
+    if (tutorial.id.isNotEmpty &&
+        (baseline is! _CatalogBaseline ||
+            !identical(baseline.lifetime, _lifetime) ||
+            baseline.id != tutorial.id)) {
+      throw const TutorialEditConflict();
+    }
+    Map<String, dynamic>? assignment, membership;
+    Future<void> checkAuthority() async {
+      _requireCurrentUser();
+      final currentAssignment = await _store.readAssignment();
+      _requireAssignment(currentAssignment);
+      final currentMembership = await _store.readMembership();
+      _requireAuthor(currentMembership);
+      _requireCurrentUser();
+      if ((assignment != null && !_same(assignment, currentAssignment)) ||
+          (membership != null && !_same(membership, currentMembership)) ||
+          (baseline is _CatalogBaseline &&
+              (!_same(baseline.assignment, currentAssignment) ||
+                  !_same(baseline.membership, currentMembership)))) {
+        _invalidated = true;
+        throw const TutorialEditAuthorizationChanged();
+      }
+      assignment ??= _freeze(currentAssignment) as Map<String, dynamic>;
+      membership ??= _freeze(currentMembership) as Map<String, dynamic>;
+    }
+
+    try {
+      await checkAuthority();
+      if (baseline is _CatalogBaseline) {
+        final current = await _store.readExercise(tutorial.id);
+        _requireCurrentUser();
+        if (current?['archived'] == true ||
+            !_same(current, baseline.document)) {
+          throw const TutorialEditConflict();
+        }
+      }
+      var coverUrl = tutorial.thumbnailUrl, videoUrl = tutorial.videoUrl;
+      if (cover != null) {
+        coverUrl = await _mediaStore.uploadCover(cover);
+        await checkAuthority();
+      }
+      if (video != null) {
+        videoUrl =
+            await _mediaStore.uploadVideo(video, onProgress: onVideoProgress);
+        await checkAuthority();
+      }
+      return await save(TutorialVideo(
+          id: tutorial.id,
+          editBaseline: tutorial.editBaseline,
+          trackingCapability: tutorial.trackingCapability,
+          title: tutorial.title,
+          category: tutorial.category,
+          status: tutorial.status,
+          coversExercise: tutorial.coversExercise,
+          difficulty: tutorial.difficulty,
+          durationMin: tutorial.durationMin,
+          videoUrl: videoUrl,
+          thumbnailUrl: coverUrl,
+          description: tutorial.description,
+          equipment: tutorial.equipment,
+          tutorialSteps: tutorial.tutorialSteps));
+    } on TutorialEditConflict {
+      rethrow;
+    } on TutorialEditAuthorizationChanged {
+      rethrow;
+    } on TutorialCatalogSaveFailed {
+      rethrow;
+    } on FirebaseException catch (error) {
+      if (error.code == 'permission-denied' ||
+          error.code == 'unauthenticated') {
+        _invalidated = true;
+        throw const TutorialEditAuthorizationChanged();
+      }
+      throw const TutorialMediaUploadFailed();
+    } catch (_) {
+      throw const TutorialMediaUploadFailed();
+    }
+  }
 
   @override
   List<TutorialVideo> get tutorials => const [];
@@ -130,10 +237,11 @@ class FirebaseExerciseCatalogRepository implements TutorialRepository {
         baseline.id != tutorial.id) {
       throw const TutorialEditConflict();
     }
+    final editable = {...const ExerciseTutorialDetails().toJson(), ...data};
     final patch = Map<String, Object?>.unmodifiable({
-      for (final field in data.entries)
+      for (final field in editable.entries)
         if (field.key != 'schemaVersion' &&
-            field.value != baseline.editable[field.key])
+            !_same(field.value, baseline.editable[field.key]))
           field.key: field.value,
     });
     // Baseline and patch are captured OUTSIDE the retryable callback.
@@ -160,10 +268,60 @@ class FirebaseExerciseCatalogRepository implements TutorialRepository {
     return _readBack(tutorial.id);
   }
 
+  @override
+  Future<void> archive(TutorialVideo tutorial) async {
+    try {
+      _requireCurrentUser();
+      final baseline = tutorial.editBaseline;
+      if (baseline is! _CatalogBaseline ||
+          !identical(baseline.lifetime, _lifetime) ||
+          baseline.id != tutorial.id) {
+        throw const TutorialEditConflict();
+      }
+      await _store.transaction((transaction) async {
+        _requireCurrentUser();
+        final assignment = await transaction.readAssignment();
+        final membership = await transaction.readMembership();
+        _requireAssignment(assignment);
+        _requireAuthor(membership);
+        if (!_same(assignment, baseline.assignment) ||
+            !_same(membership, baseline.membership)) {
+          throw const TutorialEditAuthorizationChanged();
+        }
+        final current = await transaction.readExercise(tutorial.id);
+        _requireCurrentUser();
+        if (!_same(current, baseline.document)) {
+          throw const TutorialEditConflict();
+        }
+        transaction.update(tutorial.id, {'archived': true, 'isActive': false});
+      });
+      final saved = await _store.readExercise(tutorial.id);
+      _requireCurrentUser();
+      if (saved?['archived'] != true || saved?['isActive'] != false) {
+        throw const TutorialCatalogSaveFailed();
+      }
+    } on TutorialEditConflict {
+      rethrow;
+    } on TutorialEditAuthorizationChanged {
+      rethrow;
+    } on FirebaseException catch (error) {
+      if (error.code == 'permission-denied' ||
+          error.code == 'unauthenticated') {
+        _invalidated = true;
+        throw const TutorialEditAuthorizationChanged();
+      }
+      throw const TutorialCatalogSaveFailed();
+    } catch (_) {
+      throw const TutorialCatalogSaveFailed();
+    }
+  }
+
   Future<TutorialVideo> _readBack(String id) async {
     final persisted = await _store.readExercise(id);
     _requireCurrentUser();
-    if (persisted == null) throw const TutorialCatalogSaveFailed();
+    if (persisted == null) {
+      throw const TutorialCatalogSaveFailed();
+    }
     // Successful form closes. Another edit must explicitly reload a baseline.
     return _fromDocument(id, persisted);
   }
@@ -187,13 +345,20 @@ class FirebaseExerciseCatalogRepository implements TutorialRepository {
   }
 
   /// The only client-authored fields in an exercise catalog record.
-  static Map<String, Object?> encodeCatalogFields(TutorialVideo tutorial) => {
-        'schemaVersion': 1,
-        'exerciseName': tutorial.title.trim(),
-        'muscleCategory': tutorial.category.trim(),
-        'videoUrl': tutorial.videoUrl.trim(),
-        'isActive': tutorial.status == TutorialStatus.active,
-      };
+  static Map<String, Object?> encodeCatalogFields(TutorialVideo tutorial) {
+    final details =
+        ExerciseTutorialDetails.fromJson(tutorial.tutorialDetails.toJson());
+    final defaults = const ExerciseTutorialDetails().toJson();
+    return {
+      'schemaVersion': 1,
+      'exerciseName': tutorial.title.trim(),
+      'muscleCategory': tutorial.category.trim(),
+      'videoUrl': tutorial.videoUrl.trim(),
+      'isActive': tutorial.status == TutorialStatus.active,
+      for (final field in details.toJson().entries)
+        if (!_same(field.value, defaults[field.key])) field.key: field.value,
+    };
+  }
 
   TutorialVideo _fromDocument(String id, Map<String, dynamic> data,
       {TutorialEditBaseline? baseline}) {
@@ -206,8 +371,12 @@ class FirebaseExerciseCatalogRepository implements TutorialRepository {
         data['isActive'] is! bool) {
       throw const FormatException('Exercise catalog record is invalid.');
     }
+    final details = ExerciseTutorialDetails.fromJson(data);
     return TutorialVideo(
       id: id,
+      archived: data['archived'] == true,
+      trackingCapability: ExerciseTrackingRegistry.resolve(
+          organizationId: scope.organizationId, exerciseId: id),
       editBaseline: baseline,
       title: (data['exerciseName'] as String).trim(),
       category: (data['muscleCategory'] as String).trim(),
@@ -215,6 +384,11 @@ class FirebaseExerciseCatalogRepository implements TutorialRepository {
           ? TutorialStatus.active
           : TutorialStatus.draft,
       videoUrl: data['videoUrl'] as String,
+      description: details.description,
+      thumbnailUrl: details.coverImageUrl,
+      difficulty: details.difficulty,
+      equipment: details.equipment,
+      tutorialSteps: details.steps,
     );
   }
 }
@@ -226,6 +400,7 @@ class _CatalogBaseline extends TutorialEditBaseline {
         membership = _freeze(membership) as Map<String, dynamic>,
         assignment = _freeze(assignment) as Map<String, dynamic>,
         editable = Map<String, Object?>.unmodifiable({
+          ...ExerciseTutorialDetails.fromJson(document).toJson(),
           for (final key in [
             'exerciseName',
             'muscleCategory',

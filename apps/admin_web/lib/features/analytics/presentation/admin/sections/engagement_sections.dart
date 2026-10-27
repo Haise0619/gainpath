@@ -4,6 +4,8 @@ import 'package:syncfusion_flutter_charts/charts.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:gainpath_domain/analytics.dart';
+import '../../../application/admin_reporting_gateway.dart';
+import '../admin_check_in_analytics.dart';
 
 /// Posture, Retention, and Gamification — the underlying mock data here
 /// (`riskExercises`, `atRiskLeads`, the weekly-trend series) has no
@@ -234,7 +236,9 @@ class RetentionRiskSection extends StatelessWidget {
 class GamificationSection extends StatelessWidget {
   final GlobalKey anchorKey;
   final bool live;
-  const GamificationSection({super.key, required this.anchorKey, this.live = false});
+  final AdminReportQuery? query;
+  final int refreshToken;
+  const GamificationSection({super.key, required this.anchorKey, this.live = false, this.query, this.refreshToken = 0});
 
   static const _weeklyPoints = [12400, 13800, 12900, 15200, 16100, 15600, 17400];
   static const _badgesEarned = 418;
@@ -242,6 +246,9 @@ class GamificationSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (live && query != null) {
+      return AdminCheckInAnalytics(query: query!, anchorKey: anchorKey, refreshToken: refreshToken);
+    }
     final points = _weekSeries(_weeklyPoints);
     final streakDistribution = context.read<AnalyticsRepository>().streakDistribution;
     final totalMembers = streakDistribution.fold<double>(0, (sum, s) => sum + s.value);

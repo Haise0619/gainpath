@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
 import 'package:gainpath_domain/workout.dart';
 import 'widgets/workout_media.dart';
+import 'widgets/curl_arm_stats.dart';
 import '../../domain/workout_contracts.dart' show WorkoutSessionSummary;
 
 class WorkoutResultScreen extends StatefulWidget {
@@ -11,9 +12,15 @@ class WorkoutResultScreen extends StatefulWidget {
   final int seconds;
   final WorkoutSessionSummary? measuredSummary;
   final Widget? syncPanel;
+  final VoidCallback? onContinue;
+  final String continueLabel;
 
   WorkoutResultScreen.measured(
-      {super.key, required WorkoutSessionSummary summary, this.syncPanel})
+      {super.key,
+      required WorkoutSessionSummary summary,
+      this.syncPanel,
+      this.onContinue,
+      this.continueLabel = 'Back to home'})
       : measuredSummary = summary,
         reps = summary.repetitions,
         accuracy = summary.formScorePercent?.round() ?? 0,
@@ -25,7 +32,9 @@ class WorkoutResultScreen extends StatefulWidget {
     required this.accuracy,
     required this.seconds,
   })  : measuredSummary = null,
-        syncPanel = null;
+        syncPanel = null,
+        onContinue = null,
+        continueLabel = 'Back to home';
 
   @override
   State<WorkoutResultScreen> createState() => _WorkoutResultScreenState();
@@ -263,7 +272,16 @@ class _WorkoutResultScreenState extends State<WorkoutResultScreen>
               child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                const Eyebrow('Measured squat result'),
+                if (metrics.curlArms != null) ...[
+                  CurlArmStats(metrics: metrics.curlArms!),
+                  const SizedBox(height: 12),
+                ],
+                Eyebrow(switch (metrics.scoringVersion) {
+                  'single-arm-curl-side-v1' => 'Measured curl result',
+                  'standing-calf-raise-side-v1' => 'Measured calf raise result',
+                  'wall-push-up-side-v1' => 'Measured wall push-up result',
+                  _ => 'Measured squat result',
+                }),
                 const SizedBox(height: 8),
                 Text(
                     score == null
@@ -284,7 +302,10 @@ class _WorkoutResultScreenState extends State<WorkoutResultScreen>
               child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                if (metrics.deviations.isEmpty)
+                if (metrics.scoringVersion != 'bodyweight-squat-side-v1')
+                  const Text(
+                      'Detailed deviation counts are not available for this analyser. Form estimates are provisional.')
+                else if (metrics.deviations.isEmpty)
                   Text(score == null
                       ? 'No completed attempt was available to assess.'
                       : 'No supported deviation was detected in assessed attempts.'),
@@ -294,14 +315,22 @@ class _WorkoutResultScreenState extends State<WorkoutResultScreen>
                       child: Text(
                           '${entry.key == 'trunkLean' ? 'Trunk lean' : 'Incomplete depth'}: ${entry.value.count} attempts')),
                 const SizedBox(height: 8),
-                const Text(
-                    'Front-view knee alignment is not assessed. Guidance is provisional.'),
+                Text(switch (metrics.scoringVersion) {
+                  'single-arm-curl-side-v1' =>
+                    'One selected arm is tracked at a time. Load and grip are not assessed. Guidance is provisional.',
+                  'standing-calf-raise-side-v1' =>
+                    'Only the camera-facing leg is measured. Equal work on both legs, balance and load are not assessed. Guidance is provisional.',
+                  'wall-push-up-side-v1' =>
+                    'Only the visible arm and projected body line are measured. Wall contact is user-confirmed; pushing force, load and equal work by both arms are not assessed.',
+                  _ =>
+                    'Front-view knee alignment is not assessed. Guidance is provisional.',
+                }),
               ])),
           const SizedBox(height: 20),
           FilledButton(
-              onPressed: () =>
-                  Navigator.popUntil(context, (route) => route.isFirst),
-              child: const Text('Back to home')),
+              onPressed: widget.onContinue ??
+                  () => Navigator.popUntil(context, (route) => route.isFirst),
+              child: Text(widget.continueLabel)),
         ]));
   }
 

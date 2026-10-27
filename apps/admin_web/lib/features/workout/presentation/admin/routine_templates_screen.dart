@@ -1,3 +1,4 @@
+import 'confirm_content_removal.dart';
 import 'package:flutter/material.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
 import '../../../../navigation/admin_breadcrumb.dart';
@@ -29,7 +30,8 @@ Widget _networkHero(String url, {BoxFit fit = BoxFit.cover}) {
 /// genuinely a lot of content, the kind of "Create" flow that gets its
 /// own page in a real web console rather than a cramped popup.
 class RoutineTemplatesScreen extends StatefulWidget {
-  const RoutineTemplatesScreen({super.key});
+  const RoutineTemplatesScreen({super.key, this.allowRemoval = true});
+  final bool allowRemoval;
 
   @override
   State<RoutineTemplatesScreen> createState() => _RoutineTemplatesScreenState();
@@ -39,6 +41,7 @@ class _RoutineTemplatesScreenState extends State<RoutineTemplatesScreen> {
   String? _expandedId;
   RoutineBlueprint? _editing;
   bool _creating = false;
+  bool _removing = false;
   String? _publishingId;
   late Future<List<RoutineBlueprint>> _templatesFuture;
 
@@ -56,8 +59,34 @@ class _RoutineTemplatesScreenState extends State<RoutineTemplatesScreen> {
         _templatesFuture = context.read<RoutineTemplateRepository>().load();
       });
 
+  Future<void> _remove(RoutineBlueprint item) async {
+    if (_removing || _publishingId != null || !widget.allowRemoval) return;
+    final repository = context.read<RoutineTemplateRepository>();
+    if (repository is! RoutineArchivingRepository) return;
+    setState(() => _removing = true);
+    try {
+      final confirmed = await confirmContentRemoval(context,
+          title: item.name,
+          detail:
+              'This archives the template. Published Member routines and workout history are preserved.');
+      if (!confirmed || !mounted || !widget.allowRemoval) {
+        return;
+      }
+      await (repository as RoutineArchivingRepository).archive(item);
+      if (!mounted) return;
+      setState(() => _templatesFuture = repository.load());
+      showToast(context, 'Template removed.');
+    } catch (_) {
+      if (mounted) {
+        showToast(context, 'Removal was not verified. Reload before retrying.');
+      }
+    } finally {
+      if (mounted) setState(() => _removing = false);
+    }
+  }
+
   Future<void> _publish(RoutineBlueprint blueprint) async {
-    if (_publishingId != null) return;
+    if (_publishingId != null || _removing) return;
     final firebaseCatalog =
         context.read<TutorialRepository>().requiresCatalogSelection;
     setState(() => _publishingId = blueprint.id);
@@ -124,8 +153,16 @@ class _RoutineTemplatesScreenState extends State<RoutineTemplatesScreen> {
                         style: Theme.of(context).textTheme.bodyLarge,
                       ),
                     ),
+                    IconButton(
+                        tooltip: 'Reload templates',
+                        icon: const Icon(Icons.refresh),
+                        onPressed: _removing
+                            ? null
+                            : () => setState(() => _templatesFuture = context
+                                .read<RoutineTemplateRepository>()
+                                .load())),
                     FilledButton.icon(
-                      onPressed: _openCreate,
+                      onPressed: _removing ? null : _openCreate,
                       icon: const Icon(Icons.add_rounded, size: 18),
                       label: const Text('New template'),
                     ),
@@ -135,10 +172,18 @@ class _RoutineTemplatesScreenState extends State<RoutineTemplatesScreen> {
                 ...templates.map((t) => Padding(
                       padding: const EdgeInsets.only(bottom: 12),
                       child: _TemplateCard(
+                        showRemoval: widget.allowRemoval,
                         template: t,
                         expanded: _expandedId == t.id,
                         onToggle: () => setState(() =>
                             _expandedId = _expandedId == t.id ? null : t.id),
+                        onRemove: widget.allowRemoval &&
+                                context.read<RoutineTemplateRepository>()
+                                    is RoutineArchivingRepository &&
+                                !_removing &&
+                                _publishingId == null
+                            ? () => _remove(t)
+                            : null,
                         onEdit: () => _openEdit(t),
                         onPublish: () => _publish(t),
                         publishing: _publishingId == t.id,
@@ -155,10 +200,12 @@ class _RoutineTemplatesScreenState extends State<RoutineTemplatesScreen> {
 }
 
 class _TemplateCard extends StatelessWidget {
+  final bool showRemoval;
   final RoutineBlueprint template;
   final bool expanded;
   final VoidCallback onToggle;
   final VoidCallback onEdit;
+  final VoidCallback? onRemove;
   final VoidCallback onPublish;
   final bool publishing;
   final bool firebaseCatalog;
@@ -167,6 +214,8 @@ class _TemplateCard extends StatelessWidget {
       required this.expanded,
       required this.onToggle,
       required this.onEdit,
+      this.showRemoval = true,
+      this.onRemove,
       required this.onPublish,
       required this.publishing,
       required this.firebaseCatalog});
@@ -228,6 +277,11 @@ class _TemplateCard extends StatelessWidget {
                       ],
                     ),
                   ),
+                  if (showRemoval)
+                    IconButton(
+                        tooltip: 'Remove template',
+                        onPressed: onRemove,
+                        icon: const Icon(Icons.delete_outline, size: 18)),
                   IconButton(
                     icon: const Icon(Icons.edit_outlined, size: 18),
                     onPressed: onEdit,
@@ -874,7 +928,18 @@ class _TemplateFormPageState extends State<_TemplateFormPage> {
                             ),
                             items: _catalog
                                 .map((item) => DropdownMenuItem(
-                                    value: item.id, child: Text(item.title)))
+                                    value: item.id,
+                                    child: Row(children: [
+                                      Expanded(
+                                          child: Text(item.title,
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis)),
+                                      const SizedBox(width: 8),
+                                      Text(item.trackingCapability.displayLabel,
+                                          style: const TextStyle(
+                                              fontSize: 11,
+                                              color: AppColors.inkSoft)),
+                                    ])))
                                 .toList(),
                             onChanged: _catalogLoading || _catalog.isEmpty
                                 ? null

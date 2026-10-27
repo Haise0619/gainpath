@@ -21,10 +21,12 @@ class SquatResultSync extends StatefulWidget {
       required this.summary,
       required this.auth,
       this.acknowledgement,
+      this.returnToRoutine = false,
       this.repositoryFactory});
   final WorkoutSessionSummary summary;
   final AuthBloc auth;
   final WorkoutConsentAcknowledgement? acknowledgement;
+  final bool returnToRoutine;
   final Future<RealWorkoutOutboxRepository> Function()? repositoryFactory;
   @override
   State<SquatResultSync> createState() => _SquatResultSyncState();
@@ -82,6 +84,9 @@ class _SquatResultSyncState extends State<SquatResultSync> {
   @override
   Widget build(BuildContext context) => WorkoutResultScreen.measured(
       summary: widget.summary,
+      onContinue: widget.returnToRoutine ? () => Navigator.pop(context) : null,
+      continueLabel:
+          widget.returnToRoutine ? 'Continue routine' : 'Back to home',
       syncPanel: _error != null
           ? Text(_error!)
           : _repository == null

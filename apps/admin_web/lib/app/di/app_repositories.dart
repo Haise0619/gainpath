@@ -28,6 +28,8 @@ import '../../infrastructure/local/equipment_video_picker.dart';
 import '../../infrastructure/local/account_photo_picker.dart';
 import '../../infrastructure/firebase/firebase_admin_member_directory_repository.dart';
 import '../../infrastructure/firebase/firebase_reward_catalog_repository.dart';
+import '../../infrastructure/firebase/firebase_mini_game_content_repository.dart';
+import '../../infrastructure/firebase/firebase_mini_game_reward_configuration_repository.dart';
 import '../../infrastructure/firebase/firebase_facility_settings_repository.dart';
 import 'admin_presentation_dependencies.dart';
 import '../../features/analytics/application/admin_reporting_gateway.dart';
@@ -53,6 +55,7 @@ class AppRepositories extends StatefulWidget {
     this.accountContactFactory,
     this.memberDirectoryFactory,
     this.rewardCatalogFactory,
+    this.miniGameContentFactory,
     this.facilitySettingsFactory,
     this.reportingGatewayFactory,
   });
@@ -74,6 +77,8 @@ class AppRepositories extends StatefulWidget {
       memberDirectoryFactory;
   final RewardCatalogRepository Function(SessionScope, bool Function())?
       rewardCatalogFactory;
+  final MiniGameContentRepository Function(SessionScope, bool Function())?
+      miniGameContentFactory;
   final FacilitySettingsRepository Function(SessionScope, bool Function())?
       facilitySettingsFactory;
 
@@ -93,6 +98,8 @@ class _AppRepositoriesState extends State<AppRepositories> {
   CatalogEditSessionGuard? _accountContactGuard;
   CatalogEditSessionGuard? _memberDirectoryGuard;
   CatalogEditSessionGuard? _rewardGuard;
+  CatalogEditSessionGuard? _miniGameGuard;
+  CatalogEditSessionGuard? _miniGameRewardGuard;
   CatalogEditSessionGuard? _facilityGuard;
   CatalogEditSessionGuard _buildSessionGuard() {
     AuthBloc? auth;
@@ -122,6 +129,21 @@ class _AppRepositoriesState extends State<AppRepositories> {
     return widget.rewardCatalogFactory?.call(scope, _rewardGuard!.isCurrent) ??
         FirebaseRewardCatalogRepository(
             scope: scope, isCurrent: _rewardGuard!.isCurrent);
+  }
+
+  MiniGameContentRepository _createMiniGameContent(SessionScope scope) {
+    _miniGameGuard = _buildSessionGuard();
+    return widget.miniGameContentFactory
+            ?.call(scope, _miniGameGuard!.isCurrent) ??
+        FirebaseMiniGameContentRepository(
+            scope: scope, isCurrent: _miniGameGuard!.isCurrent);
+  }
+
+  MiniGameRewardConfigurationRepository _createMiniGameRewards(
+      SessionScope scope) {
+    _miniGameRewardGuard = _buildSessionGuard();
+    return FirebaseMiniGameRewardConfigurationRepository(
+        scope: scope, isCurrent: _miniGameRewardGuard!.isCurrent);
   }
 
   AdminMemberDirectoryRepository _createMemberDirectory(SessionScope scope) {
@@ -221,6 +243,8 @@ class _AppRepositoriesState extends State<AppRepositories> {
     _accountContactGuard?.dispose();
     _memberDirectoryGuard?.dispose();
     _rewardGuard?.dispose();
+    _miniGameGuard?.dispose();
+    _miniGameRewardGuard?.dispose();
     _facilityGuard?.dispose();
     _equipmentGuard?.dispose();
     super.dispose();
@@ -262,6 +286,10 @@ class _AppRepositoriesState extends State<AppRepositories> {
           create: (_) => _createFacilitySettings(scope)),
       RepositoryProvider<RewardCatalogRepository>(
           create: (_) => _createRewardCatalog(scope)),
+      RepositoryProvider<MiniGameContentRepository>(
+          create: (_) => _createMiniGameContent(scope)),
+      RepositoryProvider<MiniGameRewardConfigurationRepository>(
+          create: (_) => _createMiniGameRewards(scope)),
       RepositoryProvider<AdminMemberDirectoryRepository>(
           create: (_) => _createMemberDirectory(scope)),
       RepositoryProvider<AccountPhotoPicker>(

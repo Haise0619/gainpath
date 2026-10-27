@@ -2,15 +2,23 @@
 // These do not execute Flutter platform plugins or contact a real project.
 import { readFileSync } from 'node:fs';
 import { isDeepStrictEqual } from 'node:util';
-import { initializeTestEnvironment, type RulesTestEnvironment } from '@firebase/rules-unit-testing';
+import { assertFails, assertSucceeds, initializeTestEnvironment, type RulesTestEnvironment } from '@firebase/rules-unit-testing';
 import { doc, getDoc, runTransaction, serverTimestamp, setDoc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { beforeAll, beforeEach, afterAll, expect, it } from 'vitest';
 
 let env: RulesTestEnvironment;
+const richTutorial = {
+  description: 'Move slowly with control.', coverImageUrl: 'https://media.example.test/cover.jpg',
+  difficulty: 'Intermediate', equipment: 'Exercise mat',
+  tutorialSteps: [
+    { title: 'Set up', description: 'Stand tall.', imageUrl: 'https://media.example.test/setup.webp' },
+    { title: 'Move', description: 'Lower slowly.', imageUrl: '' },
+  ],
+};
 beforeAll(async () => {
   if (!process.env.FIRESTORE_EMULATOR_HOST) throw new Error('Emulator required.');
   env = await initializeTestEnvironment({ projectId: 'demo-gainpath', firestore: {
-    rules: readFileSync('../firebase/firestore.rules', 'utf8'),
+    rules: readFileSync(process.env.GAINPATH_EXERCISE_FIRESTORE_RULES_FILE || '../firebase/firestore.rules', 'utf8'),
   } });
 });
 afterAll(async () => { await env?.cleanup(); });
@@ -30,6 +38,60 @@ beforeEach(async () => {
 });
 
 // Contract fixture captures expected data outside the retryable callback.
+it('authors can save rich instructions and clear optional fields', async () => {
+  const reference = doc(author(), 'orgs/o/exerciseVideos/exercise');
+  await assertSucceeds(updateDoc(reference, { ...richTutorial, updatedAt: serverTimestamp() }));
+  expect((await getDoc(reference)).data()).toMatchObject(richTutorial);
+  await assertSucceeds(updateDoc(reference, {
+    description: '', coverImageUrl: '', equipment: '', tutorialSteps: [], updatedAt: serverTimestamp(),
+  }));
+});
+it('authors can create an exercise with 12 steps and signed image URLs', async () => {
+  const step = {title:'M'.repeat(80), description:'D'.repeat(1200), imageUrl:'https://media.example.test/o/image?alt=media&token=fixture'};
+  const reference = doc(author(), 'orgs/o/exerciseVideos/rich');
+  await assertSucceeds(setDoc(reference, {
+    schemaVersion:1, exerciseName:'Move', muscleCategory:'Core', videoUrl:'', isActive:true,
+    ...richTutorial, tutorialSteps:Array.from({length:12}, () => step),
+    createdAt:serverTimestamp(), updatedAt:serverTimestamp(),
+  }));
+  await assertSucceeds(updateDoc(reference, {equipment:'Updated setup', updatedAt:serverTimestamp()}));
+  const invalidLastStep = Array.from({length:12}, (_, i) => i === 11 ? {...step, title:''} : step);
+  await assertFails(updateDoc(reference, {tutorialSteps:invalidLastStep, updatedAt:serverTimestamp()}));
+});
+it.each([
+  { tutorialSteps: Array.from({length: 13}, () => richTutorial.tutorialSteps[0]) },
+  { tutorialSteps: [{ title: '', description: 'Move' }] },
+  { tutorialSteps: [{ title: '   ', description: 'Move' }] },
+  { tutorialSteps: [{ title: ['Move'], description: 'Move' }] },
+  { tutorialSteps: [{ title: 'Move', description: 1 }] },
+  { tutorialSteps: ['Move'] },
+  { tutorialSteps: null },
+  { tutorialSteps: [{ title: 'Move', description: 'x'.repeat(1201) }] },
+  { tutorialSteps: [{ title: 'Move', description: 'Move', trackerId: 'forged' }] },
+  { tutorialSteps: [{ title: 'Move', description: 'Move', imageUrl: 'file:///private.jpg' }] },
+  { coverImageUrl: 'https://user:password@media.example.test/cover.jpg' },
+  { difficulty: 'Expert' }, { description: 'x'.repeat(2001) },
+  { equipment: 'x'.repeat(301) }, { aiSupported: true },
+])('rejects invalid content and authored capability flags %#', async patch => {
+  await assertFails(updateDoc(doc(author(), 'orgs/o/exerciseVideos/exercise'),
+    { ...patch, updatedAt: serverTimestamp() }));
+});
+it('rich fields do not broaden member or wrong-organization write authority', async () => {
+  await env.withSecurityRulesDisabled(async context => {
+    await setDoc(doc(context.firestore(), 'users/member'), { organizationId: 'o' });
+    await setDoc(doc(context.firestore(), 'orgs/o/members/member'), {
+      role: 'member', status: 'active', organizationId: 'o',
+    });
+  });
+  const memberDb = env.authenticatedContext('member', {email_verified:true}).firestore();
+  await assertFails(updateDoc(doc(memberDb, 'orgs/o/exerciseVideos/exercise'),
+    { ...richTutorial, updatedAt: serverTimestamp() }));
+  await assertFails(setDoc(doc(author(), 'orgs/other/exerciseVideos/exercise'), {
+    schemaVersion: 1, exerciseName: 'Move', muscleCategory: 'Core', videoUrl: '', isActive:true,
+    ...richTutorial, createdAt:serverTimestamp(), updatedAt:serverTimestamp(),
+  }));
+});
+
 async function preparedEdit() {
   const db = author();
   const exercise = doc(db, 'orgs/o/exerciseVideos/exercise');

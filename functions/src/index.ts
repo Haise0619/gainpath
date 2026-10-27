@@ -49,3 +49,20 @@ export { fitnessAssistantCommand } from './modules/chatbot/chatbot-callable';
 export {googleGymConnectionCommand,googleGymOAuthCallback,syncGymBookingCommand} from './modules/coaching/google-gym-callables';
 // Prepared locally; no automatic delivery until selective deployment and activation approval.
 export {synchronizeGoogleBooking} from './modules/coaching/automatic-google-worker';
+
+// Prepared workout backup only; selective deployment requires owner approval.
+export { workoutBackupCommand } from './modules/workouts/workout-backup-callable';
+
+// Prepared basic app check-in only; policy/deployment need explicit approval.
+export { appCheckInCommand } from './modules/gamification/app-check-in-callable';
+
+// Prepared read-only reporting; selective deployment needs owner approval.
+export { adminReportingCommand } from './modules/analytics/admin-reporting-callable';
+// Prepared aggregate-only backup analytics; deployment requires exact owner approval.
+export { adminWorkoutReportingCommand } from './modules/analytics/admin-workout-reporting-callable';
+// Prepared check-in aggregates only; selective deployment requires owner approval.
+export { adminCheckInReportingCommand } from './modules/analytics/admin-check-in-reporting-callable';
+// Prepared Admin shop publication; no configuration or deployment is implied.
+export { rewardCatalogCommand } from './modules/gamification/reward-catalog-callable';
+// Prepared supported-game content only; selective deployment requires owner approval.
+export { miniGameContentCommand } from './modules/content/mini-game-content-callables';

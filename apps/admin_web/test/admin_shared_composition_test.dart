@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:gainpath_admin_web/app/di/admin_presentation_dependencies.dart';
 import 'package:gainpath_admin_web/app/di/app_repositories.dart';
 import 'package:gainpath_admin_web/features/analytics/application/admin_reporting_gateway.dart';
+import 'package:gainpath_admin_web/infrastructure/firebase/firebase_admin_reporting_gateway.dart';
 import 'package:gainpath_domain/analytics.dart';
 import 'package:gainpath_domain/gainpath_domain.dart';
 import 'package:gainpath_domain/identity.dart';
@@ -37,7 +38,7 @@ void main() {
       expect(deps.availability, isA<NeutralAvailabilityRepository>());
       expect(deps.coach, isA<NeutralCoachRepository>());
       expect(deps.userAccount, isA<NeutralUserAccountRepository>());
-      expect(deps.reportingGateway, isA<UnavailableAdminReportingGateway>());
+      expect(deps.reportingGateway, isA<FirebaseAdminReportingGateway>());
 
       // Verifies neutral accounts contain no seeded mock users
       expect(deps.userAccount.users, isEmpty);
@@ -80,7 +81,7 @@ void main() {
                   'deps:$hasDeps,'
                   'analytics:${analytics is NeutralAnalyticsRepository},'
                   'rec:${recommendation is NeutralRecommendationRepository},'
-                  'gateway:${gateway is UnavailableAdminReportingGateway},'
+                  'gateway:${gateway is FirebaseAdminReportingGateway},'
                   'users:${accounts.users.length}',
                 );
               },

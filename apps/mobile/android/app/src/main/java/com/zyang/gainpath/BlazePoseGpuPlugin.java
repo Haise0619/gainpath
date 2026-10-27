@@ -17,8 +17,9 @@ import org.tensorflow.lite.Tensor;
 import org.tensorflow.lite.gpu.GpuDelegate;
 import org.tensorflow.lite.gpu.GpuDelegateFactory;
 
-/** Diagnostic-only backend. No camera, preprocessing, filtering or workout APIs.
- * OpenCL is required explicitly: failure is surfaced, never relabeled CPU/GL. */
+/** Native acceleration transport. No camera, preprocessing, filtering or workout APIs.
+ * OpenCL is required here; Dart may select a separate validated CPU interpreter
+ * after initialization failure. This transport never relabels CPU/GL as OpenCL. */
 public final class BlazePoseGpuPlugin implements FlutterPlugin, MethodChannel.MethodCallHandler {
     private MethodChannel channel;
     private final Handler main = new Handler(Looper.getMainLooper());

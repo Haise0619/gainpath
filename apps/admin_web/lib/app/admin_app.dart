@@ -11,7 +11,8 @@ import 'shells/admin_shell.dart';
 import '../infrastructure/firebase/firebase_auth_gateway.dart';
 import 'package:gainpath_domain/workout.dart';
 import 'package:gainpath_domain/content.dart' show FacilitySettingsRepository;
-import 'package:gainpath_domain/gamification.dart' show RewardCatalogRepository;
+import 'package:gainpath_domain/gamification.dart'
+    show RewardCatalogRepository, MiniGameContentRepository;
 import 'package:gainpath_domain/identity.dart' show CoachProfileAdminRepository;
 import 'package:gainpath_domain/identity.dart'
     show AdminAccountContactRepository, AdminMemberDirectoryRepository;
@@ -35,6 +36,7 @@ class GainPathAdminWebApp extends StatelessWidget {
       this.accountContactFactory,
       this.memberDirectoryFactory,
       this.rewardCatalogFactory,
+      this.miniGameContentFactory,
       this.facilitySettingsFactory,
       this.reportingGatewayFactory,
       this.passwordResetSender});
@@ -57,6 +59,8 @@ class GainPathAdminWebApp extends StatelessWidget {
       memberDirectoryFactory;
   final RewardCatalogRepository Function(SessionScope, bool Function())?
       rewardCatalogFactory;
+  final MiniGameContentRepository Function(SessionScope, bool Function())?
+      miniGameContentFactory;
   final FacilitySettingsRepository Function(SessionScope, bool Function())?
       facilitySettingsFactory;
 
@@ -99,6 +103,7 @@ class GainPathAdminWebApp extends StatelessWidget {
               accountContactFactory: accountContactFactory,
               memberDirectoryFactory: memberDirectoryFactory,
               rewardCatalogFactory: rewardCatalogFactory,
+              miniGameContentFactory: miniGameContentFactory,
               facilitySettingsFactory: facilitySettingsFactory,
               reportingGatewayFactory: reportingGatewayFactory,
               child: app,

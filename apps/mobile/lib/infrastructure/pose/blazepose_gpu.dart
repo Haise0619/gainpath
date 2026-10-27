@@ -6,6 +6,10 @@ import 'blazepose_contract.dart';
 
 const poseGpuDebugEnabled =
     !kReleaseMode && bool.fromEnvironment('GAINPATH_POSE_GPU');
+// Normal sessions prefer acceleration. Explicit GPU diagnostics remain strict;
+// disabling acceleration preserves the existing CPU execution path.
+const poseGpuPreferred = poseGpuDebugEnabled ||
+    bool.fromEnvironment('GAINPATH_POSE_ACCELERATION', defaultValue: true);
 const poseGpuCompareEnabled =
     poseGpuDebugEnabled && bool.fromEnvironment('GAINPATH_POSE_GPU_COMPARE');
 const _channel = MethodChannel('gainpath/blazepose_gpu');
@@ -71,6 +75,19 @@ class BlazePoseGpuSession {
     } catch (_) {
       await closeId(id);
       rethrow;
+    }
+  }
+
+  static Future<BlazePoseGpuSession?> createPreferred(
+      String id, List<String> paths,
+      {bool requireGpu = false}) async {
+    try {
+      return await create(id, paths);
+    } catch (_) {
+      // create() closes native resources before propagating initialization or
+      // tensor-inventory failures. CPU will validate the same verified assets.
+      if (requireGpu) rethrow;
+      return null;
     }
   }
 

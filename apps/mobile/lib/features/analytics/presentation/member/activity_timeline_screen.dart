@@ -11,9 +11,14 @@ import 'widgets/local_progress_widgets.dart';
 /// trend or proportion), then the full chronological log below.
 class ActivityTimelineScreen extends StatelessWidget {
   const ActivityTimelineScreen(
-      {super.key, this.localProgress, this.onRefresh, this.onOpenWorkout});
+      {super.key,
+      this.localProgress,
+      this.onRefresh,
+      this.onOpenWorkout,
+      this.onOpenReport});
 
   final MemberLocalProgress? localProgress;
+  final VoidCallback? onOpenReport;
   final Future<void> Function()? onRefresh;
   final void Function(LocalWorkoutProgressRecord)? onOpenWorkout;
 
@@ -41,13 +46,14 @@ class ActivityTimelineScreen extends StatelessWidget {
           IconButton(
             icon: const Icon(Icons.tune_rounded),
             tooltip: 'Filter',
-            onPressed: () =>
-                local == null ? _filter(context) : showUnavailable(context),
+            onPressed: onOpenReport ??
+                () =>
+                    local == null ? _filter(context) : showUnavailable(context),
           ),
           IconButton(
             icon: const Icon(Icons.ios_share_rounded),
             tooltip: 'Export',
-            onPressed: () => showUnavailable(context),
+            onPressed: onOpenReport ?? () => showUnavailable(context),
           ),
         ],
       ),

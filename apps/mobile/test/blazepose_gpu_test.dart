@@ -37,6 +37,55 @@ void main() {
       .instance.defaultBinaryMessenger
       .setMockMethodCallHandler(channel, null));
 
+  test('automatic acceleration falls back after unsupported GPU is cleaned up',
+      () async {
+    final result =
+        await BlazePoseGpuSession.createPreferred('optional', ['d', 'l']);
+    expect(result, isNull);
+    expect(calls, ['create', 'close']);
+  });
+
+  test('explicit GPU diagnostic still fails rather than reporting CPU as GPU',
+      () async {
+    await expectLater(
+        BlazePoseGpuSession.createPreferred('required', ['d', 'l'],
+            requireGpu: true),
+        throwsStateError);
+    expect(calls, ['create', 'close']);
+  });
+
+  test(
+      'automatic acceleration retains the verified native session when available',
+      () async {
+    Map<String, Object> spec(PoseTensorSpec tensor) =>
+        {'name': tensor.name, 'shape': tensor.shape, 'type': tensor.type};
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (call) async {
+      calls.add(call.method);
+      if (call.method != 'create') return null;
+      return {
+        'backend': 'opencl_required',
+        'ownerThread': 17,
+        'models': [
+          for (final contract in [
+            BlazePoseModelContract.detector,
+            BlazePoseModelContract.landmark
+          ])
+            {
+              'inputs': [spec(contract.input)],
+              'outputs': contract.outputs.map(spec).toList()
+            },
+        ]
+      };
+    });
+    final session =
+        await BlazePoseGpuSession.createPreferred('available', ['d', 'l']);
+    expect(session, isNotNull);
+    expect(session!.ownerThread, 17);
+    await session.close();
+    expect(calls, ['create', 'close']);
+  });
+
   test('native inventory validates every output including unused segmentation',
       () {
     Map<String, Object> spec(PoseTensorSpec s) =>

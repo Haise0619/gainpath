@@ -8,9 +8,10 @@ import '../../features/workout/domain/published_routine_view.dart';
 import '../../features/workout/presentation/member/workout_prep_screen.dart';
 import '../../navigation/workout_navigation.dart';
 import 'pose_preview_route.dart';
-import 'real_squat_route.dart';
+import 'exercise_tracker_route.dart';
 import 'saved_squat_sessions_route.dart';
 import 'exercise_tutorial_route.dart';
+import 'routine_journey_route.dart';
 
 /// App-owned destinations for the published workout preparation flow.
 class WorkoutPrepRoute extends StatelessWidget {
@@ -46,6 +47,10 @@ class WorkoutPrepRoute extends StatelessWidget {
             realSessionBuilder: _realSession,
             savedSessionsBuilder: _savedSessions,
             posePreviewBuilder: _posePreview,
+            journeyBuilder: scope == null
+                ? null
+                : (_, routine) =>
+                    RoutineJourneyRoute(scope: scope, routine: routine),
             tutorialBuilder: scope == null
                 ? null
                 : (_, exercise) => BlocProvider.value(
@@ -60,13 +65,7 @@ Widget _realSession(BuildContext context, RealWorkoutLaunch launch) =>
         enabled: membershipAccessEnforcementEnabled,
         feature: MembershipAccessFeature.exercise,
         resourceId: launch.exercise.exerciseId,
-        child: RealSquatRoute(
-            scope: launch.scope,
-            routineId: launch.routineId,
-            exercise: launch.exercise,
-            consented: launch.consented,
-            setupConfirmed: launch.setupConfirmed,
-            requestServerUpload: launch.requestServerUpload));
+        child: ExerciseTrackerRoute(launch: launch));
 
 Widget _savedSessions(BuildContext context, SessionScope scope) =>
     SavedSquatSessionsRoute(scope: scope);

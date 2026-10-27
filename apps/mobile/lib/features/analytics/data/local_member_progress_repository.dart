@@ -3,6 +3,8 @@ import 'package:gainpath_domain/gainpath_domain.dart' show SessionScope;
 import '../domain/local_member_progress_repository.dart';
 import '../../workout/domain/workout_contracts.dart';
 import '../../workout/domain/real_workout_sync.dart';
+import '../../workout/domain/routine_journey.dart';
+import '../../workout/domain/routine_attempt.dart';
 
 /// Maps the existing account-owned summary and outbox snapshots without writes.
 class StoredLocalMemberProgressRepository
@@ -11,8 +13,11 @@ class StoredLocalMemberProgressRepository
       {required this.scope,
       required this.workoutStore,
       required this.syncStore,
-      required this.activeScope}) {
-    if (workoutStore.scope != scope || syncStore.scope != scope) {
+      required this.activeScope,
+      this.routineStore}) {
+    if (workoutStore.scope != scope ||
+        syncStore.scope != scope ||
+        (routineStore != null && routineStore!.scope != scope)) {
       throw ArgumentError(
           'Progress stores must belong to the current account.');
     }
@@ -20,6 +25,7 @@ class StoredLocalMemberProgressRepository
   @override
   final SessionScope scope;
   final WorkoutSessionStore workoutStore;
+  final RoutineJourneyStore? routineStore;
   final RealWorkoutSyncStore syncStore;
   final SessionScope? Function() activeScope;
   void _checkActive() {
@@ -127,8 +133,35 @@ class StoredLocalMemberProgressRepository
       }
     }
     _checkActive();
+    var routineAvailable = false;
+    final attempts = <RoutineAttempt>[];
+    if (routineStore != null) {
+      try {
+        final checkpoints = await routineStore!.load();
+        _checkActive();
+        if (checkpoints.any((c) => c.scope != scope)) {
+          throw StateError('Routine account mismatch');
+        }
+        attempts.addAll(
+            checkpoints.map((c) => c.attempt).whereType<RoutineAttempt>());
+        if (checkpoints.any((c) => c.attempt == null)) {
+          warnings.add(
+              'Older routine attempts need reopening before their details are available.');
+        }
+        routineAvailable = true;
+      } catch (_) {
+        _checkActive();
+        warnings.add(
+            'Routine history could not be read. Camera results are still available.');
+      }
+    }
+    _checkActive();
     return LocalMemberProgressSnapshot(
-        records: records, summaries: summaries, warnings: warnings.toSet());
+        attempts: attempts,
+        routineHistoryAvailable: routineAvailable,
+        records: records,
+        summaries: summaries,
+        warnings: warnings.toSet());
   }
 
   bool _matches(WorkoutSessionSummary s, RealWorkoutSyncEntry entry) {

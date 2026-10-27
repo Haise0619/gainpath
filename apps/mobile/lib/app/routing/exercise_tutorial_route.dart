@@ -5,6 +5,7 @@ import 'package:gainpath_domain/gainpath_domain.dart'
     show AppRole, SessionScope;
 import 'package:gainpath_identity/gainpath_identity.dart';
 import '../../features/workout/domain/published_routine_view.dart';
+import '../../features/workout/domain/exercise_tracker_dispatcher.dart';
 import '../../features/workout/domain/tutorial_player.dart';
 import '../../features/workout/presentation/member/published_exercise_tutorial_screen.dart';
 import '../../infrastructure/media/video_tutorial_player.dart';
@@ -49,5 +50,11 @@ class _ExerciseTutorialRouteState extends State<ExerciseTutorialRoute> {
   Widget build(BuildContext context) => PublishedExerciseTutorialScreen(
       exercise: widget.exercise,
       playerFactory: widget.playerFactory,
+      perArmTargets: const ExerciseTrackerDispatcher()
+              .resolve(
+                  organizationId: widget.scope.organizationId,
+                  exerciseId: widget.exercise.exerciseId)
+              .tracker ==
+          ExerciseTracker.sideViewCurl,
       authorized: _authorized);
 }

@@ -1,8 +1,13 @@
 import '../di/chatbot_factory.dart';
+import '../../features/gamification/application/app_check_in_cubit.dart';
+import '../../features/gamification/presentation/member/app_check_in_card.dart';
 import 'dart:math' as math;
+import '../../features/gamification/application/rewards_feature_host.dart';
 import 'package:gainpath_domain/analytics.dart';
 import '../../features/analytics/presentation/member/widgets/local_progress_widgets.dart';
 import '../../features/workout/data/published_routine.dart';
+import '../../features/workout/domain/routine_attempt.dart';
+import '../../features/analytics/presentation/member/widgets/routine_progress_card.dart';
 import 'package:flutter/material.dart';
 import '../../features/gamification/application/gamification_bloc.dart';
 import 'package:gainpath_domain/gamification.dart';
@@ -39,18 +44,25 @@ class MemberHomeScreen extends StatefulWidget {
   const MemberHomeScreen(
       {super.key,
       this.liveSession,
+      this.appCheckIn,
+      this.onAppClaim,
+      this.onRefreshCheckIn,
       this.onOpenCoachingUpdates,
       this.liveProfile,
       this.publishedRoutine,
       this.routineStatusMessage,
       this.onStartWorkout,
       this.localProgress,
+      this.routineProgress,
+      this.onOpenRoutineHistory,
+      this.onOpenRoutine,
       this.progressError,
       this.progressWarnings = const [],
       this.onRefreshProgress,
       this.onRefreshRoutines,
       this.announcements,
       this.onRefreshAnnouncements,
+      this.onOpenRewards,
       this.onOpenProgress,
       this.onOpenHistory,
       this.onOpenEquipment,
@@ -59,19 +71,24 @@ class MemberHomeScreen extends StatefulWidget {
       this.onOpenWorkout});
 
   final AuthSession? liveSession;
+  final AppCheckInState? appCheckIn;
+  final Future<void> Function()? onAppClaim, onRefreshCheckIn;
   final VoidCallback? onOpenCoachingUpdates;
   final FitnessProfile? liveProfile;
   final PublishedRoutine? publishedRoutine;
   final String? routineStatusMessage;
   final VoidCallback? onStartWorkout;
   final MemberLocalProgress? localProgress;
+  final RoutineProgress? routineProgress;
+  final VoidCallback? onOpenRoutineHistory;
+  final void Function(RoutineAttempt)? onOpenRoutine;
   final String? progressError;
   final List<String> progressWarnings;
   final Future<void> Function()? onRefreshProgress;
   final Future<void> Function()? onRefreshRoutines;
   final Widget? announcements;
   final Future<void> Function()? onRefreshAnnouncements;
-  final VoidCallback? onOpenProgress, onOpenHistory;
+  final VoidCallback? onOpenProgress, onOpenHistory, onOpenRewards;
   final VoidCallback? onOpenEquipment;
   final VoidCallback? onOpenCoaches, onOpenBookings;
   final void Function(LocalWorkoutProgressRecord)? onOpenWorkout;
@@ -126,6 +143,7 @@ class _MemberHomeScreenState extends State<MemberHomeScreen>
   Future<void> _refreshLive() async {
     await Future.wait<void>([
       if (widget.onRefreshProgress != null) widget.onRefreshProgress!(),
+      if (widget.onRefreshCheckIn != null) widget.onRefreshCheckIn!(),
       if (widget.onRefreshRoutines != null) widget.onRefreshRoutines!(),
       if (widget.onRefreshAnnouncements != null)
         widget.onRefreshAnnouncements!(),
@@ -164,6 +182,7 @@ class _MemberHomeScreenState extends State<MemberHomeScreen>
     await Navigator.push(context, MaterialPageRoute(builder: (_) => screen));
     if (mounted && widget.liveSession != null) {
       await widget.onRefreshProgress?.call();
+      await widget.onRefreshCheckIn?.call();
     }
   }
 
@@ -197,7 +216,9 @@ class _MemberHomeScreenState extends State<MemberHomeScreen>
             _HeroHeader(
                 greeting: _greeting,
                 firstName: firstName,
-                points: gamification?.points,
+                points: live
+                    ? widget.appCheckIn?.snapshot?.balance
+                    : gamification?.points,
                 live: live,
                 onOpenCoachingUpdates: widget.onOpenCoachingUpdates,
                 onOpenAnnouncements: live && widget.announcements != null
@@ -222,13 +243,19 @@ class _MemberHomeScreenState extends State<MemberHomeScreen>
                             setState(() => _dismissedBroadcast = true)),
                     const SizedBox(height: 14),
                   ],
-                  _StreakCard(
-                    live: live,
-                    claimed: gamification?.checkedInToday ?? false,
-                    scale: _claimScale,
-                    onClaim: live ? () => showUnavailable(context) : _claim,
-                    reward: RewardPolicy.dailyCheckIn,
-                  ),
+                  if (live && widget.appCheckIn != null)
+                    AppCheckInCard(
+                        state: widget.appCheckIn!,
+                        onClaim: widget.onAppClaim ?? () async {},
+                        onRefresh: widget.onRefreshCheckIn)
+                  else
+                    _StreakCard(
+                      live: live,
+                      claimed: gamification?.checkedInToday ?? false,
+                      scale: _claimScale,
+                      onClaim: live ? () => showUnavailable(context) : _claim,
+                      reward: RewardPolicy.dailyCheckIn,
+                    ),
                   const SizedBox(height: 20),
                   const Eyebrow("Today's session"),
                   _TodayWorkoutCard(
@@ -241,6 +268,13 @@ class _MemberHomeScreenState extends State<MemberHomeScreen>
                                   publishedRoutine: widget.publishedRoutine))
                           : () => _go(const WorkoutPrepRoute(live: false))),
                   const SizedBox(height: 20),
+                  if (live) ...[
+                    RoutineProgressCard(
+                        progress: widget.routineProgress,
+                        onOpenHistory: widget.onOpenRoutineHistory,
+                        onOpenAttempt: widget.onOpenRoutine),
+                    const SizedBox(height: 16),
+                  ],
                   const Eyebrow('This week'),
                   _RingStatsRow(live: live, progress: widget.localProgress),
                   if (live) ...[
@@ -283,9 +317,13 @@ class _MemberHomeScreenState extends State<MemberHomeScreen>
                   ],
                   const Eyebrow('Quick access'),
                   _QuickActionsGrid(
+                      onOpenRewards: widget.onOpenRewards,
                       onSelect: _go,
                       enabled: !live,
-                      onOpenSavedAdvice: live ? () => _go(buildMemberChatbot(widget.liveSession!, openSavedAdvice: true)) : null,
+                      onOpenSavedAdvice: live
+                          ? () => _go(buildMemberChatbot(widget.liveSession!,
+                              openSavedAdvice: true))
+                          : null,
                       onOpenEquipment: widget.onOpenEquipment,
                       onOpenCoaches: widget.onOpenCoaches,
                       onOpenBookings: widget.onOpenBookings,
@@ -296,7 +334,8 @@ class _MemberHomeScreenState extends State<MemberHomeScreen>
                       live: live,
                       liveProfile: widget.liveProfile,
                       onTap: live
-                          ? () => _go(GoalProgressScreen(live: true, localProgress: widget.localProgress))
+                          ? () => _go(GoalProgressScreen(
+                              live: true, localProgress: widget.localProgress))
                           : () => _go(const GoalProgressScreen())),
                   const SizedBox(height: 20),
                   _MembershipStrip(
@@ -350,7 +389,11 @@ class _HeroHeader extends StatelessWidget {
           ?.copyWith(color: Colors.white, fontSize: 18),
       title: const Text('GainPath'),
       actions: [
-        if (onOpenCoachingUpdates != null) IconButton(tooltip: 'Coaching updates and privacy', icon: const Icon(Icons.notifications_active_outlined), onPressed: onOpenCoachingUpdates),
+        if (onOpenCoachingUpdates != null)
+          IconButton(
+              tooltip: 'Coaching updates and privacy',
+              icon: const Icon(Icons.notifications_active_outlined),
+              onPressed: onOpenCoachingUpdates),
         IconButton(
           tooltip:
               onOpenAnnouncements != null ? 'Announcements' : 'Notifications',
@@ -1034,7 +1077,7 @@ class _NextSessionCard extends StatelessWidget {
 class _QuickActionsGrid extends StatelessWidget {
   final void Function(Widget) onSelect;
   final bool enabled;
-  final VoidCallback? onOpenProgress;
+  final VoidCallback? onOpenProgress, onOpenRewards;
   final VoidCallback? onOpenEquipment;
   final VoidCallback? onOpenSavedAdvice;
   final VoidCallback? onOpenCoaches, onOpenBookings;
@@ -1042,6 +1085,7 @@ class _QuickActionsGrid extends StatelessWidget {
       {required this.onSelect,
       this.enabled = true,
       this.onOpenProgress,
+      this.onOpenRewards,
       this.onOpenCoaches,
       this.onOpenBookings,
       this.onOpenSavedAdvice,
@@ -1052,14 +1096,25 @@ class _QuickActionsGrid extends StatelessWidget {
     final actions = <_QuickAction>[
       _QuickAction(Icons.insights_rounded, 'Progress', AppColors.primary,
           onOpenProgress ?? () => onSelect(const ProgressDashboardScreen())),
-      _QuickAction(Icons.emoji_events_rounded, 'Rewards', AppColors.accent,
-          () => onSelect(GamificationDashboardScreen(live: !enabled))),
+      _QuickAction(
+          Icons.emoji_events_rounded,
+          'Rewards',
+          AppColors.accent,
+          onOpenRewards ??
+              () => onSelect(GamificationDashboardScreen(live: !enabled))),
       _QuickAction(Icons.people_alt_rounded, 'Coaches', AppColors.info,
           onOpenCoaches ?? () => onSelect(const BrowseCoachesScreen())),
       _QuickAction(Icons.event_note_rounded, 'Bookings', AppColors.success,
           onOpenBookings ?? () => onSelect(const BookingScheduleScreen())),
-      _QuickAction(Icons.leaderboard_rounded, 'Ranking', AppColors.warning,
-          () => onSelect(const LeaderboardScreen())),
+      _QuickAction(
+          Icons.leaderboard_rounded,
+          'Ranking',
+          AppColors.warning,
+          () => onSelect(enabled
+              ? const LeaderboardScreen()
+              : RewardsFeatureHost(
+                  builder: (repo) =>
+                      LeaderboardScreen(connected: true, repository: repo)))),
       _QuickAction(Icons.sports_esports_rounded, 'Mini-games',
           AppColors.primarySoft, () => onSelect(const MiniGamesScreen())),
       _QuickAction(
@@ -1094,6 +1149,7 @@ class _QuickActionsGrid extends StatelessWidget {
                 action: a,
                 enabled: enabled ||
                     a.label == 'Rewards' ||
+                    a.label == 'Ranking' ||
                     a.label == 'Membership' ||
                     (a.label == 'Progress' && onOpenProgress != null) ||
                     (a.label == 'Coaches' && onOpenCoaches != null) ||

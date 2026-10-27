@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest';
 import type { DocumentData, DocumentStore, TransactionPort } from '../src/platform/firestore/store';
 import { DomainError } from '../src/platform/errors';
 import { InputValidationError } from '../src/platform/validation';
-import { publishRoutine } from '../src/modules/content/publish-routine';
+import { publishRoutine as sourcePublishRoutine } from '../src/modules/content/publish-routine';
+const publishRoutine: typeof sourcePublishRoutine = process.env.GAINPATH_EXERCISE_PUBLISHER_MODULE
+  ? require(process.env.GAINPATH_EXERCISE_PUBLISHER_MODULE).publishRoutine : sourcePublishRoutine;
 
 class MemoryStore implements DocumentStore {
   readonly documents = new Map<string, DocumentData>();
@@ -58,6 +60,71 @@ function setup(role = 'staff') {
 }
 
 describe('publishRoutine', () => {
+  it('rejects archived blueprints without publishing content', async () => {
+    const store = setup();
+    store.documents.set('orgs/org-1/routineBlueprints/blueprint-1', {...blueprint, archived: true});
+    await expect(publishRoutine(store, auth(), request, () => 1000)).rejects.toMatchObject({code: 'failed-precondition'});
+    expect(store.documents.has('orgs/org-1/content/routine_blueprint-1')).toBe(false);
+  });
+  it('preserves explicit routine difficulty independently of exercise difficulty and leaves legacy unknown',async()=>{
+    for(const level of ['Beginner','Intermediate','Advanced']){
+      const store=setup();store.documents.set('orgs/org-1/routineBlueprints/blueprint-1',{...blueprint,level});
+      const result=await publishRoutine(store,auth(),request,()=>1000);
+      expect(store.documents.get('orgs/org-1/content/'+result.contentId)?.difficulty).toBe(level);
+    }
+    const store=setup();const result=await publishRoutine(store,auth(),request,()=>1000);expect(store.documents.get('orgs/org-1/content/'+result.contentId)).not.toHaveProperty('difficulty');
+  });
+  it('snapshots exercise overview, cover, equipment and ordered tutorial steps', async () => {
+    const store = setup();
+    const details = {
+      description: 'A controlled lower-body movement.',
+      coverImageUrl: 'https://media.example.test/cover.jpg',
+      difficulty: 'Intermediate', equipment: 'Exercise mat',
+      tutorialSteps: [
+        { title: 'Set up', description: 'Stand tall.', imageUrl: 'https://media.example.test/setup.webp' },
+        { title: 'Lower', description: 'Bend your knees slowly.', imageUrl: '' },
+      ],
+    };
+    store.documents.set('orgs/org-1/exerciseVideos/squat-1', {
+      exerciseName: 'Squat', muscleCategory: 'Lower body', videoUrl: '', isActive: true, ...details,
+    });
+    await publishRoutine(store, auth(), request, () => 1000);
+    const content = store.documents.get('orgs/org-1/content/routine_blueprint-1')!;
+    expect(content.exercises).toMatchObject([{ ...details, imageUrl: details.coverImageUrl }]);
+    store.documents.set('orgs/org-1/exerciseVideos/squat-1', {
+      exerciseName: 'Changed', muscleCategory: 'Core', isActive: true, videoUrl: '',
+      description: 'New instructions', tutorialSteps: [],
+    });
+    await publishRoutine(store, auth(), request, () => 2000);
+    expect(store.documents.get('orgs/org-1/content/routine_blueprint-1')).toEqual(content);
+  });
+  it.each([
+    {tutorialSteps: Array.from({length:13}, () => ({title:'Move', description:'Slowly'}))},
+    {tutorialSteps:[{title:'Move', description:'', imageUrl:''}]},
+    {tutorialSteps:[{title:'Move', description:'Slowly', aiSupported:true}]},
+    {description:'x'.repeat(2001)}, {equipment:'x'.repeat(301)}, {difficulty:'Unknown'},
+  ])('rejects malformed authored instructions without writing content %#', async details => {
+    const store = setup();
+    store.documents.set('orgs/org-1/exerciseVideos/squat-1', {
+      exerciseName:'Squat', muscleCategory:'Lower body', isActive:true, videoUrl:'', ...details,
+    });
+    await expect(publishRoutine(store, auth(), request)).rejects.toMatchObject({code:'failed-precondition'});
+    expect(store.documents.has('orgs/org-1/content/routine_blueprint-1')).toBe(false);
+  });
+  it('rejects an oversized snapshot before writing content or a receipt', async () => {
+    const store = setup();
+    store.documents.set('orgs/org-1/routineBlueprints/blueprint-1', {
+      ...blueprint, days:Array.from({length:3}, (_, i) => ({dayNumber:i + 1,
+        exercises:Array.from({length:i === 2 ? 10 : 20}, () => ({exerciseId:'squat-1', sets:3, reps:8}))})),
+    });
+    store.documents.set('orgs/org-1/exerciseVideos/squat-1', {
+      exerciseName:'Squat', muscleCategory:'Lower body', isActive:true, videoUrl:'',
+      tutorialSteps:Array.from({length:12}, () => ({title:'Move', description:'動'.repeat(1200), imageUrl:''})),
+    });
+    await expect(publishRoutine(store, auth(), request)).rejects.toMatchObject({code:'failed-precondition'});
+    expect(store.documents.has('orgs/org-1/content/routine_blueprint-1')).toBe(false);
+    expect([...store.documents.keys()].some(path => path.includes('/commandReceipts/'))).toBe(false);
+  });
   it('snapshots tutorial media from the exact active catalog ID and preserves retry content', async () => {
     const store = setup();
     store.documents.set('orgs/org-1/exerciseVideos/squat-1', {
@@ -123,7 +190,7 @@ describe('publishRoutine', () => {
   it('rejects unknown client fields and invalid exercise references before writing', async () => {
     const store = setup();
     await expect(publishRoutine(store, auth(), { ...request, status: 'published' }))
-      .rejects.toBeInstanceOf(InputValidationError);
+      .rejects.toMatchObject({ name: 'InputValidationError', message: 'Unknown publish command field' });
     store.documents.set('orgs/org-1/routineBlueprints/blueprint-1', {
       ...blueprint,
       days: [{ dayNumber: 1, exercises: [{ exerciseId: 'missing', sets: 2, reps: 5 }] }],
