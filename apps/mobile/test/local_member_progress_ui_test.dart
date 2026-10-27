@@ -251,7 +251,7 @@ void main() {
           _record(id: 'gap', score: null),
           _record(id: 'new-version', score: 91, scoringVersion: 'rule-b'),
         ])));
-    expect(find.text('Posture accuracy'), findsOneWidget);
+    expect(find.text('Estimated form'), findsOneWidget);
     expect(find.textContaining('rule-a'), findsWidgets);
     expect(find.textContaining('rule-b'), findsWidgets);
     final charts = tester

@@ -26,6 +26,14 @@ Architecture boundaries, backend source/test TypeScript compilation and the smal
 
 Publication audit found no new credentials/private-fixture contents/binary artifacts in the reviewed manifest. APKs, source ZIPs, private credentials, screenshots, transactions/device readbacks and release helpers under ignored build/ remain local. Evidence is retained in build/checkpoint-20261027/. This fresh run is **not** a claim of a full Mobile/Admin suite, full-project lint gate, new browser/emulator/physical UAT, fresh Android/Web build or new cloud deployment. Earlier signed builds and release checks retain their own dated evidence.
 
+### GitHub CI correction after the checkpoint
+
+The first pushed checkpoint failed the broader GitHub workspace gate. The earlier 2,079-test result above was an affected-source selection, not a full app/emulator gate. Backend build, typechecking and unit tests passed on GitHub, but the emulator command selected newer fixed-port suites under the old shared emulator configuration. Mobile had four stale tests: Reward shop and Estimated form titles, the current unavailable check-in card, and a workout fixture missing AuthBloc.
+
+The emulator runner now partitions all 51 integration files into six matching loopback/demo-project groups without changing their safety guards or Rules. Three regression tests cover complete/unique selection, dedicated endpoints and each file's fixed ports. Existing manual targeted emulator commands remain supported. The four Mobile fixtures now reflect the implemented UI and required authentication context; production app behavior is unchanged.
+
+Fresh local checks for this correction: full backend unit suite 1,134 passed, full Mobile suite 923 passed/15 skipped, full Admin suite 358 passed, and all five dedicated integration groups 34 passed. TypeScript source build/test checks, changed-test Dart analysis and architecture pass. A legacy booking-lifecycle contention case passed in the first core run but returned emulator INVALID_ARGUMENT on subsequent full and isolated runs; it is being rechecked separately rather than hidden or skipped. CI-fix evidence is retained locally in build/ci-fix-20261027/. No cloud deployment, live data or installed app change is included.
+
 ## Overall position
 
 The product has a connected foundation across Member, Coach and Admin roles, with an implemented routine journey and a working data-backed basic rewards loop. Full FYP completion still depends on physical workout acceptance, end-to-end owner UAT, broader required reporting/recommendations and the held membership/provider capabilities below.

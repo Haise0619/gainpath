@@ -6,6 +6,9 @@ import 'package:gainpath_mobile/features/workout/presentation/member/workout_pre
 import 'package:google_fonts/google_fonts.dart';
 import 'package:gainpath_mobile/app/home/member_home_screen.dart';
 import 'package:gainpath_domain/gainpath_domain.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:gainpath_data/gainpath_data.dart';
+import 'package:gainpath_identity/gainpath_identity.dart';
 
 void main() {
   setUpAll(() => GoogleFonts.config.allowRuntimeFetching = false);
@@ -136,8 +139,17 @@ void main() {
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
     final routine = PublishedRoutine.fromDocument('routine-1', document);
-    await tester.pumpWidget(MaterialApp(
-      home: WorkoutPrepScreen(live: true, publishedRoutine: routine),
+    final repository = InMemoryAuthRepository();
+    final auth = AuthBloc(repository: repository);
+    addTearDown(() async {
+      await auth.close();
+      await repository.dispose();
+    });
+    await tester.pumpWidget(BlocProvider.value(
+      value: auth,
+      child: MaterialApp(
+        home: WorkoutPrepScreen(live: true, publishedRoutine: routine),
+      ),
     ));
     await tester.pumpAndSettle();
     expect(find.text('Strength basics'), findsOneWidget);

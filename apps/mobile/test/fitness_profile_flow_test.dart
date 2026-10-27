@@ -250,16 +250,10 @@ void main() {
     await mount(tester, auth, profiles);
     expect(find.byType(MemberHomeScreen), findsOneWidget);
     expect(find.text('Announcements'), findsOneWidget);
-    expect(find.text('- day streak'), findsOneWidget);
-    expect(find.text('Check-in is not connected yet.'), findsOneWidget);
+    expect(find.text('Daily app check-in'), findsOneWidget);
+    expect(find.text('App check-in awaiting activation.'), findsOneWidget);
     expect(find.text('No published routine yet'), findsOneWidget);
-    expect(
-        tester
-            .widget<FilledButton>(find.widgetWithText(FilledButton, 'Claim'))
-            .onPressed,
-        isNotNull);
-    await tap(tester, 'Claim');
-    expect(find.text('This feature is currently unavailable.'), findsOneWidget);
+    expect(find.text('Claim'), findsNothing);
     await tap(tester, 'Workout');
     expect(find.byType(WorkoutPrepScreen), findsOneWidget);
     expect(find.text('Watch tutorial'), findsOneWidget);

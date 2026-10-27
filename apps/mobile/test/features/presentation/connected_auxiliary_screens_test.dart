@@ -78,7 +78,7 @@ void main() {
     'Leaderboard': const LeaderboardScreen(connected: true),
     'Badges': const BadgesScreen(connected: true),
     'Mini-games': const MiniGamesScreen(connected: true),
-    'Redeem points':
+    'Reward shop':
         RewardShopScreen(connected: true, repository: RewardsFake()),
     'Membership plans':
         BrowsePlansScreen(connected: true, repository: MembershipFake()),
