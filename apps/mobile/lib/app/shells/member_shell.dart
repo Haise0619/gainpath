@@ -1,7 +1,7 @@
 import '../../infrastructure/firebase/firebase_module9_repository.dart';
+import '../notifications/member_notifications_screen.dart';
 import '../routing/app_check_in_host.dart';
 import '../../features/gamification/application/app_check_in_cubit.dart';
-import '../../features/coaching/presentation/member/coaching_updates_screen.dart';
 import 'package:flutter/material.dart';
 import 'dart:async';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -13,7 +13,6 @@ import '../../features/membership/application/membership_feature_host.dart';
 import '../../infrastructure/local/mock_membership_commerce.dart';
 import '../../features/analytics/application/member_progress_cubit.dart';
 import 'package:gainpath_domain/analytics.dart';
-import '../../features/content/presentation/member/member_announcements.dart';
 import '../home/member_home_screen.dart';
 import '../routing/member_progress_route.dart';
 import '../routing/workout_prep_route.dart';
@@ -80,7 +79,6 @@ class _MemberShellState extends State<MemberShell> {
   PublishedRoutineCatalogCubit? _catalog;
   MembershipCommerceRepository? _membership;
   AnnouncementReader? _announcements;
-  final _announcementKey = GlobalKey<MemberAnnouncementsState>();
   AuthBloc? _auth;
   StreamSubscription<AuthState>? _authSubscription;
 
@@ -207,21 +205,28 @@ class _MemberShellState extends State<MemberShell> {
           appCheckIn: checkIn,
           onAppClaim: claimCheckIn,
           onRefreshCheckIn: refreshCheckIn,
-          onOpenCoachingUpdates: session == null
-              ? null
-              : () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                      builder: (_) => CoachingUpdatesScreen(
-                            repository: FirebaseModule9Repository(
+          onOpenNotifications: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                  builder: (_) => MemberNotificationsScreen(
+                        session: session,
+                        announcementReader: _announcements,
+                        module9Repository: session == null
+                            ? null
+                            : FirebaseModule9Repository(
                                 scope: session.scope,
                                 isCurrent: () =>
                                     _activeScope() == session.scope),
-                            isCurrent: () => _activeScope() == session.scope,
-                            onOpenBookings: () => openBookingList(
+                        bookingListFactory: widget.bookingListFactory,
+                        isCurrent: () =>
+                            session == null ||
+                            _activeScope() == session.scope,
+                        onOpenBookings: session == null
+                            ? null
+                            : () => openBookingList(
                                 context, session,
                                 factory: widget.bookingListFactory),
-                          ))),
+                      ))),
           liveProfile: widget.liveProfile,
           localProgress: progress?.progress,
           routineProgress: progress?.routines,
@@ -234,13 +239,8 @@ class _MemberShellState extends State<MemberShell> {
           progressWarnings: progress?.snapshot?.warnings ?? const [],
           onRefreshProgress: refresh,
           onRefreshRoutines: _catalog?.refresh,
-          announcements: _announcements == null
-              ? null
-              : MemberAnnouncements(
-                  key: _announcementKey, reader: _announcements!),
-          onRefreshAnnouncements: connected
-              ? () async => _announcementKey.currentState?.refresh()
-              : null,
+          announcements: null,
+          onRefreshAnnouncements: null,
           onOpenProgress:
               open == null ? null : () => open(MemberProgressView.dashboard),
           onOpenHistory:

@@ -26,6 +26,7 @@ import '../infrastructure/firebase/firebase_fitness_profile_gateway.dart';
 import '../infrastructure/firebase/firebase_member_preferences_repository.dart';
 import '../infrastructure/firebase/firebase_password_actions.dart';
 import '../infrastructure/firebase/firebase_member_account_lifecycle_repository.dart';
+import '../infrastructure/firebase/firebase_module9_repository.dart';
 import '../features/identity/presentation/member/member_account_recovery_screen.dart';
 import '../infrastructure/firebase/firebase_published_routine_repository.dart';
 import '../features/workout/data/published_routine.dart';
@@ -309,6 +310,9 @@ class _MobileAuthGateState extends State<_MobileAuthGate> {
                               repository: FirebaseMemberPreferencesRepository(
                                   scope: scope,
                                   isSessionCurrent: isCurrentMember),
+                              module9Repository: FirebaseModule9Repository(
+                                  scope: scope, isCurrent: isCurrentMember),
+                              isSessionCurrent: isCurrentMember,
                               verifyCurrentPassword: actions.verifyCurrent,
                               saveNewPassword: actions.saveNew,
                               lifecycleRepository:

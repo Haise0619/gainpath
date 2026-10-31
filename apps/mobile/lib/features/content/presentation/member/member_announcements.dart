@@ -6,8 +6,9 @@ import 'package:gainpath_ui/gainpath_ui.dart';
 /// Owns only announcement read state. Session composition replaces this widget
 /// on account changes; generation checks discard late reads and old refreshes.
 class MemberAnnouncements extends StatefulWidget {
-  const MemberAnnouncements({super.key, required this.reader});
+  const MemberAnnouncements({super.key, required this.reader, this.compact = false});
   final AnnouncementReader reader;
+  final bool compact;
   @override
   State<MemberAnnouncements> createState() => MemberAnnouncementsState();
 }
@@ -92,6 +93,107 @@ class MemberAnnouncementsState extends State<MemberAnnouncements> {
   Widget build(BuildContext context) {
     final visible = _items.where((a) => a.isActive).toList()
       ..sort((a, b) => b.validFrom.compareTo(a.validFrom));
+
+    if (widget.compact) {
+      if (!_loading && _error == null && visible.isEmpty) {
+        return const SizedBox.shrink();
+      }
+      if (_loading && _items.isEmpty) {
+        return const SizedBox.shrink();
+      }
+      if (_error != null) {
+        return Container(
+          margin: const EdgeInsets.only(bottom: 12),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            color: AppColors.surface,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: AppColors.hairline),
+          ),
+          child: Row(
+            children: [
+              const Icon(Icons.info_outline, size: 16, color: AppColors.inkSoft),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(_error!,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 12, color: AppColors.inkSoft)),
+              ),
+              TextButton(
+                onPressed: refresh,
+                style: TextButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  visualDensity: VisualDensity.compact,
+                ),
+                child: const Text('Retry', style: TextStyle(fontSize: 12)),
+              ),
+            ],
+          ),
+        );
+      }
+      final latest = visible.first;
+      return Container(
+        margin: const EdgeInsets.only(bottom: 12),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: AppColors.accentTint,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: AppColors.warning.withValues(alpha: 0.3)),
+        ),
+        child: InkWell(
+          onTap: () => showDialog<void>(
+            context: context,
+            builder: (ctx) => AlertDialog(
+              title: Text(latest.title),
+              content: SingleChildScrollView(child: Text(latest.body)),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text('Close'),
+                ),
+              ],
+            ),
+          ),
+          child: Row(
+            children: [
+              const Icon(Icons.campaign_rounded,
+                  size: 20, color: AppColors.warning),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      latest.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.ink,
+                      ),
+                    ),
+                    if (visible.length > 1)
+                      Text(
+                        '+${visible.length - 1} more announcement${visible.length > 2 ? 's' : ''}',
+                        style: const TextStyle(
+                          fontSize: 11,
+                          color: AppColors.inkSoft,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              const Icon(Icons.chevron_right_rounded,
+                  size: 18, color: AppColors.inkSoft),
+            ],
+          ),
+        ),
+      );
+    }
+
     return Panel(
         background: AppColors.accentTint,
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [

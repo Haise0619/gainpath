@@ -41,7 +41,7 @@ class FakeModule9 implements Module9Repository {
 void main() {
   setUpAll(() => GoogleFonts.config.allowRuntimeFetching = false);
   testWidgets(
-      'Member explicitly grants sharing, save failure retains verified state, notification opens bookings',
+      'Coaching updates screen displays notices, no duplicate privacy switch, and notification opens bookings',
       (tester) async {
     final repo = FakeModule9();
     var opened = false;
@@ -51,18 +51,8 @@ void main() {
             isCurrent: () => true,
             onOpenBookings: () => opened = true)));
     await tester.pumpAndSettle();
-    expect(tester.widget<SwitchListTile>(find.byType(SwitchListTile)).value,
-        isFalse);
-    await tester.tap(find.byType(SwitchListTile));
-    await tester.pumpAndSettle();
-    expect(repo.expectedRevision, 0);
-    expect(tester.widget<SwitchListTile>(find.byType(SwitchListTile)).value,
-        isTrue);
-    repo.failSave = true;
-    await tester.tap(find.byType(SwitchListTile));
-    await tester.pumpAndSettle();
-    expect(tester.widget<SwitchListTile>(find.byType(SwitchListTile)).value,
-        isTrue);
+    expect(find.byType(SwitchListTile), findsNothing);
+    expect(find.text('Session cancelled'), findsOneWidget);
     await tester.tap(find.text('Session cancelled'));
     await tester.pumpAndSettle();
     expect(repo.readId, 'n1');

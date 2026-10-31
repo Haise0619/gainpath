@@ -84,20 +84,21 @@ void main() {
     ));
     await tester.pumpAndSettle();
     expect(find.text("TODAY'S SESSION"), findsOneWidget);
-    expect(find.text('Avg form'), findsOneWidget);
-    expect(find.text('To badge'), findsOneWidget);
-    expect(find.text('NEXT WITH A COACH'), findsOneWidget);
-    expect(find.text('with -'), findsOneWidget);
+    expect(find.text("THIS WEEK"), findsOneWidget);
+    expect(find.text('Sessions'), findsOneWidget);
+    // Unmeasured and unsupported placeholder cards are removed in live mode without data
+    expect(find.text('Avg form'), findsNothing);
+    expect(find.text('To badge'), findsNothing);
+    expect(find.text('with -'), findsNothing);
+    expect(find.text('- membership'), findsNothing);
+
+    // Bookings and Coaches are directly accessible on the Quick Access grid
     await tester.ensureVisible(find.text('Coaches'));
     await tester.tap(find.text('Coaches'));
     await tester.tap(find.text('Bookings'));
     expect(coaches, 1);
     expect(bookings, 1);
-    await tester.ensureVisible(find.text('See all goals'));
-    expect(find.text('Train 4x per week'), findsOneWidget);
-    expect(find.text('Hit 85% average form'), findsOneWidget);
-    expect(find.text('3 of 4'), findsNothing);
-    expect(find.text('- membership'), findsOneWidget);
+
     expect(tester.takeException(), isNull);
   });
 }

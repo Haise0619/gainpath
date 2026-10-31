@@ -1,12 +1,9 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:gainpath_data/gainpath_data.dart';
-import 'package:gainpath_mobile/app/home/member_home_screen.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:gainpath_domain/content.dart';
 import 'package:gainpath_mobile/features/content/presentation/member/member_announcements.dart';
-import 'support/fitness_profile_fake.dart';
 
 Announcement entry(String id,
         {AnnouncementStatus status = AnnouncementStatus.published,
@@ -38,30 +35,21 @@ class _Reader implements AnnouncementReader {
 void main() {
   setUpAll(() => GoogleFonts.config.allowRuntimeFetching = false);
   testWidgets(
-      'Member Home bell opens and refreshes real announcements instead of unavailable',
+      'Member announcements component renders and refreshes real announcements instead of unavailable',
       (tester) async {
     tester.view.physicalSize = const Size(1000, 1400);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
-    final auth = InMemoryAuthRepository();
-    final session = await auth.signIn(
-        email: 'member@example.test', password: 'password123');
     final reader = _Reader()..items = [entry('Original publication')];
     final key = GlobalKey<MemberAnnouncementsState>();
     await tester.pumpWidget(MaterialApp(
-        home: MemberHomeScreen(
-      liveSession: session,
-      liveProfile: sampleProfile(),
-      announcements: MemberAnnouncements(key: key, reader: reader),
-      onRefreshAnnouncements: () async {
-        await key.currentState?.refresh();
-      },
+        home: Scaffold(
+      body: MemberAnnouncements(key: key, reader: reader),
     )));
     await tester.pumpAndSettle();
-    await tester.drag(find.byType(CustomScrollView), const Offset(0, -900));
-    await tester.pumpAndSettle();
+    expect(find.text('Original publication'), findsOneWidget);
     reader.items = [entry('Refreshed publication')];
-    await tester.tap(find.byIcon(Icons.notifications_none_rounded));
+    await key.currentState!.refresh();
     await tester.pumpAndSettle();
     expect(find.text('Refreshed publication'), findsOneWidget);
     expect(tester.getTopLeft(find.text('Refreshed publication')).dy,

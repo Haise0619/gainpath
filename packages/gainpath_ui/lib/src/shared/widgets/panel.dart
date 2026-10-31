@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import '../../tokens/app_theme.dart';
 
@@ -26,15 +25,13 @@ class Panel extends StatelessWidget {
         color: background ?? AppColors.surface,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: AppColors.hairline),
-        boxShadow: kIsWeb
-            ? [
-                BoxShadow(
-                  color: AppColors.ink.withValues(alpha: 0.04),
-                  blurRadius: 14,
-                  offset: const Offset(0, 3),
-                ),
-              ]
-            : null,
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x08190F2E),
+            blurRadius: 10,
+            offset: Offset(0, 2),
+          ),
+        ],
       ),
       child: child,
     );

@@ -391,12 +391,12 @@ class _MemberProfileScreenState extends State<MemberProfileScreen>
                                 MaterialPageRoute(
                                     builder: (_) =>
                                         const AccountSettingsScreen()))
-                            : memberSettingsBuilder == null
-                                ? showUnavailable(context)
-                                : Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                        builder: memberSettingsBuilder!))),
+                            : Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                    builder: memberSettingsBuilder ??
+                                        (_) => AccountSettingsScreen(
+                                            contactSession: liveSession)))),
                   ],
                 ),
               ),

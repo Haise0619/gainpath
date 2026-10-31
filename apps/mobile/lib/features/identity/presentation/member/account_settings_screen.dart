@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
 import 'package:gainpath_domain/gainpath_domain.dart';
 import 'package:gainpath_domain/identity.dart';
+import 'package:gainpath_domain/coaching.dart';
 import 'member_contact_details_panel.dart';
 import 'member_deactivation_dialog.dart';
+import 'privacy_and_data_settings_screen.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:gainpath_identity/gainpath_identity.dart';
 
@@ -16,7 +18,9 @@ class AccountSettingsScreen extends StatefulWidget {
       this.lifecycleRepository,
       this.onAccountDeactivated,
       this.verifyCurrentPassword,
-      this.saveNewPassword});
+      this.saveNewPassword,
+      this.module9Repository,
+      this.isSessionCurrent});
 
   final MemberPreferencesRepository? repository;
   final AuthSession? contactSession;
@@ -25,6 +29,8 @@ class AccountSettingsScreen extends StatefulWidget {
   final VoidCallback? onAccountDeactivated;
   final Future<void> Function(String)? verifyCurrentPassword;
   final Future<void> Function(String)? saveNewPassword;
+  final Module9Repository? module9Repository;
+  final bool Function()? isSessionCurrent;
 
   @override
   State<AccountSettingsScreen> createState() => _AccountSettingsScreenState();
@@ -244,12 +250,19 @@ class _AccountSettingsScreenState extends State<AccountSettingsScreen> {
                           ListTile(
                             leading: const Icon(Icons.privacy_tip_outlined),
                             title: const Text('Privacy and data'),
+                            subtitle: const Text('Posture & camera data sharing'),
                             trailing: const Icon(
                                 Icons.arrow_forward_ios_rounded,
                                 size: 14),
-                            onTap: () => widget.repository == null
-                                ? showToast(context, 'Privacy settings.')
-                                : showUnavailable(context),
+                            onTap: () => Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                    builder: (_) =>
+                                        PrivacyAndDataSettingsScreen(
+                                          repository: widget.module9Repository,
+                                          isCurrent: widget.isSessionCurrent ??
+                                              () => true,
+                                        ))),
                           ),
                         ],
                       ),
