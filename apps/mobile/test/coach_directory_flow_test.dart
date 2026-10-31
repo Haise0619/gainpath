@@ -1,3 +1,4 @@
+import 'support/signed_out_firebase.dart';
 import 'support/coach_account_gateway_fake.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
@@ -72,6 +73,7 @@ class DriftingCoachAuth extends InMemoryAuthRepository {
 }
 
 void main() {
+  setUpAll(setUpSignedOutFirebase);
   setUpAll(() => GoogleFonts.config.allowRuntimeFetching = false);
   for (final verification in [false, true]) {
     testWidgets(

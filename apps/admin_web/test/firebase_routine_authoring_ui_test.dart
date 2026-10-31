@@ -172,6 +172,60 @@ void main() {
   });
 
   testWidgets(
+      'routine builder moves catalog exercises with their targets before publication',
+      (tester) async {
+    tester.view.physicalSize = const Size(1600, 1200);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final exercises = _ExerciseCatalog()
+      ..entries.add(TutorialVideo(
+          id: 'row-1',
+          title: 'Cable row',
+          category: 'Upper body',
+          status: TutorialStatus.active,
+          videoUrl: ''));
+    final routines = _RoutineRepository()
+      ..entries.add(RoutineBlueprint(
+          id: 'routine-a',
+          name: 'Ordered routine',
+          level: 'Beginner',
+          assignedMembers: 0,
+          days: [
+            const RoutineDay(1, [
+              RoutineExerciseRef('Squat', 3, 8, exerciseId: 'squat-1'),
+              RoutineExerciseRef('Cable row', 4, 12, exerciseId: 'row-1'),
+            ])
+          ]));
+    await tester.pumpWidget(MultiRepositoryProvider(
+        providers: [
+          RepositoryProvider<TutorialRepository>.value(value: exercises),
+          RepositoryProvider<RoutineTemplateRepository>.value(value: routines),
+        ],
+        child: MaterialApp(
+            theme: AppTheme.build(), home: const RoutineTemplatesScreen())));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Ordered routine'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byIcon(Icons.edit_outlined));
+    await tester.tap(find.byIcon(Icons.edit_outlined));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Move down').first);
+    await tester.tap(find.text('Move down').first);
+    await tester.pumpAndSettle();
+    final save = find.widgetWithText(FilledButton, 'Save changes');
+    await tester.ensureVisible(save);
+    await tester.tap(save);
+    await tester.pumpAndSettle();
+    final ordered = routines.entries.last.days.single.exercises;
+    expect(ordered.map((e) => e.exerciseId), ['row-1', 'squat-1']);
+    expect(ordered.map((e) => [e.sets, e.reps]), [
+      [4, 12],
+      [3, 8]
+    ]);
+    expect(routines.entries.last.days.single.dayNumber, 1);
+  });
+
+  testWidgets(
       'routine builder stores catalog IDs and publishes through its repository',
       (tester) async {
     tester.view.physicalSize = const Size(1600, 1000);

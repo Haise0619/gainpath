@@ -1,3 +1,5 @@
+import {observedActivity,type ObservationEvent,type ObservationReader} from './admin-observed-activity';
+import {engagementExtensions, type EngagementPage} from './admin-engagement-extensions';
 import {isDeepStrictEqual} from 'node:util';
 import {DomainError} from '../../platform/errors';
 import {requireVerifiedEmail} from '../../platform/auth-context';
@@ -8,6 +10,8 @@ import {authorizeAdminReport, type ReportRow} from './admin-reporting';
 
 type Auth = {uid: string; token: Record<string, unknown>};
 export interface CheckInReportReader {
+  page?: EngagementPage;
+  observations?: ObservationReader;
   members(after: string | undefined, limit: number): Promise<ReportRow[]>;
   claims(uid: string, after: string | undefined, limit: number): Promise<ReportRow[]>;
 }
@@ -38,7 +42,7 @@ function checkPage(rows: ReportRow[], after: string | undefined, limit: number, 
 export async function adminCheckInReport(store: DocumentStore, auth: Auth | undefined, raw: unknown, reader: CheckInReportReader, clock: () => number = Date.now): Promise<CheckInReport> {
   requireVerifiedEmail(auth);
   const q = raw as DocumentData, now = clock();
-  if (!q || typeof q !== 'object' || Array.isArray(q) || Object.keys(q).length !== 4 || q.schemaVersion !== 1 || !integer(now) || now > 8639999996400000 ||
+  if (!q || typeof q !== 'object' || Array.isArray(q) || Object.keys(q).length !== 4 || (q.schemaVersion !== 1 && q.schemaVersion !== 2 && q.schemaVersion !== 3) || !integer(now) || now > 8639999996400000 ||
       !integer(q.startAtMillis) || !integer(q.endAtMillis) || q.startAtMillis >= q.endAtMillis || q.endAtMillis > now + DAY) throw new InputValidationError('Invalid check-in report query.');
   const org = requiredIdentifier(q.organizationId, 'organizationId');
   if (org !== APP_CHECK_IN_POLICY.organizationId) throw new DomainError('permission-denied', 'Check-in analytics is unavailable for this organization.');
@@ -49,6 +53,8 @@ export async function adminCheckInReport(store: DocumentStore, auth: Auth | unde
     sourceReadStartedAtMillis: now, capturedAtMillis: now, timezone: APP_CHECK_IN_POLICY.timezone, policyVersion: APP_CHECK_IN_POLICY.version, pointsPerClaim: APP_CHECK_IN_POLICY.points,
     coverage: {membersScanned: 0, activeMembers: 0, profiles: 0, claimsScanned: 0}, totals: {claims: 0, claimingMembers: 0, pointsAwarded: 0}, daily: [], weekly: [],
     streaks: {asOfDate: todayDate, current: buckets(), longest: buckets()}};
+  const activityClaims:ObservationEvent[]=[];
+  const badgeUnlocks: {badgeId:string;at:number}[] = [];
   const rows: ReportRow[] = [];
   let after: string | undefined;
   do {
@@ -83,6 +89,7 @@ export async function adminCheckInReport(store: DocumentStore, auth: Auth | unde
         try {receipt = parseAppCheckInReceipt(row.data, org, uid, row.id);} catch (_) {throw fail();}
         if (receipt.claimedAtMillis > now) throw fail();
         lastClaimAt = receipt.claimedAtMillis;
+        activityClaims.push({memberId:uid,at:receipt.claimedAtMillis,source:'checkIns'});
         const ordinal = Date.parse(row.id + 'T00:00:00Z') / DAY;
         running = last !== null && ordinal === last + 1 ? running + 1 : 1; longest = Math.max(longest, running); last = ordinal; allDays.push(row.id);
         if (receipt.claimedAtMillis >= result.startAtMillis && receipt.claimedAtMillis < result.endAtMillis) {
@@ -103,13 +110,18 @@ export async function adminCheckInReport(store: DocumentStore, auth: Auth | unde
     const afterProfile = await store.transact(async tx => {await authorizeAdminReport(tx, auth!, org); return tx.get(profilePath);});
     if (!isDeepStrictEqual(rawProfile, afterProfile)) throw fail();
     if (rawProfile) result.coverage.profiles++;
+    for(const [badgeId,at] of Object.entries(profile.badges)){if(at>now)throw fail();badgeUnlocks.push({badgeId,at});}
     const current = last !== null && today - last <= 1 ? running : 0;
     result.streaks.current[bucketKey(current)]++; result.streaks.longest[bucketKey(longest)]++;
   }
   result.totals.claimingMembers = claimants.size; result.totals.pointsAwarded = result.totals.claims * APP_CHECK_IN_POLICY.points;
   result.daily = [...daily].sort(([a], [b]) => a.localeCompare(b)).map(([date, members]) => ({date, claims: members.size, claimingMembers: members.size, pointsAwarded: members.size * APP_CHECK_IN_POLICY.points}));
   result.weekly = [...weekly].sort(([a], [b]) => a.localeCompare(b)).map(([date, week]) => ({date, claims: week.claims, claimingMembers: week.members.size, pointsAwarded: week.claims * APP_CHECK_IN_POLICY.points}));
+  if(q.schemaVersion===2||q.schemaVersion===3){if(!reader.page)throw new DomainError('failed-precondition','Extended engagement sources are unavailable.');(result as CheckInReport & {extensions:unknown}).extensions=await engagementExtensions(org,result.startAtMillis,result.endAtMillis,now,reader.page,authorize,badgeUnlocks,result.totals.claims,result.totals.pointsAwarded);}
+  if(q.schemaVersion===3){if(!reader.observations)throw fail();(result as CheckInReport & {observations:unknown}).observations=await observedActivity(org,result.startAtMillis,result.endAtMillis,now,eligible,activityClaims,reader.observations,authorize);}
   await authorize(); result.capturedAtMillis = clock();
   if (!integer(result.capturedAtMillis) || result.capturedAtMillis < now || result.capturedAtMillis > 8640000000000000) throw fail();
   return result;
 }
+
+

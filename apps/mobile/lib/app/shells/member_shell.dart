@@ -18,6 +18,7 @@ import '../home/member_home_screen.dart';
 import '../routing/member_progress_route.dart';
 import '../routing/workout_prep_route.dart';
 import '../di/local_member_progress_factory.dart';
+import '../di/workout_backup_factory.dart';
 import '../di/published_routine_catalog_factory.dart';
 import '../di/equipment_catalog_factory.dart';
 import '../di/coach_profile_factory.dart';
@@ -47,6 +48,9 @@ class MemberShell extends StatefulWidget {
       this.bookingFactory,
       this.bookingListFactory,
       this.progressRepositoryFactory,
+      this.progressGoalSummaryBuilder,
+      this.backupFactory,
+      this.memberRewardsBuilder,
       this.memberSettingsBuilder});
 
   final AuthSession? liveSession;
@@ -61,7 +65,10 @@ class MemberShell extends StatefulWidget {
   final BookingServicesFactory? bookingFactory;
   final BookingListFactory? bookingListFactory;
   final LocalMemberProgressRepositoryFactory? progressRepositoryFactory;
+  final ProgressGoalSummaryBuilder? progressGoalSummaryBuilder;
+  final WorkoutBackupFactory? backupFactory;
   final WidgetBuilder? memberSettingsBuilder;
+  final WidgetBuilder? memberRewardsBuilder;
 
   @override
   State<MemberShell> createState() => _MemberShellState();
@@ -154,6 +161,8 @@ class _MemberShellState extends State<MemberShell> {
         builder: (checkIn, refreshCheckIn, claimCheckIn) => MemberProgressHost(
               key: ValueKey(widget.liveSession!.scope),
               scope: widget.liveSession!.scope,
+              backupFactory: widget.backupFactory,
+              goalSummaryBuilder: widget.progressGoalSummaryBuilder,
               repositoryFactory: widget.progressRepositoryFactory ??
                   createLocalMemberProgressRepository,
               builder: (context, progress, refresh, open, openWorkout) =>
@@ -275,11 +284,12 @@ class _MemberShellState extends State<MemberShell> {
                     builder: (_) => buildMemberEquipmentScanner(session,
                         factory: widget.equipmentReaderFactory))),
       ),
-      GamificationDashboardScreen(
-          live: connected,
-          checkIn: checkIn,
-          onClaim: claimCheckIn,
-          onRefreshCheckIn: refreshCheckIn),
+      widget.memberRewardsBuilder?.call(context) ??
+          GamificationDashboardScreen(
+              live: connected,
+              checkIn: checkIn,
+              onClaim: claimCheckIn,
+              onRefreshCheckIn: refreshCheckIn),
       session == null
           ? const BrowseCoachesScreen()
           : _directoryVisited

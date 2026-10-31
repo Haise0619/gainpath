@@ -8,6 +8,8 @@ import 'package:gainpath_identity/gainpath_identity.dart';
 import 'package:gainpath_mobile/app/routing/app_check_in_host.dart';
 import 'package:gainpath_mobile/features/gamification/presentation/member/app_check_in_card.dart';
 import 'package:gainpath_mobile/features/gamification/presentation/member/app_check_in_dashboard.dart';
+import 'package:gainpath_mobile/features/gamification/presentation/member/fitness_arcade_games.dart';
+import 'package:gainpath_mobile/features/gamification/presentation/member/fitness_arcade_rank.dart';
 import 'package:gainpath_mobile/infrastructure/firebase/firebase_app_check_in_repository.dart';
 import 'app_check_in_test.dart' as support;
 
@@ -36,7 +38,11 @@ void main() {
                     repositoryFactory: (_, __) async => repo,
                     builder: (state, refresh, claim) => rewards
                         ? AppCheckInDashboard(
-                            state: state, onClaim: claim, onRefresh: refresh)
+                            state: state,
+                            onClaim: claim,
+                            onRefresh: refresh,
+                            gamesSection: FitnessArcadeGames(onReturn: refresh),
+                            weeklyRankSection: FitnessArcadeRank(onTap: () {}))
                         : Scaffold(
                             body: ListView(children: [
                             AppCheckInCard(

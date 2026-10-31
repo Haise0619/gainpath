@@ -59,26 +59,24 @@ class ReportPreviewTile extends StatelessWidget {
                         .textTheme
                         .bodyMedium
                         ?.copyWith(fontSize: 12.5),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
                   ),
                 ],
               ),
             ),
-            const SizedBox(width: 10),
-            SizedBox(
-              width: 64,
-              height: 34,
-              child: sparkData.isEmpty
-                  ? const Center(child: Text('-'))
-                  : SfSparkAreaChart(
-                      data: sparkData,
-                      color: sparkColor.withValues(alpha: 0.85),
-                      borderColor: sparkColor,
-                      borderWidth: 1.6,
-                      axisLineColor: Colors.transparent,
-                    ),
-            ),
+            if (sparkData.isNotEmpty) ...[
+              const SizedBox(width: 10),
+              SizedBox(
+                width: 64,
+                height: 34,
+                child: SfSparkAreaChart(
+                  data: sparkData,
+                  color: sparkColor.withValues(alpha: 0.85),
+                  borderColor: sparkColor,
+                  borderWidth: 1.6,
+                  axisLineColor: Colors.transparent,
+                ),
+              ),
+            ],
             const SizedBox(width: 6),
             const Icon(Icons.arrow_forward_ios_rounded,
                 size: 13, color: AppColors.inkSoft),

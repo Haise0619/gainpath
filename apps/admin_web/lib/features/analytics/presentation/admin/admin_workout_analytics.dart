@@ -78,7 +78,7 @@ class _AdminWorkoutAnalyticsState extends State<AdminWorkoutAnalytics> {
                               'gainpath-workout-activity.csv', report.toCsv()),
                       icon: const Icon(Icons.download_rounded)),
               ]);
-          final content = state.loading
+          final content = state.loading && report == null
               ? const Padding(
                   padding: EdgeInsets.all(20),
                   child: Row(children: [
@@ -111,6 +111,10 @@ class _AdminWorkoutAnalyticsState extends State<AdminWorkoutAnalytics> {
                       Text('Workout activity',
                           style: Theme.of(context).textTheme.titleMedium),
                       controls,
+                      if (state.loading && report != null)
+                        const LinearProgressIndicator(),
+                      if (state.error != null && report != null)
+                        Text(state.error!),
                       const SizedBox(height: 10),
                       content
                     ])));
@@ -119,7 +123,7 @@ class _AdminWorkoutAnalyticsState extends State<AdminWorkoutAnalytics> {
               anchorKey: widget.anchorKey ?? _fallbackAnchor,
               title: 'Workout activity',
               subtitle:
-                  'Saved device measurements and routine-day progress · organization-wide',
+                  'Saved device measurements and routine attempt outcomes · organization-wide',
               live: true,
               tagLabel: 'Provisional backups',
               exportFilename: 'gainpath-workout-activity.csv',
@@ -127,7 +131,15 @@ class _AdminWorkoutAnalyticsState extends State<AdminWorkoutAnalytics> {
               exportRows: report?.toCsv,
               child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [controls, const SizedBox(height: 10), content]));
+                  children: [
+                    controls,
+                    if (state.loading && report != null)
+                      const LinearProgressIndicator(),
+                    if (state.error != null && report != null)
+                      Text(state.error!),
+                    const SizedBox(height: 10),
+                    content
+                  ]));
         });
   }
 
@@ -139,7 +151,7 @@ class _AdminWorkoutAnalyticsState extends State<AdminWorkoutAnalytics> {
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Wrap(spacing: 10, runSpacing: 10, children: [
         stat('${t.sessions}', 'Saved camera sessions'),
-        stat('${t.completedRoutineDays}', 'Completed routine days'),
+        stat('${t.completedRoutineDays}', 'Completed routine attempts'),
         stat('${t.fullReps}', 'Measured full reps'),
         stat(_duration(t.trackedMicros), 'Tracked duration'),
         if (!widget.compact) ...[
@@ -195,7 +207,7 @@ class _AdminWorkoutAnalyticsState extends State<AdminWorkoutAnalytics> {
         Panel(
             child:
                 Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text('Routine-day progress', style: text.titleMedium),
+          Text('Routine attempt outcomes', style: text.titleMedium),
           for (final e in <String, int>{
             'Completed': t.completedRoutineDays,
             'Finished incomplete': t.partialRoutineDays,
@@ -286,7 +298,7 @@ class _AdminWorkoutAnalyticsState extends State<AdminWorkoutAnalytics> {
                 yValueMapper: (d, _) => d.sessions,
                 color: AppColors.primary),
             ColumnSeries<WorkoutReportDay, String>(
-                name: 'Completed routine days',
+                name: 'Completed routine attempts',
                 dataSource: days,
                 xValueMapper: (d, _) => d.date,
                 yValueMapper: (d, _) => d.totals.completedRoutineDays,

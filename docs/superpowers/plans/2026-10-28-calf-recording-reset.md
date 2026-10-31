@@ -1,0 +1,11 @@
+# Calf recording reset correction
+
+Owner request: directly diagnose and fix the 15:00 recording's zero-count failure. Use existing dirty checkout, preserve unrelated work and all retained artifacts. Local correction/build is authorized; completed prior installation approval grants no new device/cloud activation authority.
+
+Evidence:31.83s private recording reaches Ready and Raising/Lowering but resets into calibration, including the exact toe-or-camera reset cue at~10.75s. Overlay points are smoothed and lack native confidence/timestamps; no raw replay or physical accuracy claim. Existing guards conflate foot-index articulation and projected shin changes with stance/camera movement. Existing calibration allows neutral heel jitter that the fixed return threshold can never accept.
+
+1. Preserve installed source snapshot. RED tests for bounded foot arc/foreshortening across both facing directions/sides/rates; accepted neutral jitter on a full cycle; continued rejecting steps, translation, jumps, bent knee, weak/stale/model/side changes and static jitter.
+2. Bound forefoot motion by separate horizontal/vertical corridors and use stable thigh evidence alongside a bounded shin range for scale. Keep .7 joint confidence, resolution/geometry limits and fixed neutral normalization. Do not reconstruct interrupted motion.
+3. Derive bounded noise floors from stable calibration inliers, use hysteresis for start/partial/held return with raw+filtered agreement; preserve full peak/return dwell and history/scoring wire identity. Add scalar diagnostics and distinguish/persist foot vs leg-view reset cues through the next setup hold.
+4. Exercise real Mobile fresh-frame session with the same projections and noise, authored targets/rest/save/retry/lifecycle/account guards. No other analyzers or shared pipeline changes.
+5. One independent whole-change review; fix Important findings with RED/GREEN, focused pose/Mobile/domain checks, analysis/architecture/host benchmark and exact signed Mobile candidate build. Admin has no new behavior and stays as released. Update current operational references, progress and existing manual with limits/evidence. Preserve old artifacts. Separate exact APK approval is the next release step.

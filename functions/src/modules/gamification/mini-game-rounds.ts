@@ -8,7 +8,7 @@ import {rewardInteger, rewardTime} from './mini-game-reward-policy';
 type Auth = {uid: string; token: Record<string, unknown>};
 type Status = 'open' | 'awaiting_verification' | 'abandoned';
 export interface MiniGameRoundSnapshot {
-  schemaVersion: 1; organizationId: string; memberId: string; gameId: 'move-catch-v1'; attemptId: string;
+  schemaVersion: 1; organizationId: string; memberId: string; gameId: 'move-catch-v1' | 'reach-tap-v1'; attemptId: string;
   challengeToken: string; status: Status; sequence: number; activeMillis: number;
   startedAtMillis: number; leaseUntilMillis: number; expiresAtMillis: number;
   physicalVerified: false; pointsAwarded: 0;
@@ -31,7 +31,7 @@ function parse(raw: unknown): DocumentData {
   const keys = ['schemaVersion', 'organizationId', 'action', ...actions[d.action]];
   if (Object.keys(d).length !== keys.length || Object.keys(d).some(k => !keys.includes(k))) throw invalid();
   try {requiredIdentifier(d.organizationId, 'organizationId');} catch {throw invalid();}
-  if (d.action === 'begin') {if (!hex(d.requestId) || d.gameId !== 'move-catch-v1') throw invalid();}
+  if (d.action === 'begin') {if (!hex(d.requestId) || !['move-catch-v1','reach-tap-v1'].includes(String(d.gameId))) throw invalid();}
   else {
     if (!hex(d.attemptId) || !hex(d.challengeToken)) throw invalid();
     if (d.action !== 'abandon' && !rewardInteger(d.sequence, 1, 361)) throw invalid();
@@ -51,7 +51,7 @@ async function authorize(tx: TransactionPort, auth: Auth, org: string) {
 }
 function readRound(data: DocumentData | undefined, org: string, uid: string, attemptId: string): Round {
   if (!data || data.schemaVersion !== 1 || data.organizationId !== org || data.memberId !== uid || data.attemptId !== attemptId) throw deny();
-  if (data.gameId !== 'move-catch-v1' || !hex(data.challengeToken) || !hex(data.requestId)
+  if (!['move-catch-v1','reach-tap-v1'].includes(String(data.gameId)) || !hex(data.challengeToken) || !hex(data.requestId)
     || !['open', 'awaiting_verification', 'abandoned'].includes(String(data.status))
     || !rewardInteger(data.sequence, 0, 361) || !rewardInteger(data.activeMillis, 0, 40000)
     || !rewardTime(data.startedAtMillis) || !rewardTime(data.lastAtMillis) || !rewardTime(data.leaseUntilMillis)
@@ -93,7 +93,7 @@ export async function miniGameRounds(store: DocumentStore, auth: Auth | undefine
       if (lease && (lease.schemaVersion !== 1 || lease.organizationId !== org || lease.memberId !== uid
         || !hex(lease.attemptId) || !rewardTime(lease.leaseUntilMillis) || !['open', 'closed'].includes(String(lease.status)))) throw fail();
       if (lease?.status === 'open' && Number(lease.leaseUntilMillis) > now) throw new DomainError('resource-exhausted', 'Another round is being checked. Continue playing locally or wait for it to finish.');
-      const r: Round = {schemaVersion: 1, organizationId: org, memberId: uid, gameId: 'move-catch-v1', ...candidate!,
+      const r: Round = {schemaVersion: 1, organizationId: org, memberId: uid, gameId: d.gameId as Round['gameId'], ...candidate!,
         requestId: String(d.requestId), status: 'open', sequence: 0, activeMillis: 0, phase: 'paused', lastAtMillis: now,
         startedAtMillis: now, leaseUntilMillis: now + LEASE, expiresAtMillis: now + MAX_LIFETIME, physicalVerified: false, pointsAwarded: 0};
       tx.create(roundPath(r.attemptId), r);

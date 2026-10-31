@@ -14,3 +14,4 @@ export 'src/gamification/workout_rewards.dart';
 export 'src/gamification/repositories/reward_publishing_repository.dart';
 export 'src/gamification/repositories/reward_media_repository.dart';
 export 'src/gamification/earned_points_leaderboard.dart';
+export 'src/gamification/mini_game_competition.dart';

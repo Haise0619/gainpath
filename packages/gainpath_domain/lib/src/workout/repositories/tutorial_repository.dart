@@ -1,4 +1,5 @@
 import '../entities/tutorial_video.dart';
+import '../enums/tutorial_status.dart';
 
 class TutorialEditConflict implements Exception {
   const TutorialEditConflict();
@@ -39,4 +40,10 @@ abstract class TutorialRepository {
 /// Archives authoring content while retaining stable references.
 abstract interface class TutorialArchivingRepository {
   Future<void> archive(TutorialVideo tutorial);
+}
+
+/// Changes availability while retaining the catalog identity and saved content.
+abstract interface class TutorialCatalogStatusRepository {
+  Future<TutorialVideo> setCatalogStatus(
+      TutorialVideo tutorial, ExerciseCatalogStatus status);
 }

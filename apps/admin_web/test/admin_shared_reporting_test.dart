@@ -145,14 +145,14 @@ void main() {
       );
 
       // Voucher processing shows unavailable text
-      expect(find.text('Voucher redemption is unavailable'), findsOneWidget);
+      expect(find.text('Verify and collect an existing reward voucher'), findsOneWidget);
 
       // Tapping voucher shows toast rather than pushing screen
       await tester.tap(find.text('Process a voucher'));
       await tester.pump();
       expect(
         find.text('Voucher processing is unavailable in this environment.'),
-        findsOneWidget,
+        findsNothing,
       );
     });
 

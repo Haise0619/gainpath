@@ -51,6 +51,12 @@ class MoveCatchEngine {
   int get caught => _caught;
   int get obstaclesHit => _obstaclesHit;
   int get missed => _missed;
+  int get activeMillis => _activeMicros ~/ 1000;
+  /// Optional ordered discrete-event observer; reporting never changes play.
+  void Function(String type)? onScoreEvent;
+  void _reportScoreEvent(String type) {
+    try { onScoreEvent?.call(type); } catch (_) { /* Reporting is optional. */ }
+  }
   double get remainingSeconds =>
       max(0, durationMicros - _activeMicros) / 1000000;
   double get calibrationProgress =>
@@ -210,9 +216,11 @@ class MoveCatchEngine {
         if (object.kind == MoveCatchObjectKind.star) {
           _caught++;
           _score += 10;
+          _reportScoreEvent('catch');
         } else {
           _obstaclesHit++;
           _score = max(0, _score - 5);
+          _reportScoreEvent('obstacle');
         }
       } else if (y > 1.05) {
         if (object.kind == MoveCatchObjectKind.star) _missed++;

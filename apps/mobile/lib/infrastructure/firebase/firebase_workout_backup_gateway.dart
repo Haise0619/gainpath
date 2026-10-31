@@ -83,12 +83,16 @@ class FirebaseWorkoutBackupGateway implements WorkoutBackupGateway {
 
   @override
   Future<WorkoutBackupPage> list(String? cursor) async {
-    final data = await _call('list', {'after': cursor});
+    final data = await _call('list', {
+      'after': cursor,
+      'maxPoseMetricsSchemaVersion': 6,
+    });
     final raw = data['records'], next = data['nextCursor'];
     if (data.length != 3 ||
         raw is! List ||
         raw.length > 3 ||
-        (next != null && next != 'routines' &&
+        (next != null &&
+            next != 'routines' &&
             (next is! String ||
                 !RegExp(r'^(session|routine)-[A-Za-z0-9_-]{1,128}$')
                     .hasMatch(next)))) {

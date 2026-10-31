@@ -42,3 +42,24 @@ it('a valid concurrent claim fails closed instead of mixing profile and receipt 
     const rows = await reader.claims(uid, after, limit); await claim(Date.UTC(2026, 9, 26, 5)); return rows;
   }}, () => now)).rejects.toMatchObject({code: 'failed-precondition'});
 });
+it('schema two aggregates real redemption and game documents while leaving wallets and receipts unchanged',async()=>{
+ const redemption=db.doc(`orgs/gainpath/rewardRedemptions/${'b'.repeat(64)}`),roundId='a'.repeat(32),round=db.doc(`orgs/gainpath/miniGameRoundSessions/${roundId}`);
+ await redemption.set({schemaVersion:1,organizationId:'gainpath',redemptionId:redemption.id,memberId:'previous-member',itemId:'shirt',title:'Gym shirt',points:100,status:'fulfilled',issuedAtMillis:query.startAtMillis-1000,fulfilledAtMillis:query.startAtMillis,fulfilledBy:'admin',policyVersion:'points-only-v1',exchangeRateVersion:'points-only-v1'});
+ await round.set({schemaVersion:1,organizationId:'gainpath',memberId:'previous-member',attemptId:roundId,gameId:'reach-tap-v1',status:'awaiting_verification',startedAtMillis:query.startAtMillis,lastAtMillis:query.startAtMillis+40000,activeMillis:40000,expiresAtMillis:query.startAtMillis+900000,sequence:10,physicalVerified:false,pointsAwarded:0});
+ const before=await redemption.get(),r=await adminCheckInReport(new FirestoreStore(db),actor,{...query,schemaVersion:2},{...reader,page:(kind,after,limit)=>page(`orgs/gainpath/${kind}`,after,limit)},()=>now);
+ const extension=(r as unknown as {extensions:{redemptions:{issued:number;collected:number};games:{gameId:string;completed:number;pointsAwarded:number}[]}}).extensions;
+ expect(extension.redemptions).toMatchObject({issued:0,collected:1});expect(extension.games.find(g=>g.gameId==='reach-tap-v1')).toMatchObject({completed:1,pointsAwarded:0});expect((await redemption.get()).updateTime?.isEqual(before.updateTime!)).toBe(true);expect((await db.collection('orgs/gainpath/rewardBalances').get()).empty).toBe(true);expect(JSON.stringify(r)).not.toContain('previous-member');
+});
+it('schema two rejects a foreign source and authority drift during actual extended reads',async()=>{
+ await db.doc('orgs/gainpath/rewardRedemptions/bad').set({schemaVersion:1,organizationId:'other'});
+ await expect(adminCheckInReport(new FirestoreStore(db),actor,{...query,schemaVersion:2},{...reader,page:(kind,after,limit)=>page(`orgs/gainpath/${kind}`,after,limit)},()=>now)).rejects.toMatchObject({code:'failed-precondition'});
+ await db.doc('orgs/gainpath/rewardRedemptions/bad').delete();
+ await expect(adminCheckInReport(new FirestoreStore(db),actor,{...query,schemaVersion:2},{...reader,page:async(kind,after,limit)=>{const rows=await page(`orgs/gainpath/${kind}`,after,limit);if(kind==='miniGameParticipationAwards')await db.doc('users/admin').update({organizationId:'other'});return rows;}},()=>now)).rejects.toMatchObject({code:'permission-denied'});
+});
+it('schema three reports real observable events, distinct Members and historical recency without writes',async()=>{
+ await claim(Date.UTC(2026,9,25,6));
+ const ref=db.doc('orgs/gainpath/bookings/observed');await ref.set({schemaVersion:1,organizationId:'gainpath',memberId:'member',createdAtMillis:query.startAtMillis,status:'confirmed'});const before=await ref.get();
+ const r=await adminCheckInReport(new FirestoreStore(db),actor,{...query,schemaVersion:3},{...reader,page:(kind,a,l)=>page(`orgs/gainpath/${kind}`,a,l),observations:{page:(kind,a,l)=>page(`orgs/gainpath/${kind}`,a,l),backups:(uid,a,l)=>page(`orgs/gainpath/members/${uid}/workoutBackups`,a,l)}},()=>now);
+ const observations=(r as unknown as {observations:{sourceCounts:{checkIns:number;bookings:number};cohortMembers:number;daily:{uniqueMembers:number}[]}}).observations;
+ expect(observations.sourceCounts).toMatchObject({checkIns:1,bookings:1});expect(observations.cohortMembers).toBe(1);expect(observations.daily[0].uniqueMembers).toBe(1);expect(JSON.stringify(observations)).not.toContain('memberId');expect((await ref.get()).updateTime?.isEqual(before.updateTime!)).toBe(true);
+});

@@ -63,7 +63,8 @@ class AppCheckInCard extends StatelessWidget {
                                 border: day.date == s.today
                                     ? Border.all(
                                         color: AppColors.primary, width: 2)
-                                    : null),
+                                    : Border.all(
+                                        color: AppColors.hairline, width: 1)),
                             child: day.claimed
                                 ? const Icon(Icons.check_rounded,
                                     color: Colors.white, size: 18)
@@ -79,7 +80,13 @@ class AppCheckInCard extends StatelessWidget {
                               'S',
                               'S'
                             ][DateTime.parse(day.date).weekday - 1],
-                            style: Theme.of(context).textTheme.bodySmall)
+                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                fontWeight: day.date == s.today
+                                    ? FontWeight.w800
+                                    : (day.claimed ? FontWeight.w700 : FontWeight.w500),
+                                color: day.date == s.today
+                                    ? AppColors.primary
+                                    : (day.claimed ? AppColors.ink : AppColors.inkSoft)))
                       ])))
           ]),
         ],

@@ -1,3 +1,5 @@
+import '../../features/gamification/reward_fulfilment_repository.dart';
+import '../../features/gamification/presentation/admin/reward_fulfilment_panel.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:gainpath_identity/gainpath_identity.dart';
@@ -8,6 +10,7 @@ import '../../features/identity/presentation/admin/admin_settings_screens.dart';
 import '../../features/identity/presentation/admin/admin_account_avatar.dart';
 import '../../features/workout/presentation/admin/exercise_tutorials_screen.dart';
 import '../../features/workout/presentation/admin/routine_templates_screen.dart';
+import '../../features/workout/presentation/admin/workout_programs_screen.dart';
 import '../../features/workout/presentation/admin/equipment_catalog_screen.dart';
 import '../../features/gamification/presentation/admin/reward_catalog_screen.dart';
 import '../../features/content/presentation/admin/announcements_screen.dart';
@@ -84,6 +87,24 @@ class _AdminShellState extends State<AdminShell> {
   int _notificationReviewGeneration = 0;
   final Set<int> _visited = {0};
   final Set<String> _expanded = {'Users & Coaches'};
+  final _scaffoldKey = GlobalKey<ScaffoldState>();
+
+  void _openRewardCollection() {
+    final source = context.read<AdminMemberDirectoryRepository>();
+    if (source is! RewardFulfilmentRepository) return;
+    final auth = context.read<AuthBloc>();
+    showDialog<void>(
+        context: context,
+        builder: (_) => Dialog(
+            child: SizedBox(
+                width: 520,
+                child: BlocBuilder<AuthBloc, AuthState>(
+                    bloc: auth,
+                    builder: (_, __) => SingleChildScrollView(
+                        child: RewardFulfilmentPanel(
+                            repository:
+                                source as RewardFulfilmentRepository))))));
+  }
 
   /// Built once (not `const`) so the Dashboard's refund-alert callback can
   /// close over `this` — rebuilding this list on every `setState` would
@@ -97,7 +118,9 @@ class _AdminShellState extends State<AdminShell> {
         AdminDashboardScreen(
             live: widget.liveSession != null,
             liveSession: widget.liveSession,
-            onOpenRefunds: () => _select(_indexOfLabel('Refunds')))),
+            onOpenRefunds: () => _select(_indexOfLabel('Refunds')),
+            onOpenCoaches: () => _select(_indexOfLabel('Coaches')),
+            onProcessVoucher: _openRewardCollection)),
     _NavGroup(
         Icons.people_outline_rounded, Icons.people_rounded, 'Users & Coaches', [
       _NavPage(
@@ -135,13 +158,21 @@ class _AdminShellState extends State<AdminShell> {
           Icons.video_library_rounded,
           'Exercise Catalog',
           'Manage the tutorial video library',
-          ExerciseTutorialsScreen(allowRemoval: widget.allowContentRemoval)),
+          const ExerciseTutorialsScreen()),
       _NavPage(
           Icons.list_alt_outlined,
           Icons.list_alt_rounded,
           'Routine Templates',
           'Author and assign workout blueprints',
           RoutineTemplatesScreen(allowRemoval: widget.allowContentRemoval)),
+      _NavPage(
+          Icons.calendar_month_outlined,
+          Icons.calendar_month,
+          'Workout Programs',
+          'Manage training levels and weekly schedules',
+          WorkoutProgramsScreen(
+              onOpenRoutineBuilder: () =>
+                  _select(_indexOfLabel('Routine Templates')))),
       _NavPage(
           Icons.sports_esports_outlined,
           Icons.sports_esports_rounded,
@@ -324,26 +355,38 @@ class _AdminShellState extends State<AdminShell> {
   Widget build(BuildContext context) {
     final flatPages = _flatPages;
     final current = flatPages[_index];
+    final useDrawer = MediaQuery.sizeOf(context).width < 1100 ||
+        MediaQuery.textScalerOf(context).scale(1) > 1.5;
+    final navigation = _Sidebar(
+      liveSession: widget.liveSession,
+      collapsed: false,
+      selectedIndex: _index,
+      expandedGroups: _expanded,
+      destinations: _destinations,
+      onSelect: (index) {
+        if (useDrawer) _scaffoldKey.currentState?.closeDrawer();
+        _select(index);
+      },
+      onToggleGroup: _toggleGroup,
+    );
     return Scaffold(
+      key: _scaffoldKey,
+      drawer: useDrawer
+          ? Drawer(width: 300, child: SafeArea(child: navigation))
+          : null,
       backgroundColor: AppColors.bg,
       body: LayoutBuilder(
         builder: (context, constraints) {
-          final collapsed = constraints.maxWidth < 980;
           return Row(
             children: [
-              _Sidebar(
-                liveSession: widget.liveSession,
-                collapsed: collapsed,
-                selectedIndex: _index,
-                expandedGroups: _expanded,
-                destinations: _destinations,
-                onSelect: _select,
-                onToggleGroup: _toggleGroup,
-              ),
+              if (!useDrawer) navigation,
               Expanded(
                 child: Column(
                   children: [
                     _TopBar(
+                        onOpenNavigation: useDrawer
+                            ? () => _scaffoldKey.currentState?.openDrawer()
+                            : null,
                         onOpenCoachAlert: _openCoachAlert,
                         liveSession: widget.liveSession,
                         breadcrumbs: _breadcrumbs(),
@@ -419,8 +462,10 @@ class _TopBar extends StatelessWidget {
   final String subtitle;
   final VoidCallback onSignOut;
   final AuthSession? liveSession;
+  final VoidCallback? onOpenNavigation;
   const _TopBar(
-      {required this.breadcrumbs,
+      {this.onOpenNavigation,
+      required this.breadcrumbs,
       required this.onOpenCoachAlert,
       required this.subtitle,
       this.liveSession,
@@ -429,14 +474,22 @@ class _TopBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 72,
-      padding: const EdgeInsets.symmetric(horizontal: 28),
+      constraints: const BoxConstraints(minHeight: 80),
+      padding: EdgeInsets.symmetric(
+          horizontal: onOpenNavigation == null ? 28 : 12, vertical: 14),
       decoration: const BoxDecoration(
         color: AppColors.surface,
         border: Border(bottom: BorderSide(color: AppColors.hairline)),
       ),
       child: Row(
         children: [
+          if (onOpenNavigation != null) ...[
+            IconButton(
+                tooltip: 'Open navigation',
+                onPressed: onOpenNavigation,
+                icon: const Icon(Icons.menu_rounded)),
+            const SizedBox(width: 8),
+          ],
           Expanded(
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -458,6 +511,8 @@ class _TopBar extends StatelessWidget {
                 ),
                 const SizedBox(height: 2),
                 Text(subtitle,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
                     style: Theme.of(context)
                         .textTheme
                         .bodyMedium
@@ -465,35 +520,15 @@ class _TopBar extends StatelessWidget {
               ],
             ),
           ),
-          SizedBox(
-            width: 260,
-            height: 40,
-            child: TextField(
-              enabled: liveSession == null,
-              style: const TextStyle(fontSize: 13.5),
-              decoration: InputDecoration(
-                isDense: true,
-                hintText: 'Search members, coaches, reports…',
-                hintStyle: const TextStyle(fontSize: 13),
-                prefixIcon: const Icon(Icons.search_rounded, size: 18),
-                fillColor: AppColors.surfaceAlt,
-                contentPadding: const EdgeInsets.symmetric(vertical: 10),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
-                  borderSide: BorderSide.none,
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
-                  borderSide: BorderSide.none,
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
-                  borderSide:
-                      const BorderSide(color: AppColors.primary, width: 1.4),
-                ),
-              ),
-            ),
-          ),
+          if (MediaQuery.sizeOf(context).width >= 1280 &&
+              MediaQuery.textScalerOf(context).scale(1) <= 1.5)
+            const Padding(
+                padding: EdgeInsets.only(left: 24),
+                child: Text('GAINPATH / ADMIN',
+                    style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.inkSoft))),
           const SizedBox(width: 14),
           if (liveSession == null) const _NotificationButton(),
           if (liveSession != null)
@@ -825,7 +860,7 @@ class _Sidebar extends StatelessWidget {
                   width: 40,
                   height: 40,
                   decoration: BoxDecoration(
-                    gradient: AppColors.heroGradient,
+                    color: AppColors.primary,
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: const Icon(Icons.accessibility_new_rounded,
@@ -952,6 +987,12 @@ class _Sidebar extends StatelessWidget {
         ),
       ),
     );
-    return Padding(padding: const EdgeInsets.only(bottom: 4), child: item);
+    return Semantics(
+        selected: selected,
+        button: true,
+        label: collapsed ? label : null,
+        child: Padding(
+            padding: const EdgeInsets.only(bottom: 4),
+            child: collapsed ? Tooltip(message: label, child: item) : item));
   }
 }

@@ -60,6 +60,8 @@ class _MiniGameParticipationPanelState
     final round = widget.roundTiming?.completedRound;
     if (round == null ||
         round.scope != widget.repository.scope ||
+        _result == null ||
+        round.gameId != _result!.gameId ||
         _lastAttempt == round.attemptId) {
       return;
     }
@@ -110,6 +112,9 @@ class _MiniGameParticipationPanelState
         if (!widget.repository.current) return const SizedBox.shrink();
         final r = _result, policy = r?.policy, award = r?.award;
         final timing = widget.roundTiming;
+        final matching =
+            policy?.games.where((g) => g.gameId == r?.gameId).toList();
+        final game = matching?.length == 1 ? matching!.single : null;
         final message = switch (r?.status) {
           'awarded' => '+${award!.points} points earned',
           'already-awarded' =>
@@ -123,14 +128,13 @@ class _MiniGameParticipationPanelState
           'game-disabled' => 'Points are unavailable for this game.',
           _ => r?.active != true
               ? 'Game rewards are not active yet.'
-              : policy!.games.single.dailyClaimLimit == 0 ||
-                      policy.games.single.points == 0
+              : game == null || game.dailyClaimLimit == 0 || game.points == 0
                   ? 'Points are unavailable for this game.'
-                  : r!.claimsToday >= policy.games.single.dailyClaimLimit
+                  : r!.claimsToday >= game.dailyClaimLimit
                       ? 'Today’s points earned. Keep playing for your personal best.'
-                      : r.remainingToday < policy.games.single.points
+                      : r.remainingToday < game.points
                           ? 'Daily points limit reached. Keep playing for your personal best.'
-                          : 'Complete a round to earn ${policy.games.single.points} points.',
+                          : 'Complete a round to earn ${game.points} points.',
         };
         return Panel(
             child:
@@ -145,9 +149,9 @@ class _MiniGameParticipationPanelState
             Text('${r?.remainingToday ?? '—'} remaining today')
           ]),
           const SizedBox(height: 8),
-          Text(policy == null
+          Text(policy == null || game == null
               ? '20 points per round · once per game/day · 60 points daily limit.'
-              : '${policy.games.single.points} points per completed round · ${policy.games.single.dailyClaimLimit} per game/day · ${policy.dailyPointsCap} shared daily points.'),
+              : '${game.points} points per completed round · ${game.dailyClaimLimit} per game/day · ${policy.dailyPointsCap} shared daily points.'),
           if (timing?.state == MiniGameRoundSyncState.unavailable) ...[
             const SizedBox(height: 8),
             Text(timing!.canRetry

@@ -15,7 +15,7 @@ void main() {
         child: const MaterialApp(
             home: ExerciseTutorialsScreen(allowRemoval: false))));
     await tester.pumpAndSettle();
-    expect(find.byTooltip('Remove exercise'), findsNothing);
+    expect(find.byTooltip('Delete exercise'), findsNothing);
     expect(find.byIcon(Icons.edit_outlined), findsWidgets);
     expect(find.text('Squat'), findsOneWidget);
     expect(tester.takeException(), isNull);

@@ -1,3 +1,4 @@
+import 'admin_commerce_report.dart';
 import 'package:flutter/material.dart';
 import 'package:gainpath_domain/gainpath_domain.dart' show Money;
 import 'admin_operational_metrics.dart';
@@ -59,6 +60,7 @@ class AdminActivityRecord {
 @immutable
 class AdminReportingSnapshot {
   final AdminOperationalMetrics? operations;
+  final AdminCommerceReport? commerce;
   final AdminReportQuery query;
   final DateTime capturedAt;
   final bool isAvailable;
@@ -82,6 +84,7 @@ class AdminReportingSnapshot {
 
   const AdminReportingSnapshot({
     this.operations,
+    this.commerce,
     required this.query,
     required this.capturedAt,
     this.isAvailable = true,
@@ -147,4 +150,16 @@ class UnavailableAdminReportingGateway implements AdminReportingGateway {
   Future<AdminReportingSnapshot> load(AdminReportQuery query) async {
     return AdminReportingSnapshot.unavailable(query: query);
   }
+}
+
+/// Optional scoped source guard for retaining an already loaded snapshot.
+abstract interface class AdminReportingSessionGuard {
+  bool get canRetainSnapshot;
+}
+
+class AdminReportingException implements Exception {
+  const AdminReportingException(this.message,
+      {this.invalidatesSnapshot = false});
+  final bool invalidatesSnapshot;
+  final String message;
 }

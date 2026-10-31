@@ -238,8 +238,8 @@ void main() {
   test('a small rise is partial and a single high spike cannot become full',
       () {
     for (final lifts in <List<double>>[
-      [.02, .04, .06, .06, .04, .02, 0],
-      [.02, .04, .06, .12, .06, .04, .02, 0]
+      [.02, .04, .06, .06, .04, .02, 0, 0],
+      [.02, .04, .06, .12, .06, .04, .02, 0, 0]
     ]) {
       final u = cycle(calibrated(), lifts);
       expect(u.repetitions, 0);
@@ -272,7 +272,8 @@ void main() {
                   ? 2500000
                   : 2050000);
       expect(a.snapshot.repetitions, 0);
-      expect(a.snapshot.needsCalibration, true);
+      expect(a.snapshot.needsCalibration, kind != 'loss');
+      if (kind == 'loss') expect(a.snapshot.requiresHeelReset, true);
     }
   });
   test('freshness tick invalidates a held peak', () {

@@ -278,6 +278,12 @@ class _WorkoutResultScreenState extends State<WorkoutResultScreen>
                 ],
                 Eyebrow(switch (metrics.scoringVersion) {
                   'single-arm-curl-side-v1' => 'Measured curl result',
+                  'single-arm-row-side-v1' => 'Measured row result',
+                  'reverse-lunge-side-v1' => 'Measured reverse lunge result',
+                  'standing-lateral-raise-front-v1' =>
+                    'Measured lateral raise result',
+                  'dumbbell-shoulder-press-front-v1' =>
+                    'Measured shoulder press result',
                   'standing-calf-raise-side-v1' => 'Measured calf raise result',
                   'wall-push-up-side-v1' => 'Measured wall push-up result',
                   _ => 'Measured squat result',
@@ -285,16 +291,34 @@ class _WorkoutResultScreenState extends State<WorkoutResultScreen>
                 const SizedBox(height: 8),
                 Text(
                     score == null
-                        ? 'Not enough evidence'
+                        ? metrics.scoringVersion == 'reverse-lunge-side-v1'
+                            ? 'Form score is not assessed for reverse lunges'
+                            : metrics.scoringVersion ==
+                                    'dumbbell-shoulder-press-front-v1'
+                                ? 'Form score is not assessed for shoulder presses'
+                                : metrics.scoringVersion ==
+                                        'standing-lateral-raise-front-v1'
+                                    ? 'Form score is not assessed for lateral raises'
+                                    : metrics.scoringVersion ==
+                                            'single-arm-row-side-v1'
+                                        ? 'Form score is not assessed for rows'
+                                        : 'Not enough evidence'
                         : '${score.toStringAsFixed(0)}% estimated form',
                     style: Theme.of(context).textTheme.titleLarge),
                 Text(
                     'Tracked: ${(summary.trackedDurationMicros / 1000000).toStringAsFixed(1)} seconds'),
                 Text(
                     'Unassessable: ${(summary.rejectedDurationMicros / 1000000).toStringAsFixed(1)} seconds'),
+                if (metrics.lungeSide != null)
+                  Text(
+                      'Front planted working leg: ${metrics.lungeSide == 'left' ? 'Left' : 'Right'} · counts apply to this leg only'),
+                if (metrics.rowSide != null)
+                  Text(
+                      'Selected arm: ${metrics.rowSide == 'left' ? 'Left' : 'Right'} · counts apply to this arm only'),
                 const SizedBox(height: 8),
-                const Text(
-                    'Estimates use the side view. Unfinished movements are not counted as full repetitions.'),
+                Text(metrics.cameraView == 'front'
+                    ? 'Counts use the front view with both arms together. Unfinished movements are not counted as full repetitions.'
+                    : 'Estimates use the side view. Unfinished movements are not counted as full repetitions.'),
               ])),
           const SizedBox(height: 16),
           const Eyebrow('Observed deviations'),
@@ -316,8 +340,16 @@ class _WorkoutResultScreenState extends State<WorkoutResultScreen>
                           '${entry.key == 'trunkLean' ? 'Trunk lean' : 'Incomplete depth'}: ${entry.value.count} attempts')),
                 const SizedBox(height: 8),
                 Text(switch (metrics.scoringVersion) {
+                  'standing-lateral-raise-front-v1' =>
+                    'Only projected bilateral lateral raise movement is measured. Weight, standing posture and three-dimensional shoulder mechanics are not assessed. No form score is produced.',
+                  'dumbbell-shoulder-press-front-v1' =>
+                    'Only projected bilateral press movement is measured. Load, spinal alignment and three-dimensional shoulder mechanics are not assessed. No form score is produced.',
                   'single-arm-curl-side-v1' =>
                     'One selected arm is tracked at a time. Load and grip are not assessed. Guidance is provisional.',
+                  'reverse-lunge-side-v1' =>
+                    'Only the selected front planted leg and projected reverse lunge movement are measured. Load, balance and three-dimensional alignment are not assessed. No form score is produced.',
+                  'single-arm-row-side-v1' =>
+                    'Only selected-arm projected row movement is measured. Weight, bench contact, spinal shape and three-dimensional torso rotation are not assessed. No form score is produced.',
                   'standing-calf-raise-side-v1' =>
                     'Only the camera-facing leg is measured. Equal work on both legs, balance and load are not assessed. Guidance is provisional.',
                   'wall-push-up-side-v1' =>

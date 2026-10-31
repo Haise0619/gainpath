@@ -3,10 +3,14 @@ import 'package:gainpath_domain/workout.dart'
 
 /// Every kind has an exhaustive app-owned route; catalog content cannot add one.
 enum ExerciseTracker {
+  frontViewLateralRaise,
+  frontViewShoulderPress,
   sideViewSquat,
   sideViewCurl,
   sideViewCalfRaise,
-  sideViewWallPushUp
+  sideViewWallPushUp,
+  sideViewRow,
+  sideViewReverseLunge
 }
 
 class ExerciseTrackerResolution {
@@ -28,19 +32,30 @@ class ExerciseTrackerResolution {
 class ExerciseTrackerDispatcher {
   const ExerciseTrackerDispatcher(
       {this.availableTrackers = const {
+        ExerciseTracker.frontViewLateralRaise,
+        ExerciseTracker.frontViewShoulderPress,
         ExerciseTracker.sideViewSquat,
         ExerciseTracker.sideViewCurl,
-        // Calf tracking is held after the owner's unsuccessful phone trials.
+        ExerciseTracker.sideViewCalfRaise,
         ExerciseTracker.sideViewWallPushUp,
+        ExerciseTracker.sideViewRow,
+        ExerciseTracker.sideViewReverseLunge,
       }});
   final Set<ExerciseTracker> availableTrackers;
   static const _implementations = {
+    ExerciseTracker.frontViewLateralRaise:
+        ExerciseTrackingCapability.frontViewLateralRaise,
+    ExerciseTracker.frontViewShoulderPress:
+        ExerciseTrackingCapability.frontViewShoulderPress,
     ExerciseTracker.sideViewSquat: ExerciseTrackingCapability.sideViewSquat,
     ExerciseTracker.sideViewCurl: ExerciseTrackingCapability.sideViewCurl,
     ExerciseTracker.sideViewCalfRaise:
         ExerciseTrackingCapability.sideViewCalfRaise,
     ExerciseTracker.sideViewWallPushUp:
         ExerciseTrackingCapability.sideViewWallPushUp,
+    ExerciseTracker.sideViewRow: ExerciseTrackingCapability.sideViewRow,
+    ExerciseTracker.sideViewReverseLunge:
+        ExerciseTrackingCapability.sideViewReverseLunge,
   };
 
   ExerciseTrackerResolution resolve(

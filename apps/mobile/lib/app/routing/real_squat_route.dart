@@ -177,7 +177,9 @@ class _RealSquatRouteState extends State<RealSquatRoute>
           detectorVersion: BlazePoseModelContract.version,
           performance: _performance,
           guidance: GuidedWorkoutProgress(
-              sets: widget.exercise.sets, repetitions: widget.exercise.reps),
+              sets: widget.exercise.sets,
+              repetitions: widget.exercise.reps,
+              restSeconds: widget.exercise.restSeconds),
           saveVoiceMode: (mode) async {
             final preferences = _voicePreferences;
             if (preferences == null) {

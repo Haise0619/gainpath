@@ -8,6 +8,7 @@ import 'package:gainpath_mobile/features/workout/data/workout_session_repository
 import 'package:gainpath_mobile/features/workout/domain/workout_backup.dart';
 import 'package:gainpath_mobile/infrastructure/local/file_routine_journey_store.dart';
 import 'package:gainpath_mobile/infrastructure/local/file_workout_backup_store.dart';
+import 'package:gainpath_mobile/infrastructure/local/file_workout_session_store.dart';
 import 'package:gainpath_mobile/features/workout/application/routine_journey_controller.dart';
 import 'routine_journey_controller_test.dart' as fixture;
 
@@ -30,6 +31,52 @@ void main() {
   });
   tearDown(() async {
     await dir.delete(recursive: true);
+  });
+  test('exercise save wakeup follows durable write and never awaits network',
+      () async {
+    var notifications = 0;
+    final file = FileWorkoutSessionStore(
+        directory: dir, scope: scope, onSaved: () => notifications++);
+    final source = StoredWorkoutBackupLocal(
+        scope: scope,
+        activeScope: () => active,
+        workouts: file,
+        routines: journeys);
+    await source.restore(
+        WorkoutBackupRecord.session(fixture.measured(scope, 'saved')), null);
+    expect(notifications, 1);
+    expect((await file.read()).single.summary.sessionId, 'saved');
+    // A repeated snapshot is merely another wakeup; IDs remain unchanged.
+    await file.write(await file.read());
+    expect(notifications, 2);
+  });
+  test('routine save wakeup occurs only after revision validation succeeds',
+      () async {
+    var notifications = 0;
+    journeys = FileRoutineJourneyStore(
+        directory: dir, scope: scope, onSaved: () => notifications++);
+    final repo = WorkoutSessionRepository(
+        scope: scope,
+        store: workouts,
+        uploadGateway: UnavailableWorkoutUploadGateway(),
+        activeScope: () => active);
+    final c = RoutineJourneyController(
+        scope: scope,
+        activeScope: () => active,
+        routine: fixture.routineFixture(),
+        store: journeys,
+        workouts: repo,
+        newId: () => 'notify-routine');
+    await c.openDay(1);
+    final checkpoint = c.checkpoint!;
+    final successfulSaves = notifications;
+    expect(successfulSaves, greaterThan(0));
+    await expectLater(
+        journeys.saveRevision(checkpoint, expectedUpdatedAtMicros: -1),
+        throwsStateError);
+    expect(notifications, successfulSaves);
+    expect((await journeys.load()).single.id, checkpoint.id);
+    c.dispose();
   });
   test(
       'restored exercise summary remains unaccepted and duplicate restore is harmless',

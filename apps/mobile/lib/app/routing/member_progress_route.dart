@@ -1,4 +1,9 @@
+import 'workout_program_route.dart';
+import '../../features/analytics/presentation/member/goal_comparison_report.dart';
 import 'dart:async';
+import 'member_points_progress_route.dart';
+import 'member_program_adherence.dart';
+import '../../features/analytics/presentation/member/goal_progress_screen.dart';
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -21,9 +26,12 @@ import '../../features/workout/domain/routine_attempt.dart';
 import '../../features/workout/presentation/member/routine_history_screen.dart';
 import 'routine_journey_route.dart';
 import 'member_workout_report_route.dart';
+import '../../features/identity/presentation/member/numeric_fitness_targets.dart';
+import '../../features/analytics/domain/member_workout_report.dart';
 import '../di/workout_backup_factory.dart';
 import '../../features/workout/presentation/member/workout_backup_screen.dart';
 import '../../features/workout/application/workout_backup_coordinator.dart';
+import '../../features/workout/application/workout_backup_scheduler.dart';
 
 enum MemberProgressView {
   dashboard,
@@ -31,8 +39,12 @@ enum MemberProgressView {
   performance,
   form,
   routines,
+  goals,
   backup
 }
+
+typedef ProgressGoalSummaryBuilder = Widget Function(
+    SessionScope, MemberLocalProgress, RoutineProgress?, VoidCallback);
 
 typedef MemberProgressBuilder = Widget Function(
     BuildContext context,
@@ -41,17 +53,18 @@ typedef MemberProgressBuilder = Widget Function(
     void Function(MemberProgressView) open,
     void Function(LocalWorkoutProgressRecord) openWorkout);
 
-/// App composition owns stores, account lifetime and navigation. Browsing reads
-/// existing durable summaries/receipts only; it never starts the upload worker.
+/// App composition owns local stores, account lifetime and opted-in backup.
 class MemberProgressHost extends StatefulWidget {
   const MemberProgressHost(
       {super.key,
       required this.scope,
       required this.builder,
       this.backupFactory,
+      this.goalSummaryBuilder,
       this.repositoryFactory = createLocalMemberProgressRepository});
   final SessionScope scope;
   final LocalMemberProgressRepositoryFactory repositoryFactory;
+  final ProgressGoalSummaryBuilder? goalSummaryBuilder;
   final MemberProgressBuilder builder;
   final WorkoutBackupFactory? backupFactory;
   @override
@@ -71,7 +84,7 @@ class _MemberProgressHostState extends State<MemberProgressHost>
   StreamSubscription<AuthState>? _authSubscription;
   StreamSubscription<MemberProgressState>? _progressSubscription;
   Timer? _weekTimer;
-  Timer? _backupTimer;
+  WorkoutBackupScheduler? _backupScheduler;
   WorkoutBackupLease? _backupLease;
   final _backupPresentation =
       ValueNotifier(const _BackupPresentation(null, null));
@@ -94,6 +107,7 @@ class _MemberProgressHostState extends State<MemberProgressHost>
     _authSubscription = _auth!.stream.listen((_) {
       _cubit?.accountChanged();
       _backupLease?.coordinator.accountChanged();
+      if (_activeScope() != null) _backupScheduler?.opportunity();
     });
     unawaited(_initialize());
   }
@@ -125,7 +139,7 @@ class _MemberProgressHostState extends State<MemberProgressHost>
         _cubit = cubit;
       });
       await cubit.load();
-      if (_backupConfigured) await _initializeBackup();
+      if (_backupConfigured) unawaited(_initializeBackup());
     } catch (_) {
       if (mounted && _activeScope() != null) {
         setState(() => _initializationError =
@@ -156,8 +170,13 @@ class _MemberProgressHostState extends State<MemberProgressHost>
         return;
       }
       _backupLease = lease;
+      _backupScheduler = lease.scheduler ??
+          WorkoutBackupScheduler(coordinator: lease.coordinator);
+      _backupScheduler!.setForeground(_foreground);
       await lease.coordinator.load();
       if (!mounted || _activeScope() == null) {
+        if (lease.scheduler == null) _backupScheduler?.dispose();
+        _backupScheduler = null;
         lease.release();
         _backupLease = null;
         return;
@@ -166,6 +185,8 @@ class _MemberProgressHostState extends State<MemberProgressHost>
       _backupPresentation.value = _BackupPresentation(lease.coordinator, null);
       await _syncBackup();
     } catch (_) {
+      if (_backupLease?.scheduler == null) _backupScheduler?.dispose();
+      _backupScheduler = null;
       _backupLease?.release();
       _backupLease = null;
       if (mounted && _activeScope() != null) {
@@ -179,30 +200,15 @@ class _MemberProgressHostState extends State<MemberProgressHost>
   }
 
   Future<void> _syncBackup() async {
-    _backupTimer?.cancel();
-    final c = _backupLease?.coordinator;
-    if (!_foreground || _activeScope() == null || c == null) return;
-    try {
-      await c.sync();
-    } catch (_) {
-      if (mounted && _activeScope() != null) {
-        setState(
-            () => _backupError = 'Backup status could not be saved. Retry.');
-      }
-    }
-    if (!mounted || !_foreground || _activeScope() == null) return;
-    _backupTimer = Timer(
-        Duration(seconds: c.state.lastError == null ? 60 : 120), () async {
-      await _syncBackup();
-      if (mounted && _activeScope() != null) await _cubit?.load();
-    });
+    if (!_foreground || _activeScope() == null) return;
+    _backupScheduler?.opportunity();
   }
 
   Future<void> _refresh() async {
     if (_activeScope() == null) return;
     if (_cubit != null) {
-      await _syncBackup();
       await _cubit!.load();
+      if (_backupConfigured) unawaited(_syncBackup());
     } else {
       await _initialize();
     }
@@ -211,22 +217,22 @@ class _MemberProgressHostState extends State<MemberProgressHost>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     _foreground = state == AppLifecycleState.resumed;
+    _backupScheduler?.setForeground(_foreground);
     if (_foreground) {
       unawaited(_refresh());
-    } else {
-      _backupTimer?.cancel();
     }
   }
 
   Future<void> _open(MemberProgressView view) async {
     if (_activeScope() == null || _cubit == null) return;
-    await _refresh();
+    unawaited(_refresh());
     if (!mounted || _activeScope() == null || _cubit == null) return;
     await Navigator.push(
         context,
         MaterialPageRoute<void>(
             builder: (_) => _ScopedProgressPage(
                 scope: widget.scope,
+                goalSummaryBuilder: widget.goalSummaryBuilder,
                 auth: _auth!,
                 cubit: _cubit!,
                 view: view,
@@ -285,7 +291,7 @@ class _MemberProgressHostState extends State<MemberProgressHost>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _weekTimer?.cancel();
-    _backupTimer?.cancel();
+    if (_backupLease?.scheduler == null) _backupScheduler?.dispose();
     _backupLease?.release();
     _backupPresentation.dispose();
     _authSubscription?.cancel();
@@ -328,7 +334,14 @@ class MemberProgressRoute extends StatelessWidget {
       {super.key,
       required this.scope,
       this.view = MemberProgressView.dashboard,
-      this.repositoryFactory = createLocalMemberProgressRepository});
+      this.repositoryFactory = createLocalMemberProgressRepository,
+      this.programProgressBuilder,
+      this.goalSummaryBuilder});
+  final Widget Function(SessionScope scope, Object reloadToken)?
+      programProgressBuilder;
+  final Widget Function(
+          SessionScope, MemberLocalProgress, RoutineProgress?, VoidCallback)?
+      goalSummaryBuilder;
   final SessionScope scope;
   final MemberProgressView view;
   final LocalMemberProgressRepositoryFactory repositoryFactory;
@@ -337,13 +350,16 @@ class MemberProgressRoute extends StatelessWidget {
       key: ValueKey(scope),
       scope: scope,
       repositoryFactory: repositoryFactory,
-      builder: (context, state, refresh, open, openWorkout) =>
-          _progressContent(context, state, view, refresh, open, openWorkout));
+      builder: (context, state, refresh, open, openWorkout) => _progressContent(
+          context, state, view, refresh, open, openWorkout,
+          programProgressBuilder: programProgressBuilder,
+          goalSummaryBuilder: goalSummaryBuilder));
 }
 
 class _ScopedProgressPage extends StatelessWidget {
   const _ScopedProgressPage(
       {required this.scope,
+      this.goalSummaryBuilder,
       required this.auth,
       required this.cubit,
       required this.view,
@@ -353,6 +369,7 @@ class _ScopedProgressPage extends StatelessWidget {
       required this.backupState,
       this.retryBackup});
   final SessionScope scope;
+  final ProgressGoalSummaryBuilder? goalSummaryBuilder;
   final AuthBloc auth;
   final MemberProgressCubit cubit;
   final MemberProgressView view;
@@ -379,6 +396,7 @@ class _ScopedProgressPage extends StatelessWidget {
                 bloc: cubit,
                 builder: (context, state) => _progressContent(
                     context, state, view, refresh, open, openWorkout,
+                    goalSummaryBuilder: goalSummaryBuilder,
                     backup: presentation.coordinator,
                     backupError: presentation.error,
                     retryBackup: retryBackup));
@@ -392,7 +410,12 @@ Widget _progressContent(
     Future<void> Function() refresh,
     void Function(MemberProgressView) open,
     void Function(LocalWorkoutProgressRecord) openWorkout,
-    {WorkoutBackupCoordinator? backup,
+    {Widget Function(SessionScope scope, Object reloadToken)?
+        programProgressBuilder,
+    Widget Function(
+            SessionScope, MemberLocalProgress, RoutineProgress?, VoidCallback)?
+        goalSummaryBuilder,
+    WorkoutBackupCoordinator? backup,
     String? backupError,
     VoidCallback? retryBackup}) {
   final progress = state.progress;
@@ -407,16 +430,63 @@ Widget _progressContent(
                 FilledButton(onPressed: refresh, child: const Text('Retry'))
               ])));
   }
-  void openReport() {
+  void openReport([WorkoutReportFilter? filter]) {
     Navigator.push(
         context,
         MaterialPageRoute<void>(
-            builder: (_) => MemberWorkoutReportRoute(scope: progress.scope)));
+            builder: (_) => MemberWorkoutReportRoute(
+                scope: progress.scope,
+                initialFilter: filter,
+                onOpenWorkout: openWorkout,
+                onOpenRoutine: (id) {
+                  final matches =
+                      state.routines?.records.where((a) => a.id == id);
+                  if (matches != null && matches.isNotEmpty) {
+                    openRoutineAttempt(context, matches.first, refresh);
+                  }
+                })));
+  }
+
+  Future<void> openProgram() async {
+    final auth = context.read<AuthBloc>();
+    final captured = auth.state.session;
+    bool current() =>
+        identical(auth.state.session, captured) &&
+        captured?.scope == progress.scope &&
+        AuthRolePolicy.canEnter(auth.state, allowed: const {AppRole.member});
+    if (!current()) return;
+    await Navigator.push(
+        context,
+        MaterialPageRoute<void>(
+            builder: (_) => WorkoutProgramRoute(scope: progress.scope)));
+    if (context.mounted && current()) await refresh();
   }
 
   final screen = switch (view) {
     MemberProgressView.dashboard => ProgressDashboardScreen(
+        onStartWorkout: openProgram,
+        goalSummary: goalSummaryBuilder?.call(progress.scope, progress,
+                state.routines, () => open(MemberProgressView.goals)) ??
+            GoalComparisonHost(
+                progress: progress,
+                routineProgress: state.routines,
+                compact: true,
+                onView: () => open(MemberProgressView.goals)),
+        programStatsBuilder: programProgressBuilder == null
+            ? (summaryBuilder) => LiveProgramAdherence(
+                scope: progress.scope,
+                reloadToken: progress,
+                weeklySummaryBuilder: summaryBuilder,
+                onChooseProgram: openProgram,
+                onOpenProgram: (_) => openProgram())
+            : null,
+        programProgress: programProgressBuilder?.call(progress.scope, progress),
+        onOpenGoals: () => open(MemberProgressView.goals),
         onOpenReport: openReport,
+        onOpenPoints: () => Navigator.push(
+            context,
+            MaterialPageRoute<void>(
+                builder: (_) => const LivePointsProgress())),
         localProgress: progress,
         routineProgress: state.routines,
         onOpenRoutineHistory: () => open(MemberProgressView.routines),
@@ -428,14 +498,53 @@ Widget _progressContent(
         onOpenPerformance: () => open(MemberProgressView.performance),
         onOpenForm: () => open(MemberProgressView.form)),
     MemberProgressView.history => ActivityTimelineScreen(
+        routineProgress: state.routines,
         onOpenReport: openReport,
+        onOpenFilteredReport: (filter) => openReport(filter),
         localProgress: progress,
         onRefresh: refresh,
         onOpenWorkout: openWorkout),
     MemberProgressView.performance => WorkoutPerformanceScreen(
-        localProgress: progress, onOpenReport: openReport),
-    MemberProgressView.form =>
-      PostureAccuracyScreen(localProgress: progress, onOpenReport: openReport),
+        localProgress: progress,
+        routineProgress: state.routines,
+        onOpenFilteredReport: (filter) => openReport(filter),
+        onOpenReport: openReport,
+        onOpenWorkout: openWorkout),
+    MemberProgressView.form => PostureAccuracyScreen(
+        localProgress: progress,
+        routineProgress: state.routines,
+        onOpenFilteredReport: (filter) => openReport(filter),
+        onOpenReport: openReport,
+        onOpenWorkout: openWorkout),
+    MemberProgressView.goals => GoalProgressScreen(
+        live: true,
+        localProgress: progress,
+        routineProgress: state.routines,
+        onEditTargets: () async {
+          final auth = context.read<AuthBloc>();
+          final session = auth.state.session;
+          if (session == null ||
+              session.scope != progress.scope ||
+              !AuthRolePolicy.canEnter(auth.state,
+                  allowed: const {AppRole.member})) {
+            return;
+          }
+          bool current() =>
+              identical(auth.state.session, session) &&
+              AuthRolePolicy.canEnter(auth.state,
+                  allowed: const {AppRole.member});
+          await Navigator.push(
+              context,
+              MaterialPageRoute<void>(
+                  builder: (_) => Scaffold(
+                      appBar: AppBar(title: const Text('Fitness targets')),
+                      body: SingleChildScrollView(
+                          padding: const EdgeInsets.all(20),
+                          child: NumericFitnessTargets(
+                              live: true,
+                              session: session,
+                              isSessionCurrent: current)))));
+        }),
     MemberProgressView.routines => RoutineHistoryScreen(
         attempts: state.routines?.records ?? const [],
         available: state.routines != null,
@@ -448,7 +557,11 @@ Widget _progressContent(
         onRetry: retryBackup,
         onChanged: refresh),
   };
-  final warnings = state.snapshot?.warnings ?? const <String>[];
+  final warnings = [
+    ...?state.snapshot?.warnings,
+    if (state.error != null)
+      '${state.error} Showing previously loaded local results.'
+  ];
   return Column(children: [
     if (warnings.isNotEmpty)
       SafeArea(

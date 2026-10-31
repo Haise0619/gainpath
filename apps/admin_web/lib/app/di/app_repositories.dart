@@ -33,6 +33,8 @@ import '../../infrastructure/firebase/firebase_mini_game_reward_configuration_re
 import '../../infrastructure/firebase/firebase_facility_settings_repository.dart';
 import 'admin_presentation_dependencies.dart';
 import '../../features/analytics/application/admin_reporting_gateway.dart';
+import '../../features/workout/domain/admin_workout_program_repository.dart';
+import '../../infrastructure/firebase/firebase_admin_workout_program_repository.dart';
 
 /// Session-scoped Firebase data access with neutral unavailable capabilities.
 class AppRepositories extends StatefulWidget {
@@ -58,10 +60,13 @@ class AppRepositories extends StatefulWidget {
     this.miniGameContentFactory,
     this.facilitySettingsFactory,
     this.reportingGatewayFactory,
+    this.workoutProgramFactory,
   });
   final Widget child;
   final AuthSession? session;
   final ReportingGatewayFactory? reportingGatewayFactory;
+  final AdminWorkoutProgramRepository Function(SessionScope, bool Function())?
+      workoutProgramFactory;
   final TutorialRepository Function(SessionScope)? tutorialRepositoryFactory;
   final RoutineTemplateRepository Function(SessionScope, TutorialRepository)?
       routineRepositoryFactory;
@@ -101,6 +106,15 @@ class _AppRepositoriesState extends State<AppRepositories> {
   CatalogEditSessionGuard? _miniGameGuard;
   CatalogEditSessionGuard? _miniGameRewardGuard;
   CatalogEditSessionGuard? _facilityGuard;
+  CatalogEditSessionGuard? _programGuard;
+  AdminWorkoutProgramRepository _createPrograms(SessionScope scope) {
+    _programGuard = _buildSessionGuard();
+    return widget.workoutProgramFactory
+            ?.call(scope, _programGuard!.isCurrent) ??
+        FirebaseAdminWorkoutProgramRepository(
+            scope: scope, isCurrent: _programGuard!.isCurrent);
+  }
+
   CatalogEditSessionGuard _buildSessionGuard() {
     AuthBloc? auth;
     try {
@@ -247,6 +261,7 @@ class _AppRepositoriesState extends State<AppRepositories> {
     _miniGameRewardGuard?.dispose();
     _facilityGuard?.dispose();
     _equipmentGuard?.dispose();
+    _programGuard?.dispose();
     super.dispose();
   }
 
@@ -290,6 +305,8 @@ class _AppRepositoriesState extends State<AppRepositories> {
           create: (_) => _createMiniGameContent(scope)),
       RepositoryProvider<MiniGameRewardConfigurationRepository>(
           create: (_) => _createMiniGameRewards(scope)),
+      RepositoryProvider<AdminWorkoutProgramRepository>(
+          create: (_) => _createPrograms(scope)),
       RepositoryProvider<AdminMemberDirectoryRepository>(
           create: (_) => _createMemberDirectory(scope)),
       RepositoryProvider<AccountPhotoPicker>(

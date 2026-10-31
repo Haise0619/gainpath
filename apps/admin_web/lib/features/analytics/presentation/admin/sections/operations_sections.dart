@@ -1,3 +1,4 @@
+import '../admin_commerce_section.dart';
 import 'package:flutter/material.dart';
 import 'package:gainpath_domain/coaching.dart';
 import 'package:syncfusion_flutter_charts/charts.dart';
@@ -160,13 +161,28 @@ class CoachBookingUtilizationSection extends StatelessWidget {
       final total = snapshot!.totalBookingsCount!;
       return ReportSection(
           anchorKey: anchorKey,
-          title: 'Coach Booking Utilization',
+          title: 'Coach booking activity',
           subtitle:
               'Recorded booking activity · capacity-based utilization remains unavailable',
           live: true,
           tagLabel: 'Booking activity',
           exportFilename: 'booking_activity.csv',
-          exportRows: () => ops.toCsv(snapshot!),
+          exportRows: () => [
+                ['GainPath booking activity', 'Not capacity utilization'],
+                [
+                  'Start inclusive UTC',
+                  snapshot!.query.range.start.toUtc().toIso8601String()
+                ],
+                [
+                  'End exclusive UTC',
+                  snapshot!.query.range.end.toUtc().toIso8601String()
+                ],
+                ['Timezone', 'Asia/Kuala_Lumpur'],
+                ['Bookings created in range', total],
+                ['Confirmed/completed scheduled starts', ops.scheduledStarts],
+                ['Current status of bookings created in range', 'Count'],
+                for (final e in ops.statuses.entries) [e.key, e.value],
+              ],
           child:
               Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Row(children: [
@@ -264,15 +280,21 @@ class CoachPerformanceSection extends StatelessWidget {
   final GlobalKey anchorKey;
   final ReportFilter filter;
   final bool live;
+  final AdminReportingSnapshot? snapshot;
   const CoachPerformanceSection({
     super.key,
     required this.anchorKey,
     required this.filter,
     this.live = false,
+    this.snapshot,
   });
 
   @override
   Widget build(BuildContext context) {
+    if (snapshot?.commerce != null) {
+      return AdminCommerceSection(
+          anchorKey: anchorKey, report: snapshot!.commerce!, coach: true);
+    }
     final allDates = context
         .read<BookingRepository>()
         .allBookings
@@ -322,7 +344,7 @@ class CoachPerformanceSection extends StatelessWidget {
       child: coaches.isEmpty
           ? NoFilteredData(
               message: live
-                  ? 'No coach performance data available in this release.'
+                  ? 'Coach comparison awaits a compatible reporting service.'
                   : 'No coaches match this branch filter.')
           : Column(
               children: [

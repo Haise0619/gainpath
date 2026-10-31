@@ -66,3 +66,5 @@ export { adminCheckInReportingCommand } from './modules/analytics/admin-check-in
 export { rewardCatalogCommand } from './modules/gamification/reward-catalog-callable';
 // Prepared supported-game content only; selective deployment requires owner approval.
 export { miniGameContentCommand } from './modules/content/mini-game-content-callables';
+// Owner-approved isolated Program release; this is not authority for a full deploy.
+export { workoutProgramCommand } from './modules/content/workout-program-callable';

@@ -7,7 +7,8 @@ import '../../features/workout/domain/workout_contracts.dart';
 /// App-private durable outbox. Composition supplies the application support
 /// directory; never use a temporary directory for real sessions.
 class FileWorkoutSessionStore implements WorkoutSessionStore {
-  FileWorkoutSessionStore({required Directory directory, required this.scope})
+  FileWorkoutSessionStore(
+      {required Directory directory, required this.scope, this.onSaved})
       : _directory = Directory('${directory.absolute.path}/workouts-v2/'
             '${_segment(scope.organizationId)}/${_segment(scope.userId)}');
 
@@ -27,6 +28,7 @@ class FileWorkoutSessionStore implements WorkoutSessionStore {
 
   static final Map<String, Future<void>> _queues = {};
   final Directory _directory;
+  final void Function()? onSaved;
   @override
   final SessionScope scope;
   File get _file => File('${_directory.path}/records.json');
@@ -88,5 +90,6 @@ class FileWorkoutSessionStore implements WorkoutSessionStore {
     // Atomic replace leaves either the previous complete snapshot or the new
     // complete snapshot after process interruption. Orphan .pending is ignored.
     await pending.rename(_file.path);
+    onSaved?.call();
   }
 }

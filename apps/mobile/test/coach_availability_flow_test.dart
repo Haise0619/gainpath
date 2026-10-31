@@ -1,3 +1,4 @@
+import 'support/signed_out_firebase.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -19,6 +20,7 @@ import 'support/coach_availability_fake.dart';
 final window = DatedCoachWindow(
     branchId: 'main', startAtMillis: 1792116000000, endAtMillis: 1792117800000);
 void main() {
+  setUpAll(setUpSignedOutFirebase);
   setUpAll(() => GoogleFonts.config.allowRuntimeFetching = false);
   test(
       'edit baseline remains immutable; same-intent retry, conflict/discard and fresh removal',

@@ -1,3 +1,8 @@
+import 'package:gainpath_mobile/features/analytics/presentation/member/goal_comparison_report.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:gainpath_identity/gainpath_identity.dart';
+import 'package:gainpath_domain/gainpath_domain.dart'
+    show NumericFitnessGoal, NumericFitnessGoalRepository;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -11,6 +16,16 @@ import 'package:gainpath_mobile/features/analytics/presentation/member/activity_
 import 'package:gainpath_mobile/features/workout/data/workout_session_repository.dart';
 import 'package:gainpath_mobile/features/workout/domain/real_workout_sync.dart';
 import 'support/fitness_profile_fake.dart';
+
+class EmptyTargets implements NumericFitnessGoalRepository {
+  EmptyTargets(this.scope);
+  @override
+  final SessionScope scope;
+  @override
+  Future<List<NumericFitnessGoal>> loadActive() async => [];
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
 
 WorkoutSessionRecord record(SessionScope scope, String id) {
   final start = DateTime.now().toUtc().subtract(const Duration(seconds: 30));
@@ -57,6 +72,17 @@ void main() {
     await store(first.scope).write([record(first.scope, 'first-camera')]);
     await tester.pumpWidget(GainPathMobileApp.injected(
         authRepository: auth,
+        progressGoalSummaryBuilder: (scope, progress, routines, onView) =>
+            Builder(
+                builder: (context) => GoalComparisonReport(
+                    repository: EmptyTargets(scope),
+                    progress: progress,
+                    routineProgress: routines,
+                    isCurrent: () =>
+                        context.read<AuthBloc>().state.session?.scope == scope,
+                    compact: true,
+                    onView: onView)),
+        memberRewardsBuilder: (_) => const SizedBox(),
         profileRepositoryFactory: profiles.repository,
         routineLoaderFactory: (_) async => null,
         progressRepositoryFactory: (scope, active) async =>
@@ -73,7 +99,14 @@ void main() {
     await tester.tap(find.text('Progress'));
     await tester.pumpAndSettle();
     expect(find.byType(ProgressDashboardScreen), findsOneWidget);
-    expect(find.text('1 saved camera sessions this week'), findsOneWidget);
+    expect(
+        tester
+            .widget<ProgressDashboardScreen>(
+                find.byType(ProgressDashboardScreen))
+            .localProgress!
+            .weeklySessions,
+        1);
+    expect(find.text('Training days'), findsOneWidget);
     // Open the account-owned history page, then add a durable result and refresh
     // it while still open. No mock repositories or upload worker are installed.
     tester
@@ -115,7 +148,14 @@ void main() {
     await tester.tap(find.text('Progress and reports'));
     await tester.pumpAndSettle();
     expect(find.byType(ProgressDashboardScreen), findsOneWidget);
-    expect(find.text('3 saved camera sessions this week'), findsOneWidget);
+    expect(
+        tester
+            .widget<ProgressDashboardScreen>(
+                find.byType(ProgressDashboardScreen))
+            .localProgress!
+            .weeklySessions,
+        3);
+    expect(find.text('Training days'), findsOneWidget);
     await auth.signOut();
     await tester.pumpAndSettle();
     final second =

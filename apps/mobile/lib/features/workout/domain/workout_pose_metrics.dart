@@ -57,6 +57,8 @@ class WorkoutPoseMetrics {
     required DateTime consentedAt,
     this.publishedRoutineId,
     this.curlArms,
+    this.rowSide,
+    this.lungeSide,
     Map<String, WorkoutDeviationAggregate> deviations = const {},
   })  : consentedAt = consentedAt.toUtc(),
         deviations = Map.unmodifiable(deviations) {
@@ -77,9 +79,34 @@ class WorkoutPoseMetrics {
           'bodyweight-squat-side-v1',
           'single-arm-curl-side-v1',
           'standing-calf-raise-side-v1',
-          'wall-push-up-side-v1'
+          'wall-push-up-side-v1',
+          'single-arm-row-side-v1',
+          'reverse-lunge-side-v1',
+          'dumbbell-shoulder-press-front-v1',
+          'standing-lateral-raise-front-v1',
         }.contains(scoringVersion) ||
-        cameraView != 'side' ||
+        (scoringVersion == 'reverse-lunge-side-v1'
+            ? (!const {'left', 'right'}.contains(lungeSide) ||
+                formScorePercent != null ||
+                curlArms != null)
+            : lungeSide != null) ||
+        (scoringVersion == 'single-arm-row-side-v1'
+            ? (!const {'left', 'right'}.contains(rowSide) ||
+                formScorePercent != null ||
+                curlArms != null)
+            : rowSide != null) ||
+        (const {
+              'dumbbell-shoulder-press-front-v1',
+              'standing-lateral-raise-front-v1'
+            }.contains(scoringVersion) &&
+            (formScorePercent != null || curlArms != null)) ||
+        cameraView !=
+            (const {
+              'dumbbell-shoulder-press-front-v1',
+              'standing-lateral-raise-front-v1'
+            }.contains(scoringVersion)
+                ? 'front'
+                : 'side') ||
         consentVersion != workoutConsentVersion ||
         !_metricId.hasMatch(detectorId) ||
         !_metricId.hasMatch(detectorVersion) ||
@@ -113,9 +140,27 @@ class WorkoutPoseMetrics {
   final Map<String, WorkoutDeviationAggregate> deviations;
   final CurlArmMetrics? curlArms;
 
+  /// Selected anatomical arm for unscored side-view rows only.
+  final String? rowSide;
+
+  /// Front planted working leg for unscored side-view reverse lunges only.
+  final String? lungeSide;
+
   Map<String, Object?> toJson() => {
-        'schemaVersion': curlArms == null ? 1 : 2,
+        'schemaVersion': scoringVersion == 'standing-lateral-raise-front-v1'
+            ? 6
+            : lungeSide != null
+                ? 5
+                : scoringVersion == 'dumbbell-shoulder-press-front-v1'
+                    ? 4
+                    : rowSide != null
+                        ? 3
+                        : curlArms == null
+                            ? 1
+                            : 2,
         if (curlArms != null) 'curlArms': curlArms!.toJson(),
+        if (rowSide != null) 'rowSide': rowSide,
+        if (lungeSide != null) 'lungeSide': lungeSide,
         'partialRepetitions': partialRepetitions,
         'trackedDurationMicros': trackedDurationMicros,
         'rejectedDurationMicros': rejectedDurationMicros,
@@ -147,9 +192,28 @@ class WorkoutPoseMetrics {
       'publishedRoutineId',
       'deviations',
       if (json['schemaVersion'] == 2) 'curlArms',
+      if (json['schemaVersion'] == 3) 'rowSide',
+      if (json['schemaVersion'] == 5) 'lungeSide',
     });
-    if (json['schemaVersion'] != 1 && json['schemaVersion'] != 2) {
+    if (json['schemaVersion'] != 1 &&
+        json['schemaVersion'] != 2 &&
+        json['schemaVersion'] != 3 &&
+        json['schemaVersion'] != 4 &&
+        json['schemaVersion'] != 5 &&
+        json['schemaVersion'] != 6) {
       throw const FormatException('Unsupported pose metrics version.');
+    }
+    if ((json['schemaVersion'] == 6) !=
+        (json['scoringVersion'] == 'standing-lateral-raise-front-v1')) {
+      throw const FormatException('Invalid lateral raise metric version.');
+    }
+    if ((json['schemaVersion'] == 4) !=
+        (json['scoringVersion'] == 'dumbbell-shoulder-press-front-v1')) {
+      throw const FormatException('Invalid shoulder press metric version.');
+    }
+    if ((json['schemaVersion'] == 5) !=
+        (json['scoringVersion'] == 'reverse-lunge-side-v1')) {
+      throw const FormatException('Invalid reverse lunge metric version.');
     }
     final score = json['formScorePercent'];
     final routine = json['publishedRoutineId'];
@@ -165,6 +229,8 @@ class WorkoutPoseMetrics {
       throw const FormatException('Unsupported workout deviation.');
     }
     return WorkoutPoseMetrics(
+      rowSide: json['schemaVersion'] == 3 ? _text(json, 'rowSide') : null,
+      lungeSide: json['schemaVersion'] == 5 ? _text(json, 'lungeSide') : null,
       curlArms: json['schemaVersion'] == 2
           ? CurlArmMetrics.fromJson(_object(json['curlArms']))
           : null,
@@ -187,6 +253,8 @@ class WorkoutPoseMetrics {
   @override
   bool operator ==(Object other) =>
       other is WorkoutPoseMetrics &&
+      rowSide == other.rowSide &&
+      lungeSide == other.lungeSide &&
       curlArms == other.curlArms &&
       partialRepetitions == other.partialRepetitions &&
       trackedDurationMicros == other.trackedDurationMicros &&
@@ -218,7 +286,9 @@ class WorkoutPoseMetrics {
       publishedRoutineId,
       deviations['trunkLean'],
       deviations['incompleteDepth'],
-      curlArms);
+      curlArms,
+      rowSide,
+      lungeSide);
 }
 
 void _fields(Map<String, Object?> json, Set<String> fields) {

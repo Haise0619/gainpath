@@ -1,4 +1,7 @@
 import 'package:gainpath_domain/gainpath_domain.dart' show SessionScope;
+import '../../features/workout/application/workout_backup_scheduler.dart';
+import 'workout_backup_wakeups.dart';
+import 'workout_backup_network_opportunities.dart';
 import '../../features/workout/application/workout_backup_coordinator.dart';
 import '../../features/workout/data/stored_workout_backup_local.dart';
 import '../../infrastructure/firebase/firebase_workout_backup_gateway.dart';
@@ -13,20 +16,24 @@ typedef WorkoutBackupFactory = Future<WorkoutBackupLease> Function(
     SessionScope scope, SessionScope? Function() activeScope);
 
 class WorkoutBackupLease {
-  WorkoutBackupLease(this.coordinator, this.release);
+  WorkoutBackupLease(this.coordinator, this.release, {this.scheduler});
   final WorkoutBackupCoordinator coordinator;
   final void Function() release;
+  final WorkoutBackupScheduler? scheduler;
 }
 
 class _SharedBackup {
-  _SharedBackup(this.coordinator, this.scopes);
+  _SharedBackup(this.coordinator, this.scopes, this.scheduler, this.wakeups);
   final WorkoutBackupCoordinator coordinator;
   final List<SessionScope? Function()> scopes;
+  final WorkoutBackupScheduler scheduler;
+  final WorkoutBackupWakeups wakeups;
 }
 
 final _shared = <SessionScope, Future<_SharedBackup>>{};
 Future<WorkoutBackupLease> acquireWorkoutBackup(
-    SessionScope scope, SessionScope? Function() activeScope) async {
+    SessionScope scope, SessionScope? Function() activeScope,
+    {Stream<void>? networkOpportunities}) async {
   if (!workoutCloudBackupEnabled) {
     throw UnsupportedError('Cloud backup awaits activation.');
   }
@@ -44,7 +51,14 @@ Future<WorkoutBackupLease> acquireWorkoutBackup(
         gateway: FirebaseWorkoutBackupGateway(
             scope: scope, activeAccount: () => current() == scope),
         store: await createWorkoutBackupStore(scope));
-    return _SharedBackup(c, scopes);
+    final scheduler = WorkoutBackupScheduler(coordinator: c);
+    final wakeups = WorkoutBackupWakeups(
+        scope: scope,
+        activeScope: current,
+        scheduler: scheduler,
+        networkOpportunities:
+            networkOpportunities ?? workoutBackupNetworkOpportunities());
+    return _SharedBackup(c, scopes, scheduler, wakeups);
   });
   _SharedBackup shared;
   try {
@@ -61,9 +75,11 @@ Future<WorkoutBackupLease> acquireWorkoutBackup(
     shared.scopes.remove(activeScope);
     if (shared.scopes.isEmpty) {
       if (identical(_shared[scope], future)) _shared.remove(scope);
+      shared.wakeups.dispose();
+      shared.scheduler.dispose();
       shared.coordinator.dispose();
     } else {
       shared.coordinator.accountChanged();
     }
-  });
+  }, scheduler: shared.scheduler);
 }

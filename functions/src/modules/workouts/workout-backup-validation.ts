@@ -23,7 +23,7 @@ function idsMap(raw: unknown, lists = false): void { for (const [k, v] of Object
 function nullableNumber(v: unknown, max = 100): void { if (v !== null && (typeof v !== 'number' || !Number.isFinite(v) || v < 0 || v > max))
     throw new InputValidationError('Invalid backup score.'); }
 function metrics(raw: unknown): void { const m = object(raw); const fields = ['schemaVersion', 'partialRepetitions', 'trackedDurationMicros', 'rejectedDurationMicros', 'formScorePercent', 'scoringVersion', 'detectorId', 'detectorVersion', 'cameraView', 'consentVersion', 'consentedAt', 'publishedRoutineId', 'deviations']; if (m.schemaVersion === 2)
-    fields.push('curlArms'); keys(m, fields); if (![1, 2].includes(Number(m.schemaVersion)))
+    fields.push('curlArms'); if (m.schemaVersion === 3) fields.push('rowSide'); if (m.schemaVersion === 5) fields.push('lungeSide'); keys(m, fields); if (m.schemaVersion !== 6 && m.schemaVersion !== 5 && m.schemaVersion !== 4 && m.schemaVersion !== 3 && ![1, 2].includes(Number(m.schemaVersion)))
     throw new InputValidationError('Invalid metric version.'); for (const k of ['partialRepetitions', 'trackedDurationMicros', 'rejectedDurationMicros'])
     number(m[k]); nullableNumber(m.formScorePercent); for (const k of ['scoringVersion', 'detectorId', 'detectorVersion', 'cameraView', 'consentVersion', 'consentedAt'])
     text(m[k], 256); if (m.publishedRoutineId !== null)
@@ -32,6 +32,52 @@ function metrics(raw: unknown): void { const m = object(raw); const fields = ['s
     keys(a, ['count', 'maximumDegrees']);
     number(a.count, 10000);
     nullableNumber(a.maximumDegrees, 180);
+} if (m.schemaVersion === 5 || m.scoringVersion === 'reverse-lunge-side-v1') {
+    if (m.schemaVersion !== 5 || m.scoringVersion !== 'reverse-lunge-side-v1' ||
+        !['left', 'right'].includes(String(m.lungeSide)) || typeof m.lungeSide !== 'string' ||
+        m.formScorePercent !== null || Object.keys(deviations).length !== 0 ||
+        m.cameraView !== 'side' || m.consentVersion !== 'pose-local-summary-v1' ||
+        !/^[A-Za-z0-9_-]{1,128}$/.test(String(m.detectorId)) ||
+        !/^[A-Za-z0-9_-]{1,128}$/.test(String(m.detectorVersion)) ||
+        Number(m.partialRepetitions) > 10000 || Number(m.trackedDurationMicros) > 86400000000 ||
+        Number(m.rejectedDurationMicros) > 86400000000 ||
+        Number(m.trackedDurationMicros) + Number(m.rejectedDurationMicros) > 86400000000 ||
+        (m.trackedDurationMicros === 0 && m.partialRepetitions !== 0))
+        throw new InputValidationError('Invalid provisional reverse lunge metrics.');
+} if (m.schemaVersion === 6 || m.scoringVersion === 'standing-lateral-raise-front-v1') {
+    if (m.schemaVersion !== 6 || m.scoringVersion !== 'standing-lateral-raise-front-v1' ||
+        m.formScorePercent !== null || Object.keys(deviations).length !== 0 ||
+        m.cameraView !== 'front' || m.consentVersion !== 'pose-local-summary-v1' ||
+        !/^[A-Za-z0-9_-]{1,128}$/.test(String(m.detectorId)) ||
+        !/^[A-Za-z0-9_-]{1,128}$/.test(String(m.detectorVersion)) ||
+        Number(m.partialRepetitions) > 10000 || Number(m.trackedDurationMicros) > 86400000000 ||
+        Number(m.rejectedDurationMicros) > 86400000000 ||
+        Number(m.trackedDurationMicros) + Number(m.rejectedDurationMicros) > 86400000000 ||
+        (m.trackedDurationMicros === 0 && m.partialRepetitions !== 0))
+        throw new InputValidationError('Invalid provisional lateral raise metrics.');
+} if (m.schemaVersion === 4 || m.scoringVersion === 'dumbbell-shoulder-press-front-v1') {
+    if (m.schemaVersion !== 4 || m.scoringVersion !== 'dumbbell-shoulder-press-front-v1' ||
+        m.formScorePercent !== null || Object.keys(deviations).length !== 0 ||
+        m.cameraView !== 'front' || m.consentVersion !== 'pose-local-summary-v1' ||
+        !/^[A-Za-z0-9_-]{1,128}$/.test(String(m.detectorId)) ||
+        !/^[A-Za-z0-9_-]{1,128}$/.test(String(m.detectorVersion)) ||
+        Number(m.partialRepetitions) > 10000 || Number(m.trackedDurationMicros) > 86400000000 ||
+        Number(m.rejectedDurationMicros) > 86400000000 ||
+        Number(m.trackedDurationMicros) + Number(m.rejectedDurationMicros) > 86400000000 ||
+        (m.trackedDurationMicros === 0 && m.partialRepetitions !== 0))
+        throw new InputValidationError('Invalid provisional shoulder press metrics.');
+} if (m.schemaVersion === 3 || m.scoringVersion === 'single-arm-row-side-v1') {
+    if (m.schemaVersion !== 3 || m.scoringVersion !== 'single-arm-row-side-v1' ||
+        !['left', 'right'].includes(String(m.rowSide)) || typeof m.rowSide !== 'string' ||
+        m.formScorePercent !== null || Object.keys(deviations).length !== 0 ||
+        m.cameraView !== 'side' || m.consentVersion !== 'pose-local-summary-v1' ||
+        !/^[A-Za-z0-9_-]{1,128}$/.test(String(m.detectorId)) ||
+        !/^[A-Za-z0-9_-]{1,128}$/.test(String(m.detectorVersion)) ||
+        Number(m.partialRepetitions) > 10000 || Number(m.trackedDurationMicros) > 86400000000 ||
+        Number(m.rejectedDurationMicros) > 86400000000 ||
+        Number(m.trackedDurationMicros) + Number(m.rejectedDurationMicros) > 86400000000 ||
+        (m.trackedDurationMicros === 0 && m.partialRepetitions !== 0))
+        throw new InputValidationError('Invalid provisional row metrics.');
 } if (m.schemaVersion === 2) {
     const a = object(m.curlArms);
     keys(a, ['mode', 'targetSets', 'repetitionsPerArm', 'completedSets', 'left', 'right']);
@@ -50,12 +96,14 @@ function metrics(raw: unknown): void { const m = object(raw); const fields = ['s
 function plan(raw: unknown): void { const p = object(raw); const required=['schemaVersion', 'kind', 'status', 'sourceBlueprintId', 'title', 'estimatedMinutes', 'exercises']; keys(p, [...required,'difficulty'],required); if (p.difficulty!==undefined&&!['Beginner','Intermediate','Advanced'].includes(String(p.difficulty)))throw new InputValidationError('Invalid routine difficulty'); if (p.schemaVersion !== 1 || p.kind !== 'routine' || p.status !== 'published')
     throw new InputValidationError('Invalid plan snapshot'); text(p.sourceBlueprintId, 128); text(p.title, 500); number(p.estimatedMinutes, 10000); for (const rawE of array(p.exercises, 50)) {
     const e = object(rawE);
-    keys(e, ['exerciseId', 'dayNumber', 'name', 'category', 'sets', 'reps', 'cue', 'imageUrl', 'muscleGroup', 'videoUrl', 'description', 'coverImageUrl', 'difficulty', 'equipment', 'tutorialSteps']);
+    const required = ['exerciseId', 'dayNumber', 'name', 'category', 'sets', 'reps', 'cue', 'imageUrl', 'muscleGroup', 'videoUrl', 'description', 'coverImageUrl', 'difficulty', 'equipment', 'tutorialSteps'];
+    keys(e, [...required, 'restSeconds'], required);
     requiredIdentifier(e.exerciseId, 'exerciseId');
     for (const k of ['dayNumber', 'sets', 'reps'])
         number(e[k], 10000);
+    if ('restSeconds' in e) number(e.restSeconds, 600);
     for (const [k, v] of Object.entries(e))
-        if (!['dayNumber', 'sets', 'reps', 'tutorialSteps'].includes(k))
+        if (!['dayNumber', 'sets', 'reps', 'restSeconds', 'tutorialSteps'].includes(k))
             text(v, 8000);
     for (const k of ['imageUrl', 'videoUrl', 'coverImageUrl']) {
         const v = String(e[k]);
@@ -85,6 +133,22 @@ export function validateBackupPayload(kind: string, id: string, org: string, uid
         throw new InputValidationError('Invalid summary times');
     metrics(p.poseMetrics);
     const m=object(p.poseMetrics),attempts=Number(p.repetitions)+Number(m.partialRepetitions);
+    if ((m.scoringVersion === 'reverse-lunge-side-v1' || p.exerciseId === 'bodyweight-reverse-lunge-side-v1') &&
+        (org !== 'gainpath' || p.exerciseId !== 'bodyweight-reverse-lunge-side-v1' ||
+            m.scoringVersion !== 'reverse-lunge-side-v1' || m.schemaVersion !== 5 || p.accuracy !== 0))
+        throw new InputValidationError('Invalid provisional reverse lunge identity.');
+    if ((m.scoringVersion === 'standing-lateral-raise-front-v1' || p.exerciseId === 'standing-lateral-raise-front-v1') &&
+        (org !== 'gainpath' || p.exerciseId !== 'standing-lateral-raise-front-v1' ||
+            m.scoringVersion !== 'standing-lateral-raise-front-v1' || m.schemaVersion !== 6 || p.accuracy !== 0))
+        throw new InputValidationError('Invalid provisional lateral raise identity.');
+    if ((m.scoringVersion === 'dumbbell-shoulder-press-front-v1' || p.exerciseId === 'dumbbell-shoulder-press-front-v1') &&
+        (org !== 'gainpath' || p.exerciseId !== 'dumbbell-shoulder-press-front-v1' ||
+            m.scoringVersion !== 'dumbbell-shoulder-press-front-v1' || m.schemaVersion !== 4 || p.accuracy !== 0))
+        throw new InputValidationError('Invalid provisional shoulder press identity.');
+    if ((m.scoringVersion === 'single-arm-row-side-v1' || p.exerciseId === 'single-arm-dumbbell-row-side-v1') &&
+        (org !== 'gainpath' || p.exerciseId !== 'single-arm-dumbbell-row-side-v1' ||
+            m.scoringVersion !== 'single-arm-row-side-v1' || m.schemaVersion !== 3 || p.accuracy !== 0))
+        throw new InputValidationError('Invalid provisional row identity.');
     if(attempts>10000||Number(m.trackedDurationMicros)+Number(m.rejectedDurationMicros)>(end-start)*1000||Date.parse(String(m.consentedAt))>start||!Number.isFinite(Date.parse(String(m.consentedAt)))||(attempts===0&&m.formScorePercent!==null)||(m.trackedDurationMicros===0&&p.repetitions!==0))throw new InputValidationError('Inconsistent backup summary.');
 }
 else if (kind === 'routine') {

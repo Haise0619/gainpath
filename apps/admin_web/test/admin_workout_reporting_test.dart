@@ -173,7 +173,8 @@ void main() {
     expect(c.state.query, q);
     expect(c.state.report!.query, q);
     final pending = c.load();
-    expect(c.state.report, isNull);
+    expect(c.state.report!.query, q);
+    expect(c.state.loading, isTrue);
     g.requests.last.completeError(StateError('unavailable'));
     await pending;
     expect(c.state.error, isNotNull);

@@ -5,12 +5,14 @@ import 'mini_game_content_repository.dart' show MiniGameContentCall;
 class RemoteMiniGameRoundRepository implements MiniGameRoundRepository {
   RemoteMiniGameRoundRepository(
       {required this.scope,
+      this.gameId = 'move-catch-v1',
       required bool Function() isCurrent,
       required MiniGameContentCall call})
       : _isCurrent = isCurrent,
         _call = call;
   @override
   final SessionScope scope;
+  final String gameId;
   final bool Function() _isCurrent;
   final MiniGameContentCall _call;
   @override
@@ -28,7 +30,7 @@ class RemoteMiniGameRoundRepository implements MiniGameRoundRepository {
         ...fields
       });
       _check();
-      return MiniGameRound.fromJson(d, scope);
+      return MiniGameRound.fromJson(d, scope, gameId: gameId);
     } catch (_) {
       _check();
       rethrow;
@@ -36,7 +38,9 @@ class RemoteMiniGameRoundRepository implements MiniGameRoundRepository {
   }
 
   Map<String, dynamic> _bound(MiniGameRound r) {
-    if (r.scope != scope) throw const MiniGameRoundSessionChanged();
+    if (r.scope != scope || r.gameId != gameId) {
+      throw const MiniGameRoundSessionChanged();
+    }
     return {'attemptId': r.attemptId, 'challengeToken': r.challengeToken};
   }
 
@@ -61,7 +65,7 @@ class RemoteMiniGameRoundRepository implements MiniGameRoundRepository {
       throw const FormatException('Invalid round request ID.');
     }
     final r = await _command(
-        {'action': 'begin', 'requestId': requestId, 'gameId': 'move-catch-v1'});
+        {'action': 'begin', 'requestId': requestId, 'gameId': gameId});
     if (r.status != 'open' || r.sequence != 0 || r.activeMillis != 0) {
       throw const FormatException('Round is already used.');
     }

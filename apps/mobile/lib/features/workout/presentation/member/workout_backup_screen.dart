@@ -18,7 +18,7 @@ class WorkoutBackupScreen extends StatelessWidget {
                   title: const Text('Back up workout history?'),
                   content: const SingleChildScrollView(
                       child: Text(
-                          'Store your exercise summaries, routine targets and progress in your private account backup. No video or skeleton frames are uploaded. AI measurements remain provisional and self-reported sets stay separate. Backup does not earn rewards or verify form. Turning this off stops future sync; it does not delete existing cloud copies.')),
+                          'Automatically back up your exercise summaries, routine targets and progress to your private account after saving on this device. No video or raw landmarks are uploaded. Program enrollment is not synced. AI measurements remain provisional and self-reported sets stay separate. Backup does not earn rewards or verify form. Turning this off stops future sync; it does not delete existing cloud copies.')),
                   actions: [
                     TextButton(
                         onPressed: () => Navigator.pop(context, false),
@@ -64,29 +64,32 @@ class WorkoutBackupScreen extends StatelessWidget {
                         style: Theme.of(context).textTheme.headlineSmall),
                     SwitchListTile(
                         contentPadding: EdgeInsets.zero,
-                        title: const Text('Back up and restore history'),
+                        title: const Text('Automatic workout backup'),
                         subtitle: const Text(
                             'Private summaries and routine progress · optional'),
                         value: c.state.enabled,
-                        onChanged:
-                            c.busy ? null : (v) => _enable(context, c, v)),
-                    const Text(
-                        'Saved copies remain provisional. Backup status is separate from workout verification or rewards.'),
+                        onChanged: c.busy && !c.state.enabled
+                            ? null
+                            : (v) => _enable(context, c, v)),
+                    Text(c.state.enabled
+                        ? 'Results save on this device first and back up automatically while the app is open and connected. No manual sync is needed. Saved copies remain provisional; backup does not verify workouts or earn rewards.'
+                        : 'Results stay saved on this device. Turning backup off stops future sync and does not delete existing cloud copies. Saved copies remain provisional; backup does not verify workouts or earn rewards.'),
                     if (c.busy) const LinearProgressIndicator(),
                     if (c.state.lastError != null)
                       const Padding(
                           padding: EdgeInsets.symmetric(vertical: 12),
                           child: Text(
                               'Backup could not finish. Your local results are retained. Retry when connected.')),
-                    FilledButton.icon(
-                        onPressed: !c.state.enabled || c.busy
-                            ? null
-                            : () async {
-                                await c.sync();
-                                await onChanged?.call();
-                              },
-                        icon: const Icon(Icons.sync_rounded),
-                        label: const Text('Sync now')),
+                    if (c.state.enabled && c.state.lastError != null)
+                      FilledButton.icon(
+                          onPressed: c.busy
+                              ? null
+                              : () async {
+                                  await c.sync();
+                                  await onChanged?.call();
+                                },
+                          icon: const Icon(Icons.sync_rounded),
+                          label: const Text('Retry now')),
                     const SizedBox(height: 16),
                     for (final row in c.records)
                       Card(
@@ -100,7 +103,9 @@ class WorkoutBackupScreen extends StatelessWidget {
                                         : 'Exercise result · ${row.payload['exerciseId']}'),
                                     Text(switch (c.statusFor(row)) {
                                       BackupRecordStatus.localOnly =>
-                                        'Saved locally',
+                                        'Saved on device',
+                                      BackupRecordStatus.pendingBackup =>
+                                        'Pending backup',
                                       BackupRecordStatus.syncing => 'Syncing',
                                       BackupRecordStatus.backedUp =>
                                         'Backed up',

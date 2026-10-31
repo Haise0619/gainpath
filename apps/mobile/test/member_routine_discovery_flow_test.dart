@@ -1,3 +1,4 @@
+import 'support/signed_out_firebase.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -55,6 +56,7 @@ class _Catalog implements PublishedRoutineCatalogRepository {
 }
 
 void main() {
+  setUpAll(setUpSignedOutFirebase);
   setUpAll(() => GoogleFonts.config.allowRuntimeFetching = false);
   testWidgets(
       'Member chooses, refreshes and navigates the same read-only routine across tabs',

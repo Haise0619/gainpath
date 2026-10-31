@@ -1,0 +1,9 @@
+# Reverse Lunge hands-free setup and visible stance
+
+Owner flags impossible post-Ready touch confirmation and overlapping legs in21:09recording. Local correction/test/build authorized; earlier installation completed, no new cloud/device authority. Preserve dirty owner checkout/private evidence/old APK.
+
+Evidence21.81s recording: selectedRightfront, rearleftankleunclear orfeet-together rejection, a briefhold59%, noReady. Requiring overlapping feet obstructs essentialrearankle; touch confirmation means reachingphoneundoesvalidatedsetup. Do not lowerconfidence, inferhiddenankle orautoselectleg.
+
+1. Pose TDD: allow bounded small horizontalgap in neutral (.30leg horizontal/.08vertical), selectedfrontknee160/hipslevel held; preservefullfront115/hipdrop/backstep/standingreturn/dwell, fixedbaseline normalization,8actualjointsconfidence.7. Returnto same observedbaseline, rejectlarge/splitstance/walking/squat/forward/wrongleg/jump. Instructionangle slighttowardcamerahelpsseparateankles; noprecise3Dposeassertion.
+2. Mobile TDD: remove confirmationbutton/method; afterfresh800mssetup automatically show3-second countdown requiringcontinuouscurrentneutralframes. Onlyfreshcameraevents advance/finish; trackingloss/stale/model/lifecycle/sidechange cancel, no timer-onlyunlock. Movementduringpreflightnotcounted, side lockedonlyafterautomaticstart. Audio countdown/Begin respects existingvoice settings. Keepportraitpreview/retry/accessibilityandrequiredjointfeedback; camera alwaysvisiblewithouttouchrequirement.
+3. One independent review, affectedpose/Mobile/domain, analysis/architecture/hostbenchmark/signedAPK. Nootheranalyzers/backend/Admin/catalog/Programs/historyschema/rewardchanges. Updatecurrentdocs/manual/PROGRESS_REPORT, seal exactcandidate. Separateinstallationapproval thenphysicalreadiness/count/framing/latency/thermalretest; syntheticrepro notnativevideoaccuracy.

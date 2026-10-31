@@ -1,4 +1,4 @@
-import 'confirm_content_removal.dart';
+import 'exercise_catalog_list.dart';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:gainpath_domain/workout.dart';
@@ -48,6 +48,8 @@ class _ExerciseTutorialsScreenState extends State<ExerciseTutorialsScreen> {
   TutorialVideo? _editing;
   bool _creating = false;
   bool _removing = false;
+  ExerciseCatalogStatus? _filter;
+  String? _statusError;
   late Future<List<TutorialVideo>> _tutorialsFuture;
 
   @override
@@ -57,37 +59,97 @@ class _ExerciseTutorialsScreenState extends State<ExerciseTutorialsScreen> {
   }
 
   void _openCreate() => setState(() => _creating = true);
-  void _openEdit(TutorialVideo t) => setState(() => _editing = t);
+  void _openEdit(TutorialVideo t) {
+    if (_removing || _statusError != null || t.archived) return;
+    setState(() => _editing = t);
+  }
+
+  void _reload() => setState(() {
+        _statusError = null;
+        _tutorialsFuture = context.read<TutorialRepository>().load();
+      });
   void _closeForm() => setState(() {
         _creating = false;
         _editing = null;
         _tutorialsFuture = context.read<TutorialRepository>().load();
       });
 
-  Future<void> _remove(TutorialVideo item) async {
-    if (_removing || !widget.allowRemoval) return;
+  Future<void> _delete(TutorialVideo item) async {
+    if (_removing || _statusError != null || !widget.allowRemoval) return;
     final repository = context.read<TutorialRepository>();
-    if (repository is! TutorialArchivingRepository) return;
+    if (repository is! TutorialArchivingRepository &&
+        repository is! TutorialCatalogStatusRepository) {
+      return;
+    }
     setState(() => _removing = true);
     try {
-      final confirmed = await confirmContentRemoval(context,
-          title: item.title,
-          detail:
-              'This archives the exercise and removes it from new routine selections. Existing published routines and workout history are preserved.');
-      if (!confirmed || !mounted || !widget.allowRemoval) {
-        return;
+      final confirmed = await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+                  title: Text('Delete "${item.title}"?'),
+                  content: const Text(
+                      'This archives the exercise and removes it from new routine selections. You can restore it from Archived. Published routines, Programs and workout history are preserved.'),
+                  actions: [
+                    TextButton(
+                        onPressed: () => Navigator.pop(context, false),
+                        child: const Text('Cancel')),
+                    FilledButton(
+                        onPressed: () => Navigator.pop(context, true),
+                        child: const Text('Delete')),
+                  ]));
+      if (confirmed != true || !mounted || !widget.allowRemoval) return;
+      if (repository is TutorialCatalogStatusRepository) {
+        await (repository as TutorialCatalogStatusRepository)
+            .setCatalogStatus(item, ExerciseCatalogStatus.archived);
+      } else {
+        await (repository as TutorialArchivingRepository).archive(item);
       }
-      await (repository as TutorialArchivingRepository).archive(item);
       if (!mounted) return;
-      setState(() => _tutorialsFuture = repository.load());
-      showToast(context, 'Exercise removed.');
-    } catch (_) {
-      if (mounted) {
-        showToast(context, 'Removal was not verified. Reload before retrying.');
-      }
+      setState(() {
+        _tutorialsFuture = repository.load();
+      });
+      showToast(context, 'Exercise archived. Find it in Archived.');
+    } catch (error) {
+      _statusFailure(error);
     } finally {
       if (mounted) setState(() => _removing = false);
     }
+  }
+
+  Future<void> _setStatus(
+      TutorialVideo item, ExerciseCatalogStatus status) async {
+    if (_removing || _statusError != null || !widget.allowRemoval) return;
+    final repository = context.read<TutorialRepository>();
+    if (repository is! TutorialCatalogStatusRepository) return;
+    setState(() => _removing = true);
+    try {
+      await (repository as TutorialCatalogStatusRepository)
+          .setCatalogStatus(item, status);
+      if (!mounted) return;
+      setState(() {
+        _tutorialsFuture = repository.load();
+      });
+      showToast(
+          context,
+          item.archived
+              ? 'Exercise restored as inactive.'
+              : status == ExerciseCatalogStatus.active
+                  ? 'Exercise activated.'
+                  : 'Exercise deactivated.');
+    } catch (error) {
+      _statusFailure(error);
+    } finally {
+      if (mounted) setState(() => _removing = false);
+    }
+  }
+
+  void _statusFailure(Object error) {
+    if (!mounted) return;
+    setState(() => _statusError = error is TutorialEditConflict
+        ? 'This exercise changed. Reload the catalog before retrying.'
+        : error is TutorialEditAuthorizationChanged
+            ? 'Your authorization changed. Reopen the catalog after signing in.'
+            : 'Status change was not verified. Reload the catalog before retrying.');
   }
 
   @override
@@ -105,148 +167,35 @@ class _ExerciseTutorialsScreenState extends State<ExerciseTutorialsScreen> {
             return Center(
                 child: Column(mainAxisSize: MainAxisSize.min, children: [
               const Text('Could not load the exercise catalog.'),
-              TextButton(
-                  onPressed: () => setState(() => _tutorialsFuture =
-                      context.read<TutorialRepository>().load()),
-                  child: const Text('Retry')),
+              TextButton(onPressed: _reload, child: const Text('Retry')),
             ]));
           }
-          if (!snapshot.hasData) {
+          if (!snapshot.hasData ||
+              snapshot.connectionState != ConnectionState.done) {
             return const Center(child: CircularProgressIndicator());
           }
-          final tutorials =
-              snapshot.data!.where((item) => !item.archived).toList();
-          final catalogOnly =
-              context.read<TutorialRepository>().requiresCatalogSelection;
-          final active =
-              tutorials.where((t) => t.status == TutorialStatus.active).length;
-          return _tutorialList(context, tutorials, active, catalogOnly);
+          final repository = context.read<TutorialRepository>();
+          return ExerciseCatalogList(
+            tutorials: snapshot.data!,
+            catalogOnly: repository.requiresCatalogSelection,
+            filter: _filter,
+            onFilter: (value) => setState(() => _filter = value),
+            onReload: _reload,
+            onAdd: _openCreate,
+            onEdit: _openEdit,
+            busy: _removing,
+            error: _statusError,
+            onDelete: widget.allowRemoval &&
+                    (repository is TutorialCatalogStatusRepository ||
+                        repository is TutorialArchivingRepository)
+                ? _delete
+                : null,
+            onStatusChange: widget.allowRemoval &&
+                    repository is TutorialCatalogStatusRepository
+                ? _setStatus
+                : null,
+          );
         },
-      ),
-    );
-  }
-
-  Widget _tutorialList(BuildContext context, List<TutorialVideo> tutorials,
-      int active, bool catalogOnly) {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(28, 24, 28, 40),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (catalogOnly) ...[
-            Text('Exercise Catalog',
-                style: Theme.of(context).textTheme.headlineMedium),
-            const SizedBox(height: 6),
-            const Text(
-                'Build routines with AI-tracked and guided-only exercises. Tracking availability is checked by the system.'),
-            const SizedBox(height: 18),
-          ],
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                    catalogOnly
-                        ? '$active of ${tutorials.length} exercises are active in the catalog.'
-                        : '$active of ${tutorials.length} tutorials are live to members.',
-                    style: Theme.of(context).textTheme.bodyLarge),
-              ),
-              IconButton(
-                  tooltip: 'Reload catalog',
-                  icon: const Icon(Icons.refresh),
-                  onPressed: _removing
-                      ? null
-                      : () => setState(() => _tutorialsFuture =
-                          context.read<TutorialRepository>().load())),
-              FilledButton.icon(
-                onPressed: _removing ? null : _openCreate,
-                icon: const Icon(Icons.add_rounded, size: 18),
-                label: Text(catalogOnly ? 'Add exercise' : 'Add tutorial'),
-              ),
-            ],
-          ),
-          const SizedBox(height: 20),
-          Panel(
-            padding: EdgeInsets.zero,
-            child: Column(
-              children: List.generate(tutorials.length, (i) {
-                final t = tutorials[i];
-                return Column(
-                  children: [
-                    if (i > 0) const Divider(height: 1, indent: 74),
-                    ListTile(
-                      onTap: () => _openEdit(t),
-                      contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 18, vertical: 6),
-                      leading: ClipRRect(
-                        borderRadius: BorderRadius.circular(12),
-                        child: SizedBox(
-                          width: 44,
-                          height: 44,
-                          child: t.thumbnailUrl.isEmpty
-                              ? Container(
-                                  color: AppColors.ink,
-                                  child: const Icon(Icons.play_arrow_rounded,
-                                      color: Colors.white),
-                                )
-                              : _networkHero(t.thumbnailUrl),
-                        ),
-                      ),
-                      title: Text(t.title,
-                          style: Theme.of(context).textTheme.titleMedium),
-                      subtitle: Text(
-                          catalogOnly
-                              ? '${t.category}  ·  ${t.trackingCapability.displayLabel}\nID ${t.id}'
-                              : '${t.category}  ·  ${t.durationMin} min'
-                                  '${t.coversExercise.isEmpty ? '' : '  ·  covers ${t.coversExercise}'}',
-                          style: Theme.of(context).textTheme.bodyMedium),
-                      trailing: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          statusPill(t.status.label),
-                          if (t.videoUrl.trim().isNotEmpty)
-                            IconButton(
-                              tooltip: 'Preview tutorial video',
-                              icon: const Icon(Icons.play_circle_outline),
-                              onPressed: () => showDialog<void>(
-                                context: context,
-                                builder: (context) => AlertDialog(
-                                  title: Text(t.title),
-                                  content: SizedBox(
-                                    width: 640,
-                                    child:
-                                        ExerciseVideoPreview(url: t.videoUrl),
-                                  ),
-                                  actions: [
-                                    TextButton(
-                                      onPressed: () => Navigator.pop(context),
-                                      child: const Text('Close'),
-                                    )
-                                  ],
-                                ),
-                              ),
-                            ),
-                          if (widget.allowRemoval &&
-                              context.read<TutorialRepository>()
-                                  is TutorialArchivingRepository)
-                            IconButton(
-                                tooltip: 'Remove exercise',
-                                icon:
-                                    const Icon(Icons.delete_outline, size: 18),
-                                onPressed: _removing ? null : () => _remove(t)),
-                          const SizedBox(width: 6),
-                          IconButton(
-                            icon: const Icon(Icons.edit_outlined, size: 18),
-                            onPressed: () => _openEdit(t),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                );
-              }),
-            ),
-          ),
-        ],
       ),
     );
   }
@@ -661,7 +610,7 @@ class _TutorialFormPageState extends State<_TutorialFormPage> {
                         labelText: 'Status', isDense: true),
                     items: const [
                       DropdownMenuItem(value: 'Active', child: Text('Active')),
-                      DropdownMenuItem(value: 'Draft', child: Text('Draft')),
+                      DropdownMenuItem(value: 'Draft', child: Text('Inactive')),
                     ],
                     onChanged: (value) =>
                         setState(() => _status = value ?? _status),

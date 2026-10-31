@@ -143,7 +143,8 @@ void main() {
     await first;
     expect(c.state.report!.query, q);
     final retry = c.load();
-    expect(c.state.report, isNull);
+    expect(c.state.report!.query, q);
+    expect(c.state.loading, isTrue);
     g.requests.last.completeError(StateError('offline'));
     await retry;
     expect(c.state.error, isNotNull);

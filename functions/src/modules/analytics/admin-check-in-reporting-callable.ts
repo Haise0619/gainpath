@@ -23,6 +23,8 @@ export const adminCheckInReportingCommand = onCall({region: 'asia-southeast1', e
       return (await q.get()).docs.map(d => ({id: d.id, data: d.data()}));
     };
     const result = await adminCheckInReport(new FirestoreStore(db), auth, request.data, {
+      observations: {page:(kind,after,limit)=>page(`orgs/${org}/${kind}`,after,limit),backups:(uid,after,limit)=>page(`orgs/${org}/members/${uid}/workoutBackups`,after,limit)},
+      page: (kind, after, limit) => page(`orgs/${org}/${kind}`, after, limit),
       members: (after, limit) => page(`orgs/${org}/members`, after, limit),
       claims: (uid, after, limit) => page(`orgs/${org}/appCheckInProfiles/${uid}/claims`, after, limit),
     });
@@ -33,3 +35,4 @@ export const adminCheckInReportingCommand = onCall({region: 'asia-southeast1', e
     throw new HttpsError('unavailable', 'Check-in analytics could not be loaded. No partial totals were returned.');
   }
 });
+

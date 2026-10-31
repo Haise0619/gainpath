@@ -26,7 +26,7 @@ export function buildPointsHistory(org:string,uid:string,balance:number,now:numb
     at=d.awardedAtMillis;title='Manual points credit';source='manual_credit';
    }else if(kind==='participation'){
     validateParticipationHistoryReceipt(d,org,uid,key);
-    at=d.awardedAtMillis;title='Move & Catch participation';source='mini_game_participation';
+    at=d.awardedAtMillis;title=d.gameId==='reach-tap-v1'?'Reach & Tap participation':'Move & Catch participation';source='mini_game_participation';
    }else if(kind==='awards'){
     if(d.awardId!==key||!id(d.eventId)||!id(d.sourceId)||!id(d.policyVersion)||!id(d.producerVersion)||!int(d.basePoints,1)||typeof d.premiumBonus!=='boolean'||points!==(d.premiumBonus?Math.floor(d.basePoints*3/2):d.basePoints))throw fail();
     if(d.sourceId==='owner_demo_bonus'&&(d.eventId!=='owner-demo-bonus-20261027'||d.producerVersion!=='owner-demo-bonus-v1'||d.policyVersion!=='owner-demo-bonus-20261027-v1'||d.basePoints!==100||d.points!==100||d.premiumBonus!==false||d.reason!=='Owner-approved one-time demo bonus'))throw fail();

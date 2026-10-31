@@ -4,6 +4,10 @@ import 'package:gainpath_ui/gainpath_ui.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:gainpath_domain/analytics.dart';
 import 'widgets/local_progress_widgets.dart';
+import '../../domain/member_workout_report.dart';
+import '../../../workout/domain/routine_attempt.dart';
+import 'widgets/contextual_progress_filter.dart';
+import 'widgets/exercise_improvement_card.dart';
 
 /// AD-M5.2 (Workout performance) — weekly lifted volume as a column
 /// chart, paired with a doughnut breakdown of muscle-group split. Column
@@ -11,10 +15,18 @@ import 'widgets/local_progress_widgets.dart';
 /// two questions: "how much, over time" and "what proportion, right now."
 class WorkoutPerformanceScreen extends StatelessWidget {
   const WorkoutPerformanceScreen(
-      {super.key, this.localProgress, this.onOpenReport});
+      {super.key,
+      this.localProgress,
+      this.onOpenReport,
+      this.onOpenWorkout,
+      this.routineProgress,
+      this.onOpenFilteredReport});
 
   final MemberLocalProgress? localProgress;
+  final RoutineProgress? routineProgress;
   final VoidCallback? onOpenReport;
+  final void Function(WorkoutReportFilter)? onOpenFilteredReport;
+  final void Function(LocalWorkoutProgressRecord)? onOpenWorkout;
 
   static const _weekLabels = ['W1', 'W2', 'W3', 'W4', 'W5', 'W6', 'W7'];
   static const _sliceColors = [
@@ -29,21 +41,32 @@ class WorkoutPerformanceScreen extends StatelessWidget {
     final local = localProgress;
     if (local != null) {
       return Scaffold(
-        appBar: AppBar(title: const Text('Measured workout trends'), actions: [
-          if (onOpenReport != null)
-            IconButton(
-                tooltip: 'Filter and export report',
-                onPressed: onOpenReport,
-                icon: const Icon(Icons.picture_as_pdf_outlined)),
-        ]),
+        appBar: AppBar(
+            title: const Text('Measured workout trends'), actions: const []),
         body: PageBody(children: [
           const Text('Saved camera captures · provisional measurements'),
           const SizedBox(height: 12),
-          const Panel(
-              child: Text(
-                  'Weight and muscle-group volume are not recorded by these captures. No lifted kilograms or muscle split is inferred.')),
+          const ExpansionTile(
+              tilePadding: EdgeInsets.zero,
+              title: Text('About measurements'),
+              children: [
+                Text(
+                    'Weight and muscle-group volume are not recorded by these captures. No lifted kilograms or muscle split is inferred.')
+              ]),
           const SizedBox(height: 16),
-          ..._localDetails(context, local),
+          ContextualProgressFilter(
+              onExport: onOpenFilteredReport ??
+                  (onOpenReport == null ? null : (_) => onOpenReport!()),
+              progress: local,
+              builder: (filtered) => Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        ExerciseImprovementCard(
+                            progress: filtered,
+                            routineProgress: routineProgress,
+                            onOpenWorkout: onOpenWorkout),
+                        ..._localDetails(context, filtered),
+                      ])),
         ]),
       );
     }

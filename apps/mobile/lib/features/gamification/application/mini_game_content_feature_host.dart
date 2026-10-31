@@ -9,6 +9,9 @@ import '../domain/move_catch_ports.dart';
 import '../../../infrastructure/local/move_catch_best_scores.dart';
 import '../../../infrastructure/firebase/firebase_mini_game_reward_status_reader.dart';
 import '../../../infrastructure/firebase/firebase_mini_game_participation_repository.dart';
+import '../../../infrastructure/local/reach_tap_history.dart';
+import '../domain/reach_tap_ports.dart';
+import '../domain/reach_tap_participation_repository.dart';
 
 class MiniGameContentFeatureHost extends StatelessWidget {
   const MiniGameContentFeatureHost({super.key, required this.builder});
@@ -26,15 +29,26 @@ class MiniGameContentFeatureHost extends StatelessWidget {
     }
     return CoachSessionHost(
         session: session,
-        builder: (_, current) => builder(
-            FirebaseMiniGameContentReader(
-                scope: session.scope, isCurrent: current),
-            LocalMoveCatchBestScores(),
-            FirebaseMiniGameRewardStatusReader(
-                scope: session.scope, isCurrent: current),
-            FirebaseMiniGameParticipationRepository.enabled
-                ? FirebaseMiniGameParticipationRepository(
-                    scope: session.scope, isCurrent: current)
-                : null));
+        builder: (_, current) =>
+            RepositoryProvider<ReachTapParticipationRepository>(
+                create: (_) => ReachTapParticipationRepository(
+                    FirebaseMiniGameParticipationRepository.enabled
+                        ? FirebaseMiniGameParticipationRepository(
+                            scope: session.scope,
+                            isCurrent: current,
+                            gameId: MiniGameContent.reachTapId)
+                        : null),
+                child: RepositoryProvider<ReachTapHistoryStore>(
+                    create: (_) => LocalReachTapHistory(),
+                    child: builder(
+                        FirebaseMiniGameContentReader(
+                            scope: session.scope, isCurrent: current),
+                        LocalMoveCatchBestScores(),
+                        FirebaseMiniGameRewardStatusReader(
+                            scope: session.scope, isCurrent: current),
+                        FirebaseMiniGameParticipationRepository.enabled
+                            ? FirebaseMiniGameParticipationRepository(
+                                scope: session.scope, isCurrent: current)
+                            : null))));
   }
 }

@@ -5,6 +5,7 @@ import '../identity.dart' show SessionScope;
 class MiniGameRound {
   const MiniGameRound._(
       {required this.scope,
+      required this.gameId,
       required this.attemptId,
       required this.challengeToken,
       required this.status,
@@ -14,13 +15,15 @@ class MiniGameRound {
       required this.leaseUntilMillis,
       required this.expiresAtMillis});
   final SessionScope scope;
+  final String gameId;
   final String attemptId, challengeToken, status;
   final int sequence,
       activeMillis,
       startedAtMillis,
       leaseUntilMillis,
       expiresAtMillis;
-  factory MiniGameRound.fromJson(Map<String, dynamic> d, SessionScope scope) {
+  factory MiniGameRound.fromJson(Map<String, dynamic> d, SessionScope scope,
+      {String gameId = 'move-catch-v1'}) {
     bool integer(String key, int min, int max) =>
         d[key] is int && d[key] >= min && d[key] <= max;
     bool hex(String key) =>
@@ -29,7 +32,8 @@ class MiniGameRound {
         d['schemaVersion'] != 1 ||
         d['organizationId'] != scope.organizationId ||
         d['memberId'] != scope.userId ||
-        d['gameId'] != 'move-catch-v1' ||
+        !{'move-catch-v1', 'reach-tap-v1'}.contains(gameId) ||
+        d['gameId'] != gameId ||
         !hex('attemptId') ||
         !hex('challengeToken') ||
         d['attemptId'] == d['challengeToken'] ||
@@ -50,6 +54,7 @@ class MiniGameRound {
     }
     return MiniGameRound._(
         scope: scope,
+        gameId: gameId,
         attemptId: d['attemptId'],
         challengeToken: d['challengeToken'],
         status: d['status'],

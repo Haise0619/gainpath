@@ -1,7 +1,9 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:syncfusion_flutter_charts/charts.dart';
 import 'package:gainpath_mobile/features/analytics/domain/member_workout_report.dart';
 import 'package:gainpath_mobile/features/analytics/domain/local_member_progress_repository.dart';
 import 'package:gainpath_mobile/features/analytics/presentation/member/workout_report_screen.dart';
@@ -36,21 +38,61 @@ class ReportExporterFake implements WorkoutReportExporter {
 
 void main() {
   setUpAll(() => GoogleFonts.config.allowRuntimeFetching = false);
-  testWidgets('measured timeline filter and export open the shared report',
+  testWidgets('timeline filters in place and exports the selected window',
       (tester) async {
-    var opened = 0;
+    tester.view.physicalSize = const Size(1100, 4000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    WorkoutReportFilter? exported;
     final progress = calculateLocalMemberProgress(
         scope: support.reportScope,
-        records: [support.reportRecord('camera', support.reportNow)],
+        records: [
+          support.reportRecord('recent', support.reportNow),
+          support.reportRecord('other-exercise', support.reportNow,
+              exercise: 'curl'),
+          support.reportRecord(
+              'old', support.reportNow.subtract(const Duration(days: 20)))
+        ],
         asOf: support.reportNow);
     await tester.pumpWidget(MaterialApp(
         home: ActivityTimelineScreen(
-            localProgress: progress, onOpenReport: () => opened++)));
-    await tester.tap(find.byTooltip('Filter'));
+            localProgress: progress,
+            onOpenFilteredReport: (filter) => exported = filter)));
     await tester.pumpAndSettle();
+    expect(find.text('Measurement details'), findsNWidgets(3));
+    await tester.tap(find.text('Last 7 days'));
+    await tester.pumpAndSettle();
+    expect(find.text('old'), findsNothing);
+    expect(find.text('Measurement details'), findsNWidgets(2));
+    await tester.tap(find.byType(DropdownButtonFormField<String>));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Squat').last);
+    await tester.pumpAndSettle();
+    expect(find.text('other-exercise'), findsNothing);
     await tester.tap(find.byTooltip('Export'));
+    expect(exported!.exerciseId, 'squat');
+    expect(exported!.includes(support.reportNow), isTrue);
+    expect(
+        exported!
+            .includes(support.reportNow.subtract(const Duration(days: 20))),
+        isFalse);
+    final exporter = ReportExporterFake();
+    await tester.pumpWidget(MaterialApp(
+        home: WorkoutReportScreen(
+            scope: support.reportScope,
+            source: LocalMemberProgressSnapshot(
+                records: progress.records, routineHistoryAvailable: true),
+            asOf: support.reportNow,
+            initialFilter: exported,
+            exporter: exporter,
+            isCurrent: () => true,
+            onRefresh: () async {})));
     await tester.pumpAndSettle();
-    expect(opened, 2);
+    await tester.tap(find.byTooltip('Export PDF'));
+    await tester.pumpAndSettle();
+    expect(exporter.saved!.lines.join(' '), contains('recent'));
+    expect(exporter.saved!.lines.join(' '), isNot(contains('old')));
+    expect(exporter.saved!.lines.join(' '), isNot(contains('other-exercise')));
   });
   Future<void> mount(WidgetTester tester, ReportExporterFake exporter,
       {LocalMemberProgressSnapshot? source, bool Function()? active}) async {
@@ -70,17 +112,78 @@ void main() {
     await tester.pumpAndSettle();
   }
 
+  testWidgets('form series renders missing captures as gaps with matching PDF',
+      (tester) async {
+    final exporter = ReportExporterFake();
+    await mount(tester, exporter,
+        source: LocalMemberProgressSnapshot(records: [
+          support.reportRecord(
+              'before', support.reportNow.subtract(const Duration(hours: 2))),
+          support.reportRecord('unassessed',
+              support.reportNow.subtract(const Duration(hours: 1)),
+              score: null),
+          support.reportRecord('after', support.reportNow),
+        ], routineHistoryAvailable: true));
+    final chartFinder = find.byWidgetPredicate((w) =>
+        w is SfCartesianChart &&
+        w.series.any((s) => s is LineSeries<WorkoutReportFormPoint, String>));
+    await tester.scrollUntilVisible(chartFinder, 200,
+        scrollable: find.byType(Scrollable).first);
+    final chart = tester.widget<SfCartesianChart>(chartFinder);
+    final line =
+        chart.series.single as LineSeries<WorkoutReportFormPoint, String>;
+    expect(line.emptyPointSettings.mode, EmptyPointMode.gap);
+    expect(line.dataSource!.map((p) => p.score), [80.0, null, 80.0]);
+    expect(line.dataSource!.map((p) => p.key).toSet(), hasLength(3));
+    await tester.tap(find.byTooltip('Export PDF'));
+    await tester.pumpAndSettle();
+    expect(exporter.saved!.formTrends.single.points.map((p) => p.score),
+        [80.0, null, 80.0]);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('320px and large text fit without overflow', (tester) async {
     tester.view.physicalSize = const Size(320, 780);
     tester.view.devicePixelRatio = 1;
-    tester.platformDispatcher.textScaleFactorTestValue = 1.4;
+    tester.platformDispatcher.textScaleFactorTestValue = 2;
     addTearDown(() => tester.view.resetPhysicalSize());
     addTearDown(() => tester.view.resetDevicePixelRatio());
     addTearDown(
         () => tester.platformDispatcher.clearTextScaleFactorTestValue());
     await mount(tester, ReportExporterFake());
     expect(find.text('Workout report'), findsOneWidget);
+    final title =
+        tester.renderObject<RenderParagraph>(find.text('Workout report'));
+    expect(title.didExceedMaxLines, isFalse);
+    expect(find.byTooltip('Filter report'), findsOneWidget);
+    expect(find.byTooltip('Export PDF'), findsOneWidget);
     expect(find.text('Camera sessions'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('filtered progression timeline uses the same records as PDF',
+      (tester) async {
+    final exporter = ReportExporterFake();
+    await mount(tester, exporter);
+    await tester.tap(find.byTooltip('Filter report'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('report-exercise-filter')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Curl').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Apply filters'));
+    await tester.pumpAndSettle();
+    final timeline = find.text('Progression history timeline (1)');
+    await tester.scrollUntilVisible(timeline, 250,
+        scrollable: find.byType(Scrollable).first);
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Measured AI capture'), findsOneWidget);
+    expect(find.text('Curl'), findsWidgets);
+    expect(find.textContaining('squat-record'), findsNothing);
+    await tester.tap(find.byTooltip('Export PDF'));
+    await tester.pumpAndSettle();
+    expect(exporter.saved!.lines.join('\n'), contains('curl-record'));
+    expect(exporter.saved!.lines.join('\n'), isNot(contains('squat-record')));
     expect(tester.takeException(), isNull);
   });
   testWidgets('applied exercise filter controls screen and exported rows',
@@ -91,7 +194,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('report-exercise-filter')));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('curl').last);
+    await tester.tap(find.text('Curl').last);
     await tester.pumpAndSettle();
     await tester.tap(find.text('Apply filters'));
     await tester.pumpAndSettle();

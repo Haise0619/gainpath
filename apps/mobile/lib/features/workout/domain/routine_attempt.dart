@@ -90,6 +90,7 @@ Map<String, dynamic> routinePlanSnapshot(PublishedRoutine routine) => {
             'category': e.category,
             'sets': e.sets,
             'reps': e.reps,
+            if (e.restSeconds != 60) 'restSeconds': e.restSeconds,
             'cue': e.cue,
             'imageUrl': e.imageUrl,
             'muscleGroup': e.muscleGroup,

@@ -134,13 +134,13 @@ class WorkoutReportPlugin : FlutterPlugin, ActivityAware, PluginRegistry.Activit
             }
         }
         fun text(value: String) {
-            var remaining = value.replace('\n', ' ').replace('\r', ' ')
-            if (remaining.isEmpty()) { space(14f); y += 14f }
-            while (remaining.isNotEmpty()) {
+            val wrapped = WorkoutReportTextLayout.wrap(value) { remaining ->
+                paint.breakText(remaining, true, 520f, null)
+            }
+            space(WorkoutReportTextLayout.blockHeight(wrapped.size, 14f, 720f))
+            for (line in wrapped) {
                 space(14f); paint.color = Color.rgb(35, 28, 50)
-                var count = paint.breakText(remaining, true, 520f, null).coerceAtLeast(1)
-                if (count < remaining.length && count > 1 && Character.isHighSurrogate(remaining[count - 1])) count--
-                page.canvas.drawText(remaining.take(count), 36f, y, paint); remaining = remaining.drop(count); y += 14f
+                page.canvas.drawText(line, 36f, y, paint); y += 14f
             }
         }
         try {
@@ -166,6 +166,7 @@ class WorkoutReportPlugin : FlutterPlugin, ActivityAware, PluginRegistry.Activit
                 if (points.isEmpty()) continue
                 for (chunk in points.chunked(12)) {
                     space(245f); text("ESTIMATED FORM | separate compatible group"); text(group["label"].toString())
+                    text("Each point is a capture | Malaysia time | Unassessed captures leave gaps")
                     // Heading wrapping can itself advance the page. Reserve the
                     // chart after the heading so long valid labels cannot clip it.
                     space(155f)
@@ -174,7 +175,14 @@ class WorkoutReportPlugin : FlutterPlugin, ActivityAware, PluginRegistry.Activit
                     paint.color = Color.DKGRAY; page.canvas.drawText("100%", 36f, top + 5f, paint); page.canvas.drawText("0%", 45f, bottom, paint)
                     var previousX: Float? = null; var previousY: Float? = null
                     for ((i, rawPoint) in chunk.withIndex()) {
-                        val p = rawPoint as Map<*, *>; val score = (p["score"] as Number).toFloat()
+                        val p = rawPoint as Map<*, *>
+                        if (p["score"] == null) {
+                            // Missing observations occupy their own x-position and
+                            // break the line; never interpolate across unassessed work.
+                            previousX = null; previousY = null
+                            continue
+                        }
+                        val score = (p["score"] as Number).toFloat()
                         require(score.isFinite() && score in 0f..100f)
                         val x = if (chunk.size == 1) 310f else 85f + i * (450f / (chunk.size - 1))
                         val pointY = bottom - score * 1.1f

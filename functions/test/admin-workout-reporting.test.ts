@@ -26,6 +26,50 @@ beforeEach(() => {
   store.documents.set('orgs/gainpath/members/admin', {organizationId: 'gainpath', role: 'admin', status: 'active', branchIds: []});
   store.documents.set('users/member', {organizationId: 'gainpath', role: 'member'});
 });
+it('includes schema-three selected-arm rows only as provisional unscored activity', async () => {
+  for (const side of ['left', 'right']) {
+    backups.push(record('session', {...payload, sessionId: 'row-' + side,
+      exerciseId: 'single-arm-dumbbell-row-side-v1', accuracy: 0,
+      poseMetrics: {...payload.poseMetrics, schemaVersion: 3, rowSide: side,
+        scoringVersion: 'single-arm-row-side-v1', formScorePercent: null}}));
+  }
+  const before = JSON.stringify([...store.documents]);
+  const result = await run();
+  expect(result.classification).toBe('provisional_member_backup');
+  expect(result.totals).toMatchObject({sessions: 2, fullReps: 4, trackedMicros: 16000000});
+  expect(result.forms).toEqual([]);
+  expect(result.exercises).toHaveLength(1);
+  expect(JSON.stringify([...store.documents])).toBe(before);
+});
+it('reports custom-rest Program routine backups with existing evidence totals and labels', async () => {
+  const routine = routineFixture();
+  routine.finished = routine.attempt.finished = true;
+  routine.attempt.finishedAtMicros = routine.updatedAtMicros;
+  routine.attempt.entries[0].status = 'selfReportedCompleted';
+  routine.attempt.entries[0].manualSets = 1;
+  const programRoutine = {...routine, attempt: {...routine.attempt, routine: {...routine.attempt.routine,
+    exercises: routine.attempt.routine.exercises.map(e => ({...e, restSeconds: 75}))}}};
+  backups = [record('routine', programRoutine)];
+  const result = await run();
+  expect(result.classification).toBe('provisional_member_backup');
+  expect(result.totals).toMatchObject({sessions: 0, fullReps: 0, trackedMicros: 0, completedRoutineDays: 1, manualSets: 1});
+});
+it('refuses invalid-rest Program backup sources instead of returning partial report totals', async () => {
+  const routine = routineFixture();
+  const invalid = {...routine, attempt: {...routine.attempt, routine: {...routine.attempt.routine,
+    exercises: routine.attempt.routine.exercises.map(e => ({...e, restSeconds: 601}))}}};
+  backups = [record('routine', invalid), record('session', payload)];
+  await expect(run()).rejects.toMatchObject({code: 'failed-precondition'});
+});
+it('reports unscored front-view press reps without creating a form score or writing data',async()=>{
+  backups=[record('session',{...payload,exerciseId:'dumbbell-shoulder-press-front-v1',accuracy:0,
+    poseMetrics:{...payload.poseMetrics,schemaVersion:4,scoringVersion:'dumbbell-shoulder-press-front-v1',
+      cameraView:'front',formScorePercent:null}})];
+  const before=JSON.stringify([...store.documents]);const result=await run();
+  expect(result.totals.sessions).toBe(1);expect(result.totals.fullReps).toBe(2);
+  expect(result.forms).toEqual([]);expect(result.classification).toBe('provisional_member_backup');
+  expect(JSON.stringify([...store.documents])).toBe(before);
+});
 it('aggregates only camera sessions once, keeps manual sets separate and returns no personal rows or writes', async () => {
   const routine = routineFixture();
   routine.attempt.entries[0] = {...routine.attempt.entries[0], status: 'completed', sessionIds: ['s1'], fullRepetitions: 200, trackedDurationMicros: 999999, manualSets: 1};
@@ -128,4 +172,13 @@ it('chronologically valid future device-clock routine records are excluded until
   p.updatedAtMicros = p.attempt.updatedAtMicros = (now + 2000) * 1000;
   backups = [record('routine', p)];
   const r = await run(); expect(r.coverage.membersWithBackups).toBe(1); expect(r.totals.routineAttempts).toBe(0);
+});
+
+it('reports schema-five lunges as provisional unscored activity without writes',async()=>{
+  backups=['left','right'].map(side=>record('session',{...payload,sessionId:'lunge-'+side,exerciseId:'bodyweight-reverse-lunge-side-v1',accuracy:0,
+    poseMetrics:{...payload.poseMetrics,schemaVersion:5,scoringVersion:'reverse-lunge-side-v1',cameraView:'side',lungeSide:side,formScorePercent:null}}));
+  const before=JSON.stringify([...store.documents]);const result=await run();
+  expect(result.totals.sessions).toBe(2);expect(result.totals.fullReps).toBe(4);
+  expect(result.forms).toEqual([]);expect(result.classification).toBe('provisional_member_backup');
+  expect(JSON.stringify([...store.documents])).toBe(before);
 });

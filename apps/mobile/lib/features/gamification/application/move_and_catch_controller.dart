@@ -4,6 +4,7 @@ import 'package:gainpath_domain/gainpath_domain.dart' show SessionScope;
 import '../domain/move_and_catch.dart';
 import '../domain/move_catch_ports.dart';
 import 'mini_game_round_coordinator.dart';
+import 'mini_game_competition_coordinator.dart';
 
 class MoveAndCatchController extends ChangeNotifier {
   MoveAndCatchController(
@@ -12,6 +13,9 @@ class MoveAndCatchController extends ChangeNotifier {
       required this.camera,
       required this.bestScores,
       this.roundTiming,
+      this.competition,
+      this.earningAvailable,
+      this.autoStart = false,
       MoveCatchEngine? engine,
       int Function()? clockMicros,
       bool autoTick = true})
@@ -20,6 +24,11 @@ class MoveAndCatchController extends ChangeNotifier {
     _clock = clockMicros ?? () => clock.elapsedMicroseconds;
     camera.addListener(_cameraChanged);
     roundTiming?.addListener(_notify);
+    competition?.addListener(_notify);
+    if (competition != null) {
+      this.engine.onScoreEvent =
+          (type) => competition?.event(type, this.engine.activeMillis);
+    }
     if (autoTick) {
       _timer = Timer.periodic(const Duration(milliseconds: 33), (_) => tick());
     }
@@ -30,6 +39,10 @@ class MoveAndCatchController extends ChangeNotifier {
   final MoveCatchBestScoreStore bestScores;
   final MoveCatchEngine engine;
   final MiniGameRoundCoordinator? roundTiming;
+  final MiniGameCompetitionCoordinator? competition;
+  final Future<bool> Function()? earningAvailable;
+  final bool autoStart;
+  bool earningUnavailable = false;
   bool roundTimingConsent = false;
   void setRoundTimingConsent(bool consented) {
     if (!hasConsent && roundTiming != null && current) {
@@ -53,6 +66,25 @@ class MoveAndCatchController extends ChangeNotifier {
       scoreSaveFailed = false,
       bestScoreAvailable = false;
   int bestScore = 0;
+  int? _previousBest;
+  bool get saving => _saving;
+  bool get newPersonalBest =>
+      bestSaved &&
+      _previousBest != null &&
+      engine.score > _previousBest! &&
+      bestScore == engine.score;
+  Future<void> retrySave() async {
+    if (!current ||
+        _saving ||
+        !_roundRecorded ||
+        bestSaved ||
+        engine.phase != MoveCatchPhase.finished) {
+      return;
+    }
+    _finishFuture = _finish();
+    await _finishFuture;
+  }
+
   int _resumeAfterMicros = 0;
   String? error;
   bool get current {
@@ -83,6 +115,18 @@ class MoveAndCatchController extends ChangeNotifier {
     loading = true;
     error = null;
     _notify();
+    if (roundTimingConsent && earningAvailable != null) {
+      try {
+        if (!await earningAvailable!()) {
+          roundTimingConsent = false;
+          earningUnavailable = true;
+        }
+      } catch (_) {
+        roundTimingConsent = false;
+        earningUnavailable = true;
+      }
+      if (!current) return;
+    }
     try {
       final best = await bestScores.load(scope);
       if (!current) return;
@@ -124,6 +168,12 @@ class MoveAndCatchController extends ChangeNotifier {
         fullTorso: sample.fullTorso,
         capturedAtMicros: sample.capturedAtMicros,
         nowMicros: now);
+    if (autoStart &&
+        engine.phase == MoveCatchPhase.ready &&
+        !loading &&
+        !_resumeRequested) {
+      startRound();
+    }
     if (_resumeRequested &&
         engine.trackingReady &&
         sample.capturedAtMicros >= _resumeAfterMicros) {
@@ -140,6 +190,9 @@ class MoveAndCatchController extends ChangeNotifier {
     }
     if (!hasConsent || _background || loading || error != null) return;
     engine.tick(_clock());
+    competition?.observe(
+        activeMillis: engine.activeMillis,
+        playing: engine.phase == MoveCatchPhase.playing);
     if (roundTimingConsent) {
       roundTiming?.observe(
           activeMillis:
@@ -151,7 +204,9 @@ class MoveAndCatchController extends ChangeNotifier {
     if (engine.phase == MoveCatchPhase.finished &&
         !_roundRecorded &&
         !_saving) {
+      competition?.finish();
       _roundRecorded = true;
+      _previousBest = bestScoreAvailable ? bestScore : null;
       if (roundTimingConsent) roundTiming?.finish();
       _finishFuture = _finish();
       unawaited(_finishFuture);
@@ -163,6 +218,10 @@ class MoveAndCatchController extends ChangeNotifier {
     if (!current || loading || !camera.tracking || error != null) return;
     final previous = engine.phase;
     engine.start(_clock());
+    if (previous == MoveCatchPhase.ready &&
+        engine.phase == MoveCatchPhase.countdown) {
+      competition?.start();
+    }
     if (roundTimingConsent &&
         previous == MoveCatchPhase.ready &&
         engine.phase == MoveCatchPhase.countdown) {
@@ -216,9 +275,24 @@ class MoveAndCatchController extends ChangeNotifier {
     try {
       if (_finishFuture != null) await _finishFuture;
       if (!current || _background) return;
+      if (roundTimingConsent && earningAvailable != null) {
+        try {
+          if (!await earningAvailable!()) {
+            roundTimingConsent = false;
+            earningUnavailable = true;
+          }
+        } catch (_) {
+          roundTimingConsent = false;
+          earningUnavailable = true;
+        }
+        if (!current || _background) return;
+      }
       engine.restart(_clock());
+      competition?.reset();
+      if (competition != null) unawaited(competition!.loadPreference());
       roundTiming?.reset();
       _roundRecorded = false;
+      _previousBest = null;
       bestSaved = false;
       scoreSaveFailed = false;
       error = null;
@@ -275,6 +349,7 @@ class MoveAndCatchController extends ChangeNotifier {
     _timer?.cancel();
     engine.pause(_clock());
     camera.removeListener(_cameraChanged);
+    competition?.reset();
     roundTiming?.reset();
     return _closing = camera.close().catchError((Object _) {});
   }
@@ -292,6 +367,8 @@ class MoveAndCatchController extends ChangeNotifier {
   void dispose() {
     if (_disposed) return;
     unawaited(close());
+    competition?.removeListener(_notify);
+    competition?.dispose();
     roundTiming?.removeListener(_notify);
     roundTiming?.dispose();
     _disposed = true;

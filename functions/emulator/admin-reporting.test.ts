@@ -27,3 +27,13 @@ it('canonical organization drift during a real page read denies the result',asyn
  const changed:ReportingReader={page:async(kind,after,limit)=>{const rows=await reader.page(kind,after,limit);if(kind==='transactions')await db.doc('users/admin').update({organizationId:'other'});return rows;}};
  await expect(adminReport(new FirestoreStore(db),actor,query,changed,()=>now)).rejects.toMatchObject({code:'permission-denied'});
 });
+it('schema2 reads real consultation and review documents without source writes',async()=>{
+ const id='session',root='orgs/gainpath/bookings/'+id,t=query.startAtMillis+1000;
+ await db.doc(root).set({schemaVersion:1,organizationId:'gainpath',bookingId:id,coachId:'coach',memberId:'member',status:'completed',createdAtMillis:t,startAtMillis:t+1,endAtMillis:t+2});
+ await db.doc(root+'/consultation/current').set({schemaVersion:1,organizationId:'gainpath',bookingId:id,coachId:'coach',memberId:'member',text:'Genuine emulator fixture consultation',publishedAtMillis:t+3});
+ await db.doc(root+'/review/current').set({schemaVersion:1,bookingId:id,coachId:'coach',memberId:'member',stars:5,reviewedAtMillis:t+4});
+ const before=await db.doc(root).get();const r=await adminReport(new FirestoreStore(db),actor,{...query,schemaVersion:2},reader,()=>now);
+ expect(r.commerce?.coaches[0]).toMatchObject({bookings:1,completed:1,consultations:1,reviewCount:1,ratingSum:5});
+ expect((await db.doc(root).get()).updateTime?.isEqual(before.updateTime!)).toBe(true);
+ expect((await db.collection('orgs/gainpath/coachEarnings').get()).empty).toBe(true);
+});

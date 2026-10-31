@@ -15,6 +15,8 @@ import '../../features/analytics/domain/local_member_progress_repository.dart';
 import '../di/local_member_progress_factory.dart';
 import 'member_progress_route.dart';
 import 'move_and_catch_route.dart';
+import 'reach_tap_route.dart';
+import '../../features/gamification/domain/mini_game_launch.dart';
 
 Route<dynamic>? buildFeatureRoute(RouteSettings settings,
     {bool firebase = false,
@@ -31,8 +33,20 @@ Route<dynamic>? buildFeatureRoute(RouteSettings settings,
           body: Center(
               child: Text('This workflow is not connected to Firebase yet.')))
       : switch (settings.name) {
-          FeatureNavigation.moveAndCatch when firebase =>
-            MoveAndCatchRoute(content: args is MiniGameContent ? args : null),
+          FeatureNavigation.reachAndTap when firebase => ReachTapRoute(
+              playAndEarn: args is MiniGameLaunchArguments && args.playAndEarn,
+              content: args is MiniGameLaunchArguments
+                  ? args.content
+                  : args is MiniGameContent
+                      ? args
+                      : null),
+          FeatureNavigation.moveAndCatch when firebase => MoveAndCatchRoute(
+              content: args is MiniGameLaunchArguments
+                  ? args.content
+                  : args is MiniGameContent
+                      ? args
+                      : null,
+              playAndEarn: args is MiniGameLaunchArguments && args.playAndEarn),
           FeatureNavigation.equipment when args is GymEquipment =>
             EquipmentDetailScreen(equipment: args),
           FeatureNavigation.coach when args is Coach =>

@@ -7,6 +7,7 @@ import 'firebase_app_check_readiness.dart';
 class FirebaseMiniGameRoundRepository extends RemoteMiniGameRoundRepository {
   FirebaseMiniGameRoundRepository(
       {required super.scope,
+      super.gameId,
       required bool Function() isCurrent,
       String? Function()? currentUid,
       MiniGameContentCall? call,

@@ -4,6 +4,10 @@ import 'package:gainpath_ui/gainpath_ui.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:gainpath_domain/analytics.dart';
 import 'widgets/local_progress_widgets.dart';
+import '../../domain/member_workout_report.dart';
+import '../../../workout/domain/routine_attempt.dart';
+import 'widgets/contextual_progress_filter.dart';
+import 'widgets/exercise_improvement_card.dart';
 
 /// AD-M5.2 (Posture accuracy) — a smoothed trend area answers "is form
 /// improving over time"; a horizontal bar ranking answers "which exercise
@@ -11,10 +15,18 @@ import 'widgets/local_progress_widgets.dart';
 /// chart shapes rather than reusing one chart for both.
 class PostureAccuracyScreen extends StatelessWidget {
   const PostureAccuracyScreen(
-      {super.key, this.localProgress, this.onOpenReport});
+      {super.key,
+      this.localProgress,
+      this.onOpenReport,
+      this.onOpenWorkout,
+      this.routineProgress,
+      this.onOpenFilteredReport});
 
   final MemberLocalProgress? localProgress;
+  final RoutineProgress? routineProgress;
   final VoidCallback? onOpenReport;
+  final void Function(WorkoutReportFilter)? onOpenFilteredReport;
+  final void Function(LocalWorkoutProgressRecord)? onOpenWorkout;
 
   static const _sessionLabels = ['S1', 'S2', 'S3', 'S4', 'S5', 'S6', 'S7'];
 
@@ -28,6 +40,26 @@ class PostureAccuracyScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final local = localProgress;
+    if (local != null) {
+      return Scaffold(
+          appBar: AppBar(
+              title: const Text('Estimated Form Scores'), actions: const []),
+          body: PageBody(children: [
+            ContextualProgressFilter(
+                onExport: onOpenFilteredReport ??
+                    (onOpenReport == null ? null : (_) => onOpenReport!()),
+                progress: local,
+                builder: (filtered) => Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          ExerciseImprovementCard(
+                              progress: filtered,
+                              routineProgress: routineProgress,
+                              onOpenWorkout: onOpenWorkout),
+                          ..._localDetails(context, filtered)
+                        ]))
+          ]));
+    }
 
     final trend = local == null
         ? context.read<AnalyticsRepository>().postureTrend
@@ -149,10 +181,15 @@ class PostureAccuracyScreen extends StatelessWidget {
             'Provisional rule estimates · ${localProgressZone(progress.utcOffset)}',
             style: Theme.of(context).textTheme.bodyMedium),
         const SizedBox(height: 12),
-        const Text(
-            'Each exercise, rule, detector, model and camera view is shown '
-            'separately. Upload acceptance does not validate the form estimate. '
-            'Unassessed captures appear as gaps.'),
+        const ExpansionTile(
+            tilePadding: EdgeInsets.zero,
+            title: Text('About measurements'),
+            children: [
+              Text(
+                  'Each exercise, rule, detector, model and camera view is shown '
+                  'separately. Upload acceptance does not validate the form estimate. '
+                  'Unassessed captures appear as gaps.')
+            ]),
         const SizedBox(height: 20),
         const Eyebrow('Estimated form by version'),
         if (progress.formSeries.isEmpty)
@@ -162,7 +199,10 @@ class PostureAccuracyScreen extends StatelessWidget {
               child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                Text(group.exerciseId,
+                Text(
+                    reportExerciseNames(routineProgress?.records ?? const [])[
+                            group.exerciseId] ??
+                        reportExerciseLabel(group.exerciseId),
                     style: Theme.of(context).textTheme.titleMedium),
                 Text(
                     'Rule ${group.scoringVersion} · detector ${group.detectorId} · '

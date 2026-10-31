@@ -97,6 +97,7 @@ class _CurlWorkoutRouteState extends State<CurlWorkoutRoute>
           saveVoiceMode: (mode) async {
             await _voicePreferences?.write(mode);
           });
+      session.guidance.setRestSeconds(launch.exercise.restSeconds);
       _session = session;
       _auth = auth.stream.listen((_) => session.accountChanged());
       setState(() {});

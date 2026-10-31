@@ -13,7 +13,7 @@ class GuidedWorkoutProgress {
         repetitions < 1 ||
         repetitions > 1000 ||
         restSeconds < 0 ||
-        restSeconds > 300) {
+        restSeconds > 600) {
       throw ArgumentError('Invalid guided workout targets');
     }
   }
@@ -33,7 +33,7 @@ class GuidedWorkoutProgress {
   int get remainingRestSeconds => (_remainingRestMicros / 1000000).ceil();
 
   void setRestSeconds(int seconds) {
-    if (seconds < 0 || seconds > 300) throw ArgumentError.value(seconds);
+    if (seconds < 0 || seconds > 600) throw ArgumentError.value(seconds);
     _restSeconds = seconds;
   }
 
@@ -58,7 +58,7 @@ class GuidedWorkoutProgress {
     if (last != null && nowMicros < last) return;
     if (!_suspended && last != null && stage == GuidedWorkoutStage.resting) {
       _remainingRestMicros =
-          (_remainingRestMicros - (nowMicros - last)).clamp(0, 300000000);
+          (_remainingRestMicros - (nowMicros - last)).clamp(0, 600000000);
     }
     _lastTick = nowMicros;
   }

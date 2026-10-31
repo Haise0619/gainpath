@@ -41,7 +41,11 @@ class MemberProgressCubit extends Cubit<MemberProgressState> {
       return;
     }
     final generation = ++_generation;
-    emit(const MemberProgressState(status: MemberProgressStatus.loading));
+    emit(MemberProgressState(
+        status: MemberProgressStatus.loading,
+        progress: state.progress,
+        routines: state.routines,
+        snapshot: state.snapshot));
     try {
       final snapshot = await repository.load();
       if (isClosed || generation != _generation) return;
@@ -67,7 +71,10 @@ class MemberProgressCubit extends Cubit<MemberProgressState> {
         accountChanged();
         return;
       }
-      emit(const MemberProgressState(
+      emit(MemberProgressState(
+          progress: state.progress,
+          routines: state.routines,
+          snapshot: state.snapshot,
           status: MemberProgressStatus.failure,
           error: 'Could not read measured workouts saved on this device.'));
     }

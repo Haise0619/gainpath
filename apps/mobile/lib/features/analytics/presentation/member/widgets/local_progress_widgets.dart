@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../domain/member_workout_report.dart';
 import 'package:gainpath_domain/analytics.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
 import 'package:syncfusion_flutter_charts/charts.dart';
@@ -44,8 +45,10 @@ class LocalProgressRecordTile extends StatelessWidget {
       {super.key,
       required this.record,
       required this.utcOffset,
-      this.onOpenWorkout});
+      this.onOpenWorkout,
+      this.exerciseName});
   final LocalWorkoutProgressRecord record;
+  final String? exerciseName;
   final Duration utcOffset;
   final void Function(LocalWorkoutProgressRecord)? onOpenWorkout;
 
@@ -76,10 +79,8 @@ class LocalProgressRecordTile extends StatelessWidget {
               child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                Text(record.exerciseId,
+                Text(exerciseName ?? reportExerciseLabel(record.exerciseId),
                     style: Theme.of(context).textTheme.titleMedium),
-                Text(record.sessionId,
-                    style: Theme.of(context).textTheme.bodySmall),
                 Text(
                     '${localProgressDate(record.endedAt, utcOffset)} · '
                     '${record.repetitions} full reps · ${record.partialRepetitions} partial attempts',
@@ -88,25 +89,33 @@ class LocalProgressRecordTile extends StatelessWidget {
                 Text(localProgressStatus(record.status),
                     style: TextStyle(
                         color: statusColor, fontWeight: FontWeight.w700)),
-                if (record.failureCode != null)
-                  Text('Upload detail: ${record.failureCode}'),
-                if (record.acceptedAt != null)
-                  Text(
-                      'Accepted ${localProgressDate(record.acceptedAt!, utcOffset)}'),
-                Text(record.formScorePercent == null
-                    ? 'Estimated form: unassessed'
-                    : 'Estimated form: ${record.formScorePercent!.toStringAsFixed(1)}%'),
-                const Text(
-                    'Provisional estimate · upload acceptance does not validate form'),
-                Text(
-                    'Measurement coverage: ${localProgressCoverage(record.coverage)}'),
-                Text(
-                    'Tracked ${(record.trackedDurationMicros / 1000000).toStringAsFixed(1)} s · '
-                    'rejected ${(record.rejectedDurationMicros / 1000000).toStringAsFixed(1)} s'),
-                Text(
-                    'Rule ${record.scoringVersion} · detector ${record.detectorId} · '
-                    'model ${record.detectorVersion} · view ${record.cameraView}',
-                    style: Theme.of(context).textTheme.bodySmall),
+                ExpansionTile(
+                  tilePadding: EdgeInsets.zero,
+                  title: const Text('Measurement details'),
+                  children: [
+                    Text('Exercise ID: ${record.exerciseId}'),
+                    Text(record.sessionId),
+                    if (record.failureCode != null)
+                      Text('Upload detail: ${record.failureCode}'),
+                    if (record.acceptedAt != null)
+                      Text(
+                          'Accepted ${localProgressDate(record.acceptedAt!, utcOffset)}'),
+                    Text(record.formScorePercent == null
+                        ? 'Estimated form: unassessed'
+                        : 'Estimated form: ${record.formScorePercent!.toStringAsFixed(1)}%'),
+                    const Text(
+                        'Provisional estimate · upload acceptance does not validate form'),
+                    Text(
+                        'Measurement coverage: ${localProgressCoverage(record.coverage)}'),
+                    Text(
+                        'Tracked ${(record.trackedDurationMicros / 1000000).toStringAsFixed(1)} s · '
+                        'rejected ${(record.rejectedDurationMicros / 1000000).toStringAsFixed(1)} s'),
+                    Text(
+                        'Rule ${record.scoringVersion} · detector ${record.detectorId} · '
+                        'model ${record.detectorVersion} · view ${record.cameraView}',
+                        style: Theme.of(context).textTheme.bodySmall),
+                  ],
+                ),
               ])),
           if (onOpenWorkout != null)
             const Icon(Icons.chevron_right_rounded, color: AppColors.inkSoft),

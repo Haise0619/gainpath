@@ -4,6 +4,11 @@ import '../../workout/domain/routine_attempt.dart';
 import 'local_member_progress_repository.dart';
 
 const workoutReportOffset = Duration(hours: 8);
+String workoutAcceptanceLabel(LocalWorkoutProgressRecord record) =>
+    record.status == LocalWorkoutRecordStatus.accepted &&
+            record.acceptedAt != null
+        ? 'Workout acceptance: server accepted'
+        : 'Workout acceptance: not server accepted (acceptance held)';
 String reportDate(DateTime instant) =>
     instant.toUtc().add(workoutReportOffset).toIso8601String().substring(0, 10);
 String reportDuration(int micros) {
@@ -55,10 +60,12 @@ class WorkoutReportDay {
 }
 
 class WorkoutReportFormPoint {
-  const WorkoutReportFormPoint(this.date, this.score);
+  const WorkoutReportFormPoint(this.date, this.score, {String? key})
+      : key = key ?? date;
   final String date;
-  final double score;
-  Map<String, Object> toJson() => {'label': date, 'score': score};
+  final String key;
+  final double? score;
+  Map<String, Object?> toJson() => {'label': date, 'score': score};
 }
 
 class WorkoutReportFormChart {
@@ -108,6 +115,54 @@ class WorkoutReportRoutine {
       : 'Finished';
 }
 
+/// Readable identifier fallback only; this does not assert a catalogue title.
+String reportExerciseLabel(String id) {
+  if (RegExp(r'^[A-Za-z0-9]{16,}$').hasMatch(id)) return 'Saved exercise';
+  final words = id.split('/').last.replaceAll(RegExp(r'[-_]'), ' ').trim();
+  if (words.isEmpty) return 'Exercise';
+  return words[0].toUpperCase() + words.substring(1);
+}
+
+/// Only a unique saved history label is used, never an unrelated catalogue title.
+Map<String, String> reportExerciseNames(Iterable<RoutineAttempt> attempts) {
+  final candidates = <String, Set<String>>{};
+  for (final attempt in attempts) {
+    for (final exercise in attempt.routine.exercises) {
+      final name = exercise.name.trim();
+      if (name.isNotEmpty) {
+        candidates.putIfAbsent(exercise.exerciseId, () => <String>{}).add(name);
+      }
+    }
+  }
+  return {
+    for (final entry in candidates.entries)
+      entry.key: entry.value.length == 1
+          ? entry.value.single
+          : reportExerciseLabel(entry.key)
+  };
+}
+
+/// Filtered read-only chronology. Routine snapshots are not additional AI captures.
+class WorkoutReportTimelineEntry {
+  WorkoutReportTimelineEntry(
+      {required this.id,
+      required this.title,
+      required DateTime at,
+      required this.sourceLabel,
+      required this.dateBasis,
+      required this.detail})
+      : at = at.toUtc();
+  final String id, title, sourceLabel, dateBasis, detail;
+  final DateTime at;
+  String get dateTimeLabel => at
+      .add(workoutReportOffset)
+      .toIso8601String()
+      .substring(0, 19)
+      .replaceFirst('T', ' ');
+  String get documentLine =>
+      '$dateTimeLabel MYT | $sourceLabel | $title | $dateBasis | $detail | $id';
+}
+
 class MemberWorkoutReport {
   MemberWorkoutReport._(
       {required this.scope,
@@ -149,7 +204,37 @@ class MemberWorkoutReport {
   int get unknownCompletionDays => routines
       .where((r) => r.attempt.isComplete && r.attempt.finishedAtMicros == null)
       .length;
-  String exerciseName(String id) => exerciseNames[id] ?? id;
+  String exerciseName(String id) =>
+      exerciseNames[id] ?? reportExerciseLabel(id);
+
+  List<WorkoutReportTimelineEntry> get timeline {
+    final entries = <WorkoutReportTimelineEntry>[
+      for (final s in sessions)
+        WorkoutReportTimelineEntry(
+            id: s.sessionId,
+            title: exerciseName(s.exerciseId),
+            at: s.endedAt,
+            sourceLabel: 'Measured AI capture',
+            dateBasis: 'Capture ended',
+            detail:
+                '${s.repetitions} full reps · ${s.partialRepetitions} partial attempts · ${reportDuration(s.trackedDurationMicros)} tracked · Estimated Form Score ${s.formScorePercent == null ? 'unavailable' : '${s.formScorePercent!.toStringAsFixed(1)}%'}'),
+      for (final r in routines)
+        WorkoutReportTimelineEntry(
+            id: r.attempt.id,
+            title: '${r.attempt.routine.title} · Day ${r.attempt.day}',
+            at: r.activityAt,
+            sourceLabel: 'Saved routine snapshot',
+            dateBasis: r.dateBasis,
+            detail:
+                '${r.attempt.statusLabel} · ${r.manualSets} self-reported sets in selection · Whole routine: ${r.attempt.completedExercises}/${r.attempt.entries.length} exercises complete'),
+    ]..sort((a, b) {
+        final byDate = b.at.compareTo(a.at);
+        if (byDate != 0) return byDate;
+        final bySource = a.sourceLabel.compareTo(b.sourceLabel);
+        return bySource != 0 ? bySource : a.id.compareTo(b.id);
+      });
+    return List.unmodifiable(entries);
+  }
 
   factory MemberWorkoutReport.build(
       {required SessionScope scope,
@@ -161,15 +246,14 @@ class MemberWorkoutReport {
     final history =
         RoutineProgress(scope: scope, attempts: source.attempts, asOf: asOf);
     final all = history.records;
-    final routineNames = <String, String>{}, exerciseNames = <String, String>{};
+    final routineNames = <String, String>{};
+    final exerciseNames = reportExerciseNames(all);
     for (final a in all) {
       routineNames.putIfAbsent(a.routine.id, () => a.routine.title);
-      for (final e in a.routine.exercises) {
-        exerciseNames.putIfAbsent(e.exerciseId, () => e.name);
-      }
     }
     for (final s in base.records) {
-      exerciseNames.putIfAbsent(s.exerciseId, () => s.exerciseId);
+      exerciseNames.putIfAbsent(
+          s.exerciseId, () => reportExerciseLabel(s.exerciseId));
     }
     final linked = {
       for (final a in all)
@@ -217,19 +301,25 @@ class MemberWorkoutReport {
     ];
     final charts = <WorkoutReportFormChart>[];
     for (final g in filtered.formSeries) {
-      final points = <String, List<LocalWorkoutProgressRecord>>{};
-      for (final s in g.records.where((s) => s.formScorePercent != null)) {
-        points.putIfAbsent(reportDate(s.endedAt), () => []).add(s);
-      }
+      final records = g.records.toList()
+        ..sort((a, b) {
+          final order = a.endedAt.compareTo(b.endedAt);
+          return order != 0 ? order : a.sessionId.compareTo(b.sessionId);
+        });
       charts.add(WorkoutReportFormChart(
           '${exerciseNames[g.exerciseId]} · ${g.scoringVersion} · ${g.detectorId}/${g.detectorVersion} · ${g.cameraView}',
           [
-            for (final date in points.keys.toList()..sort())
+            for (final record in records)
               WorkoutReportFormPoint(
-                  date,
-                  points[date]!.fold<double>(
-                          0, (n, s) => n + s.formScorePercent! * s.attempts) /
-                      points[date]!.fold<int>(0, (n, s) => n + s.attempts))
+                  record.endedAt
+                      .toUtc()
+                      .add(workoutReportOffset)
+                      .toIso8601String()
+                      .substring(0, 19)
+                      .replaceFirst('T', ' '),
+                  record.formScorePercent,
+                  key:
+                      '${record.endedAt.toUtc().toIso8601String()}/${record.sessionId}')
           ]));
     }
     return MemberWorkoutReport._(
@@ -255,7 +345,7 @@ class MemberWorkoutReport {
       'Routine: ${filter.routineId == null ? 'All routines' : routineNames[filter.routineId] ?? filter.routineId}',
       'Exercise: ${filter.exerciseId == null ? 'All exercises' : exerciseName(filter.exerciseId!)}',
       'Source: account-local saved history, including restored backups.',
-      'Provisional AI estimates; backup is not workout verification or a reward award.',
+      'Provisional AI estimates; workout acceptance is not Cloud Backup status or a reward award.',
       ...warnings.map((w) => 'Data warning: $w'),
       '',
       'SUMMARY',
@@ -275,18 +365,23 @@ class MemberWorkoutReport {
       for (final d in days)
         '${d.date} | ${d.fullReps} full | ${d.partialReps} partial | ${reportDuration(d.trackedMicros)}',
       '',
-      'ESTIMATED FORM | compatible exercise/rule/model/view groups',
+      'ESTIMATED FORM SCORES | compatible exercise/rule/model/view groups',
       if (formGroups.isEmpty) 'No estimated form available.',
       for (final g in formGroups) ...[
         '${exerciseName(g.exerciseId)} | ${g.scoringVersion} | ${g.detectorId}/${g.detectorVersion} | ${g.cameraView}',
         'Weighted estimate: ${g.meanScore?.toStringAsFixed(1) ?? 'Unavailable'}${g.meanScore == null ? '' : '%'} | ${g.scoredAttempts} scored / ${g.unassessedAttempts} unassessed attempts',
       ],
       '',
+      'PROGRESSION HISTORY TIMELINE | selected filters',
+      if (timeline.isEmpty) 'No activity matches these filters.',
+      for (final event in timeline) event.documentLine,
+      'Routine snapshots describe progress; they are not added to measured capture totals.',
+      '',
       'CAMERA SESSION DETAILS',
       for (final s in sessions) ...[
         '${reportDate(s.endedAt)} | ${exerciseName(s.exerciseId)} | ${s.sessionId}',
-        '${s.repetitions} full | ${s.partialRepetitions} partial | ${reportDuration(s.trackedDurationMicros)} tracked | Estimated form ${s.formScorePercent?.toStringAsFixed(1) ?? 'unavailable'}${s.formScorePercent == null ? '' : '%'}',
-        'Status: ${s.status.name} | ${s.scoringVersion} | ${s.detectorId}/${s.detectorVersion} | ${s.cameraView}',
+        '${s.repetitions} full | ${s.partialRepetitions} partial | ${reportDuration(s.trackedDurationMicros)} tracked | Estimated Form Score ${s.formScorePercent?.toStringAsFixed(1) ?? 'unavailable'}${s.formScorePercent == null ? '' : '%'}',
+        '${workoutAcceptanceLabel(s)} | ${s.scoringVersion} | ${s.detectorId}/${s.detectorVersion} | ${s.cameraView}',
       ],
       '',
       'ROUTINE ATTEMPTS | measured and self-reported work remain separate',

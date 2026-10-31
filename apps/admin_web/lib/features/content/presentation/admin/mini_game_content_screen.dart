@@ -10,6 +10,22 @@ import 'package:gainpath_ui/gainpath_ui.dart';
 import '../../../../navigation/admin_breadcrumb.dart';
 import '../../../../media/video_preview.dart';
 import 'mini_game_reward_policy_panel.dart';
+import 'mini_game_standings_screen.dart';
+import '../../../../infrastructure/firebase/firebase_mini_game_competition_repository.dart';
+
+String _gameName(String id) =>
+    id == MiniGameContent.reachTapId ? 'Reach & Tap' : 'Move & Catch';
+
+List<MiniGameContent> _knownContent(
+        List<MiniGameContent> items, String organizationId) =>
+    [
+      for (final id in MiniGameContent.supportedIds)
+        items
+                .where((item) =>
+                    item.gameId == id && item.organizationId == organizationId)
+                .firstOrNull ??
+            MiniGameContent.defaults(organizationId, gameId: id),
+    ];
 
 String _newId() {
   final random = Random.secure();
@@ -39,8 +55,13 @@ Widget _cover(String url, {Uint8List? bytes}) {
 /// Authoring for system-supported games. Registry and gameplay stay managed.
 class MiniGameContentScreen extends StatefulWidget {
   const MiniGameContentScreen(
-      {super.key, this.repository, this.imagePicker, this.videoPicker});
+      {super.key,
+      this.repository,
+      this.imagePicker,
+      this.videoPicker,
+      this.competitionRepository});
   final MiniGameContentRepository? repository;
+  final MiniGameCompetitionRepository? competitionRepository;
   final EquipmentImagePicker? imagePicker;
   final EquipmentVideoPicker? videoPicker;
 
@@ -55,6 +76,14 @@ class _MiniGameContentScreenState extends State<MiniGameContentScreen> {
   String? _error;
   int _generation = 0;
   bool _loading = false;
+  String _query = '';
+  String _mediaFilter = 'all';
+  bool get _expandedRegistryAvailable =>
+      _repository is! MiniGameContentRegistryStatus ||
+      (_repository as MiniGameContentRegistryStatus).expandedRegistryAvailable;
+  bool _editable(MiniGameContent content) =>
+      content.gameId != MiniGameContent.reachTapId ||
+      _expandedRegistryAvailable;
 
   @override
   void initState() {
@@ -90,11 +119,7 @@ class _MiniGameContentScreenState extends State<MiniGameContentScreen> {
       final items = await repository.load();
       if (!mounted || generation != _generation || !repository.current) return;
       setState(() {
-        _items = items
-            .where((item) =>
-                item.gameId == MiniGameContent.supportedId &&
-                item.organizationId == repository.scope.organizationId)
-            .toList();
+        _items = _knownContent(items, repository.scope.organizationId);
         _editing = null;
       });
     } catch (_) {
@@ -147,18 +172,24 @@ class _MiniGameContentScreenState extends State<MiniGameContentScreen> {
                         onPressed: _loading ? null : _load,
                         icon: const Icon(Icons.refresh_rounded),
                         label: const Text('Reload')),
+                    OutlinedButton.icon(
+                        onPressed: () => Navigator.of(context).push(
+                            MaterialPageRoute<void>(
+                                builder: (_) => MiniGameStandingsScreen(
+                                    repository: widget.competitionRepository ??
+                                        FirebaseAdminMiniGameCompetitionRepository(
+                                            scope: _repository.scope,
+                                            isCurrent: () =>
+                                                _repository.current)))),
+                        icon: const Icon(Icons.leaderboard_outlined),
+                        label: const Text('Game standings')),
                   ]),
-              const SizedBox(height: 6),
-              if (context.read<MiniGameRewardConfigurationRepository?>()
-                  case final configuration?) ...[
-                MiniGameRewardPolicyPanel(repository: configuration),
-                const SizedBox(height: 20),
-              ],
+              const SizedBox(height: 8),
               const Text(
-                  'Edit the introduction, instructions and media for supported games.'),
+                  'Manage Member introductions, instructions and media for the two implemented games.'),
               const SizedBox(height: 24),
               if (_loading)
-                const Center(child: CircularProgressIndicator())
+                const LinearProgressIndicator()
               else if (_error != null)
                 Panel(
                     child: Column(
@@ -168,53 +199,196 @@ class _MiniGameContentScreenState extends State<MiniGameContentScreen> {
                           style: const TextStyle(color: AppColors.danger)),
                       TextButton(onPressed: _load, child: const Text('Retry')),
                     ]))
-              else if (_items?.isEmpty ?? true)
-                const Panel(
-                    child: Text(
-                        'Supported mini-game content is unavailable. Reload to try again.'))
-              else
-                for (final item in _items!)
-                  ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 600),
-                      child: Panel(
-                          padding: EdgeInsets.zero,
-                          child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [
-                                ClipRRect(
-                                    borderRadius: const BorderRadius.vertical(
-                                        top: Radius.circular(16)),
-                                    child: _cover(item.coverUrl)),
-                                Padding(
-                                    padding: const EdgeInsets.all(20),
-                                    child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          const Eyebrow('Move & Catch'),
-                                          const SizedBox(height: 8),
-                                          Text(item.title,
-                                              style: Theme.of(context)
-                                                  .textTheme
-                                                  .titleLarge),
-                                          const SizedBox(height: 8),
-                                          Text(item.introduction),
-                                          const SizedBox(height: 18),
-                                          OutlinedButton.icon(
-                                              onPressed: () {
-                                                if (_repository.current) {
-                                                  setState(
-                                                      () => _editing = item);
-                                                }
-                                              },
-                                              icon: const Icon(
-                                                  Icons.edit_outlined),
-                                              label:
-                                                  const Text('Edit content')),
-                                        ])),
-                              ]))),
+              else if (_items != null) ...[
+                _registry(context),
+                const SizedBox(height: 24),
+                const Eyebrow('Rewards'),
+                const Text(
+                    'Move & Catch uses the existing mini-game reward policy. Reach & Tap reward points are inactive.'),
+                const SizedBox(height: 12),
+                if (context.read<MiniGameRewardConfigurationRepository?>()
+                    case final configuration?)
+                  MiniGameRewardPolicyPanel(repository: configuration),
+              ],
             ])));
   }
+
+  Widget _registry(BuildContext context) {
+    final items = _items!.where((item) {
+      final search = '${_gameName(item.gameId)} ${item.title} ${item.gameId}'
+          .toLowerCase();
+      final hasMedia =
+          item.coverUrl.isNotEmpty || item.previewVideoUrl.isNotEmpty;
+      return search.contains(_query.toLowerCase().trim()) &&
+          (_mediaFilter == 'all' ||
+              (_mediaFilter == 'with' ? hasMedia : !hasMedia));
+    }).toList();
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      Wrap(spacing: 24, runSpacing: 12, children: [
+        Text('${_items!.length} implemented games',
+            style: Theme.of(context).textTheme.titleMedium),
+        Text(
+            '${_items!.where((item) => !item.isBuiltIn).length} saved content overrides'),
+        Text(
+            '${_items!.where((item) => item.coverUrl.isNotEmpty || item.previewVideoUrl.isNotEmpty).length} with media'),
+      ]),
+      const SizedBox(height: 20),
+      LayoutBuilder(builder: (context, constraints) {
+        final search = TextField(
+            key: const Key('mini-game-search'),
+            decoration: const InputDecoration(
+                labelText: 'Search games',
+                prefixIcon: Icon(Icons.search_rounded),
+                hintText: 'Name or game ID'),
+            onChanged: (value) => setState(() => _query = value));
+        final filter = DropdownButtonFormField<String>(
+            key: const Key('mini-game-media-filter'),
+            initialValue: _mediaFilter,
+            isExpanded: true,
+            decoration: const InputDecoration(labelText: 'Media'),
+            items: const [
+              DropdownMenuItem(value: 'all', child: Text('All media states')),
+              DropdownMenuItem(value: 'with', child: Text('With media')),
+              DropdownMenuItem(value: 'without', child: Text('Without media'))
+            ],
+            onChanged: (value) =>
+                setState(() => _mediaFilter = value ?? 'all'));
+        if (constraints.maxWidth < 680 ||
+            MediaQuery.textScalerOf(context).scale(1) > 1.5) {
+          return Column(children: [search, const SizedBox(height: 12), filter]);
+        }
+        return Row(children: [
+          Expanded(child: search),
+          const SizedBox(width: 16),
+          SizedBox(width: 240, child: filter)
+        ]);
+      }),
+      const SizedBox(height: 16),
+      if (!_expandedRegistryAvailable) ...[
+        const Panel(
+            child: Text(
+                'Reach & Tap is showing its built-in guide. Editing is unavailable on the connected server. Reload after the expanded content registry is released.')),
+        const SizedBox(height: 16),
+      ],
+      if (items.isEmpty)
+        const Panel(child: Text('No games match these filters.'))
+      else
+        LayoutBuilder(builder: (context, constraints) {
+          if (constraints.maxWidth < 900 ||
+              MediaQuery.textScalerOf(context).scale(1) > 1.5) {
+            return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  for (final item in items)
+                    Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: Panel(
+                            child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                              Text(item.title,
+                                  style:
+                                      Theme.of(context).textTheme.titleMedium),
+                              Text(
+                                  '${_gameName(item.gameId)} · ${item.gameId}'),
+                              const SizedBox(height: 12),
+                              _contentStatus(item),
+                              const SizedBox(height: 8),
+                              _mediaStatus(item),
+                              const SizedBox(height: 12),
+                              _editAction(item),
+                            ]))),
+                ]);
+          }
+          return Panel(
+              key: const Key('mini-game-registry-table'),
+              padding: EdgeInsets.zero,
+              child: SizedBox(
+                  width: double.infinity,
+                  child: DataTable(
+                    headingRowColor:
+                        const WidgetStatePropertyAll(AppColors.surfaceAlt),
+                    headingRowHeight: 52,
+                    dataRowMinHeight: 104,
+                    dataRowMaxHeight: 120,
+                    columnSpacing: 24,
+                    horizontalMargin: 24,
+                    columns: const [
+                      DataColumn(label: Text('Cover')),
+                      DataColumn(label: Text('Game')),
+                      DataColumn(label: Text('Content')),
+                      DataColumn(label: Text('Media')),
+                      DataColumn(label: Text('Action'))
+                    ],
+                    rows: [
+                      for (final item in items)
+                        DataRow(cells: [
+                          DataCell(SizedBox(
+                              width: 104,
+                              child: ClipRRect(
+                                  borderRadius: BorderRadius.circular(8),
+                                  child: _cover(item.coverUrl)))),
+                          DataCell(SizedBox(
+                              width: (constraints.maxWidth * .24)
+                                  .clamp(140, 420)
+                                  .toDouble(),
+                              child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(item.title,
+                                        maxLines: 2,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: const TextStyle(
+                                            fontWeight: FontWeight.w700)),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                        '${_gameName(item.gameId)} · ${item.gameId}',
+                                        maxLines: 2,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .bodySmall),
+                                  ]))),
+                          DataCell(_contentStatus(item)),
+                          DataCell(_mediaStatus(item)),
+                          DataCell(_editAction(item)),
+                        ])
+                    ],
+                  )));
+        }),
+    ]);
+  }
+
+  Widget _contentStatus(MiniGameContent item) => Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(item.isBuiltIn ? 'Built-in guide' : 'Saved content',
+                style: const TextStyle(fontWeight: FontWeight.w600)),
+            Text(item.isBuiltIn
+                ? 'No saved override'
+                : 'Revision ${item.revision}'),
+          ]);
+  Widget _mediaStatus(MiniGameContent item) => Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+                item.coverUrl.isEmpty ? 'No cover image' : 'Cover image saved'),
+            Text(item.previewVideoUrl.isEmpty
+                ? 'No preview video'
+                : 'Preview video saved'),
+          ]);
+  Widget _editAction(MiniGameContent item) => OutlinedButton.icon(
+      key: Key('edit-${item.gameId}'),
+      onPressed: !_editable(item)
+          ? null
+          : () {
+              if (_repository.current) setState(() => _editing = item);
+            },
+      icon: const Icon(Icons.edit_outlined),
+      label: const Text('Edit content'));
 }
 
 class _SessionUnavailable extends StatelessWidget {
@@ -400,14 +574,14 @@ class _ContentEditorState extends State<_ContentEditor> {
       if (!_current) return;
       final scoped = items
           .where((item) =>
-              item.gameId == MiniGameContent.supportedId &&
+              MiniGameContent.supportedIds.contains(item.gameId) &&
               item.organizationId == repository.scope.organizationId)
           .toList();
       if (!scoped.any((item) =>
           item.gameId == saved.gameId && item.revision >= saved.revision)) {
         throw const MiniGameContentUnavailable();
       }
-      widget.onSaved(scoped);
+      widget.onSaved(_knownContent(scoped, repository.scope.organizationId));
     } on MiniGameContentConflict {
       if (_current) {
         setState(() {
@@ -455,18 +629,22 @@ class _ContentEditorState extends State<_ContentEditor> {
                 child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      PageBreadcrumb(crumbs: [
-                        PageCrumb('Mini-games', () {
-                          if (!_busy) widget.onCancel();
-                        }),
-                        const PageCrumb('Edit content'),
-                      ]),
+                      SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          child: PageBreadcrumb(crumbs: [
+                            PageCrumb('Mini-games', () {
+                              if (!_busy) widget.onCancel();
+                            }),
+                            const PageCrumb('Edit content'),
+                          ])),
                       const SizedBox(height: 6),
                       Text('Edit mini-game content',
                           style: Theme.of(context).textTheme.headlineMedium),
                       const SizedBox(height: 6),
-                      const Text(
-                          'Move & Catch · Member introduction and how to play'),
+                      Text(
+                          '${_gameName(widget.content.gameId)} · Member introduction and how to play'),
+                      const SizedBox(height: 16),
+                      _editorActions(),
                       const SizedBox(height: 22),
                       LayoutBuilder(builder: (context, constraints) {
                         final form = _formPanel(context),
@@ -490,6 +668,23 @@ class _ContentEditorState extends State<_ContentEditor> {
                       }),
                     ]))));
   }
+
+  Widget _editorActions() => Wrap(spacing: 10, runSpacing: 10, children: [
+        OutlinedButton(
+            onPressed: _busy ? null : widget.onCancel,
+            child: const Text('Cancel')),
+        FilledButton(
+            onPressed: _busy || _reloadRequired ? null : _save,
+            child: Text(_saving
+                ? 'Saving…'
+                : _error != null && !_reloadRequired
+                    ? 'Retry save'
+                    : 'Save changes')),
+        if (_error != null || _reloadRequired)
+          TextButton(
+              onPressed: _busy ? null : widget.onReload,
+              child: const Text('Discard edits and reload')),
+      ]);
 
   Widget _formPanel(BuildContext context) => Form(
       key: _form,
@@ -660,22 +855,6 @@ class _ContentEditorState extends State<_ContentEditor> {
               padding: const EdgeInsets.only(bottom: 12),
               child: Text(_error!,
                   style: const TextStyle(color: AppColors.danger))),
-        Wrap(spacing: 10, runSpacing: 10, children: [
-          OutlinedButton(
-              onPressed: _busy ? null : widget.onCancel,
-              child: const Text('Cancel')),
-          FilledButton(
-              onPressed: _busy || _reloadRequired ? null : _save,
-              child: Text(_saving
-                  ? 'Saving…'
-                  : _error != null && !_reloadRequired
-                      ? 'Retry save'
-                      : 'Save changes')),
-          if (_error != null || _reloadRequired)
-            TextButton(
-                onPressed: _busy ? null : widget.onReload,
-                child: const Text('Discard edits and reload')),
-        ]),
       ]));
 
   Widget _preview(BuildContext context) =>
@@ -697,7 +876,7 @@ class _ContentEditorState extends State<_ContentEditor> {
                           children: [
                             Text(
                                 _title.text.trim().isEmpty
-                                    ? 'Move & Catch'
+                                    ? _gameName(widget.content.gameId)
                                     : _title.text.trim(),
                                 style: Theme.of(context).textTheme.titleLarge),
                             const SizedBox(height: 10),

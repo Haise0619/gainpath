@@ -1,3 +1,4 @@
+import 'support/signed_out_firebase.dart';
 import 'package:gainpath_mobile/features/workout/presentation/member/equipment_scanner_screen.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
@@ -40,6 +41,7 @@ class _Reader implements EquipmentReader {
 }
 
 void main() {
+  setUpAll(setUpSignedOutFirebase);
   setUpAll(() => GoogleFonts.config.allowRuntimeFetching = false);
   testWidgets(
       'Firebase Member Home Equipment entry opens scoped browsing without recording activity',

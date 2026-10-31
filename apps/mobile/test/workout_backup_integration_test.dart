@@ -13,9 +13,94 @@ import 'package:gainpath_mobile/infrastructure/firebase/firebase_workout_backup_
 import 'member_progress_route_test.dart' as progress;
 import 'workout_backup_test.dart' as backup;
 import 'routine_journey_controller_test.dart' as fixture;
+import 'dart:async';
+import 'package:gainpath_mobile/app/shells/member_shell.dart';
+import 'package:gainpath_mobile/app/di/workout_local_save_notifications.dart';
+import 'package:gainpath_mobile/app/di/workout_backup_wakeups.dart';
+import 'package:gainpath_mobile/features/workout/application/workout_backup_scheduler.dart';
+import 'support/mock_app_scope.dart';
 
 void main() {
   setUpAll(() => GoogleFonts.config.allowRuntimeFetching = false);
+  testWidgets(
+      'full member shell backs up saves without visiting Progress and respects opt-out',
+      (tester) async {
+    tester.view.physicalSize = const Size(1000, 2400);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    late AuthBloc auth;
+    await tester.runAsync(() async {
+      auth = AuthBloc(repository: InMemoryAuthRepository());
+      await Future<void>.delayed(Duration.zero);
+      auth.add(const LoginSubmitted(
+          email: 'member@example.com', password: 'password123'));
+      await auth.stream.firstWhere((s) => s.status == AuthStatus.signedIn);
+    });
+    final scope = auth.state.session!.scope;
+    final local = backup.Local(), remote = backup.Remote();
+    final network = StreamController<void>.broadcast();
+    WorkoutBackupCoordinator? coordinator;
+    var opened = 0;
+    var liveLeases = 0;
+    await tester.pumpWidget(BlocProvider.value(
+        value: auth,
+        child: MockAppScope(
+            child: MaterialApp(
+                home: MemberShell(
+          liveSession: auth.state.session,
+          memberRewardsBuilder: (_) => const SizedBox(),
+          progressRepositoryFactory: (_, __) async =>
+              progress.TestRepository(scope),
+          backupFactory: (_, active) async {
+            opened++;
+            liveLeases++;
+            final c = coordinator = WorkoutBackupCoordinator(
+                scope: scope,
+                activeScope: active,
+                local: local,
+                gateway: remote,
+                store: backup.Metadata(scope));
+            final scheduler = WorkoutBackupScheduler(coordinator: c);
+            final wakeups = WorkoutBackupWakeups(
+                scope: scope,
+                activeScope: active,
+                scheduler: scheduler,
+                networkOpportunities: network.stream);
+            return WorkoutBackupLease(c, () {
+              liveLeases--;
+              wakeups.dispose();
+              scheduler.dispose();
+              c.dispose();
+            }, scheduler: scheduler);
+          },
+        )))));
+    await tester.pumpAndSettle();
+    expect(
+        find.byType(MemberProgressHost, skipOffstage: false), findsOneWidget);
+    expect(opened, greaterThan(0));
+    expect(liveLeases, 1);
+    final row =
+        WorkoutBackupRecord.session(fixture.measured(scope, 'full-shell'));
+    local.rows[row.key] = row;
+    notifyWorkoutLocalSave(scope);
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
+    expect(remote.saves, 0);
+    await coordinator!.setEnabled(true);
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pumpAndSettle();
+    expect(remote.saves, 1);
+    notifyWorkoutLocalSave(scope);
+    network.add(null);
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
+    expect(remote.saves, 1);
+    expect(find.byType(MemberShell), findsOneWidget);
+    await tester.pumpWidget(const SizedBox());
+    expect(liveLeases, 0);
+    await network.close();
+    await tester.runAsync(auth.close);
+  });
   testWidgets(
       'open backup page reacts when initialization fails then retry succeeds',
       (tester) async {
@@ -59,7 +144,7 @@ void main() {
     await tester.tap(find.text('Retry'));
     await tester.pumpAndSettle();
     expect(find.byType(Switch), findsOneWidget);
-    expect(find.text('Saved locally'), findsOneWidget);
+    expect(find.text('Saved on device'), findsOneWidget);
     await tester.pumpWidget(const SizedBox());
     c.dispose();
     await tester.runAsync(auth.close);

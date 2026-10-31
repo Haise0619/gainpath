@@ -34,11 +34,15 @@ class RoutineJourneyController extends ChangeNotifier {
   bool busy = false;
   String? error;
   int day = 1;
+  int? _scheduledDay;
+  String? _scheduledAttemptId;
+  bool get isScheduled => _scheduledDay != null;
   Future<void> _tail = Future.value();
   bool get authorized => !_disposed && activeScope() == scope;
   RoutineCheckpoint? get checkpoint => authorized ? _checkpoint : null;
-  List<int> get days =>
-      (routine.exercises.map((e) => e.dayNumber).toSet().toList()..sort());
+  List<int> get days => _scheduledDay != null
+      ? [_scheduledDay!]
+      : (routine.exercises.map((e) => e.dayNumber).toSet().toList()..sort());
   List<int> get dayIndices => [
         for (var i = 0; i < routine.exercises.length; i++)
           if (routine.exercises[i].dayNumber == day) i
@@ -48,7 +52,13 @@ class RoutineJourneyController extends ChangeNotifier {
         routine.id,
         routine.sourceBlueprintId,
         for (final e in routine.exercises)
-          [e.exerciseId, e.dayNumber, e.sets, e.reps]
+          [
+            e.exerciseId,
+            e.dayNumber,
+            e.sets,
+            e.reps,
+            if (e.restSeconds != 60) e.restSeconds
+          ]
       ]);
 
   void _guard() {
@@ -96,20 +106,24 @@ class RoutineJourneyController extends ChangeNotifier {
     _checkpoint = next;
   }
 
-  Future<void> openDay(int selectedDay) => _run(() => _openDay(selectedDay));
-  Future<void> openLatest() => _run(() async {
-        final checkpoints = (await store.load())
-            .where((e) =>
-                e.scope == scope &&
-                e.routineId == routine.id &&
-                e.planSignature == _signature &&
-                days.contains(e.day))
-            .toList()
-          ..sort((a, b) => b.updatedAtMicros.compareTo(a.updatedAtMicros));
-        _guard();
-        await _openDay(
-            checkpoints.isEmpty ? days.first : checkpoints.first.day);
-      });
+  Future<void> openDay(int selectedDay) => isScheduled
+      ? openProgramAttempt(_scheduledAttemptId!, selectedDay)
+      : _run(() => _openDay(selectedDay));
+  Future<void> openLatest() => isScheduled
+      ? openProgramAttempt(_scheduledAttemptId!, _scheduledDay!)
+      : _run(() async {
+          final checkpoints = (await store.load())
+              .where((e) =>
+                  e.scope == scope &&
+                  e.routineId == routine.id &&
+                  e.planSignature == _signature &&
+                  days.contains(e.day))
+              .toList()
+            ..sort((a, b) => b.updatedAtMicros.compareTo(a.updatedAtMicros));
+          _guard();
+          await _openDay(
+              checkpoints.isEmpty ? days.first : checkpoints.first.day);
+        });
   Future<void> _openDay(int selectedDay) async {
     if (!days.contains(selectedDay)) throw ArgumentError('Unknown routine day');
     day = selectedDay;
@@ -133,8 +147,8 @@ class RoutineJourneyController extends ChangeNotifier {
     await _save(_checkpoint!.copyWith());
   }
 
-  Future<void> _newAttempt() => _save(RoutineCheckpoint(
-      id: newId(),
+  Future<void> _newAttempt({String? id}) => _save(RoutineCheckpoint(
+      id: id ?? newId(),
       scope: scope,
       routineId: routine.id,
       planSignature: _signature,
@@ -143,6 +157,10 @@ class RoutineJourneyController extends ChangeNotifier {
       startedAtMicros: DateTime.now().toUtc().microsecondsSinceEpoch,
       updatedAtMicros: DateTime.now().toUtc().microsecondsSinceEpoch));
   Future<void> startNewAttempt() => _run(() async {
+        if (isScheduled) {
+          throw StateError(
+              'Return to the program to choose another scheduled day');
+        }
         await _newAttempt();
         await _reload();
       });
@@ -200,6 +218,16 @@ class RoutineJourneyController extends ChangeNotifier {
       trackingFor(index).tracker == ExerciseTracker.sideViewCurl;
   String targetsFor(int index) {
     final e = routine.exercises[index];
+    if ((trackingFor(index).tracker == ExerciseTracker.frontViewShoulderPress ||
+        trackingFor(index).tracker == ExerciseTracker.frontViewLateralRaise)) {
+      return '${e.sets} sets · ${e.reps} reps per set · both arms together';
+    }
+    if (trackingFor(index).tracker == ExerciseTracker.sideViewRow) {
+      return '${e.sets} sets · ${e.reps} reps per selected arm per set';
+    }
+    if (trackingFor(index).tracker == ExerciseTracker.sideViewReverseLunge) {
+      return '${e.sets} sets · ${e.reps} reps per selected front leg per set';
+    }
     return '${e.sets} sets · ${e.reps} reps${perArmTargetsFor(index) ? ' per arm' : ''} per set';
   }
 
@@ -387,6 +415,9 @@ class RoutineJourneyController extends ChangeNotifier {
           ]);
 
   Future<void> openAttempt(String id) => _run(() async {
+        if (isScheduled && id != _scheduledAttemptId) {
+          throw StateError('This program day is linked to a different attempt');
+        }
         final matches = (await store.load()).where((v) =>
             v.id == id &&
             v.scope == scope &&
@@ -396,6 +427,40 @@ class RoutineJourneyController extends ChangeNotifier {
         if (matches.length != 1) throw StateError('Saved attempt unavailable');
         _checkpoint = matches.single;
         day = _checkpoint!.day;
+        await _reload();
+      });
+
+  /// Program slots persist their attempt identity before opening this route.
+  /// Reopening a slot can only resume that same attempt, never another day's.
+  Future<void> openProgramAttempt(String id, int selectedDay) => _run(() async {
+        if (isScheduled &&
+            (id != _scheduledAttemptId || selectedDay != _scheduledDay)) {
+          throw StateError('Scheduled routine attempt is already pinned');
+        }
+        if (!RegExp(r'^[A-Za-z0-9_-]{1,128}$').hasMatch(id) ||
+            !days.contains(selectedDay)) {
+          throw ArgumentError('Invalid scheduled routine attempt');
+        }
+        final matches = (await store.load()).where((v) => v.id == id).toList();
+        _guard();
+        _scheduledDay = selectedDay;
+        _scheduledAttemptId = id;
+        day = selectedDay;
+        if (matches.isEmpty) {
+          _checkpoint = null;
+          _history = [];
+          await _newAttempt(id: id);
+        } else {
+          final value = matches.single;
+          if (value.scope != scope ||
+              value.routineId != routine.id ||
+              value.planSignature != _signature ||
+              value.day != selectedDay) {
+            throw StateError(
+                'Scheduled routine attempt does not match its plan');
+          }
+          _checkpoint = value;
+        }
         await _reload();
       });
   int? get nextDay => days.where((d) => d > day).firstOrNull;

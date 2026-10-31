@@ -17,7 +17,15 @@ import '../../features/workout/presentation/member/routine_journey_screen.dart';
 import '../../features/workout/presentation/member/workout_prep_screen.dart'
     show
         showWorkoutCaptureConsent,
+        lateralRaiseCaptureInstruction,
+        lateralRaiseSetupConfirmation,
         curlCaptureInstruction,
+        rowCaptureInstruction,
+        reverseLungeCaptureInstruction,
+        reverseLungeSetupConfirmation,
+        shoulderPressCaptureInstruction,
+        shoulderPressSetupConfirmation,
+        rowSetupConfirmation,
         calfRaiseCaptureInstruction,
         wallPushUpCaptureInstruction,
         wallPushUpSetupConfirmation;
@@ -37,11 +45,15 @@ class RoutineJourneyRoute extends StatefulWidget {
       required this.routine,
       this.trackers = const ExerciseTrackerDispatcher(),
       this.attemptId,
+      this.programAttemptId,
+      this.initialDay = 1,
       this.action = RoutineJourneyAction.view});
   final SessionScope scope;
   final PublishedRoutine routine;
   final ExerciseTrackerDispatcher trackers;
   final String? attemptId;
+  final String? programAttemptId;
+  final int initialDay;
   final RoutineJourneyAction action;
   @override
   State<RoutineJourneyRoute> createState() => _RoutineJourneyRouteState();
@@ -85,7 +97,9 @@ class _RoutineJourneyRouteState extends State<RoutineJourneyRoute> {
           newId: newWorkoutRequestId);
       _controller = c;
       _subscription = auth.stream.listen((_) => c.accountChanged());
-      if (widget.attemptId == null) {
+      if (widget.programAttemptId != null) {
+        await c.openProgramAttempt(widget.programAttemptId!, widget.initialDay);
+      } else if (widget.attemptId == null) {
         await c.openLatest();
       } else {
         await c.openAttempt(widget.attemptId!);
@@ -124,14 +138,29 @@ class _RoutineJourneyRouteState extends State<RoutineJourneyRoute> {
     final consented = await showWorkoutCaptureConsent(context,
         allowUpload: tracker == ExerciseTracker.sideViewSquat,
         exerciseInstruction: switch (tracker) {
+          ExerciseTracker.frontViewLateralRaise =>
+            lateralRaiseCaptureInstruction,
+          ExerciseTracker.frontViewShoulderPress =>
+            shoulderPressCaptureInstruction,
           ExerciseTracker.sideViewCurl => curlCaptureInstruction,
+          ExerciseTracker.sideViewRow => rowCaptureInstruction,
+          ExerciseTracker.sideViewReverseLunge =>
+            reverseLungeCaptureInstruction,
           ExerciseTracker.sideViewCalfRaise => calfRaiseCaptureInstruction,
           ExerciseTracker.sideViewWallPushUp => wallPushUpCaptureInstruction,
           _ => null,
         },
         setupConfirmationLabel: tracker == ExerciseTracker.sideViewWallPushUp
             ? wallPushUpSetupConfirmation
-            : null,
+            : tracker == ExerciseTracker.frontViewLateralRaise
+                ? lateralRaiseSetupConfirmation
+                : tracker == ExerciseTracker.frontViewShoulderPress
+                    ? shoulderPressSetupConfirmation
+                    : tracker == ExerciseTracker.sideViewRow
+                        ? rowSetupConfirmation
+                        : tracker == ExerciseTracker.sideViewReverseLunge
+                            ? reverseLungeSetupConfirmation
+                            : null,
         onUploadChanged: (value) => upload = value);
     if (consented != true || !mounted || !_authorized(auth)) return;
     // Persist the exact capture ID before opening the camera. Reconciliation

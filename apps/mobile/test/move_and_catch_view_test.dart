@@ -26,6 +26,16 @@ class _Engine extends Fake implements MoveCatchEngine {
 
 class _Controller extends ChangeNotifier implements MoveAndCatchController {
   @override
+  bool get autoStart => false;
+  @override
+  bool get newPersonalBest => false;
+  @override
+  bool get saving => false;
+  @override
+  bool get roundTimingConsent => false;
+  @override
+  Future<void> retrySave() async {}
+  @override
   MiniGameRoundCoordinator? get roundTiming => null;
   @override
   final _Engine engine = _Engine();

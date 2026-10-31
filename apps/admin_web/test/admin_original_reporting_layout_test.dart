@@ -145,7 +145,7 @@ void main() {
     expect(find.text('All branches'), findsOneWidget);
     expect(find.text('MYR 89.00'), findsWidgets);
     expect(find.text('MYR 50.00'), findsWidgets);
-    expect(find.text('Download CSV'), findsOneWidget);
+    expect(find.text('Export overview CSV'), findsOneWidget);
     expect(find.text('Custom dates'), findsOneWidget);
     final revenue = tester
         .widgetList<ReportSection>(find.byType(ReportSection))

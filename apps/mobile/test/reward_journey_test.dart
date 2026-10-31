@@ -198,6 +198,8 @@ void main() {
     await t.tap(find.text('Redeem'));
     await t.pumpAndSettle();
     await t.scrollUntilVisible(find.text('Confirm redemption'), 300);
+    await t.ensureVisible(find.text('Confirm redemption'));
+    await t.pumpAndSettle();
     await t.tap(find.text('Confirm redemption'));
     await t.pumpAndSettle();
     expect(repo.redemptions, 1);
@@ -332,8 +334,11 @@ void main() {
     await t.pumpAndSettle();
     expect(repo.redemptions, 0);
     expect(find.textContaining('30 days'), findsWidgets);
+    await t.scrollUntilVisible(find.textContaining('remain spent'), 200);
     expect(find.textContaining('remain spent'), findsOneWidget);
     await t.scrollUntilVisible(find.text('Confirm redemption'), 300);
+    await t.ensureVisible(find.text('Confirm redemption'));
+    await t.pumpAndSettle();
     await t.tap(find.text('Confirm redemption'));
     await t.pumpAndSettle();
     expect(repo.redemptions, 1);

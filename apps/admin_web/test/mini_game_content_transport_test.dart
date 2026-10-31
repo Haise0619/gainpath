@@ -6,6 +6,27 @@ import 'package:gainpath_admin_web/infrastructure/firebase/firebase_mini_game_co
 
 void main() {
   final scope = SessionScope(userId: 'admin', organizationId: 'gainpath');
+  test('Admin transport exposes explicit legacy registry capability', () async {
+    var calls = 0;
+    final repo = FirebaseMiniGameContentRepository(
+        scope: scope,
+        isCurrent: () => true,
+        verifiedSession: () => true,
+        call: (input) async {
+          calls++;
+          if (input.containsKey('supportedGameIds')) {
+            throw const MiniGameContentRegistryUnsupported();
+          }
+          return {
+            'schemaVersion': 1,
+            'organizationId': 'gainpath',
+            'games': [MiniGameContent.defaults('gainpath').toJson()]
+          };
+        });
+    expect((await repo.load()).single.gameId, MiniGameContent.supportedId);
+    expect(repo.expandedRegistryAvailable, isFalse);
+    expect(calls, 2);
+  });
   test(
       'verified Admin transport keeps reads scoped and blocks pending session drift',
       () async {

@@ -62,8 +62,8 @@ class _VerifiedRewardShopViewState extends State<VerifiedRewardShopView>
     if (mounted && widget.repository.current) _refresh();
   }
 
-  Future<void> _review(
-      VerifiedRewardItem item, bool enabled, String reason) async {
+  Future<void> _review(VerifiedRewardItem item, bool enabled, String reason,
+      int? balance) async {
     if (_busy || !widget.repository.current) return;
     final confirmed = await Navigator.push<bool>(
         context,
@@ -74,7 +74,8 @@ class _VerifiedRewardShopViewState extends State<VerifiedRewardShopView>
                     item: item,
                     enabled: enabled,
                     isCurrent: () => widget.repository.current,
-                    disabledReason: reason))));
+                    disabledReason: reason,
+                    confirmedBalance: balance))));
     if (confirmed == true && mounted && widget.repository.current) {
       await _redeem(item);
     }
@@ -311,13 +312,17 @@ class _VerifiedRewardShopViewState extends State<VerifiedRewardShopView>
                                                             : () => _review(
                                                                 item,
                                                                 enabled,
-                                                                reason),
+                                                                reason,
+                                                                data.balance),
                                                         child: const Text(
                                                             'View details')),
                                                     FilledButton(
                                                         onPressed: enabled
                                                             ? () => _review(
-                                                                item, true, '')
+                                                                item,
+                                                                true,
+                                                                '',
+                                                                data.balance)
                                                             : null,
                                                         child: Text(_busy
                                                             ? 'Checking…'

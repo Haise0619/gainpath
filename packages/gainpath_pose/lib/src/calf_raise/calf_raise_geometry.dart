@@ -7,12 +7,24 @@ enum CalfSide { left, right }
 class CalfRaiseGeometry {
   const CalfRaiseGeometry(
       {required this.shinLength,
+      required this.thighLength,
       required this.kneeAngleDegrees,
       required this.heelHeight,
       required this.ankleY,
       required this.toeX,
-      required this.toeY});
-  final double shinLength, kneeAngleDegrees, heelHeight, ankleY, toeX, toeY;
+      required this.toeY,
+      required this.imageHeight});
+  final double shinLength,
+      thighLength,
+      kneeAngleDegrees,
+      heelHeight,
+      ankleY,
+      toeX,
+      toeY;
+  final int imageHeight;
+  static const minimumShinPixels = 40;
+  static bool usableSize(double shin, int height) =>
+      shin >= .04 && shin * height >= minimumShinPixels;
   static List<PoseLandmark> joints(CalfSide side) => side == CalfSide.left
       ? const [
           PoseLandmark.leftHip,
@@ -65,6 +77,10 @@ class CalfRaiseGeometry {
             ? CalfSide.left
             : CalfSide.right);
     if (confidence(frame, side) < .7) {
+      final ids = joints(side);
+      if (ids.any((id) => frame.landmark(id) == null)) {
+        return 'Keep hip, knee, ankle, heel and toes fully visible from the side';
+      }
       return 'Foot tracking is weak · light your feet and keep heels and toes visible';
     }
     final g = fromFrame(frame, side);
@@ -75,7 +91,7 @@ class CalfRaiseGeometry {
       final ratio = frame.imageWidth / frame.imageHeight;
       final shin = math.sqrt(math.pow((knee.x - ankle.x) * ratio, 2) +
           math.pow(knee.y - ankle.y, 2));
-      if (shin < .10) {
+      if (!usableSize(shin, frame.imageHeight)) {
         return 'Move a little closer · keep hips and feet fully in view';
       }
       final heel = frame.landmark(ids[3])!, toe = frame.landmark(ids[4])!;
@@ -101,8 +117,8 @@ class CalfRaiseGeometry {
         shin = math.sqrt(bx * bx + by * by);
     final footX = (toe.x - heel.x) * ratio, footY = toe.y - heel.y;
     final foot = math.sqrt(footX * footX + footY * footY);
-    if (shin < .10 ||
-        thigh < .08 ||
+    if (!usableSize(shin, frame.imageHeight) ||
+        thigh * frame.imageHeight < 16 ||
         ay >= 0 ||
         by <= 0 ||
         thigh / shin < .4 ||
@@ -114,6 +130,7 @@ class CalfRaiseGeometry {
     }
     return CalfRaiseGeometry(
         shinLength: shin,
+        thighLength: thigh,
         kneeAngleDegrees:
             math.acos(((ax * bx + ay * by) / (thigh * shin)).clamp(-1.0, 1.0)) *
                 180 /
@@ -121,6 +138,7 @@ class CalfRaiseGeometry {
         heelHeight: toe.y - heel.y,
         ankleY: ankle.y,
         toeX: toe.x * ratio,
-        toeY: toe.y);
+        toeY: toe.y,
+        imageHeight: frame.imageHeight);
   }
 }

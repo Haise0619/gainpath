@@ -155,12 +155,29 @@ class AdminWorkoutReport {
         'Device-reported; no generated repetitions or form scores'
       ],
       ['Coverage', 'Count'],
-      for (final e in coverage.entries) [e.key, e.value],
+      for (final e in coverage.entries)
+        [
+          e.key
+              .replaceAll('RoutineDays', 'RoutineAttempts')
+              .replaceAll('unknownCompletionDays', 'unknownCompletionAttempts'),
+          e.value
+        ],
       [],
       ['Metric', 'Count / microseconds'],
-      for (final e in totals.values.entries) [e.key, e.value],
+      for (final e in totals.values.entries)
+        [
+          e.key
+              .replaceAll('RoutineDays', 'RoutineAttempts')
+              .replaceAll('unknownCompletionDays', 'unknownCompletionAttempts'),
+          e.value
+        ],
       [],
-      ['Malaysia date', ...WorkoutTotals.keys],
+      [
+        'Malaysia date',
+        ...WorkoutTotals.keys.map((k) => k
+            .replaceAll('RoutineDays', 'RoutineAttempts')
+            .replaceAll('unknownCompletionDays', 'unknownCompletionAttempts'))
+      ],
       for (final d in daily)
         [d.date, for (final k in WorkoutTotals.keys) d.totals.values[k]],
       [],
@@ -240,10 +257,20 @@ class AdminWorkoutReportingCubit extends Cubit<AdminWorkoutReportingState> {
   Future<void> load([AdminReportQuery? target]) async {
     if (isClosed) return;
     final query = target ?? state.query, generation = ++_generation;
-    emit(AdminWorkoutReportingState(query: query, loading: true));
+    final retained = query == state.query &&
+            (gateway is! AdminReportingSessionGuard ||
+                (gateway as AdminReportingSessionGuard).canRetainSnapshot)
+        ? state.report
+        : null;
+    emit(AdminWorkoutReportingState(
+        query: query, report: retained, loading: true));
     try {
       final report = await gateway.loadWorkouts(query);
       if (isClosed || generation != _generation) return;
+      if (gateway is AdminReportingSessionGuard &&
+          !(gateway as AdminReportingSessionGuard).canRetainSnapshot) {
+        throw StateError('Reporting account changed');
+      }
       if (report.query != query) {
         throw const FormatException('Workout report query mismatch');
       }
@@ -252,9 +279,20 @@ class AdminWorkoutReportingCubit extends Cubit<AdminWorkoutReportingState> {
       if (isClosed || generation != _generation) return;
       emit(AdminWorkoutReportingState(
           query: query,
-          error: error is AdminWorkoutReportException
+          report:
+              (error is AdminReportingException && error.invalidatesSnapshot) ||
+                      error is StateError ||
+                      error is FormatException ||
+                      (gateway is AdminReportingSessionGuard &&
+                          !(gateway as AdminReportingSessionGuard)
+                              .canRetainSnapshot)
+                  ? null
+                  : retained,
+          error: error is AdminReportingException
               ? error.message
-              : 'Could not load workout analytics. Check your connection and retry.'));
+              : error is AdminWorkoutReportException
+                  ? error.message
+                  : 'Could not load workout analytics. Check your connection and retry.'));
     }
   }
 

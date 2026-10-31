@@ -143,7 +143,7 @@ void main() {
     await c.close();
   });
   testWidgets(
-      'live rewards renders actual claim history and badges on a small screen',
+      'live rewards claims then opens real badges on a secondary small-screen route',
       (tester) async {
     tester.view.physicalSize = const Size(320, 780);
     tester.view.devicePixelRatio = 1;
@@ -166,7 +166,9 @@ void main() {
     await tester.tap(find.text('Claim 50 points'));
     await tester.pumpAndSettle();
     expect(find.text('Claimed today'), findsOneWidget);
-    await tester.scrollUntilVisible(find.text('First check-in'), 180);
+    await tester.scrollUntilVisible(find.text('Badges'), 180);
+    await tester.tap(find.text('Badges'));
+    await tester.pumpAndSettle();
     expect(find.text('First check-in'), findsOneWidget);
     expect(tester.takeException(), isNull);
     expect(repo.claims, 0);

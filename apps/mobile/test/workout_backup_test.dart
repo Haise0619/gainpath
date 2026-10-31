@@ -56,6 +56,16 @@ class Metadata implements WorkoutBackupStore {
   }
 }
 
+class FailingMetadata extends Metadata {
+  FailingMetadata(super.scope);
+  bool fail = true;
+  @override
+  Future<BackupState> read() async {
+    if (fail) throw StateError('storage unavailable');
+    return super.read();
+  }
+}
+
 void main() {
   final scope = SessionScope(userId: 'member', organizationId: 'gainpath');
   late Local local;
@@ -134,6 +144,30 @@ void main() {
     expect(c.authorized, false);
     expect(c.state.enabled, false);
     expect(local.rows, isEmpty);
+    c.dispose();
+  });
+  test('failed metadata initialization can be retried without losing consent',
+      () async {
+    final failing = FailingMetadata(scope)..state = BackupState(enabled: true);
+    final c = WorkoutBackupCoordinator(
+        scope: scope,
+        activeScope: () => active,
+        local: local,
+        gateway: remote,
+        store: failing);
+    await expectLater(c.load(), throwsStateError);
+    failing.fail = false;
+    await c.load();
+    expect(c.state.enabled, true);
+    c.dispose();
+  });
+  test('opted-in rows waiting for upload report pending backup', () async {
+    metadata.state = BackupState(enabled: true);
+    local.rows[record().key] = record();
+    final c = controller();
+    await c.load();
+    expect(c.statusFor(record()), BackupRecordStatus.pendingBackup);
+    expect(c.label, 'Pending backup');
     c.dispose();
   });
   test('number normalization produces stable digest across int and double JSON',

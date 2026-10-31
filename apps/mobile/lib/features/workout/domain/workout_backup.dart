@@ -94,7 +94,14 @@ abstract interface class WorkoutBackupLocal {
   Future<bool> restore(WorkoutBackupRecord record, String? expectedDigest);
 }
 
-enum BackupRecordStatus { localOnly, syncing, backedUp, retryNeeded, conflict }
+enum BackupRecordStatus {
+  localOnly,
+  pendingBackup,
+  syncing,
+  backedUp,
+  retryNeeded,
+  conflict
+}
 
 class BackupState {
   BackupState(

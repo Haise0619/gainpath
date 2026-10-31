@@ -9,7 +9,7 @@ class MiniGameRewardGame {
   final String gameId;
   final int points, dailyClaimLimit;
   Map<String, dynamic> toJson() {
-    if (gameId != MiniGameContent.supportedId ||
+    if (!MiniGameContent.supportedIds.contains(gameId) ||
         points < 0 ||
         points > 1000 ||
         dailyClaimLimit < 0 ||
@@ -104,10 +104,11 @@ class MiniGameRewardPolicy {
         at < 0 ||
         at > 9007199254740991 ||
         (rev == 0) != (at == 0) ||
-        d['version'] !=
-            (rev == 0
-                ? 'mini-game-rewards-draft-v1'
-                : 'mini-game-rewards-v$rev') ||
+        d['version'] != 'reach-tap-participation-v1' &&
+            d['version'] !=
+                (rev == 0
+                    ? 'mini-game-rewards-draft-v1'
+                    : 'mini-game-rewards-v$rev') ||
         d['dailyPointsCap'] is! int ||
         rows is! List ||
         rows.any((r) => r is! Map)) {
@@ -121,6 +122,16 @@ class MiniGameRewardPolicy {
         games: rows.map((r) =>
             MiniGameRewardGame.fromJson(Map<String, dynamic>.from(r as Map))));
     p.toFields();
+    final reach = p.games.single.gameId == MiniGameContent.reachTapId;
+    if (reach != (p.version == 'reach-tap-participation-v1') ||
+        (reach &&
+            (rev != 0 ||
+                at != 0 ||
+                p.dailyPointsCap > 60 ||
+                p.games.single.points != 20 ||
+                p.games.single.dailyClaimLimit != 1))) {
+      throw const FormatException('Invalid Reach participation policy.');
+    }
     return p;
   }
 }

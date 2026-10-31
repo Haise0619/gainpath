@@ -1,3 +1,4 @@
+import 'member_progress_overview.dart';
 import 'package:flutter/material.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
 import '../member/activity_timeline_screen.dart';
@@ -34,7 +35,14 @@ class ProgressDashboardScreen extends StatefulWidget {
       this.onOpenWorkout,
       this.onOpenHistory,
       this.onOpenPerformance,
-      this.onOpenForm});
+      this.onOpenForm,
+      this.onOpenPoints,
+      this.onOpenGoals,
+      this.programProgress,
+      this.onStartWorkout,
+      this.goalSummary,
+      this.programSummaryBuilder,
+      this.programStatsBuilder});
 
   final MemberLocalProgress? localProgress;
   final RoutineProgress? routineProgress;
@@ -47,6 +55,15 @@ class ProgressDashboardScreen extends StatefulWidget {
   final VoidCallback? onOpenHistory;
   final VoidCallback? onOpenPerformance;
   final VoidCallback? onOpenForm;
+  final VoidCallback? onOpenPoints;
+  final Widget? programProgress;
+  final VoidCallback? onStartWorkout;
+  final Widget? goalSummary;
+  final Widget Function(Widget Function(BuildContext, int?))?
+      programSummaryBuilder;
+  final Widget Function(Widget Function(BuildContext, int?, int?))?
+      programStatsBuilder;
+  final VoidCallback? onOpenGoals;
 
   @override
   State<ProgressDashboardScreen> createState() =>
@@ -94,6 +111,34 @@ class _ProgressDashboardScreenState extends State<ProgressDashboardScreen>
     final columns =
         MediaQuery.sizeOf(context).width < 360 || scale > 1.3 ? 1 : 2;
 
+    if (local != null) {
+      return Scaffold(
+          appBar: AppBar(title: const Text('Your progress'), actions: [
+            if (widget.onRefresh != null)
+              IconButton(
+                  tooltip: 'Refresh',
+                  onPressed: widget.onRefresh,
+                  icon: const Icon(Icons.refresh_rounded))
+          ]),
+          body: PageBody(children: [
+            MemberProgressOverview(
+                progress: local,
+                routines: widget.routineProgress,
+                program: widget.programProgress,
+                programBuilder: widget.programSummaryBuilder,
+                programStatsBuilder: widget.programStatsBuilder,
+                goals: widget.goalSummary,
+                onStart: widget.onStartWorkout,
+                onHistory: widget.onOpenHistory,
+                onReports: widget.onOpenReport,
+                onPerformance: widget.onOpenPerformance,
+                onForm: widget.onOpenForm,
+                onPoints: widget.onOpenPoints,
+                onBackup: widget.onOpenBackup,
+                onWorkout: widget.onOpenWorkout,
+                onRoutine: widget.onOpenRoutine)
+          ]));
+    }
     // The volume record check is computed, not asserted, so this stays
     // correct if the underlying weekly figures ever change.
     final volume = local == null
@@ -131,23 +176,6 @@ class _ProgressDashboardScreenState extends State<ProgressDashboardScreen>
       ]),
       body: PageBody(
         children: [
-          if (local != null) ...[
-            if (widget.onOpenReport != null)
-              FilledButton.icon(
-                  onPressed: widget.onOpenReport,
-                  icon: const Icon(Icons.picture_as_pdf_outlined),
-                  label: const Text('Workout report & PDF')),
-            RoutineProgressCard(
-                progress: widget.routineProgress,
-                onOpenHistory: widget.onOpenRoutineHistory,
-                onOpenAttempt: widget.onOpenRoutine),
-            if (widget.onOpenBackup != null)
-              TextButton.icon(
-                  onPressed: widget.onOpenBackup,
-                  icon: const Icon(Icons.cloud_upload_outlined),
-                  label: const Text('Workout backup')),
-            const SizedBox(height: 16),
-          ],
           _reveal(
             _HighlightCard(
               isRecordWeek: isRecordWeek,
@@ -168,68 +196,139 @@ class _ProgressDashboardScreenState extends State<ProgressDashboardScreen>
             0.0,
             0.6,
           ),
+          if (local != null)
+            Padding(
+                padding: const EdgeInsets.only(top: 12),
+                child: OutlinedButton.icon(
+                    onPressed: widget.onOpenGoals ??
+                        () => Navigator.push(
+                            context,
+                            MaterialPageRoute<void>(
+                                builder: (_) => GoalProgressScreen(
+                                    live: true,
+                                    localProgress: local,
+                                    routineProgress: widget.routineProgress))),
+                    icon: const Icon(Icons.flag_outlined),
+                    label: const Text('Your goals & targets'))),
           const SizedBox(height: 20),
           Eyebrow(local == null
               ? 'This month at a glance'
               : 'This week at a glance'),
-          _reveal(
-            GridView(
-              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: columns,
-                  mainAxisExtent: 190 * scale,
-                  mainAxisSpacing: 10,
-                  crossAxisSpacing: 10),
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              children: [
-                _StatCard(
-                  icon: Icons.event_available_rounded,
-                  value: local == null ? '18' : '${local.weeklySessions}',
-                  label: local == null ? 'Sessions' : 'Saved sessions',
-                  delta: local == null
-                      ? '+3 vs last month'
-                      : 'Camera captures this week',
-                  deltaColor: AppColors.success,
-                  onTap: openHistory,
-                ),
-                _StatCard(
-                  icon: Icons.verified_rounded,
-                  value: local == null ? '84%' : '-',
-                  label: 'Avg Form',
-                  delta: local == null ? '+5 pts trend' : '-',
-                  deltaColor: AppColors.success,
-                  onTap: openForm,
-                ),
-                _StatCard(
-                  icon: Icons.fitness_center_rounded,
-                  value: local == null ? '3,400' : '-',
-                  label: 'kg Volume',
-                  delta: local == null ? '+13% this week' : '-',
-                  deltaColor: AppColors.success,
-                  onTap: openPerformance,
-                ),
-                _StatCard(
-                  icon: Icons.local_fire_department_rounded,
-                  value: local == null
-                      ? '${context.read<GamificationRepository>().streak}'
-                      : '-',
-                  label: 'Day Streak',
-                  delta: local == null
-                      ? 'Best ${context.read<GamificationRepository>().longestStreak} days'
-                      : '-',
-                  deltaColor: AppColors.accentDark,
-                  onTap: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                          builder: (_) =>
-                              GamificationProgressScreen(live: local != null))),
-                ),
-              ],
+          if (local == null)
+            _reveal(
+              GridView(
+                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: columns,
+                    mainAxisExtent: 190 * scale,
+                    mainAxisSpacing: 10,
+                    crossAxisSpacing: 10),
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                children: [
+                  _StatCard(
+                    icon: Icons.event_available_rounded,
+                    value: local == null ? '18' : '${local.weeklySessions}',
+                    label: local == null ? 'Sessions' : 'Saved sessions',
+                    delta: local == null
+                        ? '+3 vs last month'
+                        : 'Camera captures this week',
+                    deltaColor: AppColors.success,
+                    onTap: openHistory,
+                  ),
+                  _StatCard(
+                    icon: Icons.verified_rounded,
+                    value: local == null ? '84%' : '-',
+                    label: 'Avg Form',
+                    delta: local == null ? '+5 pts trend' : '-',
+                    deltaColor: AppColors.success,
+                    onTap: openForm,
+                  ),
+                  _StatCard(
+                    icon: Icons.fitness_center_rounded,
+                    value: local == null ? '3,400' : '-',
+                    label: 'kg Volume',
+                    delta: local == null ? '+13% this week' : '-',
+                    deltaColor: AppColors.success,
+                    onTap: openPerformance,
+                  ),
+                  _StatCard(
+                    icon: Icons.local_fire_department_rounded,
+                    value: local == null
+                        ? '${context.read<GamificationRepository>().streak}'
+                        : '-',
+                    label: 'Day Streak',
+                    delta: local == null
+                        ? 'Best ${context.read<GamificationRepository>().longestStreak} days'
+                        : '-',
+                    deltaColor: AppColors.accentDark,
+                    onTap: widget.onOpenPoints ??
+                        () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                                builder: (_) => GamificationProgressScreen(
+                                    live: local != null))),
+                  ),
+                ],
+              ),
+              0.1,
+              0.75,
             ),
-            0.1,
-            0.75,
-          ),
+          if (local != null) ...[
+            const SizedBox(height: 20),
+            const Eyebrow('Measured camera activity'),
+            LocalProgressPeriod(progress: local),
+            const SizedBox(height: 10),
+            GridView(
+                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: columns,
+                    mainAxisExtent: 190 * scale,
+                    mainAxisSpacing: 10,
+                    crossAxisSpacing: 10),
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                children: [
+                  _StatCard(
+                      icon: Icons.event_available_rounded,
+                      value: '${local.weeklySessions}',
+                      label: 'Saved sessions',
+                      delta: 'Measured camera sessions',
+                      deltaColor: AppColors.inkSoft,
+                      onTap: openHistory),
+                  _StatCard(
+                      icon: Icons.fitness_center_rounded,
+                      value: '${local.weeklyRepetitions}',
+                      label: 'Full reps',
+                      delta: 'Measured full repetitions',
+                      deltaColor: AppColors.inkSoft,
+                      onTap: openPerformance),
+                  _StatCard(
+                      icon: Icons.timelapse_rounded,
+                      value: '${local.weeklyPartialRepetitions}',
+                      label: 'Partial attempts',
+                      delta: 'Separate from full reps',
+                      deltaColor: AppColors.inkSoft,
+                      onTap: openPerformance),
+                  _StatCard(
+                      icon: Icons.visibility_rounded,
+                      value: local.weeklyCoverage == null
+                          ? '-'
+                          : localProgressCoverage(local.weeklyCoverage),
+                      label: 'Measurement coverage',
+                      delta: 'Tracked / (tracked + rejected)',
+                      deltaColor: AppColors.inkSoft,
+                      onTap: openForm),
+                ]),
+          ],
           const SizedBox(height: 20),
+          if (local != null) ...[
+            const Eyebrow('Programs & routines'),
+            if (widget.programProgress != null) widget.programProgress!,
+            RoutineProgressCard(
+                progress: widget.routineProgress,
+                onOpenHistory: widget.onOpenRoutineHistory,
+                onOpenAttempt: widget.onOpenRoutine),
+            const SizedBox(height: 16),
+          ],
           const Eyebrow('Deep dives'),
           _reveal(
             Column(
@@ -237,7 +336,9 @@ class _ProgressDashboardScreenState extends State<ProgressDashboardScreen>
                 ReportPreviewTile(
                   icon: Icons.bar_chart_rounded,
                   title: 'Workout performance',
-                  subtitle: 'Volume and muscle group split',
+                  subtitle: local == null
+                      ? 'Volume and muscle group split'
+                      : 'Measured reps and tracked time',
                   sparkData: local == null
                       ? context
                           .read<AnalyticsRepository>()
@@ -250,8 +351,12 @@ class _ProgressDashboardScreenState extends State<ProgressDashboardScreen>
                 const SizedBox(height: 10),
                 ReportPreviewTile(
                   icon: Icons.show_chart_rounded,
-                  title: 'Posture accuracy',
-                  subtitle: 'How your form is changing',
+                  title: local == null
+                      ? 'Posture accuracy'
+                      : 'Estimated Form Scores',
+                  subtitle: local == null
+                      ? 'How your form is changing'
+                      : 'Compatible exercise and tracker versions only',
                   sparkData: local == null
                       ? context
                           .read<AnalyticsRepository>()
@@ -284,11 +389,14 @@ class _ProgressDashboardScreenState extends State<ProgressDashboardScreen>
                   subtitle: 'How you are tracking against your targets',
                   sparkData: local == null ? const [75, 99, 86] : const [],
                   sparkColor: AppColors.info,
-                  onTap: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                          builder: (_) => GoalProgressScreen(
-                              live: local != null, localProgress: local))),
+                  onTap: widget.onOpenGoals ??
+                      () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (_) => GoalProgressScreen(
+                                  live: local != null,
+                                  localProgress: local,
+                                  routineProgress: widget.routineProgress))),
                 ),
                 const SizedBox(height: 10),
                 ReportPreviewTile(
@@ -303,11 +411,12 @@ class _ProgressDashboardScreenState extends State<ProgressDashboardScreen>
                           .toList()
                       : const [],
                   sparkColor: AppColors.accentDark,
-                  onTap: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                          builder: (_) =>
-                              GamificationProgressScreen(live: local != null))),
+                  onTap: widget.onOpenPoints ??
+                      () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (_) =>
+                                  const GamificationProgressScreen())),
                 ),
                 const SizedBox(height: 10),
                 ReportPreviewTile(
@@ -325,8 +434,9 @@ class _ProgressDashboardScreenState extends State<ProgressDashboardScreen>
                   onTap: () => Navigator.push(
                       context,
                       MaterialPageRoute(
-                          builder: (_) =>
-                              BodyMetricsScreen(live: local != null))),
+                          builder: (_) => local != null
+                              ? BodyMetricsScreen.connected(context)
+                              : const BodyMetricsScreen())),
                 ),
               ],
             ),
@@ -334,43 +444,17 @@ class _ProgressDashboardScreenState extends State<ProgressDashboardScreen>
             1.0,
           ),
           if (local != null) ...[
-            const SizedBox(height: 20),
-            const Eyebrow('Measured camera activity'),
-            LocalProgressPeriod(progress: local),
-            const SizedBox(height: 10),
-            GridView(
-                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: columns,
-                    mainAxisExtent: 190 * scale,
-                    mainAxisSpacing: 10,
-                    crossAxisSpacing: 10),
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                children: [
-                  _StatCard(
-                      icon: Icons.fitness_center_rounded,
-                      value: '${local.weeklyRepetitions}',
-                      label: 'Full reps',
-                      delta: 'Measured full repetitions',
-                      deltaColor: AppColors.inkSoft,
-                      onTap: openPerformance),
-                  _StatCard(
-                      icon: Icons.timelapse_rounded,
-                      value: '${local.weeklyPartialRepetitions}',
-                      label: 'Partial attempts',
-                      delta: 'Separate from full reps',
-                      deltaColor: AppColors.inkSoft,
-                      onTap: openPerformance),
-                  _StatCard(
-                      icon: Icons.visibility_rounded,
-                      value: local.weeklyCoverage == null
-                          ? '-'
-                          : localProgressCoverage(local.weeklyCoverage),
-                      label: 'Measurement coverage',
-                      delta: 'Tracked / (tracked + rejected)',
-                      deltaColor: AppColors.inkSoft,
-                      onTap: openForm),
-                ]),
+            const SizedBox(height: 16),
+            if (widget.onOpenReport != null)
+              FilledButton.icon(
+                  onPressed: widget.onOpenReport,
+                  icon: const Icon(Icons.picture_as_pdf_outlined),
+                  label: const Text('Workout report & PDF')),
+            if (widget.onOpenBackup != null)
+              TextButton.icon(
+                  onPressed: widget.onOpenBackup,
+                  icon: const Icon(Icons.cloud_upload_outlined),
+                  label: const Text('Workout backup')),
             const SizedBox(height: 20),
             const Eyebrow('Recent sessions'),
             if (local.records.isEmpty)

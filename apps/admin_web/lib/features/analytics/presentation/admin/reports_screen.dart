@@ -1,3 +1,4 @@
+import 'admin_remaining_analytics.dart';
 import 'package:flutter/material.dart';
 import 'package:gainpath_domain/coaching.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
@@ -60,9 +61,9 @@ class _ReportsScreenState extends State<ReportsScreen> {
     ('Overview', _overviewKey),
     ('Workouts', _workoutsKey),
     ('Usage', _usageKey),
-    ('Posture', _postureKey),
+    ('Estimated form', _postureKey),
     ('Booking', _bookingKey),
-    ('Retention', _retentionKey),
+    ('Engagement', _retentionKey),
     ('Rewards', _rewardsKey),
     ('Revenue', _revenueKey),
     ('Gamification', _gamificationKey),
@@ -277,18 +278,45 @@ class _ReportsScreenState extends State<ReportsScreen> {
                       query: _reportingCubit!.state.query,
                       refreshToken: _workoutRefresh,
                       anchorKey: _workoutsKey),
-                UsageEngagementSection(
-                    anchorKey: _usageKey, filter: filter, live: widget.live),
-                PostureAccuracySection(
-                    anchorKey: _postureKey, live: widget.live),
-                CoachBookingUtilizationSection(
-                    anchorKey: _bookingKey,
-                    filter: filter,
+                if (_operational && _reportingCubit != null)
+                  AdminObservedSection(
+                      query: _reportingCubit!.state.query,
+                      anchorKey: _usageKey,
+                      refreshToken: _workoutRefresh)
+                else
+                  UsageEngagementSection(
+                      anchorKey: _usageKey, filter: filter, live: widget.live),
+                if (_operational && _reportingCubit != null)
+                  AdminPostureSection(
+                      query: _reportingCubit!.state.query,
+                      anchorKey: _postureKey,
+                      refreshToken: _workoutRefresh)
+                else
+                  PostureAccuracySection(
+                      anchorKey: _postureKey, live: widget.live),
+                if (snapshot?.commerce != null)
+                  AdminCoachActivitySection(
+                      anchorKey: _bookingKey, report: snapshot!.commerce!)
+                else
+                  CoachBookingUtilizationSection(
+                      anchorKey: _bookingKey,
+                      filter: filter,
+                      live: widget.live,
+                      snapshot: snapshot),
+                if (_operational && _reportingCubit != null)
+                  AdminObservedSection(
+                      query: _reportingCubit!.state.query,
+                      anchorKey: _retentionKey,
+                      retention: true,
+                      refreshToken: _workoutRefresh)
+                else
+                  RetentionRiskSection(
+                      anchorKey: _retentionKey, live: widget.live),
+                RewardsSection(
+                    anchorKey: _rewardsKey,
                     live: widget.live,
-                    snapshot: snapshot),
-                RetentionRiskSection(
-                    anchorKey: _retentionKey, live: widget.live),
-                RewardsSection(anchorKey: _rewardsKey, live: widget.live),
+                    query: _operational ? _reportingCubit?.state.query : null,
+                    refreshToken: _workoutRefresh),
                 RevenueSection(
                     anchorKey: _revenueKey,
                     live: widget.live,
@@ -300,6 +328,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
                     refreshToken: _workoutRefresh),
                 CoachPerformanceSection(
                     anchorKey: _coachPerfKey,
+                    snapshot: snapshot,
                     filter: filter,
                     live: widget.live),
               ],
@@ -476,7 +505,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
                       icon: const Icon(Icons.refresh_rounded, size: 18)),
                   TextButton.icon(
                       icon: const Icon(Icons.download_rounded, size: 17),
-                      label: const Text('Download CSV'),
+                      label: const Text('Export overview CSV'),
                       onPressed: loading || snapshot?.operations == null
                           ? null
                           : () => downloadCsv('gainpath-operational-report.csv',
@@ -613,7 +642,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Eyebrow('Branch performance'),
+        const Eyebrow('Current organization census'),
         if (snapshot?.operations != null) ...[
           Panel(
               child: Column(

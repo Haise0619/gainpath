@@ -1,3 +1,4 @@
+import 'support/signed_out_firebase.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -13,6 +14,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:gainpath_mobile/features/gamification/presentation/member/move_and_catch_view.dart';
 
 void main() {
+  setUpAll(setUpSignedOutFirebase);
   setUpAll(() => GoogleFonts.config.allowRuntimeFetching = false);
 
   Future<void> open(WidgetTester tester, RouteSettings settings,

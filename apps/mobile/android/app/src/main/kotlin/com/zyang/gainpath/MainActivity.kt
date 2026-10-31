@@ -11,5 +11,7 @@ class MainActivity : FlutterActivity() {
         flutterEngine.plugins.add(PrivatePdfPlugin())
         flutterEngine.plugins.add(CoachStatementPlugin())
         flutterEngine.plugins.add(WorkoutReportPlugin())
+        flutterEngine.plugins.add(AchievementSharePlugin())
+        flutterEngine.plugins.add(NetworkOpportunitiesPlugin())
     }
 }

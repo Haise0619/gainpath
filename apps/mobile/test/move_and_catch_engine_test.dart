@@ -61,6 +61,21 @@ class Driver {
 }
 
 void main() {
+  test('score event observer preserves actual collision order and active clock', () {
+    final h = Driver(random: CenterRandom(alternating: true));
+    final events = <String>[];
+    h.engine.onScoreEvent = events.add;
+    h.play();
+    h.run(40000000);
+    expect(events.where((e) => e == 'catch').length, h.engine.caught);
+    expect(events.where((e) => e == 'obstacle').length, h.engine.obstaclesHit);
+    expect(events, isNotEmpty);
+    var score = 0;
+    for (final event in events) {score = event == 'catch' ? score + 10 : (score - 5).clamp(0, 4000);}
+    expect(score, h.engine.score);
+    expect(h.engine.activeMillis, 40000);
+  });
+
   test(
       'calibration tolerates small jitter and a short dip without per-frame resets',
       () {
@@ -358,3 +373,4 @@ void main() {
     expect(d.engine.trackingReady, isFalse);
   });
 }
+

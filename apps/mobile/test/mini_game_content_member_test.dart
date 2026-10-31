@@ -22,7 +22,12 @@ class _Reader implements MiniGameContentReader {
   @override
   Future<List<MiniGameContent>> load() async {
     calls++;
-    return result == null ? [MiniGameContent.defaults('gym')] : await result!();
+    return result == null
+        ? [
+            MiniGameContent.defaults('gym'),
+            MiniGameContent.defaults('gym', gameId: MiniGameContent.reachTapId)
+          ]
+        : await result!();
   }
 }
 

@@ -31,6 +31,11 @@ Future<Map<String, dynamic>> _call(Map<String, dynamic> input,
     if (error.code == 'unauthenticated') {
       throw const MiniGameContentSessionChanged();
     }
+    if (error.code == 'invalid-argument' &&
+        input['action'] == 'list' &&
+        input.containsKey('supportedGameIds')) {
+      throw const MiniGameContentRegistryUnsupported();
+    }
     throw const MiniGameContentUnavailable();
   }
 }

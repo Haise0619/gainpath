@@ -89,6 +89,7 @@ class CalfRaiseWorkoutSession extends ChangeNotifier
   DateTime? _startedAt;
   int? _startedMicros;
   Timer? _timer;
+  PoseFrame? _latestFrame;
   Future<WorkoutSessionSummary?>? _saving;
   Future<void>? _closing;
   bool get _authorized =>
@@ -100,8 +101,14 @@ class CalfRaiseWorkoutSession extends ChangeNotifier
       viewPhase == MeasuredWorkoutPhase.active &&
       !isPaused &&
       guidance.stage == GuidedWorkoutStage.working;
+  bool _notificationPending = false;
   void _notify() {
-    if (!_disposed) notifyListeners();
+    if (_disposed || _notificationPending) return;
+    _notificationPending = true;
+    scheduleMicrotask(() {
+      _notificationPending = false;
+      if (!_disposed) notifyListeners();
+    });
   }
 
   @override
@@ -112,7 +119,10 @@ class CalfRaiseWorkoutSession extends ChangeNotifier
   @override
   bool get isRecalibrating => _recalibrating;
   @override
-  bool get analysisAvailable => _canAnalyse && _hasFrame;
+  bool get analysisAvailable =>
+      _canAnalyse &&
+      _hasFrame &&
+      _analyzer.snapshot.health == TrackingStatus.healthy;
   @override
   String? get errorMessage => _error ?? preview.errorMessage;
   @override
@@ -131,10 +141,24 @@ class CalfRaiseWorkoutSession extends ChangeNotifier
   String get formGuidance =>
       'On level ground, raise both heels with control, hold briefly, then lower fully. Keep knees steady and toes in place. Only the camera-facing leg is measured; equal work on both legs, balance and load are not assessed. Guidance is provisional.';
   @override
-  String get movementCue => switch (_analyzer.snapshot.phase) {
-        CalfRaisePhase.ready => 'Ready · raise your heels with control',
-        CalfRaisePhase.raising => 'Rise onto your toes · keep knees steady',
-        CalfRaisePhase.lowering => 'Lower your heels fully with control',
+  String get movementCue => _analyzer.snapshot.requiresHeelReset
+      ? 'Lower both heels and hold briefly to restart'
+      : switch (_analyzer.snapshot.phase) {
+          CalfRaisePhase.ready => 'Ready · raise your heels with control',
+          CalfRaisePhase.raising => 'Rise onto your toes · keep knees steady',
+          CalfRaisePhase.lowering => 'Lower your heels fully with control',
+        };
+
+  /// Scalar-only local diagnostics; no images, coordinates or upload authority.
+  Map<String, Object?> get decisionDiagnostics => {
+        ..._analyzer.decisionDiagnostics,
+        'revision': CalfRaiseAnalyzer.implementationRevision,
+        'decision': _analyzer.snapshot.decision,
+        'needsCalibration': _analyzer.snapshot.needsCalibration,
+        'requiresHeelReset': _analyzer.snapshot.requiresHeelReset,
+        'health': _analyzer.snapshot.health.name,
+        'phase': _analyzer.snapshot.phase.name,
+        'repetitions': _analyzer.snapshot.repetitions,
       };
   @override
   WorkoutAnalysisView? get analysis {
@@ -153,8 +177,14 @@ class CalfRaiseWorkoutSession extends ChangeNotifier
 
   @override
   bool get canConfirmRecalibration {
-    final frame = preview.frame;
-    if (!_authorized || !_foreground || !_recalibrating || frame == null) {
+    final frame = _latestFrame;
+    if (!_authorized ||
+        !_foreground ||
+        !_recalibrating ||
+        frame == null ||
+        preview.phase != PosePreviewPhase.tracking ||
+        frame.detectorId != detectorId ||
+        frame.modelVersion != detectorVersion) {
       return false;
     }
     final age = clockMicros() - frame.capturedAtMicros;
@@ -163,7 +193,8 @@ class CalfRaiseWorkoutSession extends ChangeNotifier
         age <= CalfRaiseAnalyzer.maximumFrameAgeMicros &&
         (side == null ? CalfSide.values : [side]).any((side) =>
             CalfRaiseGeometry.confidence(frame, side) >= .7 &&
-            CalfRaiseGeometry.fromFrame(frame, side) != null);
+            (CalfRaiseGeometry.fromFrame(frame, side)?.kneeAngleDegrees ?? 0) >=
+                165);
   }
 
   Future<void> start(
@@ -203,6 +234,7 @@ class CalfRaiseWorkoutSession extends ChangeNotifier
   }
 
   void _consume(PoseFrame frame) {
+    if (_authorized) _latestFrame = frame;
     if (!_canAnalyse) return;
     if (frame.detectorId != detectorId ||
         frame.modelVersion != detectorVersion) {
@@ -260,7 +292,12 @@ class CalfRaiseWorkoutSession extends ChangeNotifier
     if (_foreground && !_recalibrating) {
       guidance.resumeClock(clockMicros());
       audio.resume();
-      await preview.resume();
+      if (_deferred) {
+        _deferred = false;
+        await preview.start(consented: true);
+      } else {
+        await preview.resume();
+      }
     }
     _notify();
   }
@@ -273,16 +310,16 @@ class CalfRaiseWorkoutSession extends ChangeNotifier
       guidance.suspend(clockMicros());
       _suspendAnalysis();
       await preview.background();
-    } else if (!_manualPaused) {
-      if (!_recalibrating) {
+    } else {
+      if (!_manualPaused && !_recalibrating) {
         guidance.resumeClock(clockMicros());
         audio.resume();
       }
-      if (_deferred) {
+      // Clear the preview background flag even while manual pause is retained.
+      await preview.foreground();
+      if (_deferred && !_manualPaused) {
         _deferred = false;
         await preview.start(consented: true);
-      } else {
-        await preview.foreground();
       }
     }
     _notify();

@@ -6,6 +6,10 @@ import 'real_squat_route.dart';
 import 'curl_workout_route.dart';
 import 'calf_raise_workout_route.dart';
 import 'wall_push_up_workout_route.dart';
+import 'row_workout_route.dart';
+import 'reverse_lunge_workout_route.dart';
+import 'shoulder_press_workout_route.dart';
+import 'lateral_raise_workout_route.dart';
 
 /// All measured entry points dispatch here, preserving the original launch data.
 class ExerciseTrackerRoute extends StatelessWidget {
@@ -23,6 +27,13 @@ class ExerciseTrackerRoute extends StatelessWidget {
         organizationId: launch.scope.organizationId,
         exerciseId: launch.exercise.exerciseId);
     return switch (resolution.tracker) {
+      ExerciseTracker.frontViewLateralRaise =>
+        LateralRaiseWorkoutRoute(launch: launch),
+      ExerciseTracker.frontViewShoulderPress =>
+        ShoulderPressWorkoutRoute(launch: launch),
+      ExerciseTracker.sideViewRow => RowWorkoutRoute(launch: launch),
+      ExerciseTracker.sideViewReverseLunge =>
+        ReverseLungeWorkoutRoute(launch: launch),
       ExerciseTracker.sideViewWallPushUp =>
         WallPushUpWorkoutRoute(launch: launch),
       ExerciseTracker.sideViewCalfRaise =>

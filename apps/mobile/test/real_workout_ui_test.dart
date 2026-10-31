@@ -349,6 +349,7 @@ void main() {
     final history =
         find.textContaining('0 full reps · 0 partial attempts').last;
     await tester.ensureVisible(history);
+    await tester.pumpAndSettle();
     expect(history, findsOneWidget);
     await tester.tap(history);
     await tester.pumpAndSettle();

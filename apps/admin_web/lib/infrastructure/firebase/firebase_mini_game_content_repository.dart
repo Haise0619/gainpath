@@ -37,6 +37,9 @@ Future<Map<String, dynamic>> _call(Map<String, dynamic> input) async {
       throw MiniGameContentUploadFailed(code: error.code);
     }
     if (error.code == 'invalid-argument') {
+      if (input['action'] == 'list' && input.containsKey('supportedGameIds')) {
+        throw const MiniGameContentRegistryUnsupported();
+      }
       throw const FormatException('Invalid mini-game content.');
     }
     throw const MiniGameContentUnavailable();

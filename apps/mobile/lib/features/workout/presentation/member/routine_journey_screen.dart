@@ -140,7 +140,9 @@ class _RoutineJourneyScreenState extends State<RoutineJourneyScreen> {
               for (final day in c.days)
                 DropdownMenuItem(value: day, child: Text('Day $day'))
             ],
-            onChanged: disabled ? null : (day) => _act(() => c.openDay(day!))),
+            onChanged: disabled || c.isScheduled
+                ? null
+                : (day) => _act(() => c.openDay(day!))),
       ]),
       const SizedBox(height: 8),
       const Text(
@@ -381,17 +383,19 @@ class _RoutineJourneyScreenState extends State<RoutineJourneyScreen> {
         TextButton(
             onPressed: widget.onViewHistory,
             child: const Text('Routine history')),
-      OutlinedButton(
-          onPressed: _working || c.busy
-              ? null
-              : () => _act(() async {
-                    await c.startNewAttempt();
-                    if (mounted) setState(() => _showSummary = false);
-                  }),
-          child: const Text('Repeat this workout')),
+      if (!c.isScheduled)
+        OutlinedButton(
+            onPressed: _working || c.busy
+                ? null
+                : () => _act(() async {
+                      await c.startNewAttempt();
+                      if (mounted) setState(() => _showSummary = false);
+                    }),
+            child: const Text('Repeat this workout')),
       TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('Back to workouts')),
+          child: Text(
+              c.isScheduled ? 'Back to weekly schedule' : 'Back to workouts')),
     ];
   }
 }

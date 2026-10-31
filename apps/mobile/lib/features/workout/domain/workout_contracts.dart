@@ -100,6 +100,30 @@ class WorkoutSessionSummary {
             .every(_measuredSummaryId.hasMatch) ||
         accuracy < 0 ||
         accuracy > 100 ||
+        (metrics.scoringVersion == 'standing-lateral-raise-front-v1' &&
+            (accuracy != 0 ||
+                organizationId != 'gainpath' ||
+                exerciseId != 'standing-lateral-raise-front-v1')) ||
+        (exerciseId == 'standing-lateral-raise-front-v1' &&
+            metrics.scoringVersion != 'standing-lateral-raise-front-v1') ||
+        (metrics.scoringVersion == 'reverse-lunge-side-v1' &&
+            (accuracy != 0 ||
+                organizationId != 'gainpath' ||
+                exerciseId != 'bodyweight-reverse-lunge-side-v1')) ||
+        (exerciseId == 'bodyweight-reverse-lunge-side-v1' &&
+            metrics.scoringVersion != 'reverse-lunge-side-v1') ||
+        (metrics.scoringVersion == 'dumbbell-shoulder-press-front-v1' &&
+            (accuracy != 0 ||
+                organizationId != 'gainpath' ||
+                exerciseId != 'dumbbell-shoulder-press-front-v1')) ||
+        (exerciseId == 'dumbbell-shoulder-press-front-v1' &&
+            metrics.scoringVersion != 'dumbbell-shoulder-press-front-v1') ||
+        (metrics.scoringVersion == 'single-arm-row-side-v1' &&
+            (accuracy != 0 ||
+                organizationId != 'gainpath' ||
+                exerciseId != 'single-arm-dumbbell-row-side-v1')) ||
+        (exerciseId == 'single-arm-dumbbell-row-side-v1' &&
+            metrics.scoringVersion != 'single-arm-row-side-v1') ||
         repetitions < 0 ||
         repetitions > 10000 ||
         attempts > 10000 ||

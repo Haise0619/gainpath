@@ -4,12 +4,14 @@ import 'package:gainpath_domain/gainpath_domain.dart' show SessionScope;
 import '../../features/workout/domain/routine_journey.dart';
 
 class FileRoutineJourneyStore implements RevisionedRoutineJourneyStore {
-  FileRoutineJourneyStore({required Directory directory, required this.scope})
+  FileRoutineJourneyStore(
+      {required Directory directory, required this.scope, this.onSaved})
       : _directory = Directory('${directory.absolute.path}/routine-journeys-v1/'
             '${_segment(scope.organizationId)}/${_segment(scope.userId)}');
   @override
   final SessionScope scope;
   final Directory _directory;
+  final void Function()? onSaved;
   static final _queues = <String, Future<void>>{};
   static String _segment(String value) {
     final hex = utf8
@@ -106,5 +108,6 @@ class FileRoutineJourneyStore implements RevisionedRoutineJourneyStore {
         }
         await pending.writeAsString(encoded, flush: true);
         await pending.rename(file.path);
+        onSaved?.call();
       });
 }

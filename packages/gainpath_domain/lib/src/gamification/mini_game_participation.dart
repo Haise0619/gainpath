@@ -4,6 +4,7 @@ import 'mini_game_rewards.dart';
 class MiniGameParticipation {
   const MiniGameParticipation._(
       {required this.scope,
+      required this.gameId,
       required this.policy,
       required this.today,
       required this.active,
@@ -16,7 +17,7 @@ class MiniGameParticipation {
       this.award});
   final SessionScope scope;
   final MiniGameRewardPolicy policy;
-  final String today, status;
+  final String today, status, gameId;
   final bool active;
   final int balance, earnedToday, remainingToday, claimsToday;
   final String? attemptId;
@@ -24,8 +25,11 @@ class MiniGameParticipation {
   factory MiniGameParticipation.fromJson(
       Map<String, dynamic> d, SessionScope scope) {
     bool n(dynamic v) => v is int && v >= 0 && v <= 9007199254740991;
-    if (d.length != 9 ||
-        d['schemaVersion'] != 2 ||
+    final negotiated = d['schemaVersion'] == 3;
+    final gameId = negotiated ? d['gameId'] : 'move-catch-v1';
+    if (d.length != (negotiated ? 10 : 9) ||
+        ![2, 3].contains(d['schemaVersion']) ||
+        !['move-catch-v1', 'reach-tap-v1'].contains(gameId) ||
         d['organizationId'] != scope.organizationId ||
         d['memberId'] != scope.userId ||
         d['mode'] != 'participation' ||
@@ -39,7 +43,8 @@ class MiniGameParticipation {
         r = Map<String, dynamic>.from(d['result']);
     final policy = MiniGameRewardPolicy.fromJson(
         Map<String, dynamic>.from(o['policy'] as Map));
-    if (o.length != 8 ||
+    if (policy.games.single.gameId != gameId ||
+        o.length != 8 ||
         !_date(o['today']) ||
         o['timezone'] != 'Asia/Kuala_Lumpur' ||
         o['issuanceActive'] is! bool ||
@@ -73,12 +78,14 @@ class MiniGameParticipation {
             Map<String, dynamic>.from(d['award'] as Map), scope);
     final awarded = ['awarded', 'already-awarded'].contains(r['status']);
     if (awarded != (award != null) ||
-        (award != null && award.attemptId != r['attemptId']) ||
+        (award != null &&
+            (award.attemptId != r['attemptId'] || award.gameId != gameId)) ||
         (r['status'] == 'not-active' && o['issuanceActive'] != false)) {
       throw const FormatException('Inconsistent participation receipt.');
     }
     return MiniGameParticipation._(
         scope: scope,
+        gameId: gameId,
         policy: policy,
         today: o['today'],
         active: o['issuanceActive'],
@@ -95,11 +102,12 @@ class MiniGameParticipation {
 class MiniGameParticipationAward {
   const MiniGameParticipationAward._(
       {required this.attemptId,
+      required this.gameId,
       required this.awardId,
       required this.points,
       required this.policyVersion,
       required this.awardedAtMillis});
-  final String attemptId, awardId, policyVersion;
+  final String attemptId, awardId, policyVersion, gameId;
   final int points, awardedAtMillis;
   factory MiniGameParticipationAward.fromJson(
       Map<String, dynamic> d, SessionScope scope) {
@@ -107,7 +115,7 @@ class MiniGameParticipationAward {
         d['schemaVersion'] != 2 ||
         d['organizationId'] != scope.organizationId ||
         d['memberId'] != scope.userId ||
-        d['gameId'] != 'move-catch-v1' ||
+        !['move-catch-v1', 'reach-tap-v1'].contains(d['gameId']) ||
         !_hex(d['attemptId']) ||
         d['awardId'] is! String ||
         !RegExp(r'^participation_[a-f0-9]{64}$').hasMatch(d['awardId']) ||
@@ -129,7 +137,8 @@ class MiniGameParticipationAward {
     }
     final policy = MiniGameRewardPolicy.fromJson(
         Map<String, dynamic>.from(d['policySnapshot']));
-    if (d['policyVersion'] != policy.version ||
+    if (policy.games.single.gameId != d['gameId'] ||
+        d['policyVersion'] != policy.version ||
         policy.games.single.points != d['points'] ||
         DateTime.fromMillisecondsSinceEpoch(d['awardedAtMillis'], isUtc: true)
                 .add(const Duration(hours: 8))
@@ -140,6 +149,7 @@ class MiniGameParticipationAward {
     }
     return MiniGameParticipationAward._(
         attemptId: d['attemptId'],
+        gameId: d['gameId'],
         awardId: d['awardId'],
         points: d['points'],
         policyVersion: d['policyVersion'],

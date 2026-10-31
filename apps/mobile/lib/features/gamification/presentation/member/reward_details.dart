@@ -68,11 +68,13 @@ class RewardDetailsScreen extends StatelessWidget {
       required this.item,
       required this.enabled,
       required this.isCurrent,
-      required this.disabledReason});
+      required this.disabledReason,
+      this.confirmedBalance});
   final VerifiedRewardItem item;
   final bool enabled;
   final bool Function() isCurrent;
   final String disabledReason;
+  final int? confirmedBalance;
   @override
   Widget build(BuildContext context) => Scaffold(
       appBar: AppBar(title: const Text('Reward details')),
@@ -85,6 +87,18 @@ class RewardDetailsScreen extends StatelessWidget {
         Text('${item.pointCost} points',
             style: Theme.of(context).textTheme.titleLarge?.copyWith(
                 color: AppColors.primary, fontWeight: FontWeight.w800)),
+        const SizedBox(height: 12),
+        Panel(
+            child:
+                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(confirmedBalance == null
+              ? 'Balance unavailable · refresh before redeeming'
+              : '$confirmedBalance points available'),
+          Text('${item.stock} available · stock checked at confirmation'),
+          if (confirmedBalance != null && confirmedBalance! >= item.pointCost)
+            Text(
+                '${confirmedBalance! - item.pointCost} points after redemption'),
+        ])),
         const SizedBox(height: 8),
         Text(item.validityDays == null
             ? 'Validity is shown on your issued voucher.'

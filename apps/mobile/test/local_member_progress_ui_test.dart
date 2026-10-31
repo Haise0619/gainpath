@@ -52,7 +52,54 @@ Future<void> _show(WidgetTester tester, Widget screen) async {
 }
 
 void main() {
+  testWidgets(
+      'timeline date filter changes visible captures and opens actual record',
+      (tester) async {
+    tester.view.physicalSize = const Size(1100, 5000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    LocalWorkoutProgressRecord? opened;
+    await _show(
+        tester,
+        ActivityTimelineScreen(
+            localProgress: _progress(
+                [_record(id: 'old', day: 1), _record(id: 'recent', day: 13)]),
+            onOpenWorkout: (r) => opened = r));
+    await tester.tap(find.text('Last 7 days'));
+    await tester.pumpAndSettle();
+    expect(find.text('old'), findsNothing);
+    expect(find.text('Squat'), findsOneWidget);
+    await tester.tap(find.text('Squat'));
+    expect(opened?.sessionId, 'recent');
+  });
+
+  testWidgets('live estimated form never renders empty legacy accuracy charts',
+      (tester) async {
+    await _show(tester, PostureAccuracyScreen(localProgress: _progress([])));
+    expect(find.text('Estimated Form Scores'), findsOneWidget);
+    expect(find.byType(SfCartesianChart), findsNothing);
+    expect(find.text('No estimated form measurements yet.'), findsOneWidget);
+    expect(find.text('Form accuracy over time'), findsNothing);
+  });
+
   setUpAll(() => GoogleFonts.config.allowRuntimeFetching = false);
+  testWidgets(
+      'live dashboard excludes unsupported placeholders and labels real metrics',
+      (tester) async {
+    tester.view.physicalSize = const Size(1100, 5000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await _show(
+        tester, ProgressDashboardScreen(localProgress: _progress([_record()])));
+    expect(find.text('kg Volume'), findsNothing);
+    expect(find.text('Avg Form'), findsNothing);
+    expect(find.text('Day Streak'), findsNothing);
+    expect(find.text('Volume and muscle group split'), findsNothing);
+    expect(find.text('Training days'), findsOneWidget);
+    expect(find.text('Training days'), findsOneWidget);
+    expect(find.text('Measurement details'), findsOneWidget);
+    expect(find.text('Saved sessions'), findsNothing);
+  });
   testWidgets(
       'form chart uses actual UTC instants and explicit Malaysia labels near midnight',
       (tester) async {
@@ -97,24 +144,33 @@ void main() {
         ProgressDashboardScreen(
           localProgress: _progress([_record()]),
           onOpenHistory: () => opened.add('history'),
+          onOpenReport: () => opened.add('reports'),
+          onOpenPoints: () => opened.add('points'),
+          onOpenBackup: () => opened.add('backup'),
           onOpenPerformance: () => opened.add('performance'),
           onOpenForm: () => opened.add('form'),
         ));
-    const expectations = {
-      'Saved sessions': ['history'],
-      'Full reps': ['history', 'performance'],
-      'Measurement coverage': ['history', 'performance', 'form'],
-    };
-    for (final label in expectations.keys) {
-      await tester.scrollUntilVisible(find.text(label), 100,
-          scrollable: find.byType(Scrollable).first);
+    Future<void> open(String label) async {
       await tester.ensureVisible(find.text(label));
       await tester.pumpAndSettle();
       await tester.tap(find.text(label));
       await tester.pumpAndSettle();
-      expect(opened, expectations[label]);
     }
-    expect(opened, ['history', 'performance', 'form']);
+
+    for (final label in [
+      'History',
+      'View reports',
+      'Estimated Form Scores',
+      'Points & streak',
+      'Workout backup'
+    ]) {
+      await open(label);
+    }
+    expect(find.text('Workout performance'), findsNothing);
+    await open('Measurement details');
+    await open('Workout performance');
+    expect(opened,
+        ['history', 'reports', 'form', 'points', 'backup', 'performance']);
     expect(find.text('Your progress'), findsOneWidget);
   });
   testWidgets('live dashboard uses saved measured totals and opens a record',
@@ -132,22 +188,19 @@ void main() {
           ]),
           onOpenWorkout: (record) => opened = record,
         ));
-    expect(find.text('Saved sessions'), findsOneWidget);
-    expect(find.text('Full reps'), findsOneWidget);
-    expect(find.text('Partial attempts'), findsOneWidget);
-    expect(find.text('2'), findsOneWidget);
-    expect(find.text('4'), findsOneWidget);
-    expect(find.text('3'), findsOneWidget);
-    expect(find.text('75%'), findsOneWidget);
-    expect(find.text('84%'), findsNothing);
+    expect(find.text('Training days'), findsOneWidget);
+    expect(find.text('1'), findsOneWidget);
     expect(find.text('3,400'), findsNothing);
-    expect(find.text('Points & streak'), findsOneWidget);
-    expect(find.text('Body metrics'), findsOneWidget);
-    expect(find.text('Goal progress'), findsOneWidget);
-    await tester.scrollUntilVisible(find.text('capture-a'), 250,
-        scrollable: find.byType(Scrollable).first);
-    await tester.tap(find.text('capture-a'));
+    await tester.ensureVisible(find.text('Squat').first);
+    await tester.tap(find.text('Squat').first);
     expect(opened?.sessionId, 'capture-a');
+    await tester.ensureVisible(find.text('Measurement details'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Measurement details'));
+    await tester.pumpAndSettle();
+    expect(find.text('4 full reps · 3 partial attempts this week'),
+        findsOneWidget);
+    expect(find.text('Measurement coverage: 75%'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -162,13 +215,15 @@ void main() {
             refreshes++;
           },
         ));
-    await tester.scrollUntilVisible(find.text('Measurement coverage'), 250,
-        scrollable: find.byType(Scrollable).first);
-    expect(find.text('-'), findsWidgets);
-    await tester.scrollUntilVisible(
-        find.text('No saved camera sessions yet.'), 250,
-        scrollable: find.byType(Scrollable).first);
-    expect(find.text('No saved camera sessions yet.'), findsOneWidget);
+    expect(
+        find.text(
+            'No camera workouts recorded yet. Routine history is unavailable.'),
+        findsOneWidget);
+    await tester.ensureVisible(find.text('Measurement details'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Measurement details'));
+    await tester.pumpAndSettle();
+    expect(find.text('Measurement coverage: Unavailable'), findsOneWidget);
     await tester.tap(find.byTooltip('Refresh'));
     await tester.pumpAndSettle();
     expect(refreshes, 1);
@@ -196,6 +251,14 @@ void main() {
       expect(find.text(label), findsOneWidget);
     }
     expect(find.byTooltip('Export'), findsOneWidget);
+    expect(find.textContaining('Provisional estimate'), findsNothing);
+    await tester.scrollUntilVisible(
+        find.text('Measurement details').first, -200,
+        scrollable: find.byType(Scrollable).first);
+    await tester.ensureVisible(find.text('Measurement details').first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Measurement details').first);
+    await tester.pumpAndSettle();
     expect(find.textContaining('Provisional estimate'), findsWidgets);
     expect(tester.takeException(), isNull);
   });
@@ -229,6 +292,12 @@ void main() {
     expect(values, [0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 7, 4]);
     expect(find.text('WEEKLY VOLUME (KG)'), findsNothing);
     expect(find.text('MUSCLE GROUP SPLIT'), findsNothing);
+    expect(find.text('About measurements'), findsOneWidget);
+    expect(
+        find.textContaining('Weight and muscle-group volume are not recorded'),
+        findsNothing);
+    await tester.tap(find.text('About measurements'));
+    await tester.pumpAndSettle();
     expect(
         find.textContaining('Weight and muscle-group volume are not recorded'),
         findsOneWidget);
@@ -251,7 +320,7 @@ void main() {
           _record(id: 'gap', score: null),
           _record(id: 'new-version', score: 91, scoringVersion: 'rule-b'),
         ])));
-    expect(find.text('Estimated form'), findsOneWidget);
+    expect(find.text('Estimated Form Scores'), findsOneWidget);
     expect(find.textContaining('rule-a'), findsWidgets);
     expect(find.textContaining('rule-b'), findsWidgets);
     final charts = tester
@@ -268,10 +337,10 @@ void main() {
         find.text('6 scored attempts · 6 unassessed attempts'), findsOneWidget);
     expect(
         find.text('6 scored attempts · 0 unassessed attempts'), findsOneWidget);
-    expect(find.text('FORM ACCURACY OVER TIME'), findsOneWidget);
-    expect(find.text('BY EXERCISE'), findsOneWidget);
+    expect(find.text('FORM ACCURACY OVER TIME'), findsNothing);
+    expect(find.text('BY EXERCISE'), findsNothing);
     expect(find.text('84%'), findsNothing);
-    expect(find.byTooltip('Export'), findsOneWidget);
+    expect(find.byTooltip('Filter report and export PDF'), findsNothing);
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox.shrink());
   });

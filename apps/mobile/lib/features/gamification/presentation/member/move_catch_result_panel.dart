@@ -17,6 +17,14 @@ class MoveCatchResultPanel extends StatelessWidget {
     required this.onExit,
     this.error,
     this.rewardStatus,
+    this.gameTitle = 'Move & Catch',
+    this.hitsOnly = false,
+    this.newPersonalBest = false,
+    this.onRetrySave,
+    this.saving = false,
+    this.competitionStatus,
+    this.onLeaderboard,
+    this.footer,
   });
 
   final int score, caught, missed, obstacles, bestScore;
@@ -24,7 +32,10 @@ class MoveCatchResultPanel extends StatelessWidget {
   final VoidCallback? onReplay;
   final VoidCallback onExit;
   final String? error;
-  final Widget? rewardStatus;
+  final Widget? rewardStatus, competitionStatus, footer;
+  final String gameTitle;
+  final bool hitsOnly, newPersonalBest, saving;
+  final VoidCallback? onRetrySave, onLeaderboard;
 
   @override
   Widget build(BuildContext context) => ColoredBox(
@@ -50,8 +61,20 @@ class MoveCatchResultPanel extends StatelessWidget {
                                     color: AppColors.ink,
                                     fontWeight: FontWeight.w800)),
                         const SizedBox(height: 4),
-                        const Text('Move & Catch', textAlign: TextAlign.center),
-                        const SizedBox(height: 24),
+                        Text(gameTitle,
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(color: AppColors.ink)),
+                        const SizedBox(height: 12),
+                        if (newPersonalBest)
+                          Semantics(
+                              liveRegion: true,
+                              child: Text('New personal best!',
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                      color: AppColors.primary,
+                                      fontWeight: FontWeight.w800,
+                                      fontSize: 18))),
+                        const SizedBox(height: 12),
                         Container(
                             padding: const EdgeInsets.all(24),
                             decoration: BoxDecoration(
@@ -92,10 +115,13 @@ class MoveCatchResultPanel extends StatelessWidget {
                           final largeText =
                               MediaQuery.textScalerOf(context).scale(16) > 22;
                           final tiles = [
-                            _stat(Icons.star_outline_rounded, 'Caught', caught),
-                            _stat(Icons.south_rounded, 'Missed', missed),
-                            _stat(
-                                Icons.diamond_outlined, 'Obstacles', obstacles)
+                            _stat(Icons.star_outline_rounded,
+                                hitsOnly ? 'Targets hit' : 'Caught', caught),
+                            if (!hitsOnly)
+                              _stat(Icons.south_rounded, 'Missed', missed),
+                            if (!hitsOnly)
+                              _stat(Icons.diamond_outlined, 'Obstacles',
+                                  obstacles)
                           ];
                           if (largeText || constraints.maxWidth < 320) {
                             return Column(children: [
@@ -120,11 +146,18 @@ class MoveCatchResultPanel extends StatelessWidget {
                             title: bestScoreAvailable
                                 ? 'Personal best: $bestScore'
                                 : 'Personal best unavailable',
-                            body: scoreSaveFailed
-                                ? 'Personal best could not be saved. This round is still complete.'
-                                : bestSaved
-                                    ? 'Personal best saved on this device.'
-                                    : 'This device keeps your personal best for your account.'),
+                            body: saving
+                                ? 'Saving on this device…'
+                                : scoreSaveFailed
+                                    ? 'Personal best could not be saved. This round is still complete.'
+                                    : bestSaved
+                                        ? 'Personal best saved on this device.'
+                                        : 'This device keeps your personal best for your account.'),
+                        if (scoreSaveFailed && onRetrySave != null)
+                          TextButton.icon(
+                              onPressed: saving ? null : onRetrySave,
+                              icon: const Icon(Icons.refresh),
+                              label: const Text('Retry saving')),
                         const SizedBox(height: 12),
                         rewardStatus ??
                             _section(
@@ -133,6 +166,10 @@ class MoveCatchResultPanel extends StatelessWidget {
                                 status: 'Not active',
                                 body:
                                     'No reward points are awarded for this game.'),
+                        if (competitionStatus != null) ...[
+                          const SizedBox(height: 12),
+                          competitionStatus!
+                        ],
                         if (error != null) ...[
                           const SizedBox(height: 12),
                           Text(error!,
@@ -148,6 +185,13 @@ class MoveCatchResultPanel extends StatelessWidget {
                             onPressed: onReplay,
                             icon: const Icon(Icons.replay_rounded),
                             label: const Text('Play again')),
+                        if (onLeaderboard != null) ...[
+                          const SizedBox(height: 10),
+                          OutlinedButton.icon(
+                              onPressed: onLeaderboard,
+                              icon: const Icon(Icons.leaderboard_outlined),
+                              label: const Text('View leaderboard'))
+                        ],
                         const SizedBox(height: 10),
                         OutlinedButton.icon(
                             style: OutlinedButton.styleFrom(
@@ -157,6 +201,7 @@ class MoveCatchResultPanel extends StatelessWidget {
                             onPressed: onExit,
                             icon: const Icon(Icons.arrow_back_rounded),
                             label: const Text('Back to games')),
+                        if (footer != null) footer!,
                       ])))));
 
   Widget _stat(IconData icon, String label, int value) => Container(

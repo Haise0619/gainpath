@@ -1,3 +1,4 @@
+import 'routing/member_progress_route.dart' show ProgressGoalSummaryBuilder;
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -51,6 +52,8 @@ class GainPathMobileApp extends StatelessWidget {
       this.bookingFactory,
       this.bookingListFactory,
       this.progressRepositoryFactory,
+      this.progressGoalSummaryBuilder,
+      this.memberRewardsBuilder,
       this.passwordResetSender,
       this.accountLifecycleFactory,
       this.memberSettingsBuilder});
@@ -70,10 +73,12 @@ class GainPathMobileApp extends StatelessWidget {
   final BookingServicesFactory? bookingFactory;
   final BookingListFactory? bookingListFactory;
   final LocalMemberProgressRepositoryFactory? progressRepositoryFactory;
+  final ProgressGoalSummaryBuilder? progressGoalSummaryBuilder;
   final Future<void> Function(String)? passwordResetSender;
   final MemberAccountLifecycleRepository Function(AuthSession, bool Function())?
       accountLifecycleFactory;
   final WidgetBuilder? memberSettingsBuilder;
+  final WidgetBuilder? memberRewardsBuilder;
 
   @override
   Widget build(BuildContext context) {
@@ -108,6 +113,8 @@ class GainPathMobileApp extends StatelessWidget {
                 bookingFactory: bookingFactory,
                 bookingListFactory: bookingListFactory,
                 progressRepositoryFactory: progressRepositoryFactory,
+                progressGoalSummaryBuilder: progressGoalSummaryBuilder,
+                memberRewardsBuilder: memberRewardsBuilder,
                 passwordResetSender: passwordResetSender,
                 accountLifecycleFactory: accountLifecycleFactory,
                 memberSettingsBuilder: memberSettingsBuilder);
@@ -164,6 +171,8 @@ class _MobileAuthGate extends StatefulWidget {
       this.bookingFactory,
       this.bookingListFactory,
       this.progressRepositoryFactory,
+      this.progressGoalSummaryBuilder,
+      this.memberRewardsBuilder,
       this.passwordResetSender,
       this.accountLifecycleFactory,
       this.memberSettingsBuilder});
@@ -181,10 +190,12 @@ class _MobileAuthGate extends StatefulWidget {
   final BookingServicesFactory? bookingFactory;
   final BookingListFactory? bookingListFactory;
   final LocalMemberProgressRepositoryFactory? progressRepositoryFactory;
+  final ProgressGoalSummaryBuilder? progressGoalSummaryBuilder;
   final Future<void> Function(String)? passwordResetSender;
   final MemberAccountLifecycleRepository Function(AuthSession, bool Function())?
       accountLifecycleFactory;
   final WidgetBuilder? memberSettingsBuilder;
+  final WidgetBuilder? memberRewardsBuilder;
   @override
   State<_MobileAuthGate> createState() => _MobileAuthGateState();
 }
@@ -274,8 +285,11 @@ class _MobileAuthGateState extends State<_MobileAuthGate> {
                       bookingFactory: widget.bookingFactory,
                       bookingListFactory: widget.bookingListFactory,
                       coachAvailabilityFactory: widget.coachAvailabilityFactory,
+                      progressGoalSummaryBuilder:
+                          widget.progressGoalSummaryBuilder,
                       progressRepositoryFactory:
                           widget.progressRepositoryFactory,
+                      memberRewardsBuilder: widget.memberRewardsBuilder,
                       routineCatalogFactory: widget.routineCatalogFactory ??
                           (catalogScope, activeScope) =>
                               widget.routineLoaderFactory == null

@@ -1,3 +1,4 @@
+import '../admin_commerce_section.dart';
 import 'package:flutter/material.dart';
 import 'package:syncfusion_flutter_charts/charts.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
@@ -5,6 +6,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:gainpath_domain/analytics.dart';
 import '../../../application/admin_reporting_gateway.dart';
 import '../original_report_data_widgets.dart';
+import '../admin_check_in_analytics.dart';
 
 class _WeekPoint {
   final String label;
@@ -26,6 +28,10 @@ class RevenueSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (snapshot?.commerce != null) {
+      return AdminCommerceSection(
+          anchorKey: anchorKey, report: snapshot!.commerce!, coach: false);
+    }
     final ops = snapshot?.operations;
     return ReportSection(
       anchorKey: anchorKey,
@@ -42,7 +48,30 @@ class RevenueSection extends StatelessWidget {
       exportFilename: 'membership_revenue.csv',
       exportEnabled: ops != null || !live,
       exportRows: ops != null
-          ? () => ops.toCsv(snapshot!)
+          ? () => [
+                [
+                  'GainPath confirmed Sandbox receipts',
+                  'Not net revenue or payouts'
+                ],
+                ['Timezone', 'Asia/Kuala_Lumpur'],
+                [
+                  'Start inclusive UTC',
+                  snapshot!.query.range.start.toUtc().toIso8601String()
+                ],
+                [
+                  'End exclusive UTC',
+                  snapshot!.query.range.end.toUtc().toIso8601String()
+                ],
+                [
+                  'Basis',
+                  'Original server clearance dates; review and refund cases excluded'
+                ],
+                ['Membership receipts minor MYR', ops.membershipMinor],
+                ['Coaching receipts minor MYR', ops.coachingMinor],
+                ['Malaysia date', 'Membership minor MYR', 'Coaching minor MYR'],
+                for (final d in ops.daily)
+                  [d.date, d.membershipMinor, d.coachingMinor],
+              ]
           : live
               ? null
               : () => [
@@ -56,6 +85,11 @@ class RevenueSection extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          if (live && snapshot?.commerce == null)
+            const Padding(
+                padding: EdgeInsets.only(bottom: 12),
+                child: Text(
+                    'Extended membership analytics await a compatible reporting service. Existing receipt totals remain available.')),
           Row(
             children: [
               Expanded(
@@ -139,7 +173,14 @@ class RevenueSection extends StatelessWidget {
 class RewardsSection extends StatelessWidget {
   final GlobalKey anchorKey;
   final bool live;
-  const RewardsSection({super.key, required this.anchorKey, this.live = false});
+  final AdminReportQuery? query;
+  final int refreshToken;
+  const RewardsSection(
+      {super.key,
+      required this.anchorKey,
+      this.live = false,
+      this.query,
+      this.refreshToken = 0});
 
   static const _sliceColors = [
     AppColors.primary,
@@ -150,6 +191,13 @@ class RewardsSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (live && query != null) {
+      return AdminCheckInAnalytics(
+          query: query!,
+          anchorKey: anchorKey,
+          refreshToken: refreshToken,
+          redemptionsOnly: true);
+    }
     final trend = List.generate(
         context.read<AnalyticsRepository>().rewardWeeklyRedemptions.length,
         (i) => _WeekPoint('W${i + 1}',

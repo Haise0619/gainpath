@@ -3,12 +3,18 @@ import 'package:gainpath_mobile/features/workout/domain/exercise_tracker_dispatc
 
 void main() {
   const installed = ExerciseTrackerDispatcher();
-  test('calf tracking is on hold and defaults to guided-only on this app', () {
+  test('corrected calf candidate selects only its exact installed identity',
+      () {
     final result = installed.resolve(
         organizationId: 'gainpath', exerciseId: 'standing-calf-raise-side-v1');
-    expect(result.tracker, isNull);
-    expect(result.capability.hasPoseTracking, false);
-    expect(result.unavailable, true);
+    expect(result.tracker, ExerciseTracker.sideViewCalfRaise);
+    expect(result.capability.hasPoseTracking, true);
+    expect(result.unavailable, false);
+    final held = const ExerciseTrackerDispatcher(availableTrackers: {}).resolve(
+        organizationId: 'gainpath', exerciseId: 'standing-calf-raise-side-v1');
+    expect(held.tracker, isNull);
+    expect(held.capability.hasPoseTracking, false);
+    expect(held.unavailable, true);
     expect(
         installed
             .resolve(

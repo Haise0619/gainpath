@@ -4,16 +4,19 @@ import 'package:gainpath_ui/gainpath_ui.dart';
 import 'package:syncfusion_flutter_charts/charts.dart';
 import '../../application/admin_reporting_gateway.dart';
 import '../../application/admin_check_in_reporting.dart';
+import 'admin_engagement_widgets.dart';
 
 class AdminCheckInAnalytics extends StatefulWidget {
   const AdminCheckInAnalytics(
       {super.key,
       required this.query,
       required this.anchorKey,
-      this.refreshToken = 0});
+      this.refreshToken = 0,
+      this.redemptionsOnly = false});
   final AdminReportQuery query;
   final GlobalKey anchorKey;
   final int refreshToken;
+  final bool redemptionsOnly;
   @override
   State<AdminCheckInAnalytics> createState() => _AdminCheckInAnalyticsState();
 }
@@ -71,44 +74,70 @@ class _AdminCheckInAnalyticsState extends State<AdminCheckInAnalytics> {
                 Align(
                     alignment: Alignment.centerRight,
                     child: IconButton(
-                        tooltip: 'Refresh check-in analytics',
+                        tooltip: widget.redemptionsOnly
+                            ? 'Refresh redemption analytics'
+                            : 'Refresh check-in analytics',
                         onPressed: state.loading ? null : () => _cubit!.load(),
                         icon: const Icon(Icons.refresh_rounded))),
-                if (state.loading)
-                  const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 18),
+                if (state.loading && report == null)
+                  Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 18),
                       child: Row(children: [
                         SizedBox(
                             width: 18,
                             height: 18,
                             child: CircularProgressIndicator(strokeWidth: 2)),
                         SizedBox(width: 12),
-                        Expanded(child: Text('Loading check-in analytics…'))
+                        Expanded(
+                            child: Text(widget.redemptionsOnly
+                                ? 'Loading redemption analytics...'
+                                : 'Loading check-in analytics...'))
                       ]))
                 else if (report == null) ...[
                   Text(state.error ?? 'Check-in analytics is unavailable.'),
                   TextButton.icon(
                       onPressed: () => _cubit!.load(),
                       icon: const Icon(Icons.refresh_rounded),
-                      label: const Text('Retry check-in analytics')),
-                ] else
+                      label: Text(widget.redemptionsOnly
+                          ? 'Retry redemption analytics'
+                          : 'Retry check-in analytics')),
+                ] else ...[
+                  if (state.loading) const LinearProgressIndicator(),
+                  if (state.error != null) Text(state.error!),
                   _data(context, report),
+                ],
               ]));
         });
   }
 
   Widget _section(AdminCheckInReport? report, Widget child) => ReportSection(
       anchorKey: widget.anchorKey,
-      title: 'Gamification Engagement',
-      subtitle:
-          'Daily app check-in · confirmed receipts · 50 base points per claim',
+      title: widget.redemptionsOnly
+          ? 'Reward Redemptions'
+          : 'Gamification Engagement',
+      subtitle: widget.redemptionsOnly
+          ? 'Voucher issue, collection and expiry - server records'
+          : 'Check-ins, recorded mini-games and confirmed Reward Points',
       live: true,
-      tagLabel: report == null ? 'Unavailable' : 'App check-in',
-      exportFilename: 'gainpath-app-check-in.csv',
-      exportEnabled: report != null,
-      exportRows: report?.toCsv,
+      tagLabel: report == null ||
+              (widget.redemptionsOnly && report.extensions == null)
+          ? 'Unavailable'
+          : widget.redemptionsOnly
+              ? 'Voucher records'
+              : 'Confirmed records',
+      exportFilename: widget.redemptionsOnly
+          ? 'gainpath-reward-redemptions.csv'
+          : 'gainpath-gamification-engagement.csv',
+      exportEnabled: report != null &&
+          (!widget.redemptionsOnly || report.extensions != null),
+      exportRows: widget.redemptionsOnly
+          ? report?.extensions?.redemptionCsv
+          : report?.toCsv,
       child: child);
   Widget _data(BuildContext context, AdminCheckInReport r) {
+    if (widget.redemptionsOnly) {
+      return AdminRedemptionData(extension: r.extensions);
+    }
     final text = Theme.of(context).textTheme,
         periods = _weekly ? r.weekly : r.daily;
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -120,12 +149,12 @@ class _AdminCheckInAnalyticsState extends State<AdminCheckInAnalytics> {
             child: StatTile('${r.claimingMembers}', 'Unique claiming Members')),
         SizedBox(
             width: 210,
-            child: StatTile('${r.pointsAwarded}', 'Points awarded',
+            child: StatTile('${r.pointsAwarded}', 'Check-in Reward Points',
                 valueColor: AppColors.primary)),
       ]),
       const SizedBox(height: 12),
       Text(
-          'Selected Malaysia date range. App engagement only; gym attendance, games, other earning sources, wallet balances and redemptions are excluded.',
+          'Check-in metrics cover current active Members. App engagement only; gym attendance and wallet balances are excluded.',
           style: text.bodySmall),
       const SizedBox(height: 14),
       if (r.claims == 0)
@@ -205,6 +234,8 @@ class _AdminCheckInAnalyticsState extends State<AdminCheckInAnalytics> {
               ]),
       ])),
       const SizedBox(height: 18),
+      AdminGameEngagementData(extension: r.extensions),
+      const SizedBox(height: 18),
       Text(
           'Current as of ${r.asOfDate} · streaks ignore the selected date range',
           style: text.titleSmall),
@@ -250,3 +281,4 @@ class _AdminCheckInAnalyticsState extends State<AdminCheckInAnalytics> {
               '${counts[e.key]} Members'),
       ]));
 }
+

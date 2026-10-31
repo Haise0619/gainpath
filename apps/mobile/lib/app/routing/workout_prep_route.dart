@@ -1,4 +1,4 @@
-import 'package:flutter/widgets.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:gainpath_identity/gainpath_identity.dart';
 import 'package:gainpath_domain/gainpath_domain.dart' show SessionScope;
@@ -12,6 +12,7 @@ import 'exercise_tracker_route.dart';
 import 'saved_squat_sessions_route.dart';
 import 'exercise_tutorial_route.dart';
 import 'routine_journey_route.dart';
+import 'workout_program_route.dart';
 
 /// App-owned destinations for the published workout preparation flow.
 class WorkoutPrepRoute extends StatelessWidget {
@@ -38,6 +39,14 @@ class WorkoutPrepRoute extends StatelessWidget {
     final scope = auth?.state.session?.scope;
     return WorkoutPrepScreen(
         live: live,
+        onOpenPrograms: scope == null
+            ? null
+            : () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                    builder: (_) => BlocProvider.value(
+                        value: auth!,
+                        child: WorkoutProgramRoute(scope: scope)))),
         onOpenEquipment: onOpenEquipment,
         publishedRoutine: publishedRoutine,
         routineLoadFailed: routineLoadFailed,

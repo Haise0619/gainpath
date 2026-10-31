@@ -1,5 +1,7 @@
+import 'admin_observed_activity.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'admin_reporting_gateway.dart';
+import 'admin_engagement_extension.dart';
 
 abstract interface class AdminCheckInReportingGateway {
   Future<AdminCheckInReport> loadCheckIns(AdminReportQuery query);
@@ -29,6 +31,8 @@ class AdminCheckInReport {
       required this.claims,
       required this.claimingMembers,
       required this.pointsAwarded,
+      this.extensions,
+      this.observations,
       required Map<String, int> coverage,
       required List<CheckInReportPeriod> daily,
       required List<CheckInReportPeriod> weekly,
@@ -46,6 +50,8 @@ class AdminCheckInReport {
     'threeSix': '3–6 days',
     'sevenPlus': '7+ days'
   };
+  final AdminObservedActivity? observations;
+  final AdminEngagementExtension? extensions;
   final AdminReportQuery query;
   final DateTime scanStartedAt, capturedAt;
   final String asOfDate;
@@ -53,7 +59,12 @@ class AdminCheckInReport {
   final Map<String, int> coverage, currentStreaks, longestStreaks;
   final List<CheckInReportPeriod> daily, weekly;
   List<List<Object?>> toCsv() => [
-        ['GainPath app check-in analytics', policyVersion],
+        [
+          extensions == null
+              ? 'GainPath app check-in analytics'
+              : 'GainPath gamification engagement analytics',
+          policyVersion
+        ],
         ['Timezone', 'Asia/Kuala_Lumpur UTC+08:00'],
         ['Start inclusive UTC', query.range.start.toUtc().toIso8601String()],
         ['End exclusive UTC', query.range.end.toUtc().toIso8601String()],
@@ -96,6 +107,7 @@ class AdminCheckInReport {
           'Read consistency',
           'Complete bounded reads over a disclosed interval, not one atomic organization snapshot.'
         ],
+        if (extensions != null) ...extensions!.engagementCsv(),
       ];
 }
 
@@ -117,10 +129,20 @@ class AdminCheckInReportingCubit extends Cubit<AdminCheckInReportingState> {
   Future<void> load([AdminReportQuery? target]) async {
     if (isClosed) return;
     final query = target ?? state.query, generation = ++_generation;
-    emit(AdminCheckInReportingState(query: query, loading: true));
+    final retained = query == state.query &&
+            (gateway is! AdminReportingSessionGuard ||
+                (gateway as AdminReportingSessionGuard).canRetainSnapshot)
+        ? state.report
+        : null;
+    emit(AdminCheckInReportingState(
+        query: query, report: retained, loading: true));
     try {
       final report = await gateway.loadCheckIns(query);
       if (isClosed || generation != _generation) return;
+      if (gateway is AdminReportingSessionGuard &&
+          !(gateway as AdminReportingSessionGuard).canRetainSnapshot) {
+        throw StateError('Reporting account changed');
+      }
       if (report.query != query) {
         throw const FormatException('Check-in report query mismatch');
       }
@@ -129,9 +151,19 @@ class AdminCheckInReportingCubit extends Cubit<AdminCheckInReportingState> {
       if (isClosed || generation != _generation) return;
       emit(AdminCheckInReportingState(
           query: query,
-          error: e is AdminCheckInReportException
+          report: (e is AdminReportingException && e.invalidatesSnapshot) ||
+                  e is StateError ||
+                  e is FormatException ||
+                  (gateway is AdminReportingSessionGuard &&
+                      !(gateway as AdminReportingSessionGuard)
+                          .canRetainSnapshot)
+              ? null
+              : retained,
+          error: e is AdminReportingException
               ? e.message
-              : 'Could not load check-in analytics. Check your connection and retry.'));
+              : e is AdminCheckInReportException
+                  ? e.message
+                  : 'Could not load check-in analytics. Check your connection and retry.'));
     }
   }
 

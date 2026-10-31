@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:gainpath_domain/analytics.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:gainpath_domain/gainpath_domain.dart'
@@ -16,8 +17,14 @@ class MemberWorkoutReportRoute extends StatefulWidget {
       {super.key,
       required this.scope,
       this.repositoryFactory = createLocalMemberProgressRepository,
-      this.exporter});
+      this.exporter,
+      this.initialFilter,
+      this.onOpenWorkout,
+      this.onOpenRoutine});
+  final void Function(LocalWorkoutProgressRecord)? onOpenWorkout;
+  final void Function(String)? onOpenRoutine;
   final SessionScope scope;
+  final WorkoutReportFilter? initialFilter;
   final LocalMemberProgressRepositoryFactory repositoryFactory;
   final WorkoutReportExporter? exporter;
   @override
@@ -88,6 +95,9 @@ class _MemberWorkoutReportRouteState extends State<MemberWorkoutReportRoute> {
 
   Widget _screen(MemberProgressState state) => WorkoutReportScreen(
       scope: widget.scope,
+      onOpenWorkout: widget.onOpenWorkout,
+      onOpenRoutine: widget.onOpenRoutine,
+      initialFilter: widget.initialFilter,
       source: state.snapshot,
       asOf: state.progress?.asOf ?? DateTime.now(),
       exporter: _exporter,

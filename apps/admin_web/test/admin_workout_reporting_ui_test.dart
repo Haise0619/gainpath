@@ -73,7 +73,7 @@ void main() {
     expect(find.text('Workouts'), findsOneWidget);
     await t.tap(find.byTooltip('Refresh reports'));
     await t.pumpAndSettle();
-    expect(g.calls, 2);
+    expect(g.calls, 4);
     await t.tap(find.text('Workouts'));
     await t.pumpAndSettle();
     expect(find.text('Most-used exercises'), findsOneWidget);
@@ -90,7 +90,7 @@ void main() {
     await t.pumpAndSettle();
     expect(find.text('MYR 139.00'), findsWidgets);
     expect(find.text('Workout analytics is awaiting server activation.'),
-        findsOneWidget);
+        findsNWidgets(2));
     expect(find.text('Retry workout analytics'), findsOneWidget);
   });
   testWidgets(
@@ -119,7 +119,7 @@ void main() {
     await t.ensureVisible(find.byTooltip('Refresh workout analytics'));
     await t.tap(find.byTooltip('Refresh workout analytics'));
     await t.pump();
-    expect(find.text('Most-used exercises'), findsNothing);
+    expect(find.text('Most-used exercises'), findsOneWidget);
     g.pendingWorkouts!.completeError(StateError('offline'));
     await t.pumpAndSettle();
     expect(find.text('Retry workout analytics'), findsOneWidget);

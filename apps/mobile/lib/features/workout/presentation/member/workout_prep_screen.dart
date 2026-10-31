@@ -23,6 +23,7 @@ class WorkoutPrepScreen extends StatelessWidget {
       this.routineStatusMessage,
       this.routineCatalogControls,
       this.onOpenEquipment,
+      this.onOpenPrograms,
       this.trackers = const ExerciseTrackerDispatcher(),
       this.routes = const WorkoutPrepRoutes()});
   final bool live;
@@ -31,6 +32,7 @@ class WorkoutPrepScreen extends StatelessWidget {
   final String? routineStatusMessage;
   final Widget? routineCatalogControls;
   final VoidCallback? onOpenEquipment;
+  final VoidCallback? onOpenPrograms;
   final WorkoutPrepRoutes routes;
   final ExerciseTrackerDispatcher trackers;
 
@@ -133,6 +135,16 @@ class WorkoutPrepScreen extends StatelessWidget {
             padding: const EdgeInsets.fromLTRB(16, 20, 16, 24),
             sliver: SliverList.list(
               children: [
+                if (onOpenPrograms != null) ...[
+                  _DetourCard(
+                      icon: Icons.calendar_month,
+                      iconColor: AppColors.primary,
+                      title: "Today's Workout",
+                      subtitle:
+                          'Your program, weekly schedule and saved progress',
+                      onTap: onOpenPrograms!),
+                  const SizedBox(height: 12),
+                ],
                 if (routineCatalogControls != null) ...[
                   routineCatalogControls!,
                   const SizedBox(height: 12),
@@ -342,16 +354,31 @@ class WorkoutPrepScreen extends StatelessWidget {
             realWorkout: true,
             allowUpload: tracker == ExerciseTracker.sideViewSquat,
             exerciseInstruction: switch (tracker) {
+              ExerciseTracker.frontViewLateralRaise =>
+                lateralRaiseCaptureInstruction,
+              ExerciseTracker.frontViewShoulderPress =>
+                shoulderPressCaptureInstruction,
               ExerciseTracker.sideViewCurl => curlCaptureInstruction,
+              ExerciseTracker.sideViewRow => rowCaptureInstruction,
+              ExerciseTracker.sideViewReverseLunge =>
+                reverseLungeCaptureInstruction,
               ExerciseTracker.sideViewCalfRaise => calfRaiseCaptureInstruction,
               ExerciseTracker.sideViewWallPushUp =>
                 wallPushUpCaptureInstruction,
               _ => null,
             },
-            setupConfirmationLabel:
-                tracker == ExerciseTracker.sideViewWallPushUp
-                    ? wallPushUpSetupConfirmation
-                    : null,
+            setupConfirmationLabel: tracker ==
+                    ExerciseTracker.sideViewWallPushUp
+                ? wallPushUpSetupConfirmation
+                : tracker == ExerciseTracker.frontViewLateralRaise
+                    ? lateralRaiseSetupConfirmation
+                    : tracker == ExerciseTracker.frontViewShoulderPress
+                        ? shoulderPressSetupConfirmation
+                        : tracker == ExerciseTracker.sideViewRow
+                            ? rowSetupConfirmation
+                            : tracker == ExerciseTracker.sideViewReverseLunge
+                                ? reverseLungeSetupConfirmation
+                                : null,
             onUploadChanged: (value) => uploadRequested = value));
     if (consented != true ||
         !context.mounted ||
@@ -526,6 +553,21 @@ Future<bool?> showWorkoutCaptureConsent(BuildContext context,
 const curlCaptureInstruction =
     'Choose both arms, left only or right only before the camera starts. Reps are per selected arm per set. Keep the selected arm closest to the camera, lower it to calibrate, and switch only when prompted. Keep the shoulder, elbow, wrist and hip visible. Results stay on this device; upload and rewards are unavailable.';
 
+const reverseLungeCaptureInstruction =
+    'Choose the front leg that stays planted before opening the camera. The other foot steps backward. Reps apply only to the selected front leg for every set; do not alternate within a set. Put a stable side camera on the selected front-leg side, with its knee and heel-to-toe outline, your torso, both hips and both ankles visible. The verified camera hold and 3-second countdown start automatically; no touch is needed. The far knee bend is not measured. Stand tall with a small comfortable gap so both ankles stay visible, then step back, lower with control and return both feet to the same standing position between reps. Balance, load, floor contact and three-dimensional alignment are not assessed. No form score, verified upload or workout rewards are available.';
+const reverseLungeSetupConfirmation =
+    'My phone is stable at my side, both legs and feet stay visible, and I have clear space to step backward with the other leg.';
+
+const rowCaptureInstruction =
+    'Choose the arm to train before opening the camera. Reps apply to that selected arm only. Support the other hand and knee on a stable bench, keep your torso nearly horizontal and let the working arm hang to calibrate. Place the camera side-on with the working shoulder, elbow, wrist and hip visible. Pull the elbow toward your hip and lower with control. Bench contact, weight, spinal shape and three-dimensional rotation are not assessed. No form score, verified upload or workout rewards are available.';
+const rowSetupConfirmation =
+    'I have a stable bench, the selected arm faces the side camera, and I can keep my shoulder, elbow, wrist and hip visible.';
+
+const shoulderPressCaptureInstruction =
+    'Face the camera with both shoulders, elbows, wrists and hips visible. Leave space above your hands. Hold both hands above bent elbows at shoulder height to calibrate. Press overhead together and return with control; both arms together count as one rep. Weight, spinal alignment and three-dimensional shoulder mechanics are not assessed. No form score, verified upload or workout rewards are available.';
+const shoulderPressSetupConfirmation =
+    'I face the camera with both arms and hips visible and enough space above my hands.';
+
 const calfRaiseCaptureInstruction =
     'Stand side-on on level ground, with both feet flat to calibrate. Keep your hips, knees, heels and toes fully visible. Raise both heels, hold briefly, then lower with control; do not jump. Only the visible leg is measured; equal work on both legs, balance and load are not assessed. Results stay on this device; upload and rewards are unavailable.';
 
@@ -694,3 +736,8 @@ class _ConsentSheetState extends State<_ConsentSheet> {
 /// set/rep targets, and rest intervals; tapping an exercise hands off into
 /// its tutorial. Reviewing and returning is the whole point of this screen
 /// living outside the main staging menu.
+
+const lateralRaiseCaptureInstruction =
+    'Front view: show both shoulders, elbows, wrists and hips with space on both sides. Hold arms at your sides until Ready, then raise both arms out to shoulder height and lower fully. One bilateral cycle is one rep. Counts are provisional; no form score or load assessment.';
+const lateralRaiseSetupConfirmation =
+    'I can face the camera with both arms visible throughout the raise. I will hold my arms at my sides for automatic readiness.';

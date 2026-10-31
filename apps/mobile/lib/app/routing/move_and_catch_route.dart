@@ -1,4 +1,9 @@
 import 'dart:async';
+import '../../features/gamification/application/mini_game_competition_coordinator.dart';
+import '../../features/gamification/presentation/member/game_competition_privacy.dart';
+import '../../features/gamification/presentation/member/game_competition_result_status.dart';
+import '../../features/gamification/presentation/member/game_leaderboard_screen.dart';
+import '../../infrastructure/firebase/firebase_mini_game_competition_repository.dart';
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -8,6 +13,7 @@ import 'package:gainpath_domain/gainpath_domain.dart'
 import 'package:gainpath_identity/gainpath_identity.dart';
 import 'package:gainpath_domain/gamification.dart';
 import '../../features/gamification/application/move_and_catch_controller.dart';
+import '../../features/gamification/domain/mini_game_launch.dart';
 import '../../features/gamification/presentation/member/move_and_catch_view.dart';
 import '../../features/gamification/presentation/member/move_catch_exit_guard.dart';
 import '../../features/gamification/presentation/member/mini_game_reward_status_panel.dart';
@@ -22,8 +28,9 @@ import '../../infrastructure/local/move_catch_best_scores.dart';
 import '../../infrastructure/pose/move_catch_pose_camera.dart';
 
 class MoveAndCatchRoute extends StatefulWidget {
-  const MoveAndCatchRoute({super.key, this.content});
+  const MoveAndCatchRoute({super.key, this.content, this.playAndEarn = false});
   final MiniGameContent? content;
+  final bool playAndEarn;
   @override
   State<MoveAndCatchRoute> createState() => _MoveAndCatchRouteState();
 }
@@ -72,19 +79,35 @@ class _MoveAndCatchRouteState extends State<MoveAndCatchRoute>
       _participation = FirebaseMiniGameParticipationRepository(
           scope: captured.scope, isCurrent: () => activeScope() != null);
     }
+    final timing = MiniGameRoundCoordinator(
+        repository: FirebaseMiniGameRoundRepository(
+            scope: captured.scope,
+            isCurrent: () => activeScope() != null,
+            gameId: 'move-catch-v1'));
+    final competition = MiniGameCompetitionCoordinator(
+        repository: FirebaseMiniGameCompetitionRepository(
+            scope: captured.scope, isCurrent: () => activeScope() != null),
+        timing: timing,
+        gameId: 'move-catch-v1');
     _game = MoveAndCatchController(
         scope: captured.scope,
         activeScope: activeScope,
         camera: camera,
+        competition: competition,
         bestScores: LocalMoveCatchBestScores(),
-        roundTiming: FirebaseMiniGameRoundRepository.enabled ||
-                FirebaseMiniGameParticipationRepository.enabled
-            ? MiniGameRoundCoordinator(
-                repository: FirebaseMiniGameRoundRepository(
-                    scope: captured.scope,
-                    isCurrent: () => activeScope() != null))
-            : null,
+        autoStart: true,
+        earningAvailable: () async {
+          final repo = _participation;
+          if (repo == null || !repo.current) return false;
+          final result = await repo.overview();
+          return repo.current &&
+              result.scope == repo.scope &&
+              MiniGameLaunchArguments.canEarn(
+                  result, MiniGameContent.supportedId);
+        },
+        roundTiming: timing,
         clockMicros: () => _clock.elapsedMicroseconds);
+    _game!.setRoundTimingConsent(widget.playAndEarn);
     _viewport = _CameraViewport(camera: camera);
     _auth = auth.stream.listen((_) {
       if (!_game!.current) {
@@ -122,17 +145,26 @@ class _MoveAndCatchRouteState extends State<MoveAndCatchRoute>
           builder: (exit) => MoveAndCatchView(
               controller: _game!,
               viewport: _viewport!,
+              modeSelected: true,
+              competitionConsent: GameCompetitionPrivacy(
+                  repository: _game!.competition!.repository,
+                  onConfirmed: _game!.competition!.acceptPreference),
+              competitionStatus:
+                  GameCompetitionResultStatus(coordinator: _game!.competition!),
+              onLeaderboard: () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                      builder: (_) => GameLeaderboardScreen(
+                          repository: _game!.competition!.repository,
+                          gameId: 'move-catch-v1'))),
               content: _content,
               onExit: exit,
-              participationStatus: _participation == null
+              participationStatus: !_game!.roundTimingConsent ||
+                      _participation == null
                   ? null
                   : MiniGameParticipationPanel(
                       repository: _participation!,
                       onHistory: () => Navigator.of(context).push(
-                          MaterialPageRoute<void>(
-                              builder: (_) => RewardsFeatureHost(
-                                  builder: (repo) =>
-                                      PointsHistoryScreen(repository: repo)))),
+                          MaterialPageRoute<void>(builder: (_) => RewardsFeatureHost(builder: (repo) => PointsHistoryScreen(repository: repo)))),
                       roundTiming: _game!.roundTiming),
               rewardStatus: MiniGameRewardStatusPanel(reader: _rewards!)));
 }

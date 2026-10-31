@@ -20,6 +20,7 @@ class RealWorkoutView extends StatefulWidget {
       required this.exerciseName,
       required this.targetRepetitions,
       this.uploadNotice,
+      this.alignmentInstruction,
       this.routineContext,
       this.resultBuilder});
   final RoutineWorkoutContext? routineContext;
@@ -29,6 +30,7 @@ class RealWorkoutView extends StatefulWidget {
   final String exerciseName;
   final int targetRepetitions;
   final String? uploadNotice;
+  final String? alignmentInstruction;
   @override
   State<RealWorkoutView> createState() => _RealWorkoutViewState();
 }
@@ -371,6 +373,7 @@ class _RealWorkoutViewState extends State<RealWorkoutView> {
                           right: 12,
                           bottom: collapsedHeight + 8,
                           child: WorkoutAlignmentGuide(
+                              instruction: widget.alignmentInstruction,
                               canConfirm: c.canConfirmRecalibration,
                               onConfirm: c.finishRecalibration)),
                     Positioned.fill(

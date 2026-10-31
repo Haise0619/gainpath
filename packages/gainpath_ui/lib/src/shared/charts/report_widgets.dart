@@ -137,9 +137,12 @@ class _ProvenanceTag extends StatelessWidget {
           Icon(live ? Icons.bolt_rounded : Icons.info_outline_rounded,
               size: 11, color: color),
           const SizedBox(width: 3),
-          Text(label ?? (live ? 'Live · filtered' : 'Illustrative'),
-              style: TextStyle(
-                  fontSize: 10.5, fontWeight: FontWeight.w700, color: color)),
+          Flexible(
+              child: Text(label ?? (live ? 'Live · filtered' : 'Illustrative'),
+                  style: TextStyle(
+                      fontSize: 10.5,
+                      fontWeight: FontWeight.w700,
+                      color: color))),
         ],
       ),
     );

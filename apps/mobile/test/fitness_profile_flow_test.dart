@@ -1,3 +1,4 @@
+import 'support/signed_out_firebase.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -53,6 +54,7 @@ Future<void> confirmInitialMetrics(WidgetTester tester) async {
 }
 
 void main() {
+  setUpAll(setUpSignedOutFirebase);
   setUpAll(() => GoogleFonts.config.allowRuntimeFetching = false);
 
   Future<void> mount(WidgetTester tester, InMemoryAuthRepository auth,

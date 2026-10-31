@@ -37,6 +37,24 @@ LocalMemberProgressSnapshot sample() => LocalMemberProgressSnapshot(records: [
     ]);
 void main() {
   test(
+      'refresh retains readable local snapshot during delayed read and failure',
+      () async {
+    final repo = Repository()..read = () async => sample();
+    final c = MemberProgressCubit(repository: repo, activeScope: () => scope);
+    await c.load();
+    final snapshot = c.state.snapshot;
+    final waiting = Completer<LocalMemberProgressSnapshot>();
+    repo.read = () => waiting.future;
+    final refresh = c.load();
+    expect(c.state.progress!.allTimeSessions, 1);
+    expect(c.state.snapshot, same(snapshot));
+    waiting.completeError(StateError('offline local storage'));
+    await refresh;
+    expect(c.state.progress!.allTimeSessions, 1);
+    expect(c.state.error, isNotNull);
+    await c.close();
+  });
+  test(
       'ready state uses clock and explicit Malaysia week instead of machine timezone',
       () async {
     final repo = Repository()..read = () async => sample();

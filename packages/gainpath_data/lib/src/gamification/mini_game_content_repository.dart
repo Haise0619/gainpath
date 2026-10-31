@@ -8,7 +8,8 @@ import 'package:gainpath_domain/workout.dart'
 typedef MiniGameContentCall = Future<Map<String, dynamic>> Function(
     Map<String, dynamic>);
 
-class RemoteMiniGameContentReader implements MiniGameContentReader {
+class RemoteMiniGameContentReader
+    implements MiniGameContentReader, MiniGameContentRegistryStatus {
   RemoteMiniGameContentReader(
       {required this.scope,
       required bool Function() isCurrent,
@@ -19,6 +20,9 @@ class RemoteMiniGameContentReader implements MiniGameContentReader {
   final SessionScope scope;
   final bool Function() _isCurrent;
   final MiniGameContentCall _call;
+  @override
+  bool get expandedRegistryAvailable => _expandedRegistryAvailable;
+  bool _expandedRegistryAvailable = true;
   @override
   bool get current => _isCurrent();
   void _check() {
@@ -47,15 +51,38 @@ class RemoteMiniGameContentReader implements MiniGameContentReader {
 
   @override
   Future<List<MiniGameContent>> load() async {
-    final d = await _command({'action': 'list'}), games = d['games'];
+    late Map<String, dynamic> d;
+    var expanded = true;
+    try {
+      d = await _command({
+        'action': 'list',
+        'supportedGameIds': MiniGameContent.supportedIds.toList()
+      });
+    } on MiniGameContentRegistryUnsupported {
+      expanded = false;
+      d = await _command({'action': 'list'});
+    }
+    final games = d['games'];
+    final expected = expanded
+        ? MiniGameContent.supportedIds.toList()
+        : [MiniGameContent.supportedId];
     if (d.length != 3 ||
         games is! List ||
-        games.length != 1 ||
+        games.length != expected.length ||
         games.any((v) => v is! Map)) {
       throw const FormatException('Supported mini-game content unavailable.');
     }
-    return List.unmodifiable(games.map((v) =>
-        MiniGameContent.fromJson(Map<String, dynamic>.from(v as Map), scope)));
+    final parsed = games
+        .map((v) => MiniGameContent.fromJson(
+            Map<String, dynamic>.from(v as Map), scope))
+        .toList();
+    for (var i = 0; i < expected.length; i++) {
+      if (parsed[i].gameId != expected[i]) {
+        throw const FormatException('Supported mini-game registry changed.');
+      }
+    }
+    _expandedRegistryAvailable = expanded;
+    return List.unmodifiable(parsed);
   }
 }
 
@@ -88,7 +115,8 @@ class RemoteMiniGameContentRepository extends RemoteMiniGameContentReader
     }
     final result = MiniGameContent.fromJson(
         Map<String, dynamic>.from(d['game'] as Map), scope);
-    if (result.revision != baseRevision + 1 ||
+    if (result.gameId != content.gameId ||
+        result.revision != baseRevision + 1 ||
         jsonEncode(result.toFields()) != jsonEncode(fields)) {
       throw const MiniGameContentConflict();
     }
@@ -103,7 +131,7 @@ class RemoteMiniGameContentRepository extends RemoteMiniGameContentReader
       required Uint8List bytes,
       required String contentType}) async {
     _check();
-    if (gameId != MiniGameContent.supportedId ||
+    if (!MiniGameContent.supportedIds.contains(gameId) ||
         !['cover', 'preview'].contains(kind) ||
         !RegExp(r'^[a-f0-9]{32}$').hasMatch(uploadId)) {
       throw const FormatException('Invalid mini-game media selection.');
@@ -111,8 +139,9 @@ class RemoteMiniGameContentRepository extends RemoteMiniGameContentReader
     late Uint8List safe;
     if (kind == 'cover') {
       final image = EquipmentImage(bytes);
-      if (image.contentType != contentType)
+      if (image.contentType != contentType) {
         throw const FormatException('Image type mismatch.');
+      }
       safe = image.bytes;
     } else {
       if (contentType != 'video/mp4' ||
@@ -136,7 +165,8 @@ class RemoteMiniGameContentRepository extends RemoteMiniGameContentReader
         d['kind'] != kind ||
         d['url'] is! String ||
         (d['url'] as String).isEmpty ||
-        !MiniGameContent.validMediaUrl(d['url'], scope.organizationId, kind)) {
+        !MiniGameContent.validMediaUrl(d['url'], scope.organizationId, kind,
+            gameId: gameId)) {
       throw const FormatException('Mini-game upload was not confirmed.');
     }
     final url = d['url'] as String;

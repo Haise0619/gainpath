@@ -65,9 +65,13 @@ void main() {
     expect(find.text('Unique claiming Members'), findsOneWidget);
     await t.tap(find.byTooltip('Refresh reports'));
     await t.pumpAndSettle();
-    expect(g.checkInCalls, 2);
-    expect(g.calls, 2);
-    await t.drag(find.byWidgetPredicate((w) => w is ListView && w.scrollDirection == Axis.horizontal), const Offset(-400, 0));
+    expect(g.checkInCalls,
+        8); // Four sections request updates; Firebase coalesces the shared scan.
+    expect(g.calls, 4);
+    await t.drag(
+        find.byWidgetPredicate(
+            (w) => w is ListView && w.scrollDirection == Axis.horizontal),
+        const Offset(-400, 0));
     await t.pumpAndSettle();
     expect(find.text('Gamification').hitTestable(), findsOneWidget);
     await t.tap(find.text('Gamification'));
@@ -85,8 +89,9 @@ void main() {
     expect(find.text('MYR 139.00'), findsWidgets);
     expect(find.text('Saved camera sessions'), findsOneWidget);
     expect(find.text('Check-in analytics is awaiting server activation.'),
-        findsOneWidget);
+        findsNWidgets(4));
     expect(find.text('Retry check-in analytics'), findsOneWidget);
+    expect(find.text('Retry redemption analytics'), findsOneWidget);
   });
   testWidgets(
       'small screen/large text supports weekly view, clears stale metrics and retries',
@@ -115,8 +120,8 @@ void main() {
     await t.ensureVisible(find.byTooltip('Refresh check-in analytics'));
     await t.tap(find.byTooltip('Refresh check-in analytics'));
     await t.pump();
-    expect(find.text('Confirmed check-ins'), findsNothing);
-    expect(find.byTooltip('Export CSV'), findsNothing);
+    expect(find.text('Confirmed check-ins'), findsOneWidget);
+    expect(find.byTooltip('Export CSV'), findsOneWidget);
     g.pendingCheckIns!.completeError(StateError('offline'));
     await t.pumpAndSettle();
     expect(find.text('Retry check-in analytics'), findsOneWidget);
@@ -139,7 +144,7 @@ void main() {
     await t.pumpAndSettle();
     expect(find.text('No confirmed check-ins in this date range.'),
         findsOneWidget);
-    expect(find.text('Points awarded'), findsOneWidget);
+    expect(find.text('Check-in Reward Points'), findsOneWidget);
     expect(t.takeException(), isNull);
   });
 }

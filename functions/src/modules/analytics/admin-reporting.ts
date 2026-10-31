@@ -1,3 +1,4 @@
+import {commerceExtensions,type ReportIdentity} from './admin-commerce-extensions';
 import {DomainError} from '../../platform/errors';
 import {requireVerifiedEmail,requireActiveMembership} from '../../platform/auth-context';
 import {requiredIdentifier,InputValidationError} from '../../platform/validation';
@@ -6,7 +7,7 @@ import {readAll,type DocumentStore,type DocumentData,type TransactionPort} from 
 type Auth={uid:string;token:Record<string,unknown>}|undefined;
 export interface ReportRow {id:string;data:DocumentData}
 export type ReportCollection='members'|'bookings'|'transactions';
-export interface ReportingReader {page(kind:ReportCollection,after:string|undefined,limit:number):Promise<ReportRow[]>}
+export interface ReportingReader {page(kind:ReportCollection,after:string|undefined,limit:number):Promise<ReportRow[]>;identity?:(uid:string)=>Promise<ReportIdentity>}
 export const REPORT_SCAN_LIMIT=2000;
 const DAY=86400000,OFFSET=8*3600000;
 const integer=(v:unknown):v is number=>Number.isSafeInteger(v)&&Number(v)>=0;
@@ -14,6 +15,7 @@ const fail=()=>new DomainError('failed-precondition','Reporting source records n
 const date=(t:number)=>new Date(t+OFFSET).toISOString().slice(0,10);
 const states=['pending_hold','confirmed','cancelled','expired','completed','refunded'] as const;
 export interface OperationalReport {
+ commerce?:Awaited<ReturnType<typeof commerceExtensions>>;
  schemaVersion:1;organizationId:string;startAtMillis:number;endAtMillis:number;
  capturedAtMillis:number;sourceReadStartedAtMillis:number;timezone:'Asia/Kuala_Lumpur';environment:'sandbox';
  currentAccounts:{members:number;coaches:number};
@@ -47,7 +49,7 @@ export async function adminReport(store:DocumentStore,auth:Auth,raw:unknown,read
  requireVerifiedEmail(auth);
  if(!raw||typeof raw!=='object'||Array.isArray(raw))throw new InputValidationError('Report query required.');
  const d=raw as DocumentData,now=clock();
- if(Object.keys(d).length!==4||d.schemaVersion!==1||!integer(d.startAtMillis)||!integer(d.endAtMillis)||
+ if(Object.keys(d).length!==4||(d.schemaVersion!==1&&d.schemaVersion!==2)||!integer(d.startAtMillis)||!integer(d.endAtMillis)||
    d.startAtMillis>=d.endAtMillis||d.endAtMillis>now+DAY||!integer(now))throw new InputValidationError('Invalid report dates or fields.');
  const org=requiredIdentifier(d.organizationId,'organizationId');
  await store.transact(tx=>authorize(tx,auth!,org));
@@ -101,8 +103,10 @@ export async function adminReport(store:DocumentStore,auth:Auth,raw:unknown,read
    if(Object.values(output.receipts).some(n=>!Number.isSafeInteger(n)))throw fail();
  }
  await store.transact(tx=>authorize(tx,auth!,org));
+ if(d.schemaVersion===2)output.commerce=await commerceExtensions(store,auth!,org,Number(d.startAtMillis),Number(d.endAtMillis),now,members,bookings,payments,reader.identity);
  output.capturedAtMillis=clock();
  if(!integer(output.capturedAtMillis)||output.capturedAtMillis<now)throw fail();
  output.daily=[...daily.values()].sort((a,b)=>a.date.localeCompare(b.date));
  return output;
 }
+

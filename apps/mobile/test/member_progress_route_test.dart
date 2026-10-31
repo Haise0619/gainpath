@@ -37,6 +37,35 @@ void main() {
     return auth;
   }
 
+  testWidgets('history opens immediately while refresh is pending',
+      (tester) async {
+    final auth = await signIn(tester);
+    final repo = TestRepository(auth.state.session!.scope);
+    late void Function(MemberProgressView) open;
+    await tester.pumpWidget(BlocProvider.value(
+        value: auth,
+        child: MaterialApp(
+            home: MemberProgressHost(
+                scope: repo.scope,
+                repositoryFactory: (_, __) async => repo,
+                builder: (context, state, refresh, navigate, workout) {
+                  open = navigate;
+                  return const Scaffold(body: Text('Host'));
+                }))));
+    await tester.pumpAndSettle();
+    final waiting = Completer<LocalMemberProgressSnapshot>();
+    repo.read = () => waiting.future;
+    open(MemberProgressView.history);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.text('Activity timeline'), findsOneWidget);
+    waiting.completeError(StateError('read failed'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Showing previously loaded local results.'),
+        findsOneWidget);
+    await tester.pumpWidget(const SizedBox());
+    await tester.runAsync(auth.close);
+  });
   testWidgets(
       'local dashboard uses injected scoped repository and refreshes without mock providers',
       (tester) async {
@@ -50,9 +79,14 @@ void main() {
         child: MaterialApp(
             home: MemberProgressRoute(
                 scope: repo.scope,
-                repositoryFactory: (scope, active) async => repo))));
+                repositoryFactory: (scope, active) async => repo,
+                programProgressBuilder: (_, __) => const SizedBox(),
+                goalSummaryBuilder: (_, __, ___, ____) => const SizedBox()))));
     await tester.pumpAndSettle();
-    expect(find.text('No saved camera sessions yet.'), findsOneWidget);
+    expect(
+        find.text(
+            'No camera workouts recorded yet. Routine history is unavailable.'),
+        findsOneWidget);
     expect(find.text('84%'), findsNothing);
     expect(repo.reads, 1);
     await tester.tap(find.byTooltip('Refresh'));
@@ -72,7 +106,9 @@ void main() {
         child: MaterialApp(
             home: MemberProgressRoute(
                 scope: repo.scope,
-                repositoryFactory: (scope, active) async => repo))));
+                repositoryFactory: (scope, active) async => repo,
+                programProgressBuilder: (_, __) => const SizedBox(),
+                goalSummaryBuilder: (_, __, ___, ____) => const SizedBox()))));
     await tester.pump();
     await tester.pump();
     await tester.runAsync(() async {
@@ -81,7 +117,10 @@ void main() {
     });
     pending.complete(LocalMemberProgressSnapshot(records: []));
     await tester.pumpAndSettle();
-    expect(find.text('No saved camera sessions yet.'), findsNothing);
+    expect(
+        find.text(
+            'No camera workouts recorded yet. Routine history is unavailable.'),
+        findsNothing);
     expect(
         find.text('Sign in to view this account’s progress.'), findsOneWidget);
     await tester.pumpWidget(const SizedBox());

@@ -9,7 +9,8 @@ class FirebaseExerciseCatalogRepository
     implements
         TutorialRepository,
         TutorialMediaRepository,
-        TutorialArchivingRepository {
+        TutorialArchivingRepository,
+        TutorialCatalogStatusRepository {
   FirebaseExerciseCatalogRepository({
     required this.scope,
     FirebaseFirestore? firestore,
@@ -77,6 +78,7 @@ class FirebaseExerciseCatalogRepository
       void Function(double)? onVideoProgress}) async {
     if (cover == null && video == null) return save(tutorial);
     _requireCurrentUser();
+    if (tutorial.archived) throw const TutorialEditConflict();
     encodeCatalogFields(tutorial); // Validate text before sending any bytes.
     final baseline = tutorial.editBaseline;
     if (tutorial.id.isNotEmpty &&
@@ -221,6 +223,7 @@ class FirebaseExerciseCatalogRepository
 
   Future<TutorialVideo> _save(TutorialVideo tutorial) async {
     _requireCurrentUser();
+    if (tutorial.archived) throw const TutorialEditConflict();
     final data = encodeCatalogFields(tutorial);
     if (tutorial.id.isEmpty) {
       _requireAssignment(await _store.readAssignment());
@@ -262,6 +265,7 @@ class FirebaseExerciseCatalogRepository
       if (!_same(current, baseline.document)) {
         throw const TutorialEditConflict();
       }
+      if (current?['archived'] == true) throw const TutorialEditConflict();
       if (patch.isNotEmpty) transaction.update(tutorial.id, patch);
     });
     _requireCurrentUser();
@@ -270,6 +274,12 @@ class FirebaseExerciseCatalogRepository
 
   @override
   Future<void> archive(TutorialVideo tutorial) async {
+    await setCatalogStatus(tutorial, ExerciseCatalogStatus.archived);
+  }
+
+  @override
+  Future<TutorialVideo> setCatalogStatus(
+      TutorialVideo tutorial, ExerciseCatalogStatus status) async {
     try {
       _requireCurrentUser();
       final baseline = tutorial.editBaseline;
@@ -293,16 +303,32 @@ class FirebaseExerciseCatalogRepository
         if (!_same(current, baseline.document)) {
           throw const TutorialEditConflict();
         }
-        transaction.update(tutorial.id, {'archived': true, 'isActive': false});
+        transaction.update(tutorial.id, {
+          'archived': status == ExerciseCatalogStatus.archived,
+          'isActive': status == ExerciseCatalogStatus.active,
+        });
       });
       final saved = await _store.readExercise(tutorial.id);
       _requireCurrentUser();
-      if (saved?['archived'] != true || saved?['isActive'] != false) {
+      final assignment = await _store.readAssignment();
+      _requireAssignment(assignment);
+      final membership = await _store.readMembership();
+      _requireAuthor(membership);
+      _requireCurrentUser();
+      if (!_same(assignment, baseline.assignment) ||
+          !_same(membership, baseline.membership)) {
+        throw const TutorialEditAuthorizationChanged();
+      }
+      if (saved == null ||
+          saved['archived'] != (status == ExerciseCatalogStatus.archived) ||
+          saved['isActive'] != (status == ExerciseCatalogStatus.active)) {
         throw const TutorialCatalogSaveFailed();
       }
+      return _fromDocument(tutorial.id, saved);
     } on TutorialEditConflict {
       rethrow;
     } on TutorialEditAuthorizationChanged {
+      _invalidated = true;
       rethrow;
     } on FirebaseException catch (error) {
       if (error.code == 'permission-denied' ||

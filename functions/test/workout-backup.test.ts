@@ -2,6 +2,24 @@ import { beforeEach, expect, it } from 'vitest';
 import { MemoryStore } from './memory-store';
 import { backupWorkout, listWorkoutBackups, type BackupStore } from '../src/modules/workouts/workout-backup';
 import {actor,payload,command} from './workout-backup-fixture';
+it.each([0, 75, 600])('backs up optional Program exercise restSeconds %s without changing evidence classification', async restSeconds => {
+ const {routinePayload} = await import('./workout-backup-fixture');
+ const next = {...routinePayload, attempt: {...routinePayload.attempt, routine: {...routinePayload.attempt.routine,
+  exercises: routinePayload.attempt.routine.exercises.map(e => ({...e, restSeconds}))}}};
+ const result = await backupWorkout(store, actor, {...command, kind: 'routine', id: 'r1', payload: next});
+ expect(result).toMatchObject({status: 'backed_up'});
+ const head = memory.documents.get('orgs/gainpath/members/member/workoutBackups/routine-r1')!;
+ expect(head.classification).toBe('provisional_member_backup');
+ expect(JSON.parse(String(head.payloadJson)).attempt.routine.exercises[0].restSeconds).toBe(restSeconds);
+ expect([...memory.documents.keys()].some(p => p.includes('/rewardAwards/') || p.includes('/verifiedRoutineAttempts/'))).toBe(false);
+});
+it.each([-1, 601, 1.5, '75', null])('rejects invalid Program restSeconds %s without writing a backup', async restSeconds => {
+ const {routinePayload} = await import('./workout-backup-fixture');
+ const next = {...routinePayload, attempt: {...routinePayload.attempt, routine: {...routinePayload.attempt.routine,
+  exercises: routinePayload.attempt.routine.exercises.map(e => ({...e, restSeconds}))}}};
+ await expect(backupWorkout(store, actor, {...command, kind: 'routine', id: 'r1', payload: next})).rejects.toHaveProperty('name', 'InputValidationError');
+ expect([...memory.documents.keys()].some(p => p.includes('/workoutBackups/'))).toBe(false);
+});
 it('backs up optional routine difficulty without promoting provisional evidence',async()=>{
  const {routinePayload}=await import('./workout-backup-fixture');
  const next={...routinePayload,attempt:{...routinePayload.attempt,routine:{...routinePayload.attempt.routine,difficulty:'Advanced'}}};

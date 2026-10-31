@@ -15,11 +15,13 @@ class PublishedRoutineExercise extends Exercise {
     required String imageUrl,
     required String muscleGroup,
     this.videoUrl,
+    this.restSeconds = 60,
     this.tutorial = const ExerciseTutorialDetails(),
   }) : super(name, category, sets, reps, cue, imageUrl, muscleGroup);
 
   final String exerciseId;
   final int dayNumber;
+  final int restSeconds;
   final String? videoUrl;
   final ExerciseTutorialDetails tutorial;
 }
@@ -75,6 +77,10 @@ class PublishedRoutine {
         throw const FormatException('Invalid routine exercise');
       }
       final day = item['dayNumber'] ?? 1;
+      final rest = item['restSeconds'] ?? 60;
+      if (rest is! int || rest < 0 || rest > 600) {
+        throw const FormatException('Invalid exercise rest target');
+      }
       if (day is! int || day < 1) {
         throw const FormatException('Invalid routine day');
       }
@@ -88,6 +94,7 @@ class PublishedRoutine {
       return PublishedRoutineExercise(
         exerciseId: item['exerciseId'] as String,
         dayNumber: day,
+        restSeconds: rest,
         videoUrl: tutorialMediaUri(item['videoUrl'])?.toString(),
         tutorial: tutorial,
         name: item['name'] as String,

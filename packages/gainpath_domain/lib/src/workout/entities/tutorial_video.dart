@@ -21,6 +21,11 @@ class TutorialVideo {
   String title;
   String category;
   TutorialStatus status;
+  ExerciseCatalogStatus get catalogStatus => archived
+      ? ExerciseCatalogStatus.archived
+      : status == TutorialStatus.active
+          ? ExerciseCatalogStatus.active
+          : ExerciseCatalogStatus.inactive;
   String coversExercise;
   String difficulty;
   int durationMin;

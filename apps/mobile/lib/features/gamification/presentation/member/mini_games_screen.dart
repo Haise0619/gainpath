@@ -7,6 +7,11 @@ import 'live_mini_game_screen.dart';
 import 'widgets/game_media.dart';
 import '../../domain/move_catch_ports.dart';
 import 'mini_game_details_screen.dart';
+import '../../application/game_leaderboard_host.dart';
+import 'reach_tap_challenge_card.dart';
+import '../../domain/reach_tap_ports.dart';
+import '../../domain/reach_tap_participation_repository.dart';
+import 'mini_game_participation_panel.dart';
 
 class MiniGamesScreen extends StatelessWidget {
   const MiniGamesScreen(
@@ -14,11 +19,14 @@ class MiniGamesScreen extends StatelessWidget {
       this.connected = false,
       this.reader,
       this.bestScoreStore,
-      this.rewardStatus});
+      this.rewardStatus,
+      this.participation,
+      this.reachParticipation});
   final bool connected;
   final MiniGameContentReader? reader;
   final MoveCatchBestScoreStore? bestScoreStore;
   final Widget? rewardStatus;
+  final MiniGameParticipationRepository? participation, reachParticipation;
 
   @override
   Widget build(BuildContext context) {
@@ -26,6 +34,9 @@ class MiniGamesScreen extends StatelessWidget {
       return _MotionGames(
           reader: reader,
           bestScoreStore: bestScoreStore,
+          participation: participation,
+          reachParticipation: reachParticipation ??
+              context.read<ReachTapParticipationRepository?>()?.repository,
           rewardStatus: rewardStatus);
     }
     final games = connected
@@ -67,16 +78,23 @@ class MiniGamesScreen extends StatelessWidget {
 }
 
 class _MotionGames extends StatefulWidget {
-  const _MotionGames({this.reader, this.bestScoreStore, this.rewardStatus});
+  const _MotionGames(
+      {this.reader,
+      this.bestScoreStore,
+      this.rewardStatus,
+      this.participation,
+      this.reachParticipation});
   final MiniGameContentReader? reader;
   final MoveCatchBestScoreStore? bestScoreStore;
   final Widget? rewardStatus;
+  final MiniGameParticipationRepository? participation, reachParticipation;
   @override
   State<_MotionGames> createState() => _MotionGamesState();
 }
 
 class _MotionGamesState extends State<_MotionGames> {
   MiniGameContent? _content;
+  MiniGameContent? _reachContent;
   bool _loading = false, _unavailable = false;
   int _generation = 0, _bestRevision = 0;
 
@@ -95,6 +113,7 @@ class _MotionGamesState extends State<_MotionGames> {
   Future<void> _load() async {
     final reader = widget.reader, generation = ++_generation;
     _content = null;
+    _reachContent = null;
     _unavailable = false;
     _loading = reader != null && reader.current;
     if (reader == null || !reader.current) return;
@@ -102,18 +121,22 @@ class _MotionGamesState extends State<_MotionGames> {
       final rows = await reader.load();
       if (!mounted || generation != _generation) return;
       MiniGameContent? content;
+      MiniGameContent? reachContent;
       if (reader.current) {
         for (final row in rows) {
           if (row.gameId == MiniGameContent.supportedId &&
               row.organizationId == reader.scope.organizationId) {
             content = row;
-            break;
+          } else if (row.gameId == MiniGameContent.reachTapId &&
+              row.organizationId == reader.scope.organizationId) {
+            reachContent = row;
           }
         }
       }
       setState(() {
         _content = content;
-        _unavailable = content == null;
+        _reachContent = reachContent;
+        _unavailable = content == null || reachContent == null;
         _loading = false;
       });
     } catch (_) {
@@ -138,9 +161,21 @@ class _MotionGamesState extends State<_MotionGames> {
     await Navigator.of(context).push(MaterialPageRoute<void>(
         builder: (_) => MiniGameDetailsScreen(
             content: content,
+            onLeaderboard: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                    builder: (_) =>
+                        GameLeaderboardHost(gameId: content.gameId))),
+            participation: content.gameId == MiniGameContent.reachTapId
+                ? widget.reachParticipation
+                : widget.participation,
             reader: widget.reader,
+            reachTapHistory: context.read<ReachTapHistoryStore?>(),
             bestScoreStore: widget.bestScoreStore,
-            rewardStatus: widget.rewardStatus)));
+            rewardStatus: content.gameId == MiniGameContent.reachTapId &&
+                    widget.reachParticipation != null
+                ? MiniGameParticipationPanel(
+                    repository: widget.reachParticipation!)
+                : widget.rewardStatus)));
     if (mounted && (widget.reader?.current ?? true)) {
       setState(() => _bestRevision++);
     }
@@ -161,6 +196,9 @@ class _MotionGamesState extends State<_MotionGames> {
     }
     final content = _content ??
         MiniGameContent.defaults(reader?.scope.organizationId ?? 'built-in');
+    final reachContent = _reachContent ??
+        MiniGameContent.defaults(reader?.scope.organizationId ?? 'built-in',
+            gameId: MiniGameContent.reachTapId);
     return Scaffold(
         backgroundColor: AppColors.bg,
         appBar: AppBar(title: const Text('Mini-games'), actions: [
@@ -206,9 +244,14 @@ class _MotionGamesState extends State<_MotionGames> {
                       Wrap(spacing: 12, runSpacing: 12, children: [
                         SizedBox(
                             width: (constraints.maxWidth - 12) / 2,
-                            child: _MotionChallengeCard(
+                            child: MotionChallengeCard(
                                 content: content,
-                                onTap: () => _details(content)))
+                                onTap: () => _details(content))),
+                        SizedBox(
+                            width: (constraints.maxWidth - 12) / 2,
+                            child: ReachTapChallengeCard(
+                                content: reachContent,
+                                onTap: () => _details(reachContent))),
                       ])),
             ])));
   }
@@ -287,50 +330,6 @@ class _GameLabel extends StatelessWidget {
       child: Text(label,
           style: const TextStyle(
               color: Colors.white, fontWeight: FontWeight.w700, fontSize: 12)));
-}
-
-class _MotionChallengeCard extends StatelessWidget {
-  const _MotionChallengeCard({required this.content, required this.onTap});
-  final MiniGameContent content;
-  final VoidCallback onTap;
-  @override
-  Widget build(BuildContext context) => Material(
-      color: Colors.white,
-      shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(18),
-          side: const BorderSide(color: AppColors.hairline)),
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-          key: const Key('move-catch-challenge-card'),
-          onTap: onTap,
-          child:
-              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            AspectRatio(
-                aspectRatio: 1.2,
-                child: Stack(fit: StackFit.expand, children: [
-                  MiniGameCover(content: content),
-                  const Center(
-                      child: Icon(Icons.play_circle_fill_rounded,
-                          size: 42, color: Colors.white)),
-                ])),
-            Padding(
-                padding: const EdgeInsets.all(12),
-                child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(content.title,
-                          style: Theme.of(context)
-                              .textTheme
-                              .titleMedium
-                              ?.copyWith(fontWeight: FontWeight.w800)),
-                      const SizedBox(height: 6),
-                      const Text('40 seconds · Camera',
-                          style: TextStyle(color: AppColors.inkSoft)),
-                      const SizedBox(height: 4),
-                      const Text('All levels',
-                          style: TextStyle(color: AppColors.primary)),
-                    ])),
-          ])));
 }
 
 Color _difficultyColor(String difficulty) {

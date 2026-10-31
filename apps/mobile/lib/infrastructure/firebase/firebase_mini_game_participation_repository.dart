@@ -8,6 +8,7 @@ class FirebaseMiniGameParticipationRepository
     extends RemoteMiniGameParticipationRepository {
   FirebaseMiniGameParticipationRepository(
       {required super.scope,
+      super.gameId,
       required bool Function() isCurrent,
       String? Function()? currentUid,
       MiniGameContentCall? call,

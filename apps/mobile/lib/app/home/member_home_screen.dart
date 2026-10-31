@@ -236,13 +236,24 @@ class _MemberHomeScreenState extends State<MemberHomeScreen>
                   if (widget.announcements != null) ...[
                     widget.announcements!,
                     const SizedBox(height: 14),
-                  ] else if (!_dismissedBroadcast) ...[
+                  ] else if (!live && !_dismissedBroadcast) ...[
                     _BroadcastBanner(
                         live: live,
                         onDismiss: () =>
                             setState(() => _dismissedBroadcast = true)),
                     const SizedBox(height: 14),
                   ],
+                  const Eyebrow("Today's session"),
+                  _TodayWorkoutCard(
+                      live: live,
+                      publishedRoutine: widget.publishedRoutine,
+                      routineStatusMessage: widget.routineStatusMessage,
+                      onStart: live
+                          ? widget.onStartWorkout ??
+                              () => _go(WorkoutPrepRoute(
+                                  publishedRoutine: widget.publishedRoutine))
+                          : () => _go(const WorkoutPrepRoute(live: false))),
+                  const SizedBox(height: 16),
                   if (live && widget.appCheckIn != null)
                     AppCheckInCard(
                         state: widget.appCheckIn!,
@@ -256,17 +267,6 @@ class _MemberHomeScreenState extends State<MemberHomeScreen>
                       onClaim: live ? () => showUnavailable(context) : _claim,
                       reward: RewardPolicy.dailyCheckIn,
                     ),
-                  const SizedBox(height: 20),
-                  const Eyebrow("Today's session"),
-                  _TodayWorkoutCard(
-                      live: live,
-                      publishedRoutine: widget.publishedRoutine,
-                      routineStatusMessage: widget.routineStatusMessage,
-                      onStart: live
-                          ? widget.onStartWorkout ??
-                              () => _go(WorkoutPrepRoute(
-                                  publishedRoutine: widget.publishedRoutine))
-                          : () => _go(const WorkoutPrepRoute(live: false))),
                   const SizedBox(height: 20),
                   if (live) ...[
                     RoutineProgressCard(
@@ -379,7 +379,7 @@ class _HeroHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     return SliverAppBar(
       pinned: true,
-      expandedHeight: 178,
+      expandedHeight: 140,
       backgroundColor: AppColors.primaryDark,
       foregroundColor: Colors.white,
       elevation: 0,
@@ -433,8 +433,8 @@ class _HeroHeader extends StatelessWidget {
                     Row(
                       children: [
                         Container(
-                          width: 46,
-                          height: 46,
+                          width: 40,
+                          height: 40,
                           decoration: BoxDecoration(
                             color: Colors.white.withValues(alpha: 0.18),
                             borderRadius: BorderRadius.circular(14),
@@ -467,7 +467,7 @@ class _HeroHeader extends StatelessWidget {
                                       .headlineMedium
                                       ?.copyWith(
                                           color: Colors.white,
-                                          fontSize: 24,
+                                          fontSize: 20,
                                           height: 1.15)),
                             ],
                           ),
@@ -622,12 +622,12 @@ class _StreakCard extends StatelessWidget {
             Row(
               children: [
                 Container(
-                  width: 46,
-                  height: 46,
+                  width: 40,
+                  height: 40,
                   decoration: BoxDecoration(
                     color:
                         claimed ? AppColors.successTint : AppColors.accentTint,
-                    borderRadius: BorderRadius.circular(13),
+                    borderRadius: BorderRadius.circular(12),
                   ),
                   child: Icon(
                     claimed
@@ -686,11 +686,11 @@ class _StreakCard extends StatelessWidget {
                       width: 30,
                       height: 30,
                       decoration: BoxDecoration(
-                        color: done ? AppColors.accent : AppColors.surfaceAlt,
+                        color: done ? AppColors.primary : AppColors.surfaceAlt,
                         shape: BoxShape.circle,
                         border: isToday
                             ? Border.all(color: AppColors.primary, width: 2)
-                            : null,
+                            : Border.all(color: AppColors.hairline, width: 1),
                       ),
                       child: done
                           ? const Icon(Icons.check_rounded,
@@ -702,8 +702,10 @@ class _StreakCard extends StatelessWidget {
                       labels[day.weekday - 1],
                       style: TextStyle(
                         fontSize: 11,
-                        fontWeight: isToday ? FontWeight.w800 : FontWeight.w600,
-                        color: isToday ? AppColors.primary : AppColors.inkSoft,
+                        fontWeight: isToday ? FontWeight.w800 : (done ? FontWeight.w700 : FontWeight.w600),
+                        color: isToday
+                            ? AppColors.primary
+                            : (done ? AppColors.ink : AppColors.inkSoft),
                       ),
                     ),
                   ],
@@ -792,7 +794,25 @@ class _TodayWorkoutCard extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 10),
+          if (live && publishedRoutine != null && publishedRoutine!.exercises.isNotEmpty) ...[
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.2),
+                borderRadius: BorderRadius.circular(999),
+                border: Border.all(color: Colors.white.withValues(alpha: 0.3)),
+              ),
+              child: Text(publishedRoutine!.exercises.first.category,
+                  style: const TextStyle(
+                      fontSize: 11,
+                      color: Colors.white,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 0.5)),
+            ),
+            const SizedBox(height: 10),
+          ] else
+            const SizedBox(height: 6),
           Wrap(
             spacing: 6,
             runSpacing: 6,
@@ -844,7 +864,7 @@ class _TodayWorkoutCard extends StatelessWidget {
               ),
               onPressed: onStart,
               icon: const Icon(Icons.bolt_rounded, size: 20),
-              label: const Text('Start workout'),
+              label: Text(routineStatusMessage?.contains('progress') == true ? 'Resume workout' : 'Start workout'),
             ),
           ),
         ],

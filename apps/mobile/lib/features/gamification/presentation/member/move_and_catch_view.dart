@@ -15,12 +15,18 @@ class MoveAndCatchView extends StatefulWidget {
       this.content,
       this.onExit,
       this.participationStatus,
-      this.rewardStatus});
+      this.rewardStatus,
+      this.modeSelected = false,
+      this.competitionStatus,
+      this.competitionConsent,
+      this.onLeaderboard});
   final MoveAndCatchController controller;
   final Widget viewport;
   final MiniGameContent? content;
   final Future<void> Function()? onExit;
-  final Widget? rewardStatus;
+  final Widget? rewardStatus, competitionStatus, competitionConsent;
+  final VoidCallback? onLeaderboard;
+  final bool modeSelected;
   final Widget? participationStatus;
   @override
   State<MoveAndCatchView> createState() => _MoveAndCatchViewState();
@@ -162,19 +168,40 @@ class _MoveAndCatchViewState extends State<MoveAndCatchView> {
                     bestScoreAvailable: controller.bestScoreAvailable,
                     bestSaved: controller.bestSaved,
                     scoreSaveFailed: controller.scoreSaveFailed,
-                    rewardStatus: widget.participationStatus ??
-                        (controller.roundTiming != null &&
-                                controller.roundTimingConsent
-                            ? Column(
-                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                    newPersonalBest: controller.newPersonalBest,
+                    saving: controller.saving,
+                    onRetrySave: controller.retrySave,
+                    competitionStatus: widget.competitionStatus,
+                    onLeaderboard: widget.onLeaderboard,
+                    rewardStatus: widget.modeSelected &&
+                            !controller.roundTimingConsent
+                        ? const Panel(
+                            child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                    if (widget.rewardStatus != null)
-                                      widget.rewardStatus!,
-                                    const SizedBox(height: 12),
-                                    MiniGameRoundStatusPanel(
-                                        coordinator: controller.roundTiming!),
-                                  ])
-                            : widget.rewardStatus),
+                                Text('Reward Points · Play for fun',
+                                    style: TextStyle(
+                                        color: AppColors.ink,
+                                        fontWeight: FontWeight.w700)),
+                                Text('No Reward Points claim for this round.')
+                              ]))
+                        : (controller.roundTimingConsent
+                                ? widget.participationStatus
+                                : null) ??
+                            (controller.roundTiming != null &&
+                                    controller.roundTimingConsent
+                                ? Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.stretch,
+                                    children: [
+                                        if (widget.rewardStatus != null)
+                                          widget.rewardStatus!,
+                                        const SizedBox(height: 12),
+                                        MiniGameRoundStatusPanel(
+                                            coordinator:
+                                                controller.roundTiming!),
+                                      ])
+                                : widget.rewardStatus),
                     error: controller.error,
                     onReplay:
                         controller.loading ? null : () => controller.restart(),
@@ -222,12 +249,14 @@ class _MoveAndCatchViewState extends State<MoveAndCatchView> {
                       Text(content?.title ?? 'Move & Catch',
                           style: Theme.of(context)
                               .textTheme
-                              .headlineLarge
-                              ?.copyWith(fontWeight: FontWeight.w800)),
+                              .headlineMedium
+                              ?.copyWith(
+                                  color: AppColors.ink,
+                                  fontWeight: FontWeight.w800)),
                       const SizedBox(height: 12),
                       Text(content?.introduction ??
                           'Lean left and right to catch stars and avoid obstacles in a 40-second round.'),
-                      if (content != null) ...[
+                      if (content != null && !widget.modeSelected) ...[
                         const SizedBox(height: 16),
                         for (var i = 0; i < content.instructions.length; i++)
                           Padding(
@@ -244,7 +273,18 @@ class _MoveAndCatchViewState extends State<MoveAndCatchView> {
                       const SizedBox(height: 20),
                       const Text(
                           'Camera and movement stay on this device. No video is saved. Game scores are not reward points.'),
-                      if (c.roundTiming != null) ...[
+                      if (widget.modeSelected) ...[
+                        const SizedBox(height: 12),
+                        Text(c.roundTimingConsent
+                            ? 'Play & Earn · timing shared with your consent'
+                            : c.earningUnavailable
+                                ? 'Earning is unavailable · continuing for fun'
+                                : 'Play for fun · no Reward Points claim'),
+                        TextButton(
+                            onPressed: c.loading ? null : _exit,
+                            child: const Text('Change mode'))
+                      ],
+                      if (!widget.modeSelected && c.roundTiming != null) ...[
                         const SizedBox(height: 12),
                         CheckboxListTile(
                             contentPadding: EdgeInsets.zero,
@@ -259,6 +299,8 @@ class _MoveAndCatchViewState extends State<MoveAndCatchView> {
                                 ? 'Optional. Sends round ID, start/end times, checkpoints and active/paused status to GainPath. No video, pose coordinates or game score is sent. Timing alone does not earn points.'
                                 : 'Optional. Share round timing to earn points. Camera, pose and score stay on-device.')),
                       ],
+                      if (widget.competitionConsent != null)
+                        widget.competitionConsent!,
                       const SizedBox(height: 20),
                       if (c.error != null)
                         Padding(
@@ -333,7 +375,7 @@ class _MoveAndCatchViewState extends State<MoveAndCatchView> {
       ],
       const SizedBox(height: 10),
       Wrap(spacing: 8, runSpacing: 8, children: [
-        if (phase == 'ready')
+        if (phase == 'ready' && !c.autoStart)
           FilledButton(
               onPressed: c.loading ? null : () => c.startRound(),
               child: const Text('Start round')),

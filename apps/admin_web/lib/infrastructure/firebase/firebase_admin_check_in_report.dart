@@ -1,6 +1,8 @@
+import '../../features/analytics/application/admin_observed_activity.dart';
 import 'package:gainpath_domain/gainpath_domain.dart' show SessionScope;
 import '../../features/analytics/application/admin_reporting_gateway.dart';
 import '../../features/analytics/application/admin_check_in_reporting.dart';
+import '../../features/analytics/application/admin_engagement_extension.dart';
 
 Map<String, dynamic> _map(Object? v) {
   if (v is! Map || v.keys.any((k) => k is! String)) {
@@ -160,8 +162,23 @@ AdminCheckInReport parseAdminCheckInReport(
       throw const FormatException('Check-in daily/week mismatch');
     }
   }
+  final extension = m['extensions'] == null
+      ? null
+      : AdminEngagementExtension.parse(m['extensions'], query, captured, scan);
+  if (extension != null) {
+    final checkIn =
+        extension.sources.firstWhere((s) => s.id == 'daily_check_in');
+    if (checkIn['claims'] != totals['claims'] ||
+        checkIn['pointsAwarded'] != totals['pointsAwarded']) {
+      throw const FormatException('Check-in earning source mismatch');
+    }
+  }
   return AdminCheckInReport(
       query: query,
+      observations: m['observations'] == null
+          ? null
+          : AdminObservedActivity.parse(m['observations'], query, scan),
+      extensions: extension,
       scanStartedAt: DateTime.fromMillisecondsSinceEpoch(scan, isUtc: true),
       capturedAt: DateTime.fromMillisecondsSinceEpoch(captured, isUtc: true),
       asOfDate: streaks['asOfDate'] as String,

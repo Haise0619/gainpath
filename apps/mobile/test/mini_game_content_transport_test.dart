@@ -5,6 +5,28 @@ import 'package:gainpath_mobile/infrastructure/firebase/firebase_mini_game_conte
 
 void main() {
   final scope = SessionScope(userId: 'member', organizationId: 'gainpath');
+  test('Member transport exposes explicit legacy registry capability',
+      () async {
+    var calls = 0;
+    final repo = FirebaseMiniGameContentReader(
+        scope: scope,
+        isCurrent: () => true,
+        currentUid: () => scope.userId,
+        call: (input) async {
+          calls++;
+          if (input.containsKey('supportedGameIds')) {
+            throw const MiniGameContentRegistryUnsupported();
+          }
+          return {
+            'schemaVersion': 1,
+            'organizationId': 'gainpath',
+            'games': [MiniGameContent.defaults('gainpath').toJson()]
+          };
+        });
+    expect((await repo.load()).single.gameId, MiniGameContent.supportedId);
+    expect(repo.expandedRegistryAvailable, isFalse);
+    expect(calls, 2);
+  });
   test(
       'Member transport reads scoped supported content without write capabilities',
       () async {
@@ -17,10 +39,14 @@ void main() {
           return {
             'schemaVersion': 1,
             'organizationId': 'gainpath',
-            'games': [MiniGameContent.defaults('gainpath').toJson()]
+            'games': [
+              for (final id in MiniGameContent.supportedIds)
+                MiniGameContent.defaults('gainpath', gameId: id).toJson()
+            ]
           };
         });
-    expect((await repo.load()).single.gameId, MiniGameContent.supportedId);
+    expect((await repo.load()).map((game) => game.gameId),
+        MiniGameContent.supportedIds);
     expect(repo, isNot(isA<MiniGameContentRepository>()));
   });
   test('Member transport rejects a different Firebase subject', () async {

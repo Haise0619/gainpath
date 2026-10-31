@@ -21,7 +21,7 @@ beforeEach(() => {
     store.documents.set(path('members', uid), {organizationId: org, userId: uid, role, status: 'active', branchIds: []});
   }
   freshAuth = vi.fn(async () => undefined);
-  media = {upload: vi.fn(async (objectPath: string) => `https://firebasestorage.googleapis.com/v0/b/synthetic/o/${encodeURIComponent(objectPath)}?alt=media&token=synthetic`)};
+  media = {upload: vi.fn(async (objectPath: string) => `https://firebasestorage.googleapis.com/v0/b/gainpath-0619.firebasestorage.app/o/${encodeURIComponent(objectPath)}?alt=media&token=12345678-1234-1234-1234-123456789abc`)};
 });
 
 it('returns the real supported built-in guide at revision zero without any writes', async () => {
@@ -32,6 +32,53 @@ it('returns the real supported built-in guide at revision zero without any write
     coverUrl: '', previewVideoUrl: '', updatedAtMillis: 0}]});
   expect([...store.documents]).toEqual(before);
   expect(freshAuth).toHaveBeenCalledTimes(2);
+});
+it('negotiates exact supported games in canonical order without seeding content', async () => {
+  const before = structuredClone([...store.documents]);
+  const result = await command('list', {supportedGameIds: ['reach-tap-v1', gameId]}, member);
+  expect(result.games.map((game: any) => game.gameId)).toEqual([gameId, 'reach-tap-v1']);
+  expect(result.games[1]).toMatchObject({title: 'Reach & Tap', revision: 0});
+  expect([...store.documents]).toEqual(before);
+});
+it.each([[], [gameId, gameId], ['invented'], [gameId, 'reach-tap-v1', 'invented'], 'reach-tap-v1', null])('rejects invalid registry negotiation %j', async supportedGameIds => {
+  await expect(command('list', {supportedGameIds})).rejects.toHaveProperty('name', 'InputValidationError');
+});
+it('saves Reach & Tap independently and rejects cross-game request reuse', async () => {
+  const first = await save({gameId: 'reach-tap-v1', title: 'Reach guide'});
+  expect(first.game).toMatchObject({gameId: 'reach-tap-v1', revision: 1});
+  expect(await save({gameId: 'reach-tap-v1', title: 'Reach guide'})).toEqual(first);
+  await expect(save()).rejects.toMatchObject({code: 'already-exists'});
+  expect(store.documents.has(path('miniGameContent', gameId))).toBe(false);
+});
+it('isolates media receipts and object paths by game', async () => {
+  const cover = await upload({gameId: 'reach-tap-v1'});
+  expect(cover.gameId).toBe('reach-tap-v1');
+  expect(media.upload).toHaveBeenCalledWith(expect.stringContaining('/reach-tap-v1/cover/'), png, 'image/png', expect.any(String));
+  await expect(save({coverUrl: cover.url})).rejects.toMatchObject({code: 'permission-denied'});
+  expect(await save({gameId: 'reach-tap-v1', coverUrl: cover.url})).toMatchObject({game: {gameId: 'reach-tap-v1', coverUrl: cover.url}});
+});
+it('rejects an upload adapter returning media for another game', async () => {
+  const old = await upload();
+  media.upload = vi.fn(async () => old.url);
+  await expect(upload({gameId: 'reach-tap-v1'})).rejects.toMatchObject({code: 'failed-precondition'});
+  expect([...store.documents.values()].filter(value => value.gameId === 'reach-tap-v1')).toHaveLength(0);
+});
+it('rejects stored media scoped to another game when listing', async () => {
+  const old = await upload();
+  await save({gameId: 'reach-tap-v1'});
+  store.documents.get(path('miniGameContent', 'reach-tap-v1'))!.coverUrl = old.url;
+  await expect(command('list', {supportedGameIds: ['reach-tap-v1']})).rejects.toMatchObject({code: 'failed-precondition'});
+});
+it('does not permit negotiation fields on writes or swapped stored identities', async () => {
+  await expect(save({supportedGameIds: [gameId]})).rejects.toHaveProperty('name', 'InputValidationError');
+  await save({gameId: 'reach-tap-v1'});
+  store.documents.get(path('miniGameContent', 'reach-tap-v1'))!.gameId = gameId;
+  await expect(command('list', {supportedGameIds: ['reach-tap-v1']})).rejects.toMatchObject({code: 'failed-precondition'});
+});
+it.each([['move-catch-v1'], ['reach-tap-v1'], null, 1, {}])('rejects non-string game identity %j', async gameId => {
+  await expect(save({gameId})).rejects.toHaveProperty('name', 'InputValidationError');
+  await expect(upload({gameId})).rejects.toHaveProperty('name', 'InputValidationError');
+  expect(media.upload).not.toHaveBeenCalled();
 });
 it('saves an override and projects only public fields to Members', async () => {
   expect(await save()).toMatchObject({schemaVersion: 1, organizationId: org, confirmed: true, game: {...content, gameId, revision: 1, updatedAtMillis: now}});

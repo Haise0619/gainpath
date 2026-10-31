@@ -12,9 +12,10 @@ export interface BackupStore extends DocumentStore {
 function input(auth: WorkoutAuth | undefined, raw: unknown, write: boolean) {
   requireVerifiedEmail(auth);
   const v = object(raw);
-  keys(v, write
+  const required = write
     ? ['schemaVersion','organizationId','memberId','consented','kind','id','baseDigest','payload']
-    : ['schemaVersion','organizationId','memberId','consented','after']);
+    : ['schemaVersion','organizationId','memberId','consented','after'];
+  keys(v, write ? required : [...required,'maxPoseMetricsSchemaVersion'], required);
   const org = requiredIdentifier(v.organizationId,'organizationId');
   const uid = requiredIdentifier(v.memberId,'memberId');
   if (auth!.uid !== uid) throw new DomainError('permission-denied','Only your own backup is accessible.');
@@ -65,6 +66,11 @@ export async function backupWorkout(store: BackupStore, auth: WorkoutAuth | unde
 }
 export async function listWorkoutBackups(store: BackupStore, auth: WorkoutAuth | undefined, raw: unknown) {
   const {v,org,uid} = input(auth,raw,false);
+  // Existing clients understand metric schemas 1/2 and send no negotiation.
+  const maximum = 'maxPoseMetricsSchemaVersion' in v ? v.maxPoseMetricsSchemaVersion : 2;
+  if (!Number.isSafeInteger(maximum) || Number(maximum) < 2 || Number(maximum) > 6) {
+    throw new InputValidationError('Invalid supported pose metric version.');
+  }
   const after = v.after === null ? null : String(v.after);
   if (after !== null && after !== 'routines' && !/^(session|routine)-[A-Za-z0-9_-]{1,128}$/.test(after)) {
     throw new InputValidationError('Invalid cursor.');
@@ -83,5 +89,19 @@ export async function listWorkoutBackups(store: BackupStore, auth: WorkoutAuth |
     }
     return {kind:d.kind,id:d.id,digest:d.digest,payload:p};
   });
-  return {schemaVersion:1,records,nextCursor:docs.length === 3 ? String(docs.at(-1)!.key) : kind === 'session' ? 'routines' : null};
+  // Verify the whole scanned page before compatibility filtering: an unreadable
+  // client schema never hides corruption. Cursor progress follows scanned docs.
+  const supported = records.filter(record => {
+    if (record.kind === 'session') return Number(object(record.payload.poseMetrics).schemaVersion) <= Number(maximum);
+    if (Number(maximum) >= 6) return true;
+    const routine = object(object(record.payload.attempt).routine);
+    return !(routine.exercises as unknown[]).some(exercise => {
+      const id = object(exercise).exerciseId;
+      return id === 'standing-lateral-raise-front-v1' ||
+        (Number(maximum) < 5 && id === 'bodyweight-reverse-lunge-side-v1') ||
+        (Number(maximum) < 4 && id === 'dumbbell-shoulder-press-front-v1') ||
+        (Number(maximum) < 3 && id === 'single-arm-dumbbell-row-side-v1');
+    });
+  });
+  return {schemaVersion:1,records:supported,nextCursor:docs.length === 3 ? String(docs.at(-1)!.key) : kind === 'session' ? 'routines' : null};
 }

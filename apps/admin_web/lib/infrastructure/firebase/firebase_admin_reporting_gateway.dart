@@ -1,3 +1,4 @@
+import '../../features/analytics/application/admin_commerce_report.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:gainpath_domain/gainpath_domain.dart' show SessionScope, Money;
@@ -14,6 +15,7 @@ typedef AdminReportingInvoke = Future<Object?> Function(
 class FirebaseAdminReportingGateway
     implements
         OperationalAdminReportingGateway,
+        AdminReportingSessionGuard,
         AdminWorkoutReportingGateway,
         AdminCheckInReportingGateway {
   FirebaseAdminReportingGateway(
@@ -49,24 +51,62 @@ class FirebaseAdminReportingGateway
         .data;
   }
 
+  final Map<AdminReportQuery, Future<AdminCheckInReport>> _pendingCheckIns = {};
   @override
-  Future<AdminCheckInReport> loadCheckIns(AdminReportQuery query) async {
+  Future<AdminCheckInReport> loadCheckIns(AdminReportQuery query) {
+    _check();
+    final pending = _pendingCheckIns[query];
+    if (pending != null) return pending;
+    late final Future<AdminCheckInReport> request;
+    request = _loadCheckIns(query).whenComplete(() {
+      if (identical(_pendingCheckIns[query], request)) {
+        _pendingCheckIns.remove(query);
+      }
+    });
+    _pendingCheckIns[query] = request;
+    return request;
+  }
+
+  Future<AdminCheckInReport> _loadCheckIns(AdminReportQuery query) async {
     _check();
     if (query.branchId != null) {
       throw const AdminCheckInReportException(
           'App check-in analytics is organization-wide. Select all branches.');
     }
     try {
-      final raw = await _checkInInvoke({
-        'schemaVersion': 1,
+      final input = <String, Object?>{
+        'schemaVersion': 3,
         'organizationId': scope.organizationId,
         'startAtMillis': query.range.start.toUtc().millisecondsSinceEpoch,
         'endAtMillis': query.range.end.toUtc().millisecondsSinceEpoch
-      });
+      };
+      Object? raw;
+      try {
+        raw = await _checkInInvoke(input);
+      } on FirebaseFunctionsException catch (e) {
+        if (e.code != 'invalid-argument') rethrow;
+        _check();
+        try {
+          raw = await _checkInInvoke({...input, 'schemaVersion': 2});
+        } on FirebaseFunctionsException catch (legacy) {
+          if (legacy.code != 'invalid-argument') rethrow;
+          _check();
+          raw = await _checkInInvoke({...input, 'schemaVersion': 1});
+        }
+      }
       _check();
       return parseAdminCheckInReport(raw, scope, query);
     } on FirebaseFunctionsException catch (e) {
       _check();
+      if (e.code == 'permission-denied' || e.code == 'unauthenticated') {
+        throw const AdminReportingException(
+            'Your reporting access changed. Sign in again.',
+            invalidatesSnapshot: true);
+      }
+      if (e.code == 'failed-precondition') {
+        throw const AdminReportingException(
+            'Reporting sources need review. Retry; no partial totals were returned.');
+      }
       if (e.code == 'not-found' || e.code == 'unimplemented') {
         throw const AdminCheckInReportException(
             'Check-in analytics is awaiting server activation.');
@@ -113,6 +153,15 @@ class FirebaseAdminReportingGateway
       return parseAdminWorkoutReport(raw, scope, query);
     } on FirebaseFunctionsException catch (e) {
       _check();
+      if (e.code == 'permission-denied' || e.code == 'unauthenticated') {
+        throw const AdminReportingException(
+            'Your reporting access changed. Sign in again.',
+            invalidatesSnapshot: true);
+      }
+      if (e.code == 'failed-precondition') {
+        throw const AdminReportingException(
+            'Reporting sources need review. Retry; no partial totals were returned.');
+      }
       if (e.code == 'not-found' || e.code == 'unimplemented') {
         throw const AdminWorkoutReportException(
             'Workout analytics is awaiting server activation.');
@@ -141,6 +190,9 @@ class FirebaseAdminReportingGateway
         .data;
   }
 
+  @override
+  bool get canRetainSnapshot => isCurrent() && _uid() == scope.userId;
+
   void _check() {
     if (!isCurrent() || _uid() != scope.userId) {
       throw StateError('Reporting account changed');
@@ -158,12 +210,52 @@ class FirebaseAdminReportingGateway
     }
     final start = query.range.start.toUtc().millisecondsSinceEpoch,
         end = query.range.end.toUtc().millisecondsSinceEpoch;
-    final raw = await _invoke({
-      'schemaVersion': 1,
-      'organizationId': scope.organizationId,
-      'startAtMillis': start,
-      'endAtMillis': end
-    });
+    Object? raw;
+    try {
+      raw = await _invoke({
+        'schemaVersion': 2,
+        'organizationId': scope.organizationId,
+        'startAtMillis': start,
+        'endAtMillis': end
+      });
+    } on FirebaseFunctionsException catch (e) {
+      if (e.code == 'invalid-argument') {
+        _check();
+        final legacy = await _invoke({
+          'schemaVersion': 1,
+          'organizationId': scope.organizationId,
+          'startAtMillis': start,
+          'endAtMillis': end
+        });
+        _check();
+        return parseAdminOperationalReport(legacy, scope, query);
+      }
+
+      _check();
+      if (e.code == 'permission-denied' || e.code == 'unauthenticated') {
+        throw const AdminReportingException(
+            'Your reporting access changed. Sign in again.',
+            invalidatesSnapshot: true);
+      }
+      if (e.code == 'failed-precondition') {
+        throw const AdminReportingException(
+            'Reporting sources need review. Retry; no partial totals were returned.');
+      }
+      throw AdminReportingException(switch (e.code) {
+        'permission-denied' ||
+        'unauthenticated' =>
+          'Your reporting access changed. Sign in again.',
+        'resource-exhausted' =>
+          'The reporting source scan limit was reached. An authorized source review is needed.',
+        'failed-precondition' =>
+          'Reporting sources need review. Retry; no partial totals were returned.',
+        'not-found' ||
+        'unimplemented' =>
+          'This reporting service is not available yet.',
+        _ =>
+          'Reports are temporarily unavailable. Check your connection and retry.',
+      });
+    }
     _check();
     return parseAdminOperationalReport(raw, scope, query);
   }
@@ -321,6 +413,9 @@ AdminReportingSnapshot parseAdminOperationalReport(
       query: query,
       capturedAt: DateTime.fromMillisecondsSinceEpoch(captured, isUtc: true),
       operations: ops,
+      commerce: m['commerce'] == null
+          ? null
+          : AdminCommerceReport.parse(m['commerce'], query),
       totalRevenue:
           Money(currency: 'MYR', minorUnits: receipts['confirmedMinor']!),
       activeMembersCount: accounts['members'],

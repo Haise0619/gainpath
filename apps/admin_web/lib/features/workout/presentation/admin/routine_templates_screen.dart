@@ -540,6 +540,13 @@ class _TemplateFormPageState extends State<_TemplateFormPage> {
     });
   }
 
+  void _moveExercise(int dayIndex, int from, int to) {
+    if (_saving || _reloadRequired) return;
+    final exercises = _days[dayIndex].exercises;
+    if (to < 0 || to >= exercises.length) return;
+    setState(() => exercises.insert(to, exercises.removeAt(from)));
+  }
+
   Future<void> _save() async {
     if (_saving || _reloadRequired || _catalogLoading) return;
     if (_name.text.trim().isEmpty) {
@@ -905,82 +912,108 @@ class _TemplateFormPageState extends State<_TemplateFormPage> {
           ...List.generate(day.exercises.length, (exIndex) {
             final ex = day.exercises[exIndex];
             return Padding(
+              key: ObjectKey(ex),
               padding: const EdgeInsets.only(bottom: 8),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    flex: 3,
-                    child: _usesCatalog
-                        ? DropdownButtonFormField<String>(
-                            initialValue: _catalog.any(
-                                    (item) => item.id == ex.selectedExerciseId)
-                                ? ex.selectedExerciseId
-                                : null,
-                            isExpanded: true,
-                            decoration: InputDecoration(
-                              hintText: _catalogLoading
-                                  ? 'Loading exercises…'
-                                  : _catalog.isEmpty
-                                      ? 'Add an active exercise first'
-                                      : 'Select exercise',
-                              isDense: true,
-                            ),
-                            items: _catalog
-                                .map((item) => DropdownMenuItem(
-                                    value: item.id,
-                                    child: Row(children: [
-                                      Expanded(
-                                          child: Text(item.title,
-                                              maxLines: 1,
-                                              overflow: TextOverflow.ellipsis)),
-                                      const SizedBox(width: 8),
-                                      Text(item.trackingCapability.displayLabel,
-                                          style: const TextStyle(
-                                              fontSize: 11,
-                                              color: AppColors.inkSoft)),
-                                    ])))
-                                .toList(),
-                            onChanged: _catalogLoading || _catalog.isEmpty
-                                ? null
-                                : (id) =>
-                                    setState(() => ex.selectedExerciseId = id),
-                          )
-                        : TextField(
-                            controller: ex.name,
+              child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          flex: 3,
+                          child: _usesCatalog
+                              ? DropdownButtonFormField<String>(
+                                  initialValue: _catalog.any((item) =>
+                                          item.id == ex.selectedExerciseId)
+                                      ? ex.selectedExerciseId
+                                      : null,
+                                  isExpanded: true,
+                                  decoration: InputDecoration(
+                                    hintText: _catalogLoading
+                                        ? 'Loading exercises…'
+                                        : _catalog.isEmpty
+                                            ? 'Add an active exercise first'
+                                            : 'Select exercise',
+                                    isDense: true,
+                                  ),
+                                  items: _catalog
+                                      .map((item) => DropdownMenuItem(
+                                          value: item.id,
+                                          child: Row(children: [
+                                            Expanded(
+                                                child: Text(item.title,
+                                                    maxLines: 1,
+                                                    overflow:
+                                                        TextOverflow.ellipsis)),
+                                            const SizedBox(width: 8),
+                                            Text(
+                                                item.trackingCapability
+                                                    .displayLabel,
+                                                style: const TextStyle(
+                                                    fontSize: 11,
+                                                    color: AppColors.inkSoft)),
+                                          ])))
+                                      .toList(),
+                                  onChanged: _catalogLoading || _catalog.isEmpty
+                                      ? null
+                                      : (id) => setState(
+                                          () => ex.selectedExerciseId = id),
+                                )
+                              : TextField(
+                                  controller: ex.name,
+                                  decoration: const InputDecoration(
+                                      hintText: 'Exercise name', isDense: true),
+                                ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: TextField(
+                            controller: ex.sets,
+                            keyboardType: TextInputType.number,
                             decoration: const InputDecoration(
-                                hintText: 'Exercise name', isDense: true),
+                                hintText: 'Sets', isDense: true),
                           ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: TextField(
-                      controller: ex.sets,
-                      keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(
-                          hintText: 'Sets', isDense: true),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: TextField(
+                            controller: ex.reps,
+                            keyboardType: TextInputType.number,
+                            decoration: const InputDecoration(
+                                hintText: 'Reps', isDense: true),
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.close_rounded, size: 16),
+                          onPressed: day.exercises.length > 1
+                              ? () => _removeExercise(dayIndex, exIndex)
+                              : null,
+                          constraints:
+                              const BoxConstraints(minWidth: 30, minHeight: 30),
+                          padding: EdgeInsets.zero,
+                        ),
+                      ],
                     ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: TextField(
-                      controller: ex.reps,
-                      keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(
-                          hintText: 'Reps', isDense: true),
-                    ),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.close_rounded, size: 16),
-                    onPressed: day.exercises.length > 1
-                        ? () => _removeExercise(dayIndex, exIndex)
-                        : null,
-                    constraints:
-                        const BoxConstraints(minWidth: 30, minHeight: 30),
-                    padding: EdgeInsets.zero,
-                  ),
-                ],
-              ),
+                    Wrap(spacing: 8, children: [
+                      TextButton.icon(
+                          onPressed: exIndex == 0 || _saving || _reloadRequired
+                              ? null
+                              : () =>
+                                  _moveExercise(dayIndex, exIndex, exIndex - 1),
+                          icon: const Icon(Icons.arrow_upward, size: 16),
+                          label: const Text('Move up')),
+                      TextButton.icon(
+                          onPressed: exIndex == day.exercises.length - 1 ||
+                                  _saving ||
+                                  _reloadRequired
+                              ? null
+                              : () =>
+                                  _moveExercise(dayIndex, exIndex, exIndex + 1),
+                          icon: const Icon(Icons.arrow_downward, size: 16),
+                          label: const Text('Move down')),
+                    ]),
+                  ]),
             );
           }),
           TextButton.icon(

@@ -5,6 +5,9 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:gainpath_domain/analytics.dart';
 import 'package:gainpath_domain/workout.dart';
 import 'widgets/local_progress_widgets.dart';
+import '../../domain/member_workout_report.dart';
+import '../../../workout/domain/routine_attempt.dart';
+import 'widgets/contextual_progress_filter.dart';
 
 /// AD-M5.2 (Activity timeline) — a weekly session-frequency column chart
 /// up top (this report's own characteristic: density over time, not
@@ -13,18 +16,68 @@ class ActivityTimelineScreen extends StatelessWidget {
   const ActivityTimelineScreen(
       {super.key,
       this.localProgress,
+      this.routineProgress,
       this.onRefresh,
       this.onOpenWorkout,
-      this.onOpenReport});
+      this.onOpenReport,
+      this.onOpenFilteredReport});
 
   final MemberLocalProgress? localProgress;
+  final RoutineProgress? routineProgress;
   final VoidCallback? onOpenReport;
+  final void Function(WorkoutReportFilter)? onOpenFilteredReport;
   final Future<void> Function()? onRefresh;
   final void Function(LocalWorkoutProgressRecord)? onOpenWorkout;
 
   @override
   Widget build(BuildContext context) {
     final local = localProgress;
+    if (local != null) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Activity timeline'), actions: [
+          if (onRefresh != null)
+            IconButton(
+                tooltip: 'Refresh',
+                onPressed: onRefresh,
+                icon: const Icon(Icons.refresh_rounded)),
+        ]),
+        body: localProgressRefresh(
+            onRefresh: onRefresh,
+            child: PageBody(children: [
+              ContextualProgressFilter(
+                  showDisabledExport: true,
+                  onExport: onOpenFilteredReport ??
+                      (onOpenReport == null ? null : (_) => onOpenReport!()),
+                  progress: local,
+                  builder: (filtered) => Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            const Eyebrow('Sessions per week'),
+                            LocalProgressPeriod(progress: filtered),
+                            LocalWeeklyChart(progress: filtered),
+                            const SizedBox(height: 20),
+                            const Eyebrow('Log'),
+                            Text(
+                                '${filtered.allTimeSessions} saved sessions · ${filtered.allTimeRepetitions} full reps · ${filtered.allTimePartialRepetitions} partial attempts'),
+                            if (local.records.isEmpty)
+                              const Panel(
+                                  child: Text('No saved camera sessions yet.'))
+                            else if (filtered.records.isEmpty)
+                              const Panel(
+                                  child:
+                                      Text('No captures match these filters.')),
+                            ...filtered.records.map((record) =>
+                                LocalProgressRecordTile(
+                                    record: record,
+                                    exerciseName: reportExerciseNames(
+                                        routineProgress?.records ??
+                                            const [])[record.exerciseId],
+                                    utcOffset: filtered.utcOffset,
+                                    onOpenWorkout: onOpenWorkout)),
+                          ])),
+            ])),
+      );
+    }
     final counts = local == null
         ? context.read<AnalyticsRepository>().sessionsPerWeek
         : <int>[];
@@ -43,13 +96,15 @@ class ActivityTimelineScreen extends StatelessWidget {
                 tooltip: 'Refresh',
                 icon: const Icon(Icons.refresh_rounded),
                 onPressed: onRefresh),
-          IconButton(
-            icon: const Icon(Icons.tune_rounded),
-            tooltip: 'Filter',
-            onPressed: onOpenReport ??
-                () =>
-                    local == null ? _filter(context) : showUnavailable(context),
-          ),
+          if (local == null)
+            IconButton(
+              icon: const Icon(Icons.tune_rounded),
+              tooltip: 'Filter',
+              onPressed: onOpenReport ??
+                  () => local == null
+                      ? _filter(context)
+                      : showUnavailable(context),
+            ),
           IconButton(
             icon: const Icon(Icons.ios_share_rounded),
             tooltip: 'Export',
@@ -99,10 +154,20 @@ class ActivityTimelineScreen extends StatelessWidget {
                     '${local.allTimeSessions} saved sessions · ${local.allTimeRepetitions} full reps · ${local.allTimePartialRepetitions} partial attempts'),
                 if (local.records.isEmpty)
                   const Panel(child: Text('No saved camera sessions yet.')),
-                ...local.records.map((record) => LocalProgressRecordTile(
-                    record: record,
-                    utcOffset: local.utcOffset,
-                    onOpenWorkout: onOpenWorkout)),
+                ContextualProgressFilter(
+                    showDisabledExport: true,
+                    onExport: onOpenFilteredReport ??
+                        (onOpenReport == null ? null : (_) => onOpenReport!()),
+                    progress: local,
+                    builder: (filtered) => Column(children: [
+                          if (filtered.records.isEmpty)
+                            const Text('No captures match these filters.'),
+                          ...filtered.records.map((record) =>
+                              LocalProgressRecordTile(
+                                  record: record,
+                                  utcOffset: local.utcOffset,
+                                  onOpenWorkout: onOpenWorkout)),
+                        ])),
               ] else
                 ...context.read<WorkoutRepository>().history.map((r) => Padding(
                       padding: const EdgeInsets.only(bottom: 10),

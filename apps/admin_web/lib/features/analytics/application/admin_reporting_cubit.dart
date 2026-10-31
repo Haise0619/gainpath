@@ -53,21 +53,45 @@ class AdminReportingCubit extends Cubit<AdminReportingState> {
     final query = targetQuery ?? state.query;
     final currentGen = ++_generation;
 
-    emit(AdminReportingState(query: query, isLoading: true));
+    final retained = query == state.query &&
+            (gateway is! AdminReportingSessionGuard ||
+                (gateway as AdminReportingSessionGuard).canRetainSnapshot)
+        ? state.snapshot
+        : null;
+    emit(
+        AdminReportingState(query: query, snapshot: retained, isLoading: true));
 
     try {
       final result = await gateway.load(query);
       if (isClosed || _generation != currentGen) return;
+      if (gateway is AdminReportingSessionGuard &&
+          !(gateway as AdminReportingSessionGuard).canRetainSnapshot) {
+        throw StateError('Reporting account changed');
+      }
       if (result.query != query) {
         throw const FormatException('Reporting query mismatch');
       }
       emit(AdminReportingState(query: query, snapshot: result));
-    } catch (_) {
+    } catch (error) {
       if (isClosed || _generation != currentGen) return;
       emit(AdminReportingState(
         query: query,
-        errorMessage:
-            'Could not load reports. Check your connection and retry.',
+        snapshot: (gateway is AdminReportingSessionGuard &&
+                    !(gateway as AdminReportingSessionGuard)
+                        .canRetainSnapshot) ||
+                (error is AdminReportingException &&
+                    error.invalidatesSnapshot) ||
+                error is StateError ||
+                error is FormatException
+            ? null
+            : retained,
+        errorMessage: error is AdminReportingException
+            ? error.message
+            : error is StateError
+                ? 'Your reporting session changed. Sign in again.'
+                : error is FormatException
+                    ? 'The report response could not be validated. Retry or request a source review.'
+                    : 'Reports are temporarily unavailable. Check your connection and retry.',
       ));
     }
   }

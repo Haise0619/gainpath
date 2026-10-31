@@ -15,7 +15,7 @@ export const adminReportingCommand=onCall({region:'asia-southeast1',enforceAppCh
    const current=await getAuth().getUser(auth.uid),validAfter=current.tokensValidAfterTime?Date.parse(current.tokensValidAfterTime):0;
    if(current.disabled||!current.emailVerified||current.email!==auth.token.email||!Number.isFinite(validAfter)||Number(auth.token.auth_time)*1000<validAfter)throw new DomainError('unauthenticated','Your account session changed.');
    const org=requiredIdentifier(request.data?.organizationId,'organizationId'),db=getFirestore();
-   return await adminReport(new FirestoreStore(db),auth,request.data,{page:async(kind,after,limit)=>{
+   return await adminReport(new FirestoreStore(db),auth,request.data,{identity:async uid=>{try{const u=await getAuth().getUser(uid);return {exists:true,disabled:u.disabled,emailVerified:u.emailVerified};}catch(e){if((e as {code?:string}).code==='auth/user-not-found')return {exists:false,disabled:false,emailVerified:false};throw e;}},page:async(kind,after,limit)=>{
      let q=db.collection(`orgs/${org}/${kind}`).orderBy(FieldPath.documentId()).limit(limit);
      if(after)q=q.startAfter(after);
      return (await q.get()).docs.map(doc=>({id:doc.id,data:doc.data()}));
@@ -24,3 +24,4 @@ export const adminReportingCommand=onCall({region:'asia-southeast1',enforceAppCh
    if(e instanceof InputValidationError)throw new HttpsError('invalid-argument',e.message);
    throw new HttpsError('unavailable','Reports could not be loaded. No partial totals were returned.');}
 });
+

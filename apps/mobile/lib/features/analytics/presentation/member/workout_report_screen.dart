@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:gainpath_domain/gainpath_domain.dart' show SessionScope;
+import 'package:gainpath_domain/analytics.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
 import 'package:syncfusion_flutter_charts/charts.dart';
 import '../../domain/member_workout_report.dart';
@@ -16,8 +17,14 @@ class WorkoutReportScreen extends StatefulWidget {
       required this.isCurrent,
       required this.onRefresh,
       this.loading = false,
-      this.error});
+      this.initialFilter,
+      this.error,
+      this.onOpenWorkout,
+      this.onOpenRoutine});
+  final void Function(LocalWorkoutProgressRecord)? onOpenWorkout;
+  final void Function(String)? onOpenRoutine;
   final SessionScope scope;
+  final WorkoutReportFilter? initialFilter;
   final LocalMemberProgressSnapshot? source;
   final DateTime asOf;
   final WorkoutReportExporter exporter;
@@ -31,7 +38,7 @@ class WorkoutReportScreen extends StatefulWidget {
 
 class _WorkoutReportScreenState extends State<WorkoutReportScreen> {
   late WorkoutReportFilter _filter =
-      WorkoutReportFilter.lastDays(widget.asOf, 30);
+      widget.initialFilter ?? WorkoutReportFilter.lastDays(widget.asOf, 30);
   bool _saving = false;
   int _visible = 20;
   @override
@@ -104,19 +111,28 @@ class _WorkoutReportScreenState extends State<WorkoutReportScreen> {
             filter: _filter,
             asOf: widget.asOf);
     return Scaffold(
-        appBar: AppBar(title: const Text('Workout report'), actions: [
-          IconButton(
-              tooltip: 'Filter report',
-              onPressed:
-                  report == null || _saving ? null : () => _filters(report),
-              icon: const Icon(Icons.tune_rounded)),
-          IconButton(
-              tooltip: 'Export PDF',
-              onPressed: report == null || _saving || widget.loading
-                  ? null
-                  : () => _export(report),
-              icon: const Icon(Icons.picture_as_pdf_outlined)),
-        ]),
+        appBar: AppBar(
+            toolbarHeight: 56 * MediaQuery.textScalerOf(context).scale(1),
+            title: const Text('Workout report', maxLines: 2, softWrap: true),
+            bottom: PreferredSize(
+                preferredSize: Size.fromHeight(
+                    MediaQuery.textScalerOf(context).scale(1) >= 1.8 ? 96 : 48),
+                child: Wrap(alignment: WrapAlignment.end, children: [
+                  IconButton(
+                      tooltip: 'Filter report',
+                      onPressed: report == null || _saving
+                          ? null
+                          : () => _filters(report),
+                      icon: const Icon(Icons.tune_rounded)),
+                  Tooltip(
+                      message: 'Export PDF',
+                      child: TextButton.icon(
+                          label: const Text('Export PDF'),
+                          onPressed: report == null || _saving || widget.loading
+                              ? null
+                              : () => _export(report),
+                          icon: const Icon(Icons.picture_as_pdf_outlined))),
+                ]))),
         body: !widget.isCurrent()
             ? const Center(
                 child: Text('Sign in to view this account’s report.'))
@@ -161,8 +177,15 @@ class _WorkoutReportScreenState extends State<WorkoutReportScreen> {
                                         }),
                                 child: const Text('Reset filters'))
                           ]),
-                          const Text(
-                              'Saved measurements are provisional. Self-reported sets are shown separately.'),
+                          const ExpansionTile(
+                              tilePadding: EdgeInsets.zero,
+                              title: Text('About measurements'),
+                              children: [
+                                Padding(
+                                    padding: EdgeInsets.only(bottom: 12),
+                                    child: Text(
+                                        'Saved measurements are provisional. Workout acceptance is not Cloud Backup status. Acceptance remains held unless a server acceptance receipt is saved. Self-reported sets are shown separately. Routine completion requires the whole day’s targets. Manual sets reflect matching saved routine snapshots.'))
+                              ]),
                           for (final warning in report.warnings)
                             Padding(
                                 padding: const EdgeInsets.only(top: 8),
@@ -170,12 +193,22 @@ class _WorkoutReportScreenState extends State<WorkoutReportScreen> {
                                     style: const TextStyle(
                                         color: AppColors.warning))),
                           const SizedBox(height: 16),
+                          if (report.sessions.isEmpty &&
+                              report.routines.isEmpty)
+                            const Padding(
+                                padding: EdgeInsets.symmetric(vertical: 24),
+                                child:
+                                    Text('No activity matches these filters.')),
                           LayoutBuilder(builder: (context, c) {
-                            final columns = c.maxWidth >= 520 &&
-                                    MediaQuery.textScalerOf(context).scale(14) <
-                                        19
-                                ? 3
-                                : 2;
+                            final columns =
+                                MediaQuery.textScalerOf(context).scale(14) >= 22
+                                    ? 1
+                                    : c.maxWidth >= 520 &&
+                                            MediaQuery.textScalerOf(context)
+                                                    .scale(14) <
+                                                19
+                                        ? 3
+                                        : 2;
                             final width =
                                 (c.maxWidth - (columns - 1) * 8) / columns;
                             return Wrap(spacing: 8, runSpacing: 8, children: [
@@ -208,12 +241,6 @@ class _WorkoutReportScreenState extends State<WorkoutReportScreen> {
                             const Padding(
                                 padding: EdgeInsets.symmetric(vertical: 8),
                                 child: Text('Routine history unavailable')),
-                          if (report.sessions.isEmpty &&
-                              report.routines.isEmpty)
-                            const Padding(
-                                padding: EdgeInsets.symmetric(vertical: 24),
-                                child:
-                                    Text('No activity matches these filters.')),
                           if (report.days.isNotEmpty) ...[
                             const SizedBox(height: 20),
                             const Eyebrow('Measured repetitions'),
@@ -247,11 +274,11 @@ class _WorkoutReportScreenState extends State<WorkoutReportScreen> {
                                     ])),
                           ],
                           const SizedBox(height: 16),
-                          const Eyebrow('Estimated form'),
+                          const Eyebrow('Estimated Form Scores'),
                           const Text(
                               'Each exercise, rule, model and camera view is kept separate. Estimates are weighted by scored attempts.'),
                           if (report.formGroups.isEmpty)
-                            const Text('No estimated form available.'),
+                            const Text('No Estimated Form Scores available.'),
                           for (var i = 0;
                               i < report.formGroups.length;
                               i++) ...[
@@ -261,12 +288,21 @@ class _WorkoutReportScreenState extends State<WorkoutReportScreen> {
                             Text(
                                 '${report.formGroups[i].meanScore?.toStringAsFixed(1) ?? 'Unavailable'}${report.formGroups[i].meanScore == null ? '' : '%'} · '
                                 '${report.formGroups[i].scoredAttempts} scored / ${report.formGroups[i].unassessedAttempts} unassessed attempts'),
+                            const Text(
+                                'Each point is a camera capture · Malaysia time · Unassessed captures leave gaps'),
                             if (report.formCharts[i].points.isNotEmpty)
                               SizedBox(
                                   height: 180,
                                   child: SfCartesianChart(
-                                      primaryXAxis:
-                                          CategoryAxis(labelRotation: -45),
+                                      primaryXAxis: CategoryAxis(
+                                          labelRotation: -45,
+                                          axisLabelFormatter: (args) =>
+                                              ChartAxisLabel(
+                                                  report.formCharts[i].points
+                                                      .firstWhere((p) =>
+                                                          p.key == args.text)
+                                                      .date,
+                                                  args.textStyle)),
                                       primaryYAxis:
                                           NumericAxis(minimum: 0, maximum: 100),
                                       series: <CartesianSeries<
@@ -274,8 +310,11 @@ class _WorkoutReportScreenState extends State<WorkoutReportScreen> {
                                         LineSeries(
                                             dataSource:
                                                 report.formCharts[i].points,
-                                            xValueMapper: (d, _) => d.date,
+                                            xValueMapper: (d, _) => d.key,
                                             yValueMapper: (d, _) => d.score,
+                                            emptyPointSettings:
+                                                const EmptyPointSettings(
+                                                    mode: EmptyPointMode.gap),
                                             color: AppColors.primary,
                                             animationDuration: 0,
                                             markerSettings:
@@ -284,6 +323,49 @@ class _WorkoutReportScreenState extends State<WorkoutReportScreen> {
                                       ])),
                           ],
                           const SizedBox(height: 20),
+                          ExpansionTile(
+                              initiallyExpanded: true,
+                              title: Text(
+                                  'Progression history timeline (${report.timeline.length})'),
+                              subtitle:
+                                  const Text('Selected filters · newest first'),
+                              children: [
+                                for (final event in report.timeline.take(_visible))
+                                  ListTile(
+                                      onTap: event.sourceLabel ==
+                                              'Measured AI capture'
+                                          ? (widget.onOpenWorkout == null
+                                              ? null
+                                              : () => widget.onOpenWorkout!(
+                                                  report.sessions.firstWhere((s) =>
+                                                      s.sessionId == event.id)))
+                                          : (widget.onOpenRoutine == null
+                                              ? null
+                                              : () => widget
+                                                  .onOpenRoutine!(event.id)),
+                                      trailing: (event.sourceLabel ==
+                                                  'Measured AI capture'
+                                              ? widget.onOpenWorkout != null
+                                              : widget.onOpenRoutine != null)
+                                          ? const Icon(Icons.chevron_right_rounded)
+                                          : null,
+                                      title: Text(event.title),
+                                      subtitle: Text('${event.dateTimeLabel} MYT · ${event.sourceLabel}\n${event.dateBasis} · ${event.detail}\n${event.id}')),
+                                if (report.timeline.length > _visible)
+                                  TextButton(
+                                      onPressed: () =>
+                                          setState(() => _visible += 20),
+                                      child: const Text(
+                                          'Show 20 more activities')),
+                                if (report.timeline.isEmpty)
+                                  const ListTile(
+                                      title: Text(
+                                          'No activity matches these filters.')),
+                                const Padding(
+                                    padding: EdgeInsets.all(16),
+                                    child: Text(
+                                        'Routine snapshots are shown separately from measured captures and are never added to AI totals.')),
+                              ]),
                           ExpansionTile(
                               title: Text(
                                   'Camera session details (${report.sessions.length})'),
@@ -294,7 +376,7 @@ class _WorkoutReportScreenState extends State<WorkoutReportScreen> {
                                           report.exerciseName(s.exerciseId)),
                                       subtitle: Text(
                                           '${reportDate(s.endedAt)} · ${s.repetitions} full · ${s.partialRepetitions} partial\n'
-                                          '${reportDuration(s.trackedDurationMicros)} tracked · ${s.status.name}\n${s.sessionId}')),
+                                          '${reportDuration(s.trackedDurationMicros)} tracked · ${workoutAcceptanceLabel(s)}\n${s.sessionId}')),
                                 if (report.sessions.length > _visible)
                                   TextButton(
                                       onPressed: () =>

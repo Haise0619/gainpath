@@ -17,12 +17,16 @@ class AdminDashboardScreen extends StatefulWidget {
   /// specific claim within it) instead of pushing a screen — this
   /// dashboard has no way to change the shell's own selection itself.
   final VoidCallback? onOpenRefunds;
+  final VoidCallback? onOpenCoaches;
+  final VoidCallback? onProcessVoucher;
   final bool live;
   final AuthSession? liveSession;
 
   const AdminDashboardScreen({
     super.key,
     this.onOpenRefunds,
+    this.onOpenCoaches,
+    this.onProcessVoucher,
     this.live = false,
     this.liveSession,
   });
@@ -142,9 +146,6 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     final bookings = snapshot?.totalBookingsCount != null
         ? '${snapshot!.totalBookingsCount}'
         : '—';
-    final posture = snapshot?.avgPostureAccuracy != null
-        ? '${(snapshot!.avgPostureAccuracy! * 100).round()}%'
-        : '—';
     return [
       [
         _operational ? 'Confirmed Sandbox receipts' : 'Total revenue',
@@ -157,7 +158,11 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         '—'
       ],
       ['Bookings in range', bookings, '—'],
-      ['Avg accuracy', posture, '—'],
+      [
+        'Current active Coaches',
+        snapshot?.activeCoachesCount?.toString() ?? '-',
+        '-'
+      ],
     ];
   }
 
@@ -498,8 +503,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                       AppColors.warning,
                       'Coach verification',
                       'Review pending coach applications and certificates',
-                      onTap: () =>
-                          showToast(context, 'Navigate to Coaches in sidebar.'),
+                      onTap: widget.onOpenCoaches,
                     ),
                     const Divider(height: 1, indent: 62),
                     _alert(
@@ -571,12 +575,11 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                 Icons.qr_code_scanner_rounded,
                 'Process a voucher',
                 widget.live
-                    ? 'Voucher redemption is unavailable'
+                    ? 'Verify and collect an existing reward voucher'
                     : 'Redeem a member reward at the desk',
                 () {
                   if (widget.live) {
-                    showToast(context,
-                        'Voucher processing is unavailable in this environment.');
+                    widget.onProcessVoucher?.call();
                   } else {
                     Navigator.push(
                         context,

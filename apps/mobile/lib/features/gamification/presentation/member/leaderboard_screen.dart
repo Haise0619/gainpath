@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:gainpath_domain/gamification.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
 import '../../application/rewards_feature_host.dart';
+import '../../application/game_leaderboard_host.dart';
 import 'legacy_leaderboard_view.dart';
 import 'leaderboard_standings.dart';
 
@@ -51,7 +52,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
               child: Text('Leaderboard unavailable for this session.')));
     }
     return Scaffold(
-        appBar: AppBar(title: const Text('Leaderboard'), actions: [
+        appBar: AppBar(title: const Text('Earned-points leaderboard'), actions: [
           IconButton(
               tooltip: 'Refresh leaderboard',
               onPressed: repo.current ? _refresh : null,
@@ -61,6 +62,15 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
             repository: repo,
             child: SafeArea(
                 child: Column(children: [
+              Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
+                  child: OutlinedButton.icon(
+                      onPressed: repo.current
+                          ? () => Navigator.of(context).push(MaterialPageRoute<void>(
+                              builder: (_) => const GameLeaderboardHost()))
+                          : null,
+                      icon: const Icon(Icons.sports_esports_outlined),
+                      label: const Text('Mini-game leaderboards'))),
               Padding(
                   padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
                   child: SizedBox(

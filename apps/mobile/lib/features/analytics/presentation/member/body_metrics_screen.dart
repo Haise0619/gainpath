@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:gainpath_domain/gainpath_domain.dart';
+import 'package:gainpath_identity/gainpath_identity.dart';
+import '../../../../infrastructure/firebase/member_profile_repositories.dart';
 import 'package:syncfusion_flutter_charts/charts.dart';
 import 'package:syncfusion_flutter_gauges/gauges.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
@@ -16,6 +19,23 @@ class BodyMetricsScreen extends StatelessWidget {
   final bool live;
   final double? weightKg;
   final double? heightCm;
+
+  static Widget connected(BuildContext context) =>
+      BlocBuilder<AuthBloc, AuthState>(builder: (context, state) {
+        final session = state.session;
+        if (session == null ||
+            !AuthRolePolicy.canEnter(state, allowed: const {AppRole.member})) {
+          return const Scaffold(
+              body: Center(child: Text('Sign in to view body metrics.')));
+        }
+        final auth = context.read<AuthBloc>();
+        bool current() => identical(auth.state.session, session);
+        return ProfileBodyMetricsScreen(
+            key: ObjectKey(session),
+            repository:
+                createReportFitnessProfileRepository(session.scope, current),
+            current: current);
+      });
 
   static const _months = [
     'Jan',
@@ -53,7 +73,7 @@ class BodyMetricsScreen extends StatelessWidget {
         .toList();
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Body metrics')),
+      appBar: AppBar(title: const Text('Weight & BMI')),
       body: PageBody(
         children: [
           Row(
@@ -69,49 +89,54 @@ class BodyMetricsScreen extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 20),
-          const Eyebrow('Weight trend (last 7 weeks)'),
-          Panel(
-            child: SizedBox(
-              height: 190,
-              child: SfCartesianChart(
-                plotAreaBorderWidth: 0,
-                primaryXAxis: const CategoryAxis(
-                  majorGridLines: MajorGridLines(width: 0),
-                  axisLine: AxisLine(width: 0),
-                  labelStyle:
-                      TextStyle(fontSize: 9.5, color: AppColors.inkSoft),
-                ),
-                primaryYAxis: NumericAxis(
-                  minimum: weights.isEmpty
-                      ? null
-                      : (weights.reduce((a, b) => a < b ? a : b) - 1)
-                          .floorToDouble(),
-                  maximum: weights.isEmpty
-                      ? null
-                      : (weights.reduce((a, b) => a > b ? a : b) + 1)
-                          .ceilToDouble(),
-                  majorGridLines: const MajorGridLines(
-                      width: 0.6, color: AppColors.hairline),
-                  axisLine: const AxisLine(width: 0),
-                  labelStyle:
-                      const TextStyle(fontSize: 10, color: AppColors.inkSoft),
-                ),
-                trackballBehavior: TrackballBehavior(
-                    enable: true, activationMode: ActivationMode.singleTap),
-                series: <CartesianSeries<_WeightPoint, String>>[
-                  SplineSeries<_WeightPoint, String>(
-                    dataSource: points,
-                    xValueMapper: (d, _) => d.label,
-                    yValueMapper: (d, _) => d.weightKg,
-                    color: AppColors.primary,
-                    width: 2.4,
-                    markerSettings: const MarkerSettings(
-                        isVisible: true, height: 6, width: 6),
+          if (live)
+            const Text(
+                'Current Module 1 profile · self-reported · measurement date unknown. No dated weight history is available.'),
+          if (!live) ...[
+            const Eyebrow('Weight trend (last 7 weeks)'),
+            Panel(
+              child: SizedBox(
+                height: 190,
+                child: SfCartesianChart(
+                  plotAreaBorderWidth: 0,
+                  primaryXAxis: const CategoryAxis(
+                    majorGridLines: MajorGridLines(width: 0),
+                    axisLine: AxisLine(width: 0),
+                    labelStyle:
+                        TextStyle(fontSize: 9.5, color: AppColors.inkSoft),
                   ),
-                ],
+                  primaryYAxis: NumericAxis(
+                    minimum: weights.isEmpty
+                        ? null
+                        : (weights.reduce((a, b) => a < b ? a : b) - 1)
+                            .floorToDouble(),
+                    maximum: weights.isEmpty
+                        ? null
+                        : (weights.reduce((a, b) => a > b ? a : b) + 1)
+                            .ceilToDouble(),
+                    majorGridLines: const MajorGridLines(
+                        width: 0.6, color: AppColors.hairline),
+                    axisLine: const AxisLine(width: 0),
+                    labelStyle:
+                        const TextStyle(fontSize: 10, color: AppColors.inkSoft),
+                  ),
+                  trackballBehavior: TrackballBehavior(
+                      enable: true, activationMode: ActivationMode.singleTap),
+                  series: <CartesianSeries<_WeightPoint, String>>[
+                    SplineSeries<_WeightPoint, String>(
+                      dataSource: points,
+                      xValueMapper: (d, _) => d.label,
+                      yValueMapper: (d, _) => d.weightKg,
+                      color: AppColors.primary,
+                      width: 2.4,
+                      markerSettings: const MarkerSettings(
+                          isVisible: true, height: 6, width: 6),
+                    ),
+                  ],
+                ),
               ),
             ),
-          ),
+          ],
           const SizedBox(height: 20),
           const Eyebrow('BMI range'),
           Panel(
@@ -154,7 +179,7 @@ class BodyMetricsScreen extends StatelessWidget {
                     markerPointers: [
                       if (bmi != null)
                         LinearShapePointer(
-                          // `num.clamp()` returns `num`, not `double` — Dart
+                          // `num.clamp()` returns `num`, not `double` â€” Dart
                           // won't implicitly downcast that into a `double`
                           // parameter.
                           value: bmi.clamp(15, 35).toDouble(),
@@ -191,4 +216,41 @@ class _WeightPoint {
   final String label;
   final double weightKg;
   const _WeightPoint(this.label, this.weightKg);
+}
+
+class ProfileBodyMetricsScreen extends StatefulWidget {
+  const ProfileBodyMetricsScreen(
+      {super.key, required this.repository, required this.current});
+  final FitnessProfileRepository repository;
+  final bool Function() current;
+  @override
+  State<ProfileBodyMetricsScreen> createState() =>
+      ProfileBodyMetricsScreenState();
+}
+
+class ProfileBodyMetricsScreenState extends State<ProfileBodyMetricsScreen> {
+  late final Future<FitnessProfile?> _profile = widget.repository.load();
+  @override
+  Widget build(BuildContext context) => FutureBuilder<FitnessProfile?>(
+      future: _profile,
+      builder: (context, snapshot) {
+        if (!widget.current()) {
+          return const Scaffold(
+              body: Center(child: Text('Sign in to view body metrics.')));
+        }
+        if (snapshot.connectionState != ConnectionState.done) {
+          return const Scaffold(
+              body: Center(child: CircularProgressIndicator()));
+        }
+        if (snapshot.hasError) {
+          return const Scaffold(
+              body: Center(
+                  child: Text(
+                      'Profile measurements unavailable. Reopen to retry.')));
+        }
+        return BodyMetricsScreen(
+            live: true,
+            weightKg: snapshot.data?.weightKg.toDouble(),
+            heightCm: snapshot.data?.heightCm.toDouble());
+      });
 }

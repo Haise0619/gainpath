@@ -84,3 +84,13 @@ it('the all-time ledger scan cap never returns partial interval totals', async (
     return {id: date, data: {schemaVersion: 1, organizationId: 'gainpath', memberId: 'a', date, claimedAtMillis, points: 50, policyVersion: 'app-check-in-v1', source: 'app_check_in'}};});
   await expect(run({...reader, claims: async (_uid, after, limit) => rows.filter(r => !after || r.id > after).slice(0, limit)})).rejects.toMatchObject({code: 'resource-exhausted'});
 });
+it('schema two negotiates extra read-only sources without changing schema one response',async()=>{
+ const q={...query,schemaVersion:2};const data={...reader,page:async()=>[]};
+ const result=await adminCheckInReport(store,actor,q,data,()=>now);
+ expect(result.schemaVersion).toBe(1);expect((result as unknown as {extensions:unknown}).extensions).toMatchObject({sourceCounts:{redemptions:0,rounds:0,awards:0}});
+ expect((await run() as unknown as {extensions?:unknown}).extensions).toBeUndefined();
+ await expect(adminCheckInReport(store,actor,q,reader,()=>now)).rejects.toMatchObject({code:'failed-precondition'});
+});
+it('non Admin schema two never reads extra sources',async()=>{
+ let pages=0;await expect(adminCheckInReport(store,{uid:'member',token:actor.token},{...query,schemaVersion:2},{...reader,page:async()=>{pages++;return[];}},()=>now)).rejects.toMatchObject({code:'permission-denied'});expect(pages).toBe(0);
+});

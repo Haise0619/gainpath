@@ -1,0 +1,18 @@
+# Reach & Tap wider targets and cursor responsiveness
+
+Owner requests wider screen distribution and less hand-cursor latency. Continue direct implementation and standing verified in-place Xiaomi updates, preserving unrelated work and previous artifacts. No cloud/Admin/content/account/reward change.
+
+## Investigation and chosen design
+
+Refined BlazePose feeds the game before preview smoothing. Camera uses medium resolution and bounded latest-only inference; controller notifies immediately on each sample as well as ticking at33ms. No evidence justifies shared camera/model changes. Confirmed added latency is engine EMA tau65000us: at16.7ms a large move travels only23% toward the real wrist on its first sample. Replace with movement-adaptive bounded interpolation: jitter uses tau35000us; displacement from last displayed cursor transitions from smoothing to immediate raw position between .004 and .04 board-short-side. Alpha never exceeds1; no prediction, extra inference, synthetic samples or change to raw+displayed hit/dwell/cooldown/freshness guards.
+
+Expand fixed calibrated target area sideways to min(.32 short side,.50 torso), up to min(.35 short side,.55 torso), and down to min(.40 short side,.55 torso). Clip displacement by initial torso framing margins (2% short side laterally,12% vertically). Admit a whole target circle only if it fits calibrated90%-arm reach after some body displacement inside this rectangle; target centers below initial hips are allowed only up to the bounded downward displacement. Keep targets static during motion. Spread over3 columns ×4 rows in a distant-region order; retain current/prior hand separation, visible margins, small-body adaptation and fallback. These geometric limits do not establish physical comfort.
+
+Alternatives: remove all smoothing (jitter); extrapolate hands (fabricates positions); lower confidence/shared-model resolution (unproven quality impact); unbounded screen corners (may be unreachable). Reject those. Full hardware capture/inference/display latency has not been measured in this task; claim only verified removal of extra cursor lag and geometric distribution, pending physical retest.
+
+- [x] Snapshot current reviewed sources before edits; add failing tests for fast first-sample response at16/33/67ms, bounded jitter/interpolation, missing/stale hand behavior and no hit from cursor alone. Add bounded lower/outer distribution and fixed-target movement regressions.
+- [x] Implement only ReachTap engine smoothing and target-envelope/partition changes. Update superseded envelope/region expectations; keep movement/lifecycle/recovery/account/reward checks. Run affected suite, strict analysis and architecture.
+- [x] Scoped independent review, signed Android build, sealed hashes/signature, prior APK/device identity capture, in-place install/launch under standing authority (no active unsaved game). Update operational references, progress/manual and private verification. Physical reach/framing/jump/occlusion/capture-to-display latency/thermal acceptance remains pending.
+
+
+Completed29October: observed five expected regression failures before implementation, seven new regressions green. Final285 affected tests/five existing skips, strict analysis, architecture, scoped review and signed Android build pass. Exact standing-authorized in-place Xiaomi installation/launch verifies hash/signer, identity/data and previous APK preservation; no active camera game interrupted. Evidence: `build/reach-tap-responsiveness-20261029/release-verification.json`. Native end-to-end latency and physical reach/framing/occlusion/jump/thermal acceptance remain pending.

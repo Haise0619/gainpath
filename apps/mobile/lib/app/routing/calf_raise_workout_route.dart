@@ -7,6 +7,7 @@ import '../../features/workout/application/calf_raise_workout_session.dart';
 import '../../features/workout/data/workout_session_repository.dart';
 import '../../features/workout/domain/workout_audio_port.dart';
 import '../../features/workout/presentation/member/real_workout_view.dart';
+import '../../features/workout/presentation/member/calf_raise_setup_screen.dart';
 import '../../infrastructure/audio/android_workout_audio.dart';
 import '../../infrastructure/firebase/firebase_member_preferences_repository.dart';
 import '../../infrastructure/pose/android_pose_camera.dart';
@@ -34,6 +35,7 @@ class _CalfRaiseWorkoutRouteState extends State<CalfRaiseWorkoutRoute>
   AndroidPoseCamera? _camera;
   StreamSubscription<AuthState>? _auth;
   bool _opening = false, _foreground = true;
+  bool _setupConfirmed = false;
   String? _error;
   bool _authorized(AuthBloc auth) =>
       auth.state.session?.scope == widget.launch.scope &&
@@ -47,7 +49,7 @@ class _CalfRaiseWorkoutRouteState extends State<CalfRaiseWorkoutRoute>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    if (!_opening && _session == null && _error == null) {
+    if (_setupConfirmed && !_opening && _session == null && _error == null) {
       unawaited(_open());
     }
   }
@@ -56,7 +58,10 @@ class _CalfRaiseWorkoutRouteState extends State<CalfRaiseWorkoutRoute>
     _opening = true;
     final launch = widget.launch, auth = context.read<AuthBloc>();
     try {
-      if (!_authorized(auth) || !launch.consented || !launch.setupConfirmed) {
+      if (!_setupConfirmed ||
+          !_authorized(auth) ||
+          !launch.consented ||
+          !launch.setupConfirmed) {
         throw StateError(
             'Calf raise capture requires current consent and account');
       }
@@ -91,6 +96,7 @@ class _CalfRaiseWorkoutRouteState extends State<CalfRaiseWorkoutRoute>
           saveVoiceMode: (mode) async {
             await _voicePreferences?.write(mode);
           });
+      session.guidance.setRestSeconds(launch.exercise.restSeconds);
       _session = session;
       _auth = auth.stream.listen((_) => session.accountChanged());
       setState(() {});
@@ -146,6 +152,17 @@ class _CalfRaiseWorkoutRouteState extends State<CalfRaiseWorkoutRoute>
 
   @override
   Widget build(BuildContext context) {
+    if (!_setupConfirmed) {
+      return CalfRaiseSetupScreen(
+          exerciseName: widget.launch.exercise.name,
+          sets: widget.launch.exercise.sets,
+          reps: widget.launch.exercise.reps,
+          restSeconds: widget.launch.exercise.restSeconds,
+          onStart: () {
+            setState(() => _setupConfirmed = true);
+            unawaited(_open());
+          });
+    }
     if (_error != null) {
       return Scaffold(
           appBar: AppBar(title: const Text('Calf raise session')),
@@ -166,6 +183,8 @@ class _CalfRaiseWorkoutRouteState extends State<CalfRaiseWorkoutRoute>
     }
     return RealWorkoutView(
         session: session,
+        alignmentInstruction:
+            'Stand side-on on level ground with both heels down. Keep the camera-facing hip, knee, ankle, heel and toes visible, from hips to the floor. Hold knees straight and keep the phone stationary.',
         exerciseName: widget.launch.exercise.name,
         targetRepetitions: widget.launch.exercise.reps,
         routineContext: widget.launch.routineContext,

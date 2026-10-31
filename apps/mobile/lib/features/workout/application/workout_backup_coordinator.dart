@@ -35,7 +35,11 @@ class WorkoutBackupCoordinator extends ChangeNotifier {
   }
 
   Future<void>? _loading;
-  Future<void> load() => _loading ??= _load();
+  Future<void> load() =>
+      _loading ??= _load().catchError((Object error, StackTrace stack) {
+        _loading = null;
+        Error.throwWithStackTrace(error, stack);
+      });
   Future<void> _load() async {
     final generation = _generation;
     final value = await store.read();
@@ -47,7 +51,7 @@ class WorkoutBackupCoordinator extends ChangeNotifier {
   }
 
   Future<void> setEnabled(bool enabled) async {
-    if (!authorized || busy) return;
+    if (!authorized || (busy && enabled)) return;
     ++_generation;
     _state = BackupState(
         enabled: enabled,
@@ -62,25 +66,25 @@ class WorkoutBackupCoordinator extends ChangeNotifier {
 
   BackupRecordStatus statusFor(WorkoutBackupRecord r) {
     if (!authorized || !_state.enabled) return BackupRecordStatus.localOnly;
-    if (busy) return BackupRecordStatus.syncing;
     if (_state.conflicts.containsKey(r.key)) return BackupRecordStatus.conflict;
     if (_state.baselines[r.key] == r.digest) return BackupRecordStatus.backedUp;
+    if (busy) return BackupRecordStatus.syncing;
     return _state.lastError == null
-        ? BackupRecordStatus.localOnly
+        ? BackupRecordStatus.pendingBackup
         : BackupRecordStatus.retryNeeded;
   }
 
   String get label => busy
       ? 'Syncing'
       : !state.enabled
-          ? 'Saved locally'
+          ? 'Saved on device'
           : state.conflicts.isNotEmpty
               ? 'Conflicting copies kept'
               : state.lastError != null
                   ? 'Retry needed'
                   : records.any(
                           (r) => statusFor(r) != BackupRecordStatus.backedUp)
-                      ? 'Saved locally'
+                      ? 'Pending backup'
                       : 'Backed up';
   Future<void> sync() async {
     if (!authorized || busy || !_state.enabled) return;
@@ -140,6 +144,7 @@ class WorkoutBackupCoordinator extends ChangeNotifier {
       localRows = {for (final r in await local.read()) r.key: r};
       _check(generation);
       for (final row in localRows.values) {
+        _check(generation);
         if (row.linkedSessionKeys.any(conflicts.containsKey)) {
           conflicts[row.key] = row.digest;
           continue;

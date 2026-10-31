@@ -14,6 +14,7 @@ const suites = {
       'reward-journey', 'reward-cover-upload', 'mini-game-rewards', 'workout-rewards']},
   rounds: {project: 'demo-gainpath-mini-game-rounds', port: 18092, tests: ['mini-game-rounds']},
   participation: {project: 'demo-gainpath-participation', port: 18096, tests: ['mini-game-participation']},
+  catalogstatus: {project: 'demo-gainpath-catalog-status', port: 18102, tests: ['exercise-catalog-status']},
 };
 for (const suite of Object.values(suites)) {
   suite.tests = suite.tests.map(name => `emulator/${name}.test.ts`);

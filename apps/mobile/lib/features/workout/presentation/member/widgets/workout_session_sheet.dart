@@ -434,7 +434,18 @@ class _WorkoutSessionSheetState extends State<WorkoutSessionSheet> {
                     DropdownButton<int>(
                         value: flow.restSeconds,
                         items: [
-                          for (final seconds in [0, 30, 60, 90, 120, 180, 300])
+                          for (final seconds
+                              in ({
+                            0,
+                            30,
+                            60,
+                            90,
+                            120,
+                            180,
+                            300,
+                            flow.restSeconds
+                          }.toList()
+                                ..sort()))
                             DropdownMenuItem(
                                 value: seconds, child: Text('${seconds}s'))
                         ],

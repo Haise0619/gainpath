@@ -28,6 +28,8 @@ export interface MiniGameContent {
   updatedAtMillis: number;
 }
 const GAME_ID = 'move-catch-v1';
+const REACH_TAP_ID = 'reach-tap-v1';
+const GAME_IDS = [GAME_ID, REACH_TAP_ID];
 const CONTENT_FIELDS = ['title', 'introduction', 'instructions', 'coverUrl', 'previewVideoUrl'];
 const integer = (v: unknown, minimum = 0): v is number => Number.isSafeInteger(v) && Number(v) >= minimum;
 const identifier = (v: unknown): v is string => typeof v === 'string' && /^[A-Za-z0-9_-]{1,128}$/.test(v);
@@ -43,13 +45,35 @@ const digest = (...parts: string[]) => createHash('sha256').update(JSON.stringif
 const unavailable = () => new DomainError('failed-precondition', 'Mini-game content is unavailable. Reload before editing.');
 const deny = () => new DomainError('permission-denied', 'Current verified organization authority is required.');
 
+function gameMediaUrl(value: string, org: string, gameId: string, kind: MiniGameMediaKind, objectPath?: string): boolean {
+  if (!value) return objectPath === undefined;
+  try {
+    const u = new URL(value), keys = [...u.searchParams.keys()];
+    if (u.protocol !== 'https:' || u.host !== 'firebasestorage.googleapis.com' || u.username || u.password || u.hash
+        || keys.length !== 2 || !keys.includes('alt') || !keys.includes('token') || u.searchParams.get('alt') !== 'media'
+        || !/^[a-fA-F0-9-]{36}$/.test(u.searchParams.get('token') ?? '')) return false;
+    const prefix = '/v0/b/gainpath-0619.firebasestorage.app/o/';
+    if (!u.pathname.startsWith(prefix)) return false;
+    const path = decodeURIComponent(u.pathname.slice(prefix.length)), parts = path.split('/');
+    return parts.length === 7 && parts[0] === 'orgs' && parts[1] === org && parts[2] === 'miniGameMedia'
+      && parts[3] === gameId && parts[4] === kind && identifier(parts[5]) && hexId(parts[6])
+      && (objectPath === undefined || path === objectPath);
+  } catch {return false;}
+}
+
 function validContent(d: DocumentData): boolean {
   return text(d.title, 80) && text(d.introduction, 2000) && Array.isArray(d.instructions)
     && d.instructions.length >= 1 && d.instructions.length <= 8 && d.instructions.every(v => text(v, 500))
     && url(d.coverUrl) && url(d.previewVideoUrl);
 }
 /** Registry defaults describe the implemented game; reading them never seeds Firestore. */
-function builtin(org: string): MiniGameContent {
+function builtin(org: string, gameId: string): MiniGameContent {
+  if (gameId === REACH_TAP_ID) return {schemaVersion: 1, organizationId: org, gameId, revision: 0, title: 'Reach & Tap',
+    introduction: 'Reach with your hands to touch fixed targets in a 40-second round.',
+    instructions: ['Face the camera with your body and both hands visible for alignment.',
+      'Hold steady until Ready, then the countdown starts automatically.',
+      'Move within your calibrated space and touch targets with an observed hand. Each confirmed hit earns 10 Game Score.'],
+    coverUrl: '', previewVideoUrl: '', updatedAtMillis: 0};
   return {schemaVersion: 1, organizationId: org, gameId: GAME_ID, revision: 0, title: 'Move & Catch',
     introduction: 'Lean left and right to catch stars and avoid obstacles in a 40-second round.',
     instructions: ['Face the camera with your shoulders and hips visible.',
@@ -57,11 +81,13 @@ function builtin(org: string): MiniGameContent {
       'Lean gently to catch stars and avoid diamonds. Return into view during the tracking warning.'],
     coverUrl: '', previewVideoUrl: '', updatedAtMillis: 0};
 }
-function serialized(d: DocumentData | undefined, org: string): MiniGameContent {
-  if (!d) return builtin(org);
-  if (d.schemaVersion !== 1 || d.organizationId !== org || d.gameId !== GAME_ID || !integer(d.revision, 1)
-      || !integer(d.updatedAtMillis, 1) || d.updatedAtMillis > 8640000000000000 || !validContent(d)) throw unavailable();
-  return {schemaVersion: 1, organizationId: org, gameId: GAME_ID, revision: d.revision,
+function serialized(d: DocumentData | undefined, org: string, gameId: string): MiniGameContent {
+  if (!d) return builtin(org, gameId);
+  if (d.schemaVersion !== 1 || d.organizationId !== org || d.gameId !== gameId || !integer(d.revision, 1)
+      || !integer(d.updatedAtMillis, 1) || d.updatedAtMillis > 8640000000000000 || !validContent(d)
+      || !gameMediaUrl(d.coverUrl as string, org, gameId, 'cover')
+      || !gameMediaUrl(d.previewVideoUrl as string, org, gameId, 'preview')) throw unavailable();
+  return {schemaVersion: 1, organizationId: org, gameId, revision: d.revision,
     title: d.title as string, introduction: d.introduction as string, instructions: [...d.instructions as string[]],
     coverUrl: d.coverUrl as string, previewVideoUrl: d.previewVideoUrl as string, updatedAtMillis: d.updatedAtMillis};
 }
@@ -88,10 +114,14 @@ function request(raw: unknown): DocumentData {
     uploadMedia: ['gameId', 'kind', 'uploadId', 'contentType', 'dataBase64'],
   };
   if (d.schemaVersion !== 1 || typeof d.action !== 'string' || !Object.hasOwn(actions, d.action)) throw new InputValidationError('Unsupported mini-game command.');
-  const fields = ['schemaVersion', 'organizationId', 'action', ...actions[d.action]];
+  const negotiated = d.action === 'list' && Object.hasOwn(d, 'supportedGameIds');
+  const fields = ['schemaVersion', 'organizationId', 'action', ...actions[d.action], ...(negotiated ? ['supportedGameIds'] : [])];
   if (Object.keys(d).length !== fields.length || Object.keys(d).some(k => !fields.includes(k))) throw new InputValidationError('Invalid mini-game command fields.');
   requiredIdentifier(d.organizationId, 'organizationId');
-  if (d.action !== 'list' && d.gameId !== GAME_ID) throw new InputValidationError('Only existing supported games can be edited.');
+  if (negotiated && (!Array.isArray(d.supportedGameIds) || !d.supportedGameIds.length
+      || d.supportedGameIds.length > GAME_IDS.length || new Set(d.supportedGameIds).size !== d.supportedGameIds.length
+      || d.supportedGameIds.some(id => !GAME_IDS.includes(id)))) throw new InputValidationError('Unsupported mini-game registry.');
+  if (d.action !== 'list' && (typeof d.gameId !== 'string' || !GAME_IDS.includes(d.gameId))) throw new InputValidationError('Only existing supported games can be edited.');
   if (d.action === 'save' && (!hexId(d.requestId) || !integer(d.baseRevision) || d.baseRevision >= Number.MAX_SAFE_INTEGER || !validContent(d))) throw new InputValidationError('Invalid mini-game content.');
   return d;
 }
@@ -116,20 +146,21 @@ function mediaInput(d: DocumentData) {
   return {bytes, kind: d.kind as MiniGameMediaKind, contentType: d.contentType,
     sha256: createHash('sha256').update(bytes).digest('hex')};
 }
-const receiptPath = (org: string, kind: MiniGameMediaKind, mediaUrl: string) => `orgs/${org}/miniGameMediaReceipts/${digest(GAME_ID, kind, mediaUrl)}`;
-function validMediaReceipt(r: DocumentData | undefined, org: string, kind: MiniGameMediaKind, mediaUrl: string): r is DocumentData {
-  return !!r && r.schemaVersion === 1 && r.organizationId === org && r.gameId === GAME_ID && r.kind === kind && r.url === mediaUrl
+const receiptPath = (org: string, gameId: string, kind: MiniGameMediaKind, mediaUrl: string) => `orgs/${org}/miniGameMediaReceipts/${digest(gameId, kind, mediaUrl)}`;
+function validMediaReceipt(r: DocumentData | undefined, org: string, gameId: string, kind: MiniGameMediaKind, mediaUrl: string): r is DocumentData {
+  return !!r && r.schemaVersion === 1 && r.organizationId === org && r.gameId === gameId && r.kind === kind && r.url === mediaUrl
+    && gameMediaUrl(mediaUrl, org, gameId, kind)
     && identifier(r.uploadedBy) && hexId(r.uploadId) && typeof r.sha256 === 'string' && /^[a-f0-9]{64}$/.test(r.sha256)
     && integer(r.createdAtMillis, 1) && integer(r.sizeBytes, 1)
     && r.sizeBytes <= (kind === 'cover' ? 5 : 20) * 1024 * 1024
     && (kind === 'cover' ? ['image/jpeg', 'image/png', 'image/webp'] : ['video/mp4']).includes(String(r.contentType))
-    && r.objectPath === `orgs/${org}/miniGameMedia/${GAME_ID}/${kind}/${r.uploadedBy}/${r.uploadId}`;
+    && r.objectPath === `orgs/${org}/miniGameMedia/${gameId}/${kind}/${r.uploadedBy}/${r.uploadId}`;
 }
 
 /** The only editable surface is descriptive content for the fixed supported registry. */
 export async function miniGameContent(store: DocumentStore, auth: MiniGameAuth | undefined, raw: unknown, deps: MiniGameContentDependencies): Promise<Record<string, any>> {
   requireVerifiedEmail(auth);
-  const d = request(raw), org = d.organizationId as string, uid = requiredIdentifier(auth!.uid, 'uid');
+  const d = request(raw), org = d.organizationId as string, uid = requiredIdentifier(auth!.uid, 'uid'), gameId = d.gameId as string;
   const write = d.action !== 'list', clock = deps.clock ?? Date.now;
   const time = () => {const at = clock(); if (!integer(at, 1) || at > 8640000000000000) throw unavailable(); return at;};
   await deps.freshAuth(auth!);
@@ -137,46 +168,51 @@ export async function miniGameContent(store: DocumentStore, auth: MiniGameAuth |
   if (d.action === 'uploadMedia') {
     await store.transact(tx => authorize(tx, auth!, org, true));
     const input = mediaInput(d);
-    const objectPath = `orgs/${org}/miniGameMedia/${GAME_ID}/${input.kind}/${uid}/${d.uploadId}`;
+    const objectPath = `orgs/${org}/miniGameMedia/${gameId}/${input.kind}/${uid}/${d.uploadId}`;
     const mediaUrl = await deps.media.upload(objectPath, input.bytes, input.contentType, input.sha256);
     if (!url(mediaUrl) || !mediaUrl) throw unavailable();
     await deps.freshAuth(auth!);
     await store.transact(async tx => {
       await authorize(tx, auth!, org, true);
-      const p = receiptPath(org, input.kind, mediaUrl), prior = await tx.get(p);
+      if (!gameMediaUrl(mediaUrl, org, gameId, input.kind, objectPath)) throw unavailable();
+      const p = receiptPath(org, gameId, input.kind, mediaUrl), prior = await tx.get(p);
       if (prior) {
-        if (!validMediaReceipt(prior, org, input.kind, mediaUrl) || prior.uploadedBy !== uid || prior.uploadId !== d.uploadId
+        if (!validMediaReceipt(prior, org, gameId, input.kind, mediaUrl) || prior.uploadedBy !== uid || prior.uploadId !== d.uploadId
             || prior.sha256 !== input.sha256 || prior.contentType !== input.contentType || prior.sizeBytes !== input.bytes.length) throw new DomainError('already-exists', 'Upload reference already used for different media.');
-      } else tx.create(p, {schemaVersion: 1, organizationId: org, gameId: GAME_ID, kind: input.kind, url: mediaUrl,
+      } else tx.create(p, {schemaVersion: 1, organizationId: org, gameId, kind: input.kind, url: mediaUrl,
         objectPath, uploadedBy: uid, uploadId: d.uploadId, sha256: input.sha256, contentType: input.contentType, sizeBytes: input.bytes.length, createdAtMillis: time()});
     });
-    result = {schemaVersion: 1, organizationId: org, gameId: GAME_ID, kind: input.kind, url: mediaUrl};
+    result = {schemaVersion: 1, organizationId: org, gameId, kind: input.kind, url: mediaUrl};
   } else result = await store.transact(async tx => {
     await authorize(tx, auth!, org, write);
-    const contentPath = `orgs/${org}/miniGameContent/${GAME_ID}`;
-    if (d.action === 'list') return {schemaVersion: 1, organizationId: org, games: [serialized(await tx.get(contentPath), org)]};
-    const fingerprint = digest(GAME_ID, String(d.baseRevision), ...CONTENT_FIELDS.map(k => JSON.stringify(d[k])));
+    if (d.action === 'list') {
+      const requested = Array.isArray(d.supportedGameIds) ? GAME_IDS.filter(id => (d.supportedGameIds as string[]).includes(id)) : [GAME_ID];
+      const records = await readAll(tx, requested.map(id => `orgs/${org}/miniGameContent/${id}`));
+      return {schemaVersion: 1, organizationId: org, games: records.map((record, i) => serialized(record, org, requested[i]))};
+    }
+    const contentPath = `orgs/${org}/miniGameContent/${gameId}`;
+    const fingerprint = digest(gameId, String(d.baseRevision), ...CONTENT_FIELDS.map(k => JSON.stringify(d[k])));
     const p = `orgs/${org}/miniGameContentRequests/${digest(uid, d.requestId as string)}`, prior = await tx.get(p);
     if (prior) {
-      if (prior.schemaVersion !== 1 || prior.organizationId !== org || prior.gameId !== GAME_ID || prior.uid !== uid || prior.requestId !== d.requestId) throw unavailable();
-      if (prior.fingerprint !== fingerprint) throw new DomainError('already-exists', 'Request reference already used. Retry the original request or reload.');
+      if (prior.schemaVersion !== 1 || prior.organizationId !== org || typeof prior.gameId !== 'string' || !GAME_IDS.includes(prior.gameId) || prior.uid !== uid || prior.requestId !== d.requestId) throw unavailable();
+      if (prior.gameId !== gameId || prior.fingerprint !== fingerprint) throw new DomainError('already-exists', 'Request reference already used. Retry the original request or reload.');
       if (!prior.game || typeof prior.game !== 'object' || Array.isArray(prior.game)) throw unavailable();
-      const game = serialized(prior.game as DocumentData, org);
+      const game = serialized(prior.game as DocumentData, org, gameId);
       if (game.revision !== Number(d.baseRevision) + 1
           || CONTENT_FIELDS.some(k => JSON.stringify((game as unknown as DocumentData)[k]) !== JSON.stringify(d[k]))) throw unavailable();
       return {schemaVersion: 1, organizationId: org, confirmed: true, game};
     }
-    const current = serialized(await tx.get(contentPath), org);
+    const current = serialized(await tx.get(contentPath), org, gameId);
     if (current.revision !== d.baseRevision) throw new DomainError('aborted', 'Mini-game content changed. Reload and review the latest revision.');
     for (const [kind, field] of [['cover', 'coverUrl'], ['preview', 'previewVideoUrl']] as const) {
       const mediaUrl = d[field] as string;
-      if (mediaUrl && !validMediaReceipt(await tx.get(receiptPath(org, kind, mediaUrl)), org, kind, mediaUrl)) throw new DomainError('permission-denied', 'Upload media for this organization and game before saving.');
+      if (mediaUrl && !validMediaReceipt(await tx.get(receiptPath(org, gameId, kind, mediaUrl)), org, gameId, kind, mediaUrl)) throw new DomainError('permission-denied', 'Upload media for this organization and game before saving.');
     }
-    const game: MiniGameContent = {schemaVersion: 1, organizationId: org, gameId: GAME_ID, revision: current.revision + 1,
+    const game: MiniGameContent = {schemaVersion: 1, organizationId: org, gameId, revision: current.revision + 1,
       title: d.title as string, introduction: d.introduction as string, instructions: [...d.instructions as string[]],
       coverUrl: d.coverUrl as string, previewVideoUrl: d.previewVideoUrl as string, updatedAtMillis: time()};
     tx.set(contentPath, {...game, updatedBy: uid});
-    tx.create(p, {schemaVersion: 1, organizationId: org, gameId: GAME_ID, uid, requestId: d.requestId, fingerprint, game});
+    tx.create(p, {schemaVersion: 1, organizationId: org, gameId, uid, requestId: d.requestId, fingerprint, game});
     return {schemaVersion: 1, organizationId: org, confirmed: true, game};
   });
   await deps.freshAuth(auth!);

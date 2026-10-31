@@ -61,17 +61,17 @@ void main() {
         value: catalog,
         child: const MaterialApp(home: ExerciseTutorialsScreen())));
     await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('Remove exercise'));
+    await tester.tap(find.byTooltip('Delete exercise'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Cancel'));
     await tester.pumpAndSettle();
     expect(catalog.entries, hasLength(1));
-    await tester.tap(find.byTooltip('Remove exercise'));
+    await tester.tap(find.byTooltip('Delete exercise'));
     await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(FilledButton, 'Remove'));
+    await tester.tap(find.widgetWithText(FilledButton, 'Delete'));
     await tester.pumpAndSettle();
     expect(catalog.entries, isEmpty);
-    expect(find.byTooltip('Remove exercise'), findsNothing);
+    expect(find.byTooltip('Delete exercise'), findsNothing);
   });
   testWidgets('template failure retains row and successful retry refreshes',
       (tester) async {
