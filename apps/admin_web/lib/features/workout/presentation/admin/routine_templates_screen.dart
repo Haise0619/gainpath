@@ -280,11 +280,11 @@ class _TemplateCard extends StatelessWidget {
                   if (showRemoval)
                     IconButton(
                         tooltip: 'Remove template',
-                        onPressed: onRemove,
+                        onPressed: template.readOnly?null:onRemove,
                         icon: const Icon(Icons.delete_outline, size: 18)),
                   IconButton(
                     icon: const Icon(Icons.edit_outlined, size: 18),
-                    onPressed: onEdit,
+                    onPressed: template.readOnly ? null : onEdit,
                   ),
                   Icon(
                       expanded
@@ -367,7 +367,7 @@ class _TemplateCard extends StatelessWidget {
                         Align(
                           alignment: Alignment.centerRight,
                           child: OutlinedButton.icon(
-                            onPressed: publishing ? null : onPublish,
+                            onPressed: publishing || template.readOnly ? null : onPublish,
                             icon: publishing
                                 ? const SizedBox(
                                     width: 16,

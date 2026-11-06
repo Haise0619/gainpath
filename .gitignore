@@ -42,6 +42,7 @@ windows/flutter/ephemeral/
 # Firebase Functions
 functions/node_modules/
 functions/lib/
+functions/lib-module13-demo/
 .pnpm-store/
 apps/mobile/android/local.properties
 apps/mobile/android/.gradle/

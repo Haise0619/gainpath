@@ -43,7 +43,7 @@ class AdminPresentationDependencies {
     ReportingGatewayFactory? reportingFactory,
   }) {
     final gateway = reportingFactory?.call(scope, isCurrent) ??
-        FirebaseAdminReportingGateway(scope: scope, isCurrent: isCurrent);
+        FirebaseAdminReportingGateway(scope: scope, isCurrent: isCurrent,unified:scope.datasetScope==null);
 
     return AdminPresentationDependencies(
       reportingGateway: gateway,

@@ -82,6 +82,9 @@ class _Firestore implements FirebaseFirestore {
   CollectionReference<Map<String, dynamic>> collection(String path) =>
       _Query(this, path);
   @override
+  DocumentReference<Map<String, dynamic>> doc(String path) =>
+      _Reference(this, path);
+  @override
   dynamic noSuchMethod(Invocation i) => super.noSuchMethod(i);
 }
 
@@ -167,6 +170,30 @@ class _Query implements CollectionReference<Map<String, dynamic>> {
 }
 
 void main() {
+  test(
+      'actual adapter scopes the query before fetching and preserves publication filters',
+      () async {
+    final db = _Firestore();
+    const root = 'orgs/gainpath/cohorts/fyp-v1';
+    db.documents['$root/content/fictional'] = document('Fictional tutorial');
+    db.documents['orgs/gainpath/content/private'] =
+        document('Canonical tutorial');
+    final scope = SessionScope(
+        userId: 'member',
+        organizationId: 'gainpath',
+        datasetScope: const VerifiedDatasetScope(
+            datasetId: 'fyp-v1',
+            seedId: 'gainpath-fyp-v1',
+            revision: 1,
+            rootPath: root));
+    final repository = FirebasePublishedRoutineRepository(
+        scope: scope, firestore: db, auth: _Auth(), activeScope: () => scope);
+    expect((await repository.loadPage()).items.map((r) => r.id), ['fictional']);
+    expect(db.reads, hasLength(1));
+    expect(db.reads.single.path, '$root/content');
+    expect(db.reads.single.filters, {'status': 'published', 'kind': 'routine'});
+    expect(db.reads.single.source, Source.server);
+  });
   test(
       'actual adapter uses scoped published server pages and exact filtered ID lookup',
       () async {

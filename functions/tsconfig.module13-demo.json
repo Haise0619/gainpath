@@ -1,0 +1,6 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {"outDir": "lib-module13-demo"},
+  "include": ["src/module13-demo-index.ts", "src/modules/recommendation/demo-seed.ts"],
+  "exclude": ["lib", "lib-module13-demo"]
+}

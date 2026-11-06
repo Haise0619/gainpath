@@ -34,6 +34,8 @@ class AdminReportingState {
 class AdminReportingCubit extends Cubit<AdminReportingState> {
   final AdminReportingGateway gateway;
   int _generation = 0;
+  AdminReportQuery? _pendingQuery;
+  Future<void>? _pendingLoad;
 
   AdminReportingCubit({
     required this.gateway,
@@ -48,9 +50,24 @@ class AdminReportingCubit extends Cubit<AdminReportingState> {
               ),
         ));
 
-  Future<void> load([AdminReportQuery? targetQuery]) async {
-    if (isClosed) return;
+  Future<void> load([AdminReportQuery? targetQuery]) {
+    if (isClosed) return Future<void>.value();
     final query = targetQuery ?? state.query;
+    if (_pendingQuery == query && _pendingLoad != null) return _pendingLoad!;
+    _pendingQuery = query;
+    late final Future<void> request;
+    request = _load(query).whenComplete(() {
+      if (identical(_pendingLoad, request)) {
+        _pendingLoad = null;
+        _pendingQuery = null;
+      }
+    });
+    _pendingLoad = request;
+    return request;
+  }
+
+  Future<void> _load(AdminReportQuery query) async {
+    if (isClosed) return;
     final currentGen = ++_generation;
 
     final retained = query == state.query &&

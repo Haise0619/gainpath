@@ -39,7 +39,7 @@ class FirebaseCoachAccountRepository implements CoachAccountGateway {
   final FirebaseStorage? _providedStorage;
   final CoachDirectReads? _providedDirectReads;
   late final CoachDirectReads? _directReads = _providedDirectReads ??
-      (directCoachReadsEnabled && _providedFunctions == null
+      (directCoachReadsEnabled && scope.datasetScope == null && _providedFunctions == null
           ? firebaseCoachDirectReads(
               scope: scope, checkSession: check, auth: _auth)
           : null);
@@ -96,7 +96,7 @@ class FirebaseCoachAccountRepository implements CoachAccountGateway {
       [Map<String, dynamic> values = const {}]) async {
     check();
     try {
-      final result = await firebaseCallable(name, functions: _providedFunctions)
+      final result = await firebaseScopedCallable(scope, name, functions: _providedFunctions)
           .call<Map<String, dynamic>>({
         'schemaVersion': 1,
         'organizationId': scope.organizationId,
@@ -237,7 +237,7 @@ class FirebaseCoachAccountRepository implements CoachAccountGateway {
   }
 
   String path(String collection, String id) =>
-      'orgs/${scope.organizationId}/$collection/${scope.userId}/$id';
+      '${scope.dataRootPath}/$collection/${scope.userId}/$id';
   @override
   Future<String> upload(
       String collection, String id, Uint8List bytes, String contentType) async {
@@ -256,7 +256,7 @@ class FirebaseCoachAccountRepository implements CoachAccountGateway {
     check();
     if (photoPath == null) return null;
     final prefix =
-        'orgs/${scope.organizationId}/coachProfilePhotos/${scope.userId}/';
+        '${scope.dataRootPath}/coachProfilePhotos/${scope.userId}/';
     if (!photoPath.startsWith(prefix) ||
         !RegExp(r'^[a-f0-9]{32}$')
             .hasMatch(photoPath.substring(prefix.length))) {

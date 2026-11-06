@@ -1,0 +1,22 @@
+import {expect,it} from 'vitest';
+import {execFileSync} from 'node:child_process';
+import {createHash} from 'node:crypto';
+import {readFileSync,readdirSync} from 'node:fs';
+import {resolve} from 'node:path';
+const root=resolve(__dirname,'../..'),output=resolve(root,'build/module13-e/evaluation');
+const bHashes=()=>Object.fromEntries(readdirSync(resolve(root,'build/module13-batch-b')).map(name=>[name,createHash('sha256').update(readFileSync(resolve(root,'build/module13-batch-b',name))).digest('hex')]));
+it('replays B without mutating evidence or authorizing inference and reproducibly emits unjudged held-out packages',()=>{
+  const before=bHashes();
+  const run=()=>execFileSync(process.execPath,[resolve(root,'functions/tools/module13-batch-e-evaluate.cjs')],{cwd:root,encoding:'utf8',env:{...process.env,GEMINI_API_KEY:'MUST-NOT-BE-USED'},timeout:30000,windowsHide:true});
+  run();
+  const summary=JSON.parse(readFileSync(resolve(output,'summary.json'),'utf8'));
+  expect(summary.recordedDevelopment.pairedScenarioCount).toBe(11);
+  expect(summary.recordedDevelopment.rows.filter((r:any)=>r.attempt!==null).every((r:any)=>r.requestHashMatches&&r.replayMatches)).toBe(true);
+  expect(summary.heldOut).toMatchObject({scenarioCount:22,providerCalls:0,status:'awaiting_independent_human_review_and_separately_authorized_inference'});
+  expect(summary.generationAttemptsThisRun).toBe(0);
+  expect(summary.recordedDevelopment.stochasticStability.exactAgreement).toBeNull();
+  const forms=['assessor-A.blank.json','assessor-B.blank.json'].map(f=>JSON.parse(readFileSync(resolve(output,f),'utf8')));
+  expect(forms.every(f=>f.items.length===56&&f.items.every((i:any)=>i.grade===null))).toBe(true);
+  const first=readFileSync(resolve(output,'summary.json'),'utf8');run();
+  expect(readFileSync(resolve(output,'summary.json'),'utf8')).toBe(first);expect(bHashes()).toEqual(before);
+},30000);

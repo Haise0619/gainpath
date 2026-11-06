@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
@@ -8,6 +9,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:gainpath_domain/gainpath_domain.dart' show SessionScope;
 import 'package:gainpath_pose/gainpath_pose.dart';
 import 'package:gainpath_mobile/features/workout/application/guided_workout_progress.dart';
+import 'package:gainpath_mobile/features/workout/application/pose_preview_controller.dart';
 import 'package:gainpath_mobile/features/workout/application/real_squat_session_controller.dart';
 import 'package:gainpath_mobile/features/workout/data/workout_session_repository.dart';
 import 'package:gainpath_mobile/features/workout/presentation/member/real_workout_view.dart';
@@ -20,6 +22,15 @@ class _CountingDetector extends support.Detector {
   Future<void> reset() async {
     resets++;
     await super.reset();
+  }
+}
+
+class _DelayedStopCamera extends support.Camera {
+  Completer<void>? stopGate;
+  @override
+  Future<void> stop() async {
+    await super.stop();
+    await stopGate?.future;
   }
 }
 
@@ -52,7 +63,7 @@ void main() {
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
       final scope = SessionScope(userId: 'member', organizationId: 'gainpath');
-      final camera = support.Camera(), detector = _CountingDetector();
+      final camera = _DelayedStopCamera(), detector = _CountingDetector();
       final c = RealSquatSessionController(
           scope: scope,
           activeScope: () => scope,
@@ -75,6 +86,7 @@ void main() {
       await c.start(consented: true, setupConfirmed: true);
       camera.receive!(const PoseInput(timestampMicros: 100000));
       await tester.pump();
+      c.preview.phase = PosePreviewPhase.opening;
       await tester.pumpWidget(RepaintBoundary(
           key: const ValueKey('workout-ui-preview'),
           child: MaterialApp(
@@ -90,6 +102,10 @@ void main() {
                   exerciseName: 'Bodyweight squat',
                   targetRepetitions: 8,
                   uploadNotice: 'Private upload status'))));
+      c.preview.phase = PosePreviewPhase.tracking;
+      c.notifyListeners(); // ignore: invalid_use_of_protected_member, invalid_use_of_visible_for_testing_member
+      await tester.pump();
+      expect(tester.takeException(), isNull);
       await tester.pumpAndSettle();
       expect(find.byType(DraggableScrollableSheet), findsOneWidget);
       expect(
@@ -116,6 +132,14 @@ void main() {
         });
       }
 
+      final press = await tester.startGesture(tester.getCenter(find.byTooltip('Expand workout details')));
+      c.notifyListeners(); // ignore: invalid_use_of_protected_member, invalid_use_of_visible_for_testing_member
+      await tester.pump(const Duration(milliseconds: 50));
+      await press.up();
+      await tester.pumpAndSettle();
+      expect(find.text('Full reps'), findsOneWidget);
+      await tester.tap(find.byTooltip('Collapse workout details'));
+      await tester.pumpAndSettle();
       await capture('collapsed');
       expect(find.text('Private upload status'), findsNothing);
       expect(find.byTooltip('Pause'), findsOneWidget);
@@ -147,6 +171,16 @@ void main() {
           Offset(0, size.height * .65));
       await tester.pumpAndSettle();
       expect(find.text('Full reps'), findsNothing);
+      if (textScale == 1 && size.width >= 393) {
+        camera.stopGate = Completer<void>();
+        await tester.tap(find.byTooltip('Back'));
+        await tester.pumpAndSettle();
+        expect(find.text('End this workout session?'), findsOneWidget);
+        camera.stopGate!.complete();
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Not now'));
+        await tester.pumpAndSettle();
+      }
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox());
       await c.close();

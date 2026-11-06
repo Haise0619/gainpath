@@ -2,6 +2,7 @@ import 'admin_commerce_report.dart';
 import 'package:flutter/material.dart';
 import 'package:gainpath_domain/gainpath_domain.dart' show Money;
 import 'admin_operational_metrics.dart';
+import 'unified_admin_summary.dart';
 
 /// Query for administrative reporting with time window and optional branch.
 @immutable
@@ -59,6 +60,7 @@ class AdminActivityRecord {
 /// Unknown or unsupported values are `null`, NEVER coerced to zero.
 @immutable
 class AdminReportingSnapshot {
+  final UnifiedAdminSummary? unified;
   final AdminOperationalMetrics? operations;
   final AdminCommerceReport? commerce;
   final AdminReportQuery query;
@@ -83,6 +85,7 @@ class AdminReportingSnapshot {
   final List<ReportingPoint>? bookingsTimeline;
 
   const AdminReportingSnapshot({
+    this.unified,
     this.operations,
     this.commerce,
     required this.query,
@@ -137,6 +140,7 @@ class AdminReportingSnapshot {
 abstract class AdminReportingGateway {
   Future<AdminReportingSnapshot> load(AdminReportQuery query);
 }
+abstract interface class UnifiedAdminReportingPresentation {bool get unified;}
 
 /// Marks the connected operational dataset without coupling UI to Firebase.
 abstract interface class OperationalAdminReportingGateway

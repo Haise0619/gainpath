@@ -760,5 +760,163 @@ service cloud.firestore {
       allow list, write: if false;
     }
 
+    // FYP cohort: additive, explicit read projections in the default database.
+    // Assignment, manifest, identity and membership are all server owned. No
+    // canonical membership is created for these identities. Existing paths and
+    // existing ordinary-account authorization retain their current contracts.
+    match /datasetAssignments/{uid} {
+      // A missing own document resolves ordinary-account routing safely.
+      allow get: if signedIn() && request.auth.token.email_verified == true
+        && request.auth.uid == uid;
+      allow list, write: if false;
+    }
+
+    function fypLifecycleCurrent(user) {
+      return !('accountLifecycle' in user) || (user.accountLifecycle is map
+        && user.accountLifecycle.schemaVersion == 1
+        && user.accountLifecycle.state == 'active'
+        && user.accountLifecycle.revocationPending == false
+        && user.accountLifecycle.sessionNotBeforeSeconds is int
+        && user.accountLifecycle.sessionNotBeforeSeconds >= 0
+        && request.auth.token.auth_time is int
+        && request.auth.token.auth_time >= user.accountLifecycle.sessionNotBeforeSeconds);
+    }
+
+    function fypCanonicalIdentityAbsent(uid) {
+      // A cohort session must never coexist with legacy canonical authority,
+      // including an orphaned identity left behind by an older client.
+      return !exists(/databases/$(database)/documents/users/$(uid))
+        && !exists(/databases/$(database)/documents/orgs/gainpath/members/$(uid));
+    }
+
+    function fypCohortReader() {
+      let uid = request.auth.uid;
+      let assignment = get(/databases/$(database)/documents/datasetAssignments/$(uid)).data;
+      let cohort = get(/databases/$(database)/documents/orgs/gainpath/cohorts/fyp-v1).data;
+      let user = get(/databases/$(database)/documents/orgs/gainpath/cohorts/fyp-v1/users/$(uid)).data;
+      let member = get(/databases/$(database)/documents/orgs/gainpath/cohorts/fyp-v1/members/$(uid)).data;
+      return signedIn() && request.auth.token.email_verified == true
+        && fypCanonicalIdentityAbsent(uid)
+        && assignment.schemaVersion == 1 && assignment.datasetId == 'fyp-v1'
+        && assignment.organizationId == 'gainpath' && assignment.seedId == 'gainpath-fyp-v1'
+        && assignment.enabled == true && assignment.revision is int && assignment.revision >= 1
+        && assignment.authCreatedAtMillis is int && assignment.authCreatedAtMillis > 0
+        // Trusted provisioning binds this token to the actual Auth identity's
+        // creation time. Recreating a UID cannot inherit an old assignment.
+        && request.auth.token.fypAuthCreatedAtMillis == assignment.authCreatedAtMillis
+        && assignment.role in ['member', 'coach', 'admin']
+        && cohort.schemaVersion == 1 && cohort.datasetId == 'fyp-v1'
+        && cohort.organizationId == 'gainpath' && cohort.seedId == assignment.seedId
+        && cohort.enabled == true && cohort.status == 'active'
+        && user.organizationId == 'gainpath' && user.role == assignment.role && user.status == 'active'
+        && fypLifecycleCurrent(user)
+        && member.organizationId == 'gainpath' && member.userId == uid
+        && member.status == 'active' && member.role == assignment.role;
+    }
+
+    function fypRole() {
+      return get(/databases/$(database)/documents/datasetAssignments/$(request.auth.uid)).data.role;
+    }
+
+    function fypAdmin() {
+      return fypCohortReader() && fypRole() == 'admin';
+    }
+
+    function fypPrivateOwner(uid) {
+      return fypCohortReader() && (request.auth.uid == uid || fypRole() == 'admin');
+    }
+
+    function fypCoachPrivateReader(coachId) {
+      return fypCohortReader() && (fypRole() == 'admin'
+        || (fypRole() == 'coach' && request.auth.uid == coachId));
+    }
+
+    match /orgs/gainpath/cohorts/fyp-v1 {
+      allow get: if fypCohortReader();
+      allow list, write: if false;
+
+      match /users/{uid} {
+        allow get: if fypCohortReader() && request.auth.uid == uid;
+        allow list, write: if false;
+      }
+      match /members/{uid} {
+        allow get: if fypPrivateOwner(uid);
+        allow list: if fypAdmin();
+        allow write: if false;
+      }
+      match /profiles/{uid} {
+        allow get: if fypPrivateOwner(uid);
+        allow list: if fypAdmin();
+        allow write: if false;
+        match /goals/{goalId} {
+          allow read: if fypPrivateOwner(uid);
+          allow write: if false;
+          match /revisions/{revisionId} {
+            allow read: if fypPrivateOwner(uid);
+            allow write: if false;
+          }
+        }
+      }
+      match /preferences/{uid} {
+        allow get: if fypPrivateOwner(uid);
+        allow list, write: if false;
+      }
+      match /coaches/{coachId} {
+        // Resource predicates let ordinary status==published queries be proven.
+        allow read: if fypCohortReader() && (resource.data.status == 'published'
+          || fypRole() == 'admin' || (fypRole() == 'coach' && request.auth.uid == coachId));
+        allow write: if false;
+      }
+      match /coachProfiles/{coachId} {
+        allow get: if fypCoachPrivateReader(coachId);
+        allow list: if fypAdmin();
+        allow write: if false;
+        match /certifications/{certificationId} {
+          allow read: if fypCoachPrivateReader(coachId);
+          allow write: if false;
+          match /history/{revisionId} {
+            allow read: if fypCoachPrivateReader(coachId);
+            allow write: if false;
+          }
+        }
+        match /certificationState/{stateId} {
+          allow get: if stateId == 'current' && fypCoachPrivateReader(coachId);
+          allow list, write: if false;
+        }
+      }
+      match /coachAvailability/{coachId} {
+        allow get: if fypCohortReader() && (fypRole() == 'admin'
+          || (fypRole() == 'coach' && request.auth.uid == coachId)
+          || get(/databases/$(database)/documents/orgs/gainpath/cohorts/fyp-v1/coaches/$(coachId)).data.status == 'published');
+        allow list: if fypAdmin();
+        allow write: if false;
+        match /days/{dayId} {
+          allow read: if fypCohortReader() && (fypRole() == 'admin'
+            || (fypRole() == 'coach' && request.auth.uid == coachId)
+            || get(/databases/$(database)/documents/orgs/gainpath/cohorts/fyp-v1/coaches/$(coachId)).data.status == 'published');
+          allow write: if false;
+        }
+      }
+      match /content/{contentId} {
+        allow read: if fypCohortReader() && (resource.data.status == 'published' || fypRole() == 'admin');
+        allow write: if false;
+      }
+      match /exerciseVideos/{exerciseId} {
+        allow read: if fypAdmin();
+        allow write: if false;
+      }
+      match /routineBlueprints/{blueprintId} {
+        allow read: if fypAdmin();
+        allow write: if false;
+      }
+      match /notifications/{notificationId} {
+        allow read: if fypCohortReader() && resource.data.recipientId == request.auth.uid;
+        allow write: if false;
+      }
+      // No recursive allow: synthetic observations, recommendation internals,
+      // payments, rewards, unsupported module paths and arbitrary descendants
+      // stay server only, including for cohort Admins.
+    }
+
   }
 }

@@ -1,0 +1,7 @@
+{
+  "indexes": [
+    {"collectionGroup":"workoutEvidenceCaptures","queryScope":"COLLECTION","fields":[{"fieldPath":"seedId","order":"ASCENDING"},{"fieldPath":"capturedAtMillis","order":"ASCENDING"}]},
+    {"collectionGroup":"notifications","queryScope":"COLLECTION","fields":[{"fieldPath":"recipientId","order":"ASCENDING"},{"fieldPath":"createdAtMillis","order":"DESCENDING"}]}
+  ],
+  "fieldOverrides": []
+}

@@ -1,0 +1,12 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Separate demo bucket only. Normal bucket policy is not changed.
+    match /orgs/gainpath/coachCertifications/{coachId}/{credentialId} {
+      // Approval/asset integrity is verified by the guarded server seeder.
+      // No direct credential download or client upload is part of this demo.
+      allow read, write: if false;
+    }
+    match /{allPaths=**} { allow read, write: if false; }
+  }
+}

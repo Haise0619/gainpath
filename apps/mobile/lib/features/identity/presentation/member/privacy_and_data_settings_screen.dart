@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:gainpath_domain/coaching.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
+import '../../../../navigation/recommendation_privacy_navigation.dart';
 
 /// Hosts member privacy controls, specifically posture and camera data sharing
 /// under Profile > Settings > Privacy & Data > Posture & Camera Data.
@@ -9,10 +10,12 @@ class PrivacyAndDataSettingsScreen extends StatefulWidget {
   const PrivacyAndDataSettingsScreen({
     super.key,
     this.repository,
+    this.onOpenRecommendations,
     required this.isCurrent,
   });
 
   final Module9Repository? repository;
+  final VoidCallback? onOpenRecommendations;
   final bool Function() isCurrent;
 
   @override
@@ -118,6 +121,20 @@ class _PrivacyAndDataSettingsScreenState
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
+            Panel(
+              child: ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.tune, color: AppColors.primary),
+                title: const Text('Personalized Recommendations'),
+                subtitle: Text(widget.onOpenRecommendations == null
+                    ? 'Preview only · consent collection unavailable'
+                    : 'Demo purposes · independently controlled'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: widget.onOpenRecommendations ?? () =>
+                    openRecommendationPrivacyPreview(context, widget.isCurrent),
+              ),
+            ),
+            const SizedBox(height: 18),
             const Eyebrow('Posture & Camera Data'),
             const SizedBox(height: 8),
             Panel(
@@ -136,7 +153,8 @@ class _PrivacyAndDataSettingsScreenState
                   if (_loading)
                     const LinearProgressIndicator()
                   else if (_error != null) ...[
-                    Text(_error!, style: const TextStyle(color: AppColors.danger)),
+                    Text(_error!,
+                        style: const TextStyle(color: AppColors.danger)),
                     const SizedBox(height: 8),
                     TextButton(
                       onPressed: _load,
@@ -145,7 +163,8 @@ class _PrivacyAndDataSettingsScreenState
                   ] else ...[
                     SwitchListTile.adaptive(
                       contentPadding: EdgeInsets.zero,
-                      title: const Text('Share posture history with my Coaches'),
+                      title:
+                          const Text('Share posture history with my Coaches'),
                       value: _sharing?.enabled ?? false,
                       onChanged: _sharing == null || _saving || _loading
                           ? null

@@ -1,3 +1,4 @@
+import 'firebase_data_scope.dart';
 import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -27,8 +28,7 @@ class FlutterFitnessProfileGateway implements FitnessProfileGateway {
   DocumentReference<Map<String, dynamic>> _document(SessionScope scope) {
     _checkSession(scope);
     return _firestore
-        .collection('orgs')
-        .doc(scope.organizationId)
+        .scopeRoot(scope)
         .collection('profiles')
         .doc(scope.userId);
   }

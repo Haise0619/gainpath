@@ -100,6 +100,11 @@ class WorkoutSessionSummary {
             .every(_measuredSummaryId.hasMatch) ||
         accuracy < 0 ||
         accuracy > 100 ||
+        (metrics.scoringVersion == 'standard-floor-push-up-side-v1' &&
+            (organizationId != 'gainpath' || exerciseId != 'standard-floor-push-up-side-v1' ||
+                accuracy != (metrics.formScorePercent?.round() ?? 0) ||
+                metrics.floorPushUp!.issueCounts.values.any((v) => v > attempts))) ||
+        (exerciseId == 'standard-floor-push-up-side-v1' && metrics.scoringVersion != 'standard-floor-push-up-side-v1') ||
         (metrics.scoringVersion == 'standing-lateral-raise-front-v1' &&
             (accuracy != 0 ||
                 organizationId != 'gainpath' ||

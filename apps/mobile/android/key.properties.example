@@ -1,0 +1,7 @@
+# Copy to ignored key.properties only with the approved production identity.
+# Never commit passwords or generate a replacement signer for an installed app.
+# Paths resolve from apps/mobile/android; use forward slashes on Windows.
+storeFile=
+keyAlias=
+storePassword=
+keyPassword=

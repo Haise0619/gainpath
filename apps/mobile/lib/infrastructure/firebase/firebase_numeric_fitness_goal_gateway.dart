@@ -1,3 +1,4 @@
+import 'firebase_data_scope.dart';
 import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -29,8 +30,7 @@ class FlutterNumericFitnessGoalGateway implements NumericFitnessGoalGateway {
   CollectionReference<Map<String, dynamic>> _goals(SessionScope scope) {
     _check(scope);
     return _firestore
-        .collection('orgs')
-        .doc(scope.organizationId)
+        .scopeRoot(scope)
         .collection('profiles')
         .doc(scope.userId)
         .collection('goals');

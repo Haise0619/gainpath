@@ -3,7 +3,8 @@ class AdminMemberRecord {
       {required this.id,
       required this.name,
       required this.email,
-      required this.status});
+      required this.status, this.source = 'existing'});
+  final String source;
   final String id, name, email, status;
   String get statusLabel => status.isEmpty
       ? 'Not recorded'
@@ -23,12 +24,14 @@ class AdminMemberDetails {
       required this.organizationId,
       required List<String> branchIds,
       this.createdAtMillis,
-      this.updatedAtMillis})
+      this.updatedAtMillis, this.readOnly=false, this.extra=const []})
       : branchIds = List.unmodifiable(branchIds);
   final AdminMemberRecord member;
   final String organizationId;
   final List<String> branchIds;
   final int? createdAtMillis, updatedAtMillis;
+  final bool readOnly;
+  final List<Map<String,String>> extra;
 }
 
 /// Read-only organization membership directory. No account lifecycle authority.

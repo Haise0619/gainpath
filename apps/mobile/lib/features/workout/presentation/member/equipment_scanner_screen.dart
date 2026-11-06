@@ -1,12 +1,15 @@
 import 'dart:io';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:camera/camera.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
 import 'equipment_browse_screen.dart';
 import '../shared/equipment_detail_screen.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:gainpath_domain/workout.dart';
 import '../../../../infrastructure/vision/smart_equipment_vision_classifier.dart';
+import '../../../../infrastructure/local/equipment_image_picker.dart';
 
 const _viewfinderHero =
     'https://images.unsplash.com/photo-1534438327276-14e5300c3a48?auto=format&fit=crop&w=1200&q=80';
@@ -38,6 +41,7 @@ class EquipmentScannerScreen extends StatefulWidget {
     this.matcher = const EquipmentMatcher(),
     this.onBrowse,
     this.enableCamera = true,
+    this.imagePicker,
   });
 
   final bool connected;
@@ -47,6 +51,7 @@ class EquipmentScannerScreen extends StatefulWidget {
   final EquipmentMatcher matcher;
   final VoidCallback? onBrowse;
   final bool enableCamera;
+  final EquipmentImagePicker? imagePicker;
 
   @override
   State<EquipmentScannerScreen> createState() => _EquipmentScannerScreenState();
@@ -57,6 +62,7 @@ class _EquipmentScannerScreenState extends State<EquipmentScannerScreen>
   late final AnimationController _scanLine;
   CameraController? _cameraController;
   late final EquipmentVisionClassifier _classifier;
+  late final EquipmentImagePicker _imagePicker;
 
   bool _scanning = false;
   bool _noMatch = false;
@@ -66,6 +72,7 @@ class _EquipmentScannerScreenState extends State<EquipmentScannerScreen>
   bool _cameraFailed = false;
   bool _initializingCamera = false;
   GymEquipment? _suggestedMatch;
+  Uint8List? _uploadedImageBytes;
 
   static const _boxSize = 260.0;
 
@@ -78,6 +85,8 @@ class _EquipmentScannerScreenState extends State<EquipmentScannerScreen>
     _classifier = widget.classifier ??
         SmartEquipmentVisionClassifier(
             connected: widget.connected, organizationId: widget.organizationId);
+
+    _imagePicker = widget.imagePicker ?? LocalEquipmentImagePicker();
 
     if (widget.enableCamera) {
       _initCamera();
@@ -108,7 +117,7 @@ class _EquipmentScannerScreenState extends State<EquipmentScannerScreen>
 
       controller = CameraController(
         selectedCamera,
-        ResolutionPreset.medium,
+        ResolutionPreset.high,
         enableAudio: false,
       );
 
@@ -135,7 +144,9 @@ class _EquipmentScannerScreenState extends State<EquipmentScannerScreen>
   }
 
   Future<void> _retry() async {
-    if (_cameraFailed || _cameraController == null) {
+    if (_uploadedImageBytes != null) {
+      await _processImageBytes(_uploadedImageBytes!);
+    } else if (_cameraFailed || _cameraController == null) {
       await _initCamera();
     } else {
       await _runScan();
@@ -162,19 +173,36 @@ class _EquipmentScannerScreenState extends State<EquipmentScannerScreen>
     }
   }
 
-  Future<void> _runScan() async {
+  Future<void> _pickAndScanImage() async {
     if (_scanning) return;
-    if (_cameraController == null ||
-        !_cameraController!.value.isInitialized ||
-        _cameraController!.value.hasError) {
-      setState(() {
-        _cameraFailed = true;
-        _errorMessage =
-            'Camera is not ready. Retry camera access or browse the catalogue.';
-      });
-      return;
-    }
+    try {
+      final image = await _imagePicker.pick();
+      if (image == null || !mounted) return;
 
+      setState(() {
+        _uploadedImageBytes = image.bytes;
+        _errorMessage = null;
+      });
+
+      await _processImageBytes(image.bytes, mimeType: image.contentType);
+    } on FormatException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _errorMessage = e.message;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _errorMessage =
+            'Could not load the selected image. Choose another JPG, PNG or WebP.';
+      });
+    }
+  }
+
+  Future<void> _processImageBytes(
+    List<int> imageBytes, {
+    String? mimeType,
+  }) async {
     setState(() {
       _scanning = true;
       _noMatch = false;
@@ -185,34 +213,19 @@ class _EquipmentScannerScreenState extends State<EquipmentScannerScreen>
     });
 
     try {
-      late final List<int> imageBytes;
-      try {
-        final xfile = await _cameraController!.takePicture();
-        try {
-          imageBytes = await xfile.readAsBytes();
-        } finally {
-          if (xfile.path.isNotEmpty) {
-            try {
-              await File(xfile.path).delete();
-            } catch (_) {}
-          }
-        }
-        if (imageBytes.isEmpty) throw CameraException('empty', 'Empty capture');
-      } catch (_) {
-        if (mounted) {
-          setState(() {
-            _scanning = false;
-            _cameraFailed = true;
-            _errorMessage =
-                'Could not capture a photo. Retry the camera or browse the catalogue.';
-          });
-        }
-        return;
-      }
-      if (!mounted) return;
+      // Auto-detect MIME type directly from magic bytes to guarantee valid server format
+      final isPng = imageBytes.length >= 8 &&
+          imageBytes[0] == 137 &&
+          imageBytes[1] == 80 &&
+          imageBytes[2] == 78 &&
+          imageBytes[3] == 71;
+      final actualMime = isPng ? 'image/png' : 'image/jpeg';
 
       // Identify via Vision AI
-      final recognition = await _classifier.identifyEquipment(imageBytes);
+      final recognition = await _classifier.identifyEquipment(
+        imageBytes,
+        mimeType: actualMime,
+      );
 
       // Load active equipment catalog
       List<GymEquipment> activeCatalog = [];
@@ -268,12 +281,63 @@ class _EquipmentScannerScreenState extends State<EquipmentScannerScreen>
       }
     } catch (e) {
       if (!mounted) return;
+      String message =
+          'Network or scanner error. Check your connection or browse the catalog.';
+      if (e is FirebaseFunctionsException &&
+          e.message != null &&
+          e.message!.trim().isNotEmpty) {
+        message = e.message!.trim();
+      }
       setState(() {
         _scanning = false;
-        _errorMessage =
-            'Network or scanner error. Check your connection or browse the catalog.';
+        _errorMessage = message;
       });
     }
+  }
+
+  Future<void> _runScan() async {
+    if (_scanning) return;
+    if (_cameraController == null ||
+        !_cameraController!.value.isInitialized ||
+        _cameraController!.value.hasError) {
+      setState(() {
+        _cameraFailed = true;
+        _errorMessage =
+            'Camera is not ready. Retry camera access or browse the catalogue.';
+      });
+      return;
+    }
+
+    setState(() {
+      _uploadedImageBytes = null;
+    });
+
+    late final List<int> imageBytes;
+    try {
+      final xfile = await _cameraController!.takePicture();
+      try {
+        imageBytes = await xfile.readAsBytes();
+      } finally {
+        if (xfile.path.isNotEmpty) {
+          try {
+            await File(xfile.path).delete();
+          } catch (_) {}
+        }
+      }
+      if (imageBytes.isEmpty) throw CameraException('empty', 'Empty capture');
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _cameraFailed = true;
+          _errorMessage =
+              'Could not capture a photo. Retry the camera or browse the catalogue.';
+        });
+      }
+      return;
+    }
+    if (!mounted) return;
+
+    await _processImageBytes(imageBytes, mimeType: 'image/jpeg');
   }
 
   @override
@@ -286,16 +350,34 @@ class _EquipmentScannerScreenState extends State<EquipmentScannerScreen>
       body: Stack(
         fit: StackFit.expand,
         children: [
-          // Background: Camera Preview or Viewfinder Hero
-          if (cameraReady)
-            CameraPreview(_cameraController!)
+          // Background: Uploaded image, Camera Preview, or Viewfinder Hero
+          if (_uploadedImageBytes != null)
+            Center(
+              child: Image.memory(
+                _uploadedImageBytes!,
+                fit: BoxFit.contain,
+                errorBuilder: (context, error, stack) => const DecoratedBox(
+                    decoration:
+                        BoxDecoration(gradient: AppColors.heroGradient)),
+              ),
+            )
+          else if (cameraReady)
+            Center(
+              child: CameraPreview(_cameraController!),
+            )
           else
             _networkHero(_viewfinderHero),
 
           // Tint overlay
           DecoratedBox(
             decoration: BoxDecoration(
-              color: AppColors.ink.withValues(alpha: cameraReady ? 0.35 : 0.55),
+              color: AppColors.ink.withValues(
+                alpha: _uploadedImageBytes != null
+                    ? 0.10
+                    : cameraReady
+                        ? 0.20
+                        : 0.55,
+              ),
             ),
           ),
 
@@ -323,6 +405,12 @@ class _EquipmentScannerScreenState extends State<EquipmentScannerScreen>
                         ),
                       ),
                       IconButton(
+                        icon: const Icon(Icons.photo_library_rounded,
+                            color: Colors.white),
+                        tooltip: 'Upload image',
+                        onPressed: _pickAndScanImage,
+                      ),
+                      IconButton(
                         icon: const Icon(Icons.grid_view_rounded,
                             color: Colors.white),
                         tooltip: 'Browse all equipment',
@@ -331,6 +419,48 @@ class _EquipmentScannerScreenState extends State<EquipmentScannerScreen>
                     ],
                   ),
                 ),
+
+                // Uploaded image indicator chip
+                if (_uploadedImageBytes != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 6),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withValues(alpha: 0.65),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(color: Colors.white24),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.image_rounded,
+                              size: 15, color: Colors.white70),
+                          const SizedBox(width: 6),
+                          const Text(
+                            'Uploaded photo',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          InkWell(
+                            key: const Key('equipment_scanner_clear_upload'),
+                            onTap: () =>
+                                setState(() => _uploadedImageBytes = null),
+                            child: const Icon(
+                              Icons.close_rounded,
+                              size: 16,
+                              color: Colors.white70,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
 
                 // Viewfinder frame
                 Expanded(
@@ -375,7 +505,9 @@ class _EquipmentScannerScreenState extends State<EquipmentScannerScreen>
                   child: Text(
                     _scanning
                         ? 'Identifying equipment…'
-                        : 'Point your camera at gym equipment',
+                        : _uploadedImageBytes != null
+                            ? 'Scanned from uploaded photo'
+                            : 'Point your camera at gym equipment',
                     textAlign: TextAlign.center,
                     style: const TextStyle(
                       color: Colors.white,
@@ -444,6 +576,15 @@ class _EquipmentScannerScreenState extends State<EquipmentScannerScreen>
                                       ),
                                       onPressed: _retry,
                                       child: const Text('Retry'),
+                                    ),
+                                    const SizedBox(width: 16),
+                                    TextButton(
+                                      style: TextButton.styleFrom(
+                                        foregroundColor: AppColors.overlay,
+                                        padding: EdgeInsets.zero,
+                                      ),
+                                      onPressed: _pickAndScanImage,
+                                      child: const Text('Upload photo'),
                                     ),
                                   ],
                                 ),
@@ -616,35 +757,96 @@ class _EquipmentScannerScreenState extends State<EquipmentScannerScreen>
                     ),
                   ),
 
-                // Shutter button
+                // Bottom control row
                 Padding(
-                  padding: const EdgeInsets.only(bottom: 36),
-                  child: GestureDetector(
-                    onTap: _runScan,
-                    child: Container(
-                      width: 74,
-                      height: 74,
-                      decoration: const BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: Colors.white,
-                        border: Border.fromBorderSide(
-                          BorderSide(color: Colors.white54, width: 4),
+                  padding: const EdgeInsets.fromLTRB(28, 0, 28, 36),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    children: [
+                      // Upload image button
+                      Tooltip(
+                        message: 'Upload image',
+                        child: InkWell(
+                          key: const Key('equipment_scanner_upload_button'),
+                          onTap: _pickAndScanImage,
+                          borderRadius: BorderRadius.circular(30),
+                          child: Container(
+                            width: 52,
+                            height: 52,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: Colors.white.withValues(alpha: 0.16),
+                              border: Border.all(
+                                  color: Colors.white24, width: 1.5),
+                            ),
+                            child: const Icon(
+                              Icons.photo_library_rounded,
+                              color: Colors.white,
+                              size: 24,
+                            ),
+                          ),
                         ),
                       ),
-                      child: _scanning
-                          ? const Padding(
-                              padding: EdgeInsets.all(22),
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2.6,
-                                color: AppColors.primary,
-                              ),
-                            )
-                          : const Icon(
-                              Icons.camera_alt_rounded,
-                              color: AppColors.primary,
-                              size: 30,
+
+                      // Shutter button
+                      GestureDetector(
+                        onTap: _runScan,
+                        child: Container(
+                          width: 74,
+                          height: 74,
+                          decoration: const BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: Colors.white,
+                            border: Border.fromBorderSide(
+                              BorderSide(color: Colors.white54, width: 4),
                             ),
-                    ),
+                          ),
+                          child: _scanning
+                              ? const Padding(
+                                  padding: EdgeInsets.all(22),
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2.6,
+                                    color: AppColors.primary,
+                                  ),
+                                )
+                              : const Icon(
+                                  Icons.camera_alt_rounded,
+                                  color: AppColors.primary,
+                                  size: 30,
+                                ),
+                        ),
+                      ),
+
+                      // Live camera / Reset button (or placeholder for alignment)
+                      if (_uploadedImageBytes != null && cameraReady)
+                        Tooltip(
+                          message: 'Return to camera',
+                          child: InkWell(
+                            key: const Key(
+                                'equipment_scanner_return_camera_button'),
+                            onTap: () =>
+                                setState(() => _uploadedImageBytes = null),
+                            borderRadius: BorderRadius.circular(30),
+                            child: Container(
+                              width: 52,
+                              height: 52,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: Colors.white.withValues(alpha: 0.16),
+                                border: Border.all(
+                                    color: Colors.white24, width: 1.5),
+                              ),
+                              child: const Icon(
+                                Icons.videocam_rounded,
+                                color: Colors.white,
+                                size: 24,
+                              ),
+                            ),
+                          ),
+                        )
+                      else
+                        const SizedBox(width: 52),
+                    ],
                   ),
                 ),
               ],

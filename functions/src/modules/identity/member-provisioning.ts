@@ -57,6 +57,11 @@ export async function provisionMember(
   const memberPath = `${organizationPath}/members/${input.userId}`;
 
   return store.transact(async transaction => {
+    // Server-owned assignment is also a reservation/tombstone. Older clients
+    // must never enroll an assigned or revoked dataset identity into production.
+    if (await transaction.get(`datasetAssignments/${input.userId}`)) {
+      throw new DomainError('permission-denied', 'This account requires its assigned dataset session.');
+    }
     const organization = await transaction.get(organizationPath);
     const branch = await transaction.get(branchPath);
     const user = await transaction.get(userPath);

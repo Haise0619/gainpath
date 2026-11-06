@@ -14,6 +14,7 @@ import '../../application/admin_reporting_gateway.dart';
 import '../../application/admin_operational_metrics.dart';
 import 'original_report_data_widgets.dart';
 import 'admin_workout_analytics.dart';
+import '../../application/business_dashboard_metrics.dart';
 
 /// AD-M12.1/M12.2 — Admin Dashboard & Reporting. One continuous analytics
 /// page instead of eight separate pushed screens each showing a single
@@ -158,7 +159,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
     final totalRev = snapshot?.totalRevenue;
     final membershipRevenue = widget.live
         ? (_operational
-            ? reportMoney(ops?.membershipMinor)
+            ? reportMoney(ops==null?null:ops.membershipMinor+(snapshot?.unified?.membershipMinor??0))
             : totalRev != null
                 ? '${totalRev.currency} ${(totalRev.minorUnits / 100).toStringAsFixed(0)}'
                 : '—')
@@ -182,6 +183,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
                 _toolbar(
                     snapshot: snapshot,
                     loading: reportingState?.isLoading ?? false),
+                if(snapshot?.unified!=null)const Padding(padding:EdgeInsets.only(top:12),child:Text(BusinessDashboardMetrics.revenueDefinition,style:TextStyle(fontSize:12,color:AppColors.inkSoft))),
                 if (ops != null) OriginalReportContext(snapshot: snapshot!),
                 const SizedBox(height: 26),
                 Container(key: _overviewKey, child: const Eyebrow('Overview')),
@@ -194,39 +196,39 @@ class _ReportsScreenState extends State<ReportsScreen> {
                         child: StatTile(
                             membershipRevenue,
                             _operational
-                                ? 'Membership Sandbox receipts'
+                                ? 'Membership Revenue'
                                 : 'Membership revenue / month')),
                     SizedBox(
                         width: 220,
                         child: StatTile(
                             _operational
-                                ? reportMoney(ops?.coachingMinor)
+                                ? reportMoney(ops==null?null:ops.coachingMinor+(snapshot?.unified?.coachingMinor??0))
                                 : widget.live
                                     ? (completed.isEmpty
                                         ? '—'
                                         : 'RM ${coachingRevenue.toStringAsFixed(0)}')
                                     : 'RM ${coachingRevenue.toStringAsFixed(0)}',
                             _operational
-                                ? 'Coaching Sandbox receipts'
+                                ? 'Coaching Revenue'
                                 : 'Coaching revenue, all completed sessions')),
                     SizedBox(
                         width: 220,
                         child: StatTile(
                             _operational
-                                ? reportMoney(totalRev?.minorUnits)
+                                ? reportMoney(snapshot?.unified?.illustrativeMinor??totalRev?.minorUnits)
                                 : widget.live
                                     ? (completed.isEmpty
                                         ? '—'
                                         : 'RM ${avgSession.toStringAsFixed(0)}')
                                     : 'RM ${avgSession.toStringAsFixed(0)}',
                             _operational
-                                ? 'Confirmed Sandbox receipts'
+                                ? 'Recorded revenue'
                                 : 'Avg. revenue per session')),
                     SizedBox(
                         width: 220,
                         child: StatTile(
                             _operational
-                                ? snapshot?.totalBookingsCount?.toString() ??
+                                ? (snapshot?.unified!=null?BusinessDashboardMetrics(snapshot!,null).bookings.toString():snapshot?.totalBookingsCount?.toString()) ??
                                     '—'
                                 : widget.live
                                     ? (completed.isEmpty
@@ -234,7 +236,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
                                         : '${completed.length}')
                                     : '${completed.length}',
                             _operational
-                                ? 'Bookings created in range'
+                                ? 'Booking Activity'
                                 : 'Completed sessions tracked')),
                   ],
                 ),
@@ -362,7 +364,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
               const SizedBox(height: 2),
               Text(
                   widget.live
-                      ? 'Connected account, booking and Sandbox receipt reports.'
+                      ? 'Membership, appointment and financial performance.'
                       : 'Sales, operations, and engagement — one page, always live.',
                   style: Theme.of(context).textTheme.bodyLarge),
             ],
@@ -509,7 +511,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
                       onPressed: loading || snapshot?.operations == null
                           ? null
                           : () => downloadCsv('gainpath-operational-report.csv',
-                              snapshot!.operations!.toCsv(snapshot))),
+                              snapshot!.unified!=null?BusinessDashboardMetrics(snapshot,null).csv():snapshot.operations!.toCsv(snapshot))),
                 ],
               ],
             ),
@@ -586,7 +588,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
               const SizedBox(height: 4),
               Text(
                 _operational
-                    ? 'Confirmed membership Sandbox clearances in the selected period'
+                    ? 'Recorded membership collections in the selected period'
                     : widget.live
                         ? 'Revenue history is unavailable'
                         : 'Last 7 months',

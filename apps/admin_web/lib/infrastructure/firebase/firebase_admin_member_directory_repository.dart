@@ -107,7 +107,7 @@ class FirebaseAdminMemberDirectoryRepository
     }
     await _admin().timeout(const Duration(seconds: 20));
     final snapshot = await _db
-        .doc('orgs/${scope.organizationId}/members/$memberId')
+        .doc('${scope.dataRootPath}/members/$memberId')
         .get(const GetOptions(source: Source.server))
         .timeout(const Duration(seconds: 20));
     await _admin().timeout(const Duration(seconds: 20));
@@ -141,6 +141,46 @@ class FirebaseAdminMemberDirectoryRepository
         : '';
     final email =
         data['email'] is String ? (data['email'] as String).trim() : '';
+    final extra = <Map<String, String>>[];
+    try {
+      final profileSnap = await _db
+          .doc('${scope.dataRootPath}/profiles/$memberId')
+          .get(const GetOptions(source: Source.server));
+      if (profileSnap.exists && profileSnap.data() != null) {
+        final p = profileSnap.data()!;
+        for (final key in [
+          'gender',
+          'ageBracket',
+          'heightCm',
+          'weightKg',
+          'experience',
+          'activity',
+          'goals'
+        ]) {
+          final v = p[key];
+          if (v != null) {
+            extra.add({
+              'label': key,
+              'value': v is List
+                  ? v.map((e) => e.toString()).join(', ')
+                  : v.toString()
+            });
+          }
+        }
+      }
+    } catch (_) {}
+
+    try {
+      final consentSnap = await _db
+          .doc('${scope.dataRootPath}/workoutConsents/$memberId')
+          .get(const GetOptions(source: Source.server));
+      if (consentSnap.exists) {
+        extra.add({
+          'label': 'Medical & physical waiver',
+          'value': 'Signed & accepted'
+        });
+      }
+    } catch (_) {}
     _check();
     return AdminMemberDetails(
         member: AdminMemberRecord(
@@ -151,7 +191,8 @@ class FirebaseAdminMemberDirectoryRepository
         organizationId: scope.organizationId,
         branchIds: branches == null ? [] : List<String>.from(branches as List),
         createdAtMillis: millis('createdAtMillis'),
-        updatedAtMillis: millis('updatedAtMillis'));
+        updatedAtMillis: millis('updatedAtMillis'),
+        extra: extra);
   }
 
   void _check() {
@@ -167,9 +208,9 @@ class FirebaseAdminMemberDirectoryRepository
   Future<void> _admin() async {
     _check();
     const server = GetOptions(source: Source.server);
-    final user = (await _db.doc('users/${scope.userId}').get(server)).data();
+    final user = (await _db.doc(scope.userDocumentPath).get(server)).data();
     final member = (await _db
-            .doc('orgs/${scope.organizationId}/members/${scope.userId}')
+            .doc('${scope.dataRootPath}/members/${scope.userId}')
             .get(server))
         .data();
     _check();
@@ -197,7 +238,7 @@ class FirebaseAdminMemberDirectoryRepository
     // Recheck the canonical assignment before AND after each bounded server read.
     await _admin().timeout(const Duration(seconds: 20));
     Query<Map<String, dynamic>> source = _db
-        .collection('orgs/${scope.organizationId}/members')
+        .collection('${scope.dataRootPath}/members')
         .where('role', isEqualTo: 'member')
         .orderBy(FieldPath.documentId);
     if (afterId != null) source = source.startAfter([afterId]);

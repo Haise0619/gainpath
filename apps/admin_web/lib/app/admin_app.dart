@@ -19,6 +19,13 @@ import 'package:gainpath_domain/identity.dart'
 import 'package:gainpath_domain/coaching.dart' show CoachAvailabilityRepository;
 
 import 'di/admin_presentation_dependencies.dart';
+import '../features/identity/presentation/admin/admin_login_page.dart';
+
+/// Explicit controlled-demo hosts reuse these existing identity screens without
+/// constructing unrelated production repositories or changing normal startup.
+Widget buildControlledDemoAdminLogin() => const _AdminLoginScreen();
+Widget buildControlledDemoAdminVerification(AuthSession session) =>
+    _AdminVerificationScreen(session: session);
 
 class GainPathAdminWebApp extends StatelessWidget {
   /// Normal composition always uses Firebase and no repository overrides.
@@ -28,6 +35,7 @@ class GainPathAdminWebApp extends StatelessWidget {
   const GainPathAdminWebApp.injected(
       {super.key,
       this.authRepository,
+      this.datasetTransportFactory,
       this.tutorialRepositoryFactory,
       this.routineRepositoryFactory,
       this.coachRepositoryFactory,
@@ -42,6 +50,7 @@ class GainPathAdminWebApp extends StatelessWidget {
       this.passwordResetSender});
 
   final AuthRepository? authRepository;
+  final FypDatasetTransportFactory? datasetTransportFactory;
   final Future<void> Function(String)? passwordResetSender;
   final ReportingGatewayFactory? reportingGatewayFactory;
   final TutorialRepository Function(SessionScope)? tutorialRepositoryFactory;
@@ -88,6 +97,7 @@ class GainPathAdminWebApp extends StatelessWidget {
               debugShowCheckedModeBanner: false,
               theme: AppTheme.build(),
               home: _AdminAuthGate(
+                  datasetTransportFactory: datasetTransportFactory,
                   passwordResetSender: passwordResetSender ??
                       (email) => FlutterFirebaseAuthGateway()
                           .sendPasswordResetEmail(email)),
@@ -116,7 +126,9 @@ class GainPathAdminWebApp extends StatelessWidget {
 }
 
 class _AdminAuthGate extends StatelessWidget {
-  const _AdminAuthGate({this.passwordResetSender});
+  const _AdminAuthGate(
+      {this.passwordResetSender, this.datasetTransportFactory});
+  final FypDatasetTransportFactory? datasetTransportFactory;
   final Future<void> Function(String)? passwordResetSender;
 
   @override
@@ -132,7 +144,9 @@ class _AdminAuthGate extends StatelessWidget {
           return _AdminVerificationScreen(session: state.session!);
         }
         if (AuthRolePolicy.canEnter(state, allowed: const {AppRole.admin})) {
-          return AdminShell(liveSession: state.session);
+          return AdminShell(
+              liveSession: state.session,
+              datasetTransportFactory: datasetTransportFactory);
         }
         return _AdminLoginScreen(onPasswordReset: passwordResetSender);
       },
@@ -199,122 +213,4 @@ class _AdminVerificationScreen extends StatelessWidget {
   }
 }
 
-class _AdminLoginScreen extends StatefulWidget {
-  const _AdminLoginScreen({this.onPasswordReset});
-  final Future<void> Function(String)? onPasswordReset;
-
-  @override
-  State<_AdminLoginScreen> createState() => _AdminLoginScreenState();
-}
-
-class _AdminLoginScreenState extends State<_AdminLoginScreen> {
-  final _emailController = TextEditingController();
-  final _passwordController = TextEditingController();
-
-  @override
-  void initState() {
-    super.initState();
-    context.read<AuthBloc>().add(const RoleSelected(AppRole.admin));
-  }
-
-  @override
-  void dispose() {
-    _emailController.dispose();
-    _passwordController.dispose();
-    super.dispose();
-  }
-
-  void _submit() {
-    final bloc = context.read<AuthBloc>();
-    bloc.add(const RoleSelected(AppRole.admin));
-    bloc.add(
-      LoginSubmitted(
-        email: _emailController.text,
-        password: _passwordController.text,
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return BlocBuilder<AuthBloc, AuthState>(
-      builder: (context, state) {
-        final submitting = state.status == AuthStatus.submitting;
-        return Scaffold(
-          appBar: AppBar(title: const Text('GainPath Admin Web')),
-          body: Center(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(32),
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 480),
-                child: Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(28),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        Text(
-                          'Administrator sign-in',
-                          style: Theme.of(context).textTheme.headlineSmall,
-                        ),
-                        const SizedBox(height: 8),
-                        const Text(
-                            'Only organization Admin and Staff roles can enter this console.'),
-                        const SizedBox(height: 24),
-                        TextField(
-                          controller: _emailController,
-                          keyboardType: TextInputType.emailAddress,
-                          decoration: InputDecoration(
-                            labelText: 'Work email',
-                            errorText: state.fieldErrors.email,
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        TextField(
-                          controller: _passwordController,
-                          obscureText: true,
-                          decoration: InputDecoration(
-                            labelText: 'Password',
-                            errorText: state.fieldErrors.password,
-                          ),
-                        ),
-                        if (state.message != null) ...[
-                          const SizedBox(height: 12),
-                          Text(
-                            state.message!,
-                            style: TextStyle(
-                                color: Theme.of(context).colorScheme.error),
-                          ),
-                        ],
-                        const SizedBox(height: 24),
-                        FilledButton(
-                          onPressed: submitting ? null : _submit,
-                          child: Text(submitting ? 'Signing in…' : 'Sign in'),
-                        ),
-                        TextButton(
-                            onPressed: () => showForgotPasswordSheet(context,
-                                initialEmail: _emailController.text,
-                                onSend: widget.onPasswordReset == null
-                                    ? null
-                                    : (email) async {
-                                        try {
-                                          await widget.onPasswordReset!(email);
-                                        } on AuthException catch (error) {
-                                          throw PasswordResetFailure(
-                                              error.message);
-                                        }
-                                      },
-                                asDialog: true),
-                            child: const Text('Forgot password?')),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
-        );
-      },
-    );
-  }
-}
+typedef _AdminLoginScreen = AdminLoginPage;

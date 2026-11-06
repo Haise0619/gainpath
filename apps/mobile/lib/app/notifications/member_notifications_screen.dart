@@ -5,12 +5,15 @@ import 'package:gainpath_domain/coaching.dart';
 import 'package:gainpath_domain/gainpath_domain.dart' show AuthSession;
 import 'package:gainpath_ui/gainpath_ui.dart';
 import '../di/booking_factory.dart';
+import '../../features/recommendation/application/member_recommendation_repository.dart';
+import '../../features/recommendation/presentation/member/member_recommendation_sheet.dart';
 
 enum NotificationCategoryFilter {
   all,
   announcements,
   coaching,
   bookings,
+  recommendations,
 }
 
 class UnifiedNotificationItem {
@@ -24,6 +27,7 @@ class UnifiedNotificationItem {
     this.noticeId,
     this.bookingId,
     this.announcement,
+    this.recommendation,
   });
 
   final String id;
@@ -35,6 +39,7 @@ class UnifiedNotificationItem {
   final String? noticeId;
   final String? bookingId;
   final Announcement? announcement;
+  final RecommendationNotice? recommendation;
 }
 
 /// Full-screen Member Notification Center unifying gym announcements,
@@ -49,6 +54,10 @@ class MemberNotificationsScreen extends StatefulWidget {
     required this.isCurrent,
     this.onOpenBookings,
     this.initialItems,
+    this.recommendationRepository,
+    this.onOpenRecommendationTarget,
+    this.recommendationPhotoBuilder,
+    this.onBrowseCoaches,
   });
 
   final AuthSession? session;
@@ -58,6 +67,10 @@ class MemberNotificationsScreen extends StatefulWidget {
   final bool Function() isCurrent;
   final VoidCallback? onOpenBookings;
   final List<UnifiedNotificationItem>? initialItems;
+  final MemberRecommendationRepository? recommendationRepository;
+  final MemberRecommendationOpener? onOpenRecommendationTarget;
+  final MemberRecommendationPhotoBuilder? recommendationPhotoBuilder;
+  final VoidCallback? onBrowseCoaches;
 
   @override
   State<MemberNotificationsScreen> createState() =>
@@ -68,6 +81,9 @@ class _MemberNotificationsScreenState extends State<MemberNotificationsScreen> {
   NotificationCategoryFilter _selectedFilter = NotificationCategoryFilter.all;
   final List<UnifiedNotificationItem> _items = [];
   bool _loading = false;
+  bool _loadingMore = false;
+  String? _nextInboxCursor;
+  int _generation = 0;
   String? _error;
   StreamSubscription<void>? _inboxUpdates;
   Timer? _pollingTimer;
@@ -92,6 +108,7 @@ class _MemberNotificationsScreenState extends State<MemberNotificationsScreen> {
 
   @override
   void dispose() {
+    _generation++;
     unawaited(_inboxUpdates?.cancel());
     _pollingTimer?.cancel();
     super.dispose();
@@ -101,6 +118,8 @@ class _MemberNotificationsScreenState extends State<MemberNotificationsScreen> {
 
   Future<void> _load({bool silent = false}) async {
     if (!_current) return;
+    final generation = ++_generation;
+    String? nextCursor;
     if (!silent) {
       setState(() {
         _loading = true;
@@ -136,19 +155,23 @@ class _MemberNotificationsScreenState extends State<MemberNotificationsScreen> {
     if (widget.module9Repository != null) {
       try {
         final noticePage = await widget.module9Repository!.loadInbox();
+        nextCursor = noticePage.nextAfterId;
         for (final notice in noticePage.records) {
           final isBooking = notice.bookingId != null;
           newItems.add(UnifiedNotificationItem(
             id: 'notice_${notice.id}',
-            category: isBooking
-                ? NotificationCategoryFilter.bookings
-                : NotificationCategoryFilter.coaching,
+            category: notice.recommendation != null
+                ? NotificationCategoryFilter.recommendations
+                : isBooking
+                    ? NotificationCategoryFilter.bookings
+                    : NotificationCategoryFilter.coaching,
             title: notice.title,
             message: notice.message,
             timestamp: notice.createdAt,
             isRead: notice.read,
             noticeId: notice.id,
             bookingId: notice.bookingId,
+            recommendation: notice.recommendation,
           ));
         }
       } catch (_) {
@@ -158,40 +181,8 @@ class _MemberNotificationsScreenState extends State<MemberNotificationsScreen> {
       }
     }
 
-    // 3. Fallback mock announcements / notices in disconnected demo mode
-    if (widget.session == null &&
-        widget.announcementReader == null &&
-        widget.module9Repository == null &&
-        widget.initialItems == null) {
-      newItems.addAll([
-        UnifiedNotificationItem(
-          id: 'mock_announcement_1',
-          category: NotificationCategoryFilter.announcements,
-          title: 'Public holiday gym hours',
-          message:
-              'The gym closes at 6:00 PM this Friday for scheduled maintenance. Please book your personal training sessions early.',
-          timestamp: DateTime.now().subtract(const Duration(hours: 4)),
-        ),
-        UnifiedNotificationItem(
-          id: 'mock_coaching_1',
-          category: NotificationCategoryFilter.coaching,
-          title: 'Coach assigned: Coach Alex',
-          message:
-              'Coach Alex is ready for your weekly consultation review.',
-          timestamp: DateTime.now().subtract(const Duration(days: 1)),
-          isRead: true,
-        ),
-        UnifiedNotificationItem(
-          id: 'mock_booking_1',
-          category: NotificationCategoryFilter.bookings,
-          title: 'Upcoming consultation confirmed',
-          message:
-              'Your 1-on-1 coaching session is scheduled for Saturday 10:00 AM.',
-          timestamp: DateTime.now().subtract(const Duration(hours: 12)),
-          isRead: false,
-          bookingId: 'mock_b1',
-        ),
-      ]);
+    if (widget.module9Repository == null && widget.announcementReader == null) {
+      loadError = 'Notifications are currently unavailable.';
     }
 
     // Sort chronologically by timestamp (newest first)
@@ -201,8 +192,10 @@ class _MemberNotificationsScreenState extends State<MemberNotificationsScreen> {
       return tb.compareTo(ta);
     });
 
-    if (!_current) return;
+    if (!_current || generation != _generation) return;
     setState(() {
+      _nextInboxCursor = nextCursor;
+      _loadingMore = false;
       _items.clear();
       _items.addAll(newItems);
       _loading = false;
@@ -210,7 +203,81 @@ class _MemberNotificationsScreenState extends State<MemberNotificationsScreen> {
     });
   }
 
+  Future<void> _loadMore() async {
+    final cursor = _nextInboxCursor;
+    final repository = widget.module9Repository;
+    if (!_current ||
+        _loading ||
+        _loadingMore ||
+        cursor == null ||
+        repository == null) {
+      return;
+    }
+    final generation = _generation;
+    setState(() => _loadingMore = true);
+    try {
+      final page = await repository.loadInbox(afterId: cursor);
+      if (!_current || generation != _generation) return;
+      if (page.nextAfterId == cursor) {
+        throw const FormatException('Invalid inbox cursor');
+      }
+      setState(() {
+        final known = _items.map((i) => i.id).toSet();
+        for (final notice in page.records) {
+          if (!known.add('notice_${notice.id}')) continue;
+          _items.add(UnifiedNotificationItem(
+              id: 'notice_${notice.id}',
+              category: notice.recommendation != null
+                  ? NotificationCategoryFilter.recommendations
+                  : notice.bookingId != null
+                      ? NotificationCategoryFilter.bookings
+                      : NotificationCategoryFilter.coaching,
+              title: notice.title,
+              message: notice.message,
+              timestamp: notice.createdAt,
+              isRead: notice.read,
+              noticeId: notice.id,
+              bookingId: notice.bookingId,
+              recommendation: notice.recommendation));
+        }
+        _items.sort((a, b) => (b.timestamp ?? DateTime(1970))
+            .compareTo(a.timestamp ?? DateTime(1970)));
+        _nextInboxCursor = page.nextAfterId;
+        _loadingMore = false;
+        _error = null;
+      });
+    } catch (_) {
+      if (_current && generation == _generation) {
+        setState(() {
+          _loadingMore = false;
+          _error = 'Could not load older notifications. Please retry.';
+        });
+      }
+    }
+  }
+
   Future<void> _handleItemTap(UnifiedNotificationItem item) async {
+    if (!_current) return;
+    if (item.recommendation != null) {
+      final repository = widget.recommendationRepository;
+      if (repository == null ||
+          !repository.enabled ||
+          !repository.isCurrent ||
+          (widget.session != null &&
+              repository.scope != widget.session!.scope)) {
+        showToast(context, 'Recommendations are currently unavailable.');
+        return;
+      }
+      await showMemberRecommendationDetail(context,
+          recommendationId: item.recommendation!.recommendationId,
+          repository: repository,
+          isCurrent: () => _current,
+          onOpenTarget: widget.onOpenRecommendationTarget,
+          scopedPhotoBuilder: widget.recommendationPhotoBuilder,
+          onBrowseCoaches: widget.onBrowseCoaches,
+          onChanged: () => unawaited(_load(silent: true)));
+      return;
+    }
     // 1. If it has a noticeId, mark it as read in the repository
     if (item.noticeId != null && widget.module9Repository != null) {
       try {
@@ -231,6 +298,7 @@ class _MemberNotificationsScreenState extends State<MemberNotificationsScreen> {
               noticeId: old.noticeId,
               bookingId: old.bookingId,
               announcement: old.announcement,
+              recommendation: old.recommendation,
             );
           }
         });
@@ -354,6 +422,8 @@ class _MemberNotificationsScreenState extends State<MemberNotificationsScreen> {
         NotificationCategoryFilter.announcements => Icons.campaign_rounded,
         NotificationCategoryFilter.coaching => Icons.sports_rounded,
         NotificationCategoryFilter.bookings => Icons.event_rounded,
+        NotificationCategoryFilter.recommendations =>
+          Icons.auto_awesome_rounded,
         _ => Icons.notifications_rounded,
       };
 
@@ -370,6 +440,7 @@ class _MemberNotificationsScreenState extends State<MemberNotificationsScreen> {
         NotificationCategoryFilter.announcements => 'Announcement',
         NotificationCategoryFilter.coaching => 'Coaching',
         NotificationCategoryFilter.bookings => 'Booking',
+        NotificationCategoryFilter.recommendations => 'Recommendation',
         _ => 'Notification',
       };
 
@@ -378,6 +449,7 @@ class _MemberNotificationsScreenState extends State<MemberNotificationsScreen> {
           'No gym announcements at this time.',
         NotificationCategoryFilter.coaching => 'No coaching notices yet.',
         NotificationCategoryFilter.bookings => 'No booking updates yet.',
+        NotificationCategoryFilter.recommendations => 'No recommendations yet.',
         _ => 'No notifications at this time.',
       };
 
@@ -408,6 +480,14 @@ class _MemberNotificationsScreenState extends State<MemberNotificationsScreen> {
         child: Column(
           children: [
             if (_loading) const LinearProgressIndicator(),
+            if (widget.initialItems != null ||
+                widget.recommendationRepository?.fixtureOnly == true)
+              const Padding(
+                  padding: EdgeInsets.all(8),
+                  child: Text('Synthetic local preview',
+                      style: TextStyle(
+                          color: AppColors.primary,
+                          fontWeight: FontWeight.w700))),
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
               child: SingleChildScrollView(
@@ -416,14 +496,17 @@ class _MemberNotificationsScreenState extends State<MemberNotificationsScreen> {
                   children: [
                     _buildCategoryChip('All', NotificationCategoryFilter.all),
                     const SizedBox(width: 8),
-                    _buildCategoryChip(
-                        'Announcements', NotificationCategoryFilter.announcements),
+                    _buildCategoryChip('Announcements',
+                        NotificationCategoryFilter.announcements),
                     const SizedBox(width: 8),
                     _buildCategoryChip(
                         'Coaching', NotificationCategoryFilter.coaching),
                     const SizedBox(width: 8),
                     _buildCategoryChip(
                         'Bookings', NotificationCategoryFilter.bookings),
+                    const SizedBox(width: 8),
+                    _buildCategoryChip('Recommendations',
+                        NotificationCategoryFilter.recommendations),
                   ],
                 ),
               ),
@@ -516,19 +599,26 @@ class _MemberNotificationsScreenState extends State<MemberNotificationsScreen> {
                                       crossAxisAlignment:
                                           CrossAxisAlignment.start,
                                       children: [
-                                        Row(
+                                        Wrap(
+                                          spacing: 8,
+                                          runSpacing: 4,
+                                          crossAxisAlignment:
+                                              WrapCrossAlignment.center,
                                           children: [
                                             Container(
-                                              padding: const EdgeInsets.symmetric(
-                                                  horizontal: 6, vertical: 2),
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                      horizontal: 6,
+                                                      vertical: 2),
                                               decoration: BoxDecoration(
-                                                color: color
-                                                    .withValues(alpha: 0.12),
+                                                color: color.withValues(
+                                                    alpha: 0.12),
                                                 borderRadius:
                                                     BorderRadius.circular(4),
                                               ),
                                               child: Text(
-                                                _labelForCategory(item.category),
+                                                _labelForCategory(
+                                                    item.category),
                                                 style: TextStyle(
                                                   color: color,
                                                   fontSize: 11,
@@ -536,7 +626,6 @@ class _MemberNotificationsScreenState extends State<MemberNotificationsScreen> {
                                                 ),
                                               ),
                                             ),
-                                            const Spacer(),
                                             if (item.timestamp != null)
                                               Text(
                                                 _formatDate(item.timestamp!),
@@ -548,17 +637,13 @@ class _MemberNotificationsScreenState extends State<MemberNotificationsScreen> {
                                                       fontSize: 11.5,
                                                     ),
                                               ),
-                                            if (unread) ...[
-                                              const SizedBox(width: 6),
-                                              Container(
-                                                width: 8,
-                                                height: 8,
-                                                decoration: const BoxDecoration(
-                                                  color: AppColors.primary,
-                                                  shape: BoxShape.circle,
-                                                ),
-                                              ),
-                                            ],
+                                            if (unread)
+                                              const Text('Unread',
+                                                  style: TextStyle(
+                                                      color: AppColors.primary,
+                                                      fontSize: 11,
+                                                      fontWeight:
+                                                          FontWeight.w700)),
                                           ],
                                         ),
                                         const SizedBox(height: 6),
@@ -596,6 +681,14 @@ class _MemberNotificationsScreenState extends State<MemberNotificationsScreen> {
                       },
                     ),
             ),
+            if (_nextInboxCursor != null)
+              SafeArea(
+                  top: false,
+                  child: TextButton(
+                      onPressed: _loadingMore ? null : _loadMore,
+                      child: Text(_loadingMore
+                          ? 'Loading older notifications…'
+                          : 'Load older notifications'))),
           ],
         ),
       ),

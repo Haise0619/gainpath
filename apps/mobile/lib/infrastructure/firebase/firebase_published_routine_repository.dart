@@ -1,3 +1,4 @@
+import 'firebase_data_scope.dart';
 import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -42,8 +43,7 @@ class FirebasePublishedRoutineRepository
   }
 
   Query<Map<String, dynamic>> _published() => _firestore
-      .collection('orgs')
-      .doc(scope.organizationId)
+      .scopeRoot(scope)
       .collection('content')
       .where('status', isEqualTo: 'published')
       .where('kind', isEqualTo: 'routine');

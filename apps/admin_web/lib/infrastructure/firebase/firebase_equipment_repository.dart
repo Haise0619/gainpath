@@ -1,3 +1,4 @@
+import 'firebase_data_scope.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:gainpath_domain/workout.dart';
@@ -30,14 +31,12 @@ class FirebaseEquipmentRepository extends EquipmentRepository {
   @override
   List<GymEquipment> get gymEquipment => const [];
   CollectionReference<Map<String, dynamic>> get _records => _db
-      .collection('orgs')
-      .doc(scope.organizationId)
+      .scopeRoot(scope)
       .collection('gymEquipment');
   DocumentReference<Map<String, dynamic>> get _user =>
-      _db.collection('users').doc(scope.userId);
+      _db.scopeUser(scope);
   DocumentReference<Map<String, dynamic>> get _member => _db
-      .collection('orgs')
-      .doc(scope.organizationId)
+      .scopeRoot(scope)
       .collection('members')
       .doc(scope.userId);
   void _check() {

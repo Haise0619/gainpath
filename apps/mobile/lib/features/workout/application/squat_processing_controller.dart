@@ -1,8 +1,10 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:gainpath_domain/gainpath_domain.dart';
 import 'package:gainpath_pose/gainpath_pose.dart';
 import 'workout_audio_controller.dart';
+import '../domain/workout_feedback_event.dart';
 import '../../../infrastructure/pose/real_squat_performance.dart';
 import '../../../infrastructure/pose/squat_decision_diagnostics.dart';
 
@@ -45,7 +47,18 @@ class SquatProcessingController extends ChangeNotifier {
   int? _lastCapture, _lastNow;
   Future<void>? _closing;
   int _lastDiagnosticSequence = 0;
+  int _lastResetRevision = 0, _resetLogs = 0;
   void _emitDiagnostics() {
+    final state = _analyzer.trackingSnapshot;
+    final revision = state['resetRevision'] as int;
+    if (kDebugMode &&
+        revision != _lastResetRevision &&
+        _resetLogs < 32 &&
+        activeScope() == scope) {
+      _resetLogs++;
+      debugPrint('SQUAT_TRACKING_RESET ${jsonEncode(state)}');
+    }
+    _lastResetRevision = revision;
     if (squatDecisionDiagnosticsEnabled && activeScope() == scope) {
       _lastDiagnosticSequence = emitSquatDecisionRecords(
           _analyzer.diagnostics, _lastDiagnosticSequence);
@@ -100,8 +113,27 @@ class SquatProcessingController extends ChangeNotifier {
     final lost = next.health == TrackingStatus.lost &&
         _update?.health != TrackingStatus.lost;
     _update = next;
+    final attempt = next.completedAttempt;
+    final events = <WorkoutFeedbackEvent>[];
+    if (attempt != null &&
+        next.health == TrackingStatus.healthy &&
+        !next.needsCalibration) {
+      for (final cue in next.cues
+          .where((c) => c.id == 'squat_rep' || c.id == 'squat_depth')) {
+        events.add(WorkoutFeedbackEvent(
+            id: 'squat-attempt-${attempt.number}-${cue.id}',
+            cue: CueRequest(
+                id: cue.id,
+                text: attempt.complete
+                    ? 'Good repetition.'
+                    : 'Lower a little more on the next squat.',
+                priority: cue.priority),
+            observedAtMicros: next.capturedAtMicros,
+            generatedAtMicros: now));
+      }
+    }
     audio.consume([
-      ...next.cues,
+      ...next.cues.where((c) => c.id != 'squat_rep' && c.id != 'squat_depth'),
       if (lost)
         const CueRequest(
             id: 'squat_tracking_lost',
@@ -109,6 +141,8 @@ class SquatProcessingController extends ChangeNotifier {
             priority: CuePriority.warning),
     ],
         nowMicros: now,
+        events: events,
+        invalidateFeedback: next.health == TrackingStatus.lost,
         trackingAvailable:
             next.health == TrackingStatus.healthy && !next.needsCalibration);
     if (!_disposed) notifyListeners();

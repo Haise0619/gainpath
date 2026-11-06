@@ -72,7 +72,7 @@ class OriginalReceiptTrend extends StatelessWidget {
       Text('${days.first.date} – ${days.last.date} · Malaysia dates',
           style: Theme.of(context).textTheme.bodySmall),
       const Text(
-          'Confirmed Sandbox receipts · dates with recorded activity. Review/refund cases are excluded.'),
+          'Recorded collections by date. Review and refund cases are excluded.'),
     ]);
   }
 }
@@ -97,7 +97,7 @@ class OriginalReceiptBreakdown extends StatelessWidget {
           'Refunded-associated clearances: ${reportMoney(ops.refundedMinor)} · ${ops.refundedCount} records'),
       const SizedBox(height: 8),
       const Text(
-          'All amounts use original clearance dates. These are Sandbox receipts, not net revenue, refund cash flow or payouts.'),
+          'Collection values use original recorded clearance dates; they do not establish settled cash, net income, refund transfers or payouts.'),
     ]);
   }
 }

@@ -18,12 +18,7 @@ class BookingTransport {
       String? Function()? currentUid,
       BookingCallable? call})
       : _uid = currentUid ?? (() => FirebaseAuth.instance.currentUser?.uid),
-        _call = call ?? _regionalCall;
-  static Future<Map<String, dynamic>> _regionalCall(
-      String name, Map<String, dynamic> input) async {
-    return (await firebaseCallable(name).call<Map<String, dynamic>>(input))
-        .data;
-  }
+        _call = call ?? ((name, input) async => (await firebaseScopedCallable(scope, name).call<Map<String, dynamic>>(input)).data);
 
   final SessionScope scope;
   final bool Function() isCurrent;
@@ -171,7 +166,7 @@ class FirebaseBookingListRepository
     if (role != AppRole.member && role != AppRole.coach) return;
     if (role == AppRole.coach && _branches.isEmpty) return;
     Query<Map<String, dynamic>> query = FirebaseFirestore.instance
-        .collection('orgs/${scope.organizationId}/bookings')
+        .collection('${scope.dataRootPath}/bookings')
         .where(role == AppRole.coach ? 'coachId' : 'memberId',
             isEqualTo: scope.userId);
     if (role == AppRole.coach) {

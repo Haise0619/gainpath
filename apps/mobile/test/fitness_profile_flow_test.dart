@@ -22,6 +22,8 @@ import 'package:google_fonts/google_fonts.dart';
 
 import 'support/fitness_profile_fake.dart';
 import 'coach_directory_flow_test.dart' show DirectoryFake;
+import 'workout_program_controller_test.dart' show MemoryProgramStore;
+import 'routine_journey_controller_test.dart' show MemoryJourneyStore;
 
 Future<void> tap(WidgetTester tester, String text) async {
   final target = find.text(text);
@@ -67,6 +69,8 @@ void main() {
       authRepository: auth,
       profileRepositoryFactory: profiles.repository,
       routineLoaderFactory: (_) async => null,
+      programStoreFactory: (scope) async => MemoryProgramStore(scope),
+      routineJourneyStoreFactory: (scope) async => MemoryJourneyStore(scope),
       coachDirectoryFactory: (scope, current) =>
           DirectoryFake(scope)..profile = null,
       memberSettingsBuilder: settingsBuilder,
@@ -251,29 +255,19 @@ void main() {
     await profiles.repository(account.scope).save(sampleProfile());
     await mount(tester, auth, profiles);
     expect(find.byType(MemberHomeScreen), findsOneWidget);
-    expect(find.text('Announcements'), findsOneWidget);
-    expect(find.text('Daily app check-in'), findsOneWidget);
+    expect(find.byTooltip('Notifications'), findsOneWidget);
+    expect(find.text('Daily check-in'), findsWidgets);
     expect(find.text('App check-in awaiting activation.'), findsOneWidget);
     expect(find.text('No published routine yet'), findsOneWidget);
     expect(find.text('Claim'), findsNothing);
     await tap(tester, 'Workout');
     expect(find.byType(WorkoutPrepScreen), findsOneWidget);
-    expect(find.text('Watch tutorial'), findsOneWidget);
-    expect(find.text('View routine'), findsOneWidget);
-    expect(find.text('Review camera setup'), findsOneWidget);
-    expect(find.text('Scan equipment'), findsOneWidget);
-    await tester.scrollUntilVisible(find.text('Start guided session'), 300,
+    expect(find.text('Start workout'), findsNothing);
+    await tester.scrollUntilVisible(find.text('Review camera setup'), 200,
         scrollable: find.descendant(
             of: find.byType(WorkoutPrepScreen),
             matching: find.byType(Scrollable)));
-    expect(
-        tester
-            .widget<FilledButton>(find.ancestor(
-                of: find.text('Start guided session'),
-                matching:
-                    find.byWidgetPredicate((widget) => widget is FilledButton)))
-            .onPressed,
-        isNotNull);
+    expect(find.text('Review camera setup'), findsOneWidget);
     await tap(tester, 'Rewards');
     expect(find.byType(GamificationDashboardScreen), findsOneWidget);
     expect(find.text('YOUR POINTS'), findsOneWidget);

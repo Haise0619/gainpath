@@ -126,11 +126,6 @@ class _BrowseCoachesScreenState extends State<BrowseCoachesScreen> {
                   value: _SortBy.experience, child: Text('Most experienced')),
             ],
           ),
-          if (_directory != null)
-            IconButton(
-                tooltip: 'Refresh Coaches',
-                onPressed: state!.loading ? null : _directory!.refresh,
-                icon: const Icon(Icons.refresh)),
           IconButton(
             icon: const Icon(Icons.event_note_rounded),
             tooltip: 'My bookings',

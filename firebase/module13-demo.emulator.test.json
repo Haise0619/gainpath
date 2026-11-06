@@ -1,0 +1,15 @@
+{
+  "functions": {"source": "../build/module13-firebase-demo/functions"},
+  "firestore": {"rules": "firestore.rules"},
+  "storage": {"rules": "module13-demo.storage.rules"},
+  "emulators": {
+    "auth": {"host": "127.0.0.1", "port": 19099},
+    "firestore": {"host": "127.0.0.1", "port": 18119},
+    "functions": {"host": "127.0.0.1", "port": 15019},
+    "storage": {"host": "127.0.0.1", "port": 19119},
+    "hub": {"host": "127.0.0.1", "port": 14419},
+    "logging": {"host": "127.0.0.1", "port": 14519},
+    "ui": {"enabled": false},
+    "singleProjectMode": true
+  }
+}

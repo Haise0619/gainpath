@@ -1,3 +1,4 @@
+import 'firebase_data_scope.dart';
 import 'dart:convert';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -266,14 +267,12 @@ class FirebaseRewardCatalogRepository
   final Object _lifetime = Object();
   bool _invalidated = false;
   CollectionReference<Map<String, dynamic>> get _records => _db
-      .collection('orgs')
-      .doc(scope.organizationId)
+      .scopeRoot(scope)
       .collection('rewardCatalog');
   DocumentReference<Map<String, dynamic>> get _user =>
-      _db.collection('users').doc(scope.userId);
+      _db.scopeUser(scope);
   DocumentReference<Map<String, dynamic>> get _member => _db
-      .collection('orgs')
-      .doc(scope.organizationId)
+      .scopeRoot(scope)
       .collection('members')
       .doc(scope.userId);
   void _check() {

@@ -96,7 +96,9 @@ class _RealWorkoutViewState extends State<RealWorkoutView> {
       if (!automatic &&
           !completedRoutineExercise &&
           c.viewPhase != MeasuredWorkoutPhase.saveFailed) {
-        await c.pause();
+        // Counting pauses synchronously. Do not hide the confirmation behind
+        // a slow native camera shutdown; still await it before resume/save.
+        final pausing = c.pause();
         if (!mounted) return;
         final yes = await confirmSheet(context,
             title: widget.routineContext == null
@@ -106,6 +108,7 @@ class _RealWorkoutViewState extends State<RealWorkoutView> {
                 ? 'Save the measured result on this device. Any eligible upload is tracked separately; no rewards are awarded.'
                 : 'Save this partial result and return to your routine. This exercise stays unfinished so you can retry or skip it.',
             confirmLabel: 'Save result');
+        await pausing;
         if (!mounted) return;
         if (!yes) {
           if (!wasManuallyPaused) await c.resume();
@@ -271,6 +274,9 @@ class _RealWorkoutViewState extends State<RealWorkoutView> {
       return 'Rest · counting paused';
     }
     final u = c.analysis;
+    if (c is WorkoutReadinessFeedback) {
+      return (c as WorkoutReadinessFeedback).readinessMessage;
+    }
     if (u == null || !c.analysisAvailable || u.needsCalibration) {
       return c.calibrationCue;
     }
@@ -377,6 +383,7 @@ class _RealWorkoutViewState extends State<RealWorkoutView> {
                               canConfirm: c.canConfirmRecalibration,
                               onConfirm: c.finishRecalibration)),
                     Positioned.fill(
+                        key: const ValueKey('workout-session-sheet-layer'),
                         child: WorkoutSessionSheet(
                             session: c,
                             controller: _sheetController,

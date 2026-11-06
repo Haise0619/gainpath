@@ -1,5 +1,8 @@
 import 'package:flutter/widgets.dart';
 import '../../infrastructure/firebase/firebase_google_integration.dart';
+import '../../infrastructure/firebase/firebase_unified_admin.dart';
+import '../../infrastructure/firebase/unified_admin_directories.dart';
+import '../../infrastructure/firebase/unified_admin_content.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:gainpath_domain/analytics.dart';
 import 'package:gainpath_domain/coaching.dart';
@@ -111,8 +114,8 @@ class _AppRepositoriesState extends State<AppRepositories> {
     _programGuard = _buildSessionGuard();
     return widget.workoutProgramFactory
             ?.call(scope, _programGuard!.isCurrent) ??
-        FirebaseAdminWorkoutProgramRepository(
-            scope: scope, isCurrent: _programGuard!.isCurrent);
+        (scope.datasetScope!=null ? FirebaseAdminWorkoutProgramRepository(scope:scope,isCurrent:_programGuard!.isCurrent) :
+          UnifiedAdminPrograms(UnifiedAdminTransport(scope:scope,isCurrent:_programGuard!.isCurrent),FirebaseAdminWorkoutProgramRepository(scope:scope,isCurrent:_programGuard!.isCurrent)));
   }
 
   CatalogEditSessionGuard _buildSessionGuard() {
@@ -164,8 +167,8 @@ class _AppRepositoriesState extends State<AppRepositories> {
     _memberDirectoryGuard = _buildSessionGuard();
     return widget.memberDirectoryFactory
             ?.call(scope, _memberDirectoryGuard!.isCurrent) ??
-        FirebaseAdminMemberDirectoryRepository(
-            scope: scope, isCurrent: _memberDirectoryGuard!.isCurrent);
+        (scope.datasetScope!=null ? FirebaseAdminMemberDirectoryRepository(scope:scope,isCurrent:_memberDirectoryGuard!.isCurrent) :
+          UnifiedAdminMemberDirectory(UnifiedAdminTransport(scope:scope,isCurrent:_memberDirectoryGuard!.isCurrent),FirebaseAdminMemberDirectoryRepository(scope:scope,isCurrent:_memberDirectoryGuard!.isCurrent)));
   }
 
   AdminAccountContactRepository _createAccountContact(SessionScope scope) {
@@ -207,7 +210,7 @@ class _AppRepositoriesState extends State<AppRepositories> {
     _bookingGuard = _buildSessionGuard();
     return widget.bookingListFactory?.call(scope, _bookingGuard!.isCurrent) ??
         FirebaseBookingListRepository(
-            scope: scope, isCurrent: _bookingGuard!.isCurrent);
+            scope: scope, isCurrent: _bookingGuard!.isCurrent,unifiedReads:scope.datasetScope==null);
   }
 
   CoachAvailabilityRepository _createAvailability(SessionScope scope) {
@@ -215,14 +218,14 @@ class _AppRepositoriesState extends State<AppRepositories> {
     return widget.coachAvailabilityFactory
             ?.call(scope, _availabilityGuard!.isCurrent) ??
         FirebaseCoachAvailabilityRepository(
-            scope: scope, isCurrent: _availabilityGuard!.isCurrent);
+            scope: scope, isCurrent: _availabilityGuard!.isCurrent,unifiedReads:scope.datasetScope==null);
   }
 
   CoachProfileAdminRepository _createCoachDirectory(SessionScope scope) {
     _coachGuard = _buildSessionGuard();
     return widget.coachRepositoryFactory?.call(scope, _coachGuard!.isCurrent) ??
-        FirebaseCoachProfileAdminRepository(
-            scope: scope, isCurrent: _coachGuard!.isCurrent);
+        (scope.datasetScope!=null ? FirebaseCoachProfileAdminRepository(scope:scope,isCurrent:_coachGuard!.isCurrent) :
+          UnifiedAdminCoachDirectory(UnifiedAdminTransport(scope:scope,isCurrent:_coachGuard!.isCurrent),FirebaseCoachProfileAdminRepository(scope:scope,isCurrent:_coachGuard!.isCurrent)));
   }
 
   TutorialRepository _createCatalog(SessionScope scope) {
@@ -238,10 +241,11 @@ class _AppRepositoriesState extends State<AppRepositories> {
     final factory = widget.routineRepositoryFactory;
     if (factory != null) return factory(scope, catalog);
     _routineGuard = _buildSessionGuard();
-    return FirebaseRoutineTemplateRepository(
+    final canonical=FirebaseRoutineTemplateRepository(
         scope: scope,
         exerciseCatalog: catalog,
         isSessionCurrent: _routineGuard!.isCurrent);
+    return scope.datasetScope!=null?canonical:UnifiedAdminRoutines(UnifiedAdminTransport(scope:scope,isCurrent:_routineGuard!.isCurrent),canonical,catalog);
   }
 
   @override

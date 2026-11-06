@@ -68,7 +68,7 @@ export async function listWorkoutBackups(store: BackupStore, auth: WorkoutAuth |
   const {v,org,uid} = input(auth,raw,false);
   // Existing clients understand metric schemas 1/2 and send no negotiation.
   const maximum = 'maxPoseMetricsSchemaVersion' in v ? v.maxPoseMetricsSchemaVersion : 2;
-  if (!Number.isSafeInteger(maximum) || Number(maximum) < 2 || Number(maximum) > 6) {
+  if (!Number.isSafeInteger(maximum) || Number(maximum) < 2 || Number(maximum) > 7) {
     throw new InputValidationError('Invalid supported pose metric version.');
   }
   const after = v.after === null ? null : String(v.after);
@@ -93,11 +93,12 @@ export async function listWorkoutBackups(store: BackupStore, auth: WorkoutAuth |
   // client schema never hides corruption. Cursor progress follows scanned docs.
   const supported = records.filter(record => {
     if (record.kind === 'session') return Number(object(record.payload.poseMetrics).schemaVersion) <= Number(maximum);
-    if (Number(maximum) >= 6) return true;
+    if (Number(maximum) >= 7) return true;
     const routine = object(object(record.payload.attempt).routine);
     return !(routine.exercises as unknown[]).some(exercise => {
       const id = object(exercise).exerciseId;
-      return id === 'standing-lateral-raise-front-v1' ||
+      return id === 'standard-floor-push-up-side-v1' ||
+        (Number(maximum) < 6 && id === 'standing-lateral-raise-front-v1') ||
         (Number(maximum) < 5 && id === 'bodyweight-reverse-lunge-side-v1') ||
         (Number(maximum) < 4 && id === 'dumbbell-shoulder-press-front-v1') ||
         (Number(maximum) < 3 && id === 'single-arm-dumbbell-row-side-v1');

@@ -56,8 +56,8 @@ void main() {
       )),
     ));
     await tester.pumpAndSettle();
-    await tester.scrollUntilVisible(find.text('Start guided session'), 200);
-    await tester.tap(find.text('Start guided session'));
+    await tester.scrollUntilVisible(find.text('Start workout'), 200);
+    await tester.tap(find.text('Start workout'));
     await tester.pumpAndSettle();
     expect(tutorialId, 'F3b8xIr8ynBDd3gEICKX');
     expect(find.text('Selected exercise instructions'), findsOneWidget);
@@ -154,8 +154,8 @@ void main() {
                       body: Center(child: Text('Routine journey opened')));
                 })))));
     await tester.pumpAndSettle();
-    await tester.scrollUntilVisible(find.text('Start guided session'), 200);
-    await tester.tap(find.text('Start guided session'));
+    await tester.scrollUntilVisible(find.text('Start workout'), 200);
+    await tester.tap(find.text('Start workout'));
     await tester.pumpAndSettle();
     expect(selected, 'instructional');
     expect(find.text('Routine journey opened'), findsOneWidget);

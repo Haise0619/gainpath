@@ -59,6 +59,12 @@ class AdminOperationalMetrics {
   List<List<Object?>> toCsv(AdminReportingSnapshot s) => [
         ['GainPath Admin operational report', 'Sandbox · MYR'],
         ['Timezone', 'Asia/Kuala_Lumpur UTC+08:00'],
+        if(s.unified!=null)...[
+          ['Account census provenance','Existing + persistent FYP fictional administrative records; not login activity'],
+          ['Existing active Members',s.unified!.existingMembers],['FYP active Members',s.unified!.fypMembers],
+          ['Existing active Coaches',s.unified!.existingCoaches],['FYP active Coaches',s.unified!.fypCoaches],
+          ['Money provenance','Existing confirmed Sandbox provider receipts only. FYP simulation is exported separately.'],
+        ],
         ['Start inclusive UTC', s.query.range.start.toUtc().toIso8601String()],
         ['End exclusive UTC', s.query.range.end.toUtc().toIso8601String()],
         ['Source scan started UTC', sourceReadStartedAt.toIso8601String()],

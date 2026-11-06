@@ -1,0 +1,1 @@
+{"extends":"./tsconfig.json","compilerOptions":{"outDir":"../build/unified-admin-20261104/compiled"},"include":["src/fyp-release-index.ts","src/unified-local-index.ts","src/modules/dataset/unified-sample-plan.ts","src/modules/commerce/membership-payment-service.ts"]}

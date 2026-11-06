@@ -202,7 +202,7 @@ class _WorkoutProgramsScreenState extends State<WorkoutProgramsScreen> {
     final result = await showDialog<Map<String, dynamic>>(
         context: context,
         builder: (_) =>
-            _ProgramDayDialog(day: original, routines: _catalog!.routines));
+            _ProgramDayDialog(day: original, routines: _catalog!.routines.where((r)=>!r.readOnly).toList()));
     if (result == null || !mounted) return;
     setState(() {
       (_editing!['days'] as List)[index] = result;
@@ -295,8 +295,8 @@ class _WorkoutProgramsScreenState extends State<WorkoutProgramsScreen> {
                   subtitle: Text(
                       '${draft.program.level} · revision ${draft.revision}'),
                   trailing: TextButton(
-                      onPressed: () => _edit(draft.program, draft.revision),
-                      child: const Text('Edit')))),
+                      onPressed: draft.readOnly?null:() => _edit(draft.program, draft.revision),
+                      child: Text(draft.readOnly?'Read-only':'Edit')))),
         const SizedBox(height: 24),
         Text('Published Programs',
             style: Theme.of(context).textTheme.titleLarge),

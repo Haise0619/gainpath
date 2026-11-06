@@ -8,6 +8,7 @@ import 'package:gainpath_pose/gainpath_pose.dart';
 import '../domain/workout_contracts.dart';
 import '../domain/real_workout_contract.dart' show workoutConsentVersion;
 import '../domain/workout_audio_port.dart';
+import '../domain/workout_feedback_event.dart';
 import 'guided_workout_progress.dart';
 import 'measured_workout_session.dart';
 import 'pose_preview_controller.dart';
@@ -35,7 +36,7 @@ class ShoulderPressWorkoutSession extends ChangeNotifier
       this.provenance = WorkoutProvenance.realCamera})
       : _analyzer = ShoulderPressAnalyzer(),
         guidance = GuidedWorkoutProgress(sets: sets, repetitions: reps),
-        audio = WorkoutAudioController(port: audioPort) {
+        audio = WorkoutAudioController(port: audioPort, boundedStarts: true, arbiter: AudioCueArbiter(cooldownMicros: 6000000)) {
     if (repository.scope != scope ||
         ExerciseTrackingRegistry.resolve(
                     organizationId: scope.organizationId,
@@ -239,7 +240,19 @@ class ShoulderPressWorkoutSession extends ChangeNotifier
     }
     _hasFrame = true;
     final update = _analyzer.update(frame, nowMicros: clockMicros());
-    audio.consume(update.cues,
+    audio.consume([
+      if (update.needsCalibration || update.requiresBottomReset || update.health != TrackingStatus.healthy)
+        CueRequest(id: 'press_setup', text: update.calibrationCue, priority: CuePriority.warning),
+    ],
+        events: [for (final cue in update.cues)
+          WorkoutFeedbackEvent(id: 'press-${frame.capturedAtMicros}-${cue.id}',
+            cue: CueRequest(id: cue.id,
+              text: cue.id == 'shoulder_press_partial'
+                ? 'On the next repetition, press both arms fully overhead before lowering.'
+                : 'Good repetition.',
+              priority: cue.id == 'shoulder_press_partial' ? CuePriority.correction : cue.priority),
+            observedAtMicros: frame.capturedAtMicros, generatedAtMicros: clockMicros())],
+        invalidateFeedback: update.health == TrackingStatus.lost,
         nowMicros: clockMicros(),
         trackingAvailable: update.health == TrackingStatus.healthy &&
             !update.needsCalibration);

@@ -1,3 +1,4 @@
+import 'firebase_data_scope.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:gainpath_domain/gainpath_domain.dart' show SessionScope;
 import 'package:gainpath_domain/workout.dart';
@@ -24,15 +25,13 @@ class FirestoreExerciseCatalogStore implements ExerciseCatalogStore {
   FirestoreExerciseCatalogStore(FirebaseFirestore firestore, SessionScope scope)
       : _firestore = firestore,
         _catalog = firestore
-            .collection('orgs')
-            .doc(scope.organizationId)
+            .scopeRoot(scope)
             .collection('exerciseVideos'),
         _member = firestore
-            .collection('orgs')
-            .doc(scope.organizationId)
+            .scopeRoot(scope)
             .collection('members')
             .doc(scope.userId),
-        _assignment = firestore.collection('users').doc(scope.userId);
+        _assignment = firestore.scopeUser(scope);
 
   final FirebaseFirestore _firestore;
   final CollectionReference<Map<String, dynamic>> _catalog;

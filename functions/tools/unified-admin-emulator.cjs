@@ -1,0 +1,12 @@
+// Dedicated actual emulator verification; never invokes cloud or existing live tools.
+const fs=require('node:fs'),path=require('node:path'),{spawnSync}=require('node:child_process'),{createRequire}=require('node:module');
+const root=path.resolve(__dirname,'../..'),out=path.join(root,'build/unified-admin-20261104'),req=createRequire(root+'/functions/package.json'),compiled=out+'/compiled';
+if(process.argv.length!==2||!process.version.startsWith('v22.'))throw Error('Fixed Node22 emulator runner required.');
+fs.mkdirSync(out,{recursive:true});const source=out+'/emulator-functions';fs.mkdirSync(source,{recursive:true});fs.cpSync(compiled,source+'/lib',{recursive:true,filter:p=>!p.includes('node_modules')});
+const dependencies=root+'/functions/node_modules';if(!fs.existsSync(source+'/node_modules'))fs.symlinkSync(dependencies,source+'/node_modules','junction');
+fs.writeFileSync(source+'/package.json',JSON.stringify({name:'gainpath-unified-admin-emulator',private:true,main:'lib/unified-local-index.js',engines:{node:'22'},dependencies:{'firebase-admin':'^13.0.0','firebase-functions':'^6.4.0'}}));
+const config=out+'/emulator.json';fs.writeFileSync(config,JSON.stringify({functions:[{source:'emulator-functions',codebase:'unified-local'}],firestore:{rules:'firestore-before.rules',indexes:'../../firebase/firestore.indexes.json'},emulators:{auth:{host:'127.0.0.1',port:19131},firestore:{host:'127.0.0.1',port:18231},functions:{host:'127.0.0.1',port:15031},hub:{host:'127.0.0.1',port:14431},logging:{host:'127.0.0.1',port:14531},ui:{enabled:false},singleProjectMode:true}}));
+const env={...process.env,GCLOUD_PROJECT:'demo-gainpath-fyp',GOOGLE_CLOUD_PROJECT:'demo-gainpath-fyp',CI:'true',FIREBASE_CLI_DISABLE_USAGE:'1',XDG_CONFIG_HOME:out+'/emulator-cli',GCE_METADATA_HOST:'127.0.0.1:9'};
+for(const k of ['GOOGLE_APPLICATION_CREDENTIALS','FIREBASE_TOKEN','GEMINI_API_KEY','GOOGLE_API_KEY','GOOGLE_GENERATIVE_AI_API_KEY'])delete env[k];
+const pathKey=Object.keys(env).find(k=>k.toUpperCase()==='PATH')||'PATH';env[pathKey]=path.dirname(process.execPath)+path.delimiter+'C:/Program Files/Android/Android Studio/jbr/bin'+path.delimiter+env[pathKey];
+const run=spawnSync(process.execPath,[req.resolve('firebase-tools/lib/bin/firebase.js'),'emulators:exec','--project','demo-gainpath-fyp','--config',config,'--only','auth,firestore,functions',`"${process.execPath}" "${req.resolve('vitest/vitest.mjs')}" run --config "${root}/functions/vitest.unified-admin.config.ts"`],{cwd:root+'/functions',env,stdio:'inherit',windowsHide:true});process.exitCode=run.status??1;

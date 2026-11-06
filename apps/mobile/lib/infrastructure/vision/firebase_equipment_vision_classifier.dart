@@ -23,16 +23,23 @@ class FirebaseEquipmentVisionClassifier implements EquipmentVisionClassifier {
   }) async {
     final base64String = base64Encode(imageBytes);
 
+    final isPng = imageBytes.length >= 8 &&
+        imageBytes[0] == 137 &&
+        imageBytes[1] == 80 &&
+        imageBytes[2] == 78 &&
+        imageBytes[3] == 71;
+    final resolvedMime = isPng ? 'image/png' : 'image/jpeg';
+
     final callable = firebaseCallable(
       functionName,
       functions: _injectedFunctions,
-      options: HttpsCallableOptions(timeout: const Duration(seconds: 25)),
+      options: HttpsCallableOptions(timeout: const Duration(seconds: 35)),
     );
 
     final response = await callable.call<Map<String, dynamic>>({
       'organizationId': organizationId,
       'imageBase64': base64String,
-      'mimeType': mimeType,
+      'mimeType': resolvedMime,
     });
 
     final data = Map<String, dynamic>.from(response.data);

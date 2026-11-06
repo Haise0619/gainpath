@@ -1,3 +1,5 @@
+import 'firebase_function_transport.dart';
+import 'firebase_data_scope.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -23,7 +25,13 @@ class FirebaseAdminWorkoutProgramRepository
       : _isCurrent = isCurrent,
         _verifiedSession = verifiedSession,
         _ensureReady = ensureReady ?? _firebaseReady,
-        _call = call ?? _firebaseCall,
+        _call = call ??
+            (scope.datasetScope == null
+                ? _firebaseCall
+                : (input) async => (await firebaseScopedCallable(
+                            scope, 'workoutProgramCommand')
+                        .call<Map<String, dynamic>>(input))
+                    .data),
         _routines = loadRoutines;
   final SessionScope scope;
   final bool Function() _isCurrent;
@@ -117,8 +125,7 @@ class FirebaseAdminWorkoutProgramRepository
 
   Future<List<ProgramRoutineChoice>> _loadRoutines() async {
     final result = await FirebaseFirestore.instance
-        .collection('orgs')
-        .doc(scope.organizationId)
+        .scopeRoot(scope)
         .collection('content')
         .where('status', isEqualTo: 'published')
         .where('kind', isEqualTo: 'routine')

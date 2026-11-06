@@ -1,0 +1,67 @@
+{
+  "exerciseId": "standard-floor-push-up-side-v1",
+  "blueprintId": "gp-standard-floor-push-up-v1",
+  "routineId": "routine_gp-standard-floor-push-up-v1",
+  "fields": {
+    "schemaVersion": 1,
+    "exerciseName": "Standard Floor Push-Up",
+    "muscleCategory": "Compound Upper-Body",
+    "isActive": true,
+    "videoUrl": "",
+    "difficulty": "Intermediate",
+    "equipment": "Clear floor space; optional exercise mat",
+    "description": "Standard push-ups from a floor plank. Use Left Side View or Right Side View for provisional visible-side tracking. Keep hips aligned, lower with control and extend fully. Floor and Wall Push-Up are separate exercises. Unreliable or recovered tracking may count without a form score.",
+    "tutorialSteps": [
+      {
+        "title": "Set up the camera",
+        "description": "Place the camera at floor height on your left or right side. Keep shoulders, elbows, wrists, hips and ankles visible, with the near elbow clear.",
+        "imageUrl": ""
+      },
+      {
+        "title": "Hold the top",
+        "description": "Place palms on the floor and extend your arms in a plank from shoulders to ankles. Hold steady until Ready.",
+        "imageUrl": ""
+      },
+      {
+        "title": "Lower and return",
+        "description": "Lower your chest with control, keep hips aligned, and push back to extended arms. A complete observed descent and return counts once.",
+        "imageUrl": ""
+      },
+      {
+        "title": "Recover and save",
+        "description": "After an interruption, hold the top again. Follow the set and rest targets, then finish and save your measured summary. Incomplete movements remain partial repetitions.",
+        "imageUrl": ""
+      }
+    ]
+  },
+  "blueprint": {
+    "schemaVersion": 1,
+    "name": "Standard Floor Push-Up",
+    "level": "Intermediate",
+    "goal": "Practice controlled floor push-ups with visible-side guidance.",
+    "tags": [
+      "Chest",
+      "Bodyweight"
+    ],
+    "sessionDurationMin": 10,
+    "equipmentNeeded": [],
+    "imageUrl": "",
+    "days": [
+      {
+        "dayNumber": 1,
+        "exercises": [
+          {
+            "exerciseId": "standard-floor-push-up-side-v1",
+            "sets": 3,
+            "reps": 8
+          }
+        ]
+      }
+    ]
+  },
+  "targets": {
+    "sets": 3,
+    "reps": 8,
+    "restSeconds": 60
+  }
+}

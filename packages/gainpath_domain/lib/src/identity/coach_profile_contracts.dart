@@ -233,17 +233,19 @@ class CoachPublicationReview {
       required List<String> branchIds,
       required this.targetMembershipEligible,
       this.certificationVerified = false,
-      this.approvedCertificationCount = 0})
+      this.approvedCertificationCount = 0, this.readOnly=false,this.operationalSummary=const []})
       : branchIds = List.unmodifiable(branchIds);
   final String coachId;
   final CoachProfessionalProfile? draft;
   final PublishedCoachProfile? publication;
   final List<String> branchIds;
   final bool targetMembershipEligible;
+  final bool readOnly;
+  final List<String> operationalSummary;
   final bool certificationVerified;
   final int approvedCertificationCount;
   bool get canPublish =>
-      draft != null &&
+      !readOnly && draft != null &&
       targetMembershipEligible &&
       branchIds.isNotEmpty &&
       certificationVerified &&

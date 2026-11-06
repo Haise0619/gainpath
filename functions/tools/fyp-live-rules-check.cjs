@@ -1,0 +1,10 @@
+const fs=require('node:fs'),path=require('node:path'),{spawnSync}=require('node:child_process');
+const {root,out,req,hash}=require('./fyp-live-platform.cjs'),project='demo-gainpath-fyp';
+const before=JSON.parse(fs.readFileSync(path.join(out,'preflight.json')));if(hash(fs.readFileSync(path.join(out,'firestore-additive.rules')))!==before.rulesBaseline.proposedSha256)throw Error('Reviewed staged Rules mismatch.');
+const config=path.join(out,'rules-emulator.json'),vitest=path.join(root,'functions/vitest.fyp-live-rules.config.ts');
+fs.writeFileSync(config,JSON.stringify({firestore:{rules:path.join(out,'firestore-additive.rules')},emulators:{firestore:{host:'127.0.0.1',port:18231},hub:{host:'127.0.0.1',port:14431},logging:{host:'127.0.0.1',port:14531},ui:{enabled:false},singleProjectMode:true}}));
+const env={...process.env,FYP_LIVE_STAGED_RULES:'1',GCLOUD_PROJECT:project,GOOGLE_CLOUD_PROJECT:project,CI:'true',FIREBASE_CLI_DISABLE_USAGE:'1',XDG_CONFIG_HOME:path.join(out,'emulator-cli'),GCE_METADATA_HOST:'127.0.0.1:9'};
+for(const k of ['GOOGLE_APPLICATION_CREDENTIALS','FIREBASE_TOKEN','GEMINI_API_KEY','GOOGLE_API_KEY','GOOGLE_GENERATIVE_AI_API_KEY'])delete env[k];
+const pathKey=Object.keys(env).find(k=>k.toUpperCase()==='PATH')||'PATH';env[pathKey]='C:/Program Files/Android/Android Studio/jbr/bin'+path.delimiter+env[pathKey];
+const jar=req('firebase-tools/lib/emulator/downloadableEmulators').getDownloadDetails('firestore').downloadPath;if(!fs.existsSync(jar))throw Error('Existing cached emulator required.');
+const r=spawnSync(process.execPath,[req.resolve('firebase-tools/lib/bin/firebase.js'),'emulators:exec','--project',project,'--config',config,'--only','firestore',`"${process.execPath}" "${req.resolve('vitest/vitest.mjs')}" run --config "${vitest}"`],{cwd:path.join(root,'functions'),env,stdio:'inherit',windowsHide:true});if(r.error)throw r.error;process.exitCode=r.status??1;

@@ -47,7 +47,10 @@ class RealSquatSessionController extends ChangeNotifier
     processing = SquatProcessingController(
         scope: scope,
         activeScope: activeScope,
-        audio: WorkoutAudioController(port: audioPort),
+        audio: WorkoutAudioController(
+            port: audioPort,
+            boundedStarts: true,
+            arbiter: AudioCueArbiter(cooldownMicros: 6000000)),
         clockMicros: clockMicros,
         performance: performance,
         sideViewConfirmed: true,
@@ -58,6 +61,9 @@ class RealSquatSessionController extends ChangeNotifier
         camera: camera,
         detectorFactory: detectorFactory,
         clockMicros: clockMicros,
+        responsivePreview: false,
+        overlayUsesDeliveryClock: true,
+        previewFilter: PoseFrameFilter(minCutoff: 3, beta: .3),
         onRefined: _consume,
         performance: performance,
         onGeometryInvalidated: _geometryInvalidated);

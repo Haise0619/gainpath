@@ -11,6 +11,7 @@ import '../infrastructure/firebase/firebase_announcement_reader.dart';
 import 'package:gainpath_identity/gainpath_identity.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
 
+import 'member_typography_theme.dart';
 import 'routing/app_routes.dart';
 import 'routing/feature_routes.dart';
 import '../features/analytics/domain/local_member_progress_repository.dart';
@@ -30,6 +31,8 @@ import '../infrastructure/firebase/firebase_module9_repository.dart';
 import '../features/identity/presentation/member/member_account_recovery_screen.dart';
 import '../infrastructure/firebase/firebase_published_routine_repository.dart';
 import '../features/workout/data/published_routine.dart';
+import '../features/workout/domain/program_enrollment.dart';
+import '../features/workout/domain/routine_journey.dart';
 import '../features/identity/presentation/member/fitness_profile_gate.dart';
 import '../features/identity/presentation/member/account_settings_screen.dart';
 
@@ -41,9 +44,12 @@ class GainPathMobileApp extends StatelessWidget {
   const GainPathMobileApp.injected(
       {super.key,
       this.authRepository,
+      this.datasetTransportFactory,
       this.profileRepositoryFactory,
       this.routineLoaderFactory,
       this.routineCatalogFactory,
+      this.programStoreFactory,
+      this.routineJourneyStoreFactory,
       this.announcementReaderFactory,
       this.equipmentReaderFactory,
       this.coachProfileFactory,
@@ -60,10 +66,15 @@ class GainPathMobileApp extends StatelessWidget {
       this.memberSettingsBuilder});
 
   final AuthRepository? authRepository;
+  final FypDatasetTransportFactory? datasetTransportFactory;
   final FitnessProfileRepository Function(SessionScope)?
       profileRepositoryFactory;
   final Future<PublishedRoutine?> Function(SessionScope)? routineLoaderFactory;
   final PublishedRoutineCatalogFactory? routineCatalogFactory;
+  final Future<ProgramEnrollmentStore> Function(SessionScope)?
+      programStoreFactory;
+  final Future<RoutineJourneyStore> Function(SessionScope)?
+      routineJourneyStoreFactory;
   final AnnouncementReader Function(SessionScope, SessionScope? Function())?
       announcementReaderFactory;
   final EquipmentReaderFactory? equipmentReaderFactory;
@@ -102,9 +113,12 @@ class GainPathMobileApp extends StatelessWidget {
               !identical(previous.session, current.session),
           builder: (context, state) {
             final home = _MobileAuthGate(
+                datasetTransportFactory: datasetTransportFactory,
                 profileRepositoryFactory: profileRepositoryFactory,
                 routineLoaderFactory: routineLoaderFactory,
                 routineCatalogFactory: routineCatalogFactory,
+                programStoreFactory: programStoreFactory,
+                routineJourneyStoreFactory: routineJourneyStoreFactory,
                 announcementReaderFactory: announcementReaderFactory,
                 equipmentReaderFactory: equipmentReaderFactory,
                 coachProfileFactory: coachProfileFactory,
@@ -124,7 +138,18 @@ class GainPathMobileApp extends StatelessWidget {
               key: ObjectKey(state.session),
               title: 'GainPath',
               debugShowCheckedModeBanner: false,
-              theme: AppTheme.build(),
+              builder: (context, child) {
+                if (state.session?.role != AppRole.member) return child!;
+                final media = MediaQuery.of(context);
+                return MediaQuery(
+                  data: media.copyWith(
+                      textScaler: memberTextScaler(media.textScaler)),
+                  child: child!,
+                );
+              },
+              theme: state.session?.role == AppRole.member
+                  ? buildMemberTypographyTheme()
+                  : AppTheme.build(),
               home: home,
               routes: AppRouteBuilders.withLogin(
                   (_) => LoginScreen(
@@ -160,9 +185,12 @@ class GainPathMobileApp extends StatelessWidget {
 
 class _MobileAuthGate extends StatefulWidget {
   const _MobileAuthGate(
-      {this.profileRepositoryFactory,
+      {this.datasetTransportFactory,
+      this.profileRepositoryFactory,
       this.routineLoaderFactory,
       this.routineCatalogFactory,
+      this.programStoreFactory,
+      this.routineJourneyStoreFactory,
       this.announcementReaderFactory,
       this.equipmentReaderFactory,
       this.coachProfileFactory,
@@ -177,10 +205,15 @@ class _MobileAuthGate extends StatefulWidget {
       this.passwordResetSender,
       this.accountLifecycleFactory,
       this.memberSettingsBuilder});
+  final FypDatasetTransportFactory? datasetTransportFactory;
   final FitnessProfileRepository Function(SessionScope)?
       profileRepositoryFactory;
   final Future<PublishedRoutine?> Function(SessionScope)? routineLoaderFactory;
   final PublishedRoutineCatalogFactory? routineCatalogFactory;
+  final Future<ProgramEnrollmentStore> Function(SessionScope)?
+      programStoreFactory;
+  final Future<RoutineJourneyStore> Function(SessionScope)?
+      routineJourneyStoreFactory;
   final AnnouncementReader Function(SessionScope, SessionScope? Function())?
       announcementReaderFactory;
   final EquipmentReaderFactory? equipmentReaderFactory;
@@ -275,8 +308,12 @@ class _MobileAuthGateState extends State<_MobileAuthGate> {
                 session: capturedSession,
                 repository: _profileRepository!,
                 readyBuilder: (context, profile) => MemberShell(
+                      datasetTransportFactory: widget.datasetTransportFactory,
                       liveSession: state.session!,
                       liveProfile: profile,
+                      programStoreFactory: widget.programStoreFactory,
+                      routineJourneyStoreFactory:
+                          widget.routineJourneyStoreFactory,
                       equipmentReaderFactory: widget.equipmentReaderFactory,
                       announcementReaderFactory:
                           widget.announcementReaderFactory ??

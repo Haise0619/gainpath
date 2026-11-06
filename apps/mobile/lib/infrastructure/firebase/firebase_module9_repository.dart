@@ -25,33 +25,37 @@ class FirebaseModule9Repository implements Module9Repository {
   Future<Map<String, dynamic>> _call(
       String name, Map<String, dynamic> payload) async {
     _transport.check();
-    if (!await _readiness.ensureReady(check: _transport.check))
+    if (!await _readiness.ensureReady(check: _transport.check)) {
       throw const BookingException('app-check-unavailable');
+    }
     final data = await _transport.call(name, {
       'schemaVersion': 1,
       'organizationId': _scope.organizationId,
       ...payload
     });
-    if (data['schemaVersion'] != 1)
+    if (data['schemaVersion'] != 1) {
       throw const BookingException('unsupported-payload');
+    }
     return data;
   }
 
   CoachSharing _sharing(Map<String, dynamic> data) {
     if (data['enabled'] is! bool ||
         data['revision'] is! int ||
-        data['revision'] < 0)
+        data['revision'] < 0) {
       throw const BookingException('unsupported-payload');
+    }
     return CoachSharing(data['enabled'], data['revision']);
   }
 
   @override
   Stream<void> watchInbox() async* {
     _transport.check();
-    if (!await _readiness.ensureReady(check: _transport.check))
+    if (!await _readiness.ensureReady(check: _transport.check)) {
       throw const BookingException('app-check-unavailable');
+    }
     await for (final _ in FirebaseFirestore.instance
-        .collection('orgs/${_scope.organizationId}/notifications')
+        .collection('${_scope.dataRootPath}/notifications')
         .where('recipientId', isEqualTo: _scope.userId)
         .orderBy('createdAtMillis', descending: true)
         .limit(30)
@@ -83,14 +87,7 @@ class FirebaseModule9Repository implements Module9Repository {
         {'action': 'inbox', if (afterId != null) 'afterId': afterId});
     return NoticePage(
         (data['records'] as List)
-            .map((r) => MemberNotice(
-                id: r['id'] as String,
-                title: r['title'] as String,
-                message: r['message'] as String,
-                read: r['read'] as bool,
-                createdAt: DateTime.fromMillisecondsSinceEpoch(
-                    r['createdAtMillis'] as int),
-                bookingId: r['bookingId'] as String?))
+            .map((r) => parseMemberNotice(r, _scope.organizationId))
             .toList(),
         data['nextAfterId'] as String?);
   }
@@ -100,8 +97,9 @@ class FirebaseModule9Repository implements Module9Repository {
     final data = await _call('getCoachPerformanceCommand', {});
     if (data['coachId'] != _scope.userId ||
         data['currency'] != 'MYR' ||
-        data['environment'] != 'sandbox')
+        data['environment'] != 'sandbox') {
       throw const BookingException('unsupported-payload');
+    }
     final sessions = (data['sessions'] as List)
         .map((s) => CoachReportSession(
             booking: Booking(
@@ -136,4 +134,28 @@ class FirebaseModule9Repository implements Module9Repository {
         platformMinor: data['platformMinor'] as int,
         reversedMinor: data['reversedMinor'] as int);
   }
+}
+
+/// Legacy notices retain their six fields; recommendation metadata is optional.
+MemberNotice parseMemberNotice(Object? raw, String organizationId) {
+  if (raw is! Map ||
+      raw['id'] is! String ||
+      raw['title'] is! String ||
+      raw['message'] is! String ||
+      raw['read'] is! bool ||
+      raw['createdAtMillis'] is! int ||
+      (raw['bookingId'] != null && raw['bookingId'] is! String)) {
+    throw const FormatException('Invalid Member notice');
+  }
+  return MemberNotice(
+      id: raw['id'] as String,
+      title: raw['title'] as String,
+      message: raw['message'] as String,
+      read: raw['read'] as bool,
+      createdAt:
+          DateTime.fromMillisecondsSinceEpoch(raw['createdAtMillis'] as int),
+      bookingId: raw['bookingId'] as String?,
+      recommendation: raw['recommendation'] == null
+          ? null
+          : RecommendationNotice.parse(raw['recommendation'], organizationId));
 }

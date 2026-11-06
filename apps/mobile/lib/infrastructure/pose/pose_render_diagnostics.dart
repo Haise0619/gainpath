@@ -168,8 +168,9 @@ Map<String, Object?> blazePoseRenderingSummary(
     };
 
 class PoseRenderDiagnostics {
-  PoseRenderDiagnostics({this.enabled = poseRenderDebugEnabled});
+  PoseRenderDiagnostics({this.enabled = poseRenderDebugEnabled, this.observationOnly = false});
   final bool enabled;
+  final bool observationOnly;
   int viewportBuilds = 0,
       paintInvocations = 0,
       repaintChecks = 0,
@@ -264,7 +265,7 @@ class PoseRenderDiagnostics {
       'visibilityThreshold': .5,
       'presenceThreshold': .5,
       'connectionsEnabled': connections,
-      'debugCirclesIgnoreConfidence': true,
+      'debugCirclesIgnoreConfidence': !observationOnly,
       'representatives': joints
     };
   }

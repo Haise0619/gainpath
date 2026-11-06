@@ -77,18 +77,25 @@ class CoachProfileScreen extends StatelessWidget {
                     style:
                         const TextStyle(color: Colors.white70, fontSize: 14)),
                 const SizedBox(height: 10),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
+                Wrap(
+                  alignment: WrapAlignment.center,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: 4,
+                  runSpacing: 4,
                   children: [
                     const Icon(Icons.star_rounded,
                         size: 17, color: AppColors.accent),
-                    const SizedBox(width: 4),
-                    Text(published != null ? (published!.averageRating?.toStringAsFixed(1) ?? 'Not rated') : '${coach.rating}',
+                    Text(
+                        published != null
+                            ? (published!.averageRating?.toStringAsFixed(1) ??
+                                'Not rated')
+                            : '${coach.rating}',
                         style: const TextStyle(
                             fontSize: 14.5,
                             fontWeight: FontWeight.w700,
                             color: Colors.white)),
                     Text('  ·  ${coach.reviews} reviews  ·  ${coach.branch}',
+                        textAlign: TextAlign.center,
                         style: const TextStyle(
                             color: Colors.white70, fontSize: 13)),
                   ],
@@ -114,7 +121,10 @@ class CoachProfileScreen extends StatelessWidget {
               const SizedBox(width: 10),
               Expanded(
                   child: StatTile(
-                      published != null ? '${published!.reviewCount}' : '${coach.reviews}', 'Reviews')),
+                      published != null
+                          ? '${published!.reviewCount}'
+                          : '${coach.reviews}',
+                      'Reviews')),
             ],
           ),
           const SizedBox(height: 18),

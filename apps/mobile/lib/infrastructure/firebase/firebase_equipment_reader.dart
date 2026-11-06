@@ -1,3 +1,4 @@
+import 'firebase_data_scope.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:gainpath_domain/workout.dart';
@@ -27,8 +28,7 @@ class FirebaseEquipmentReader implements EquipmentReader {
   Future<EquipmentPage> loadEquipment({String? afterId}) async {
     _check();
     Query<Map<String, dynamic>> query = _db
-        .collection('orgs')
-        .doc(scope.organizationId)
+        .scopeRoot(scope)
         .collection('gymEquipment')
         .where('isActive', isEqualTo: true)
         .orderBy(FieldPath.documentId);

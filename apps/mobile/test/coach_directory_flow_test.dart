@@ -15,6 +15,8 @@ import 'package:gainpath_mobile/features/workout/domain/real_workout_sync.dart';
 import 'coach_profile_state_test.dart' show ProfileFake;
 import 'support/fitness_profile_fake.dart';
 import 'support/coach_availability_fake.dart';
+import 'workout_program_controller_test.dart' show MemoryProgramStore;
+import 'routine_journey_controller_test.dart' show MemoryJourneyStore;
 
 PublishedCoachProfile published(String bio) => PublishedCoachProfile(
     id: 'coach',
@@ -186,6 +188,8 @@ void main() {
         profileRepositoryFactory: profiles.repository,
         routineLoaderFactory: (_) async => null,
         coachDirectoryFactory: (_, current) => directory,
+        programStoreFactory: (scope) async => MemoryProgramStore(scope),
+        routineJourneyStoreFactory: (scope) async => MemoryJourneyStore(scope),
         progressRepositoryFactory: (scope, active) async =>
             StoredLocalMemberProgressRepository(
                 scope: scope,
@@ -209,9 +213,7 @@ void main() {
         findsOneWidget);
     await tester.pageBack();
     await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('Refresh Coaches'));
-    await tester.pumpAndSettle();
-    expect(find.text('No coaches available yet.'), findsOneWidget);
+    expect(find.byTooltip('Refresh Coaches'), findsNothing);
     expect(await store.read(), isEmpty);
     expect((await sync.read()).toJson(), before);
   });

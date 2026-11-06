@@ -17,7 +17,7 @@ class FirebaseEquipmentImageStore implements EquipmentImageStore {
             16, (_) => random.nextInt(256).toRadixString(16).padLeft(2, '0'))
         .join();
     final ref = (_storage ?? FirebaseStorage.instance).ref(
-        'orgs/${scope.organizationId}/equipmentImages/${scope.userId}/$id');
+        '${scope.dataRootPath}/equipmentImages/${scope.userId}/$id');
     try {
       await ref.putData(
           image.bytes, SettableMetadata(contentType: image.contentType));

@@ -1,3 +1,6 @@
+import 'firebase_function_transport.dart';
+import 'firebase_unified_admin.dart';
+import '../../features/analytics/application/unified_admin_summary.dart';
 import '../../features/analytics/application/admin_commerce_report.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -17,19 +20,55 @@ class FirebaseAdminReportingGateway
         OperationalAdminReportingGateway,
         AdminReportingSessionGuard,
         AdminWorkoutReportingGateway,
-        AdminCheckInReportingGateway {
+        AdminCheckInReportingGateway,
+        UnifiedAdminReportingPresentation {
   FirebaseAdminReportingGateway(
       {required this.scope,
       required this.isCurrent,
       String? Function()? currentUid,
       AdminReportingInvoke? invoke,
       AdminReportingInvoke? workoutInvoke,
-      AdminReportingInvoke? checkInInvoke})
+      AdminReportingInvoke? checkInInvoke,
+      this.unified = false})
       : _uid = currentUid ?? (() => FirebaseAuth.instance.currentUser?.uid),
-        _invoke = invoke ?? _call,
-        _workoutInvoke = workoutInvoke ?? _callWorkouts,
-        _checkInInvoke = checkInInvoke ?? _callCheckIns;
+        _invoke = invoke ??
+            (unified
+                ? (input) =>
+                    UnifiedAdminTransport(scope: scope, isCurrent: isCurrent)
+                        .read('report', input)
+                : scope.datasetScope == null
+                    ? _call
+                    : (input) async => (await firebaseScopedCallable(
+                                scope, 'adminReportingCommand',
+                                options: HttpsCallableOptions(
+                                    timeout: const Duration(seconds: 60)))
+                            .call<Object?>(input))
+                        .data),
+        _workoutInvoke = workoutInvoke ??
+            (unified
+                ? (input) =>
+                    UnifiedAdminTransport(scope: scope, isCurrent: isCurrent)
+                        .read('workouts', input)
+                : scope.datasetScope == null
+                    ? _callWorkouts
+                    : (input) async => (await firebaseScopedCallable(
+                                scope, 'adminWorkoutReportingCommand',
+                                options: HttpsCallableOptions(
+                                    timeout: const Duration(seconds: 60)))
+                            .call<Object?>(input))
+                        .data),
+        _checkInInvoke = checkInInvoke ??
+            (scope.datasetScope == null
+                ? _callCheckIns
+                : (input) async => (await firebaseScopedCallable(
+                            scope, 'adminCheckInReportingCommand',
+                            options: HttpsCallableOptions(
+                                timeout: const Duration(seconds: 60)))
+                        .call<Object?>(input))
+                    .data);
   final SessionScope scope;
+  @override
+  final bool unified;
   final bool Function() isCurrent;
   final String? Function() _uid;
   final AdminReportingInvoke _invoke;
@@ -138,6 +177,29 @@ class FirebaseAdminReportingGateway
   @override
   Future<AdminWorkoutReport> loadWorkouts(AdminReportQuery query) async {
     _check();
+    // Share only active requests on this account-scoped gateway. Never cache
+    // completed reports, and revalidate each caller after awaiting the result.
+    final pending = _pendingWorkouts[query];
+    final request = pending ?? _startWorkoutRead(query);
+    final report = await request;
+    _check();
+    return report;
+  }
+
+  final Map<AdminReportQuery, Future<AdminWorkoutReport>> _pendingWorkouts = {};
+  Future<AdminWorkoutReport> _startWorkoutRead(AdminReportQuery query) {
+    late final Future<AdminWorkoutReport> request;
+    request = _loadWorkouts(query).whenComplete(() {
+      if (identical(_pendingWorkouts[query], request)) {
+        _pendingWorkouts.remove(query);
+      }
+    });
+    _pendingWorkouts[query] = request;
+    return request;
+  }
+
+  Future<AdminWorkoutReport> _loadWorkouts(AdminReportQuery query) async {
+    _check();
     if (query.branchId != null) {
       throw const AdminWorkoutReportException(
           'Workout backups are organization-wide. Select all branches.');
@@ -150,7 +212,7 @@ class FirebaseAdminReportingGateway
         'endAtMillis': query.range.end.toUtc().millisecondsSinceEpoch
       });
       _check();
-      return parseAdminWorkoutReport(raw, scope, query);
+      return parseAdminWorkoutReport(raw, scope, query, allowUnified: unified);
     } on FirebaseFunctionsException catch (e) {
       _check();
       if (e.code == 'permission-denied' || e.code == 'unauthenticated') {
@@ -191,7 +253,13 @@ class FirebaseAdminReportingGateway
   }
 
   @override
-  bool get canRetainSnapshot => isCurrent() && _uid() == scope.userId;
+  bool get canRetainSnapshot {
+    try {
+      return isCurrent() && _uid() == scope.userId;
+    } catch (_) {
+      return false;
+    }
+  }
 
   void _check() {
     if (!isCurrent() || _uid() != scope.userId) {
@@ -409,7 +477,17 @@ AdminReportingSnapshot parseAdminOperationalReport(
       sourceCounts: sources,
       daily: days,
       unsupported: unsupported.cast<String>());
+  final unified =
+      m['unified'] == null ? null : UnifiedAdminSummary.parse(m['unified']);
+  if (unified != null &&
+      (unified.existingMembers + unified.fypMembers != accounts['members'] ||
+          unified.existingCoaches + unified.fypCoaches != accounts['coaches'] ||
+          unified.illustrativeMinor !=
+              receipts['confirmedMinor']! + unified.simulatedMinor)) {
+    throw const FormatException('Unified provenance totals mismatch');
+  }
   return AdminReportingSnapshot(
+      unified: unified,
       query: query,
       capturedAt: DateTime.fromMillisecondsSinceEpoch(captured, isUtc: true),
       operations: ops,

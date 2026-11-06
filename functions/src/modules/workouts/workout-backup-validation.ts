@@ -1,3 +1,4 @@
+import {validateFloorPushUpMetrics, validateFloorPushUpIdentity, FLOOR_PUSH_UP_ID} from './floor-push-up-validation';
 import { createHash } from 'node:crypto';
 import { InputValidationError, requiredIdentifier } from '../../platform/validation';
 export function object(raw: unknown): Record<string, unknown> { if (!raw || typeof raw !== 'object' || Array.isArray(raw))
@@ -23,7 +24,7 @@ function idsMap(raw: unknown, lists = false): void { for (const [k, v] of Object
 function nullableNumber(v: unknown, max = 100): void { if (v !== null && (typeof v !== 'number' || !Number.isFinite(v) || v < 0 || v > max))
     throw new InputValidationError('Invalid backup score.'); }
 function metrics(raw: unknown): void { const m = object(raw); const fields = ['schemaVersion', 'partialRepetitions', 'trackedDurationMicros', 'rejectedDurationMicros', 'formScorePercent', 'scoringVersion', 'detectorId', 'detectorVersion', 'cameraView', 'consentVersion', 'consentedAt', 'publishedRoutineId', 'deviations']; if (m.schemaVersion === 2)
-    fields.push('curlArms'); if (m.schemaVersion === 3) fields.push('rowSide'); if (m.schemaVersion === 5) fields.push('lungeSide'); keys(m, fields); if (m.schemaVersion !== 6 && m.schemaVersion !== 5 && m.schemaVersion !== 4 && m.schemaVersion !== 3 && ![1, 2].includes(Number(m.schemaVersion)))
+    fields.push('curlArms'); if (m.schemaVersion === 3) fields.push('rowSide'); if (m.schemaVersion === 5) fields.push('lungeSide'); if (m.schemaVersion === 7) fields.push('floorPushUp'); keys(m, fields); if (m.schemaVersion !== 7 && m.schemaVersion !== 6 && m.schemaVersion !== 5 && m.schemaVersion !== 4 && m.schemaVersion !== 3 && ![1, 2].includes(Number(m.schemaVersion)))
     throw new InputValidationError('Invalid metric version.'); for (const k of ['partialRepetitions', 'trackedDurationMicros', 'rejectedDurationMicros'])
     number(m[k]); nullableNumber(m.formScorePercent); for (const k of ['scoringVersion', 'detectorId', 'detectorVersion', 'cameraView', 'consentVersion', 'consentedAt'])
     text(m[k], 256); if (m.publishedRoutineId !== null)
@@ -32,7 +33,7 @@ function metrics(raw: unknown): void { const m = object(raw); const fields = ['s
     keys(a, ['count', 'maximumDegrees']);
     number(a.count, 10000);
     nullableNumber(a.maximumDegrees, 180);
-} if (m.schemaVersion === 5 || m.scoringVersion === 'reverse-lunge-side-v1') {
+} if (m.schemaVersion === 7 || m.scoringVersion === FLOOR_PUSH_UP_ID) validateFloorPushUpMetrics(m); if (m.schemaVersion === 5 || m.scoringVersion === 'reverse-lunge-side-v1') {
     if (m.schemaVersion !== 5 || m.scoringVersion !== 'reverse-lunge-side-v1' ||
         !['left', 'right'].includes(String(m.lungeSide)) || typeof m.lungeSide !== 'string' ||
         m.formScorePercent !== null || Object.keys(deviations).length !== 0 ||
@@ -120,10 +121,10 @@ function plan(raw: unknown): void { const p = object(raw); const required=['sche
             throw new InputValidationError('Invalid image reference.');
     }
 } }
-export function validateBackupPayload(kind: string, id: string, org: string, uid: string, raw: unknown): Record<string, unknown> { const p = object(raw); if (p.userId !== uid || p.organizationId !== org)
+function validatePayload(kind: string, id: string, org: string, uid: string, raw: unknown, expectedProvenance: 'realCamera' | 'recordedFixture'): Record<string, unknown> { const p = object(raw); if (p.userId !== uid || p.organizationId !== org)
     throw new InputValidationError('Backup owner mismatch.'); if (kind === 'session') {
     keys(p, ['sessionId', 'userId', 'organizationId', 'exerciseId', 'repetitions', 'accuracy', 'startedAt', 'endedAt', 'summarySchemaVersion', 'provenance', 'poseMetrics']);
-    if (p.sessionId !== id || p.summarySchemaVersion !== 3 || p.provenance !== 'realCamera')
+    if (p.sessionId !== id || p.summarySchemaVersion !== 3 || p.provenance !== expectedProvenance)
         throw new InputValidationError('Only measured local summaries can be backed up.');
     requiredIdentifier(p.exerciseId, 'exercise');
     number(p.repetitions, 10000);
@@ -132,6 +133,7 @@ export function validateBackupPayload(kind: string, id: string, org: string, uid
     if (!Number.isFinite(start) || !Number.isFinite(end) || end < start || end - start > 86400000)
         throw new InputValidationError('Invalid summary times');
     metrics(p.poseMetrics);
+    validateFloorPushUpIdentity(p, org);
     const m=object(p.poseMetrics),attempts=Number(p.repetitions)+Number(m.partialRepetitions);
     if ((m.scoringVersion === 'reverse-lunge-side-v1' || p.exerciseId === 'bodyweight-reverse-lunge-side-v1') &&
         (org !== 'gainpath' || p.exerciseId !== 'bodyweight-reverse-lunge-side-v1' ||
@@ -199,6 +201,14 @@ else if (kind === 'routine') {
 else
     throw new InputValidationError('Invalid backup kind'); const json = canonical(p); if (Buffer.byteLength(json, 'utf8') > 850000)
     throw new InputValidationError('Backup record is too large.'); return p; }
+/** Production acceptance remains restricted to actual measured-camera summaries. */
+export function validateBackupPayload(kind: string, id: string, org: string, uid: string, raw: unknown): Record<string, unknown> {
+    return validatePayload(kind, id, org, uid, raw, 'realCamera');
+}
+/** Separate parser for explicitly fictional source. Never an accepted backup or camera attestation. */
+export function validateFictionalSessionPayload(id: string, org: string, uid: string, raw: unknown): Record<string, unknown> {
+    return validatePayload('session', id, org, uid, raw, 'recordedFixture');
+}
 // Used for hashing only, not JSON storage; preserves every finite numeric bit.
 export function canonical(value: unknown): string {
  if(Array.isArray(value))return '['+value.map(canonical).join(',')+']';

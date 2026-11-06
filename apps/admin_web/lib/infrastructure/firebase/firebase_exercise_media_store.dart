@@ -30,7 +30,7 @@ class FirebaseExerciseMediaStore implements TutorialMediaStore {
             16, (_) => random.nextInt(256).toRadixString(16).padLeft(2, '0'))
         .join();
     final ref = (_storage ?? FirebaseStorage.instance).ref(
-        'orgs/${scope.organizationId}/$collection/${scope.userId}/$id$extension');
+        '${scope.dataRootPath}/$collection/${scope.userId}/$id$extension');
     try {
       final task =
           ref.putData(bytes, SettableMetadata(contentType: contentType));

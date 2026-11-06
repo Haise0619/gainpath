@@ -15,6 +15,8 @@ class ExerciseTrackingCapability {
       ExerciseTrackingCapability._('standing_calf_raise_side_v1', 'side');
   static const sideViewWallPushUp =
       ExerciseTrackingCapability._('wall_push_up_side_v1', 'side');
+  static const sideViewFloorPushUp =
+      ExerciseTrackingCapability._('standard_floor_push_up_side_v1', 'side');
   static const sideViewRow =
       ExerciseTrackingCapability._('single_arm_row_side_v1', 'side');
   static const sideViewReverseLunge =
@@ -28,7 +30,9 @@ class ExerciseTrackingCapability {
           ? '$label · Side view'
           : label;
 
-  String get description => hasPoseTracking
+  String get description => trackerId == sideViewFloorPushUp.trackerId
+      ? 'Standard Floor Push-Up · Left Side View or Right Side View · provisional visible-side form guidance'
+      : hasPoseTracking
       ? trackerId == frontViewLateralRaise.trackerId
           ? 'Front-view standing lateral raise · both arms together · provisional guidance'
           : trackerId == frontViewShoulderPress.trackerId
@@ -63,6 +67,8 @@ abstract final class ExerciseTrackingRegistry {
         ExerciseTrackingCapability.sideViewCalfRaise,
     'gainpath/wall-push-up-side-v1':
         ExerciseTrackingCapability.sideViewWallPushUp,
+    'gainpath/standard-floor-push-up-side-v1':
+        ExerciseTrackingCapability.sideViewFloorPushUp,
     'gainpath/single-arm-dumbbell-row-side-v1':
         ExerciseTrackingCapability.sideViewRow,
   };

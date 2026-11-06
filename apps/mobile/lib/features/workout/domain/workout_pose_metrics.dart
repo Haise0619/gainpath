@@ -1,5 +1,7 @@
 import 'real_workout_contract.dart' show workoutConsentVersion;
 import 'curl_arm_metrics.dart';
+import 'floor_push_up_metrics.dart';
+export 'floor_push_up_metrics.dart';
 
 const _maximumMicros = 86400000000;
 const _maximumAttempts = 10000;
@@ -59,6 +61,7 @@ class WorkoutPoseMetrics {
     this.curlArms,
     this.rowSide,
     this.lungeSide,
+    this.floorPushUp,
     Map<String, WorkoutDeviationAggregate> deviations = const {},
   })  : consentedAt = consentedAt.toUtc(),
         deviations = Map.unmodifiable(deviations) {
@@ -80,11 +83,16 @@ class WorkoutPoseMetrics {
           'single-arm-curl-side-v1',
           'standing-calf-raise-side-v1',
           'wall-push-up-side-v1',
+          'standard-floor-push-up-side-v1',
           'single-arm-row-side-v1',
           'reverse-lunge-side-v1',
           'dumbbell-shoulder-press-front-v1',
           'standing-lateral-raise-front-v1',
         }.contains(scoringVersion) ||
+        ((scoringVersion == 'standard-floor-push-up-side-v1') != (floorPushUp != null)) ||
+        (floorPushUp != null && (curlArms != null ||
+            (floorPushUp!.formScore == null) != (formScorePercent == null) ||
+            (formScorePercent != null && (floorPushUp!.formScore! - formScorePercent!).abs() > .000001))) ||
         (scoringVersion == 'reverse-lunge-side-v1'
             ? (!const {'left', 'right'}.contains(lungeSide) ||
                 formScorePercent != null ||
@@ -139,6 +147,7 @@ class WorkoutPoseMetrics {
   final DateTime consentedAt;
   final Map<String, WorkoutDeviationAggregate> deviations;
   final CurlArmMetrics? curlArms;
+  final FloorPushUpMetrics? floorPushUp;
 
   /// Selected anatomical arm for unscored side-view rows only.
   final String? rowSide;
@@ -147,7 +156,7 @@ class WorkoutPoseMetrics {
   final String? lungeSide;
 
   Map<String, Object?> toJson() => {
-        'schemaVersion': scoringVersion == 'standing-lateral-raise-front-v1'
+        'schemaVersion': floorPushUp != null ? 7 : scoringVersion == 'standing-lateral-raise-front-v1'
             ? 6
             : lungeSide != null
                 ? 5
@@ -161,6 +170,7 @@ class WorkoutPoseMetrics {
         if (curlArms != null) 'curlArms': curlArms!.toJson(),
         if (rowSide != null) 'rowSide': rowSide,
         if (lungeSide != null) 'lungeSide': lungeSide,
+        if (floorPushUp != null) 'floorPushUp': floorPushUp!.toJson(),
         'partialRepetitions': partialRepetitions,
         'trackedDurationMicros': trackedDurationMicros,
         'rejectedDurationMicros': rejectedDurationMicros,
@@ -194,14 +204,19 @@ class WorkoutPoseMetrics {
       if (json['schemaVersion'] == 2) 'curlArms',
       if (json['schemaVersion'] == 3) 'rowSide',
       if (json['schemaVersion'] == 5) 'lungeSide',
+      if (json['schemaVersion'] == 7) 'floorPushUp',
     });
     if (json['schemaVersion'] != 1 &&
         json['schemaVersion'] != 2 &&
         json['schemaVersion'] != 3 &&
         json['schemaVersion'] != 4 &&
         json['schemaVersion'] != 5 &&
-        json['schemaVersion'] != 6) {
+        json['schemaVersion'] != 6 && json['schemaVersion'] != 7) {
       throw const FormatException('Unsupported pose metrics version.');
+    }
+    if ((json['schemaVersion'] == 7) !=
+        (json['scoringVersion'] == 'standard-floor-push-up-side-v1')) {
+      throw const FormatException('Invalid floor push-up metric version.');
     }
     if ((json['schemaVersion'] == 6) !=
         (json['scoringVersion'] == 'standing-lateral-raise-front-v1')) {
@@ -229,6 +244,7 @@ class WorkoutPoseMetrics {
       throw const FormatException('Unsupported workout deviation.');
     }
     return WorkoutPoseMetrics(
+      floorPushUp: json['schemaVersion'] == 7 ? FloorPushUpMetrics.fromJson(_object(json['floorPushUp'])) : null,
       rowSide: json['schemaVersion'] == 3 ? _text(json, 'rowSide') : null,
       lungeSide: json['schemaVersion'] == 5 ? _text(json, 'lungeSide') : null,
       curlArms: json['schemaVersion'] == 2
@@ -253,6 +269,7 @@ class WorkoutPoseMetrics {
   @override
   bool operator ==(Object other) =>
       other is WorkoutPoseMetrics &&
+      floorPushUp == other.floorPushUp &&
       rowSide == other.rowSide &&
       lungeSide == other.lungeSide &&
       curlArms == other.curlArms &&
@@ -288,7 +305,8 @@ class WorkoutPoseMetrics {
       deviations['incompleteDepth'],
       curlArms,
       rowSide,
-      lungeSide);
+      lungeSide,
+      floorPushUp);
 }
 
 void _fields(Map<String, Object?> json, Set<String> fields) {

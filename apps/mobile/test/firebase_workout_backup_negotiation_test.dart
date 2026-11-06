@@ -7,7 +7,7 @@ import 'routine_journey_controller_test.dart' as fixture;
 void main() {
   final scope = SessionScope(userId: 'member', organizationId: 'gainpath');
   test(
-      'gateway lists with schema-six capability and preserves empty-page cursor',
+      'gateway lists with schema-seven capability and preserves empty-page cursor',
       () async {
     final calls = <Map<String, Object?>>[];
     final gateway = FirebaseWorkoutBackupGateway(
@@ -30,7 +30,7 @@ void main() {
         'memberId': 'member',
         'consented': true,
         'after': 'session-a',
-        'maxPoseMetricsSchemaVersion': 6,
+        'maxPoseMetricsSchemaVersion': 7,
       }
     });
     expect(page.records, isEmpty);

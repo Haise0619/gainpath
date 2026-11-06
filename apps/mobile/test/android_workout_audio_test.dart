@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:gainpath_pose/gainpath_pose.dart';
 import 'package:gainpath_mobile/features/workout/domain/workout_audio_port.dart';
 import 'package:gainpath_mobile/infrastructure/audio/android_workout_audio.dart';
+import 'package:gainpath_mobile/features/workout/domain/workout_audio_trace.dart';
 
 const cue = CueRequest(
     id: 'depth', text: 'Go deeper', priority: CuePriority.correction);
@@ -23,9 +24,11 @@ void main() {
       calls.add(call);
       return call.method == 'create'
           ? true
-          : call.method == 'play'
-              ? 'completed'
-              : null;
+          : call.method == 'clock'
+              ? 1000000
+              : call.method == 'play'
+                  ? 'completed'
+                  : null;
     });
   });
   tearDown(() async {
@@ -102,5 +105,119 @@ void main() {
                 ? 'unavailable'
                 : null);
     expect(await port.play(cue), AudioPlaybackOutcome.unavailable);
+  });
+
+  test('timed request carries bounded native deadline and correlated trace',
+      () async {
+    final trace = WorkoutAudioTrace(clockMicros: () => 42);
+    final timed =
+        AndroidWorkoutAudio(channel: channel, sessionId: 'timed', trace: trace);
+    expect(
+        await timed.playCurrent(cue,
+            requestId: 'attempt-1',
+            remainingStartTime: const Duration(milliseconds: 237)),
+        AudioPlaybackOutcome.completed);
+    final create = calls.first.arguments as Map;
+    final play = calls.last.arguments as Map;
+    expect(create['trace'], true);
+    expect(play['requestId'], 'attempt-1');
+    expect(play['maxStartDelayMs'], inInclusiveRange(1, 237));
+    expect(play['startDeadlineMicros'], inInclusiveRange(1000001, 1237000));
+    expect(trace.records.map((r) => r['stage']), contains('tts_request'));
+    await timed.close();
+  });
+
+  test('expired timed request never reaches native TTS', () async {
+    expect(
+        await port.playCurrent(cue,
+            requestId: 'stale', remainingStartTime: Duration.zero),
+        AudioPlaybackOutcome.cancelled);
+    expect(calls, isEmpty);
+  });
+
+  test(
+      'native trace correlates start/completion and ignores old request epochs',
+      () async {
+    final trace = WorkoutAudioTrace(clockMicros: () => 42);
+    final traced = AndroidWorkoutAudio(
+        channel: channel, sessionId: 'trace-session', trace: trace);
+    final done = Completer<String>();
+    messenger.setMockMethodCallHandler(channel, (call) async {
+      if (call.method == 'create') return true;
+      if (call.method == 'clock') return 1000000;
+      if (call.method == 'play') return done.future;
+      return null;
+    });
+    final playback = traced.playCurrent(cue,
+        requestId: 'attempt-2',
+        remainingStartTime: const Duration(milliseconds: 400));
+    await Future<void>.delayed(Duration.zero);
+    Future<void> native(String stage,
+        {String request = 'attempt-2', int generation = 0}) async {
+      final response = Completer<void>();
+      await messenger.handlePlatformMessage(
+          'gainpath/workout_audio/events/trace-session',
+          const StandardMethodCodec().encodeMethodCall(MethodCall('trace', {
+            'stage': stage,
+            'requestId': request,
+            'generation': generation,
+            'nativeElapsedMicros': 1234,
+          })),
+          (_) => response.complete());
+      await response.future;
+    }
+
+    await native('playback_start', request: 'old');
+    await native('playback_start', generation: 99);
+    await native('native_tts_request');
+    await native('playback_start');
+    await native('playback_completed');
+    done.complete('completed');
+    expect(await playback, AudioPlaybackOutcome.completed);
+    expect(
+        trace.records.where((r) => r['stage'] == 'playback_start').length, 1);
+    expect(
+        trace.records.where((r) => r['nativeElapsedMicros'] != null).length, 3);
+    await traced.close();
+  });
+
+  test('timed request also expires during direct engine preparation', () async {
+    final ready = Completer<bool>();
+    messenger.setMockMethodCallHandler(channel, (call) async {
+      calls.add(call);
+      if (call.method == 'create') return ready.future;
+      return null;
+    });
+    final playback = port.playCurrent(cue,
+        requestId: 'late-ready',
+        remainingStartTime: const Duration(milliseconds: 1));
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+    ready.complete(true);
+    expect(await playback, AudioPlaybackOutcome.cancelled);
+    expect(calls.map((c) => c.method), ['create']);
+  });
+
+  test('delayed platform delivery retains absolute native expiry', () async {
+    Map? request;
+    messenger.setMockMethodCallHandler(channel, (call) async {
+      if (call.method == 'create') return true;
+      if (call.method == 'clock') return 1000000;
+      if (call.method == 'play') {
+        request = call.arguments as Map;
+        // Simulated native receipt 150 ms later; the 100 ms remaining budget
+        // must already have expired, rather than restarting on native receipt.
+        final deadline = request!['startDeadlineMicros'] as int?;
+        return deadline != null && deadline <= 1150000
+            ? 'cancelled'
+            : 'completed';
+      }
+      return null;
+    });
+    expect(
+        await port.playCurrent(cue,
+            requestId: 'bridge-late',
+            remainingStartTime: const Duration(milliseconds: 100)),
+        AudioPlaybackOutcome.cancelled);
+    expect(request!['startDeadlineMicros'], lessThanOrEqualTo(1100000));
   });
 }

@@ -3,12 +3,14 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:gainpath_domain/coaching.dart';
 import 'package:gainpath_domain/gainpath_domain.dart' show SessionScope;
 import 'firebase_function_transport.dart';
+import 'firebase_unified_admin.dart';
 
 class FirebaseCoachAvailabilityRepository
     implements CoachAvailabilityRepository, CoachRosterRepository {
   FirebaseCoachAvailabilityRepository(
       {required this.scope,
       required this.isCurrent,
+      this.unifiedReads=false,
       FirebaseFunctions? functions,
       FirebaseAuth? auth})
       : _functions = functions,
@@ -16,6 +18,7 @@ class FirebaseCoachAvailabilityRepository
   @override
   final SessionScope scope;
   final bool Function() isCurrent;
+  final bool unifiedReads;
   final FirebaseFunctions? _functions;
   final FirebaseAuth _auth;
   void _check() {
@@ -28,7 +31,11 @@ class FirebaseCoachAvailabilityRepository
       String name, Map<String, dynamic> input) async {
     _check();
     try {
-      final result = await firebaseCallable(name, functions: _functions)
+      if(unifiedReads&&scope.datasetScope==null&&input['coachId'] is String&&(input['coachId'] as String).startsWith('demo-m13-coach-')){
+        if(!const {'getCoachAvailabilityCommand','getCoachRosterCommand'}.contains(name))throw const CoachAvailabilityException('permission-denied');
+        final result=await UnifiedAdminTransport(scope:scope,isCurrent:isCurrent).read('cohort',{'operation':'module/$name','input':input});_check();return Map<String,dynamic>.from(result);
+      }
+      final result = await firebaseScopedCallable(scope, name, functions: _functions)
           .call<Map<String, dynamic>>(input);
       _check();
       return result.data;

@@ -1,3 +1,4 @@
+import 'firebase_function_transport.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:gainpath_domain/gainpath_domain.dart' show SessionScope;
@@ -31,8 +32,8 @@ class FirebaseWorkoutProgramCatalog implements WorkoutProgramCatalog {
                     defaultValue: '10.0.2.2'),
                 5001);
           }
-          return (await service
-                  .httpsCallable('workoutProgramCommand',
+          return (await firebaseScopedCallable(scope, 'workoutProgramCommand',
+                      functions: service,
                       options: HttpsCallableOptions(
                           timeout: const Duration(seconds: 30)))
                   .call<Object?>(payload))

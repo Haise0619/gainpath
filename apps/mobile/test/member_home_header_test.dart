@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:gainpath_domain/gainpath_domain.dart'
     show AuthSession, AppRole, SessionScope;
 import 'package:gainpath_mobile/app/home/member_home_screen.dart';
+import 'package:gainpath_mobile/app/member_typography_theme.dart';
 import 'package:gainpath_mobile/features/gamification/application/app_check_in_cubit.dart';
 import 'package:gainpath_mobile/features/gamification/domain/app_check_in.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
@@ -25,7 +26,14 @@ void main() {
     Future<void> Function()? onAppClaim,
   }) {
     return MaterialApp(
-      theme: AppTheme.build(),
+      theme: buildMemberTypographyTheme(),
+      builder: (context, child) {
+        final media = MediaQuery.of(context);
+        return MediaQuery(
+          data: media.copyWith(textScaler: memberTextScaler(media.textScaler)),
+          child: child!,
+        );
+      },
       home: MemberHomeScreen(
         liveSession: testSession,
         onOpenNotifications: onOpenNotifications,

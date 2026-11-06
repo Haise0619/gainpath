@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:typed_data';
 import 'package:camera/camera.dart';
 import 'package:camera_platform_interface/camera_platform_interface.dart';
@@ -36,6 +37,27 @@ class StaticEquipmentVisionClassifier implements EquipmentVisionClassifier {
   }
 }
 
+class FakeEquipmentImagePicker implements EquipmentImagePicker {
+  FakeEquipmentImagePicker({
+    this.image,
+    this.shouldThrow = false,
+    this.errorMessage = 'Choose an image no larger than 5 MB.',
+  });
+  EquipmentImage? image;
+  bool shouldThrow;
+  String errorMessage;
+  int calls = 0;
+
+  @override
+  Future<EquipmentImage?> pick() async {
+    calls++;
+    if (shouldThrow) {
+      throw FormatException(errorMessage);
+    }
+    return image;
+  }
+}
+
 class FailingEquipmentVisionClassifier implements EquipmentVisionClassifier {
   @override
   Future<EquipmentRecognitionResult> identifyEquipment(
@@ -45,6 +67,9 @@ class FailingEquipmentVisionClassifier implements EquipmentVisionClassifier {
     throw Exception('Simulated network timeout');
   }
 }
+
+final validTestPngBytes = base64Decode(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAACklEQVR4nGMAAQAABQABDQottAAAAABJRU5ErkJggg==');
 
 void main() {
   late TestCameraPlatform camera;
@@ -85,6 +110,7 @@ void main() {
   Widget buildTestApp({
     required EquipmentVisionClassifier classifier,
     VoidCallback? onBrowse,
+    EquipmentImagePicker? imagePicker,
   }) {
     return MaterialApp(
       home: EquipmentScannerScreen(
@@ -92,10 +118,13 @@ void main() {
         enableCamera: true, // Real controller; fake only the native platform.
         reader: FakeEquipmentReader(testEquipment),
         classifier: classifier,
+        imagePicker: imagePicker,
         onBrowse: onBrowse,
       ),
     );
   }
+
+
 
   for (final failure in [
     'permission',
@@ -422,6 +451,199 @@ void main() {
 
     expect(find.byType(EquipmentDetailScreen), findsOneWidget);
     expect(find.text('Adjustable Bench'), findsWidgets);
+  });
+
+  testWidgets('renders upload photo icon in top bar and bottom control row',
+      (tester) async {
+    await tester.pumpWidget(
+      buildTestApp(
+        classifier: StaticEquipmentVisionClassifier(
+          const EquipmentRecognitionResult(
+            detectedEquipment: 'Squat Rack',
+            confidence: 0.95,
+          ),
+        ),
+      ),
+    );
+
+    expect(find.byIcon(Icons.photo_library_rounded), findsNWidgets(2));
+    expect(find.byKey(const Key('equipment_scanner_upload_button')),
+        findsOneWidget);
+  });
+
+  testWidgets(
+      'uploading an image picks file and identifies equipment successfully',
+      (tester) async {
+    final validImageBytes = validTestPngBytes;
+    final imagePicker = FakeEquipmentImagePicker(
+      image: EquipmentImage(validImageBytes),
+    );
+    final classifier = StaticEquipmentVisionClassifier(
+      const EquipmentRecognitionResult(
+        detectedEquipment: 'Squat Rack',
+        aliases: ['Power Rack'],
+        confidence: 0.98,
+        isGymEquipment: true,
+      ),
+    );
+
+    await tester.pumpWidget(
+      buildTestApp(
+        classifier: classifier,
+        imagePicker: imagePicker,
+      ),
+    );
+
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(imagePicker.calls, 0);
+    expect(classifier.calls, 0);
+
+    // Tap upload button
+    await tester.tap(find.byKey(const Key('equipment_scanner_upload_button')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(imagePicker.calls, 1);
+    expect(classifier.calls, 1);
+    expect(classifier.captured, validImageBytes);
+    expect(find.text('Scanned from uploaded photo'), findsOneWidget);
+    expect(find.text('Uploaded photo'), findsOneWidget);
+    expect(find.text('Possible match: Squat Rack'), findsOneWidget);
+
+    // Tap confirm equipment
+    await tester.tap(find.text('Confirm equipment'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+
+    expect(find.byType(EquipmentDetailScreen), findsOneWidget);
+    expect(find.text('Squat Rack'), findsWidgets);
+  });
+
+  testWidgets(
+      'uploading image when camera unavailable still scans and recognizes equipment',
+      (tester) async {
+    camera.denyPermission = true;
+    addTearDown(() => camera.denyPermission = false);
+    final validImageBytes = validTestPngBytes;
+    final imagePicker = FakeEquipmentImagePicker(
+      image: EquipmentImage(validImageBytes),
+    );
+    final classifier = StaticEquipmentVisionClassifier(
+      const EquipmentRecognitionResult(
+        detectedEquipment: 'Adjustable Bench',
+        confidence: 0.95,
+        isGymEquipment: true,
+      ),
+    );
+
+    await tester.pumpWidget(
+      buildTestApp(
+        classifier: classifier,
+        imagePicker: imagePicker,
+      ),
+    );
+
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(find.text('Camera unavailable'), findsOneWidget);
+
+    // Tap upload photo from error card
+    await tester.tap(find.text('Upload photo'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(imagePicker.calls, 1);
+    expect(classifier.calls, 1);
+    expect(find.text('Possible match: Adjustable Bench'), findsOneWidget);
+  });
+
+  testWidgets('cancelling image picker does not run classification',
+      (tester) async {
+    final imagePicker = FakeEquipmentImagePicker(image: null);
+    final classifier = StaticEquipmentVisionClassifier(
+      const EquipmentRecognitionResult(
+        detectedEquipment: 'Squat Rack',
+        confidence: 0.95,
+      ),
+    );
+
+    await tester.pumpWidget(
+      buildTestApp(
+        classifier: classifier,
+        imagePicker: imagePicker,
+      ),
+    );
+
+    await tester.pump(const Duration(milliseconds: 100));
+    await tester.tap(find.byKey(const Key('equipment_scanner_upload_button')));
+    await tester.pump();
+
+    expect(imagePicker.calls, 1);
+    expect(classifier.calls, 0);
+    expect(find.text('Point your camera at gym equipment'), findsOneWidget);
+  });
+
+  testWidgets('uploading invalid image displays format error message',
+      (tester) async {
+    final imagePicker = FakeEquipmentImagePicker(
+      shouldThrow: true,
+      errorMessage: 'Choose an image no larger than 5 MB.',
+    );
+    final classifier = StaticEquipmentVisionClassifier(
+      const EquipmentRecognitionResult(
+        detectedEquipment: 'Squat Rack',
+        confidence: 0.95,
+      ),
+    );
+
+    await tester.pumpWidget(
+      buildTestApp(
+        classifier: classifier,
+        imagePicker: imagePicker,
+      ),
+    );
+
+    await tester.pump(const Duration(milliseconds: 100));
+    await tester.tap(find.byKey(const Key('equipment_scanner_upload_button')));
+    await tester.pump();
+
+    expect(find.text('Choose an image no larger than 5 MB.'), findsOneWidget);
+    expect(classifier.calls, 0);
+  });
+
+  testWidgets(
+      'clearing uploaded photo resets uploaded state and returns to camera preview',
+      (tester) async {
+    final validImageBytes = validTestPngBytes;
+    final imagePicker = FakeEquipmentImagePicker(
+      image: EquipmentImage(validImageBytes),
+    );
+    final classifier = StaticEquipmentVisionClassifier(
+      const EquipmentRecognitionResult(
+        detectedEquipment: 'Squat Rack',
+        confidence: 0.95,
+      ),
+    );
+
+    await tester.pumpWidget(
+      buildTestApp(
+        classifier: classifier,
+        imagePicker: imagePicker,
+      ),
+    );
+
+    await tester.pump(const Duration(milliseconds: 100));
+    await tester.tap(find.byKey(const Key('equipment_scanner_upload_button')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(find.text('Uploaded photo'), findsOneWidget);
+
+    // Tap clear upload button
+    await tester.tap(find.byKey(const Key('equipment_scanner_clear_upload')));
+    await tester.pump();
+
+    expect(find.text('Uploaded photo'), findsNothing);
+    expect(find.text('Point your camera at gym equipment'), findsOneWidget);
   });
 }
 

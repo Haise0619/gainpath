@@ -62,8 +62,8 @@ class _AdminWorkoutAnalyticsState extends State<AdminWorkoutAnalytics> {
               spacing: 6,
               crossAxisAlignment: WrapCrossAlignment.center,
               children: [
-                const Chip(
-                    label: Text('Provisional backups'),
+                Chip(
+                    label: Text(report?.mixedSources == true ? 'Workout observations' : report?.fictional == true ? 'Workout observations' : 'Provisional backups'),
                     visualDensity: VisualDensity.compact),
                 IconButton(
                     tooltip: 'Refresh workout analytics',
@@ -122,10 +122,13 @@ class _AdminWorkoutAnalyticsState extends State<AdminWorkoutAnalytics> {
           return ReportSection(
               anchorKey: widget.anchorKey ?? _fallbackAnchor,
               title: 'Workout activity',
-              subtitle:
-                  'Saved device measurements and routine attempt outcomes · organization-wide',
+              subtitle: report?.mixedSources == true ? 'Recorded workout activity · performance estimates are not physical verification' : report?.fictional == true
+                  ? 'Recorded workout activity'
+                  : 'Saved device measurements and routine attempt outcomes · organization-wide',
               live: true,
-              tagLabel: 'Provisional backups',
+              tagLabel: report?.mixedSources == true ? 'Workout activity' : report?.fictional == true
+                  ? 'Recorded observations'
+                  : 'Provisional backups',
               exportFilename: 'gainpath-workout-activity.csv',
               exportEnabled: report != null,
               exportRows: report?.toCsv,
@@ -150,28 +153,31 @@ class _AdminWorkoutAnalyticsState extends State<AdminWorkoutAnalytics> {
         width: widget.compact ? 175 : 210, child: StatTile(value, label));
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Wrap(spacing: 10, runSpacing: 10, children: [
-        stat('${t.sessions}', 'Saved camera sessions'),
+        stat('${t.sessions}',
+            r.sessionLabel),
         stat('${t.completedRoutineDays}', 'Completed routine attempts'),
-        stat('${t.fullReps}', 'Measured full reps'),
+        stat('${t.fullReps}', r.mixedSources || r.fictional ? 'Recorded full reps' : 'Measured full reps'),
         stat(_duration(t.trackedMicros), 'Tracked duration'),
         if (!widget.compact) ...[
-          stat('${t.partialReps}', 'Measured partial reps'),
+          stat('${t.partialReps}', r.mixedSources || r.fictional ? 'Recorded partial reps' : 'Measured partial reps'),
           stat('${t.manualSets}', 'Manual sets')
         ],
       ]),
       const SizedBox(height: 12),
       Text(
-          '${r.coverage['membersWithBackups']} / ${r.coverage['activeMembers']} current active Members have backup records · '
+          '${r.coverage['membersWithBackups']} / ${r.coverage['activeMembers']} current active Members have ${r.mixedSources ? 'source observations' : r.fictional ? 'fictional observations' : 'backup records'} · '
           '${r.coverage['membersWithActivity']} with activity in range.',
           style: text.bodySmall),
       const SizedBox(height: 6),
       Text(
-          'Backup coverage only. Missing or device-only workouts are excluded. Counts are provisional; manual sets are self-reported. Backup presence does not mean backup is currently enabled.',
+          r.mixedSources ? 'Recorded observations do not establish verified camera performance, attendance or rewards.' : r.fictional
+              ? 'Recorded observations from recorded fixtures. These are read-only educational data, not physical camera captures, accepted workouts or rewards.'
+              : 'Backup coverage only. Missing or device-only workouts are excluded. Counts are provisional; manual sets are self-reported. Backup presence does not mean backup is currently enabled.',
           style: text.bodySmall),
       if (t.sessions == 0 && t.routineAttempts == 0)
         const Padding(
             padding: EdgeInsets.symmetric(vertical: 14),
-            child: Text('No backed-up workout activity in this date range.')),
+            child: Text('No source workout activity in this date range.')),
       if (widget.compact) ...[
         const SizedBox(height: 8),
         Text(
@@ -194,13 +200,13 @@ class _AdminWorkoutAnalyticsState extends State<AdminWorkoutAnalytics> {
                 onSelected: (_) => setState(() => _weekly = true))
           ]),
           if (r.daily.isNotEmpty)
-            _trend(r.trend(weekly: _weekly))
+            _trend(r.trend(weekly: _weekly), sessionLabel: r.sessionLabel)
           else
             const NoFilteredData(message: 'No activity dates to chart.'),
           Text(
               _weekly
                   ? 'Weeks start Monday; boundary weeks include only the selected date range.'
-                  : 'Malaysia calendar dates with recorded activity. Gaps have no backed-up activity.',
+                  : 'Malaysia calendar dates with recorded activity. Gaps have no source activity.',
               style: text.bodySmall),
         ])),
         const SizedBox(height: 14),
@@ -228,7 +234,7 @@ class _AdminWorkoutAnalyticsState extends State<AdminWorkoutAnalytics> {
                 Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text('Most-used exercises', style: text.titleMedium),
           Text(
-              'Ranked by saved camera sessions. Snapshot names may differ from the current catalog. Top ${r.exercises.length > 10 ? 10 : r.exercises.length} of ${r.exercises.length}; CSV includes all.',
+              'Ranked by ${r.sessionLabel.toLowerCase()}. Snapshot names may differ from the current catalog. Top ${r.exercises.length > 10 ? 10 : r.exercises.length} of ${r.exercises.length}; CSV includes all.',
               style: text.bodySmall),
           for (final e in r.exercises.take(10))
             Padding(
@@ -238,7 +244,7 @@ class _AdminWorkoutAnalyticsState extends State<AdminWorkoutAnalytics> {
                     children: [
                       Text(e.name, style: text.titleSmall),
                       Text(
-                          '${e.sessions} camera sessions · ${e.fullReps} full / ${e.partialReps} partial reps · ${_duration(e.trackedMicros)} tracked · ${e.manualSets} manual sets',
+                          '${e.sessions} ${r.sessionLabel.toLowerCase()} · ${e.fullReps} full / ${e.partialReps} partial reps · ${_duration(e.trackedMicros)} tracked · ${e.manualSets} manual sets',
                           style: text.bodySmall),
                     ])),
           if (r.exercises.isEmpty)
@@ -271,39 +277,42 @@ class _AdminWorkoutAnalyticsState extends State<AdminWorkoutAnalytics> {
         ])),
         const SizedBox(height: 12),
         Text(
-            'Latest backups only; archived revisions are excluded. Current active Member census is not historical attendance. Source scan ${r.scanStartedAt.toUtc().toIso8601String()} to ${r.capturedAt.toUtc().toIso8601String()}; these bounded reads are not one atomic snapshot.',
+            r.mixedSources ? 'Current active membership is not attendance. Records use the latest eligible revisions within the selected dates.' : r.fictional
+                ? 'Recorded dates do not prove physical camera activity or attendance.'
+                : 'Latest backups only; archived revisions are excluded. Current active Member census is not historical attendance. Source scan ${r.scanStartedAt.toUtc().toIso8601String()} to ${r.capturedAt.toUtc().toIso8601String()}; these bounded reads are not one atomic snapshot.',
             style: text.bodySmall),
       ],
     ]);
   }
 
-  Widget _trend(List<WorkoutReportDay> days) => SizedBox(
-      height: 250,
-      child: SfCartesianChart(
-          plotAreaBorderWidth: 0,
-          primaryXAxis: const CategoryAxis(
-              majorGridLines: MajorGridLines(width: 0),
-              labelIntersectAction: AxisLabelIntersectAction.rotate45),
-          primaryYAxis: const NumericAxis(minimum: 0, decimalPlaces: 0),
-          legend: const Legend(
-              isVisible: true,
-              position: LegendPosition.bottom,
-              overflowMode: LegendItemOverflowMode.wrap),
-          tooltipBehavior: TooltipBehavior(enable: true),
-          series: <CartesianSeries<WorkoutReportDay, String>>[
-            ColumnSeries<WorkoutReportDay, String>(
-                name: 'Camera sessions',
-                dataSource: days,
-                xValueMapper: (d, _) => d.date,
-                yValueMapper: (d, _) => d.sessions,
-                color: AppColors.primary),
-            ColumnSeries<WorkoutReportDay, String>(
-                name: 'Completed routine attempts',
-                dataSource: days,
-                xValueMapper: (d, _) => d.date,
-                yValueMapper: (d, _) => d.totals.completedRoutineDays,
-                color: AppColors.success),
-          ]));
+  Widget _trend(List<WorkoutReportDay> days, {required String sessionLabel}) =>
+      SizedBox(
+          height: 250,
+          child: SfCartesianChart(
+              plotAreaBorderWidth: 0,
+              primaryXAxis: const CategoryAxis(
+                  majorGridLines: MajorGridLines(width: 0),
+                  labelIntersectAction: AxisLabelIntersectAction.rotate45),
+              primaryYAxis: const NumericAxis(minimum: 0, decimalPlaces: 0),
+              legend: const Legend(
+                  isVisible: true,
+                  position: LegendPosition.bottom,
+                  overflowMode: LegendItemOverflowMode.wrap),
+              tooltipBehavior: TooltipBehavior(enable: true),
+              series: <CartesianSeries<WorkoutReportDay, String>>[
+                ColumnSeries<WorkoutReportDay, String>(
+                    name: sessionLabel == 'Saved camera sessions' ? 'Camera sessions' : sessionLabel,
+                    dataSource: days,
+                    xValueMapper: (d, _) => d.date,
+                    yValueMapper: (d, _) => d.sessions,
+                    color: AppColors.primary),
+                ColumnSeries<WorkoutReportDay, String>(
+                    name: 'Completed routine attempts',
+                    dataSource: days,
+                    xValueMapper: (d, _) => d.date,
+                    yValueMapper: (d, _) => d.totals.completedRoutineDays,
+                    color: AppColors.success),
+              ]));
 }
 
 String _duration(int micros) {

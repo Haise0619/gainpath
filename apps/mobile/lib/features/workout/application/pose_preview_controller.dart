@@ -29,8 +29,12 @@ class PosePreviewController extends ChangeNotifier {
       bool responsivePreview = const bool.fromEnvironment(
           'GAINPATH_RESPONSIVE_SKELETON',
           defaultValue: true),
+      PoseFrameFilter? previewFilter,
+      this.overlayUsesDeliveryClock = true,
       PoseQualityDiagnostics? quality})
-      : _responsivePreview = responsivePreview,
+      : _filter = previewFilter ??
+            PoseFrameFilter(beta: _beta12Experiment ? 1.2 : .3),
+        _responsivePreview = responsivePreview,
         quality = quality ?? PoseQualityDiagnostics(clockMicros: clockMicros);
   final PoseQualityDiagnostics quality;
   final RealSquatPerformance? performance;
@@ -58,6 +62,11 @@ class PosePreviewController extends ChangeNotifier {
   final Future<ManagedPoseDetector> Function() detectorFactory;
   final int Function() clockMicros;
 
+  /// Drawing-only policy: accepted results have already passed capture age.
+  /// Never feeds held landmarks back into analysis or invents a new timestamp.
+  final bool overlayUsesDeliveryClock;
+  int? _lastDisplayDelivery;
+
   /// Delivered fresh inverse-ROI pose before preview smoothing. No history.
   final void Function(PoseFrame)? onRefined;
   final void Function()? onGeometryInvalidated;
@@ -70,7 +79,7 @@ class PosePreviewController extends ChangeNotifier {
   static const _beta12Experiment = !kReleaseMode &&
       bool.fromEnvironment('GAINPATH_POSE_QUALITY_DEBUG') &&
       bool.fromEnvironment('GAINPATH_POSE_BETA12_EXPERIMENT');
-  final _filter = PoseFrameFilter(beta: _beta12Experiment ? 1.2 : .3);
+  final PoseFrameFilter _filter;
   final _activeTime = Stopwatch();
   Future<void> _tail = Future.value();
   Future<void>? _closing;
@@ -226,6 +235,7 @@ class PosePreviewController extends ChangeNotifier {
                       diagnosticTimer.elapsedMicroseconds);
                 }
                 displayedFrames++;
+                _lastDisplayDelivery = clockMicros();
                 onRefined?.call(pose);
                 performance?.delivered(pose.capturedAtMicros);
                 _notify();
@@ -293,8 +303,16 @@ class PosePreviewController extends ChangeNotifier {
           if (quality.lag.finishIfExpired()) _notify();
           if (quality.blanks.finishIfExpired()) _notify();
           final pose = frame;
-          if (pose != null &&
-              clockMicros() - pose.capturedAtMicros > _maxFrameAgeMicros) {
+          final now = clockMicros();
+          final captureAge = pose == null ? 0 : now - pose.capturedAtMicros;
+          final deliveryAge = _lastDisplayDelivery == null
+              ? captureAge
+              : now - _lastDisplayDelivery!;
+          final expired = overlayUsesDeliveryClock
+              ? deliveryAge > _maxFrameAgeMicros ||
+                  captureAge > 2 * _maxFrameAgeMicros
+              : captureAge > _maxFrameAgeMicros;
+          if (pose != null && expired) {
             if (kDebugMode) _debugExpiredOverlays++;
             performance?.frameExpired();
             quality.count(pose.landmarks.isEmpty
@@ -304,6 +322,7 @@ class PosePreviewController extends ChangeNotifier {
                 timestamp: pose.capturedAtMicros,
                 details: {
                   'ageMicros': clockMicros() - pose.capturedAtMicros,
+                  'deliveryAgeMicros': deliveryAge,
                   'wasEmpty': pose.landmarks.isEmpty,
                   'latestDiscard': quality.lastDiscard
                 });

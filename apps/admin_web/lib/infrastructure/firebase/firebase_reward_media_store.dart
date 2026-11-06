@@ -27,7 +27,7 @@ class FirebaseRewardMediaStore {
       _pendingImage = image;
     }
     final path =
-        'orgs/${scope.organizationId}/rewardImages/${scope.userId}/$_pendingId';
+        '${scope.dataRootPath}/rewardImages/${scope.userId}/$_pendingId';
     try {
       final url = await _upload(path, image.copyBytes(), image.contentType);
       _check();

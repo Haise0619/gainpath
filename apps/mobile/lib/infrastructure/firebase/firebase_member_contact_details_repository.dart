@@ -1,3 +1,4 @@
+import 'firebase_data_scope.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:gainpath_data/gainpath_data.dart';
@@ -21,9 +22,9 @@ class FirebaseMemberContactDetailsRepository
   bool _invalidated = false;
   String? _email;
   DocumentReference<Map<String, dynamic>> get _user =>
-      _db.doc('users/${scope.userId}');
+      _db.scopeUser(scope);
   DocumentReference<Map<String, dynamic>> get _member =>
-      _db.doc('orgs/${scope.organizationId}/members/${scope.userId}');
+      _db.doc('${scope.dataRootPath}/members/${scope.userId}');
   void _check() {
     final user = _auth.currentUser;
     if (_invalidated ||

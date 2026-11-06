@@ -164,7 +164,7 @@ void main() {
 
       // Exercise data unavailable explanation
       expect(
-        find.text('High-risk exercise data is unavailable in this release.'),
+        find.text('Exercise insights are unavailable in this release.'),
         findsOneWidget,
       );
     });

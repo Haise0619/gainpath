@@ -1,3 +1,5 @@
+import '../../infrastructure/firebase/firebase_fyp_progress_repository.dart';
+import '../../infrastructure/firebase/firebase_fyp_dataset.dart';
 import 'package:gainpath_domain/gainpath_domain.dart' show SessionScope;
 import '../../features/analytics/data/local_member_progress_repository.dart';
 import '../../features/analytics/domain/local_member_progress_repository.dart';
@@ -15,6 +17,9 @@ Future<LocalMemberProgressRepository> createLocalMemberProgressRepository(
         createRealWorkoutSyncStore,
     Future<RoutineJourneyStore> Function(SessionScope) routineStoreFactory =
         createRoutineJourneyStore}) async {
+  if (scope.datasetScope != null) {
+    return FirebaseFypProgressRepository(firebaseFypDatasetTransport(scope, () => activeScope() == scope));
+  }
   final workoutStore = await storeFactory(scope);
   RealWorkoutSyncStore syncStore;
   try {

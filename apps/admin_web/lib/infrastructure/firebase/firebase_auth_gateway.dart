@@ -1,15 +1,22 @@
+import 'package:cloud_functions/cloud_functions.dart';
+import 'firebase_function_transport.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:gainpath_data/gainpath_data.dart';
 
 class FlutterFirebaseAuthGateway
     implements FirebaseAuthGateway, FirebaseAuthSessionGateway {
-  FlutterFirebaseAuthGateway({FirebaseAuth? auth, FirebaseFirestore? firestore})
+  FlutterFirebaseAuthGateway(
+      {FirebaseAuth? auth,
+      FirebaseFirestore? firestore,
+      FirebaseFunctions? functions})
       : _auth = auth ?? FirebaseAuth.instance,
-        _firestore = firestore ?? FirebaseFirestore.instance;
+        _firestore = firestore ?? FirebaseFirestore.instance,
+        _functions = functions;
 
   final FirebaseAuth _auth;
   final FirebaseFirestore _firestore;
+  final FirebaseFunctions? _functions;
 
   Future<void> sendPasswordResetEmail(String email) async {
     try {
@@ -77,6 +84,37 @@ class FlutterFirebaseAuthGateway
     final email = user.email;
     if (email == null || email.isEmpty) {
       throw StateError('The authenticated account has no email address.');
+    }
+    // Only absence/Rules denial falls back to ordinary membership resolution.
+    // A found assignment must complete protected authorization before any
+    // canonical lookup or registration provisioning can occur.
+    Map<String, dynamic>? assignment;
+    try {
+      assignment = (await _firestore
+              .collection('datasetAssignments')
+              .doc(user.uid)
+              .get(const GetOptions(source: Source.server)))
+          .data();
+    } on FirebaseException catch (error) {
+      if (error.code != 'permission-denied') rethrow;
+    }
+    if (assignment != null) {
+      final response = await firebaseCallable('fypDatasetSessionCommand',
+              functions: _functions)
+          .call<Object?>({'schemaVersion': 1});
+      final session = FypDatasetSession.fromResponse(response.data);
+      return FirebaseAuthUser(
+          userId: user.uid,
+          email: email,
+          displayName: session.member['displayName'] as String?,
+          emailVerified: user.emailVerified,
+          datasetScope: session.scope,
+          claims: {
+            'organizationId': session.member['organizationId'],
+            'role': session.member['role'],
+            'status': session.member['status'],
+            'branchIds': session.member['branchIds']
+          });
     }
     final userData =
         (await _firestore.collection('users').doc(user.uid).get()).data();

@@ -16,6 +16,7 @@ class WorkoutUiGateway extends original.OriginalLayoutGateway
   int calls = 0;
   Completer<AdminWorkoutReport>? pendingWorkouts;
   bool unavailable = false;
+  bool mixed = false;
   @override
   Future<AdminWorkoutReport> loadWorkouts(q) async {
     calls++;
@@ -39,12 +40,19 @@ class WorkoutUiGateway extends original.OriginalLayoutGateway
     raw['sourceReadStartedAtMillis'] = DateTime.now()
         .subtract(const Duration(seconds: 1))
         .millisecondsSinceEpoch;
-    return parseAdminWorkoutReport(raw, support.reportingScope, q);
+    if(mixed){raw['classification']='mixed_descriptive_sources';raw['containsFictional']=true;raw['sourceBreakdown']={'existing':{'sessions':0},'fyp':{'sessions':2}};}
+    return parseAdminWorkoutReport(raw, support.reportingScope, q,allowUnified:mixed);
   }
 }
 
 void main() {
   setUpAll(() => GoogleFonts.config.allowRuntimeFetching = false);
+  testWidgets('mixed report with only FYP activity never labels observations as camera captures',(t)async{
+    t.view.physicalSize=const Size(1200,1100);t.view.devicePixelRatio=1;addTearDown(t.view.reset);
+    await t.pumpWidget(original.originalLayoutApp(const ReportsScreen(live:true),WorkoutUiGateway()..mixed=true));await t.pumpAndSettle();
+    final labels=t.widgetList<Text>(find.byType(Text)).map((w)=>w.data??'').join(' ');
+    expect(labels,contains('Mixed descriptive observations'));expect(labels,isNot(contains('saved camera sessions')));expect(labels,isNot(contains('Backup coverage only.')));expect(labels,isNot(contains('Latest backups only;')));
+  });
   testWidgets(
       'original dashboard adds compact backup workout metrics without replacing its layout',
       (t) async {

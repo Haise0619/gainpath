@@ -1297,7 +1297,7 @@ class _CompactActivityTile extends StatelessWidget {
       _ => AppColors.inkSoft,
     };
 
-    final statusText = switch (record.status) {
+    final statusText = record.scope.datasetScope != null ? 'Fictional fixture' : switch (record.status) {
       LocalWorkoutRecordStatus.accepted => 'Backed up',
       LocalWorkoutRecordStatus.localOnly => 'Saved on device',
       LocalWorkoutRecordStatus.pending => 'Pending upload',

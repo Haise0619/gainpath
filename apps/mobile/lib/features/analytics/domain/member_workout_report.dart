@@ -117,6 +117,7 @@ class WorkoutReportRoutine {
 
 /// Readable identifier fallback only; this does not assert a catalogue title.
 String reportExerciseLabel(String id) {
+  if (id == 'standard-floor-push-up-side-v1') return 'Standard Floor Push-Up';
   if (RegExp(r'^[A-Za-z0-9]{16,}$').hasMatch(id)) return 'Saved exercise';
   final words = id.split('/').last.replaceAll(RegExp(r'[-_]'), ' ').trim();
   if (words.isEmpty) return 'Exercise';
@@ -214,8 +215,8 @@ class MemberWorkoutReport {
             id: s.sessionId,
             title: exerciseName(s.exerciseId),
             at: s.endedAt,
-            sourceLabel: 'Measured AI capture',
-            dateBasis: 'Capture ended',
+            sourceLabel: scope.datasetScope != null ? 'Fictional recorded fixture' : 'Measured AI capture',
+            dateBasis: scope.datasetScope != null ? 'Declared observation end' : 'Capture ended',
             detail:
                 '${s.repetitions} full reps · ${s.partialRepetitions} partial attempts · ${reportDuration(s.trackedDurationMicros)} tracked · Estimated Form Score ${s.formScorePercent == null ? 'unavailable' : '${s.formScorePercent!.toStringAsFixed(1)}%'}'),
       for (final r in routines)
@@ -344,12 +345,12 @@ class MemberWorkoutReport {
       'Dates: ${filter.dateLabel}',
       'Routine: ${filter.routineId == null ? 'All routines' : routineNames[filter.routineId] ?? filter.routineId}',
       'Exercise: ${filter.exerciseId == null ? 'All exercises' : exerciseName(filter.exerciseId!)}',
-      'Source: account-local saved history, including restored backups.',
+      scope.datasetScope != null ? 'Source: read-only fictional dataset observations; recorded fixtures, not physical camera captures or device-local history.' : 'Source: account-local saved history, including restored backups.',
       'Provisional AI estimates; workout acceptance is not Cloud Backup status or a reward award.',
       ...warnings.map((w) => 'Data warning: $w'),
       '',
       'SUMMARY',
-      '${sessions.length} camera sessions | $fullReps full reps | $partialReps partial attempts',
+      '${sessions.length} ${scope.datasetScope != null ? 'fictional observations' : 'camera sessions'} | $fullReps full reps | $partialReps partial attempts',
       'Tracked duration: ${reportDuration(trackedMicros)}',
       if (routineHistoryAvailable) ...[
         'Completed routine days (whole day): $completedRoutineDays',
@@ -377,7 +378,7 @@ class MemberWorkoutReport {
       for (final event in timeline) event.documentLine,
       'Routine snapshots describe progress; they are not added to measured capture totals.',
       '',
-      'CAMERA SESSION DETAILS',
+      scope.datasetScope != null ? 'FICTIONAL OBSERVATION DETAILS' : 'CAMERA SESSION DETAILS',
       for (final s in sessions) ...[
         '${reportDate(s.endedAt)} | ${exerciseName(s.exerciseId)} | ${s.sessionId}',
         '${s.repetitions} full | ${s.partialRepetitions} partial | ${reportDuration(s.trackedDurationMicros)} tracked | Estimated Form Score ${s.formScorePercent?.toStringAsFixed(1) ?? 'unavailable'}${s.formScorePercent == null ? '' : '%'}',

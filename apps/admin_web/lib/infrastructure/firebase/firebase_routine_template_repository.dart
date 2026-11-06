@@ -1,3 +1,4 @@
+import 'firebase_data_scope.dart';
 import 'dart:math';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -48,8 +49,7 @@ class FirebaseRoutineTemplateRepository
   CollectionReference<Map<String, dynamic>> _collection() {
     _requireCurrentUser();
     return _firestore
-        .collection('orgs')
-        .doc(scope.organizationId)
+        .scopeRoot(scope)
         .collection('routineBlueprints');
   }
 
@@ -100,10 +100,9 @@ class FirebaseRoutineTemplateRepository
   }
 
   DocumentReference<Map<String, dynamic>> get _assignment =>
-      _firestore.collection('users').doc(scope.userId);
+      _firestore.scopeUser(scope);
   DocumentReference<Map<String, dynamic>> get _member => _firestore
-      .collection('orgs')
-      .doc(scope.organizationId)
+      .scopeRoot(scope)
       .collection('members')
       .doc(scope.userId);
 
@@ -202,8 +201,7 @@ class FirebaseRoutineTemplateRepository
           }
           for (final id in _exerciseIds(data)) {
             final exercise = await transaction.get(_firestore
-                .collection('orgs')
-                .doc(scope.organizationId)
+                .scopeRoot(scope)
                 .collection('exerciseVideos')
                 .doc(id));
             if (!exercise.exists ||
@@ -438,7 +436,7 @@ class FirebaseRoutineTemplateRepository
       timestampMicros: DateTime.now().microsecondsSinceEpoch,
     );
     try {
-      await firebaseCallable('publishRoutineCommand', functions: _functions)
+      await firebaseScopedCallable(scope, 'publishRoutineCommand', functions: _functions)
           .call({
         'schemaVersion': 1,
         'requestId': requestId,

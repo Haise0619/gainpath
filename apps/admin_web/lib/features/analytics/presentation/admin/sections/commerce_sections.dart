@@ -1,4 +1,5 @@
 import '../admin_commerce_section.dart';
+import '../unified_business_section.dart';
 import 'package:flutter/material.dart';
 import 'package:syncfusion_flutter_charts/charts.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
@@ -28,9 +29,10 @@ class RevenueSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if(snapshot?.unified!=null)return Column(crossAxisAlignment:CrossAxisAlignment.start,children:[UnifiedBusinessSection(snapshot:snapshot!,anchorKey:anchorKey),if(snapshot?.commerce!=null)ExpansionTile(title:const Text('Financial details'),subtitle:const Text('Plan filters, collections, payment states and comparisons'),children:[AdminCommerceSection(anchorKey:GlobalKey(),report:snapshot!.commerce!,coach:false)])]);
     if (snapshot?.commerce != null) {
-      return AdminCommerceSection(
-          anchorKey: anchorKey, report: snapshot!.commerce!, coach: false);
+      return Column(children:[AdminCommerceSection(
+          anchorKey: anchorKey, report: snapshot!.commerce!, coach: false),if(snapshot!.unified!=null)UnifiedBusinessSection(snapshot:snapshot!)]);
     }
     final ops = snapshot?.operations;
     return ReportSection(

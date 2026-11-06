@@ -1,3 +1,4 @@
+import 'firebase_data_scope.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:gainpath_domain/content.dart';
@@ -18,9 +19,9 @@ class FirebaseFacilitySettingsRepository implements FacilitySettingsRepository {
   final Object _lifetime = Object();
   bool _invalidated = false;
   DocumentReference<Map<String, dynamic>> get _organization =>
-      _db.collection('orgs').doc(scope.organizationId);
+      _db.scopeRoot(scope);
   DocumentReference<Map<String, dynamic>> get _user =>
-      _db.collection('users').doc(scope.userId);
+      _db.scopeUser(scope);
   DocumentReference<Map<String, dynamic>> get _member =>
       _organization.collection('members').doc(scope.userId);
   void _check() {

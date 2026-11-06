@@ -151,7 +151,7 @@ class _MemberProgressHostState extends State<MemberProgressHost>
   }
 
   bool get _backupConfigured =>
-      workoutCloudBackupEnabled || widget.backupFactory != null;
+      widget.scope.datasetScope == null && (workoutCloudBackupEnabled || widget.backupFactory != null);
   Future<void> _initializeBackup() async {
     if (!mounted ||
         _activeScope() == null ||
@@ -279,6 +279,7 @@ class _MemberProgressHostState extends State<MemberProgressHost>
                         }
                         return WorkoutResultScreen.measured(
                             summary: summary,
+                            fictionalObservation: widget.scope.datasetScope != null,
                             syncPanel: LocalProgressRecordTile(
                                 record: matches.first,
                                 utcOffset: state.progress!.utcOffset));

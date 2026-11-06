@@ -1,0 +1,15 @@
+const fs=require('node:fs'),path=require('node:path'),{spawnSync}=require('node:child_process');
+const root=path.resolve(__dirname,'..'),repo=path.resolve(root,'..'),stage=path.join(repo,'build/fyp-cohort-integration/functions'),project='demo-gainpath-fyp';
+for(const[k,v]of Object.entries({FIRESTORE_EMULATOR_HOST:'127.0.0.1:18231',FIREBASE_AUTH_EMULATOR_HOST:'127.0.0.1:19131'}))if(process.env[k]&&process.env[k]!==v)throw Error('Foreign emulator binding refused.');
+const jar=require('firebase-tools/lib/emulator/downloadableEmulators').getDownloadDetails('firestore').downloadPath;if(!fs.existsSync(jar))throw Error('Cached Firestore emulator required; no tool downloads.');
+const compile=spawnSync(process.execPath,[require.resolve('typescript/bin/tsc'),'-p','tsconfig.fyp.json'],{cwd:root,stdio:'inherit',windowsHide:true});if(compile.status!==0)process.exit(compile.status??1);
+fs.mkdirSync(stage,{recursive:true});fs.cpSync(path.join(repo,'build/fyp-cohort-integration/compiled'),path.join(stage,'lib'),{recursive:true});fs.copyFileSync(path.join(root,'fyp-emulator.package.json'),path.join(stage,'package.json'));
+// Local discovery values only. The only loaded financial endpoint is a read
+// command with an unavailable provider port; no credential/provider is enabled.
+fs.writeFileSync(path.join(stage,'.env.local'),'BILLPLZ_SANDBOX_COLLECTION_ID=emulator-only-no-provider\nBILLPLZ_SANDBOX_ORGANIZATION_ID=gainpath\nBILLPLZ_SANDBOX_ENABLED=true\nBILLPLZ_SANDBOX_REFUND_COLLECTION_ID=emulator-only-no-provider\nVERIFIED_REWARDS_ORGANIZATION_ID=gainpath\n');
+const modules=path.join(stage,'node_modules'),target=path.join(root,'node_modules');if(!fs.existsSync(modules))fs.symlinkSync(target,modules,'junction');if(fs.realpathSync(modules)!==fs.realpathSync(target))throw Error('Foreign dependency binding refused.');
+const cache=path.join(repo,'build/fyp-cohort-integration/cli-config');fs.mkdirSync(cache,{recursive:true});
+const env={...process.env,CI:'true',FIREBASE_CLI_DISABLE_USAGE:'1',XDG_CONFIG_HOME:cache,GCE_METADATA_HOST:'127.0.0.1:9',GCLOUD_PROJECT:project,GOOGLE_CLOUD_PROJECT:project,FYP_WITH_FLUTTER:process.argv.includes('--with-clients')?'1':'0'};
+for(const k of ['GOOGLE_APPLICATION_CREDENTIALS','FIREBASE_TOKEN','GEMINI_API_KEY','GOOGLE_API_KEY','GOOGLE_GENERATIVE_AI_API_KEY'])delete env[k];
+if(process.platform==='win32'){const java='C:/Program Files/Android/Android Studio/jbr/bin/java.exe';if(!fs.existsSync(java))throw Error('Existing Java required.');const k=Object.keys(env).find(k=>k.toUpperCase()==='PATH')||'PATH';env[k]=path.dirname(java)+path.delimiter+(env[k]||'');}
+const result=spawnSync(process.execPath,[require.resolve('firebase-tools/lib/bin/firebase.js'),'emulators:exec','--project',project,'--config',path.join(repo,'firebase/fyp-cohort.emulator.test.json'),'--only','auth,firestore,functions',`"${process.execPath}" "${require.resolve('vitest/vitest.mjs')}" run --config vitest.fyp.emulator.config.ts`],{cwd:root,env,stdio:'inherit',windowsHide:true});if(result.error)throw result.error;process.exitCode=result.status??1;

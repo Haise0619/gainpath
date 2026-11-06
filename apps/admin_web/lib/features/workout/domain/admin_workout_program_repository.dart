@@ -1,14 +1,16 @@
 import 'package:gainpath_domain/workout.dart';
 
 class AdminProgramDraft {
-  const AdminProgramDraft(this.program, this.revision);
+  const AdminProgramDraft(this.program, this.revision,{this.readOnly=false});
+  final bool readOnly;
   final WorkoutProgram program;
   final int revision;
 }
 
 class ProgramRoutineChoice {
   ProgramRoutineChoice(
-      {required this.id, required this.title, required this.snapshot});
+      {required this.id, required this.title, required this.snapshot, this.readOnly=false});
+  final bool readOnly;
   final String id;
   final String title;
   final Map<String, dynamic> snapshot;

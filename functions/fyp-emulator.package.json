@@ -1,0 +1,1 @@
+{"name":"gainpath-fyp-emulator-only","private":true,"version":"1.0.0","main":"lib/fyp-local-index.js","engines":{"node":"22"},"dependencies":{"firebase-admin":"^13.0.0","firebase-functions":"^6.4.0","@google-cloud/functions-framework":"^5.0.5"}}

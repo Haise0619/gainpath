@@ -1,6 +1,7 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:gainpath_domain/gainpath_domain.dart';
 import 'firebase_function_transport.dart';
+import 'firebase_unified_admin.dart';
 
 typedef BookingListCallable = Future<Map<String, dynamic>> Function(
     String, Map<String, dynamic>);
@@ -10,15 +11,13 @@ class FirebaseBookingListRepository implements BookingListRepository {
   FirebaseBookingListRepository(
       {required this.scope,
       required this.isCurrent,
+      bool unifiedReads=false,
       String? Function()? currentUid,
       BookingListCallable? call})
       : _uid = currentUid ?? (() => FirebaseAuth.instance.currentUser?.uid),
-        _call = call ?? _regionalCall;
-  static Future<Map<String, dynamic>> _regionalCall(
-      String name, Map<String, dynamic> input) async {
-    return (await firebaseCallable(name).call<Map<String, dynamic>>(input))
-        .data;
-  }
+        _call = call ?? ((name, input) async => unifiedReads&&scope.datasetScope==null&&input['coachId'] is String&&(input['coachId'] as String).startsWith('demo-m13-coach-')
+          ? Map<String,dynamic>.from(await UnifiedAdminTransport(scope:scope,isCurrent:isCurrent).read('cohort',{'operation':'module/$name','input':input}))
+          : (await firebaseScopedCallable(scope, name).call<Map<String, dynamic>>(input)).data);
 
   @override
   final SessionScope scope;

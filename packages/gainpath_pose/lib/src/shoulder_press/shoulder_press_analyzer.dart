@@ -45,7 +45,7 @@ class ShoulderPressAnalyzer {
   static const version = 'dumbbell-shoulder-press-front-v1';
   static const maximumFrameAgeMicros = 250000;
   static const lostAfterMicros = 500000;
-  static const implementationRevision = 'projection-recovery-2';
+  static const implementationRevision = 'delivery-watchdog-3';
   ShoulderPressGeometry? _base, _anchor;
   (int, int, String, String, bool)? _identity;
   int? _lastCapture,
@@ -56,6 +56,7 @@ class ShoulderPressAnalyzer {
       _peakSince,
       _returnSince;
   int? _unavailableSince, _rearmSince;
+  int? _lastAcceptedDelivery;
   int _reps = 0, _partials = 0, _tracked = 0, _rejected = 0, _samples = 0;
   bool _full = false;
   bool _requiresBottomReset = false;
@@ -107,13 +108,16 @@ class ShoulderPressAnalyzer {
     _unavailableSince = null;
     _decision = 'paused';
     _lastCapture = _lastNow = null;
+    _lastAcceptedDelivery = null;
   }
 
   ShoulderPressUpdate tick({required int nowMicros}) {
     if (_lastNow == null || nowMicros <= _lastNow!) return snapshot;
     final elapsed = nowMicros - _lastNow!;
-    if (_lastCapture == null ||
-        nowMicros - _lastCapture! > maximumFrameAgeMicros) {
+    // Capture age is checked on incoming observations. Between results, measure
+    // delivery absence so inference latency does not consume the watchdog budget.
+    if (_lastAcceptedDelivery == null ||
+        nowMicros - _lastAcceptedDelivery! > maximumFrameAgeMicros) {
       _rejected += elapsed;
       _invalidate();
       _health = TrackingStatus.lost;
@@ -206,6 +210,7 @@ class ShoulderPressAnalyzer {
       _decision = 'prolonged_loss';
     }
     _unavailableSince = null;
+    _lastAcceptedDelivery = nowMicros;
     if (_base == null) {
       _rejected += elapsed;
       if (!g.neutral || !g.symmetric) {

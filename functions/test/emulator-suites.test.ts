@@ -3,11 +3,11 @@ import {readdirSync, readFileSync} from 'node:fs';
 import {resolve} from 'node:path';
 import {expect, it} from 'vitest';
 
-const {suites, configFor} = createRequire(resolve('package.json'))('./emulator/run-suites.cjs');
+const {suites, configFor, standaloneTests} = createRequire(resolve('package.json'))('./emulator/run-suites.cjs');
 
 it('runs every emulator test in exactly one suite without dropping dedicated tests', () => {
   const files = readdirSync('emulator').filter(file => file.endsWith('.test.ts')).sort();
-  const selected = Object.values(suites).flatMap((suite: any) => suite.tests).sort();
+  const selected = [...Object.values(suites).flatMap((suite: any) => suite.tests), ...standaloneTests].sort();
   expect(selected).toEqual(files.map(file => `emulator/${file}`));
   expect(new Set(selected).size).toBe(selected.length);
 });
@@ -22,6 +22,19 @@ it('preserves dedicated loopback ports and demo-only projects for isolated suite
   expect(configFor('reporting').emulators.storage).toEqual({host: '127.0.0.1', port: 19200});
   expect(suites.reporting.tests).toContain('emulator/reward-cover-upload.test.ts');
   expect(() => configFor('production')).toThrow();
+});
+
+it('keeps recommendation delivery on its standalone guarded emulator', () => {
+  expect(standaloneTests).toContain('emulator/module13-d.test.ts');
+  expect(suites.core.tests).not.toContain('emulator/module13-d.test.ts');
+});
+it('keeps final Module13 acceptance on its own guarded standalone emulator',()=>{
+ expect(standaloneTests).toContain('emulator/module13-e.test.ts');
+ expect(suites.core.tests).not.toContain('emulator/module13-e.test.ts');
+});
+it('keeps evidence-derived final integration isolated from legacy suites',()=>{
+ expect(standaloneTests).toContain('emulator/module13-final.test.ts');
+ expect(suites.core.tests).not.toContain('emulator/module13-final.test.ts');
 });
 
 it('routes every fixed-port test to an emulator that actually exposes that port', () => {

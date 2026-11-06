@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:gainpath_domain/gainpath_domain.dart' show SessionScope;
 import 'package:gainpath_pose/gainpath_pose.dart';
 import 'package:gainpath_mobile/features/workout/application/pose_preview_controller.dart';
+import 'squat_processing_controller_test.dart' as squat_fixture;
 
 class _Camera implements PoseCameraSource {
   int starts = 0, stops = 0, invalidations = 0;
@@ -57,6 +58,79 @@ class _Detector implements ManagedPoseDetector {
 
 void main() {
   final scope = SessionScope(userId: 'user', organizationId: 'gainpath');
+  testWidgets(
+      'squat overlay survives capture-age crossing after a fresh delayed result and expires on real absence',
+      (tester) async {
+    final camera = _Camera(), detector = _Detector();
+    var now = 100000;
+    final received = <PoseFrame>[];
+    final c = PosePreviewController(
+        scope: scope,
+        activeScope: () => scope,
+        camera: camera,
+        detectorFactory: () async => detector,
+        clockMicros: () => now,
+        overlayUsesDeliveryClock: true,
+        onRefined: received.add);
+    await c.start(consented: true);
+    detector.pending = Completer<PoseFrame>();
+    camera.receive!(PoseInput(timestampMicros: now));
+    now = 300000;
+    detector.pending!.complete(squat_fixture.frame(100000, 175));
+    await tester.pump();
+    expect(received.length, 1);
+    now = 400000;
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(c.frame, isNotNull); // capture age300ms, result age100ms.
+    expect(c.frame!.capturedAtMicros, 100000);
+    expect(received.length,
+        1); // Held drawing is never a new analysis observation.
+    now = 560000;
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(c.frame, isNull); // No result for260ms: hide it.
+    detector.pending = Completer<PoseFrame>();
+    now = 700000;
+    camera.receive!(PoseInput(timestampMicros: now));
+    detector.pending!.complete(squat_fixture.frame(now, 175));
+    await tester.pump();
+    expect(c.frame!.landmarks, isNotEmpty);
+    detector.pending = Completer<PoseFrame>();
+    now = 800000;
+    camera.receive!(PoseInput(timestampMicros: now));
+    detector.pending!.complete(PoseFrame(
+        capturedAtMicros: now,
+        detectorId: 'fixture',
+        modelVersion: '1',
+        landmarks: {}));
+    await tester.pump();
+    expect(c.frame!.landmarks,
+        isEmpty); // Never hold a ghost over true missing detection.
+    await c.close();
+    c.dispose();
+  });
+  testWidgets(
+      'squat delivery overlay does not rescue genuinely stale detector results',
+      (tester) async {
+    final camera = _Camera(), detector = _Detector();
+    var now = 100000;
+    final c = PosePreviewController(
+        scope: scope,
+        activeScope: () => scope,
+        camera: camera,
+        detectorFactory: () async => detector,
+        clockMicros: () => now,
+        overlayUsesDeliveryClock: true);
+    await c.start(consented: true);
+    detector.pending = Completer<PoseFrame>();
+    camera.receive!(PoseInput(timestampMicros: now));
+    now = 400001;
+    detector.pending!.complete(squat_fixture.frame(100000, 175));
+    await tester.pump();
+    expect(c.frame, isNull);
+    expect(c.displayedFrames, 0);
+    await c.close();
+    c.dispose();
+  });
   testWidgets(
       'refined callback receives delivery once and excludes late pause results',
       (tester) async {

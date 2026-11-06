@@ -1,3 +1,4 @@
+import 'firebase_data_scope.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:gainpath_domain/content.dart';
@@ -27,8 +28,7 @@ class FirebaseAnnouncementReader implements AnnouncementReader {
   Future<AnnouncementPage> loadAnnouncements({String? afterId}) async {
     _check();
     Query<Map<String, dynamic>> query = _db
-        .collection('orgs')
-        .doc(scope.organizationId)
+        .scopeRoot(scope)
         .collection('announcements')
         .where('status', isEqualTo: 'published')
         .orderBy(FieldPath.documentId);

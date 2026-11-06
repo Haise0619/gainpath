@@ -1,0 +1,5 @@
+const fs=require('node:fs'),path=require('node:path'),{spawnSync}=require('node:child_process');
+const root=path.resolve(__dirname,'..'),out=path.resolve(root,'../build/fyp-cohort-integration');fs.mkdirSync(out,{recursive:true});
+const selected=fs.readdirSync(path.join(root,'test')).filter(n=>/^(?:fyp-|recommendation-|exercise-insights|workout-evidence|evidence-|firestore-exercise|firestore-recommendation|trainer-candidate|content-candidate|gemini-recommendation|admin-(?:workout-reporting|reporting|observed-activity|check-in-reporting)|workout-backup|workout-programs|member-provisioning|module13-demo-access|module13-demo-callables|demo-dataset|demo-seed|shared-dataset-plan).*\.test\.ts$/.test(n)).sort().map(n=>'test/'+n);
+fs.writeFileSync(path.join(out,'backend-selected-files.json'),JSON.stringify(selected,null,2)+'\n');
+const result=spawnSync(process.execPath,[require.resolve('vitest/vitest.mjs'),'run',...selected,'--reporter=default','--reporter=json','--outputFile='+path.join(out,'backend-results.json')],{cwd:root,stdio:'inherit',windowsHide:true});if(result.error)throw result.error;process.exitCode=result.status??1;

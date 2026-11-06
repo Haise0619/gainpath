@@ -11,11 +11,14 @@ import 'package:gainpath_mobile/app/routing/real_squat_route.dart';
 import 'package:gainpath_mobile/features/workout/domain/published_routine_catalog_repository.dart';
 import 'package:gainpath_mobile/features/workout/domain/published_routine_view.dart';
 import 'package:gainpath_mobile/features/workout/presentation/member/workout_prep_screen.dart';
+import 'package:gainpath_mobile/features/workout/presentation/member/routine_screen.dart';
 import 'package:gainpath_mobile/app/routing/routine_journey_route.dart';
 import 'package:gainpath_mobile/features/analytics/data/local_member_progress_repository.dart';
 import 'package:gainpath_mobile/features/workout/data/workout_session_repository.dart';
 import 'package:gainpath_mobile/features/workout/domain/real_workout_sync.dart';
 import 'support/fitness_profile_fake.dart';
+import 'workout_program_controller_test.dart' show MemoryProgramStore;
+import 'routine_journey_controller_test.dart' show MemoryJourneyStore;
 
 PublishedRoutine routine(String id, String title) => PublishedRoutine(
         id: id,
@@ -74,6 +77,8 @@ void main() {
     final before = (await sync.read()).toJson();
     await tester.pumpWidget(GainPathMobileApp.injected(
         authRepository: auth,
+        programStoreFactory: (scope) async => MemoryProgramStore(scope),
+        routineJourneyStoreFactory: (scope) async => MemoryJourneyStore(scope),
         profileRepositoryFactory: profiles.repository,
         routineCatalogFactory: (_, active) => catalog,
         progressRepositoryFactory: (scope, active) async =>
@@ -91,11 +96,9 @@ void main() {
         'a');
     await tester.tap(find.text('Workout').last);
     await tester.pumpAndSettle();
-    final dropdown = find.byType(DropdownButtonFormField<String>);
-    await tester.ensureVisible(dropdown);
-    await tester.tap(dropdown);
+    await tester.tap(find.text('Change workout'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Routine B · b').last);
+    await tester.tap(find.text('Routine B').last);
     await tester.pumpAndSettle();
     expect(
         tester
@@ -134,8 +137,11 @@ void main() {
             .title,
         'Republished B');
     catalog.records = [routine('a', 'Routine A'), routine('b', 'Updated B')];
-    await tester.ensureVisible(find.byTooltip('Refresh routines'));
+    await tester.tap(find.text('Change workout'));
+    await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('Refresh routines'));
+    await tester.pumpAndSettle();
+    Navigator.of(tester.element(find.text('Choose a workout'))).pop();
     await tester.pumpAndSettle();
     expect(
         tester
@@ -145,19 +151,17 @@ void main() {
         'Updated B');
     await tester.ensureVisible(find.text('View routine'));
     await tester.tap(find.text('View routine'));
-    // App-owned journey initialization uses native storage, outside this injected UI test.
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pumpAndSettle();
     expect(
         tester
-            .widget<RoutineJourneyRoute>(find.byType(RoutineJourneyRoute))
-            .routine
+            .widget<RoutineScreen>(find.byType(RoutineScreen))
+            .publishedRoutine!
             .id,
         'b');
-    Navigator.of(tester.element(find.byType(RoutineJourneyRoute))).pop();
+    Navigator.of(tester.element(find.byType(RoutineScreen))).pop();
     await tester.pumpAndSettle();
-    await tester.ensureVisible(find.text('Watch tutorial'));
-    await tester.tap(find.text('Watch tutorial'));
+    await tester.ensureVisible(find.text('Exercise b'));
+    await tester.tap(find.text('Exercise b'));
     await tester.pumpAndSettle();
     expect(
         tester
@@ -167,7 +171,7 @@ void main() {
         'unsupported-b');
     await tester.pageBack();
     await tester.pumpAndSettle();
-    final start = find.text('Start guided session');
+    final start = find.text('Start workout');
     await tester.ensureVisible(start);
     await tester.tap(start);
     await tester.pump();

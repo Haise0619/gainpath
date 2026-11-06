@@ -44,7 +44,10 @@ void main() {
 
       expect(tester.takeException(), isNull);
       expect(find.byType(AdminShell), findsOneWidget);
-      expect(find.text('GainPath — responsive-org'), findsOneWidget);
+      expect(find.text('GAINPATH / ADMIN'), findsOneWidget);
+      final sidebar = find.byWidgetPredicate((w) => w is Container && w.constraints?.maxWidth == 224);
+      expect(sidebar, findsOneWidget);
+      expect(tester.getSize(sidebar).width, 224);
     });
 
     testWidgets(

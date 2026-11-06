@@ -1,0 +1,5 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {"outDir": "../build/gainpath-shared-data-20261103/compiled"},
+  "include": ["src/modules/demo/shared-dataset-plan.ts"]
+}

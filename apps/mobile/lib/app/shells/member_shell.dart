@@ -1,3 +1,7 @@
+import 'package:gainpath_data/gainpath_data.dart'
+    show FypDatasetTransportFactory;
+import '../../infrastructure/firebase/firebase_fyp_dataset.dart';
+import '../di/member_recommendation_factory.dart';
 import '../../infrastructure/firebase/firebase_module9_repository.dart';
 import '../notifications/member_notifications_screen.dart';
 import '../routing/app_check_in_host.dart';
@@ -18,6 +22,10 @@ import '../routing/member_progress_route.dart';
 import '../routing/workout_prep_route.dart';
 import '../di/local_member_progress_factory.dart';
 import '../di/workout_backup_factory.dart';
+import '../di/program_store_factory.dart';
+import '../di/workout_store_factory.dart';
+import '../../features/workout/domain/program_enrollment.dart';
+import '../../features/workout/domain/routine_journey.dart';
 import '../di/published_routine_catalog_factory.dart';
 import '../di/equipment_catalog_factory.dart';
 import '../di/coach_profile_factory.dart';
@@ -37,9 +45,12 @@ class MemberShell extends StatefulWidget {
   const MemberShell(
       {super.key,
       this.liveSession,
+      this.datasetTransportFactory,
       this.liveProfile,
       this.routineLoader,
       this.routineCatalogFactory,
+      this.programStoreFactory,
+      this.routineJourneyStoreFactory,
       this.announcementReaderFactory,
       this.equipmentReaderFactory,
       this.coachDirectoryFactory,
@@ -53,9 +64,14 @@ class MemberShell extends StatefulWidget {
       this.memberSettingsBuilder});
 
   final AuthSession? liveSession;
+  final FypDatasetTransportFactory? datasetTransportFactory;
   final FitnessProfile? liveProfile;
   final Future<PublishedRoutine?> Function()? routineLoader;
   final PublishedRoutineCatalogFactory? routineCatalogFactory;
+  final Future<ProgramEnrollmentStore> Function(SessionScope)?
+      programStoreFactory;
+  final Future<RoutineJourneyStore> Function(SessionScope)?
+      routineJourneyStoreFactory;
   final AnnouncementReader Function(SessionScope, SessionScope? Function())?
       announcementReaderFactory;
   final EquipmentReaderFactory? equipmentReaderFactory;
@@ -208,25 +224,38 @@ class _MemberShellState extends State<MemberShell> {
           onOpenNotifications: () => Navigator.push(
               context,
               MaterialPageRoute(
-                  builder: (_) => MemberNotificationsScreen(
-                        session: session,
-                        announcementReader: _announcements,
-                        module9Repository: session == null
-                            ? null
-                            : FirebaseModule9Repository(
-                                scope: session.scope,
-                                isCurrent: () =>
-                                    _activeScope() == session.scope),
-                        bookingListFactory: widget.bookingListFactory,
-                        isCurrent: () =>
-                            session == null ||
-                            _activeScope() == session.scope,
-                        onOpenBookings: session == null
-                            ? null
-                            : () => openBookingList(
-                                context, session,
-                                factory: widget.bookingListFactory),
-                      ))),
+                  builder: (_) => session?.datasetScope != null
+                      ? buildMemberRecommendationNotifications(session!,
+                          datasetTransport: (widget.datasetTransportFactory ??
+                                  firebaseFypDatasetTransport)(session.scope,
+                              () => _activeScope() == session.scope),
+                          coachDirectory: widget.coachDirectoryFactory?.call(
+                              session.scope,
+                              () => _activeScope() == session.scope),
+                          catalog: widget.routineCatalogFactory
+                              ?.call(session.scope, _activeScope),
+                          announcements: _announcements,
+                          bookingFactory: widget.bookingFactory,
+                          bookingListFactory: widget.bookingListFactory,
+                          availabilityFactory: widget.coachAvailabilityFactory)
+                      : MemberNotificationsScreen(
+                          session: session,
+                          announcementReader: _announcements,
+                          module9Repository: session == null
+                              ? null
+                              : FirebaseModule9Repository(
+                                  scope: session.scope,
+                                  isCurrent: () =>
+                                      _activeScope() == session.scope),
+                          bookingListFactory: widget.bookingListFactory,
+                          isCurrent: () =>
+                              session == null ||
+                              _activeScope() == session.scope,
+                          onOpenBookings: session == null
+                              ? null
+                              : () => openBookingList(context, session,
+                                  factory: widget.bookingListFactory),
+                        ))),
           liveProfile: widget.liveProfile,
           localProgress: progress?.progress,
           routineProgress: progress?.routines,
@@ -266,6 +295,10 @@ class _MemberShellState extends State<MemberShell> {
           onStartWorkout: () => setState(() => _index = 1)),
       WorkoutPrepRoute(
         live: connected,
+        programStoreFactory:
+            widget.programStoreFactory ?? createProgramEnrollmentStore,
+        routineStoreFactory:
+            widget.routineJourneyStoreFactory ?? createRoutineJourneyStore,
         publishedRoutine: catalog?.selected,
         routineStatusMessage: catalog == null ? null : _catalogLabel(catalog),
         routineLoadFailed: catalog?.status == CatalogStatus.error,
@@ -273,6 +306,7 @@ class _MemberShellState extends State<MemberShell> {
             ? null
             : PublishedRoutineCatalogControls(
                 state: catalog,
+                catalogCubit: _catalog,
                 onRefresh: _catalog!.refresh,
                 onSelect: _catalog!.select,
                 onLoadMore: _catalog!.loadMore),

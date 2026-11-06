@@ -10,6 +10,8 @@ import '../../application/admin_reporting_gateway.dart';
 import '../../application/admin_operational_metrics.dart';
 import 'original_report_data_widgets.dart';
 import 'admin_workout_analytics.dart';
+import 'unified_business_section.dart';
+import 'business_dashboard.dart';
 
 /// AD-M12.1 — View Admin Dashboard.
 class AdminDashboardScreen extends StatefulWidget {
@@ -37,7 +39,7 @@ class AdminDashboardScreen extends StatefulWidget {
 
 class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   bool _operational = false;
-  static const _ranges = ['Today', 'This week', 'This month'];
+  static const _ranges = ['Today', 'This week', 'This month', 'Last 90 days'];
   String _range = 'Today';
   AdminReportingCubit? _reportingCubit;
 
@@ -91,11 +93,10 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       try {
         final gateway = context.read<AdminReportingGateway>();
         _operational = gateway is OperationalAdminReportingGateway;
+        if(gateway is UnifiedAdminReportingPresentation && (gateway as UnifiedAdminReportingPresentation).unified) _range='Last 90 days';
         _reportingCubit = AdminReportingCubit(
             gateway: gateway,
-            initialQuery: _operational
-                ? operationalDateQuery(DateTime.now(), days: 1)
-                : _rangeQuery(_range))
+            initialQuery: _rangeQuery(_range))
           ..load();
       } catch (_) {}
     }
@@ -114,7 +115,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           ? 1
           : range == 'This week'
               ? local.weekday
-              : local.day;
+              : range=='Last 90 days'?90:local.day;
       return operationalDateQuery(DateTime.now(), days: days);
     }
     final now = DateTime.now();
@@ -123,7 +124,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         ? today
         : range == 'This week'
             ? today.subtract(Duration(days: now.weekday - 1))
-            : DateTime(now.year, now.month, 1);
+            : range=='Last 90 days'?today.subtract(const Duration(days:89)):DateTime(now.year, now.month, 1);
     return AdminReportQuery(range: DateTimeRange(start: start, end: now));
   }
 
@@ -203,6 +204,10 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
 
   Widget _buildContent(BuildContext context, AdminReportingSnapshot? snapshot,
       {AdminReportingState? reportingState}) {
+    final gateway=widget.live?context.read<AdminReportingGateway>():null;
+    if(reportingState!=null&&gateway is UnifiedAdminReportingPresentation&&(gateway as UnifiedAdminReportingPresentation).unified){
+      return Scaffold(backgroundColor:Colors.transparent,body:BusinessDashboard(state:reportingState,range:_range,ranges:_ranges,onRange:_onRangeSelected,onRefresh:_reportingCubit!.refresh));
+    }
     return Scaffold(
       backgroundColor: Colors.transparent,
       body: LayoutBuilder(
@@ -291,6 +296,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                       .toList(),
                 ),
                 const SizedBox(height: 24),
+                if(snapshot?.unified!=null) UnifiedBusinessSection(snapshot:snapshot!),
                 wide
                     ? Row(
                         crossAxisAlignment: CrossAxisAlignment.start,

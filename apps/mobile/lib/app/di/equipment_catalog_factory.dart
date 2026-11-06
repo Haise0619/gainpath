@@ -32,7 +32,9 @@ Widget buildMemberEquipmentCatalog(AuthSession expected,
     });
 
 Widget buildMemberEquipmentScanner(AuthSession expected,
-        {EquipmentReaderFactory? factory, VoidCallback? onBrowse}) =>
+        {EquipmentReaderFactory? factory,
+        VoidCallback? onBrowse,
+        EquipmentImagePicker? imagePicker}) =>
     Builder(builder: (context) {
       final auth = context.read<AuthBloc>();
       SessionScope? active() => context.mounted &&
@@ -49,6 +51,7 @@ Widget buildMemberEquipmentScanner(AuthSession expected,
                   connected: true,
                   organizationId: expected.scope.organizationId,
                   reader: reader,
+                  imagePicker: imagePicker,
                   onBrowse: onBrowse ??
                       () => Navigator.push(
                           context,

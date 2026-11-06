@@ -32,7 +32,7 @@ class FirebaseCoachProfileRepository implements CoachProfileRepository {
     _check();
     try {
       final doc = await _db
-          .doc('orgs/${scope.organizationId}/$collection/${scope.userId}')
+          .doc('${scope.dataRootPath}/$collection/${scope.userId}')
           .get(const GetOptions(source: Source.server))
           .timeout(const Duration(seconds: 20));
       _check();
@@ -60,7 +60,7 @@ class FirebaseCoachProfileRepository implements CoachProfileRepository {
       required String requestId}) async {
     _check();
     try {
-      final response = await firebaseCallable('saveCoachProfileCommand',
+      final response = await firebaseScopedCallable(scope, 'saveCoachProfileCommand',
               functions: _functions)
           .call<Map<String, dynamic>>({
         'schemaVersion': 1,

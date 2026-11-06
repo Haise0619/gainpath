@@ -44,9 +44,9 @@ class FirebaseCoachProfileAdminRepository
 
   @override
   Future<bool> canManageDirectory() async {
-    final user = await _get('users/${scope.userId}'),
+    final user = await _get(scope.userDocumentPath),
         membership =
-            await _get('orgs/${scope.organizationId}/members/${scope.userId}');
+            await _get('${scope.dataRootPath}/members/${scope.userId}');
     return user?['organizationId'] == scope.organizationId &&
         membership?['organizationId'] == scope.organizationId &&
         membership?['status'] == 'active' &&
@@ -65,7 +65,7 @@ class FirebaseCoachProfileAdminRepository
     await _admin();
     try {
       Query<Map<String, dynamic>> query = _db
-          .collection('orgs/${scope.organizationId}/$collection')
+          .collection('${scope.dataRootPath}/$collection')
           .orderBy(FieldPath.documentId);
       if (cursor != null) {
         _id(cursor);
@@ -103,7 +103,7 @@ class FirebaseCoachProfileAdminRepository
   Future<CoachPublicationReview> loadReview(String coachId) async {
     await _admin();
     _id(coachId);
-    final root = 'orgs/${scope.organizationId}';
+    final root = scope.dataRootPath;
     final draft = await _get('$root/coachProfiles/$coachId'),
         publication = await _get('$root/coaches/$coachId');
     Map<String, dynamic>? membership;
@@ -166,7 +166,7 @@ class FirebaseCoachProfileAdminRepository
       throw const CoachRepositoryException('failed-precondition');
     }
     try {
-      final response = await firebaseCallable('setCoachDirectoryStatusCommand',
+      final response = await firebaseScopedCallable(scope, 'setCoachDirectoryStatusCommand',
               functions: _functions)
           .call<Map<String, dynamic>>({
         'schemaVersion': 1,

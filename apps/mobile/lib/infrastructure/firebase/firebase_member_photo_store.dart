@@ -45,7 +45,7 @@ class FirebaseAccountPhotoStore implements AccountPhotoStore {
             16, (_) => random.nextInt(256).toRadixString(16).padLeft(2, '0'))
         .join();
     final path =
-        'orgs/${scope.organizationId}/memberProfilePhotos/${scope.userId}/$id';
+        '${scope.dataRootPath}/memberProfilePhotos/${scope.userId}/$id';
     try {
       await _storage.ref(path).putData(
           photo.bytes,

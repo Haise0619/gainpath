@@ -145,7 +145,8 @@ void main() {
     expect(find.text('Membership unavailable'), findsOneWidget);
     expect(find.text('Free member'), findsNothing);
     repo.pending = null;
-    await tester.tap(find.byTooltip('Refresh membership'));
+    expect(find.byTooltip('Refresh membership'), findsNothing);
+    await tester.drag(find.byType(Scrollable).first, const Offset(0, 500));
     await tester.pumpAndSettle();
     expect(find.text('Free member'), findsOneWidget);
     expect(repo.reads, 2);

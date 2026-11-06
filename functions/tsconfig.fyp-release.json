@@ -1,0 +1,1 @@
+{"extends":"./tsconfig.json","compilerOptions":{"outDir":"../build/fyp-live-20261104/release-compiled"},"include":["src/fyp-release-index.ts"]}

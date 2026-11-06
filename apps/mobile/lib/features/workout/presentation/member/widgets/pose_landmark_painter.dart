@@ -101,7 +101,7 @@ class PoseLandmarkPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     quality?.painted(frame, size.width, size.height, mirrored);
-    final debug = diagnostics?.enabled == true;
+    final debug = diagnostics?.enabled == true && diagnostics?.observationOnly != true;
     final connections = !debug ||
         const bool.fromEnvironment('GAINPATH_POSE_RENDER_LINKS',
             defaultValue: true);

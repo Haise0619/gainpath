@@ -10,6 +10,8 @@ import 'package:gainpath_mobile/features/workout/domain/published_routine_view.d
 import 'package:gainpath_mobile/features/workout/domain/tutorial_player.dart';
 import 'package:gainpath_mobile/features/workout/presentation/member/published_exercise_tutorial_screen.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'workout_program_controller_test.dart' show MemoryProgramStore;
+import 'routine_journey_controller_test.dart' show MemoryJourneyStore;
 
 PublishedRoutineExercise row({String? url}) => PublishedRoutineExercise(
     exerciseId: 'exact-id',
@@ -411,16 +413,22 @@ void main() {
     await tester.pumpWidget(BlocProvider.value(
         value: auth,
         child: MaterialApp(
-          home: WorkoutPrepRoute(publishedRoutine: routine),
+          home: WorkoutPrepRoute(
+              publishedRoutine: routine,
+              programStoreFactory: (scope) async => MemoryProgramStore(scope),
+              routineStoreFactory: (scope) async => MemoryJourneyStore(scope)),
         )));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Watch tutorial'));
+    await tester.tap(find.text('Published exercise'));
     await tester.pumpAndSettle();
     final route = tester
         .widget<ExerciseTutorialRoute>(find.byType(ExerciseTutorialRoute));
     expect(route.scope, auth.state.session!.scope);
     expect(identical(route.exercise, routine.exercises.single), true);
     expect(find.text('Tutorial video unavailable'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('60 sec'), 200);
+    expect(find.text('60 sec'), findsOneWidget);
+    expect(find.text('Guided only'), findsOneWidget);
     await tester.runAsync(() async {
       auth.add(const LoggedOut());
       await auth.stream.firstWhere((s) => s.status == AuthStatus.signedOut);

@@ -20,6 +20,10 @@ for (const suite of Object.values(suites)) {
   suite.tests = suite.tests.map(name => `emulator/${name}.test.ts`);
 }
 const dedicated = new Set(Object.values(suites).flatMap(suite => suite.tests));
+// Module13 local suites use guarded projects/ports and never enter legacy core.
+const standaloneTests = ['emulator/module13-a2.test.ts', 'emulator/module13-c.test.ts',
+  'emulator/module13-d.test.ts', 'emulator/module13-e.test.ts', 'emulator/module13-final.test.ts', 'emulator/module13-demo.test.ts'];
+for (const file of standaloneTests) dedicated.add(file);
 suites.core.tests = readdirSync(__dirname).filter(name => name.endsWith('.test.ts'))
   .map(name => `emulator/${name}`).filter(name => !dedicated.has(name)).sort();
 
@@ -71,5 +75,5 @@ function main() {
   }
   return 0;
 }
-module.exports = {suites, configFor};
+module.exports = {suites, configFor, standaloneTests};
 if (require.main === module) process.exitCode = main();

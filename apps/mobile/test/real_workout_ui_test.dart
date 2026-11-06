@@ -58,7 +58,7 @@ void main() {
         child: MaterialApp(
             home: WorkoutPrepScreen(live: true, publishedRoutine: routine))));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Start guided session'));
+    await tester.tap(find.text('Start workout'));
     await tester.pumpAndSettle();
     final accept = find.widgetWithText(FilledButton, 'Accept and start');
     expect(tester.widget<FilledButton>(accept).onPressed, isNull);
@@ -110,7 +110,7 @@ void main() {
         child: MaterialApp(
             home: WorkoutPrepScreen(live: true, publishedRoutine: routine))));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Start guided session'));
+    await tester.tap(find.text('Start workout'));
     await tester.pumpAndSettle();
     await tester.tap(find.byType(Checkbox).first);
     await tester.tap(find.byType(Checkbox).at(1));
@@ -172,7 +172,7 @@ void main() {
                     return Scaffold(body: Text(launch.routineId));
                   })))));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Start guided session'));
+      await tester.tap(find.text('Start workout'));
       await tester.pumpAndSettle();
       expect(launched, isNull);
       await tester.tap(find.byType(Checkbox).first);
@@ -233,7 +233,7 @@ void main() {
                   fail('A changed account must not open a measured route.');
                 })))));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Start guided session'));
+    await tester.tap(find.text('Start workout'));
     await tester.pumpAndSettle();
     await tester.tap(find.byType(Checkbox).first);
     await tester.tap(find.byType(Checkbox).at(1));

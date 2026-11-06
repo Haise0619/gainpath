@@ -1,18 +1,19 @@
 import 'dart:async';
 import '../../domain/exercise_tracker_dispatcher.dart';
 import '../../domain/published_routine_view.dart';
+import '../../application/workout_hub_program.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:gainpath_identity/gainpath_identity.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
 import 'package:gainpath_domain/workout.dart';
+import 'package:gainpath_domain/gainpath_domain.dart' show AppRole;
 import 'equipment_scanner_screen.dart';
 import 'camera_setup_screen.dart';
 import 'exercise_tutorial_screen.dart';
 import '../../../../navigation/workout_navigation.dart';
 import 'routine_screen.dart';
-import 'live_workout_screen.dart';
-import 'widgets/workout_media.dart';
+import 'widgets/workout_exercise_image.dart';
 
 class WorkoutPrepScreen extends StatelessWidget {
   const WorkoutPrepScreen(
@@ -24,6 +25,11 @@ class WorkoutPrepScreen extends StatelessWidget {
       this.routineCatalogControls,
       this.onOpenEquipment,
       this.onOpenPrograms,
+      this.scheduledWorkout,
+      this.onStartScheduled,
+      this.programLoading = false,
+      this.programLoadError = false,
+      this.organizationId,
       this.trackers = const ExerciseTrackerDispatcher(),
       this.routes = const WorkoutPrepRoutes()});
   final bool live;
@@ -33,255 +39,234 @@ class WorkoutPrepScreen extends StatelessWidget {
   final Widget? routineCatalogControls;
   final VoidCallback? onOpenEquipment;
   final VoidCallback? onOpenPrograms;
+  final ScheduledWorkoutPreview? scheduledWorkout;
+  final VoidCallback? onStartScheduled;
+  final bool programLoading, programLoadError;
+  final String? organizationId;
   final WorkoutPrepRoutes routes;
   final ExerciseTrackerDispatcher trackers;
 
   @override
   Widget build(BuildContext context) {
+    final selectedRoutine = scheduledWorkout?.routine ?? publishedRoutine;
     final routine = live
-        ? publishedRoutine?.exercises ?? <Exercise>[]
+        ? selectedRoutine?.exercises
+                .where((e) =>
+                    scheduledWorkout == null ||
+                    e.dayNumber == scheduledWorkout!.day)
+                .toList() ??
+            <PublishedRoutineExercise>[]
         : context.read<WorkoutRepository>().routine;
     final totalSets = routine.fold<int>(0, (sum, e) => sum + e.sets);
+    final hasWorkout = !programLoading &&
+        routine.isNotEmpty &&
+        (!live || selectedRoutine != null);
+    final title = live ? selectedRoutine?.title : 'Lower Body Strength';
+    final isMultiDay = selectedRoutine != null &&
+        selectedRoutine.exercises.map((e) => e.dayNumber).toSet().length > 1;
+    final int? duration = live
+        ? scheduledWorkout != null && isMultiDay
+            ? null
+            : selectedRoutine?.estimatedMinutes
+        : 45;
+    final multipleDays = live && scheduledWorkout == null && isMultiDay;
+
+    void openExercise(int index) {
+      if (live) {
+        final builder = routes.tutorialBuilder;
+        if (builder == null) {
+          showUnavailable(context);
+          return;
+        }
+        final exercise = routine[index] as PublishedRoutineExercise;
+        Navigator.push(context,
+            MaterialPageRoute(builder: (ctx) => builder(ctx, exercise)));
+      } else {
+        Navigator.push(
+            context,
+            MaterialPageRoute(
+                builder: (_) =>
+                    ExerciseTutorialScreen(exercise: routine[index])));
+      }
+    }
+
+    void openRoutine() {
+      final display = selectedRoutine == null
+          ? null
+          : PublishedRoutine(
+              id: selectedRoutine.id,
+              sourceBlueprintId: selectedRoutine.sourceBlueprintId,
+              title: selectedRoutine.title,
+              estimatedMinutes: selectedRoutine.estimatedMinutes,
+              exercises: routine.cast<PublishedRoutineExercise>(),
+              difficulty: selectedRoutine.difficulty,
+            );
+      Navigator.push(
+          context,
+          MaterialPageRoute(
+              builder: (_) => live
+                  ? RoutineScreen(
+                      publishedRoutine: display,
+                      tutorialBuilder: routes.tutorialBuilder)
+                  : const RoutineScreen()));
+    }
 
     return Scaffold(
-      body: CustomScrollView(
-        slivers: [
-          SliverAppBar(
-            pinned: true,
-            expandedHeight: 200,
-            backgroundColor: AppColors.primaryDark,
-            foregroundColor: Colors.white,
-            elevation: 0,
-            titleTextStyle: Theme.of(context)
-                .textTheme
-                .titleLarge
-                ?.copyWith(color: Colors.white, fontSize: 18),
-            title: const Text('Workout'),
-            flexibleSpace: FlexibleSpaceBar(
-              background: Stack(
-                fit: StackFit.expand,
-                children: [
-                  networkHero(live
-                      ? (routine.isEmpty ? '' : routine.first.imageUrl)
-                      : routineHeroImage),
-                  DecoratedBox(
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: [
-                          AppColors.ink.withValues(alpha: 0.15),
-                          AppColors.ink.withValues(alpha: 0.82),
-                        ],
-                      ),
-                    ),
-                  ),
-                  SafeArea(
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(20, 0, 20, 18),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisAlignment: MainAxisAlignment.end,
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 10, vertical: 5),
-                            decoration: BoxDecoration(
-                              color: Colors.white.withValues(alpha: 0.18),
-                              borderRadius: BorderRadius.circular(999),
-                            ),
-                            child: Text(
-                                live ? 'AVAILABLE ROUTINE' : 'TODAY\'S ROUTINE',
-                                style: TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 10.5,
-                                    fontWeight: FontWeight.w800,
-                                    letterSpacing: 1.1)),
-                          ),
-                          const SizedBox(height: 10),
-                          Text(
-                              live
-                                  ? publishedRoutine?.title ??
-                                      routineStatusMessage ??
-                                      'No published routine yet'
-                                  : 'Lower Body Strength',
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .headlineMedium
-                                  ?.copyWith(
-                                      color: Colors.white, fontSize: 24)),
-                          const SizedBox(height: 6),
-                          Text(
-                            live
-                                ? publishedRoutine == null
-                                    ? routineLoadFailed
-                                        ? 'Could not load routines. Check your connection.'
-                                        : 'Exercises, sets and duration unavailable'
-                                    : '${routine.length} exercises  ·  $totalSets sets  ·  about ${publishedRoutine!.estimatedMinutes} min'
-                                : '${routine.length} exercises  ·  $totalSets sets  ·  about 45 min',
-                            style: TextStyle(
-                                fontSize: 13,
-                                color: Colors.white.withValues(alpha: 0.85)),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          SliverPadding(
-            padding: const EdgeInsets.fromLTRB(16, 20, 16, 24),
-            sliver: SliverList.list(
-              children: [
-                if (onOpenPrograms != null) ...[
-                  _DetourCard(
-                      icon: Icons.calendar_month,
-                      iconColor: AppColors.primary,
-                      title: "Today's Workout",
-                      subtitle:
-                          'Your program, weekly schedule and saved progress',
-                      onTap: onOpenPrograms!),
-                  const SizedBox(height: 12),
-                ],
-                if (routineCatalogControls != null) ...[
-                  routineCatalogControls!,
-                  const SizedBox(height: 12),
-                ],
-                _DetourCard(
-                  icon: Icons.play_circle_fill_rounded,
-                  iconColor: AppColors.primary,
-                  title: 'Watch tutorial',
-                  subtitle: live
-                      ? routine.isEmpty
-                          ? 'No published exercise is available'
-                          : 'Review the published tutorial for ${routine.first.name}'
-                      : 'See proper form for ${routine.first.name}',
-                  image: routine.isEmpty ? '' : routine.first.imageUrl,
-                  onTap: live
-                      ? () {
-                          final builder = routes.tutorialBuilder;
-                          if (routine.isEmpty || builder == null) {
-                            showUnavailable(context);
-                            return;
-                          }
-                          final row = publishedRoutine!.exercises.first;
-                          Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                  builder: (ctx) => builder(ctx, row)));
-                        }
-                      : () => Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                              builder: (_) => ExerciseTutorialScreen(
-                                  exercise: routine.first))),
-                ),
-                const SizedBox(height: 12),
-                _DetourCard(
-                  icon: Icons.list_alt_rounded,
-                  iconColor: AppColors.info,
-                  title: 'View routine',
-                  subtitle: live
-                      ? publishedRoutine == null
-                          ? 'No published routine is available yet'
-                          : 'Full exercise list and set targets'
-                      : 'Full exercise list, sets, and rest intervals',
-                  onTap: live
-                      ? publishedRoutine == null
-                          ? () => showUnavailable(context)
-                          : routes.journeyBuilder != null
-                              ? () => _openRoutineJourney(context)
-                              : () => Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                      builder: (_) => RoutineScreen(
-                                          publishedRoutine: publishedRoutine,
-                                          tutorialBuilder:
-                                              routes.tutorialBuilder)))
-                      : () => Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                              builder: (_) => const RoutineScreen())),
-                ),
-                const SizedBox(height: 12),
-                _DetourCard(
-                  icon: Icons.videocam_rounded,
-                  iconColor: AppColors.accentDark,
-                  title: 'Review camera setup',
-                  subtitle: 'Get the right distance and angle before you start',
-                  onTap: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                          builder: (_) => const CameraSetupScreen())),
-                ),
-                const SizedBox(height: 12),
-                _DetourCard(
-                  icon: Icons.qr_code_scanner_rounded,
-                  iconColor: AppColors.primarySoft,
-                  title: 'Scan equipment',
-                  subtitle:
-                      'Point your camera at a machine for how-to and safety tips',
-                  onTap: live
-                      ? onOpenEquipment ?? () => showUnavailable(context)
-                      : () => Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                              builder: (_) => const EquipmentScannerScreen())),
-                ),
-                const SizedBox(height: 28),
-                if (live)
-                  TextButton(
-                      onPressed: () {
-                        final auth = context.read<AuthBloc>();
-                        final scope = auth.state.session?.scope;
-                        if (scope == null) return;
-                        final destination = routes.savedSessionsBuilder;
-                        if (destination == null) {
-                          showUnavailable(context);
-                          return;
-                        }
-                        Navigator.push(
-                            context,
-                            MaterialPageRoute<void>(
-                                builder: (_) => BlocProvider.value(
-                                    value: auth,
-                                    child: Builder(
-                                        builder: (context) =>
-                                            destination(context, scope)))));
-                      },
-                      child: const Text('Saved squat sessions')),
-                if (const bool.fromEnvironment('GAINPATH_POSE_PREVIEW'))
-                  TextButton(
-                      onPressed: () => _startPosePreview(context),
-                      child: const Text('Try live camera preview')),
-                TextButton(
-                  onPressed: live
-                      ? () => _startRealSession(context)
-                      : () => Navigator.push(
-                          context,
-                          MaterialPageRoute<void>(
-                              builder: (_) => const LiveWorkoutScreen())),
-                  child: const Text('Workout session'),
-                ),
+      body: CustomScrollView(slivers: [
+        SliverAppBar(
+          pinned: true,
+          title: const Text('Workout'),
+        ),
+        SliverPadding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
+          sliver: SliverList.list(children: [
+            if (programLoading) ...[
+              const Panel(
+                  child: Row(children: [
                 SizedBox(
-                  width: double.infinity,
-                  child: FilledButton.icon(
-                    style:
-                        FilledButton.styleFrom(minimumSize: const Size(0, 54)),
-                    onPressed: live
+                    width: 22,
+                    height: 22,
+                    child: CircularProgressIndicator(strokeWidth: 2)),
+                SizedBox(width: 12),
+                Expanded(child: Text('Loading your workout…')),
+              ])),
+            ] else if (hasWorkout) ...[
+              _WorkoutOverview(
+                title: title!,
+                exerciseCount: routine.length,
+                totalSets: totalSets,
+                minutes: duration,
+                scheduledWorkout: scheduledWorkout,
+                imageUrl: routine.first.imageUrl,
+                switcher: routineCatalogControls,
+                onStart: scheduledWorkout != null
+                    ? onStartScheduled ?? () => showUnavailable(context)
+                    : live
                         ? () => _startRealSession(context)
                         : () => _startSession(context),
-                    icon: const Icon(Icons.bolt_rounded),
-                    label: const Text('Start guided session'),
+                journeyFirst: live && routes.journeyBuilder != null,
+              ),
+              const SizedBox(height: 24),
+              Row(children: [
+                Expanded(
+                    child: Text('Exercises in this workout',
+                        style: Theme.of(context).textTheme.titleLarge)),
+                TextButton(
+                    onPressed: openRoutine, child: const Text('View routine')),
+              ]),
+              const SizedBox(height: 8),
+              for (var i = 0; i < routine.length; i++)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: _WorkoutExerciseRow(
+                    index: i + 1,
+                    exercise: routine[i],
+                    day: multipleDays
+                        ? (routine[i] as PublishedRoutineExercise).dayNumber
+                        : null,
+                    tracker: routine[i] is PublishedRoutineExercise &&
+                            organizationId != null
+                        ? trackers
+                            .resolve(
+                                organizationId: organizationId!,
+                                exerciseId:
+                                    (routine[i] as PublishedRoutineExercise)
+                                        .exerciseId)
+                            .tracker
+                        : null,
+                    onTap: () => openExercise(i),
                   ),
                 ),
-              ],
+            ] else if (routineCatalogControls != null) ...[
+              routineCatalogControls!,
+            ] else ...[
+              Panel(
+                  child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                    Text(routineStatusMessage ?? 'No workout selected',
+                        style: Theme.of(context).textTheme.titleLarge),
+                    const SizedBox(height: 8),
+                    Text(
+                        routineLoadFailed
+                            ? 'Check your connection and refresh to try again.'
+                            : 'When a workout is available, select it to see its exercises and start.',
+                        style: Theme.of(context).textTheme.bodyMedium),
+                  ])),
+            ],
+            if (programLoadError) ...[
+              const SizedBox(height: 12),
+              const Text(
+                  'Could not load your training plan. Open My training plan to retry.',
+                  style: TextStyle(color: AppColors.inkSoft)),
+            ],
+            const SizedBox(height: 24),
+            Text('Workout tools',
+                style: Theme.of(context).textTheme.titleLarge),
+            const SizedBox(height: 8),
+            _DetourCard(
+              icon: Icons.videocam_outlined,
+              iconColor: AppColors.primary,
+              title: 'Review camera setup',
+              subtitle: 'Check your distance and camera angle',
+              onTap: () => Navigator.push(context,
+                  MaterialPageRoute(builder: (_) => const CameraSetupScreen())),
             ),
-          ),
-        ],
-      ),
+            const SizedBox(height: 8),
+            _DetourCard(
+              icon: Icons.qr_code_scanner_rounded,
+              iconColor: AppColors.primary,
+              title: 'Scan equipment',
+              subtitle: 'Find instructions and safety tips',
+              onTap: live
+                  ? onOpenEquipment ?? () => showUnavailable(context)
+                  : () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                          builder: (_) => const EquipmentScannerScreen())),
+            ),
+            if (onOpenPrograms != null) ...[
+              const SizedBox(height: 8),
+              _DetourCard(
+                  icon: Icons.calendar_month_outlined,
+                  iconColor: AppColors.primary,
+                  title: 'My training plan',
+                  subtitle: 'View your schedule and saved progress',
+                  onTap: onOpenPrograms),
+            ],
+            if (live) ...[
+              const SizedBox(height: 8),
+              _DetourCard(
+                  icon: Icons.history_rounded,
+                  iconColor: AppColors.primary,
+                  title: 'Saved workout sessions',
+                  subtitle: 'Review your saved workout results',
+                  onTap: () {
+                    final auth = context.read<AuthBloc>();
+                    final scope = auth.state.session?.scope;
+                    if (scope == null) return;
+                    final destination = routes.savedSessionsBuilder;
+                    if (destination == null) {
+                      showUnavailable(context);
+                      return;
+                    }
+                    Navigator.push(
+                        context,
+                        MaterialPageRoute<void>(
+                            builder: (_) => BlocProvider.value(
+                                value: auth,
+                                child: Builder(
+                                    builder: (context) =>
+                                        destination(context, scope)))));
+                  }),
+            ],
+            if (const bool.fromEnvironment('GAINPATH_POSE_PREVIEW'))
+              TextButton(
+                  onPressed: () => _startPosePreview(context),
+                  child: const Text('Try live camera preview')),
+          ]),
+        ),
+      ]),
     );
   }
 
@@ -365,9 +350,12 @@ class WorkoutPrepScreen extends StatelessWidget {
               ExerciseTracker.sideViewCalfRaise => calfRaiseCaptureInstruction,
               ExerciseTracker.sideViewWallPushUp =>
                 wallPushUpCaptureInstruction,
+              ExerciseTracker.sideViewFloorPushUp => floorPushUpCaptureInstruction,
               _ => null,
             },
-            setupConfirmationLabel: tracker ==
+            setupConfirmationLabel: tracker == ExerciseTracker.sideViewFloorPushUp
+                ? floorPushUpSetupConfirmation
+                : tracker ==
                     ExerciseTracker.sideViewWallPushUp
                 ? wallPushUpSetupConfirmation
                 : tracker == ExerciseTracker.frontViewLateralRaise
@@ -447,15 +435,191 @@ class WorkoutPrepScreen extends StatelessWidget {
   }
 }
 
-/// A rich, image-or-icon tappable card for the staging menu's three
-/// detours — deliberately heavier than a plain ListTile so the hub reads
-/// as a set of deliberate choices rather than a settings list.
+class _WorkoutOverview extends StatelessWidget {
+  const _WorkoutOverview(
+      {required this.title,
+      required this.exerciseCount,
+      required this.totalSets,
+      required this.minutes,
+      required this.imageUrl,
+      this.scheduledWorkout,
+      required this.onStart,
+      required this.journeyFirst,
+      this.switcher});
+  final String title, imageUrl;
+  final int exerciseCount, totalSets;
+  final int? minutes;
+  final ScheduledWorkoutPreview? scheduledWorkout;
+  final VoidCallback onStart;
+  final bool journeyFirst;
+  final Widget? switcher;
+
+  @override
+  Widget build(BuildContext context) => ClipRRect(
+        borderRadius: BorderRadius.circular(18),
+        child: Stack(children: [
+          Positioned.fill(
+              child: WorkoutExerciseImage(url: imageUrl, hero: true)),
+          const Positioned.fill(
+              child: DecoratedBox(
+                  decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [Color(0x66200C35), Color(0xE510081D)],
+                          stops: [0, 1])))),
+          Padding(
+              padding: const EdgeInsets.fromLTRB(18, 10, 18, 18),
+              child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    SizedBox(
+                      width: double.infinity,
+                      child: Wrap(
+                        alignment: WrapAlignment.spaceBetween,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          Text(
+                              scheduledWorkout == null
+                                  ? 'SELECTED WORKOUT'
+                                  : 'YOUR PROGRAM · ${scheduledWorkout!.date.day} ${const [
+                                      'JAN',
+                                      'FEB',
+                                      'MAR',
+                                      'APR',
+                                      'MAY',
+                                      'JUN',
+                                      'JUL',
+                                      'AUG',
+                                      'SEP',
+                                      'OCT',
+                                      'NOV',
+                                      'DEC'
+                                    ][scheduledWorkout!.date.month - 1]}',
+                              style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w800,
+                                  letterSpacing: .7)),
+                          if (switcher != null) switcher!,
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 46),
+                    Text(title,
+                        style: Theme.of(context)
+                            .textTheme
+                            .headlineMedium
+                            ?.copyWith(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w700)),
+                    const SizedBox(height: 6),
+                    Text(
+                        '$exerciseCount ${exerciseCount == 1 ? 'exercise' : 'exercises'} · $totalSets ${totalSets == 1 ? 'set' : 'sets'}${minutes == null ? '' : ' · about $minutes min'}',
+                        style:
+                            const TextStyle(color: Colors.white, fontSize: 14)),
+                    const SizedBox(height: 16),
+                    SizedBox(
+                        width: double.infinity,
+                        child: FilledButton.icon(
+                            style: FilledButton.styleFrom(
+                                backgroundColor: AppColors.primary,
+                                foregroundColor: Colors.white,
+                                minimumSize: const Size(0, 52)),
+                            onPressed: onStart,
+                            icon: const Icon(Icons.play_arrow_rounded),
+                            label: Text(scheduledWorkout?.inProgress == true
+                                ? 'Continue workout'
+                                : 'Start workout'))),
+                    if (journeyFirst) ...[
+                      const SizedBox(height: 8),
+                      const Text(
+                          'Choose an exercise next. Progress saves on this device.',
+                          style: TextStyle(color: Colors.white, fontSize: 12)),
+                    ],
+                  ])),
+        ]),
+      );
+}
+
+class _WorkoutExerciseRow extends StatelessWidget {
+  const _WorkoutExerciseRow(
+      {required this.index,
+      required this.exercise,
+      required this.onTap,
+      this.day,
+      this.tracker});
+  final int index;
+  final Exercise exercise;
+  final int? day;
+  final ExerciseTracker? tracker;
+  final VoidCallback onTap;
+  @override
+  Widget build(BuildContext context) {
+    final equipment = exercise is PublishedRoutineExercise
+        ? (exercise as PublishedRoutineExercise).tutorial.equipment.trim()
+        : '';
+    return Material(
+      color: AppColors.surface,
+      shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(14),
+          side: const BorderSide(color: AppColors.hairline)),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: onTap,
+        child: Padding(
+            padding: const EdgeInsets.all(10),
+            child: Row(children: [
+              SizedBox(
+                  width: 26,
+                  child: Text('$index',
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                          color: AppColors.inkSoft,
+                          fontWeight: FontWeight.w700))),
+              const SizedBox(width: 8),
+              ClipRRect(
+                  borderRadius: BorderRadius.circular(10),
+                  child: SizedBox(
+                      width: 60,
+                      height: 60,
+                      child: WorkoutExerciseImage(url: exercise.imageUrl))),
+              const SizedBox(width: 12),
+              Expanded(
+                  child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                    Text(exercise.name,
+                        style: Theme.of(context).textTheme.titleMedium),
+                    const SizedBox(height: 3),
+                    Text(
+                        '${exercise.sets} sets · ${exercise.reps} ${switch (tracker) {
+                          ExerciseTracker.sideViewCurl => 'reps per arm',
+                          ExerciseTracker.sideViewRow =>
+                            'reps per selected arm',
+                          ExerciseTracker.sideViewReverseLunge =>
+                            'reps per selected leg',
+                          _ => 'reps'
+                        }}${day == null ? '' : ' · Day $day'}',
+                        style: Theme.of(context).textTheme.bodyMedium),
+                    if (equipment.isNotEmpty)
+                      Text(equipment,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.bodySmall),
+                  ])),
+              const Icon(Icons.chevron_right_rounded, color: AppColors.inkSoft),
+            ])),
+      ),
+    );
+  }
+}
+
 class _DetourCard extends StatelessWidget {
   final IconData icon;
   final Color iconColor;
   final String title;
   final String subtitle;
-  final String? image;
   final VoidCallback? onTap;
 
   const _DetourCard({
@@ -464,7 +628,6 @@ class _DetourCard extends StatelessWidget {
     required this.title,
     required this.subtitle,
     required this.onTap,
-    this.image,
   });
 
   @override
@@ -474,38 +637,18 @@ class _DetourCard extends StatelessWidget {
       onTap: onTap,
       child: Row(
         children: [
-          if (image != null)
-            ClipRRect(
-              borderRadius:
-                  const BorderRadius.horizontal(left: Radius.circular(16)),
-              child: SizedBox(
-                width: 78,
-                height: 78,
-                child: Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    networkHero(image!),
-                    DecoratedBox(
-                        decoration: BoxDecoration(
-                            color: AppColors.ink.withValues(alpha: 0.28))),
-                    Center(child: Icon(icon, color: Colors.white, size: 26)),
-                  ],
-                ),
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Container(
+              width: 46,
+              height: 46,
+              decoration: BoxDecoration(
+                color: iconColor.withValues(alpha: 0.13),
+                borderRadius: BorderRadius.circular(13),
               ),
-            )
-          else
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: Container(
-                width: 46,
-                height: 46,
-                decoration: BoxDecoration(
-                  color: iconColor.withValues(alpha: 0.13),
-                  borderRadius: BorderRadius.circular(13),
-                ),
-                child: Icon(icon, color: iconColor, size: 23),
-              ),
+              child: Icon(icon, color: iconColor, size: 23),
             ),
+          ),
           const SizedBox(width: 4),
           Expanded(
             child: Padding(
@@ -575,6 +718,11 @@ const wallPushUpCaptureInstruction =
     'Face a wall with palms at chest height, then extend your arms to start. Place the phone at your side and keep your shoulder, elbow, wrist, hip and knee visible. Bend toward the wall with your body in line, then push back with control. Keep palms in place. Wall contact is user-confirmed; force, load and equal work by both arms are not assessed. Results stay on this device; upload and rewards are unavailable.';
 const wallPushUpSetupConfirmation =
     'My palms are on the wall at chest height, my body is side-on to the camera, and my shoulder, elbow, wrist, hip and knee are visible.';
+
+const floorPushUpCaptureInstruction =
+    'Use Left Side View or Right Side View. Place a stable phone near floor height, level and side-on, far enough away to show your whole body. Keep your shoulder, elbow, wrist, hip and ankle visible; the near side is selected automatically. Begin in a floor plank with arms extended, lower your chest with control, then extend fully. After tracking is interrupted, return to the top and hold to restart. Elbow flare, load and floor contact are not assessed. Form estimates and thresholds are provisional. Results save on this device and may appear in descriptive backup reports when you enable backup; verified upload, rewards and automatic recommendations are unavailable.';
+const floorPushUpSetupConfirmation =
+    'My phone is stable in Left Side View or Right Side View, my whole body is visible, and I have clear floor space for a standard push-up.';
 
 class _ConsentSheet extends StatefulWidget {
   const _ConsentSheet(

@@ -40,7 +40,7 @@ void main() {
       ),
     )));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Watch tutorial'));
+    await tester.tap(find.text('Same name').first);
     await tester.pumpAndSettle();
     expect(identical(selected, routine.exercises.first), true);
     expect(find.text('first-id'), findsOneWidget);

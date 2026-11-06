@@ -9,6 +9,7 @@ class FirebaseAuthUser {
     this.displayName,
     this.emailVerified = false,
     this.claims = const {},
+    this.datasetScope,
   });
 
   final String userId;
@@ -16,6 +17,7 @@ class FirebaseAuthUser {
   final String? displayName;
   final bool emailVerified;
   final Map<String, Object?> claims;
+  final VerifiedDatasetScope? datasetScope;
 }
 
 abstract interface class FirebaseAuthGateway {
@@ -303,6 +305,7 @@ class FirebaseAuthRepository
     }
     return AuthSession(
         userId: user.userId,
+        datasetScope: user.datasetScope,
         organizationId: organizationId,
         branchIds: branchIds,
         email: user.email,

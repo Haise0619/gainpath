@@ -9,6 +9,7 @@ enum ExerciseTracker {
   sideViewCurl,
   sideViewCalfRaise,
   sideViewWallPushUp,
+  sideViewFloorPushUp,
   sideViewRow,
   sideViewReverseLunge
 }
@@ -38,6 +39,7 @@ class ExerciseTrackerDispatcher {
         ExerciseTracker.sideViewCurl,
         ExerciseTracker.sideViewCalfRaise,
         ExerciseTracker.sideViewWallPushUp,
+        ExerciseTracker.sideViewFloorPushUp,
         ExerciseTracker.sideViewRow,
         ExerciseTracker.sideViewReverseLunge,
       }});
@@ -53,6 +55,8 @@ class ExerciseTrackerDispatcher {
         ExerciseTrackingCapability.sideViewCalfRaise,
     ExerciseTracker.sideViewWallPushUp:
         ExerciseTrackingCapability.sideViewWallPushUp,
+    ExerciseTracker.sideViewFloorPushUp:
+        ExerciseTrackingCapability.sideViewFloorPushUp,
     ExerciseTracker.sideViewRow: ExerciseTrackingCapability.sideViewRow,
     ExerciseTracker.sideViewReverseLunge:
         ExerciseTrackingCapability.sideViewReverseLunge,

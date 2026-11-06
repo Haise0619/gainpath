@@ -153,10 +153,10 @@ void main() {
     ));
     await tester.pumpAndSettle();
     expect(find.text('Strength basics'), findsOneWidget);
-    await tester.tap(find.text('Start guided session'));
+    await tester.tap(find.text('Start workout'));
     await tester.pump();
     expect(find.text('This feature is currently unavailable.'), findsOneWidget);
-    await tester.tap(find.text('Watch tutorial'));
+    await tester.tap(find.text('Squat'));
     await tester.pump();
     expect(find.text('This feature is currently unavailable.'), findsOneWidget);
     await tester.tap(find.text('View routine'));

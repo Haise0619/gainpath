@@ -1,3 +1,4 @@
+import 'firebase_data_scope.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'dart:typed_data';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -32,10 +33,9 @@ class FirebaseAdminAccountContactRepository
           '^orgs/${RegExp.escape(scope.organizationId)}/profilePhotos/${RegExp.escape(scope.userId)}/[a-f0-9]{32}\$')
       .hasMatch(path);
   DocumentReference<Map<String, dynamic>> get _user =>
-      _db.collection('users').doc(scope.userId);
+      _db.scopeUser(scope);
   DocumentReference<Map<String, dynamic>> get _member => _db
-      .collection('orgs')
-      .doc(scope.organizationId)
+      .scopeRoot(scope)
       .collection('members')
       .doc(scope.userId);
 

@@ -1,0 +1,18 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function demoIdentity() {
+      let m = get(/databases/$(database)/documents/module13Demo/current).data;
+      return database == 'module13-demo' && request.auth != null
+        && m.schemaVersion == 1 && m.enabled == true
+        && m.seedId == 'module13-demo-v1' && m.databaseId == database
+        && (request.auth.uid in m.adminIds || request.auth.uid in m.memberIds || request.auth.uid in m.coachIds);
+    }
+    // Only the identity gateway's own canonical records are read directly.
+    // All catalog/history/queue/consent/notification access uses owned callables.
+    match /users/{uid} { allow get: if demoIdentity() && request.auth.uid == uid; allow list, write: if false; }
+    match /orgs/gainpath/members/{uid} { allow get: if demoIdentity() && request.auth.uid == uid; allow list, write: if false; }
+    match /orgs/gainpath { allow get: if demoIdentity(); allow list, write: if false; }
+    match /{document=**} { allow read, write: if false; }
+  }
+}

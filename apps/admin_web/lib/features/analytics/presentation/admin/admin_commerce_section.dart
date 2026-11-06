@@ -106,9 +106,9 @@ class _AdminCommerceSectionState extends State<AdminCommerceSection> {
         title: coach ? 'Coach Performance Comparison' : 'Membership & Revenue',
         subtitle: coach
             ? 'Recorded bookings, published consultations and review samples'
-            : 'Current membership snapshot · historical Sandbox transactions',
+            : 'Current membership snapshot · recorded financial transactions',
         live: true,
-        tagLabel: coach ? 'Recorded' : 'Sandbox',
+        tagLabel: coach ? 'Recorded' : 'Financial activity',
         exportFilename:
             coach ? 'coach_performance.csv' : 'membership_sandbox_receipts.csv',
         exportRows: () => r.csv(coach: coach, filter: filter),
@@ -138,7 +138,7 @@ class _AdminCommerceSectionState extends State<AdminCommerceSection> {
             ]),
             const SizedBox(height: 10),
             const Text(
-                'Current canonical active Member cohort, independent of the selected dates. Unknown means entitlement evidence could not be resolved.'),
+                'Current verified active membership cohort, independent of the selected dates. Unknown means entitlement evidence could not be resolved.'),
             const SizedBox(height: 16),
           ],
           Wrap(
@@ -152,7 +152,7 @@ class _AdminCommerceSectionState extends State<AdminCommerceSection> {
                       stat('Review samples', '${total('reviewCount')}')
                     ]
                   : [
-                      stat('Confirmed Sandbox receipts',
+                      stat('Recorded collections',
                           _money(total('confirmedMinor'))),
                       stat('New purchases', '${total('purchases')}'),
                       stat('Renewals', '${total('renewals')}')
@@ -161,7 +161,7 @@ class _AdminCommerceSectionState extends State<AdminCommerceSection> {
           AdminReportDetails(
               child: Text(coach
                   ? 'Outcomes are current statuses of bookings created in the selected Malaysia period. Consultation completion rate = completed outcomes with published consultation / all created bookings; cancellation rate = cancelled / all created bookings. Pending, expired and refunded remain in the denominator. Consultations and reviews use their own event dates; bookings do not prove consultations.'
-                  : 'Payment/refund status counts use transaction creation dates. Confirmed receipts use original server clearance dates and exclude review/refund cases. These are Billplz Sandbox gross receipts, not net revenue, profit or payout. Refund approval does not establish a transferred refund.')),
+                  : 'Payment/refund status counts use transaction creation dates. Confirmed receipts use original server clearance dates and exclude review/refund cases. These are recorded gross collection values, not net revenue, profit or payout. Refund approval does not establish a transferred refund.')),
           if (rows.isEmpty)
             const Padding(
                 padding: EdgeInsets.all(18),

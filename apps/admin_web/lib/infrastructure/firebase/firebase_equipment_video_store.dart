@@ -16,7 +16,7 @@ class FirebaseEquipmentVideoStore implements EquipmentVideoStore {
             16, (_) => random.nextInt(256).toRadixString(16).padLeft(2, '0'))
         .join();
     final ref = (_storage ?? FirebaseStorage.instance).ref(
-        'orgs/${scope.organizationId}/equipmentVideos/${scope.userId}/$id.mp4');
+        '${scope.dataRootPath}/equipmentVideos/${scope.userId}/$id.mp4');
     try {
       final task =
           ref.putData(video.bytes, SettableMetadata(contentType: 'video/mp4'));

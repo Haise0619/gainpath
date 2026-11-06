@@ -2,7 +2,21 @@ import { beforeEach, expect, it } from 'vitest';
 import { provisionMember } from '../src/modules/identity/member-provisioning';
 import { MemoryStore } from './memory-store';
 
+it('fixture-like names never select Admin or Coach roles; normal registration stays Member-only',async()=>{
+ const store=new MemoryStore();
+ for(const uid of ['demo-m13-admin','demo-m13-coach-01','demo-m13-member-18']){
+  const result=await provisionMember(store,{userId:uid,email:`${uid}@gainpath-demo.invalid`,displayName:'Fictional Registration'});
+  expect(result.role).toBe('member');
+  expect(store.documents.get(`orgs/gainpath/members/${uid}`)?.role).toBe('member');
+ }
+});
+
 const now = Date.parse('2026-09-20T00:00:00Z');
+it.each([true,false])('never canonically enrolls a server-assigned dataset identity (enabled=%s)',async enabled=>{
+ const scoped=new MemoryStore();scoped.documents.set('datasetAssignments/assigned',{schemaVersion:1,enabled});
+ await expect(provisionMember(scoped,{userId:'assigned',email:'assigned@example.invalid',displayName:'Assigned'})).rejects.toMatchObject({code:'permission-denied'});
+ expect([...scoped.documents.keys()]).toEqual(['datasetAssignments/assigned']);
+});
 let store: MemoryStore;
 
 beforeEach(() => {

@@ -8,6 +8,11 @@ import 'pose_preview_controller.dart';
 
 enum MeasuredWorkoutPhase { idle, active, saving, saveFailed, saved, closed }
 
+/// Optional exercise-owned status copy; existing session behavior is unchanged.
+abstract interface class WorkoutReadinessFeedback {
+  String get readinessMessage;
+}
+
 /// Optional controls for exercises that deliberately track one arm at a time.
 abstract interface class UnilateralWorkoutSession {
   String get armLabel;

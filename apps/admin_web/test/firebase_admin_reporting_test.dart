@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'admin_workout_reporting_test.dart' show workoutResponse;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gainpath_domain/gainpath_domain.dart' show SessionScope;
@@ -66,6 +67,44 @@ Map<String, dynamic> reportingResponse() => {
       ]
     };
 void main() {
+  test('shared workout responses are rejected after account switch and failures permit retry', () async {
+    var current = true, calls = 0;
+    final pending = Completer<Object?>();
+    final gateway = FirebaseAdminReportingGateway(scope: reportingScope,
+      isCurrent: () => current, currentUid: () => reportingScope.userId,
+      workoutInvoke: (_) { calls++; return calls == 1 ? pending.future : Future.value(workoutResponse()); });
+    final first = gateway.loadWorkouts(reportingQuery);
+    final second = gateway.loadWorkouts(reportingQuery);
+    final a = expectLater(first, throwsStateError);
+    final b = expectLater(second, throwsStateError);
+    current = false;
+    pending.complete(workoutResponse());
+    await Future.wait([a,b]);
+    current = true;
+    await gateway.loadWorkouts(reportingQuery);
+    expect(calls, 2);
+  });
+  test(
+      'concurrent workout reads share one request without caching completed results',
+      () async {
+    var calls = 0;
+    final pending = Completer<Object?>();
+    final gateway = FirebaseAdminReportingGateway(
+        scope: reportingScope,
+        isCurrent: () => true,
+        currentUid: () => reportingScope.userId,
+        workoutInvoke: (_) {
+          calls++;
+          return pending.future;
+        });
+    final first = gateway.loadWorkouts(reportingQuery);
+    final second = gateway.loadWorkouts(reportingQuery);
+    expect(calls, 1);
+    pending.complete(workoutResponse());
+    await Future.wait([first, second]);
+    await gateway.loadWorkouts(reportingQuery);
+    expect(calls, 2);
+  });
   test('sends only scoped dates and maps real confirmed minor-unit amounts',
       () async {
     Map<String, Object?>? sent;

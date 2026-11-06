@@ -47,14 +47,22 @@ class _ExerciseTutorialRouteState extends State<ExerciseTutorialRoute> {
   }
 
   @override
-  Widget build(BuildContext context) => PublishedExerciseTutorialScreen(
+  Widget build(BuildContext context) {
+    final tracking = const ExerciseTrackerDispatcher().resolve(
+        organizationId: widget.scope.organizationId,
+        exerciseId: widget.exercise.exerciseId);
+    return PublishedExerciseTutorialScreen(
       exercise: widget.exercise,
       playerFactory: widget.playerFactory,
-      perArmTargets: const ExerciseTrackerDispatcher()
-              .resolve(
-                  organizationId: widget.scope.organizationId,
-                  exerciseId: widget.exercise.exerciseId)
-              .tracker ==
-          ExerciseTracker.sideViewCurl,
-      authorized: _authorized);
+      perArmTargets: tracking.tracker == ExerciseTracker.sideViewCurl,
+      targetLabel: switch (tracking.tracker) {
+        ExerciseTracker.sideViewRow => 'Reps per selected arm per set',
+        ExerciseTracker.sideViewReverseLunge => 'Reps per selected leg per set',
+        _ => null,
+      },
+      trackingLabel: tracking.capability.displayLabel,
+      trackingDescription: tracking.description,
+      authorized: _authorized,
+    );
+  }
 }

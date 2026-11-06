@@ -1,4 +1,6 @@
 import 'entities/booking.dart';
+import 'recommendation_notice.dart';
+export 'recommendation_notice.dart';
 
 class CoachSharing {
   const CoachSharing(this.enabled, this.revision);
@@ -13,11 +15,13 @@ class MemberNotice {
       required this.message,
       required this.read,
       required this.createdAt,
-      this.bookingId});
+      this.bookingId,
+      this.recommendation});
   final String id, title, message;
   final bool read;
   final DateTime createdAt;
   final String? bookingId;
+  final RecommendationNotice? recommendation;
 }
 
 class NoticePage {

@@ -28,7 +28,9 @@ import '../../features/workout/presentation/member/workout_prep_screen.dart'
         rowSetupConfirmation,
         calfRaiseCaptureInstruction,
         wallPushUpCaptureInstruction,
-        wallPushUpSetupConfirmation;
+        wallPushUpSetupConfirmation,
+        floorPushUpCaptureInstruction,
+        floorPushUpSetupConfirmation;
 import '../../navigation/membership_access_gate.dart';
 import '../di/workout_store_factory.dart';
 import 'exercise_tutorial_route.dart';
@@ -148,9 +150,12 @@ class _RoutineJourneyRouteState extends State<RoutineJourneyRoute> {
             reverseLungeCaptureInstruction,
           ExerciseTracker.sideViewCalfRaise => calfRaiseCaptureInstruction,
           ExerciseTracker.sideViewWallPushUp => wallPushUpCaptureInstruction,
+          ExerciseTracker.sideViewFloorPushUp => floorPushUpCaptureInstruction,
           _ => null,
         },
-        setupConfirmationLabel: tracker == ExerciseTracker.sideViewWallPushUp
+        setupConfirmationLabel: tracker == ExerciseTracker.sideViewFloorPushUp
+            ? floorPushUpSetupConfirmation
+            : tracker == ExerciseTracker.sideViewWallPushUp
             ? wallPushUpSetupConfirmation
             : tracker == ExerciseTracker.frontViewLateralRaise
                 ? lateralRaiseSetupConfirmation

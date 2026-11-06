@@ -1,4 +1,9 @@
 export 'src/pose/audio_cue_arbiter.dart';
+export 'src/floor_push_up/floor_push_up_rules.dart';
+export 'src/floor_push_up/floor_push_up_diagnostics.dart';
+export 'src/floor_push_up/floor_push_up_world_evidence.dart';
+export 'src/floor_push_up/floor_push_up_geometry.dart';
+export 'src/floor_push_up/floor_push_up_analyzer.dart';
 export 'src/shoulder_press/shoulder_press_geometry.dart';
 export 'src/shoulder_press/shoulder_press_analyzer.dart';
 export 'src/pose/form_score.dart';

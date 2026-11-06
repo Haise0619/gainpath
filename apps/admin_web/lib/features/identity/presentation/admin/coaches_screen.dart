@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../../shared/admin_business_copy.dart';
 import 'package:gainpath_domain/identity.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
 import 'user_action_dialogs.dart';
@@ -372,6 +373,8 @@ class _CoachesScreenState extends State<CoachesScreen> {
                 padding: EdgeInsets.only(top: 12),
                 child: Text(
                     'This review is out of date. Discard and reload before making another publication change.')),
+          if(review.readOnly) const Padding(padding:EdgeInsets.only(bottom:12),child:Text('Read-only profile. Credential records are supplied for educational review and do not establish external professional verification.')),
+          for(final summary in review.operationalSummary) Padding(padding:const EdgeInsets.only(bottom:6),child:Text(adminBusinessDetail(summary))),
           const SizedBox(height: 16),
           Wrap(
             spacing: 12,
@@ -416,7 +419,7 @@ class _CoachesScreenState extends State<CoachesScreen> {
               ),
               OutlinedButton(
                 onPressed:
-                    !state.busy && !state.conflict && review.publication != null
+                    !review.readOnly && !state.busy && !state.conflict && review.publication != null
                         ? () => _guarded(() =>
                             _cubit!.setStatus(CoachDirectoryAction.deactivate))
                         : null,

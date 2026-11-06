@@ -29,3 +29,10 @@ abstract interface class WorkoutAudioPort {
 abstract interface class PreparedWorkoutAudioPort implements WorkoutAudioPort {
   Future<bool> prepare();
 }
+
+/// Opt-in bounded native start deadline for completed-attempt events. Existing
+/// exercise playback keeps its original interface and policy.
+abstract interface class TimedWorkoutAudioPort implements WorkoutAudioPort {
+  Future<AudioPlaybackOutcome> playCurrent(CueRequest cue,
+      {required String requestId, required Duration remainingStartTime});
+}

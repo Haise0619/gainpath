@@ -86,7 +86,10 @@ class LocalProgressRecordTile extends StatelessWidget {
                     '${record.repetitions} full reps · ${record.partialRepetitions} partial attempts',
                     style: Theme.of(context).textTheme.bodyMedium),
                 const SizedBox(height: 6),
-                Text(localProgressStatus(record.status),
+                Text(
+                    record.scope.datasetScope != null
+                        ? 'Fictional recorded fixture · read only'
+                        : localProgressStatus(record.status),
                     style: TextStyle(
                         color: statusColor, fontWeight: FontWeight.w700)),
                 ExpansionTile(

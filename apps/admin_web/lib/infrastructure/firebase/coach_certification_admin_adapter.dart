@@ -21,7 +21,7 @@ class CoachCertificationAdminAdapter {
   final CoachProfileAdminRepository repository;
   final CoachDirectReads? _providedDirectReads;
   late final CoachDirectReads? _directReads = _providedDirectReads ??
-      (directCoachReadsEnabled
+      (directCoachReadsEnabled && repository.scope.datasetScope == null
           ? firebaseCoachDirectReads(
               scope: repository.scope, checkSession: () {})
           : null);
@@ -45,7 +45,7 @@ class CoachCertificationAdminAdapter {
         return result;
       }
       final result =
-          await firebaseCallable('getCoachCertificationsCommand').call({
+          await firebaseScopedCallable(repository.scope, 'getCoachCertificationsCommand').call({
         'schemaVersion': 1,
         'organizationId': repository.scope.organizationId,
         'coachId': coachId,
@@ -133,7 +133,7 @@ class CoachCertificationAdminAdapter {
           'A reason is required to reject a certification.');
     }
     try {
-      await firebaseCallable('reviewCoachCertificationCommand').call({
+      await firebaseScopedCallable(repository.scope, 'reviewCoachCertificationCommand').call({
         'schemaVersion': 1,
         'organizationId': repository.scope.organizationId,
         'coachId': coachId,

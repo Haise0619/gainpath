@@ -4,7 +4,7 @@ import 'package:gainpath_ui/gainpath_ui.dart';
 import 'package:gainpath_domain/workout.dart';
 import 'widgets/workout_media.dart';
 import 'widgets/curl_arm_stats.dart';
-import '../../domain/workout_contracts.dart' show WorkoutSessionSummary;
+import '../../domain/workout_contracts.dart' show WorkoutSessionSummary, WorkoutProvenance;
 
 class WorkoutResultScreen extends StatefulWidget {
   final int reps;
@@ -12,12 +12,14 @@ class WorkoutResultScreen extends StatefulWidget {
   final int seconds;
   final WorkoutSessionSummary? measuredSummary;
   final Widget? syncPanel;
+  final bool fictionalObservation;
   final VoidCallback? onContinue;
   final String continueLabel;
 
   WorkoutResultScreen.measured(
       {super.key,
       required WorkoutSessionSummary summary,
+      this.fictionalObservation = false,
       this.syncPanel,
       this.onContinue,
       this.continueLabel = 'Back to home'})
@@ -33,6 +35,7 @@ class WorkoutResultScreen extends StatefulWidget {
     required this.seconds,
   })  : measuredSummary = null,
         syncPanel = null,
+        fictionalObservation = false,
         onContinue = null,
         continueLabel = 'Back to home';
 
@@ -233,6 +236,8 @@ class _WorkoutResultScreenState extends State<WorkoutResultScreen>
   }
 
   Widget _measured(BuildContext context, WorkoutSessionSummary summary) {
+    final fictional = widget.fictionalObservation &&
+        summary.provenance == WorkoutProvenance.recordedFixture;
     final metrics = summary.poseMetrics!;
     final score = summary.formScorePercent;
     return Scaffold(
@@ -246,11 +251,13 @@ class _WorkoutResultScreenState extends State<WorkoutResultScreen>
                 const Icon(Icons.check_circle_outline,
                     size: 48, color: AppColors.primary),
                 const SizedBox(height: 12),
-                Text('Saved on this device',
+                Text(fictional ? 'Fictional recorded observation' : 'Saved on this device',
                     style: Theme.of(context).textTheme.titleLarge),
                 const SizedBox(height: 8),
                 Text(
-                    widget.syncPanel == null
+                    fictional
+                        ? 'Read-only recorded fixture · no physical camera capture, local save, accepted workout or reward.'
+                        : widget.syncPanel == null
                         ? 'Local result · not server-accepted. No rewards have been awarded.'
                         : 'Your measured result is saved locally. No rewards have been awarded.',
                     textAlign: TextAlign.center),
@@ -276,7 +283,7 @@ class _WorkoutResultScreenState extends State<WorkoutResultScreen>
                   CurlArmStats(metrics: metrics.curlArms!),
                   const SizedBox(height: 12),
                 ],
-                Eyebrow(switch (metrics.scoringVersion) {
+                Eyebrow(fictional ? 'Fictional exercise example' : switch (metrics.scoringVersion) {
                   'single-arm-curl-side-v1' => 'Measured curl result',
                   'single-arm-row-side-v1' => 'Measured row result',
                   'reverse-lunge-side-v1' => 'Measured reverse lunge result',
@@ -286,6 +293,7 @@ class _WorkoutResultScreenState extends State<WorkoutResultScreen>
                     'Measured shoulder press result',
                   'standing-calf-raise-side-v1' => 'Measured calf raise result',
                   'wall-push-up-side-v1' => 'Measured wall push-up result',
+                  'standard-floor-push-up-side-v1' => 'Measured floor push-up result',
                   _ => 'Measured squat result',
                 }),
                 const SizedBox(height: 8),
@@ -309,6 +317,15 @@ class _WorkoutResultScreenState extends State<WorkoutResultScreen>
                     'Tracked: ${(summary.trackedDurationMicros / 1000000).toStringAsFixed(1)} seconds'),
                 Text(
                     'Unassessable: ${(summary.rejectedDurationMicros / 1000000).toStringAsFixed(1)} seconds'),
+                if (metrics.floorPushUp case final floor?) ...[
+                  Text('Camera: ${floor.side == 'left' ? 'Left Side View' : floor.side == 'right' ? 'Right Side View' : 'Unconfirmed side view'}'),
+                  if (floor.components case final c?) ...[
+                    Text('Range of motion: ${c['rangeOfMotion']!.toStringAsFixed(0)}% · weight 40%'),
+                    Text('Body alignment: ${c['bodyAlignment']!.toStringAsFixed(0)}% · weight 35%'),
+                    Text('Movement control: ${c['movementControl']!.toStringAsFixed(0)}% · weight 15%'),
+                    Text('Arm extension: ${c['armExtension']!.toStringAsFixed(0)}% · weight 10%'),
+                  ],
+                ],
                 if (metrics.lungeSide != null)
                   Text(
                       'Front planted working leg: ${metrics.lungeSide == 'left' ? 'Left' : 'Right'} · counts apply to this leg only'),
@@ -326,7 +343,16 @@ class _WorkoutResultScreenState extends State<WorkoutResultScreen>
               child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                if (metrics.scoringVersion != 'bodyweight-squat-side-v1')
+                if (metrics.floorPushUp case final floor?)
+                  Text(floor.issueCounts.isEmpty ? 'No supported deviation was recorded in assessed attempts.' :
+                    floor.issueCounts.entries.map((e) => '${switch (e.key) {
+                      'insufficientDescent' => 'Insufficient descent',
+                      'hipSagging' => 'Hip sagging', 'hipPiking' => 'Hip piking',
+                      'incompleteExtension' => 'Incomplete arm extension',
+                      'interrupted' => 'Interrupted attempt', 'movementTooFast' => 'Movement too fast',
+                      _ => 'Unreliable tracking'
+                    }}: ${e.value} attempts').join('\n'))
+                else if (metrics.scoringVersion != 'bodyweight-squat-side-v1')
                   const Text(
                       'Detailed deviation counts are not available for this analyser. Form estimates are provisional.')
                 else if (metrics.deviations.isEmpty)
@@ -354,6 +380,8 @@ class _WorkoutResultScreenState extends State<WorkoutResultScreen>
                     'Only the camera-facing leg is measured. Equal work on both legs, balance and load are not assessed. Guidance is provisional.',
                   'wall-push-up-side-v1' =>
                     'Only the visible arm and projected body line are measured. Wall contact is user-confirmed; pushing force, load and equal work by both arms are not assessed.',
+                  'standard-floor-push-up-side-v1' =>
+                    'Provisional floor push-up estimates use the visible-side arm and shoulder–hip–ankle line. Elbow flare, floor contact, load and symmetry are not assessed. Scores are separate from Wall Push-Up. Automatic recommendations are disabled.',
                   _ =>
                     'Front-view knee alignment is not assessed. Guidance is provisional.',
                 }),

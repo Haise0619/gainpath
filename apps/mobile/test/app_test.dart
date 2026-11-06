@@ -163,6 +163,43 @@ void main() {
     await repository.dispose();
   });
 
+  for (final role in ['member', 'coach']) {
+    testWidgets('typography is scoped to the $role session', (tester) async {
+      tester.view.physicalSize = const Size(1000, 1600);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final repository = InMemoryAuthRepository();
+      await repository.signIn(
+          email: '$role@example.com', password: 'password123');
+      await tester.pumpWidget(GainPathMobileApp.injected(
+        authRepository: repository,
+        profileRepositoryFactory: FakeProfileGateway().repository,
+        coachProfileFactory: (_, current) => ProfileFake(),
+      ));
+      await tester.pumpAndSettle();
+      final theme = tester.widget<MaterialApp>(find.byType(MaterialApp)).theme!;
+      final scaler =
+          MediaQuery.textScalerOf(tester.element(find.byType(Navigator)));
+      expect(scaler.scale(16), closeTo(role == 'member' ? 17.6 : 16, 0.001));
+      if (role == 'member') {
+        expect(theme.textTheme.bodyMedium!.fontFamily, 'Barlow');
+        expect(theme.textTheme.titleLarge!.fontFamily, 'BarlowCondensed');
+        expect(theme.appBarTheme.titleTextStyle!.fontFamily, 'BarlowCondensed');
+        expect(theme.navigationBarTheme.labelTextStyle!.resolve({})!.fontFamily,
+            'Barlow');
+        expect(
+            theme.filledButtonTheme.style!.textStyle!.resolve({})!.fontFamily,
+            'Barlow');
+      } else {
+        expect(theme.textTheme.bodyMedium!.fontFamily, isNot('Barlow'));
+        expect(
+            theme.textTheme.titleLarge!.fontFamily, isNot('BarlowCondensed'));
+      }
+      await tester.pumpWidget(const SizedBox());
+      await repository.dispose();
+    });
+  }
+
   testWidgets('named member route retains scoped profile composition',
       (tester) async {
     final repository = InMemoryAuthRepository();

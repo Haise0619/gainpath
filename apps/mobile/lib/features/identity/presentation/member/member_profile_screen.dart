@@ -195,13 +195,7 @@ class _MemberProfileScreenState extends State<MemberProfileScreen>
                         ? 'Free · No expiry'
                         : '${tier!.label} · Active until $expiryLabel';
     return Scaffold(
-      appBar: AppBar(title: const Text('Profile'), actions: [
-        if (widget.membershipRepository != null)
-          IconButton(
-              tooltip: 'Refresh membership',
-              onPressed: loading ? null : _refreshMembership,
-              icon: const Icon(Icons.refresh_rounded)),
-      ]),
+      appBar: AppBar(title: const Text('Profile')),
       body: RefreshIndicator(
           onRefresh: _refreshMembership,
           child: PageBody(

@@ -9,6 +9,7 @@ import android.media.AudioManager;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.SystemClock;
 import android.speech.tts.TextToSpeech;
 import android.speech.tts.UtteranceProgressListener;
 import android.speech.tts.Voice;
@@ -35,6 +36,7 @@ public final class WorkoutAudioPlugin implements FlutterPlugin,
     private final Map<String, SpeechSession> sessions = new HashMap<>();
     private Context context;
     private MethodChannel channel;
+    private io.flutter.plugin.common.BinaryMessenger messenger;
     private Activity activity;
     private Application application;
     private boolean foreground;
@@ -58,6 +60,7 @@ public final class WorkoutAudioPlugin implements FlutterPlugin,
 
     @Override public void onAttachedToEngine(@NonNull FlutterPluginBinding binding) {
         context = binding.getApplicationContext();
+        messenger = binding.getBinaryMessenger();
         channel = new MethodChannel(binding.getBinaryMessenger(), "gainpath/workout_audio");
         channel.setMethodCallHandler(this);
     }
@@ -69,6 +72,7 @@ public final class WorkoutAudioPlugin implements FlutterPlugin,
         channel.setMethodCallHandler(null);
         channel = null;
         context = null;
+        messenger = null;
     }
 
     @Override public void onAttachedToActivity(@NonNull ActivityPluginBinding binding) {
@@ -108,13 +112,23 @@ public final class WorkoutAudioPlugin implements FlutterPlugin,
                     result.success(false);
                     return;
                 }
-                session = new SpeechSession(id, result);
+                session = new SpeechSession(id, result,
+                    BuildConfig.DEBUG && Boolean.TRUE.equals(call.argument("trace")));
                 sessions.put(id, session);
                 session.initialize();
                 return;
             case "play":
                 if (session == null) { result.success("unavailable"); return; }
-                session.play(generation.longValue(), call.argument("text"), result);
+                Number delay = call.argument("maxStartDelayMs");
+                Number deadline = call.argument("startDeadlineMicros");
+                session.play(generation.longValue(), call.argument("text"),
+                    call.argument("cueId"), call.argument("requestId"),
+                    delay == null ? null : delay.longValue(),
+                    deadline == null ? null : deadline.longValue(), result);
+                return;
+            case "clock":
+                result.success(session == null || !foreground ? null :
+                    SystemClock.elapsedRealtimeNanos() / 1000);
                 return;
             case "stop":
                 if (session != null) session.stop(generation.longValue());
@@ -144,10 +158,17 @@ public final class WorkoutAudioPlugin implements FlutterPlugin,
         long sequence;
         Runnable initializationTimeout;
         Runnable playbackTimeout;
+        Runnable startTimeout;
+        final AudioStartDeadline startDeadline = new AudioStartDeadline();
+        final MethodChannel traceChannel;
+        String requestId;
+        String cueId;
 
-        SpeechSession(String id, MethodChannel.Result result) {
+        SpeechSession(String id, MethodChannel.Result result, boolean trace) {
             this.id = id;
             readyResult = result;
+            traceChannel = trace ? new MethodChannel(messenger,
+                "gainpath/workout_audio/events/" + id) : null;
             audioManager = (AudioManager) context.getSystemService(Context.AUDIO_SERVICE);
             focus = new AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK)
                 .setAudioAttributes(attributes)
@@ -197,16 +218,33 @@ public final class WorkoutAudioPlugin implements FlutterPlugin,
                 }
                 tts.setAudioAttributes(attributes);
                 tts.setOnUtteranceProgressListener(new UtteranceProgressListener() {
-                    @Override public void onStart(String utteranceId) {}
+                    @Override public void onStart(String utteranceId) {
+                        // Timestamp on the engine callback thread, not after a
+                        // potentially delayed main-thread dispatch.
+                        long startedAt = SystemClock.elapsedRealtimeNanos() / 1000;
+                        main.post(() -> {
+                            if (!epoch.isActive(utteranceId)) return;
+                            if (!startDeadline.start(startedAt)) {
+                                trace("expired_before_start", startedAt);
+                                stop(epoch.generation());
+                                return;
+                            }
+                            if (startTimeout != null) main.removeCallbacks(startTimeout);
+                            trace("playback_start", startedAt);
+                        });
+                    }
                     @Override public void onDone(String utteranceId) {
-                        main.post(() -> completePlayback(utteranceId, "completed"));
+                        long at = SystemClock.elapsedRealtimeNanos() / 1000;
+                        main.post(() -> completePlayback(utteranceId, "completed", at));
                     }
                     @Override public void onError(String utteranceId) {
-                        main.post(() -> completePlayback(utteranceId, "unavailable"));
+                        long at = SystemClock.elapsedRealtimeNanos() / 1000;
+                        main.post(() -> completePlayback(utteranceId, "unavailable", at));
                     }
                     @Override public void onError(String utteranceId, int code) { onError(utteranceId); }
                     @Override public void onStop(String utteranceId, boolean interrupted) {
-                        main.post(() -> completePlayback(utteranceId, "cancelled"));
+                        long at = SystemClock.elapsedRealtimeNanos() / 1000;
+                        main.post(() -> completePlayback(utteranceId, "cancelled", at));
                     }
                 });
                 completeReady(true);
@@ -225,22 +263,43 @@ public final class WorkoutAudioPlugin implements FlutterPlugin,
             }
         }
 
-        void play(long generation, String text, MethodChannel.Result result) {
+        void play(long generation, String text, String nextCueId, String nextRequestId,
+                  Long maximumStartDelayMillis, Long absoluteExpiryMicros, MethodChannel.Result result) {
             if (closed || !foreground || !ready || tts == null || text == null ||
                     text.trim().isEmpty() || text.length() > 240) {
                 result.success("unavailable"); return;
             }
             if (!epoch.cancel(generation)) { result.success("cancelled"); return; }
             cancelPlayback();
+            requestId = nextRequestId;
+            cueId = nextCueId;
             String utteranceId = id + ":" + (++sequence);
             if (!epoch.begin(generation, utteranceId)) { result.success("cancelled"); return; }
             playbackResult = result;
+            long receivedAt = SystemClock.elapsedRealtimeNanos() / 1000;
+            startDeadline.arm(receivedAt, maximumStartDelayMillis, absoluteExpiryMicros);
+            if (startDeadline.expired(receivedAt)) {
+                trace("expired_before_start", receivedAt);
+                stop(epoch.generation());
+                return;
+            }
+            if (maximumStartDelayMillis != null) {
+                startTimeout = () -> {
+                    if (epoch.isActive(utteranceId) && startDeadline.expired(
+                            SystemClock.elapsedRealtimeNanos() / 1000)) {
+                        trace("expired_before_start", SystemClock.elapsedRealtimeNanos() / 1000);
+                        stop(epoch.generation());
+                    }
+                };
+                main.postDelayed(startTimeout, startDeadline.remainingMillis(receivedAt));
+            }
             playbackTimeout = () -> {
                 completePlayback(utteranceId, "unavailable");
                 if (tts != null) tts.stop();
             };
             main.postDelayed(playbackTimeout, 20000);
             try {
+                trace("native_tts_request", SystemClock.elapsedRealtimeNanos() / 1000);
                 if (audioManager == null || audioManager.requestAudioFocus(focus) !=
                         AudioManager.AUDIOFOCUS_REQUEST_GRANTED ||
                         tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, utteranceId) !=
@@ -253,10 +312,19 @@ public final class WorkoutAudioPlugin implements FlutterPlugin,
         }
 
         void completePlayback(String utteranceId, String outcome) {
+            completePlayback(utteranceId, outcome, SystemClock.elapsedRealtimeNanos() / 1000);
+        }
+        void completePlayback(String utteranceId, String outcome, long atMicros) {
             if (!epoch.finish(utteranceId)) return;
-            resolvePlayback(outcome);
+            resolvePlayback(outcome, atMicros);
         }
         void resolvePlayback(String outcome) {
+            resolvePlayback(outcome, SystemClock.elapsedRealtimeNanos() / 1000);
+        }
+        void resolvePlayback(String outcome, long atMicros) {
+            if (playbackResult != null) trace("playback_" + outcome, atMicros);
+            if (startTimeout != null) main.removeCallbacks(startTimeout);
+            startTimeout = null;
             if (playbackTimeout != null) main.removeCallbacks(playbackTimeout);
             playbackTimeout = null;
             if (audioManager != null) audioManager.abandonAudioFocusRequest(focus);
@@ -265,6 +333,16 @@ public final class WorkoutAudioPlugin implements FlutterPlugin,
                 playbackResult = null;
                 result.success(outcome);
             }
+        }
+        void trace(String stage, long atMicros) {
+            if (traceChannel == null || requestId == null) return;
+            Map<String, Object> row = new HashMap<>();
+            row.put("stage", stage);
+            row.put("requestId", requestId);
+            row.put("cueId", cueId);
+            row.put("generation", epoch.generation());
+            row.put("nativeElapsedMicros", atMicros);
+            traceChannel.invokeMethod("trace", row);
         }
         void cancelPlayback() {
             // Platform engine failure must not leave pending futures or focus.

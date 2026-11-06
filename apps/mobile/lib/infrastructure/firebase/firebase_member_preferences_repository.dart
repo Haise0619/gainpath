@@ -1,3 +1,4 @@
+import 'firebase_data_scope.dart';
 import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -40,8 +41,7 @@ class FirebaseMemberPreferencesRepository
   DocumentReference<Map<String, dynamic>> _document() {
     _checkSession();
     return _firestore
-        .collection('orgs')
-        .doc(scope.organizationId)
+        .scopeRoot(scope)
         .collection('preferences')
         .doc(scope.userId);
   }

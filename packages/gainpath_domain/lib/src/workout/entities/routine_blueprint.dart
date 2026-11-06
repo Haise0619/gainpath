@@ -27,6 +27,7 @@ abstract class RoutineEditBaseline {}
 /// mutable so the admin Edit form can replace them wholesale on save —
 /// simpler than mutating the nested day/exercise structure in place.
 class RoutineBlueprint {
+  final bool readOnly;
   final String id;
   final RoutineEditBaseline? editBaseline;
   String name;
@@ -40,6 +41,7 @@ class RoutineBlueprint {
   String imageUrl;
   RoutineBlueprint({
     required this.id,
+    this.readOnly=false,
     this.editBaseline,
     required this.name,
     required this.level,

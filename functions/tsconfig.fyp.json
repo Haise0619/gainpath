@@ -1,0 +1,1 @@
+{"extends":"./tsconfig.json","compilerOptions":{"outDir":"../build/fyp-cohort-integration/compiled"},"include":["src/fyp-local-index.ts","src/fyp-release-index.ts","src/modules/dataset/fyp-seed.ts"]}

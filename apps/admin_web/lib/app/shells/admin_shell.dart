@@ -1,3 +1,8 @@
+import 'package:gainpath_data/gainpath_data.dart'
+    show FypDatasetTransportFactory;
+import '../../infrastructure/firebase/firebase_fyp_dataset.dart';
+import '../../infrastructure/firebase/firebase_unified_admin.dart';
+import '../../infrastructure/firebase/firebase_demo_recommendation.dart';
 import '../../features/gamification/reward_fulfilment_repository.dart';
 import '../../features/gamification/presentation/admin/reward_fulfilment_panel.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -69,16 +74,40 @@ class AdminShell extends StatefulWidget {
   const AdminShell(
       {super.key,
       this.liveSession,
+      this.datasetTransportFactory,
       this.allowContentRemoval =
           const bool.fromEnvironment('ADMIN_CONTENT_REMOVAL_ENABLED')});
   final bool allowContentRemoval;
   final AuthSession? liveSession;
+  final FypDatasetTransportFactory? datasetTransportFactory;
 
   @override
   State<AdminShell> createState() => _AdminShellState();
 }
 
 class _AdminShellState extends State<AdminShell> {
+  late final FirebaseDemoAdminRepositories? _fypRecommendations = widget
+              .liveSession ==
+          null
+      ? null
+      : widget.liveSession!.datasetScope == null
+          ? FirebaseDemoAdminRepositories(
+              (widget.datasetTransportFactory ??
+                      ((scope, current) => UnifiedAdminTransport(
+                          scope: scope, isCurrent: current)))(
+                  widget.liveSession!.scope,
+                  () =>
+                      mounted &&
+                      context.read<AuthBloc>().state.session ==
+                          widget.liveSession),
+              readOnly: true)
+          : FirebaseDemoAdminRepositories(
+              (widget.datasetTransportFactory ?? firebaseFypDatasetTransport)(
+                  widget.liveSession!.scope,
+                  () =>
+                      mounted &&
+                      context.read<AuthBloc>().state.session ==
+                          widget.liveSession));
   final _coachReviewGuard = CoachReviewDiscardGuard();
   int _index = 0;
   String? _scopedCoachIdForBookings;
@@ -142,8 +171,11 @@ class _AdminShellState extends State<AdminShell> {
         Icons.auto_awesome_outlined,
         Icons.auto_awesome_rounded,
         'Recommendations',
-        'High-risk exercises and matched leads',
-        RiskLeaderboardScreen(live: widget.liveSession != null)),
+        'Exercises needing attention and matched leads',
+        RiskLeaderboardScreen(
+            live: widget.liveSession != null,
+            insightsRepository: _fypRecommendations?.insights,
+            queueRepository: _fypRecommendations?.queue)),
     _NavPage(
         Icons.receipt_long_outlined,
         Icons.receipt_long_rounded,
@@ -474,9 +506,9 @@ class _TopBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      constraints: const BoxConstraints(minHeight: 80),
+      constraints: const BoxConstraints(minHeight: 64),
       padding: EdgeInsets.symmetric(
-          horizontal: onOpenNavigation == null ? 28 : 12, vertical: 14),
+          horizontal: onOpenNavigation == null ? 24 : 12, vertical: 8),
       decoration: const BoxDecoration(
         color: AppColors.surface,
         border: Border(bottom: BorderSide(color: AppColors.hairline)),
@@ -516,7 +548,7 @@ class _TopBar extends StatelessWidget {
                     style: Theme.of(context)
                         .textTheme
                         .bodyMedium
-                        ?.copyWith(fontSize: 12.5)),
+                        ?.copyWith(fontSize: 12)),
               ],
             ),
           ),
@@ -553,7 +585,7 @@ class _BreadcrumbSegment extends StatelessWidget {
       maxLines: 1,
       overflow: TextOverflow.ellipsis,
       style: Theme.of(context).textTheme.titleLarge?.copyWith(
-            fontSize: 18,
+            fontSize: 16,
             color: current ? AppColors.ink : AppColors.inkSoft,
             fontWeight: current ? FontWeight.w700 : FontWeight.w600,
           ),
@@ -840,7 +872,7 @@ class _Sidebar extends StatelessWidget {
     }
 
     return Container(
-      width: collapsed ? 84 : 260,
+      width: collapsed ? 72 : 224,
       decoration: const BoxDecoration(
         color: AppColors.surface,
         border: Border(right: BorderSide(color: AppColors.hairline)),
@@ -850,15 +882,15 @@ class _Sidebar extends StatelessWidget {
         children: [
           Padding(
             padding: EdgeInsets.fromLTRB(
-                collapsed ? 0 : 22, 26, collapsed ? 0 : 22, 22),
+                collapsed ? 0 : 18, 14, collapsed ? 0 : 18, 14),
             child: Row(
               mainAxisAlignment: collapsed
                   ? MainAxisAlignment.center
                   : MainAxisAlignment.start,
               children: [
                 Container(
-                  width: 40,
-                  height: 40,
+                  width: 36,
+                  height: 36,
                   decoration: BoxDecoration(
                     color: AppColors.primary,
                     borderRadius: BorderRadius.circular(12),
@@ -887,16 +919,16 @@ class _Sidebar extends StatelessWidget {
             ),
           ),
           const Divider(height: 1),
-          const SizedBox(height: 12),
+          const SizedBox(height: 8),
           Expanded(
             child: ListView(
-              padding: EdgeInsets.symmetric(horizontal: collapsed ? 12 : 14),
+              padding: EdgeInsets.symmetric(horizontal: collapsed ? 10 : 10),
               children: items,
             ),
           ),
           const Divider(height: 1),
           Padding(
-            padding: EdgeInsets.all(collapsed ? 14 : 18),
+            padding: EdgeInsets.all(collapsed ? 12 : 14),
             child: Row(
               mainAxisAlignment: collapsed
                   ? MainAxisAlignment.center
@@ -957,34 +989,37 @@ class _Sidebar extends StatelessWidget {
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
         onTap: onTap,
-        child: Padding(
-          padding: EdgeInsets.symmetric(
-              horizontal: collapsed ? 0 : 14,
-              vertical: collapsed ? 14 : (dense ? 10 : 12)),
-          child: Row(
-            mainAxisAlignment:
-                collapsed ? MainAxisAlignment.center : MainAxisAlignment.start,
-            children: [
-              Icon(selected ? iconFilled : icon,
-                  size: dense ? 18 : 21,
-                  color: selected ? AppColors.primary : AppColors.inkSoft),
-              if (!collapsed) ...[
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Text(
-                    label,
-                    style: TextStyle(
-                      fontSize: dense ? 13 : 14,
-                      fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-                      color: selected ? AppColors.primary : AppColors.ink,
+        child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: 44),
+            child: Padding(
+              padding: EdgeInsets.symmetric(
+                  horizontal: collapsed ? 0 : 12, vertical: 8),
+              child: Row(
+                mainAxisAlignment: collapsed
+                    ? MainAxisAlignment.center
+                    : MainAxisAlignment.start,
+                children: [
+                  Icon(selected ? iconFilled : icon,
+                      size: dense ? 17 : 19,
+                      color: selected ? AppColors.primary : AppColors.inkSoft),
+                  if (!collapsed) ...[
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        label,
+                        style: TextStyle(
+                          fontSize: dense ? 12.5 : 13,
+                          fontWeight:
+                              selected ? FontWeight.w700 : FontWeight.w500,
+                          color: selected ? AppColors.primary : AppColors.ink,
+                        ),
+                      ),
                     ),
-                  ),
-                ),
-                if (trailing != null) trailing,
-              ],
-            ],
-          ),
-        ),
+                    if (trailing != null) trailing,
+                  ],
+                ],
+              ),
+            )),
       ),
     );
     return Semantics(

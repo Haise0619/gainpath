@@ -2,7 +2,9 @@ import {DomainError} from '../../platform/errors';
 import {requireVerifiedEmail} from '../../platform/auth-context';
 import {InputValidationError, requiredIdentifier} from '../../platform/validation';
 import {readAll, type DocumentStore, type DocumentData} from '../../platform/firestore/store';
-import {validateBackupPayload, digestOf} from '../workouts/workout-backup-validation';
+import {validateBackupPayload, validateFictionalSessionPayload, digestOf} from '../workouts/workout-backup-validation';
+import {requireFypRuntimeCapability,type FypRuntimeCapability} from '../dataset/fyp-scope';
+import {extractFypObservationEvidence} from '../dataset/fyp-observations';
 import {authorizeAdminReport, type ReportRow} from './admin-reporting';
 
 type Auth = {uid: string; token: Record<string, unknown>};
@@ -24,7 +26,7 @@ type Form = {exerciseId: string; scoringVersion: string; detectorId: string; det
 type Exercise = {exerciseId: string; name: string; sessions: number; fullReps: number; partialReps: number; trackedMicros: number; manualSets: number};
 export interface WorkoutReport {
   schemaVersion: 1; organizationId: string; startAtMillis: number; endAtMillis: number;
-  sourceReadStartedAtMillis: number; capturedAtMillis: number; timezone: 'Asia/Kuala_Lumpur'; classification: 'provisional_member_backup';
+  sourceReadStartedAtMillis: number; capturedAtMillis: number; timezone: 'Asia/Kuala_Lumpur'; classification: 'provisional_member_backup'|'fictional_synthetic_observation'; fictional?:true;
   coverage: {membersScanned: number; activeMembers: number; membersWithBackups: number; membersWithActivity: number; backupRecords: number; bytesRead: number};
   totals: Totals; daily: ({date: string} & Totals)[]; exercises: Exercise[]; forms: Form[];
 }
@@ -38,17 +40,18 @@ function checkPage(rows: ReportRow[], after: string | undefined, limit: number, 
   }
 }
 
-export async function adminWorkoutReport(store: DocumentStore, auth: Auth | undefined, raw: unknown, reader: WorkoutReportReader, clock: () => number = Date.now): Promise<WorkoutReport> {
+export async function adminWorkoutReport(store: DocumentStore, auth: Auth | undefined, raw: unknown, reader: WorkoutReportReader, clock: () => number = Date.now, fypCapability?:FypRuntimeCapability): Promise<WorkoutReport> {
   requireVerifiedEmail(auth);
   const q = raw as DocumentData, now = clock();
   if (!q || typeof q !== 'object' || Array.isArray(q) || Object.keys(q).length !== 4 || q.schemaVersion !== 1 ||
       !integer(now) || now > 8640000000000000 - DAY || !integer(q.startAtMillis) || !integer(q.endAtMillis) ||
       q.startAtMillis >= q.endAtMillis || q.endAtMillis > now + DAY) throw new InputValidationError('Invalid workout report query.');
   const org = requiredIdentifier(q.organizationId, 'organizationId');
+  const fictional=requireFypRuntimeCapability(fypCapability,org);
   const authorize = () => store.transact(tx => authorizeAdminReport(tx, auth!, org));
   await authorize();
   const result: WorkoutReport = {schemaVersion: 1, organizationId: org, startAtMillis: q.startAtMillis, endAtMillis: q.endAtMillis,
-    sourceReadStartedAtMillis: now, capturedAtMillis: now, timezone: 'Asia/Kuala_Lumpur', classification: 'provisional_member_backup',
+    sourceReadStartedAtMillis: now, capturedAtMillis: now, timezone: 'Asia/Kuala_Lumpur', classification: fictional?'fictional_synthetic_observation':'provisional_member_backup',...(fictional?{fictional:true as const}:{}),
     coverage: {membersScanned: 0, activeMembers: 0, membersWithBackups: 0, membersWithActivity: 0, backupRecords: 0, bytesRead: 0},
     totals: emptyWorkoutTotals(), daily: [], exercises: [], forms: []};
   const memberRows: ReportRow[] = [];
@@ -99,13 +102,14 @@ export async function adminWorkoutReport(store: DocumentStore, auth: Auth | unde
         const b = row.data;
         result.coverage.backupRecords++;
         if (result.coverage.backupRecords > WORKOUT_REPORT_LIMITS.backups) throw cap();
-        if (b.schemaVersion !== 1 || b.classification !== 'provisional_member_backup' || !['session', 'routine'].includes(String(b.kind)) ||
+        if (b.schemaVersion !== 1 || b.classification !== (fictional?'fictional_synthetic_observation':'provisional_member_backup') || !['session', 'routine'].includes(String(b.kind)) ||
             b.key !== row.id || b.key !== `${b.kind}-${b.id}` || typeof b.payloadJson !== 'string' || !integer(b.updatedAtMillis)) throw fail();
         result.coverage.bytesRead += Buffer.byteLength(b.payloadJson, 'utf8');
         if (result.coverage.bytesRead > WORKOUT_REPORT_LIMITS.bytes) throw cap();
         let p: DocumentData;
         try {
-          p = validateBackupPayload(String(b.kind), String(b.id), org, uid, JSON.parse(b.payloadJson));
+          if(fictional){if(b.kind!=='session')throw fail();extractFypObservationEvidence({organizationId:org,memberId:uid},row,now,fypCapability!);p=validateFictionalSessionPayload(String(b.id),org,uid,JSON.parse(b.payloadJson));}
+          else p = validateBackupPayload(String(b.kind), String(b.id), org, uid, JSON.parse(b.payloadJson));
           if (digestOf(p) !== b.digest) throw fail();
         } catch (_) {throw fail();}
         hasBackups = true;

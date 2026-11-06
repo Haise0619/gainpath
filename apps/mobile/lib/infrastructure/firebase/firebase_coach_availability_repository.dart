@@ -28,7 +28,7 @@ class FirebaseCoachAvailabilityRepository
       String name, Map<String, dynamic> input) async {
     _check();
     try {
-      final result = await firebaseCallable(name, functions: _functions)
+      final result = await firebaseScopedCallable(scope, name, functions: _functions)
           .call<Map<String, dynamic>>(input);
       _check();
       return result.data;

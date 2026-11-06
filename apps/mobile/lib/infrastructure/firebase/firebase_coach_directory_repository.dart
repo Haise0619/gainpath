@@ -66,7 +66,7 @@ class FirebaseCoachDirectoryRepository implements CoachDirectoryRepository {
   }
 
   Query<Map<String, dynamic>> get _query => _db
-      .collection('orgs/${scope.organizationId}/coaches')
+      .collection('${scope.dataRootPath}/coaches')
       .where('status', isEqualTo: 'published')
       .orderBy(FieldPath.documentId);
   @override

@@ -14,7 +14,11 @@ class PublishedExerciseTutorialScreen extends StatefulWidget {
       required this.exercise,
       required this.playerFactory,
       this.authorized,
+      this.trackingLabel,
+      this.trackingDescription,
+      this.targetLabel,
       this.perArmTargets = false});
+  final String? trackingLabel, trackingDescription, targetLabel;
   final bool perArmTargets;
   final PublishedRoutineExercise exercise;
   final TutorialPlayerFactory playerFactory;
@@ -348,9 +352,29 @@ class _PublishedExerciseTutorialScreenState
             DetailRow('Day', '${e.dayNumber}'),
             DetailRow('Sets', '${e.sets}'),
             DetailRow(
-                widget.perArmTargets ? 'Reps per arm per set' : 'Reps per set',
-                '${e.reps}')
+                widget.targetLabel ??
+                    (widget.perArmTargets
+                        ? 'Reps per arm per set'
+                        : 'Reps per set'),
+                '${e.reps}'),
+            DetailRow(
+                'Rest', e.restSeconds == 0 ? 'No rest' : '${e.restSeconds} sec')
           ])),
+          if (widget.trackingLabel != null) ...[
+            const SizedBox(height: 18),
+            const Eyebrow('Training mode'),
+            Panel(
+                child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                  Text(widget.trackingLabel!,
+                      style: Theme.of(context).textTheme.titleMedium),
+                  if (widget.trackingDescription != null) ...[
+                    const SizedBox(height: 4),
+                    Text(widget.trackingDescription!),
+                  ],
+                ])),
+          ],
           if (e.cue.trim().isNotEmpty) ...[
             const SizedBox(height: 18),
             const Eyebrow('Published cue'),

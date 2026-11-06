@@ -26,6 +26,7 @@ class SquatAnalyzer {
   TrackingStatus _health = TrackingStatus.degraded;
   bool _needsCalibration = true, _paused = false, _previousValid = false;
   int? _lastCapture, _lastNow, _accountedUntil, _lostSince, _standingSince;
+  int? _lastAcceptedDelivery, _lastFrameDelivery;
   int? _previousAngleTime,
       _cycleStart,
       _depthSince,
@@ -40,6 +41,15 @@ class SquatAnalyzer {
   SquatGeometry? _geometry;
   double? _velocity;
   double _confidence = 0;
+  int _resetRevision = 0, _captureGap = 0;
+  Map<String, Object?> _lastReset = const {};
+  /// Current scalar state only; no frame history, persistence or score changes.
+  Map<String, Object?> get trackingSnapshot => {
+    'resetRevision': _resetRevision, 'lastReset': _lastReset,
+    'phase': _phase.name, 'health': _health.name,
+    'needsCalibration': _needsCalibration, 'bottomCredit': _depthReached,
+    'captureMicros': _lastCapture, 'acceptedDeliveryMicros': _lastAcceptedDelivery,
+  };
 
   SquatUpdate update(PoseFrame frame, {required int nowMicros}) {
     final time = frame.capturedAtMicros;
@@ -50,8 +60,10 @@ class SquatAnalyzer {
       throw ArgumentError('Squat timestamps must be monotonic and not future');
     }
     final oldCapture = _lastCapture;
+    _captureGap = oldCapture == null ? 0 : time - oldCapture;
     _lastCapture = time;
     _lastNow = nowMicros;
+    _lastFrameDelivery = nowMicros;
     if (_paused) return _snapshot(time);
     final gap =
         oldCapture != null && time - oldCapture > rules.maximumFrameGapMicros;
@@ -130,6 +142,7 @@ class SquatAnalyzer {
     _previousAngle = angle;
     _previousAngleTime = time;
     _previousValid = !_needsCalibration;
+    _lastAcceptedDelivery = nowMicros;
     return _snapshot(time, cues: cues, completed: completed);
   }
 
@@ -139,10 +152,11 @@ class SquatAnalyzer {
       throw ArgumentError('Watchdog time must be monotonic');
     }
     _lastNow = nowMicros;
+    final delivery = _lastAcceptedDelivery ?? _lastFrameDelivery;
     if (!_paused &&
-        _lastCapture != null &&
-        nowMicros - _lastCapture! > rules.maximumFrameGapMicros) {
-      _lostSince ??= _lastCapture;
+        delivery != null &&
+        nowMicros - delivery > rules.maximumFrameGapMicros) {
+      _lostSince ??= delivery;
       _invalidateCalibration(
           diagnosticReason: SquatDiagnosticReason.watchdogStale,
           diagnosticTime: nowMicros);
@@ -166,6 +180,8 @@ class SquatAnalyzer {
   }
 
   void resume() {
+    _lastAcceptedDelivery = null;
+    _lastFrameDelivery = null;
     _paused = false;
     _invalidateCalibration();
     _lastCapture = null;
@@ -174,6 +190,8 @@ class SquatAnalyzer {
   }
 
   void reset() {
+    _lastAcceptedDelivery = null;
+    _lastFrameDelivery = null;
     _paused = false;
     _invalidateCalibration();
     _lastCapture = _lastNow = _accountedUntil = _lostSince = null;
@@ -369,6 +387,17 @@ class SquatAnalyzer {
       {SquatDiagnosticReason diagnosticReason =
           SquatDiagnosticReason.recalibration,
       int? diagnosticTime}) {
+    if (!_needsCalibration || _cycleStart != null || _standingSince != null) {
+      _resetRevision++;
+      _lastReset = Map.unmodifiable({
+        'reason': diagnosticReason.wire, 'fromPhase': _phase.name,
+        'hadBottomCredit': _depthReached, 'wasCalibrating': _needsCalibration,
+        'captureMicros': _lastCapture, 'nowMicros': diagnosticTime ?? _lastNow,
+        'captureGapMicros': _captureGap,
+        'lastAcceptedDeliveryMicros': _lastAcceptedDelivery,
+        'lastRawKneeAngle': _lastRawAngle, 'confidence': _confidence,
+      });
+    }
     diagnostics?.abort(diagnosticReason, diagnosticTime ?? _lastCapture ?? 0);
     _needsCalibration = true;
     _side = null;

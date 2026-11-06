@@ -85,7 +85,7 @@ class FirebaseWorkoutBackupGateway implements WorkoutBackupGateway {
   Future<WorkoutBackupPage> list(String? cursor) async {
     final data = await _call('list', {
       'after': cursor,
-      'maxPoseMetricsSchemaVersion': 6,
+      'maxPoseMetricsSchemaVersion': 7,
     });
     final raw = data['records'], next = data['nextCursor'];
     if (data.length != 3 ||

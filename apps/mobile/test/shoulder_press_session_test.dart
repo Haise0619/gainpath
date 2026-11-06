@@ -31,7 +31,7 @@ class PressHarness {
         activeScope: () => active,
         camera: camera,
         detectorFactory: () async => detector,
-        audioPort: AudioSink(),
+        audioPort: audio,
         repository: repo,
         clockMicros: () => now,
         sessionId: 'press-session',
@@ -50,6 +50,7 @@ class PressHarness {
   late FailingStore store;
   late WorkoutSessionRepository repo;
   late ShoulderPressWorkoutSession session;
+  final audio = AudioSink();
   int now = 0;
   Future<void> feed(WidgetTester tester, Iterable<PoseFrame> frames) async {
     for (final f in frames) {
@@ -67,6 +68,22 @@ class PressHarness {
 }
 
 void main() {
+  testWidgets('press completion emits actionable independent speech', (tester) async {
+    final h = PressHarness(sets: 1, reps: 5);
+    addTearDown(h.dispose);
+    h.session.audio.setVoiceEnabled(true);
+    await h.session.start(consented: true, setupConfirmed: true);
+    await h.feed(tester, shoulderPressTrajectory());
+    expect(h.audio.played.any((c) => c.text == 'Good repetition.'), isTrue);
+    expect(h.session.analysis!.repetitions, 1);
+    await h.session.close();
+  });
+
+  test('shoulder press uses the common accepted-delivery overlay freshness policy', () async {
+    final h=PressHarness();
+    expect(h.session.preview.overlayUsesDeliveryClock,true);
+    await h.session.close();h.dispose();
+  });
   testWidgets(
       'fresh raw frames with latency watchdog ticks and moving projections complete authored sets',
       (tester) async {
@@ -235,3 +252,4 @@ void main() {
         throwsArgumentError);
   });
 }
+

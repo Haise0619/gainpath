@@ -27,5 +27,8 @@ final class AudioPlaybackEpoch {
     }
 
     long generation() { return generation; }
+    boolean isActive(String id) {
+        return !closed && utterance != null && utterance.equals(id);
+    }
     void close() { closed = true; utterance = null; }
 }

@@ -52,7 +52,7 @@ WorkoutTotals _totals(Object? v) {
 }
 
 AdminWorkoutReport parseAdminWorkoutReport(
-    Object? raw, SessionScope scope, AdminReportQuery query) {
+    Object? raw, SessionScope scope, AdminReportQuery query, {bool allowUnified=false}) {
   final m = _map(raw),
       start = query.range.start.millisecondsSinceEpoch,
       end = query.range.end.millisecondsSinceEpoch;
@@ -62,7 +62,11 @@ AdminWorkoutReport parseAdminWorkoutReport(
       m['startAtMillis'] != start ||
       m['endAtMillis'] != end ||
       m['timezone'] != 'Asia/Kuala_Lumpur' ||
-      m['classification'] != 'provisional_member_backup') {
+      (allowUnified ? m['classification']!='mixed_descriptive_sources'||m['containsFictional']!=true||scope.datasetScope!=null : scope.datasetScope == null
+          ? m['classification'] != 'provisional_member_backup' ||
+              m['fictional'] == true
+          : m['classification'] != 'fictional_synthetic_observation' ||
+              m['fictional'] != true)) {
     throw const FormatException('Workout report scope mismatch');
   }
   final scan = _int(m['sourceReadStartedAtMillis'], 8640000000000000),
@@ -214,6 +218,9 @@ AdminWorkoutReport parseAdminWorkoutReport(
     }
   }
   return AdminWorkoutReport(
+      mixedSources:allowUnified,
+      sourceSessionCounts:allowUnified?{for(final e in _map(m['sourceBreakdown']).entries)e.key:_int(_map(e.value)['sessions'])}:const {},
+      fictional: scope.datasetScope != null,
       query: query,
       capturedAt: DateTime.fromMillisecondsSinceEpoch(captured, isUtc: true),
       scanStartedAt: DateTime.fromMillisecondsSinceEpoch(scan, isUtc: true),

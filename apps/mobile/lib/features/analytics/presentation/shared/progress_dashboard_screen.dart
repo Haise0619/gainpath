@@ -182,7 +182,7 @@ class _ProgressDashboardScreenState extends State<ProgressDashboardScreen>
               volumeThisWeek: volume.isEmpty ? 0 : volume.last,
               headlineOverride: local == null
                   ? null
-                  : '${local.weeklySessions} saved camera sessions this week',
+                  : '${local.weeklySessions} ${local.scope.datasetScope != null ? 'fictional observations' : 'saved camera sessions'} this week',
               detailOverride: local == null
                   ? null
                   : 'Local measurements remain provisional. A saved capture does not imply a completed routine.',
@@ -231,7 +231,9 @@ class _ProgressDashboardScreenState extends State<ProgressDashboardScreen>
                     label: local == null ? 'Sessions' : 'Saved sessions',
                     delta: local == null
                         ? '+3 vs last month'
-                        : 'Camera captures this week',
+                        : local.scope.datasetScope != null
+                            ? 'Fictional observations this week'
+                            : 'Camera captures this week',
                     deltaColor: AppColors.success,
                     onTap: openHistory,
                   ),

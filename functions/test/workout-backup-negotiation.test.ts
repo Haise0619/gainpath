@@ -78,7 +78,7 @@ it('schema-two curl sessions remain available to existing clients', async () => 
   expect((await listWorkoutBackups(store, actor, query)).records).toHaveLength(1);
   expect((await listWorkoutBackups(store, actor, {...query, maxPoseMetricsSchemaVersion: 2})).records).toHaveLength(1);
 });
-it.each([0, 1, 7, -1, 1.5, '3', null, true])('rejects unsupported negotiated maximum %j', async max => {
+it.each([0, 1, 8, -1, 1.5, '3', null, true])('rejects unsupported negotiated maximum %j', async max => {
   await expect(listWorkoutBackups(store, actor, {...query, maxPoseMetricsSchemaVersion: max})).rejects.toHaveProperty('name', 'InputValidationError');
 });
 it.each(['digest', 'side', 'future'])('validates hidden row records before filtering (%s)', async corruption => {

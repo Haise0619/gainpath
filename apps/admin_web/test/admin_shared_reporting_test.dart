@@ -37,6 +37,16 @@ void main() {
   setUpAll(() => GoogleFonts.config.allowRuntimeFetching = false);
 
   group('AdminReportingCubit', () {
+    test('concurrent identical loads share one request; completed refresh is fresh', () async {
+      final gateway = _ControlledReportingGateway();
+      final cubit = AdminReportingCubit(gateway: gateway);
+      final first = cubit.load();
+      final second = cubit.load();
+      expect(gateway.queryCount, 1);
+      await cubit.close();
+      gateway.nextCompleter.completeError(StateError('closed fixture'));
+      await Future.wait([first, second]);
+    });
     test('initial state has null snapshot and false loading', () {
       const gateway = UnavailableAdminReportingGateway();
       final cubit = AdminReportingCubit(gateway: gateway);
