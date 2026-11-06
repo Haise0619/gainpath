@@ -92,7 +92,10 @@ class RoutineScreen extends StatelessWidget {
                             Text(
                                 publishedRoutine == null
                                     ? '${e.sets} sets  ·  ${e.reps} reps  ·  90s rest'
-                                    : '${e.sets} sets  ·  ${e.reps} reps',
+                                    : e is PublishedRoutineExercise &&
+                                            e.durationSeconds != null
+                                        ? '${e.sets} sets · ${e.durationSeconds}s per set'
+                                        : '${e.sets} sets  ·  ${e.reps} reps',
                                 style: Theme.of(context)
                                     .textTheme
                                     .bodyMedium

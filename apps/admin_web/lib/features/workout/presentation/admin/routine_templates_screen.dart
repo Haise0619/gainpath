@@ -280,7 +280,7 @@ class _TemplateCard extends StatelessWidget {
                   if (showRemoval)
                     IconButton(
                         tooltip: 'Remove template',
-                        onPressed: template.readOnly?null:onRemove,
+                        onPressed: template.readOnly ? null : onRemove,
                         icon: const Icon(Icons.delete_outline, size: 18)),
                   IconButton(
                     icon: const Icon(Icons.edit_outlined, size: 18),
@@ -354,7 +354,7 @@ class _TemplateCard extends StatelessWidget {
                                             const SizedBox(width: 8),
                                             Expanded(
                                               child: Text(
-                                                  '${e.exerciseName}  ·  ${e.sets} × ${e.reps}',
+                                                  '${e.exerciseName}  ·  ${e.sets} × ${e.prescription is TimedPrescription ? '${(e.prescription as TimedPrescription).durationSeconds}s' : '${e.reps} reps'}',
                                                   style: const TextStyle(
                                                       fontSize: 13)),
                                             ),
@@ -367,7 +367,9 @@ class _TemplateCard extends StatelessWidget {
                         Align(
                           alignment: Alignment.centerRight,
                           child: OutlinedButton.icon(
-                            onPressed: publishing || template.readOnly ? null : onPublish,
+                            onPressed: publishing || template.readOnly
+                                ? null
+                                : onPublish,
                             icon: publishing
                                 ? const SizedBox(
                                     width: 16,
@@ -390,6 +392,11 @@ class _TemplateCard extends StatelessWidget {
 }
 
 class _ExerciseDraft {
+  static int _serial = 0;
+  final String entryId;
+  ExerciseExecutionMode? mode;
+  int? sourceRevision;
+  final TextEditingController rest;
   final TextEditingController name;
   final TextEditingController sets;
   final TextEditingController reps;
@@ -398,8 +405,15 @@ class _ExerciseDraft {
       {String name = '',
       String sets = '3',
       String reps = '10',
+      String rest = '60',
+      String? entryId,
+      this.mode,
+      this.sourceRevision,
       this.selectedExerciseId})
-      : name = TextEditingController(text: name),
+      : entryId = entryId ??
+            'entry-${DateTime.now().microsecondsSinceEpoch}-${_serial++}',
+        rest = TextEditingController(text: rest),
+        name = TextEditingController(text: name),
         sets = TextEditingController(text: sets),
         reps = TextEditingController(text: reps);
 
@@ -407,6 +421,7 @@ class _ExerciseDraft {
     name.dispose();
     sets.dispose();
     reps.dispose();
+    rest.dispose();
   }
 }
 
@@ -461,7 +476,12 @@ class _TemplateFormPageState extends State<_TemplateFormPage> {
               .map((e) => _ExerciseDraft(
                   name: e.exerciseName,
                   sets: '${e.sets}',
-                  reps: '${e.reps}',
+                  reps:
+                      '${e.prescription is TimedPrescription ? (e.prescription as TimedPrescription).durationSeconds : e.reps}',
+                  rest: '${e.prescription?.restSeconds ?? 60}',
+                  entryId: e.entryId.isEmpty ? null : e.entryId,
+                  mode: e.executionMode,
+                  sourceRevision: e.sourceCatalogRevision,
                   selectedExerciseId:
                       e.exerciseId.isEmpty ? null : e.exerciseId))
               .toList()))
@@ -475,6 +495,73 @@ class _TemplateFormPageState extends State<_TemplateFormPage> {
       context.read<TutorialRepository>().requiresCatalogSelection;
 
   bool get _isEdit => widget.existing != null;
+  bool get _isV2 =>
+      _usesCatalog &&
+      (widget.existing == null ||
+          widget.existing!.schemaVersion == 2 ||
+          _upgradeLegacy);
+  bool _upgradeLegacy = false;
+  int _stage = 0;
+  void _selectStage(int stage) {
+    if (stage > 0 &&
+        (_name.text.trim().isEmpty ||
+            int.tryParse(_duration.text) == null ||
+            int.parse(_duration.text) < 5 ||
+            int.parse(_duration.text) > 240)) {
+      setState(() {
+        _stage = 0;
+        _error = 'Give the routine a name and a duration of 5–240 minutes.';
+      });
+      return;
+    }
+    if (stage == 2) {
+      for (final day in _days) {
+        for (final row in day.exercises) {
+          try {
+            if (row.selectedExerciseId == null)
+              throw const FormatException('Select an exercise for every row.');
+            final sets = int.tryParse(row.sets.text),
+                value = int.tryParse(row.reps.text),
+                rest = int.tryParse(row.rest.text);
+            if (sets == null || value == null || rest == null)
+              throw const FormatException('Use whole target values.');
+            final ExercisePrescription target =
+                row.mode == ExerciseExecutionMode.videoGuidedTimed
+                    ? TimedPrescription(
+                        sets: sets, durationSeconds: value, restSeconds: rest)
+                    : RepetitionPrescription(
+                        sets: sets, repetitions: value, restSeconds: rest);
+            target.validate();
+          } on FormatException catch (error) {
+            setState(() {
+              _stage = 1;
+              _error = error.message;
+            });
+            return;
+          }
+        }
+      }
+    }
+    setState(() {
+      _stage = stage;
+      _error = null;
+    });
+  }
+
+  void _copyDefaults(_ExerciseDraft row, TutorialVideo item) {
+    row.selectedExerciseId = item.id;
+    row.mode = item.executionMode ??
+        (item.trackingCapability.hasPoseTracking
+            ? ExerciseExecutionMode.aiTracked
+            : ExerciseExecutionMode.legacyManual);
+    row.sourceRevision = item.editRevision;
+    final defaults = item.defaultPrescription;
+    row.sets.text = '${defaults?.sets ?? 3}';
+    row.rest.text = '${defaults?.restSeconds ?? 60}';
+    row.reps.text = defaults is TimedPrescription
+        ? '${defaults.durationSeconds}'
+        : '${defaults is RepetitionPrescription ? defaults.repetitions : 10}';
+  }
 
   @override
   void initState() {
@@ -494,7 +581,8 @@ class _TemplateFormPageState extends State<_TemplateFormPage> {
       final entries = await context.read<TutorialRepository>().load();
       if (mounted) {
         setState(() => _catalog = entries
-            .where((entry) => entry.status == TutorialStatus.active)
+            .where((entry) =>
+                !entry.archived && entry.status == TutorialStatus.active)
             .toList());
       }
     } catch (_) {
@@ -508,6 +596,22 @@ class _TemplateFormPageState extends State<_TemplateFormPage> {
   }
 
   void _repaint() => setState(() {});
+  Future<void> _discard() async {
+    if (_saving) return;
+    final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (dialog) => AlertDialog(
+                title: const Text('Discard unsaved routine changes?'),
+                actions: [
+                  TextButton(
+                      onPressed: () => Navigator.pop(dialog, false),
+                      child: const Text('Keep editing')),
+                  TextButton(
+                      onPressed: () => Navigator.pop(dialog, true),
+                      child: const Text('Discard'))
+                ]));
+    if (confirmed == true && mounted) widget.onDone();
+  }
 
   @override
   void dispose() {
@@ -598,14 +702,48 @@ class _TemplateFormPageState extends State<_TemplateFormPage> {
             sets <= 0 ||
             reps == null ||
             reps <= 0 ||
-            (_usesCatalog && (sets > 50 || reps > 100))) {
+            (_usesCatalog &&
+                (sets > 50 ||
+                    reps >
+                        (ex.mode == ExerciseExecutionMode.videoGuidedTimed
+                            ? 3600
+                            : 100)))) {
           setState(() => _error = _usesCatalog
               ? 'Day ${i + 1}: sets must be 1–50 and reps 1–100.'
               : 'Day ${i + 1}: sets and reps must be whole numbers greater than zero.');
           return;
         }
-        exercises.add(RoutineExerciseRef(name, sets, reps,
-            exerciseId: selected?.id ?? ''));
+        ExercisePrescription? target;
+        if (_isV2) {
+          final rest = int.tryParse(ex.rest.text);
+          if (rest == null) {
+            setState(() => _error = 'Use whole rest seconds.');
+            return;
+          }
+          target = ex.mode == ExerciseExecutionMode.videoGuidedTimed
+              ? TimedPrescription(
+                  sets: sets, durationSeconds: reps, restSeconds: rest)
+              : RepetitionPrescription(
+                  sets: sets, repetitions: reps, restSeconds: rest);
+          try {
+            target.validate();
+          } on FormatException catch (error) {
+            setState(() => _error = error.message);
+            return;
+          }
+        }
+        exercises.add(RoutineExerciseRef(
+            name, sets, target is TimedPrescription ? null : reps,
+            exerciseId: selected?.id ?? '',
+            entryId: ex.entryId,
+            executionMode: _isV2
+                ? ex.mode ??
+                    (selected!.trackingCapability.hasPoseTracking
+                        ? ExerciseExecutionMode.aiTracked
+                        : ExerciseExecutionMode.legacyManual)
+                : null,
+            prescription: target,
+            sourceCatalogRevision: ex.sourceRevision));
       }
       if (exercises.isEmpty) {
         setState(() => _error = 'Day ${i + 1} needs at least one exercise.');
@@ -624,6 +762,7 @@ class _TemplateFormPageState extends State<_TemplateFormPage> {
       id: widget.existing?.id ??
           (_usesCatalog ? '' : 'rt${DateTime.now().millisecondsSinceEpoch}'),
       editBaseline: widget.existing?.editBaseline,
+      schemaVersion: _isV2 ? 2 : 1,
       name: _name.text.trim(),
       level: _level,
       assignedMembers: 0,
@@ -695,12 +834,61 @@ class _TemplateFormPageState extends State<_TemplateFormPage> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             PageBreadcrumb(crumbs: [
-              PageCrumb('Routine Templates', widget.onDone),
+              PageCrumb('Routine Templates', _discard),
               PageCrumb(_isEdit ? 'Edit routine' : 'Create routine'),
             ]),
             const SizedBox(height: 6),
+            if (_usesCatalog && widget.existing?.schemaVersion == 1)
+              CheckboxListTile(
+                  value: _upgradeLegacy,
+                  title: const Text('Create an upgraded routine successor'),
+                  subtitle: const Text(
+                      'Keeps the original published routine and existing workout history.'),
+                  onChanged: _saving
+                      ? null
+                      : (value) => setState(() {
+                            _upgradeLegacy = value ?? false;
+                            if (_upgradeLegacy) {
+                              for (final day in _days) {
+                                for (final row in day.exercises) {
+                                  final item = _catalog
+                                      .where(
+                                          (e) => e.id == row.selectedExerciseId)
+                                      .firstOrNull;
+                                  row.mode = item?.trackingCapability
+                                              .hasPoseTracking ==
+                                          true
+                                      ? ExerciseExecutionMode.aiTracked
+                                      : ExerciseExecutionMode.legacyManual;
+                                }
+                              }
+                            }
+                          })),
             Text(_isEdit ? 'Edit routine template' : 'Create routine template',
                 style: Theme.of(context).textTheme.headlineMedium),
+            Wrap(spacing: 8, children: [
+              for (var i = 0; i < 3; i++)
+                ChoiceChip(
+                    label: Text(const ['Details', 'Structure', 'Review'][i]),
+                    selected: _stage == i,
+                    onSelected: (_) => _selectStage(i))
+            ]),
+            if (_stage == 2)
+              Panel(
+                  child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                    const Text('Review effective workout targets'),
+                    for (var d = 0; d < _days.length; d++) ...[
+                      Text('Day ${d + 1}'),
+                      for (final row in _days[d].exercises)
+                        Text(
+                            '${_catalog.where((e) => e.id == row.selectedExerciseId).firstOrNull?.title ?? row.name.text}: '
+                            '${row.sets.text} sets × ${row.reps.text}${row.mode == ExerciseExecutionMode.videoGuidedTimed ? ' seconds' : ' reps'} · ${row.rest.text}s rest'),
+                    ],
+                    const Text(
+                        'Save draft first. Publication is a separate action.'),
+                  ])),
             const SizedBox(height: 4),
             Text(
                 _usesCatalog
@@ -736,107 +924,111 @@ class _TemplateFormPageState extends State<_TemplateFormPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Eyebrow('Template details'),
-        Panel(
-          child: Column(
-            children: [
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    flex: 2,
-                    child: TextField(
-                      controller: _name,
-                      decoration: const InputDecoration(
-                          labelText: 'Template name', isDense: true),
+        if (!_isV2 || _stage == 0) ...[
+          const Eyebrow('Template details'),
+          Panel(
+            child: Column(
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      flex: 2,
+                      child: TextField(
+                        controller: _name,
+                        decoration: const InputDecoration(
+                            labelText: 'Template name', isDense: true),
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: DropdownButtonFormField<String>(
-                      initialValue: _level,
-                      decoration: const InputDecoration(
-                          labelText: 'Level', isDense: true),
-                      items: _levels
-                          .map(
-                              (l) => DropdownMenuItem(value: l, child: Text(l)))
-                          .toList(),
-                      onChanged: (v) => setState(() => _level = v ?? _level),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: DropdownButtonFormField<String>(
+                        initialValue: _level,
+                        decoration: const InputDecoration(
+                            labelText: 'Level', isDense: true),
+                        items: _levels
+                            .map((l) =>
+                                DropdownMenuItem(value: l, child: Text(l)))
+                            .toList(),
+                        onChanged: (v) => setState(() => _level = v ?? _level),
+                      ),
                     ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: _imageUrl,
-                decoration: const InputDecoration(
-                    labelText: 'Cover image URL', isDense: true),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: _goal,
-                maxLines: 2,
-                decoration: const InputDecoration(
-                    labelText: 'Goal / description', isDense: true),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: _duration,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(
-                    labelText: 'Est. session duration (minutes)',
-                    isDense: true),
-              ),
-              const SizedBox(height: 12),
-              Align(
-                alignment: Alignment.centerLeft,
-                child:
-                    Text('Tags', style: Theme.of(context).textTheme.bodyMedium),
-              ),
-              const SizedBox(height: 6),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: _tagOptions.map((t) {
-                  final selected = _tags.contains(t);
-                  return FilterChip(
-                    label: Text(t),
-                    selected: selected,
-                    onSelected: (v) =>
-                        setState(() => v ? _tags.add(t) : _tags.remove(t)),
-                    backgroundColor: AppColors.surface,
-                    selectedColor: AppColors.primaryTint,
-                    labelStyle: TextStyle(
-                        fontSize: 12.5,
-                        fontWeight: FontWeight.w600,
-                        color: selected ? AppColors.primary : AppColors.ink),
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(999),
-                        side: const BorderSide(color: AppColors.hairline)),
-                  );
-                }).toList(),
-              ),
-              const SizedBox(height: 14),
-              EditableStringList(
-                label: 'Equipment needed',
-                items: _equipmentNeeded,
-                onChanged: (v) => _equipmentNeeded = v,
-              ),
-            ],
+                  ],
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: _imageUrl,
+                  decoration: const InputDecoration(
+                      labelText: 'Cover image URL', isDense: true),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: _goal,
+                  maxLines: 2,
+                  decoration: const InputDecoration(
+                      labelText: 'Goal / description', isDense: true),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: _duration,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                      labelText: 'Est. session duration (minutes)',
+                      isDense: true),
+                ),
+                const SizedBox(height: 12),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text('Tags',
+                      style: Theme.of(context).textTheme.bodyMedium),
+                ),
+                const SizedBox(height: 6),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: _tagOptions.map((t) {
+                    final selected = _tags.contains(t);
+                    return FilterChip(
+                      label: Text(t),
+                      selected: selected,
+                      onSelected: (v) =>
+                          setState(() => v ? _tags.add(t) : _tags.remove(t)),
+                      backgroundColor: AppColors.surface,
+                      selectedColor: AppColors.primaryTint,
+                      labelStyle: TextStyle(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w600,
+                          color: selected ? AppColors.primary : AppColors.ink),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(999),
+                          side: const BorderSide(color: AppColors.hairline)),
+                    );
+                  }).toList(),
+                ),
+                const SizedBox(height: 14),
+                EditableStringList(
+                  label: 'Equipment needed',
+                  items: _equipmentNeeded,
+                  onChanged: (v) => _equipmentNeeded = v,
+                ),
+              ],
+            ),
           ),
-        ),
+        ],
         const SizedBox(height: 18),
-        const Eyebrow('Day-by-day structure'),
-        ...List.generate(
-            _days.length, (dayIndex) => _dayEditor(context, dayIndex)),
-        Padding(
-          padding: const EdgeInsets.only(bottom: 8),
-          child: OutlinedButton.icon(
-            onPressed: _addDay,
-            icon: const Icon(Icons.add_rounded, size: 16),
-            label: const Text('Add day'),
+        if (!_isV2 || _stage == 1) ...[
+          const Eyebrow('Day-by-day structure'),
+          ...List.generate(
+              _days.length, (dayIndex) => _dayEditor(context, dayIndex)),
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: OutlinedButton.icon(
+              onPressed: _addDay,
+              icon: const Icon(Icons.add_rounded, size: 16),
+              label: const Text('Add day'),
+            ),
           ),
-        ),
+        ],
         if (_error != null)
           Padding(
             padding: const EdgeInsets.only(bottom: 10),
@@ -857,8 +1049,14 @@ class _TemplateFormPageState extends State<_TemplateFormPage> {
         const SizedBox(height: 8),
         Row(
           children: [
+            if (_isV2 && _stage < 2) ...[
+              FilledButton(
+                  onPressed: _saving ? null : () => _selectStage(_stage + 1),
+                  child: const Text('Continue')),
+              const SizedBox(width: 10),
+            ],
             OutlinedButton(
-                onPressed: _saving ? null : widget.onDone,
+                onPressed: _saving ? null : _discard,
                 child: const Text('Cancel')),
             const SizedBox(width: 10),
             FilledButton(
@@ -957,8 +1155,15 @@ class _TemplateFormPageState extends State<_TemplateFormPage> {
                                       .toList(),
                                   onChanged: _catalogLoading || _catalog.isEmpty
                                       ? null
-                                      : (id) => setState(
-                                          () => ex.selectedExerciseId = id),
+                                      : (id) => setState(() {
+                                            final item = _catalog
+                                                .firstWhere((e) => e.id == id);
+                                            if (_isV2) {
+                                              _copyDefaults(ex, item);
+                                            } else {
+                                              ex.selectedExerciseId = id;
+                                            }
+                                          }),
                                 )
                               : TextField(
                                   controller: ex.name,
@@ -980,8 +1185,12 @@ class _TemplateFormPageState extends State<_TemplateFormPage> {
                           child: TextField(
                             controller: ex.reps,
                             keyboardType: TextInputType.number,
-                            decoration: const InputDecoration(
-                                hintText: 'Reps', isDense: true),
+                            decoration: InputDecoration(
+                                hintText: ex.mode ==
+                                        ExerciseExecutionMode.videoGuidedTimed
+                                    ? 'Duration (seconds)'
+                                    : 'Reps',
+                                isDense: true),
                           ),
                         ),
                         IconButton(
@@ -996,6 +1205,28 @@ class _TemplateFormPageState extends State<_TemplateFormPage> {
                       ],
                     ),
                     Wrap(spacing: 8, children: [
+                      if (_isV2) ...[
+                        SizedBox(
+                            width: 140,
+                            child: TextField(
+                                controller: ex.rest,
+                                keyboardType: TextInputType.number,
+                                decoration: const InputDecoration(
+                                    labelText: 'Rest (seconds)'))),
+                        Text(ex.mode == ExerciseExecutionMode.videoGuidedTimed
+                            ? 'Video guided · Timer tracked'
+                            : ex.mode == ExerciseExecutionMode.aiTracked
+                                ? 'AI tracking'
+                                : 'Self-reported sets'),
+                        TextButton(
+                            onPressed: ex.selectedExerciseId == null
+                                ? null
+                                : () => setState(() => _copyDefaults(
+                                    ex,
+                                    _catalog.firstWhere(
+                                        (e) => e.id == ex.selectedExerciseId))),
+                            child: const Text('Reset to exercise defaults')),
+                      ],
                       TextButton.icon(
                           onPressed: exIndex == 0 || _saving || _reloadRequired
                               ? null

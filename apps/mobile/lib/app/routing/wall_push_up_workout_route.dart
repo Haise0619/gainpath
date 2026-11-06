@@ -87,7 +87,7 @@ class _WallPushUpWorkoutRouteState extends State<WallPushUpWorkoutRoute>
           detectorId: 'blazepose-tflite',
           detectorVersion: BlazePoseModelContract.version,
           sets: launch.exercise.sets,
-          reps: launch.exercise.reps,
+          reps: launch.repetitionTarget.repetitions,
           saveVoiceMode: (mode) async {
             await _voicePreferences?.write(mode);
           });
@@ -168,7 +168,7 @@ class _WallPushUpWorkoutRouteState extends State<WallPushUpWorkoutRoute>
     return RealWorkoutView(
         session: session,
         exerciseName: widget.launch.exercise.name,
-        targetRepetitions: widget.launch.exercise.reps,
+        targetRepetitions: widget.launch.repetitionTarget.repetitions,
         routineContext: widget.launch.routineContext,
         viewport:
             PoseCameraViewport(camera: _camera!, session: session.preview),

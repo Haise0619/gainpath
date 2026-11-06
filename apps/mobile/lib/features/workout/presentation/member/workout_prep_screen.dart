@@ -7,7 +7,6 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:gainpath_identity/gainpath_identity.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
 import 'package:gainpath_domain/workout.dart';
-import 'package:gainpath_domain/gainpath_domain.dart' show AppRole;
 import 'equipment_scanner_screen.dart';
 import 'camera_setup_screen.dart';
 import 'exercise_tutorial_screen.dart';
@@ -350,23 +349,25 @@ class WorkoutPrepScreen extends StatelessWidget {
               ExerciseTracker.sideViewCalfRaise => calfRaiseCaptureInstruction,
               ExerciseTracker.sideViewWallPushUp =>
                 wallPushUpCaptureInstruction,
-              ExerciseTracker.sideViewFloorPushUp => floorPushUpCaptureInstruction,
+              ExerciseTracker.sideViewFloorPushUp =>
+                floorPushUpCaptureInstruction,
               _ => null,
             },
-            setupConfirmationLabel: tracker == ExerciseTracker.sideViewFloorPushUp
-                ? floorPushUpSetupConfirmation
-                : tracker ==
-                    ExerciseTracker.sideViewWallPushUp
-                ? wallPushUpSetupConfirmation
-                : tracker == ExerciseTracker.frontViewLateralRaise
-                    ? lateralRaiseSetupConfirmation
-                    : tracker == ExerciseTracker.frontViewShoulderPress
-                        ? shoulderPressSetupConfirmation
-                        : tracker == ExerciseTracker.sideViewRow
-                            ? rowSetupConfirmation
-                            : tracker == ExerciseTracker.sideViewReverseLunge
-                                ? reverseLungeSetupConfirmation
-                                : null,
+            setupConfirmationLabel:
+                tracker == ExerciseTracker.sideViewFloorPushUp
+                    ? floorPushUpSetupConfirmation
+                    : tracker == ExerciseTracker.sideViewWallPushUp
+                        ? wallPushUpSetupConfirmation
+                        : tracker == ExerciseTracker.frontViewLateralRaise
+                            ? lateralRaiseSetupConfirmation
+                            : tracker == ExerciseTracker.frontViewShoulderPress
+                                ? shoulderPressSetupConfirmation
+                                : tracker == ExerciseTracker.sideViewRow
+                                    ? rowSetupConfirmation
+                                    : tracker ==
+                                            ExerciseTracker.sideViewReverseLunge
+                                        ? reverseLungeSetupConfirmation
+                                        : null,
             onUploadChanged: (value) => uploadRequested = value));
     if (consented != true ||
         !context.mounted ||
@@ -593,14 +594,19 @@ class _WorkoutExerciseRow extends StatelessWidget {
                         style: Theme.of(context).textTheme.titleMedium),
                     const SizedBox(height: 3),
                     Text(
-                        '${exercise.sets} sets · ${exercise.reps} ${switch (tracker) {
-                          ExerciseTracker.sideViewCurl => 'reps per arm',
-                          ExerciseTracker.sideViewRow =>
-                            'reps per selected arm',
-                          ExerciseTracker.sideViewReverseLunge =>
-                            'reps per selected leg',
-                          _ => 'reps'
-                        }}${day == null ? '' : ' · Day $day'}',
+                        exercise is PublishedRoutineExercise &&
+                                (exercise as PublishedRoutineExercise)
+                                        .durationSeconds !=
+                                    null
+                            ? '${exercise.sets} sets · ${(exercise as PublishedRoutineExercise).durationSeconds}s per set'
+                            : '${exercise.sets} sets · ${exercise.reps} ${switch (tracker) {
+                                ExerciseTracker.sideViewCurl => 'reps per arm',
+                                ExerciseTracker.sideViewRow =>
+                                  'reps per selected arm',
+                                ExerciseTracker.sideViewReverseLunge =>
+                                  'reps per selected leg',
+                                _ => 'reps'
+                              }}${day == null ? '' : ' · Day $day'}',
                         style: Theme.of(context).textTheme.bodyMedium),
                     if (equipment.isNotEmpty)
                       Text(equipment,

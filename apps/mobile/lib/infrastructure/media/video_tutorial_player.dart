@@ -31,6 +31,8 @@ class VideoTutorialPlayer extends TutorialPlayer {
   @override
   Future<void> initialize() => _controller.initialize();
   @override
+  Future<void> setLooping(bool looping) => _controller.setLooping(looping);
+  @override
   Future<void> play() => _controller.play();
   @override
   Future<void> pause() => _controller.pause();

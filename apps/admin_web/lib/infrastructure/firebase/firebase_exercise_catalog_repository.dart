@@ -1,9 +1,13 @@
+import 'dart:convert';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_functions/cloud_functions.dart';
+import 'dart:math';
 import 'package:gainpath_domain/workout.dart';
 import 'package:gainpath_domain/gainpath_domain.dart' show SessionScope;
 import 'exercise_catalog_store.dart';
 import 'firebase_exercise_media_store.dart';
+import 'firebase_function_transport.dart';
 
 class FirebaseExerciseCatalogRepository
     implements
@@ -18,11 +22,13 @@ class FirebaseExerciseCatalogRepository
     ExerciseCatalogStore? store,
     TutorialMediaStore? mediaStore,
     bool Function()? isSessionCurrent,
+    Future<Map<String, dynamic>> Function(Map<String, Object?>)? activateTimed,
   })  : _firestore = firestore,
         _auth = auth,
         _injectedStore = store,
         _injectedMediaStore = mediaStore,
-        _sessionGuard = isSessionCurrent {
+        _sessionGuard = isSessionCurrent,
+        _activateTimed = activateTimed {
     if (store != null && isSessionCurrent == null) {
       throw ArgumentError(
           'An injected catalog transport requires a session guard.');
@@ -35,6 +41,9 @@ class FirebaseExerciseCatalogRepository
   }
 
   final SessionScope scope;
+  final _pendingDraftCommands = <String, Map<String, Object?>>{};
+  final Future<Map<String, dynamic>> Function(Map<String, Object?>)?
+      _activateTimed;
   final FirebaseFirestore? _firestore;
   final FirebaseAuth? _auth;
   final ExerciseCatalogStore? _injectedStore;
@@ -131,6 +140,9 @@ class FirebaseExerciseCatalogRepository
           id: tutorial.id,
           editBaseline: tutorial.editBaseline,
           trackingCapability: tutorial.trackingCapability,
+          executionMode: tutorial.executionMode,
+          defaultPrescription: tutorial.defaultPrescription,
+          editRevision: tutorial.editRevision,
           title: tutorial.title,
           category: tutorial.category,
           status: tutorial.status,
@@ -225,6 +237,63 @@ class FirebaseExerciseCatalogRepository
     _requireCurrentUser();
     if (tutorial.archived) throw const TutorialEditConflict();
     final data = encodeCatalogFields(tutorial);
+    if (tutorial.executionMode == ExerciseExecutionMode.videoGuidedTimed) {
+      final baseline = tutorial.editBaseline;
+      if (tutorial.id.isNotEmpty &&
+          (baseline is! _CatalogBaseline ||
+              !identical(baseline.lifetime, _lifetime) ||
+              baseline.id != tutorial.id)) throw const TutorialEditConflict();
+      final assignment = await _store.readAssignment(),
+          membership = await _store.readMembership();
+      _requireAssignment(assignment);
+      _requireAuthor(membership);
+      if (baseline is _CatalogBaseline &&
+          (!_same(assignment, baseline.assignment) ||
+              !_same(membership, baseline.membership) ||
+              !_same(
+                  await _store.readExercise(tutorial.id), baseline.document)))
+        throw const TutorialEditConflict();
+      final key = jsonEncode([tutorial.id, tutorial.editRevision, data]);
+      final pending = _pendingDraftCommands[key];
+      final id = pending?['exerciseId'] as String? ??
+          (tutorial.id.isEmpty
+              ? List.generate(
+                  16,
+                  (_) => Random.secure()
+                      .nextInt(256)
+                      .toRadixString(16)
+                      .padLeft(2, '0')).join()
+              : tutorial.id);
+      final exercise = {...data}..remove('editRevision');
+      final request = pending ??
+          <String, Object?>{
+            'schemaVersion': 1,
+            'action': 'saveTimedDraft',
+            'organizationId': scope.organizationId,
+            'exerciseId': id,
+            'requestId':
+                '${DateTime.now().microsecondsSinceEpoch}-${Random.secure().nextInt(0x7fffffff)}',
+            'expectedRevision': tutorial.editRevision,
+            'exercise': exercise
+          };
+      _pendingDraftCommands[key] = request;
+      _requireCurrentUser();
+      final result = _activateTimed != null
+          ? await _activateTimed(request)
+          : Map<String, dynamic>.from((await firebaseScopedCallable(
+                      scope, 'exerciseCatalogCommand',
+                      functions: FirebaseFunctions.instanceFor(
+                          region: 'asia-southeast1'))
+                  .call(request))
+              .data as Map);
+      _requireCurrentUser();
+      if (result['exerciseId'] != id ||
+          result['editRevision'] != tutorial.editRevision + 1)
+        throw const TutorialCatalogSaveFailed();
+      final saved = await _readBack(id);
+      _pendingDraftCommands.remove(key);
+      return saved;
+    }
     if (tutorial.id.isEmpty) {
       _requireAssignment(await _store.readAssignment());
       final membership = await _store.readMembership();
@@ -242,6 +311,8 @@ class FirebaseExerciseCatalogRepository
     }
     final editable = {...const ExerciseTutorialDetails().toJson(), ...data};
     final patch = Map<String, Object?>.unmodifiable({
+      if (tutorial.executionMode == ExerciseExecutionMode.videoGuidedTimed)
+        'mediaValidation': FieldValue.delete(),
       for (final field in editable.entries)
         if (field.key != 'schemaVersion' &&
             !_same(field.value, baseline.editable[field.key]))
@@ -288,6 +359,77 @@ class FirebaseExerciseCatalogRepository
           baseline.id != tutorial.id) {
         throw const TutorialEditConflict();
       }
+      if (tutorial.executionMode == ExerciseExecutionMode.videoGuidedTimed &&
+          status == ExerciseCatalogStatus.active) {
+        final assignment = await _store.readAssignment();
+        final membership = await _store.readMembership();
+        _requireAssignment(assignment);
+        _requireAuthor(membership);
+        if (!_same(assignment, baseline.assignment) ||
+            !_same(membership, baseline.membership))
+          throw const TutorialEditAuthorizationChanged();
+        final current = await _store.readExercise(tutorial.id);
+        if (!_same(current, baseline.document))
+          throw const TutorialEditConflict();
+        _requireCurrentUser();
+        final request = <String, Object?>{
+          'schemaVersion': 1,
+          'action': 'activateTimed',
+          'organizationId': scope.organizationId,
+          'exerciseId': tutorial.id,
+          'requestId':
+              '${DateTime.now().microsecondsSinceEpoch}-${Random.secure().nextInt(0x7fffffff)}',
+          'expectedRevision': tutorial.editRevision
+        };
+        final result = _activateTimed != null
+            ? await _activateTimed(request)
+            : Map<String, dynamic>.from((await firebaseScopedCallable(
+                        scope, 'exerciseCatalogCommand',
+                        functions: FirebaseFunctions.instanceFor(
+                            region: 'asia-southeast1'))
+                    .call(request))
+                .data as Map);
+        _requireCurrentUser();
+        if (result['status'] != 'active' || result['exerciseId'] != tutorial.id)
+          throw const TutorialCatalogSaveFailed();
+        return _readBack(tutorial.id);
+      }
+      if (tutorial.executionMode == ExerciseExecutionMode.videoGuidedTimed) {
+        final assignment = await _store.readAssignment(),
+            membership = await _store.readMembership();
+        _requireAssignment(assignment);
+        _requireAuthor(membership);
+        if (!_same(assignment, baseline.assignment) ||
+            !_same(membership, baseline.membership) ||
+            !_same(await _store.readExercise(tutorial.id), baseline.document))
+          throw const TutorialEditConflict();
+        final exercise = encodeCatalogFields(tutorial)..remove('editRevision');
+        exercise['archived'] = status == ExerciseCatalogStatus.archived;
+        final request = <String, Object?>{
+          'schemaVersion': 1,
+          'action': 'saveTimedDraft',
+          'organizationId': scope.organizationId,
+          'exerciseId': tutorial.id,
+          'requestId':
+              '${DateTime.now().microsecondsSinceEpoch}-${Random.secure().nextInt(0x7fffffff)}',
+          'expectedRevision': tutorial.editRevision,
+          'exercise': exercise
+        };
+        _requireCurrentUser();
+        final result = _activateTimed != null
+            ? await _activateTimed(request)
+            : Map<String, dynamic>.from((await firebaseScopedCallable(
+                        scope, 'exerciseCatalogCommand',
+                        functions: FirebaseFunctions.instanceFor(
+                            region: 'asia-southeast1'))
+                    .call(request))
+                .data as Map);
+        _requireCurrentUser();
+        if (result['exerciseId'] != tutorial.id ||
+            result['editRevision'] != tutorial.editRevision + 1)
+          throw const TutorialCatalogSaveFailed();
+        return _readBack(tutorial.id);
+      }
       await _store.transaction((transaction) async {
         _requireCurrentUser();
         final assignment = await transaction.readAssignment();
@@ -304,6 +446,11 @@ class FirebaseExerciseCatalogRepository
           throw const TutorialEditConflict();
         }
         transaction.update(tutorial.id, {
+          if (tutorial.executionMode ==
+              ExerciseExecutionMode.videoGuidedTimed) ...{
+            'editRevision': tutorial.editRevision + 1,
+            'mediaValidation': FieldValue.delete()
+          },
           'archived': status == ExerciseCatalogStatus.archived,
           'isActive': status == ExerciseCatalogStatus.active,
         });
@@ -372,6 +519,11 @@ class FirebaseExerciseCatalogRepository
 
   /// The only client-authored fields in an exercise catalog record.
   static Map<String, Object?> encodeCatalogFields(TutorialVideo tutorial) {
+    final timed =
+        tutorial.executionMode == ExerciseExecutionMode.videoGuidedTimed;
+    tutorial.defaultPrescription?.validate();
+    if (timed && tutorial.defaultPrescription is! TimedPrescription)
+      throw const FormatException('Timed exercise defaults are required.');
     final details =
         ExerciseTutorialDetails.fromJson(tutorial.tutorialDetails.toJson());
     final defaults = const ExerciseTutorialDetails().toJson();
@@ -380,7 +532,12 @@ class FirebaseExerciseCatalogRepository
       'exerciseName': tutorial.title.trim(),
       'muscleCategory': tutorial.category.trim(),
       'videoUrl': tutorial.videoUrl.trim(),
-      'isActive': tutorial.status == TutorialStatus.active,
+      'isActive': !timed && tutorial.status == TutorialStatus.active,
+      if (tutorial.executionMode != null)
+        'executionMode': tutorial.executionMode!.name,
+      if (tutorial.defaultPrescription != null)
+        'workoutDefaults': tutorial.defaultPrescription!.toJson(),
+      if (timed) 'editRevision': tutorial.editRevision + 1,
       for (final field in details.toJson().entries)
         if (!_same(field.value, defaults[field.key])) field.key: field.value,
     };
@@ -400,6 +557,17 @@ class FirebaseExerciseCatalogRepository
     final details = ExerciseTutorialDetails.fromJson(data);
     return TutorialVideo(
       id: id,
+      executionMode: data['executionMode'] == null
+          ? null
+          : ExerciseExecutionMode.fromJson(data['executionMode']),
+      defaultPrescription: data['workoutDefaults'] is Map
+          ? ExercisePrescription.fromJson(
+              Map<String, dynamic>.from(data['workoutDefaults'] as Map))
+          : null,
+      editRevision: data['editRevision'] as int? ?? 0,
+      mediaValidation: data['mediaValidation'] is Map
+          ? Map<String, dynamic>.from(data['mediaValidation'] as Map)
+          : null,
       archived: data['archived'] == true,
       trackingCapability: ExerciseTrackingRegistry.resolve(
           organizationId: scope.organizationId, exerciseId: id),

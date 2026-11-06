@@ -132,4 +132,21 @@ void main() {
     cubit.select('unknown');
     expect(cubit.state.selected, isNull);
   });
+  test('later-page v2 successor replaces original and current selection',
+      () async {
+    final original = fixture('old');
+    final successor = PublishedRoutine(
+        id: 'routine_v2_${original.sourceBlueprintId}',
+        sourceBlueprintId: original.sourceBlueprintId,
+        title: 'Upgraded',
+        estimatedMinutes: 30,
+        exercises: original.exercises,
+        schemaVersion: 2);
+    repository.page = PublishedRoutinePage([original], nextCursor: 'old');
+    await cubit.refresh();
+    repository.page = PublishedRoutinePage([successor]);
+    await cubit.loadMore();
+    expect(cubit.state.items.map((r) => r.id), [successor.id]);
+    expect(cubit.state.selected!.id, successor.id);
+  });
 }

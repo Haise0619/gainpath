@@ -100,7 +100,7 @@ class _RealSquatRouteState extends State<RealSquatRoute>
           organizationId: widget.scope.organizationId,
           exerciseId: widget.exercise.exerciseId,
           sets: widget.exercise.sets,
-          reps: widget.exercise.reps);
+          reps: widget.exercise.repetitionTarget.repetitions);
       if (!authorized() ||
           !widget.consented ||
           !widget.setupConfirmed ||
@@ -178,7 +178,7 @@ class _RealSquatRouteState extends State<RealSquatRoute>
           performance: _performance,
           guidance: GuidedWorkoutProgress(
               sets: widget.exercise.sets,
-              repetitions: widget.exercise.reps,
+              repetitions: widget.exercise.repetitionTarget.repetitions,
               restSeconds: widget.exercise.restSeconds),
           saveVoiceMode: (mode) async {
             final preferences = _voicePreferences;
@@ -278,7 +278,7 @@ class _RealSquatRouteState extends State<RealSquatRoute>
     return LiveWorkoutScreen(
         realSession: _session,
         exerciseName: widget.exercise.name,
-        targetRepetitions: widget.exercise.reps,
+        targetRepetitions: widget.exercise.repetitionTarget.repetitions,
         routineContext: widget.routineContext,
         resultBuilder: (summary) => ScopedSquatResult(
             summary: summary,

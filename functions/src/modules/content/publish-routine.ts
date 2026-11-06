@@ -1,3 +1,5 @@
+import {publishRoutineV2} from './publish-routine-v2';
+import type {CatalogMediaVerifier,CatalogAuth} from './exercise-catalog';
 import { DomainError } from '../../platform/errors';
 import type { DocumentData, DocumentStore } from '../../platform/firestore/store';
 import { keyOf } from '../../platform/idempotency';
@@ -101,7 +103,12 @@ export async function publishRoutine(
   auth: { uid: string; token: Record<string, unknown> } | undefined,
   rawInput: unknown,
   clock: () => number = Date.now,
+  deps?: {media:CatalogMediaVerifier;freshAuth?:(auth:CatalogAuth)=>Promise<void>},
 ): Promise<PublishRoutineResultV1> {
+  if ((rawInput as DocumentData | null)?.schemaVersion === 2) {
+    if(!deps)throw new DomainError('failed-precondition','Timed publication media verifier required.');
+    return publishRoutineV2(store,auth,rawInput,{...deps,clock}) as unknown as Promise<PublishRoutineResultV1>;
+  }
   requireVerifiedEmail(auth);
   const actorId = requiredIdentifier(auth!.uid, 'actorId');
   const input = parsePublishRoutine(rawInput);
@@ -137,7 +144,7 @@ export async function publishRoutine(
     const exerciseById = new Map<string, DocumentData>();
     exerciseIds.forEach((id, index) => {
       const data = sourceExercises[index];
-      if (!data || data.isActive !== true || typeof data.exerciseName !== 'string' || !data.exerciseName.trim()
+      if (!data || data.executionMode === 'videoGuidedTimed' || data.archived === true || data.isActive !== true || typeof data.exerciseName !== 'string' || !data.exerciseName.trim()
         || typeof data.muscleCategory !== 'string' || !data.muscleCategory.trim()) {
         throw new DomainError('failed-precondition', `Exercise ${id} is missing or inactive.`);
       }

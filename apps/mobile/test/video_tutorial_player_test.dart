@@ -10,6 +10,7 @@ class FixturePlatform extends VideoPlayerPlatform {
   String? source;
   int plays = 0, pauses = 0, releases = 0;
   Duration position = Duration.zero;
+  bool looping = false;
   @override
   Future<void> init() async {}
   @override
@@ -45,7 +46,10 @@ class FixturePlatform extends VideoPlayerPlatform {
   @override
   Future<Duration> getPosition(int playerId) async => position;
   @override
-  Future<void> setLooping(int playerId, bool looping) async {}
+  Future<void> setLooping(int playerId, bool looping) async {
+    this.looping = looping;
+  }
+
   @override
   Future<void> setVolume(int playerId, double volume) async {}
   @override
@@ -77,6 +81,8 @@ void main() {
     expect(player.playing, false);
     await tester.pumpWidget(MaterialApp(home: player.buildVideo()));
     expect(find.text('Native fixture view'), findsOneWidget);
+    await player.setLooping(true);
+    expect(platform.looping, true);
     await player.play();
     expect(platform.plays, 1);
     await player.seek(const Duration(seconds: 12));

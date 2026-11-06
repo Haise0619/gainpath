@@ -226,3 +226,9 @@ it.each([
   await save({program: value});
   await expect(publish()).rejects.toMatchObject({code: 'failed-precondition'});
 });
+it('v2 Program freezes timed targets and nullable rest while v1 lists remain compatible',async()=>{
+ const v2=program();v2.schemaVersion=2;v2.days=v2.days.map((d:any)=>({...d,schemaVersion:2,restOverrideSeconds:null}));
+ const source={...routine(),schemaVersion:2,kind:'routine_v2',exercises:[{exerciseId:'custom',entryId:'entry',executionMode:'videoGuidedTimed',name:'Mobility',category:'Full Body',sets:3,durationSeconds:45,restSeconds:30,dayNumber:1,videoUrl:'https://video.example.test/video.mp4',mediaValidation:{schemaVersion:1,generation:'123',videoUrl:'https://video.example.test/video.mp4',bucket:'bucket',objectPath:'path',contentType:'video/mp4',sizeBytes:12,sourceRevision:1,validatedAtMillis:1000}}]};store.documents.set(p('content','routine_basic'),source);
+ const v2command=(action:string,fields={})=>workoutPrograms(store,admin,{schemaVersion:2,organizationId:org,action,...fields},{freshAuth,clock:()=>now});
+ await v2command('saveDraft',{requestId:'savev2',expectedRevision:0,program:v2});const published=await v2command('publish',{requestId:'pubv2',expectedRevision:1,programId:'beginner'});expect(published.program.schemaVersion).toBe(2);const row=published.program.days[0].routineSnapshot.exercises[0];expect(row.durationSeconds).toBe(45);expect(row.restSeconds).toBe(30);expect(row).not.toHaveProperty('reps');expect(await command('list',{},member)).toEqual({programs:[],drafts:[]});expect((await v2command('adminList')).programs).toHaveLength(1);
+});

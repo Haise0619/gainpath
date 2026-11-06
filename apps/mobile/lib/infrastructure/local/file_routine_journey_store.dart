@@ -7,10 +7,14 @@ class FileRoutineJourneyStore implements RevisionedRoutineJourneyStore {
   FileRoutineJourneyStore(
       {required Directory directory, required this.scope, this.onSaved})
       : _directory = Directory('${directory.absolute.path}/routine-journeys-v1/'
-            '${_segment(scope.organizationId)}/${_segment(scope.userId)}');
+            '${_segment(scope.organizationId)}/${_segment(scope.userId)}'),
+        _v2Directory =
+            Directory('${directory.absolute.path}/routine-journeys-v2/'
+                '${_segment(scope.organizationId)}/${_segment(scope.userId)}');
   @override
   final SessionScope scope;
   final Directory _directory;
+  final Directory _v2Directory;
   final void Function()? onSaved;
   static final _queues = <String, Future<void>>{};
   static String _segment(String value) {
@@ -62,9 +66,17 @@ class FileRoutineJourneyStore implements RevisionedRoutineJourneyStore {
   @override
   Future<List<RoutineCheckpoint>> load() => _exclusive(() async {
         final result = <RoutineCheckpoint>[];
-        await for (final entity in _directory.list()) {
-          if (entity is File && entity.path.endsWith('.json')) {
-            result.add(await _read(entity));
+        for (final pair in [(_directory, 1), (_v2Directory, 2)]) {
+          if (!await pair.$1.exists()) continue;
+          await for (final entity in pair.$1.list()) {
+            if (entity is File && entity.path.endsWith('.json')) {
+              final checkpoint = await _read(entity);
+              if (checkpoint.schemaVersion != pair.$2 ||
+                  result.any((c) => c.id == checkpoint.id))
+                throw const FormatException(
+                    'Duplicate or misplaced checkpoint version');
+              result.add(checkpoint);
+            }
           }
         }
         return result;
@@ -88,7 +100,14 @@ class FileRoutineJourneyStore implements RevisionedRoutineJourneyStore {
         if (value.scope != scope) {
           throw StateError('Routine checkpoint account mismatch');
         }
-        final file = File('${_directory.path}/checkpoint-${value.id}.json');
+        final directory = value.schemaVersion == 2 ? _v2Directory : _directory;
+        await directory.create(recursive: true);
+        final other = File(
+            '${value.schemaVersion == 2 ? _directory.path : _v2Directory.path}/checkpoint-${value.id}.json');
+        if (await other.exists())
+          throw const FormatException(
+              'Attempt identity belongs to another contract version');
+        final file = File('${directory.path}/checkpoint-${value.id}.json');
         if (await file.exists()) {
           final previous = await _read(file);
           if (compareRevision &&

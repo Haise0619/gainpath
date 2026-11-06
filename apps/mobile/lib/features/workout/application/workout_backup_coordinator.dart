@@ -74,18 +74,20 @@ class WorkoutBackupCoordinator extends ChangeNotifier {
         : BackupRecordStatus.retryNeeded;
   }
 
-  String get label => busy
-      ? 'Syncing'
-      : !state.enabled
-          ? 'Saved on device'
-          : state.conflicts.isNotEmpty
-              ? 'Conflicting copies kept'
-              : state.lastError != null
-                  ? 'Retry needed'
-                  : records.any(
-                          (r) => statusFor(r) != BackupRecordStatus.backedUp)
-                      ? 'Pending backup'
-                      : 'Backed up';
+  String get label => state.lastError == 'unsupported-server'
+      ? 'Saved on device · server update required'
+      : busy
+          ? 'Syncing'
+          : !state.enabled
+              ? 'Saved on device'
+              : state.conflicts.isNotEmpty
+                  ? 'Conflicting copies kept'
+                  : state.lastError != null
+                      ? 'Retry needed'
+                      : records.any((r) =>
+                              statusFor(r) != BackupRecordStatus.backedUp)
+                          ? 'Pending backup'
+                          : 'Backed up';
   Future<void> sync() async {
     if (!authorized || busy || !_state.enabled) return;
     final generation = _generation;

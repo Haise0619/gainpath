@@ -4,7 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:web/web.dart' as web;
 
 class ContentVideoPlayer extends StatefulWidget {
-  const ContentVideoPlayer({super.key, required this.url, this.bytes});
+  const ContentVideoPlayer(
+      {super.key, required this.url, this.bytes, this.onReady});
+  final ValueChanged<bool>? onReady;
   final String url;
   final Uint8List? bytes;
 
@@ -18,7 +20,11 @@ class _ContentVideoPlayerState extends State<ContentVideoPlayer> {
   bool _failed = false;
   int _generation = 0;
   late final JSFunction _onError = ((web.Event event) {
+    widget.onReady?.call(false);
     if (mounted) setState(() => _failed = true);
+  }).toJS;
+  late final JSFunction _onReady = ((web.Event event) {
+    if (mounted) widget.onReady?.call(true);
   }).toJS;
 
   @override
@@ -36,6 +42,7 @@ class _ContentVideoPlayerState extends State<ContentVideoPlayer> {
     final video = _video;
     if (video != null) {
       video.removeEventListener('error', _onError);
+      video.removeEventListener('loadeddata', _onReady);
       video.pause();
       video.removeAttribute('src');
       video.load();
@@ -59,6 +66,7 @@ class _ContentVideoPlayerState extends State<ContentVideoPlayer> {
     video.style.height = '100%';
     video.style.objectFit = 'contain';
     video.addEventListener('error', _onError);
+    video.addEventListener('loadeddata', _onReady);
     final bytes = widget.bytes;
     if (bytes != null) {
       // Immutable selections need a native ArrayBuffer at the browser boundary.

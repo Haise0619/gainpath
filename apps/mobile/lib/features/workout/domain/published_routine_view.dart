@@ -10,13 +10,19 @@ class PublishedRoutineExercise extends Exercise {
     required String name,
     required String category,
     required int sets,
-    required int reps,
+    required int? reps,
     required String cue,
     required String imageUrl,
     required String muscleGroup,
     this.videoUrl,
     this.restSeconds = 60,
     this.tutorial = const ExerciseTutorialDetails(),
+    this.entryId = '',
+    this.executionMode,
+    this.durationSeconds,
+    this.mediaRevision,
+    this.mediaGeneration,
+    this.mediaValidation,
   }) : super(name, category, sets, reps, cue, imageUrl, muscleGroup);
 
   final String exerciseId;
@@ -24,6 +30,34 @@ class PublishedRoutineExercise extends Exercise {
   final int restSeconds;
   final String? videoUrl;
   final ExerciseTutorialDetails tutorial;
+  final String entryId;
+  final ExerciseExecutionMode? executionMode;
+  final int? durationSeconds;
+  final int? mediaRevision;
+  final String? mediaGeneration;
+  final Map<String, dynamic>? mediaValidation;
+  RepetitionPrescription get repetitionTarget {
+    if (durationSeconds != null ||
+        reps == null ||
+        executionMode == ExerciseExecutionMode.videoGuidedTimed) {
+      throw StateError('A measured workout requires a repetition prescription');
+    }
+    final target = RepetitionPrescription(
+        sets: sets, repetitions: reps!, restSeconds: restSeconds);
+    target.validate();
+    return target;
+  }
+
+  ExercisePrescription get prescription => durationSeconds != null
+      ? TimedPrescription(
+          sets: sets,
+          durationSeconds: durationSeconds!,
+          restSeconds: restSeconds)
+      : RepetitionPrescription(
+          sets: sets,
+          repetitions: reps ??
+              (throw const FormatException('Missing repetition target')),
+          restSeconds: restSeconds);
 }
 
 /// Published organization content, never a member assignment or session.
@@ -35,6 +69,7 @@ class PublishedRoutine {
     required this.estimatedMinutes,
     required this.exercises,
     this.difficulty,
+    this.schemaVersion = 1,
   });
 
   final String id;
@@ -43,10 +78,12 @@ class PublishedRoutine {
   final int estimatedMinutes;
   final List<PublishedRoutineExercise> exercises;
   final String? difficulty;
+  final int schemaVersion;
 
   static PublishedRoutine fromDocument(String id, Map<String, dynamic> data) {
-    if (data['schemaVersion'] != 1 ||
-        data['kind'] != 'routine' ||
+    final version = data['schemaVersion'];
+    if (!(version == 1 && data['kind'] == 'routine' ||
+            version == 2 && data['kind'] == 'routine_v2') ||
         data['status'] != 'published' ||
         data['sourceBlueprintId'] is! String ||
         (data['sourceBlueprintId'] as String).trim().isEmpty ||
@@ -72,8 +109,8 @@ class PublishedRoutine {
           (item['name'] as String).trim().isEmpty ||
           item['sets'] is! int ||
           (item['sets'] as int) <= 0 ||
-          item['reps'] is! int ||
-          (item['reps'] as int) <= 0) {
+          (version == 1 &&
+              (item['reps'] is! int || (item['reps'] as int) <= 0))) {
         throw const FormatException('Invalid routine exercise');
       }
       final day = item['dayNumber'] ?? 1;
@@ -84,6 +121,20 @@ class PublishedRoutine {
       if (day is! int || day < 1) {
         throw const FormatException('Invalid routine day');
       }
+      ExerciseExecutionMode? mode;
+      if (version == 2) {
+        mode = ExerciseExecutionMode.fromJson(item['executionMode']);
+        if (item['entryId'] is! String ||
+            (item['entryId'] as String).trim().isEmpty) {
+          throw const FormatException('Missing stable routine entry identity');
+        }
+        final target = ExercisePrescription.fromJson(item);
+        if ((mode == ExerciseExecutionMode.videoGuidedTimed) !=
+            (target is TimedPrescription)) {
+          throw const FormatException(
+              'Execution mode conflicts with exercise target');
+        }
+      }
       ExerciseTutorialDetails tutorial;
       try {
         tutorial =
@@ -93,6 +144,21 @@ class PublishedRoutine {
       }
       return PublishedRoutineExercise(
         exerciseId: item['exerciseId'] as String,
+        entryId: version == 2 ? item['entryId'] as String : '',
+        executionMode: mode,
+        durationSeconds: version == 2 ? item['durationSeconds'] as int? : null,
+        mediaRevision: version == 2
+            ? (item['mediaRevision'] ??
+                (item['mediaValidation'] as Map?)?['sourceRevision']) as int?
+            : null,
+        mediaGeneration: version == 2
+            ? (item['mediaGeneration'] ??
+                (item['mediaValidation'] as Map?)?['generation']) as String?
+            : null,
+        mediaValidation: item['mediaValidation'] is Map
+            ? Map<String, dynamic>.unmodifiable(
+                Map<String, dynamic>.from(item['mediaValidation'] as Map))
+            : null,
         dayNumber: day,
         restSeconds: rest,
         videoUrl: tutorialMediaUri(item['videoUrl'])?.toString(),
@@ -100,7 +166,7 @@ class PublishedRoutine {
         name: item['name'] as String,
         category: item['category'] is String ? item['category'] as String : '',
         sets: item['sets'] as int,
-        reps: item['reps'] as int,
+        reps: item['reps'] as int?,
         cue: item['cue'] is String ? item['cue'] as String : '',
         imageUrl: tutorial.coverImageUrl.isNotEmpty
             ? tutorial.coverImageUrl
@@ -109,6 +175,10 @@ class PublishedRoutine {
             item['muscleGroup'] is String ? item['muscleGroup'] as String : '',
       );
     }).toList(growable: false);
+    if (version == 2 &&
+        exercises.map((e) => e.entryId).toSet().length != exercises.length) {
+      throw const FormatException('Duplicate routine entry identity');
+    }
     return PublishedRoutine(
       id: id,
       sourceBlueprintId: data['sourceBlueprintId'] as String,
@@ -116,6 +186,7 @@ class PublishedRoutine {
       estimatedMinutes: data['estimatedMinutes'] as int,
       exercises: exercises,
       difficulty: data['difficulty'] as String?,
+      schemaVersion: version as int,
     );
   }
 }

@@ -53,17 +53,20 @@ class RoutineNextExerciseSheet extends StatelessWidget {
               Text(exercise.name,
                   style: Theme.of(context).textTheme.headlineSmall),
               const SizedBox(height: 8),
-              Text(
-                  '${exercise.sets} sets · ${exercise.reps} reps${perArmTargets ? ' per arm' : ''} per set'),
+              Text(exercise.durationSeconds != null
+                  ? '${exercise.sets} sets · ${exercise.durationSeconds}s per set · ${exercise.restSeconds}s rest'
+                  : '${exercise.sets} sets · ${exercise.reps} reps${perArmTargets ? ' per arm' : ''} per set'),
               Text(capabilityLabel,
                   style: const TextStyle(
                       color: AppColors.primary, fontWeight: FontWeight.w600)),
               const SizedBox(height: 8),
               Text(guidance, style: const TextStyle(color: AppColors.inkSoft)),
               const SizedBox(height: 8),
-              Text(hasTracking
-                  ? 'Take a moment to get ready. Tracking starts after your camera setup confirmation.'
-                  : 'Follow the tutorial, then mark sets as done on the routine page. Completion is self-reported.'),
+              Text(exercise.durationSeconds != null
+                  ? 'Start the video-guided timer when ready. No camera is required.'
+                  : hasTracking
+                      ? 'Take a moment to get ready. Tracking starts after your camera setup confirmation.'
+                      : 'Follow the tutorial, then mark sets as done on the routine page. Completion is self-reported.'),
               const SizedBox(height: 20),
               FilledButton.icon(
                   onPressed: () =>

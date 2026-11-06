@@ -74,6 +74,67 @@ class _RoutineRepository implements RoutineTemplateRepository {
 }
 
 void main() {
+  testWidgets('timed routine copies defaults and keeps overrides on save',
+      (tester) async {
+    GoogleFonts.config.allowRuntimeFetching = false;
+    tester.view.physicalSize = const Size(1600, 1200);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final catalog = _ExerciseCatalog()
+      ..entries.add(TutorialVideo(
+          id: 'mobility',
+          title: 'Mobility flow',
+          category: 'Full Body',
+          status: TutorialStatus.active,
+          executionMode: ExerciseExecutionMode.videoGuidedTimed,
+          defaultPrescription: const TimedPrescription(
+              sets: 3, durationSeconds: 45, restSeconds: 30)));
+    final routines = _RoutineRepository();
+    await tester.pumpWidget(MultiRepositoryProvider(
+        providers: [
+          RepositoryProvider<TutorialRepository>.value(value: catalog),
+          RepositoryProvider<RoutineTemplateRepository>.value(value: routines),
+        ],
+        child: MaterialApp(
+            theme: AppTheme.build(), home: const RoutineTemplatesScreen())));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('New template'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Review'));
+    await tester.pumpAndSettle();
+    expect(
+        find.text('Give the routine a name and a duration of 5–240 minutes.'),
+        findsOneWidget);
+    await tester.enterText(find.byType(TextField).first, 'Mobility routine');
+    await tester.tap(find.text('Structure'));
+    await tester.pumpAndSettle();
+    final picker = find.byType(DropdownButtonFormField<String>).last;
+    await tester.ensureVisible(picker);
+    await tester.tap(picker);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Mobility flow').last);
+    await tester.pumpAndSettle();
+    expect(find.text('Video guided · Timer tracked'), findsOneWidget);
+    expect(find.text('45'), findsOneWidget);
+    await tester.tap(find.text('Review'));
+    await tester.pumpAndSettle();
+    expect(find.text('Review effective workout targets'), findsOneWidget);
+    expect(
+        find.textContaining('3 sets × 45 seconds · 30s rest'), findsOneWidget);
+    catalog.entries.last.defaultPrescription =
+        const TimedPrescription(sets: 4, durationSeconds: 60, restSeconds: 10);
+    final save = find.widgetWithText(FilledButton, 'Create template');
+    await tester.ensureVisible(save);
+    await tester.tap(save);
+    await tester.pumpAndSettle();
+    final row = routines.entries.single.days.single.exercises.single;
+    expect(routines.entries.single.schemaVersion, 2);
+    expect(row.prescription!.toJson(),
+        {'sets': 3, 'durationSeconds': 45, 'restSeconds': 30});
+    expect(row.entryId, isNotEmpty);
+    expect(row.reps, isNull);
+    expect(routines.publishedId, isNull);
+  });
   testWidgets('catalog authors overview and ordered tutorial steps',
       (tester) async {
     GoogleFonts.config.allowRuntimeFetching = false;
@@ -93,9 +154,10 @@ void main() {
     await tester.ensureVisible(field('Exercise overview'));
     await tester.enterText(
         field('Exercise overview'), 'A controlled pulling movement.');
-    final add = find.text('Add tutorial step');
+    final add = find.widgetWithText(OutlinedButton, 'Add tutorial step');
     for (final title in ['Prepare', 'Pull']) {
-      await tester.ensureVisible(add);
+      await Scrollable.ensureVisible(tester.element(add), alignment: 0.5);
+      await tester.pumpAndSettle();
       await tester.tap(add);
       await tester.pumpAndSettle();
       await tester.ensureVisible(field('Step title').last);
@@ -246,7 +308,9 @@ void main() {
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField).first, 'Strength A');
     await tester.pumpAndSettle();
-    expect(find.byType(DropdownButtonFormField<String>), findsNWidgets(2));
+    await tester.tap(find.text('Structure'));
+    await tester.pumpAndSettle();
+    expect(find.byType(DropdownButtonFormField<String>), findsOneWidget);
     final exercisePicker = find.byType(DropdownButtonFormField<String>).last;
     await tester.ensureVisible(exercisePicker);
     await tester.tap(exercisePicker);
@@ -302,7 +366,7 @@ void main() {
   });
 
   testWidgets(
-      'guided-only exercise can be registered without a video or an AI toggle',
+      'timed exercise can be saved inactive without media or an AI toggle',
       (tester) async {
     final exercises = _ExerciseCatalog()..entries.clear();
     await tester.pumpWidget(RepositoryProvider<TutorialRepository>.value(
@@ -313,7 +377,7 @@ void main() {
     await tester.tap(find.text('Add exercise'));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextFormField).first, 'Cable row');
-    expect(find.text('Guided only'), findsOneWidget);
+    expect(find.text('Video guided · timer completion'), findsOneWidget);
     expect(find.byType(Switch), findsNothing);
     final save = find.widgetWithText(FilledButton, 'Create exercise');
     await tester.ensureVisible(save);
@@ -324,7 +388,7 @@ void main() {
     expect(exercises.entries.single.trackingCapability.hasPoseTracking, false);
   });
 
-  testWidgets('Exercise Catalog lets staff activate an exercise for routines',
+  testWidgets('new timed exercise stays inactive until verified activation',
       (tester) async {
     final exercises = _ExerciseCatalog()..entries.clear();
     await tester.pumpWidget(MultiRepositoryProvider(
@@ -349,17 +413,11 @@ void main() {
     await tester.enterText(find.byType(TextFormField).first, 'Goblet Squat');
     await tester.enterText(
         find.byType(TextFormField).at(1), 'https://example.test/squat');
-    final dropdowns = find.byType(DropdownButtonFormField<String>);
-    expect(dropdowns, findsNWidgets(3));
-    await tester.ensureVisible(dropdowns.last);
-    await tester.tap(dropdowns.last);
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Active').last);
-    await tester.pumpAndSettle();
+    expect(find.byType(DropdownButtonFormField<String>), findsNWidgets(2));
     await tester
         .ensureVisible(find.widgetWithText(FilledButton, 'Create exercise'));
     await tester.tap(find.widgetWithText(FilledButton, 'Create exercise'));
     await tester.pumpAndSettle();
-    expect(exercises.entries.single.status, TutorialStatus.active);
+    expect(exercises.entries.single.status, TutorialStatus.draft);
   });
 }

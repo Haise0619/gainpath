@@ -94,7 +94,7 @@ class _ReverseLungeWorkoutRouteState extends State<ReverseLungeWorkoutRoute>
           detectorId: 'blazepose-tflite',
           detectorVersion: BlazePoseModelContract.version,
           sets: launch.exercise.sets,
-          reps: launch.exercise.reps,
+          reps: launch.repetitionTarget.repetitions,
           saveVoiceMode: (mode) async {
             await _voicePreferences?.write(mode);
           });
@@ -158,7 +158,7 @@ class _ReverseLungeWorkoutRouteState extends State<ReverseLungeWorkoutRoute>
       return ReverseLungeSetupScreen(
           exerciseName: widget.launch.exercise.name,
           sets: widget.launch.exercise.sets,
-          reps: widget.launch.exercise.reps,
+          reps: widget.launch.repetitionTarget.repetitions,
           restSeconds: widget.launch.exercise.restSeconds,
           onStart: (side) {
             setState(() => _side = side);
@@ -196,7 +196,7 @@ class _ReverseLungeWorkoutRouteState extends State<ReverseLungeWorkoutRoute>
               session: session,
               exerciseName:
                   '${widget.launch.exercise.name} · ${session.selectedLegLabel}',
-              targetRepetitions: widget.launch.exercise.reps,
+              targetRepetitions: widget.launch.repetitionTarget.repetitions,
               routineContext: widget.launch.routineContext,
               viewport: PoseCameraViewport(
                   camera: _camera!, session: session.preview),

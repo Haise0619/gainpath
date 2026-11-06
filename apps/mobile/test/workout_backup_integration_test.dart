@@ -74,7 +74,11 @@ void main() {
             }, scheduler: scheduler);
           },
         )))));
-    await tester.pumpAndSettle();
+    // Offstage shell destinations may keep loading animations alive. Backup
+    // readiness is asserted below; it does not depend on every tab settling.
+    for (var frame = 0; frame < 10; frame++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
     expect(
         find.byType(MemberProgressHost, skipOffstage: false), findsOneWidget);
     expect(opened, greaterThan(0));
@@ -88,7 +92,7 @@ void main() {
     expect(remote.saves, 0);
     await coordinator!.setEnabled(true);
     await tester.pump(const Duration(seconds: 1));
-    await tester.pumpAndSettle();
+    await tester.pump();
     expect(remote.saves, 1);
     notifyWorkoutLocalSave(scope);
     network.add(null);

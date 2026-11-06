@@ -68,3 +68,5 @@ export { rewardCatalogCommand } from './modules/gamification/reward-catalog-call
 export { miniGameContentCommand } from './modules/content/mini-game-content-callables';
 // Owner-approved isolated Program release; this is not authority for a full deploy.
 export { workoutProgramCommand } from './modules/content/workout-program-callable';
+
+export {exerciseCatalogCommand} from './modules/content/exercise-catalog-callable';

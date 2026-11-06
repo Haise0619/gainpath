@@ -28,12 +28,16 @@ HttpsCallable firebaseCallable(
   if (functions != null) return functions.httpsCallable(name, options: options);
   // New scoped services keep their own fixed region; canonical rollback
   // aliases and endpoint inventory remain unchanged.
-  if (name == 'fypDatasetCommand' || name == 'fypDatasetSessionCommand') {
+  if (name == 'exerciseCatalogCommand' ||
+      name == 'fypDatasetCommand' ||
+      name == 'fypDatasetSessionCommand') {
     final client = FirebaseFunctions.instanceFor(region: 'asia-southeast1');
     if (const bool.fromEnvironment('USE_FIREBASE_EMULATORS')) {
-      client.useFunctionsEmulator(const String.fromEnvironment('FIREBASE_EMULATOR_HOST',
-        defaultValue: '127.0.0.1'),
-        const int.fromEnvironment('FIREBASE_FUNCTIONS_EMULATOR_PORT', defaultValue: 5001));
+      client.useFunctionsEmulator(
+          const String.fromEnvironment('FIREBASE_EMULATOR_HOST',
+              defaultValue: '127.0.0.1'),
+          const int.fromEnvironment('FIREBASE_FUNCTIONS_EMULATOR_PORT',
+              defaultValue: 5001));
     }
     return client.httpsCallable(name, options: options);
   }

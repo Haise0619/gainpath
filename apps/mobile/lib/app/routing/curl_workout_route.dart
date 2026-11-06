@@ -91,7 +91,7 @@ class _CurlWorkoutRouteState extends State<CurlWorkoutRoute>
           detectorId: 'blazepose-tflite',
           detectorVersion: BlazePoseModelContract.version,
           sets: launch.exercise.sets,
-          reps: launch.exercise.reps,
+          reps: launch.repetitionTarget.repetitions,
           armMode: _armMode!,
           startingSide: _startingSide,
           saveVoiceMode: (mode) async {
@@ -157,7 +157,7 @@ class _CurlWorkoutRouteState extends State<CurlWorkoutRoute>
       return CurlArmSetupScreen(
           exerciseName: widget.launch.exercise.name,
           sets: widget.launch.exercise.sets,
-          reps: widget.launch.exercise.reps,
+          reps: widget.launch.repetitionTarget.repetitions,
           onStart: (mode, side) {
             if (!_authorized(context.read<AuthBloc>())) return;
             setState(() {
@@ -188,7 +188,7 @@ class _CurlWorkoutRouteState extends State<CurlWorkoutRoute>
     return RealWorkoutView(
         session: session,
         exerciseName: widget.launch.exercise.name,
-        targetRepetitions: widget.launch.exercise.reps,
+        targetRepetitions: widget.launch.repetitionTarget.repetitions,
         routineContext: widget.launch.routineContext,
         viewport:
             PoseCameraViewport(camera: _camera!, session: session.preview),

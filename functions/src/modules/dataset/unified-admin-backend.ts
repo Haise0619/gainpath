@@ -28,7 +28,7 @@ const deny=()=>new DomainError('permission-denied','Current unified Admin read a
 export function parseUnifiedAdminEnvelope(raw:unknown){const q=object(raw);keys(q,['schemaVersion','operation','data']);
  if(q.schemaVersion!==1||typeof q.operation!=='string'||!Object.hasOwn(fields,q.operation)||Buffer.byteLength(JSON.stringify(q))>16384)throw deny();
  const data=object(q.data);keys(data,['schemaVersion','organizationId',...fields[q.operation]],['schemaVersion','organizationId']);
- if(![1,2].includes(data.schemaVersion as number)||data.organizationId!=='gainpath'||q.operation!=='admin.unified.report'&&data.schemaVersion!==1)throw deny();
+ if(![1,2].includes(data.schemaVersion as number)||data.organizationId!=='gainpath'||!['admin.unified.report','admin.unified.programs'].includes(String(q.operation))&&data.schemaVersion!==1)throw deny();
  if(q.operation==='admin.unified.directory'&&!['members','coaches','coachProfiles','content','routineBlueprints','branches','exerciseVideos'].includes(String(data.kind)))throw deny();
  if(q.operation==='admin.unified.cohort')assertFypAdminReadOperation(String(data.operation));return{operation:q.operation,data};
 }
@@ -77,9 +77,10 @@ export function createUnifiedAdminBackend(options:{db:Firestore;auth:Pick<Auth,'
    }
    result={schemaVersion:1,organizationId:'gainpath',...member,readOnly:row.source==='fyp',extra};
   }else if(e.operation==='admin.unified.programs'){
-   const q={schemaVersion:1,organizationId:'gainpath',action:'adminList'},canonicalPrograms=await workoutPrograms(canonical,request.auth,q,{clock,freshAuth:async()=>{await cohort.adminReadContext(request);}}),fypPrograms=await call('module/workoutProgramCommand',q) as {programs:{id:string}[];drafts:{program:{id:string};revision:number}[]};
+   const q={schemaVersion:d.schemaVersion,organizationId:'gainpath',action:'adminList'},canonicalPrograms=await workoutPrograms(canonical,request.auth,q,{clock,freshAuth:async()=>{await cohort.adminReadContext(request);}}),fypPrograms=await call('module/workoutProgramCommand',q) as {programs:{id:string}[];drafts:{program:{id:string};revision:number}[]};
    const existingIds=new Set((canonicalPrograms.programs as {id:string}[]).map(x=>x.id));if(fypPrograms.programs.some(x=>existingIds.has(x.id)))throw deny();
-   const routines=(await Promise.all([reader.rows('content','existing'),reader.rows('content','fyp')])).flat().filter(r=>r.record.status==='published'&&r.record.kind==='routine');
+   let routines=(await Promise.all([reader.rows('content','existing'),reader.rows('content','fyp')])).flat().filter(r=>r.record.status==='published'&&(r.record.kind==='routine'||d.schemaVersion===2&&r.record.kind==='routine_v2'));
+   if(d.schemaVersion===2){const newer=new Set(routines.filter(r=>r.record.kind==='routine_v2').map(r=>r.source+':'+String(r.record.sourceBlueprintId)));routines=routines.filter(r=>r.record.kind==='routine_v2'||!newer.has(r.source+':'+String(r.record.sourceBlueprintId)));}
    result={schemaVersion:1,organizationId:'gainpath',programs:[...canonicalPrograms.programs,...fypPrograms.programs],drafts:[...canonicalPrograms.drafts,...fypPrograms.drafts],fypProgramIds:fypPrograms.programs.map(x=>x.id),routines:routines.map(r=>({id:r.id,source:r.source,record:r.record}))};
   }else if(e.operation==='admin.unified.business'){
    const sample=await readUnifiedSampleBusiness(c.store,window,clock());result={schemaVersion:1,organizationId:'gainpath',...window,...sample};

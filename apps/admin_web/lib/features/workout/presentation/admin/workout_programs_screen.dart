@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:gainpath_domain/workout.dart';
 import '../../domain/admin_workout_program_repository.dart';
+import 'routine_templates_screen.dart';
 
 String _requestId() => List.generate(16,
         (_) => Random.secure().nextInt(256).toRadixString(16).padLeft(2, '0'))
@@ -27,6 +28,57 @@ class _WorkoutProgramsScreenState extends State<WorkoutProgramsScreen> {
   int _revision = 0, _week = 1, _generation = 0;
   bool _busy = false, _dirty = false;
   String? _error, _notice, _saveRequest, _publishRequest;
+  int _stage = 0;
+  void _selectStage(int stage) {
+    if (stage > 0 && _title.text.trim().isEmpty) {
+      setState(() {
+        _stage = 0;
+        _error = 'Give the Program a title.';
+      });
+      return;
+    }
+    if (stage == 2 &&
+        (_editing!['days'] as List).any(
+            (day) => day['kind'] == 'workout' && day['routineId'] == null)) {
+      setState(() {
+        _stage = 1;
+        _error =
+            'Choose a published routine for each workout slot before review.';
+      });
+      return;
+    }
+    setState(() {
+      _stage = stage;
+      _error = null;
+    });
+  }
+
+  Future<void> _createRoutine({int? selectedSlot}) async {
+    if (_busy) return;
+    final tutorials = context.read<TutorialRepository>();
+    final routines = context.read<RoutineTemplateRepository>();
+    await Navigator.of(context).push<void>(MaterialPageRoute(
+        builder: (_) => MultiRepositoryProvider(
+                providers: [
+                  RepositoryProvider<TutorialRepository>.value(
+                      value: tutorials),
+                  RepositoryProvider<RoutineTemplateRepository>.value(
+                      value: routines)
+                ],
+                child: Scaffold(
+                    appBar: AppBar(title: const Text('Routine Builder')),
+                    body: const RoutineTemplatesScreen()))));
+    if (!mounted || _repository?.current != true) return;
+    try {
+      final latest = await _repository!.load();
+      if (!mounted || _repository?.current != true) return;
+      setState(() => _catalog = latest);
+      if (selectedSlot != null) await _editDay(selectedSlot);
+    } catch (error) {
+      if (mounted) setState(() => _error = _failure(error));
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -101,6 +153,7 @@ class _WorkoutProgramsScreenState extends State<WorkoutProgramsScreen> {
       _title.text = data['title'] as String;
       _revision = revision;
       _week = 1;
+      _stage = 0;
       _dirty = revision == 0;
       _error = null;
       _notice = null;
@@ -201,8 +254,13 @@ class _WorkoutProgramsScreenState extends State<WorkoutProgramsScreen> {
         Map<String, dynamic>.from((_editing!['days'] as List)[index] as Map);
     final result = await showDialog<Map<String, dynamic>>(
         context: context,
-        builder: (_) =>
-            _ProgramDayDialog(day: original, routines: _catalog!.routines.where((r)=>!r.readOnly).toList()));
+        builder: (_) => _ProgramDayDialog(
+            day: original,
+            routines: _catalog!.routines.where((r) => !r.readOnly).toList(),
+            onCreateRoutine: () {
+              Navigator.pop(context);
+              _createRoutine(selectedSlot: index);
+            }));
     if (result == null || !mounted) return;
     setState(() {
       (_editing!['days'] as List)[index] = result;
@@ -230,11 +288,10 @@ class _WorkoutProgramsScreenState extends State<WorkoutProgramsScreen> {
                 onPressed: _busy ? null : _load,
                 icon: const Icon(Icons.refresh),
                 label: const Text('Reload')),
-            if (widget.onOpenRoutineBuilder != null)
-              OutlinedButton.icon(
-                  onPressed: _busy ? null : widget.onOpenRoutineBuilder,
-                  icon: const Icon(Icons.list_alt),
-                  label: const Text('Routine Builder')),
+            OutlinedButton.icon(
+                onPressed: _busy ? null : () => _createRoutine(),
+                icon: const Icon(Icons.list_alt),
+                label: const Text('Routine Builder')),
           ]),
       const SizedBox(height: 12),
       const Text(
@@ -276,6 +333,12 @@ class _WorkoutProgramsScreenState extends State<WorkoutProgramsScreen> {
                     : () {
                         final data = program.toJson();
                         data['id'] = 'program_${_requestId()}';
+                        data['schemaVersion'] = 2;
+                        for (final day in data['days'] as List) {
+                          day['schemaVersion'] = 2;
+                          day.remove('restSeconds');
+                          day['restOverrideSeconds'] = null;
+                        }
                         _edit(WorkoutProgram.fromJson(data), 0);
                       },
                 icon: const Icon(Icons.add),
@@ -295,8 +358,10 @@ class _WorkoutProgramsScreenState extends State<WorkoutProgramsScreen> {
                   subtitle: Text(
                       '${draft.program.level} · revision ${draft.revision}'),
                   trailing: TextButton(
-                      onPressed: draft.readOnly?null:() => _edit(draft.program, draft.revision),
-                      child: Text(draft.readOnly?'Read-only':'Edit')))),
+                      onPressed: draft.readOnly
+                          ? null
+                          : () => _edit(draft.program, draft.revision),
+                      child: Text(draft.readOnly ? 'Read-only' : 'Edit')))),
         const SizedBox(height: 24),
         Text('Published Programs',
             style: Theme.of(context).textTheme.titleLarge),
@@ -314,39 +379,59 @@ class _WorkoutProgramsScreenState extends State<WorkoutProgramsScreen> {
       ];
   List<Widget> _editorView(Map<String, dynamic> data) => [
         const SizedBox(height: 24),
-        TextField(
-            controller: _title,
-            enabled: !_busy,
-            onChanged: (_) => setState(_changed),
-            decoration: const InputDecoration(labelText: 'Program title')),
-        const SizedBox(height: 12),
-        DropdownButtonFormField<String>(
-            initialValue: data['level'] as String,
-            decoration: const InputDecoration(labelText: 'Training level'),
-            items: [
-              for (final level in ['Beginner', 'Intermediate', 'Advanced'])
-                DropdownMenuItem(value: level, child: Text(level))
-            ],
-            onChanged: _busy
-                ? null
-                : (value) => setState(() {
-                      data['level'] = value!;
-                      _changed();
-                    })),
-        const SizedBox(height: 16),
         Wrap(spacing: 8, children: [
-          for (var week = 1; week <= 4; week++)
+          for (var stage = 0; stage < 3; stage++)
             ChoiceChip(
-                label: Text('Week $week'),
-                selected: _week == week,
-                onSelected: _busy ? null : (_) => setState(() => _week = week))
+                label: Text(const ['Details', 'Schedule', 'Review'][stage]),
+                selected: _stage == stage,
+                onSelected: (_) => _selectStage(stage))
         ]),
-        const SizedBox(height: 12),
-        for (var index = 0; index < (data['days'] as List).length; index++)
-          if ((data['days'] as List)[index]['week'] == _week)
-            _dayCard(index, (data['days'] as List)[index]),
+        if (_stage == 2)
+          Text(
+              'Review: ${(data['days'] as List).where((d) => d['kind'] == 'workout').length} workout slots across four weeks. '
+              'Save the draft before publishing a new immutable version.'),
+        if (_stage == 0) ...[
+          TextField(
+              controller: _title,
+              enabled: !_busy,
+              onChanged: (_) => setState(_changed),
+              decoration: const InputDecoration(labelText: 'Program title')),
+          const SizedBox(height: 12),
+          DropdownButtonFormField<String>(
+              initialValue: data['level'] as String,
+              decoration: const InputDecoration(labelText: 'Training level'),
+              items: [
+                for (final level in ['Beginner', 'Intermediate', 'Advanced'])
+                  DropdownMenuItem(value: level, child: Text(level))
+              ],
+              onChanged: _busy
+                  ? null
+                  : (value) => setState(() {
+                        data['level'] = value!;
+                        _changed();
+                      })),
+        ],
+        const SizedBox(height: 16),
+        if (_stage == 1) ...[
+          Wrap(spacing: 8, children: [
+            for (var week = 1; week <= 4; week++)
+              ChoiceChip(
+                  label: Text('Week $week'),
+                  selected: _week == week,
+                  onSelected:
+                      _busy ? null : (_) => setState(() => _week = week))
+          ]),
+          const SizedBox(height: 12),
+          for (var index = 0; index < (data['days'] as List).length; index++)
+            if ((data['days'] as List)[index]['week'] == _week)
+              _dayCard(index, (data['days'] as List)[index]),
+        ],
         const SizedBox(height: 16),
         Wrap(spacing: 12, runSpacing: 12, children: [
+          if (_stage < 2)
+            FilledButton(
+                onPressed: _busy ? null : () => _selectStage(_stage + 1),
+                child: const Text('Continue')),
           FilledButton(
               onPressed: _busy ? null : _save, child: const Text('Save draft')),
           FilledButton.icon(
@@ -413,7 +498,7 @@ class _WorkoutProgramsScreenState extends State<WorkoutProgramsScreen> {
                         child: const Text('Edit day')),
                   ]),
               Text(day['kind'] == 'workout'
-                  ? '${routine?.title ?? 'Choose a published Routine'} · routine day ${day['routineDay'] ?? 1} · ${day['restSeconds'] ?? 60}s rest'
+                  ? '${routine?.title ?? 'Choose a published Routine'} · routine day ${day['routineDay'] ?? 1} · ${day['schemaVersion'] == 2 && day['restOverrideSeconds'] == null ? 'routine rest settings' : '${day['restOverrideSeconds'] ?? day['restSeconds'] ?? 60}s rest'}'
                   : day['kind'] == 'activeRecovery'
                       ? 'Active Recovery · no workout completion is inferred'
                       : 'Rest Day'),
@@ -430,7 +515,9 @@ class _WorkoutProgramsScreenState extends State<WorkoutProgramsScreen> {
 }
 
 class _ProgramDayDialog extends StatefulWidget {
-  const _ProgramDayDialog({required this.day, required this.routines});
+  const _ProgramDayDialog(
+      {required this.day, required this.routines, this.onCreateRoutine});
+  final VoidCallback? onCreateRoutine;
   final Map<String, dynamic> day;
   final List<ProgramRoutineChoice> routines;
   @override
@@ -439,8 +526,10 @@ class _ProgramDayDialog extends StatefulWidget {
 
 class _ProgramDayDialogState extends State<_ProgramDayDialog> {
   late final Map<String, dynamic> _day = Map.of(widget.day);
-  late final _rest =
-      TextEditingController(text: '${_day['restSeconds'] ?? 60}');
+  late final _rest = TextEditingController(
+      text: '${_day['restOverrideSeconds'] ?? _day['restSeconds'] ?? 60}');
+  late bool _overrideRest =
+      _day['schemaVersion'] != 2 || _day['restOverrideSeconds'] != null;
   String? _error;
   static const categories = [
     'Full Body',
@@ -475,7 +564,12 @@ class _ProgramDayDialogState extends State<_ProgramDayDialog> {
           () => _error = 'Rest must be a whole number from 0 to 600 seconds.');
       return;
     }
-    _day['restSeconds'] = rest;
+    if (_day['schemaVersion'] == 2) {
+      _day['restOverrideSeconds'] = _overrideRest ? rest : null;
+      _day.remove('restSeconds');
+    } else {
+      _day['restSeconds'] = rest;
+    }
     Navigator.pop(context, _day);
   }
 
@@ -514,6 +608,9 @@ class _ProgramDayDialogState extends State<_ProgramDayDialog> {
                         }
                       })),
               if (_day['kind'] == 'workout') ...[
+                TextButton(
+                    onPressed: widget.onCreateRoutine,
+                    child: const Text('Create routine')),
                 const SizedBox(height: 12),
                 DropdownButtonFormField<String>(
                     key: ValueKey('category-${_day['kind']}'),
@@ -562,17 +659,35 @@ class _ProgramDayDialogState extends State<_ProgramDayDialog> {
                       ],
                       onChanged: (v) =>
                           setState(() => _day['routineDay'] = v!)),
+                  const SizedBox(height: 12),
+                  for (final raw in (routine.snapshot['exercises'] as List)
+                      .where(
+                          (e) => (e['dayNumber'] ?? 1) == _day['routineDay']))
+                    Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                            '${raw['name'] ?? raw['exerciseId']} · ${raw['executionMode'] == 'videoGuidedTimed' ? 'Video guided' : raw['executionMode'] == 'legacyManual' ? 'Self-reported' : 'AI tracking'} · '
+                            '${raw['sets']} × ${raw['durationSeconds'] != null ? '${raw['durationSeconds']}s' : '${raw['reps']} reps'} · '
+                            '${_day['schemaVersion'] == 2 && !_overrideRest ? raw['restSeconds'] ?? 60 : _rest.text}s rest')),
                 ],
                 const SizedBox(height: 12),
+                if (_day['schemaVersion'] == 2)
+                  CheckboxListTile(
+                      title: Text(_overrideRest
+                          ? 'Override rest for this slot'
+                          : 'Use routine rest settings'),
+                      value: _overrideRest,
+                      onChanged: (v) => setState(() => _overrideRest = v!)),
                 TextField(
                     controller: _rest,
+                    enabled: _overrideRest,
                     keyboardType: TextInputType.number,
                     decoration: InputDecoration(
                         labelText: 'Rest between sets (seconds)',
                         errorText: _error)),
                 const SizedBox(height: 12),
                 const Text(
-                    'Set exercise order, sets and reps in Routine Builder, publish that Routine, then select it here. AI availability follows the existing tracker registry.'),
+                    'Set exercise order, sets, repetitions or duration in Routine Builder, publish the Routine, then select it here.'),
               ],
             ]))),
         actions: [

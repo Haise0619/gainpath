@@ -90,7 +90,7 @@ class _LateralRaiseWorkoutRouteState extends State<LateralRaiseWorkoutRoute>
           detectorId: 'blazepose-tflite',
           detectorVersion: BlazePoseModelContract.version,
           sets: launch.exercise.sets,
-          reps: launch.exercise.reps,
+          reps: launch.repetitionTarget.repetitions,
           saveVoiceMode: (mode) async {
             await _voicePreferences?.write(mode);
           });
@@ -154,7 +154,7 @@ class _LateralRaiseWorkoutRouteState extends State<LateralRaiseWorkoutRoute>
       return LateralRaiseSetupScreen(
           exerciseName: widget.launch.exercise.name,
           sets: widget.launch.exercise.sets,
-          reps: widget.launch.exercise.reps,
+          reps: widget.launch.repetitionTarget.repetitions,
           restSeconds: widget.launch.exercise.restSeconds,
           onStart: () {
             setState(() => _setupConfirmed = true);
@@ -184,7 +184,7 @@ class _LateralRaiseWorkoutRouteState extends State<LateralRaiseWorkoutRoute>
             'Face front with both shoulders, elbows, wrists and hips visible. Leave space on both sides for raised arms. Drag the outline or adjust its width.',
         session: session,
         exerciseName: widget.launch.exercise.name,
-        targetRepetitions: widget.launch.exercise.reps,
+        targetRepetitions: widget.launch.repetitionTarget.repetitions,
         routineContext: widget.launch.routineContext,
         viewport:
             PoseCameraViewport(camera: _camera!, session: session.preview),

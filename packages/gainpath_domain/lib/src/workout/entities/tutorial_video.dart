@@ -1,6 +1,7 @@
 import '../enums/tutorial_status.dart';
 import '../exercise_tracking.dart';
 import '../exercise_tutorial_details.dart';
+import '../exercise_prescription.dart';
 
 /// Opaque immutable edit token supplied by a repository, never authored by UI.
 abstract class TutorialEditBaseline {
@@ -18,6 +19,10 @@ class TutorialVideo {
   final bool archived;
   final TutorialEditBaseline? editBaseline;
   final ExerciseTrackingCapability trackingCapability;
+  ExerciseExecutionMode? executionMode;
+  ExercisePrescription? defaultPrescription;
+  final Map<String, dynamic>? mediaValidation;
+  final int editRevision;
   String title;
   String category;
   TutorialStatus status;
@@ -45,6 +50,10 @@ class TutorialVideo {
     this.archived = false,
     this.editBaseline,
     this.trackingCapability = ExerciseTrackingCapability.guidedOnly,
+    this.executionMode,
+    this.defaultPrescription,
+    this.mediaValidation,
+    this.editRevision = 0,
     required this.title,
     required this.category,
     required this.status,

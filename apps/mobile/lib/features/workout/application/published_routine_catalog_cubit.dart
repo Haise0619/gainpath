@@ -66,11 +66,12 @@ class PublishedRoutineCatalogCubit extends Cubit<PublishedRoutineCatalogState> {
         accountChanged();
         return;
       }
+      final discoveryItems = _preferSuccessors(page.items);
       PublishedRoutine? selected;
       if (selectedId == null) {
-        selected = page.items.isEmpty ? null : page.items.first;
+        selected = discoveryItems.isEmpty ? null : discoveryItems.first;
       } else {
-        for (final item in page.items) {
+        for (final item in discoveryItems) {
           if (item.id == selectedId) selected = item;
         }
         // A missing page entry is not evidence of withdrawal.
@@ -82,10 +83,10 @@ class PublishedRoutineCatalogCubit extends Cubit<PublishedRoutineCatalogState> {
       }
       _selectedId = selected?.id;
       emit(PublishedRoutineCatalogState(
-          status: page.items.isEmpty && selected == null
+          status: discoveryItems.isEmpty && selected == null
               ? CatalogStatus.empty
               : CatalogStatus.ready,
-          items: page.items,
+          items: discoveryItems,
           selected: selected,
           nextCursor: page.nextCursor,
           message: selectedId != null && selected == null
@@ -147,14 +148,22 @@ class PublishedRoutineCatalogCubit extends Cubit<PublishedRoutineCatalogState> {
         accountChanged();
         return;
       }
-      final items = {
-        for (final item in state.items) item.id: item,
-        for (final item in page.items) item.id: item
-      };
+      final items = _preferSuccessors([...state.items, ...page.items]);
+      var selected = state.selected;
+      if (selected != null) {
+        for (final item in items) {
+          if (item.sourceBlueprintId == selected!.sourceBlueprintId &&
+              item.schemaVersion == 2) {
+            selected = item;
+            break;
+          }
+        }
+      }
+      _selectedId = selected?.id;
       emit(PublishedRoutineCatalogState(
           status: CatalogStatus.ready,
-          items: List.unmodifiable(items.values),
-          selected: state.selected,
+          items: items,
+          selected: selected,
           nextCursor: page.nextCursor));
     } catch (_) {
       if (!_current(generation)) {
@@ -169,4 +178,20 @@ class PublishedRoutineCatalogCubit extends Cubit<PublishedRoutineCatalogState> {
           message: 'Could not load more routines. Please try again.'));
     }
   }
+}
+
+List<PublishedRoutine> _preferSuccessors(Iterable<PublishedRoutine> input) {
+  final byId = {for (final item in input) item.id: item};
+  final successors = <String, PublishedRoutine>{};
+  for (final item in byId.values) {
+    if (item.schemaVersion != 2) continue;
+    final previous = successors[item.sourceBlueprintId];
+    if (previous == null || item.id.compareTo(previous.id) < 0) {
+      successors[item.sourceBlueprintId] = item;
+    }
+  }
+  final emitted = <String>{};
+  return List.unmodifiable(byId.values
+      .map((item) => successors[item.sourceBlueprintId] ?? item)
+      .where((item) => emitted.add(item.id)));
 }

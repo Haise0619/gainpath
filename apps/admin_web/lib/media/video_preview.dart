@@ -9,7 +9,9 @@ class ContentVideoPreview extends StatelessWidget {
       {super.key,
       this.url = '',
       this.bytes,
-      this.semanticsLabel = 'Exercise tutorial video preview'});
+      this.semanticsLabel = 'Exercise tutorial video preview',
+      this.onReady});
+  final ValueChanged<bool>? onReady;
   final String url;
   final Uint8List? bytes;
   final String semanticsLabel;
@@ -25,7 +27,8 @@ class ContentVideoPreview extends StatelessWidget {
             aspectRatio: 16 / 9,
             child: ColoredBox(
               color: Colors.black,
-              child: platform.ContentVideoPlayer(url: url, bytes: bytes),
+              child: platform.ContentVideoPlayer(
+                  url: url, bytes: bytes, onReady: onReady),
             ),
           ),
         ),

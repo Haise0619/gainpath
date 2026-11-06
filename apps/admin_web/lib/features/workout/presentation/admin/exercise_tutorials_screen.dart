@@ -121,6 +121,41 @@ class _ExerciseTutorialsScreenState extends State<ExerciseTutorialsScreen> {
     if (_removing || _statusError != null || !widget.allowRemoval) return;
     final repository = context.read<TutorialRepository>();
     if (repository is! TutorialCatalogStatusRepository) return;
+    if (item.executionMode == ExerciseExecutionMode.videoGuidedTimed &&
+        status == ExerciseCatalogStatus.active) {
+      var ready = false;
+      final confirmed = await showDialog<bool>(
+          context: context,
+          builder: (dialogContext) => StatefulBuilder(
+              builder: (context, update) => AlertDialog(
+                    title: Text('Preview and activate ${item.title}'),
+                    content: SizedBox(
+                        width: 640,
+                        child:
+                            Column(mainAxisSize: MainAxisSize.min, children: [
+                          ExerciseVideoPreview(
+                              url: item.videoUrl,
+                              onReady: (value) {
+                                if (dialogContext.mounted)
+                                  update(() => ready = value);
+                              }),
+                          const SizedBox(height: 12),
+                          const Text(
+                              'Confirm the tutorial plays correctly. Activation also verifies the saved media and workout defaults.'),
+                        ])),
+                    actions: [
+                      TextButton(
+                          onPressed: () => Navigator.pop(dialogContext, false),
+                          child: const Text('Cancel')),
+                      FilledButton(
+                          onPressed: ready
+                              ? () => Navigator.pop(dialogContext, true)
+                              : null,
+                          child: const Text('Activate exercise'))
+                    ],
+                  )));
+      if (confirmed != true || !mounted) return;
+    }
     setState(() => _removing = true);
     try {
       await (repository as TutorialCatalogStatusRepository)
@@ -237,6 +272,18 @@ class _TutorialFormPageState extends State<_TutorialFormPage> {
         ..addListener(_repaint);
   late final _duration =
       TextEditingController(text: '${widget.existing?.durationMin ?? 5}');
+  late final _sets = TextEditingController(
+      text: '${widget.existing?.defaultPrescription?.sets ?? 3}');
+  late final _seconds = TextEditingController(
+      text:
+          '${widget.existing?.defaultPrescription is TimedPrescription ? (widget.existing!.defaultPrescription as TimedPrescription).durationSeconds : 45}');
+  late final _rest = TextEditingController(
+      text: '${widget.existing?.defaultPrescription?.restSeconds ?? 60}');
+  bool get _timed =>
+      _catalogOnly &&
+      (widget.existing == null ||
+          widget.existing!.executionMode ==
+              ExerciseExecutionMode.videoGuidedTimed);
   late String _category = widget.existing?.category ?? _categories.first;
   late String _difficulty = widget.existing?.difficulty ?? _difficulties.first;
   late String _status = widget.existing?.status.label ?? 'Draft';
@@ -306,6 +353,9 @@ class _TutorialFormPageState extends State<_TutorialFormPage> {
     _videoUrl.dispose();
     _thumbnailUrl.dispose();
     _duration.dispose();
+    _sets.dispose();
+    _seconds.dispose();
+    _rest.dispose();
     super.dispose();
   }
 
@@ -319,6 +369,16 @@ class _TutorialFormPageState extends State<_TutorialFormPage> {
       title: _title.text.trim(),
       category: _category,
       status: TutorialStatus.fromLabel(_status),
+      executionMode: _timed
+          ? ExerciseExecutionMode.videoGuidedTimed
+          : widget.existing?.executionMode,
+      defaultPrescription: _timed
+          ? TimedPrescription(
+              sets: int.parse(_sets.text.trim()),
+              durationSeconds: int.parse(_seconds.text.trim()),
+              restSeconds: int.parse(_rest.text.trim()))
+          : widget.existing?.defaultPrescription,
+      editRevision: widget.existing?.editRevision ?? 0,
       coversExercise: _catalogOnly ? '' : (_coversExercise ?? ''),
       difficulty: _difficulty,
       durationMin: _catalogOnly ? 0 : duration,
@@ -464,12 +524,13 @@ class _TutorialFormPageState extends State<_TutorialFormPage> {
                               ? Icons.auto_awesome_rounded
                               : Icons.menu_book_outlined,
                           color: AppColors.primary),
-                      title: Text(
-                          widget.existing?.trackingCapability.displayLabel ??
+                      title: Text(_timed
+                          ? 'Video guided · timer completion'
+                          : widget.existing?.trackingCapability.displayLabel ??
                               'Guided only'),
                       subtitle: Text(widget
                               .existing?.trackingCapability.description ??
-                          'New exercises start with instructions and self-reported sets. AI tracking requires a registered exercise tracker.')),
+                          'New exercises use tutorial video and a workout timer. AI tracking requires a registered exercise tracker.')),
                   const Text(
                       'Tracking availability is system-managed. Renaming an exercise or adding a video does not enable AI tracking.',
                       style: TextStyle(fontSize: 12, color: AppColors.inkSoft)),
@@ -603,7 +664,7 @@ class _TutorialFormPageState extends State<_TutorialFormPage> {
                   ],
                 ),
                 if (_catalogOnly) const SizedBox(height: 12),
-                if (_catalogOnly)
+                if (_catalogOnly && !_timed)
                   DropdownButtonFormField<String>(
                     initialValue: _status,
                     decoration: const InputDecoration(
@@ -679,6 +740,35 @@ class _TutorialFormPageState extends State<_TutorialFormPage> {
                 onChanged: (value) => setState(() => _steps = value)),
           ],
           const SizedBox(height: 22),
+          if (_timed) ...[
+            const Eyebrow('Workout defaults'),
+            Panel(
+                child: Column(children: [
+              TextFormField(
+                  controller: _sets,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(labelText: 'Default sets'),
+                  validator: (v) => _bounded(v, 1, 50)),
+              const SizedBox(height: 12),
+              TextFormField(
+                  controller: _seconds,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                      labelText: 'Duration per set (seconds)'),
+                  validator: (v) => _bounded(v, 1, 3600)),
+              const SizedBox(height: 12),
+              TextFormField(
+                  controller: _rest,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                      labelText: 'Rest between sets (seconds)'),
+                  validator: (v) => _bounded(v, 0, 600)),
+              const SizedBox(height: 12),
+              const Text(
+                  'Save an inactive draft, preview the saved video, then activate it from the catalog. Timer completion does not verify repetitions or form.'),
+            ])),
+            const SizedBox(height: 22),
+          ],
           if (_saveError != null)
             Padding(
                 padding: const EdgeInsets.only(bottom: 10),
@@ -799,5 +889,12 @@ class _TutorialFormPageState extends State<_TutorialFormPage> {
         ),
       ],
     );
+  }
+
+  String? _bounded(String? value, int min, int max) {
+    final number = int.tryParse(value?.trim() ?? '');
+    return number == null || number < min || number > max
+        ? 'Use a whole number from $min to $max.'
+        : null;
   }
 }

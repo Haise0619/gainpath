@@ -34,6 +34,7 @@ class FirebaseWorkoutBackupGateway implements WorkoutBackupGateway {
   final SessionScope scope;
   late final bool Function() _active;
   late final Future<Object?> Function(Map<String, Object?>) _invoke;
+  bool _legacyServer = false;
   Future<Map<String, dynamic>> _call(
       String action, Map<String, Object?> command) async {
     if (!_active()) throw const BackupFailure('permission-denied');
@@ -65,12 +66,27 @@ class FirebaseWorkoutBackupGateway implements WorkoutBackupGateway {
   @override
   Future<String> save(WorkoutBackupRecord record, String? baseDigest) async {
     WorkoutBackupRecord.parse(record.kind, record.id, record.payload, scope);
-    final data = await _call('save', {
-      'kind': record.kind,
-      'id': record.id,
-      'baseDigest': baseDigest,
-      'payload': record.payload
-    });
+    if (_legacyServer &&
+        record.kind == 'routine' &&
+        record.payload['schemaVersion'] == 2)
+      throw const BackupFailure('unsupported-server');
+    Map<String, dynamic> data;
+    try {
+      data = await _call('save', {
+        if (record.kind == 'routine' && record.payload['schemaVersion'] == 2)
+          'schemaVersion': 2,
+        'kind': record.kind,
+        'id': record.id,
+        'baseDigest': baseDigest,
+        'payload': record.payload
+      });
+    } on BackupFailure catch (e) {
+      if (record.kind == 'routine' &&
+          record.payload['schemaVersion'] == 2 &&
+          e.code == 'invalid-argument')
+        throw const BackupFailure('unsupported-server');
+      rethrow;
+    }
     if (data.length != 5 ||
         data['status'] != 'backed_up' ||
         data['kind'] != record.kind ||
@@ -83,10 +99,23 @@ class FirebaseWorkoutBackupGateway implements WorkoutBackupGateway {
 
   @override
   Future<WorkoutBackupPage> list(String? cursor) async {
-    final data = await _call('list', {
+    Map<String, dynamic> data;
+    final command = <String, Object?>{
       'after': cursor,
       'maxPoseMetricsSchemaVersion': 7,
-    });
+      if (!_legacyServer) ...{
+        'schemaVersion': 2,
+        'maxRoutineCheckpointSchemaVersion': 2
+      },
+    };
+    try {
+      data = await _call('list', command);
+    } on BackupFailure catch (e) {
+      if (_legacyServer || e.code != 'invalid-argument') rethrow;
+      _legacyServer = true;
+      data = await _call(
+          'list', {'after': cursor, 'maxPoseMetricsSchemaVersion': 7});
+    }
     final raw = data['records'], next = data['nextCursor'];
     if (data.length != 3 ||
         raw is! List ||

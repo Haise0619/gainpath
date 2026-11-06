@@ -171,6 +171,9 @@ class _ExerciseResult extends StatelessWidget {
       RoutineExerciseStatus.partial => 'Measured partial result',
       RoutineExerciseStatus.selfReportedPartial => 'Self-reported partial',
       RoutineExerciseStatus.skipped => 'Skipped',
+      RoutineExerciseStatus.timerPartial => 'Timer progress · not AI verified',
+      RoutineExerciseStatus.timerCompleted =>
+        'Timer complete · not AI verified',
       RoutineExerciseStatus.instructionsReviewed => 'Instructions reviewed',
       RoutineExerciseStatus.notStarted => 'Not started',
     };
@@ -180,7 +183,12 @@ class _ExerciseResult extends StatelessWidget {
             child:
                 Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text(e.name, style: Theme.of(context).textTheme.titleMedium),
-              Text('Target: ${e.sets} sets × ${e.reps} reps'),
+              Text(e.durationSeconds != null
+                  ? 'Target: ${e.sets} sets × ${e.durationSeconds}s'
+                  : 'Target: ${e.sets} sets × ${e.reps} reps'),
+              if (result.isTimed)
+                Text(
+                    '${result.guided?.completedSets ?? 0} sets · ${(result.guided?.totalActiveMicroseconds ?? 0) ~/ 1000000}s active · Not AI verified'),
               Text(label),
               if (result.sessionIds.isNotEmpty)
                 Text(

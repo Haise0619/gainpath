@@ -1,4 +1,5 @@
 export 'src/workout/entities/exercise.dart';
+export 'src/workout/exercise_prescription.dart';
 export 'src/workout/exercise_tracking.dart';
 export 'src/workout/exercise_tutorial_details.dart';
 export 'src/workout/entities/gym_equipment.dart';

@@ -44,7 +44,7 @@ class ExerciseCatalogList extends StatelessWidget {
                 style: Theme.of(context).textTheme.headlineMedium),
             const SizedBox(height: 6),
             const Text(
-                'Build routines with AI-tracked and guided-only exercises. Tracking availability is checked by the system.'),
+                'Build routines with AI-tracked and video-guided timed exercises. Tracking availability is checked by the system.'),
             const SizedBox(height: 18),
           ],
           Text(
@@ -152,6 +152,17 @@ class ExerciseCatalogList extends StatelessWidget {
                   : catalogOnly
                       ? item.catalogStatus.label
                       : item.status.label),
+              if (item.executionMode ==
+                  ExerciseExecutionMode.videoGuidedTimed) ...[
+                const Chip(label: Text('Video guided · Timer')),
+                if (item.defaultPrescription
+                    case final TimedPrescription target)
+                  Text(
+                      '${target.sets} sets × ${target.durationSeconds}s · ${target.restSeconds}s rest'),
+                Text(item.mediaValidation == null
+                    ? 'Media needs verification'
+                    : 'Media verified'),
+              ],
               if (item.videoUrl.trim().isNotEmpty)
                 IconButton(
                     tooltip: 'Preview tutorial video',

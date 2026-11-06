@@ -1,4 +1,5 @@
 import {validateFloorPushUpMetrics, validateFloorPushUpIdentity, FLOOR_PUSH_UP_ID} from './floor-push-up-validation';
+import {validateTimedRoutineBackup} from './timed-routine-backup-validation';
 import { createHash } from 'node:crypto';
 import { InputValidationError, requiredIdentifier } from '../../platform/validation';
 export function object(raw: unknown): Record<string, unknown> { if (!raw || typeof raw !== 'object' || Array.isArray(raw))
@@ -203,6 +204,7 @@ else
     throw new InputValidationError('Backup record is too large.'); return p; }
 /** Production acceptance remains restricted to actual measured-camera summaries. */
 export function validateBackupPayload(kind: string, id: string, org: string, uid: string, raw: unknown): Record<string, unknown> {
+    if(kind==='routine' && object(raw).schemaVersion===2) return validateTimedRoutineBackup(raw,id,org,uid);
     return validatePayload(kind, id, org, uid, raw, 'realCamera');
 }
 /** Separate parser for explicitly fictional source. Never an accepted backup or camera attestation. */

@@ -2,6 +2,55 @@ import 'package:test/test.dart';
 import 'package:gainpath_domain/workout.dart';
 
 void main() {
+  test('v2 slots preserve routine rests unless explicitly overridden', () {
+    final source = <String, dynamic>{
+      'schemaVersion': 2,
+      'kind': 'routine_v2',
+      'status': 'published',
+      'exercises': [
+        {
+          'entryId': 'first',
+          'exerciseId': 'mobility',
+          'dayNumber': 1,
+          'executionMode': 'videoGuidedTimed',
+          'sets': 3,
+          'durationSeconds': 45,
+          'restSeconds': 30
+        }
+      ]
+    };
+    final day = ProgramDay(
+        week: 1,
+        weekday: 1,
+        kind: 'workout',
+        category: 'Full Body',
+        schemaVersion: 2,
+        routineId: 'routine-v2',
+        routineSnapshot: source);
+    day.validate(published: true);
+    expect(day.effectiveRestSeconds(30), 30);
+    expect(day.toJson().containsKey('restSeconds'), false);
+    final override =
+        ProgramDay.fromJson({...day.toJson(), 'restOverrideSeconds': 15});
+    expect(override.effectiveRestSeconds(30), 15);
+    expect(ProgramDay.fromJson(day.toJson()).toJson(), day.toJson());
+    expect(
+        ProgramDay(week: 1, weekday: 1, kind: 'workout', category: 'Full Body')
+            .effectiveRestSeconds(30),
+        60);
+    (source['exercises'] as List).single['reps'] = 8;
+    expect(
+        () => ProgramDay(
+                week: 1,
+                weekday: 1,
+                kind: 'workout',
+                category: 'Full Body',
+                schemaVersion: 2,
+                routineId: 'routine-v2',
+                routineSnapshot: source)
+            .validate(published: true),
+        throwsFormatException);
+  });
   test('templates contain four complete weeks with 3/4/5 real workout slots',
       () {
     final templates = WorkoutProgram.templates();

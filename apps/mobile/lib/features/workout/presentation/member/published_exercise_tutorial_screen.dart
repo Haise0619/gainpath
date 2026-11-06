@@ -352,11 +352,15 @@ class _PublishedExerciseTutorialScreenState
             DetailRow('Day', '${e.dayNumber}'),
             DetailRow('Sets', '${e.sets}'),
             DetailRow(
-                widget.targetLabel ??
+                (e.durationSeconds != null
+                        ? 'Duration per set'
+                        : widget.targetLabel) ??
                     (widget.perArmTargets
                         ? 'Reps per arm per set'
                         : 'Reps per set'),
-                '${e.reps}'),
+                e.durationSeconds != null
+                    ? '${e.durationSeconds}s'
+                    : '${e.reps}'),
             DetailRow(
                 'Rest', e.restSeconds == 0 ? 'No rest' : '${e.restSeconds} sec')
           ])),

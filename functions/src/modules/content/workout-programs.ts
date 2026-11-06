@@ -1,3 +1,4 @@
+import {parseExercisePrescription} from './exercise-execution';
 import {createHash} from 'node:crypto';
 import {requireActiveMembership, requireVerifiedEmail} from '../../platform/auth-context';
 import {DomainError} from '../../platform/errors';
@@ -7,8 +8,8 @@ import {InputValidationError, requiredIdentifier} from '../../platform/validatio
 export type ProgramAuth = {uid: string; token: Record<string, unknown>};
 export interface WorkoutProgramDependencies {freshAuth(auth: ProgramAuth): Promise<void>; clock?: () => number;}
 type Day = {week: number; weekday: number; kind: string; category: string; routineId: string | null; routineDay: number;
-  muscleGroups: string[]; restSeconds: number; routineSnapshot?: DocumentData};
-export interface WorkoutProgram {schemaVersion: 1; id: string; version: number; title: string; level: string; weeks: 4; days: Day[];}
+  muscleGroups: string[]; restSeconds: number; restOverrideSeconds?:number|null; routineSnapshot?: DocumentData};
+export interface WorkoutProgram {schemaVersion: 1|2; id: string; version: number; title: string; level: string; weeks: 4; days: Day[];}
 type IndexEntry = {id: string; revision: number; version: number};
 const groups: Record<string, string[]> = {'Full Body': ['upperPush', 'upperPull', 'lower'], 'Upper Body': ['upperPush', 'upperPull'],
   'Lower Body': ['lower'], Push: ['upperPush'], Pull: ['upperPull'], Legs: ['lower'], 'Active Recovery': [], Rest: []};
@@ -29,7 +30,7 @@ const clone = <T>(v: T): T => JSON.parse(JSON.stringify(v)) as T;
 
 /** Only existing published exercise metadata and targets enter a Program snapshot. */
 function routineSnapshot(source: DocumentData | undefined, day: Day): DocumentData {
-  if (!source || source.schemaVersion !== 1 || source.kind !== 'routine' || source.status !== 'published'
+  if (!source || ![1,2].includes(Number(source.schemaVersion)) || source.kind !== (source.schemaVersion===2?'routine_v2':'routine') || source.status !== 'published'
       || !text(source.sourceBlueprintId, 128) || !text(source.title, 200) || !integer(source.estimatedMinutes, 1, 240)
       || !Array.isArray(source.exercises) || source.exercises.length < 1 || source.exercises.length > 50) throw unavailable();
   const rows = source.exercises.filter(raw => record(raw) && (raw.dayNumber ?? 1) === day.routineDay);
@@ -37,7 +38,7 @@ function routineSnapshot(source: DocumentData | undefined, day: Day): DocumentDa
   const exercises = rows.map(raw => {
     if (!record(raw)) throw unavailable();
     try {requiredIdentifier(raw.exerciseId, 'exerciseId');} catch {throw unavailable();}
-    if (!text(raw.name, 200) || !integer(raw.sets, 1, 50) || !integer(raw.reps, 1, 100)) throw unavailable();
+    if (!text(raw.name, 200) || !integer(raw.sets, 1, 50) || (source.schemaVersion===1&&!integer(raw.reps, 1, 100))) throw unavailable();
     // Catalog categories are descriptive, not recognition algorithms. Reject
     // clear upper/lower mismatches while leaving broad upper Push/Pull choices
     // with the author. Full Body may intentionally combine either region.
@@ -46,8 +47,9 @@ function routineSnapshot(source: DocumentData | undefined, day: Day): DocumentDa
     const upper = /upper[\s-]*body|chest|shoulder|triceps?|biceps?|\bback\b|\barms?\b/i.test(metadata);
     if ((['Push', 'Pull', 'Upper Body'].includes(day.category) && lower)
         || (['Lower Body', 'Legs'].includes(day.category) && upper && !lower)) throw unavailable();
-    const result: DocumentData = {exerciseId: raw.exerciseId, name: raw.name, sets: raw.sets, reps: raw.reps,
-      dayNumber: day.routineDay, restSeconds: day.restSeconds};
+    if(source.schemaVersion===2){parseExercisePrescription(raw);if(!text(raw.entryId,128))throw unavailable();if(raw.executionMode==='videoGuidedTimed'){const stamp=raw.mediaValidation;if(!record(stamp)||stamp.schemaVersion!==1||stamp.videoUrl!==raw.videoUrl||!text(stamp.bucket,200)||!text(stamp.objectPath,500)||!text(stamp.generation,100)||stamp.contentType!=='video/mp4'||!integer(stamp.sizeBytes,1,104857600)||!integer(stamp.sourceRevision)||!integer(stamp.validatedAtMillis,1))throw unavailable();}}
+    const effectiveRest=day.restOverrideSeconds===undefined?day.restSeconds:day.restOverrideSeconds??raw.restSeconds??60;
+    const result: DocumentData = {exerciseId:raw.exerciseId,name:raw.name,sets:raw.sets,dayNumber:day.routineDay,restSeconds:effectiveRest,...(source.schemaVersion===2?{entryId:raw.entryId,executionMode:raw.executionMode,...(raw.executionMode==='videoGuidedTimed'?{durationSeconds:raw.durationSeconds,mediaValidation:raw.mediaValidation}:{reps:raw.reps})}:{reps:raw.reps})};
     for (const key of ['category', 'muscleGroup', 'cue', 'imageUrl', 'videoUrl', 'description', 'equipment', 'difficulty', 'coverImageUrl', 'tutorialSteps']) {
       const value = raw[key];
       if (value === undefined) continue;
@@ -62,7 +64,7 @@ function routineSnapshot(source: DocumentData | undefined, day: Day): DocumentDa
     }
     return result;
   });
-  return {schemaVersion: 1, kind: 'routine', status: 'published', sourceBlueprintId: source.sourceBlueprintId,
+  return {schemaVersion: source.schemaVersion, kind: source.kind, status: 'published', sourceBlueprintId: source.sourceBlueprintId,
     title: source.title, estimatedMinutes: source.estimatedMinutes, ...(source.difficulty !== undefined ? {difficulty: source.difficulty} : {}), exercises};
 }
 
@@ -70,13 +72,13 @@ function parseProgram(value: unknown, published = false): WorkoutProgram {
   if (!record(value)) throw invalid();
   fields(value, ['schemaVersion', 'id', 'version', 'title', 'level', 'weeks', 'days']);
   requiredIdentifier(value.id, 'program.id');
-  if (value.schemaVersion !== 1 || !integer(value.version, published ? 1 : 0) || (!published && value.version !== 0)
+  if (![1,2].includes(Number(value.schemaVersion)) || !integer(value.version, published ? 1 : 0) || (!published && value.version !== 0)
       || !text(value.title, 120) || !['Beginner', 'Intermediate', 'Advanced'].includes(String(value.level))
       || value.weeks !== 4 || !Array.isArray(value.days) || value.days.length !== 28) throw invalid();
   const keys = new Set<string>();
   const days = value.days.map(raw => {
     if (!record(raw)) throw invalid();
-    fields(raw, ['week', 'weekday', 'kind', 'category', 'routineId', 'routineDay', 'muscleGroups', 'restSeconds', 'routineSnapshot']);
+    fields(raw, ['week', 'weekday', 'kind', 'category', 'routineId', 'routineDay', 'muscleGroups', 'restSeconds', 'routineSnapshot', ...(value.schemaVersion===2?['restOverrideSeconds','schemaVersion']:[])]);
     if (!integer(raw.week, 1, 4) || !integer(raw.weekday, 1, 7) || !['workout', 'activeRecovery', 'rest'].includes(String(raw.kind))
         || typeof raw.category !== 'string' || !Object.hasOwn(groups, raw.category) || !integer(raw.routineDay ?? 1, 1, 14)
         || !integer(raw.restSeconds ?? 60, 0, 600) || !Array.isArray(raw.muscleGroups)
@@ -87,12 +89,14 @@ function parseProgram(value: unknown, published = false): WorkoutProgram {
       : raw.category !== (raw.kind === 'rest' ? 'Rest' : 'Active Recovery')) throw invalid();
     if (groups[raw.category].length !== raw.muscleGroups.length || groups[raw.category].some(g => !(raw.muscleGroups as unknown[]).includes(g))
         || (raw.kind !== 'workout' && raw.muscleGroups.length)) throw invalid();
+    if(raw.schemaVersion!==undefined&&raw.schemaVersion!==2)throw invalid();
+    if(value.schemaVersion===2 && (!Object.hasOwn(raw,'restOverrideSeconds') || (raw.restOverrideSeconds!==null&&!integer(raw.restOverrideSeconds,0,600))))throw invalid();
     const routineId = raw.routineId ?? null;
     if (routineId !== null) requiredIdentifier(routineId, 'routineId');
     if (raw.kind !== 'workout' && routineId !== null) throw invalid();
     if (!published && raw.routineSnapshot !== undefined && raw.routineSnapshot !== null) throw invalid();
     const day: Day = {week: raw.week, weekday: raw.weekday, kind: raw.kind as string, category: raw.category,
-      routineId: routineId as string | null, routineDay: Number(raw.routineDay ?? 1), muscleGroups: [...raw.muscleGroups as string[]], restSeconds: Number(raw.restSeconds ?? 60)};
+      routineId: routineId as string | null, routineDay: Number(raw.routineDay ?? 1), muscleGroups: [...raw.muscleGroups as string[]], restSeconds: Number(raw.restSeconds ?? 60),...(value.schemaVersion===2?{restOverrideSeconds:raw.restOverrideSeconds as number|null}:{})};
     if (published) {
       if (day.kind === 'workout' && !day.routineId) throw invalid();
       if (day.routineId) day.routineSnapshot = routineSnapshot(record(raw.routineSnapshot) ? raw.routineSnapshot : undefined, day);
@@ -112,7 +116,7 @@ function parseProgram(value: unknown, published = false): WorkoutProgram {
     const counts = [1, 2, 3, 4].map(week => days.filter(day => day.week === week && day.kind === 'workout').length);
     if (!counts[0] || counts.some(count => count !== counts[0])) throw invalid();
   }
-  const program: WorkoutProgram = {schemaVersion: 1, id: value.id as string, version: value.version, title: value.title, level: value.level as string, weeks: 4, days};
+  const program: WorkoutProgram = {schemaVersion: value.schemaVersion as 1|2, id: value.id as string, version: value.version, title: value.title, level: value.level as string, weeks: 4, days};
   // Includes repeated per-day snapshots and leaves room for Firestore map overhead.
   if (Buffer.byteLength(JSON.stringify(program), 'utf8') > 700_000) throw invalid();
   return program;
@@ -143,7 +147,7 @@ async function authorize(tx: TransactionPort, auth: ProgramAuth, org: string, ad
         || auth.token.auth_time < life.sessionNotBeforeSeconds)))) throw deny();
 }
 function request(raw: unknown): DocumentData {
-  if (!record(raw) || raw.schemaVersion !== 1 || typeof raw.action !== 'string') throw invalid();
+  if (!record(raw) || ![1,2].includes(Number(raw.schemaVersion)) || typeof raw.action !== 'string') throw invalid();
   const actions: Record<string, string[]> = {list: [], adminList: [], saveDraft: ['requestId', 'expectedRevision', 'program'], publish: ['requestId', 'expectedRevision', 'programId']};
   if (!Object.hasOwn(actions, raw.action)) throw invalid();
   const allowed = ['schemaVersion', 'organizationId', 'action', ...actions[raw.action]];
@@ -154,7 +158,7 @@ function request(raw: unknown): DocumentData {
     if (!integer(raw.expectedRevision, 0, Number.MAX_SAFE_INTEGER - 1)) throw invalid();
   }
   if (raw.action === 'publish') requiredIdentifier(raw.programId, 'programId');
-  if (raw.action === 'saveDraft') parseProgram(raw.program);
+  if (raw.action === 'saveDraft') {const p=parseProgram(raw.program);if(raw.schemaVersion===1&&p.schemaVersion!==1)throw invalid();}
   return raw;
 }
 
@@ -176,13 +180,13 @@ export async function workoutPrograms(store: DocumentStore, auth: ProgramAuth | 
           if (!doc || doc.organizationId !== org) throw unavailable();
           const program = storedProgram(doc.program, true);
           if (program.id !== entry.id || program.version !== entry.version) throw unavailable();
-          programs.push(program);
+          if(input.schemaVersion===2||program.schemaVersion===1)programs.push(program);
         }
         if (admin) {
           const doc = await tx.get(`${base}/workoutProgramDrafts/${entry.id}`);
           if (!doc || doc.organizationId !== org || doc.revision !== entry.revision) throw unavailable();
           const program = storedProgram(doc.program, false); if (program.id !== entry.id) throw unavailable();
-          drafts.push({program, revision: entry.revision});
+          if(input.schemaVersion===2||program.schemaVersion===1)drafts.push({program, revision: entry.revision});
         }
       }
       if (Buffer.byteLength(JSON.stringify({programs, drafts}), 'utf8') > 4_000_000) throw unavailable();
@@ -213,12 +217,12 @@ export async function workoutPrograms(store: DocumentStore, auth: ProgramAuth | 
     } else {
       if (!entry || !draft) throw new DomainError('not-found', 'Save a Program draft before publishing.');
       const program = storedProgram(draft.program, false);
-      if (program.id !== id || program.days.some(d => d.kind === 'workout' && !d.routineId)) throw unavailable();
+      if ((input.schemaVersion===1&&program.schemaVersion!==1)||program.id !== id || program.days.some(d => d.kind === 'workout' && !d.routineId)) throw unavailable();
       const ids = [...new Set(program.days.flatMap(d => d.routineId ? [d.routineId] : []))];
       const sources = await readAll(tx, ids.map(routineId => `${base}/content/${routineId}`));
       const sourceById = new Map(ids.map((routineId, i) => [routineId, sources[i]]));
       program.version = entry.version + 1;
-      for (const day of program.days) if (day.routineId) day.routineSnapshot = routineSnapshot(sourceById.get(day.routineId), day);
+      for (const day of program.days) if (day.routineId) {const source=sourceById.get(day.routineId);if(program.schemaVersion===1&&source?.schemaVersion!==1)throw unavailable();day.routineSnapshot = routineSnapshot(source, day);}
       let published: WorkoutProgram;
       try {published = parseProgram(program, true);} catch {throw unavailable();}
       response = {program: published, revision}; nextEntry = {id, revision, version: published.version};

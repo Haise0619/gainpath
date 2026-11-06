@@ -12,6 +12,7 @@ abstract class TutorialPlayer extends ChangeNotifier {
   Duration get position;
   double get aspectRatio;
   Future<void> initialize();
+  Future<void> setLooping(bool looping) async {}
   Future<void> play();
   Future<void> pause();
   Future<void> seek(Duration position);

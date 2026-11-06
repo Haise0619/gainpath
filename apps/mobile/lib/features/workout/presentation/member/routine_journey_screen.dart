@@ -55,6 +55,10 @@ class _RoutineJourneyScreenState extends State<RoutineJourneyScreen> {
         RoutineExerciseStatus.instructionsReviewed =>
           'Instructions reviewed · not measured',
         RoutineExerciseStatus.skipped => 'Skipped',
+        RoutineExerciseStatus.timerPartial =>
+          'Timer progress saved · not AI verified',
+        RoutineExerciseStatus.timerCompleted =>
+          'Timer target complete · not AI verified',
       };
   Future<void> _finish() => _act(() async {
         final c = widget.controller;
@@ -211,7 +215,9 @@ class _RoutineJourneyScreenState extends State<RoutineJourneyScreen> {
                         ? Icons.auto_awesome_rounded
                         : Icons.menu_book_outlined,
                     size: 16),
-                label: Text(c.capabilityFor(c.selectedIndex).displayLabel),
+                label: Text(c.isTimed(c.selectedIndex)
+                    ? 'Video guided · Timer'
+                    : c.capabilityFor(c.selectedIndex).displayLabel),
                 backgroundColor: AppColors.primaryTint,
                 side: BorderSide.none)),
         const SizedBox(height: 6),
@@ -234,7 +240,22 @@ class _RoutineJourneyScreenState extends State<RoutineJourneyScreen> {
                 : () => _act(() => widget.onTutorial(c.selectedIndex)),
             icon: const Icon(Icons.play_circle_outline_rounded),
             label: const Text('Watch exercise tutorial')),
-        if (supported) ...[
+        if (c.isTimed(c.selectedIndex)) ...[
+          const SizedBox(height: 10),
+          const Text(
+              'Video guided · elapsed workout time. Repetitions and form are not measured.'),
+          Text(
+              '${c.checkpoint!.guidedProgress[c.selectedIndex]?.completedSets ?? 0}/${selected.sets} timed sets'),
+          FilledButton.icon(
+              onPressed:
+                  disabled || status == RoutineExerciseStatus.timerCompleted
+                      ? null
+                      : () => _act(() => widget.onTrack(c.selectedIndex)),
+              icon: const Icon(Icons.timer_outlined),
+              label: Text(status == RoutineExerciseStatus.timerPartial
+                  ? 'Resume timed exercise'
+                  : 'Start timed exercise')),
+        ] else if (supported) ...[
           const SizedBox(height: 8),
           if (status == RoutineExerciseStatus.completed)
             const Text(
@@ -329,6 +350,9 @@ class _RoutineJourneyScreenState extends State<RoutineJourneyScreen> {
             const Divider(),
             Text(
                 '${c.selfReportedSets} self-reported sets · separate from AI measurements'),
+            if (c.guidedDurationMicros > 0)
+              Text(
+                  '${c.guidedDurationMicros ~/ 1000000}s video-guided time · Not AI verified'),
             const SizedBox(height: 8),
             const Text(
                 'Camera measurements and self-reported completion stay separate. Manual sets add no AI reps, form score or rewards.',
@@ -354,7 +378,7 @@ class _RoutineJourneyScreenState extends State<RoutineJourneyScreen> {
                     color: AppColors.primary),
                 title: Text(c.routine.exercises[index].name),
                 subtitle: Text(
-                    '${_status(c.statusFor(index))}${c.supportsTracking(index) ? '' : '\n${c.manualSetsFor(index)} / ${c.routine.exercises[index].sets} sets self-reported'}${c.sessionsFor(index).isEmpty ? '' : '\n${c.sessionsFor(index).fold<int>(0, (n, s) => n + s.repetitions)} measured full reps'}${c.sessionsFor(index).where((s) => s.poseMetrics?.curlArms != null).map((s) => '\n${s.poseMetrics!.curlArms!.mode.label} · ${s.poseMetrics!.curlArms!.countLabel}').join()}'))),
+                    '${_status(c.statusFor(index))}${c.isTimed(index) ? '\n${c.checkpoint!.guidedProgress[index]?.completedSets ?? 0} timed sets · not AI verified' : c.supportsTracking(index) ? '' : '\n${c.manualSetsFor(index)} / ${c.routine.exercises[index].sets} sets self-reported'}${c.sessionsFor(index).isEmpty ? '' : '\n${c.sessionsFor(index).fold<int>(0, (n, s) => n + s.repetitions)} measured full reps'}${c.sessionsFor(index).where((s) => s.poseMetrics?.curlArms != null).map((s) => '\n${s.poseMetrics!.curlArms!.mode.label} · ${s.poseMetrics!.curlArms!.countLabel}').join()}'))),
       const SizedBox(height: 12),
       if (!c.allTargetsCompleted)
         FilledButton(

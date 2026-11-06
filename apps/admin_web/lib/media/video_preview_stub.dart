@@ -2,7 +2,9 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 
 class ContentVideoPlayer extends StatelessWidget {
-  const ContentVideoPlayer({super.key, required this.url, this.bytes});
+  const ContentVideoPlayer(
+      {super.key, required this.url, this.bytes, this.onReady});
+  final ValueChanged<bool>? onReady;
   final String url;
   final Uint8List? bytes;
 

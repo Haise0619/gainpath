@@ -2,7 +2,7 @@ class Exercise {
   final String name;
   final String category;
   final int sets;
-  final int reps;
+  final int? reps;
   final String cue;
   final String imageUrl;
   final String muscleGroup;

@@ -94,7 +94,7 @@ class FirebaseAdminWorkoutProgramRepository
           'App verification is unavailable. Retry to load Programs.');
     }
     final result = await _call({
-      'schemaVersion': 1,
+      'schemaVersion': 2,
       'organizationId': scope.organizationId,
       'action': action,
       ...data
@@ -128,14 +128,14 @@ class FirebaseAdminWorkoutProgramRepository
         .scopeRoot(scope)
         .collection('content')
         .where('status', isEqualTo: 'published')
-        .where('kind', isEqualTo: 'routine')
+        .where('kind', whereIn: ['routine', 'routine_v2'])
         .limit(201)
         .get(const GetOptions(source: Source.server));
     _guard();
     if (result.docs.length > 200) {
       throw StateError('Published routine catalog is too large.');
     }
-    return result.docs.map((d) {
+    final choices = result.docs.map((d) {
       final data = d.data();
       if (data['title'] is! String || data['exercises'] is! List) {
         throw const FormatException('Invalid published routine');
@@ -143,6 +143,15 @@ class FirebaseAdminWorkoutProgramRepository
       return ProgramRoutineChoice(
           id: d.id, title: data['title'] as String, snapshot: data);
     }).toList();
+    final preferred = <String, ProgramRoutineChoice>{};
+    for (final choice in choices) {
+      final key = choice.snapshot['sourceBlueprintId'] as String? ?? choice.id;
+      if (!preferred.containsKey(key) ||
+          choice.snapshot['schemaVersion'] == 2) {
+        preferred[key] = choice;
+      }
+    }
+    return preferred.values.toList();
   }
 
   @override

@@ -60,11 +60,27 @@ class FirebaseWorkoutProgramCatalog implements WorkoutProgramCatalog {
       throw StateError('App verification is unavailable. Retry programs.');
     }
     _guard();
-    final data = await _invoke({
-      'schemaVersion': 1,
-      'organizationId': scope.organizationId,
-      'action': 'list'
-    });
+    Object? data;
+    try {
+      data = await _invoke({
+        'schemaVersion': 2,
+        'organizationId': scope.organizationId,
+        'action': 'list'
+      });
+    } on FirebaseFunctionsException catch (error) {
+      _guard();
+      // Only an explicit contract rejection permits a legacy read retry.
+      final message = (error.message ?? '').toLowerCase();
+      if (error.code != 'invalid-argument' ||
+          !(message.contains('schema') || message.contains('version'))) {
+        rethrow;
+      }
+      data = await _invoke({
+        'schemaVersion': 1,
+        'organizationId': scope.organizationId,
+        'action': 'list'
+      });
+    }
     _guard();
     if (data is! Map ||
         data['programs'] is! List ||

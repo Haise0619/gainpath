@@ -206,6 +206,7 @@ class _GoalComparisonReportState extends State<GoalComparisonReport> {
                   if (attempt.scope == widget.repository.scope &&
                       attempt.startedAtMicros != null &&
                       (attempt.trackedDurationMicros > 0 ||
+                          attempt.guidedDurationMicros > 0 ||
                           attempt.selfReportedSets > 0))
                     WorkoutGoalObservation(
                       id: attempt.id,

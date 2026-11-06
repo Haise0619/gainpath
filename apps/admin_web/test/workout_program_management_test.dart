@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gainpath_admin_web/features/workout/domain/admin_workout_program_repository.dart';
 import 'package:gainpath_admin_web/features/workout/presentation/admin/workout_programs_screen.dart';
@@ -8,6 +9,51 @@ import 'package:gainpath_domain/workout.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 void main() {
+  testWidgets('routine creation return retains the unsaved Program draft',
+      (tester) async {
+    GoogleFonts.config.allowRuntimeFetching = false;
+    tester.view.physicalSize = const Size(1200, 1100);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final repository = _Repository();
+    await tester.pumpWidget(MultiRepositoryProvider(
+        providers: [
+          RepositoryProvider<TutorialRepository>.value(value: _Tutorials()),
+          RepositoryProvider<RoutineTemplateRepository>.value(
+              value: _Routines()),
+        ],
+        child: MaterialApp(
+            home: Scaffold(
+                body: WorkoutProgramsScreen(repository: repository)))));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Beginner · 3 days/week'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.widgetWithText(TextField, 'Program title'),
+        'Keep this unsaved title');
+    await tester.tap(find.text('Routine Builder'));
+    await tester.pumpAndSettle();
+    expect(find.text('New template'), findsOneWidget);
+    await tester.tap(find.byTooltip('Back'));
+    await tester.pumpAndSettle();
+    expect(find.text('Keep this unsaved title'), findsOneWidget);
+    expect(repository.saveCalls, 0);
+    expect(repository.publishCalls, 0);
+  });
+  test('upgraded Program commands explicitly negotiate schema two', () async {
+    final requests = <Map<String, dynamic>>[];
+    final repository = FirebaseAdminWorkoutProgramRepository(
+        scope: SessionScope(userId: 'admin', organizationId: 'gainpath'),
+        isCurrent: () => true,
+        verifiedSession: () => true,
+        ensureReady: () async => true,
+        call: (input) async {
+          requests.add(input);
+          return {'programs': [], 'drafts': []};
+        },
+        loadRoutines: () async => []);
+    await repository.load();
+    expect(requests.single['schemaVersion'], 2);
+  });
   final scope = SessionScope(userId: 'admin', organizationId: 'gainpath');
   test('App Check readiness failure is retried before loading Programs',
       () async {
@@ -150,9 +196,17 @@ void main() {
     expect(find.text('Advanced · 5 days/week'), findsOneWidget);
     await tester.tap(find.text('Beginner · 3 days/week'));
     await tester.pumpAndSettle();
+    await tester.tap(find.text('Schedule'));
+    await tester.pumpAndSettle();
     expect(find.text('Week 1'), findsOneWidget);
-    expect(find.text('Save draft'), findsOneWidget);
     expect(find.textContaining('Routine Builder'), findsWidgets);
+    await tester.scrollUntilVisible(find.text('Save draft'), 300,
+        scrollable: find
+            .descendant(
+                of: find.byType(ListView).first,
+                matching: find.byType(Scrollable))
+            .first);
+    expect(find.text('Save draft'), findsOneWidget);
   });
   testWidgets('unavailable catalog offers retry without sample published data',
       (tester) async {
@@ -214,4 +268,26 @@ class _Repository implements AdminWorkoutProgramRepository {
     publishCalls++;
     throw UnimplementedError();
   }
+}
+
+class _Tutorials implements TutorialRepository {
+  @override
+  List<TutorialVideo> get tutorials => [];
+  @override
+  bool get requiresCatalogSelection => true;
+  @override
+  Future<List<TutorialVideo>> load() async => [];
+  @override
+  Future<TutorialVideo> save(TutorialVideo value) async => value;
+}
+
+class _Routines implements RoutineTemplateRepository {
+  @override
+  List<RoutineBlueprint> get routineTemplates => [];
+  @override
+  Future<List<RoutineBlueprint>> load() async => [];
+  @override
+  Future<RoutineBlueprint> save(RoutineBlueprint value) async => value;
+  @override
+  Future<void> publish(String id) async {}
 }

@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'package:gainpath_domain/gainpath_domain.dart' show SessionScope;
 import 'published_routine_view.dart';
+import 'guided_timed_progress.dart';
+import 'package:gainpath_domain/workout.dart';
 
 enum RoutineExerciseStatus {
   notStarted,
@@ -9,7 +11,9 @@ enum RoutineExerciseStatus {
   selfReportedPartial,
   selfReportedCompleted,
   instructionsReviewed,
-  skipped
+  skipped,
+  timerPartial,
+  timerCompleted
 }
 
 /// A local record of one routine-day attempt. No cloud acceptance or rewards.
@@ -21,7 +25,25 @@ class RoutineExerciseResult {
       required this.fullRepetitions,
       required this.partialRepetitions,
       required this.trackedDurationMicros,
-      required this.manualSets});
+      required this.manualSets,
+      this.guided,
+      this.isTimed = false});
+  final GuidedTimedProgress? guided;
+  final bool isTimed;
+  factory RoutineExerciseResult.timed(
+          {required int index,
+          required RoutineExerciseStatus status,
+          GuidedTimedProgress? guided}) =>
+      RoutineExerciseResult(
+          index: index,
+          status: status,
+          sessionIds: const [],
+          fullRepetitions: 0,
+          partialRepetitions: 0,
+          trackedDurationMicros: 0,
+          manualSets: 0,
+          guided: guided,
+          isTimed: true);
   final int index,
       fullRepetitions,
       partialRepetitions,
@@ -31,17 +53,51 @@ class RoutineExerciseResult {
   final List<String> sessionIds;
   bool get completed =>
       status == RoutineExerciseStatus.completed ||
-      status == RoutineExerciseStatus.selfReportedCompleted;
-  Map<String, dynamic> toJson() => {
-        'index': index,
-        'status': status.name,
-        'sessionIds': sessionIds,
-        'fullRepetitions': fullRepetitions,
-        'partialRepetitions': partialRepetitions,
-        'trackedDurationMicros': trackedDurationMicros,
-        'manualSets': manualSets
-      };
+      status == RoutineExerciseStatus.selfReportedCompleted ||
+      status == RoutineExerciseStatus.timerCompleted;
+  Map<String, dynamic> toJson() => isTimed
+      ? {
+          'kind': 'timed',
+          'index': index,
+          'status': status.name,
+          if (guided != null) 'guided': guided!.toJson()
+        }
+      : {
+          'index': index,
+          'status': status.name,
+          'sessionIds': sessionIds,
+          'fullRepetitions': fullRepetitions,
+          'partialRepetitions': partialRepetitions,
+          'trackedDurationMicros': trackedDurationMicros,
+          'manualSets': manualSets
+        };
   factory RoutineExerciseResult.fromJson(Map<String, dynamic> data) {
+    if (data['kind'] == 'timed') {
+      if (data.keys
+          .any((k) => !{'kind', 'index', 'status', 'guided'}.contains(k)))
+        throw const FormatException('Unexpected timed result measurement');
+      final status =
+          RoutineExerciseStatus.values.byName(data['status'] as String);
+      final guided = data['guided'] == null
+          ? null
+          : GuidedTimedProgress.fromJson(
+              Map<String, dynamic>.from(data['guided'] as Map));
+      if (!{
+            RoutineExerciseStatus.notStarted,
+            RoutineExerciseStatus.timerPartial,
+            RoutineExerciseStatus.timerCompleted,
+            RoutineExerciseStatus.skipped
+          }.contains(status) ||
+          status == RoutineExerciseStatus.timerCompleted &&
+              guided?.completed != true ||
+          status == RoutineExerciseStatus.timerPartial &&
+              guided?.startedAt == null)
+        throw const FormatException('Invalid timer result status');
+      return RoutineExerciseResult.timed(
+          index: _number(data, 'index', max: 49),
+          status: status,
+          guided: guided);
+    }
     final status =
         RoutineExerciseStatus.values.where((s) => s.name == data['status']);
     final ids = data['sessionIds'];
@@ -74,8 +130,8 @@ int _number(Map<String, dynamic> data, String key,
 }
 
 Map<String, dynamic> routinePlanSnapshot(PublishedRoutine routine) => {
-      'schemaVersion': 1,
-      'kind': 'routine',
+      'schemaVersion': routine.schemaVersion,
+      'kind': routine.schemaVersion == 2 ? 'routine_v2' : 'routine',
       'status': 'published',
       'sourceBlueprintId': routine.sourceBlueprintId,
       'title': routine.title,
@@ -89,7 +145,19 @@ Map<String, dynamic> routinePlanSnapshot(PublishedRoutine routine) => {
             'name': e.name,
             'category': e.category,
             'sets': e.sets,
-            'reps': e.reps,
+            if (e.reps != null) 'reps': e.reps,
+            if (routine.schemaVersion == 2) ...{
+              'entryId': e.entryId,
+              'executionMode': e.executionMode!.name,
+              'restSeconds': e.restSeconds,
+              if (e.durationSeconds != null)
+                'durationSeconds': e.durationSeconds,
+              if (e.mediaRevision != null) 'mediaRevision': e.mediaRevision,
+              if (e.mediaGeneration != null)
+                'mediaGeneration': e.mediaGeneration,
+              if (e.mediaValidation != null)
+                'mediaValidation': e.mediaValidation
+            },
             if (e.restSeconds != 60) 'restSeconds': e.restSeconds,
             'cue': e.cue,
             'imageUrl': e.imageUrl,
@@ -132,12 +200,16 @@ class RoutineAttempt {
   int get trackedDurationMicros =>
       entries.fold(0, (n, e) => n + e.trackedDurationMicros);
   int get selfReportedSets => entries.fold(0, (n, e) => n + e.manualSets);
+  int get guidedDurationMicros =>
+      entries.fold(0, (n, e) => n + (e.guided?.totalActiveMicroseconds ?? 0));
+  int get timerCompletedSets =>
+      entries.fold(0, (n, e) => n + (e.guided?.completedSets ?? 0));
   int? get elapsedDurationMicros =>
       startedAtMicros == null || finishedAtMicros == null
           ? null
           : finishedAtMicros! - startedAtMicros!;
   Map<String, dynamic> toJson() => {
-        'schemaVersion': 1,
+        'schemaVersion': routine.schemaVersion,
         'id': id,
         'organizationId': scope.organizationId,
         'userId': scope.userId,
@@ -159,7 +231,7 @@ class RoutineAttempt {
       }
     }
     final raw = data['entries'];
-    if (data['schemaVersion'] != 1 ||
+    if (![1, 2].contains(data['schemaVersion']) ||
         data['finished'] is! bool ||
         data['routine'] is! Map ||
         raw is! List ||
@@ -174,6 +246,24 @@ class RoutineAttempt {
         .map((e) =>
             RoutineExerciseResult.fromJson(Map<String, dynamic>.from(e as Map)))
         .toList();
+    if (routine.schemaVersion != data['schemaVersion'])
+      throw const FormatException('Routine contract mismatch');
+    for (final result in entries) {
+      if (result.index >= routine.exercises.length)
+        throw const FormatException('Invalid result index');
+      final row = routine.exercises[result.index];
+      if ((row.executionMode == ExerciseExecutionMode.videoGuidedTimed) !=
+          result.isTimed)
+        throw const FormatException('Result execution mismatch');
+      if (result.guided case final g?) {
+        if (g.entryIndex != result.index ||
+            g.entryId != row.entryId ||
+            g.exerciseId != row.exerciseId ||
+            jsonEncode(g.prescription.toJson()) !=
+                jsonEncode(row.prescription.toJson()))
+          throw const FormatException('Guided result identity mismatch');
+      }
+    }
     final indices = [
       for (var i = 0; i < routine.exercises.length; i++)
         if (routine.exercises[i].dayNumber == day) i

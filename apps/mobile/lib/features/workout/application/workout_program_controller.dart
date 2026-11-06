@@ -1,4 +1,5 @@
 import 'dart:convert';
+import '../domain/routine_plan_signature.dart';
 import 'package:flutter/foundation.dart';
 import 'package:gainpath_domain/gainpath_domain.dart' show SessionScope;
 import 'package:gainpath_domain/workout.dart';
@@ -124,18 +125,7 @@ class WorkoutProgramController extends ChangeNotifier {
     final definition = scheduled.definition;
     final expected = PublishedRoutine.fromDocument(definition.routineId!,
         Map<String, dynamic>.from(definition.routineSnapshot!));
-    final signature = jsonEncode([
-      expected.id,
-      expected.sourceBlueprintId,
-      for (final e in expected.exercises)
-        [
-          e.exerciseId,
-          e.dayNumber,
-          e.sets,
-          e.reps,
-          if (e.restSeconds != 60) e.restSeconds
-        ]
-    ]);
+    final signature = routinePlanSignature(expected);
     if (found.single.planSignature != signature) return null;
     final a = found.single.attempt;
     if (a == null || a.scope != scope || a.id != id) return null;

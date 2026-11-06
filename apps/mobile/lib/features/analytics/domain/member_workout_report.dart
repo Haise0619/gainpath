@@ -107,6 +107,10 @@ class WorkoutReportRoutine {
   final RoutineAttempt attempt;
   final List<RoutineExerciseResult> entries;
   int get manualSets => entries.fold(0, (n, e) => n + e.manualSets);
+  int get guidedMicros =>
+      entries.fold(0, (n, e) => n + (e.guided?.totalActiveMicroseconds ?? 0));
+  int get timedSets =>
+      entries.fold(0, (n, e) => n + (e.guided?.completedSets ?? 0));
   DateTime get activityAt => DateTime.fromMicrosecondsSinceEpoch(
       attempt.finishedAtMicros ?? attempt.updatedAtMicros,
       isUtc: true);
@@ -215,8 +219,12 @@ class MemberWorkoutReport {
             id: s.sessionId,
             title: exerciseName(s.exerciseId),
             at: s.endedAt,
-            sourceLabel: scope.datasetScope != null ? 'Fictional recorded fixture' : 'Measured AI capture',
-            dateBasis: scope.datasetScope != null ? 'Declared observation end' : 'Capture ended',
+            sourceLabel: scope.datasetScope != null
+                ? 'Fictional recorded fixture'
+                : 'Measured AI capture',
+            dateBasis: scope.datasetScope != null
+                ? 'Declared observation end'
+                : 'Capture ended',
             detail:
                 '${s.repetitions} full reps · ${s.partialRepetitions} partial attempts · ${reportDuration(s.trackedDurationMicros)} tracked · Estimated Form Score ${s.formScorePercent == null ? 'unavailable' : '${s.formScorePercent!.toStringAsFixed(1)}%'}'),
       for (final r in routines)
@@ -227,7 +235,7 @@ class MemberWorkoutReport {
             sourceLabel: 'Saved routine snapshot',
             dateBasis: r.dateBasis,
             detail:
-                '${r.attempt.statusLabel} · ${r.manualSets} self-reported sets in selection · Whole routine: ${r.attempt.completedExercises}/${r.attempt.entries.length} exercises complete'),
+                '${r.attempt.statusLabel} · ${r.manualSets} self-reported sets · ${r.timedSets} timed sets · ${reportDuration(r.guidedMicros)} video guided (not AI verified) in selection · Whole routine: ${r.attempt.completedExercises}/${r.attempt.entries.length} exercises complete'),
     ]..sort((a, b) {
         final byDate = b.at.compareTo(a.at);
         if (byDate != 0) return byDate;
@@ -345,7 +353,9 @@ class MemberWorkoutReport {
       'Dates: ${filter.dateLabel}',
       'Routine: ${filter.routineId == null ? 'All routines' : routineNames[filter.routineId] ?? filter.routineId}',
       'Exercise: ${filter.exerciseId == null ? 'All exercises' : exerciseName(filter.exerciseId!)}',
-      scope.datasetScope != null ? 'Source: read-only fictional dataset observations; recorded fixtures, not physical camera captures or device-local history.' : 'Source: account-local saved history, including restored backups.',
+      scope.datasetScope != null
+          ? 'Source: read-only fictional dataset observations; recorded fixtures, not physical camera captures or device-local history.'
+          : 'Source: account-local saved history, including restored backups.',
       'Provisional AI estimates; workout acceptance is not Cloud Backup status or a reward award.',
       ...warnings.map((w) => 'Data warning: $w'),
       '',
@@ -357,6 +367,7 @@ class MemberWorkoutReport {
         'Other routine attempts: ${routines.length - completedRoutineDays! - unknownCompletionDays}',
         'Completion date unavailable: $unknownCompletionDays',
         'Self-reported sets in matching routine snapshots: $manualSets',
+        'Video-guided active time: ${reportDuration(routines.fold<int>(0, (n, r) => n + r.guidedMicros))} · not AI verified',
       ] else
         'Routine history unavailable',
       'Self-reported sets never contribute measured reps or form.',
@@ -378,7 +389,9 @@ class MemberWorkoutReport {
       for (final event in timeline) event.documentLine,
       'Routine snapshots describe progress; they are not added to measured capture totals.',
       '',
-      scope.datasetScope != null ? 'FICTIONAL OBSERVATION DETAILS' : 'CAMERA SESSION DETAILS',
+      scope.datasetScope != null
+          ? 'FICTIONAL OBSERVATION DETAILS'
+          : 'CAMERA SESSION DETAILS',
       for (final s in sessions) ...[
         '${reportDate(s.endedAt)} | ${exerciseName(s.exerciseId)} | ${s.sessionId}',
         '${s.repetitions} full | ${s.partialRepetitions} partial | ${reportDuration(s.trackedDurationMicros)} tracked | Estimated Form Score ${s.formScorePercent?.toStringAsFixed(1) ?? 'unavailable'}${s.formScorePercent == null ? '' : '%'}',
@@ -393,7 +406,9 @@ class MemberWorkoutReport {
         '${r.attempt.routine.title} | Day ${r.attempt.day} | ${r.attempt.statusLabel} | ${r.attempt.id}',
         '${r.dateBasis}: ${reportDate(r.activityAt)} | Whole day: ${r.attempt.completedExercises}/${r.attempt.entries.length} exercises complete',
         for (final e in r.entries)
-          '${r.attempt.routine.exercises[e.index].name}: ${e.status.name} | ${e.manualSets} self-reported sets | ${e.sessionIds.length} linked camera sessions',
+          e.isTimed
+              ? '${r.attempt.routine.exercises[e.index].name}: ${e.status.name} | ${e.guided?.completedSets ?? 0} timed sets | ${reportDuration(e.guided?.totalActiveMicroseconds ?? 0)} video guided | Not AI verified'
+              : '${r.attempt.routine.exercises[e.index].name}: ${e.status.name} | ${e.manualSets} self-reported sets | ${e.sessionIds.length} linked camera sessions',
       ],
       '',
       'Routine snapshots and camera session totals are not added together.',

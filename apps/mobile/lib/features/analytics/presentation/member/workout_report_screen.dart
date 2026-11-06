@@ -394,7 +394,7 @@ class _WorkoutReportScreenState extends State<WorkoutReportScreen> {
                                           '${r.attempt.routine.title} · Day ${r.attempt.day}'),
                                       subtitle: Text(
                                           '${r.attempt.statusLabel} · ${r.attempt.completedExercises}/${r.attempt.entries.length} exercises\n'
-                                          '${r.dateBasis}: ${reportDate(r.activityAt)}\n${r.manualSets} self-reported sets in selection')),
+                                          '${r.dateBasis}: ${reportDate(r.activityAt)}\n${r.manualSets} self-reported sets in selection${r.guidedMicros > 0 ? '\n${r.timedSets} timed sets · ${reportDuration(r.guidedMicros)} video guided · not AI verified' : ''}')),
                                 if (report.routines.length > _visible)
                                   TextButton(
                                       onPressed: () =>

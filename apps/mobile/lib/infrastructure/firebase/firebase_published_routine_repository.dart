@@ -46,7 +46,7 @@ class FirebasePublishedRoutineRepository
       .scopeRoot(scope)
       .collection('content')
       .where('status', isEqualTo: 'published')
-      .where('kind', isEqualTo: 'routine');
+      .where('kind', whereIn: const ['routine', 'routine_v2']);
 
   @override
   Future<PublishedRoutinePage> loadPage({String? afterId}) async {
@@ -62,12 +62,30 @@ class FirebasePublishedRoutineRepository
         .get(const GetOptions(source: Source.server))
         .timeout(const Duration(seconds: 20));
     _checkSession();
-    final items = results.docs
-        .take(pageSize)
-        .map((doc) => PublishedRoutine.fromDocument(doc.id, doc.data()))
-        .toList();
-    return PublishedRoutinePage(items,
-        nextCursor: results.docs.length > pageSize ? items.last.id : null);
+    final scanned = results.docs.take(pageSize).toList();
+    final items = <String, PublishedRoutine>{};
+    final successors = <String, PublishedRoutine?>{};
+    for (final doc in scanned) {
+      final original = PublishedRoutine.fromDocument(doc.id, doc.data());
+      PublishedRoutine item = original;
+      if (original.schemaVersion == 1) {
+        final blueprint = original.sourceBlueprintId;
+        if (!successors.containsKey(blueprint)) {
+          final successor = await loadById('routine_v2_$blueprint');
+          if (successor != null &&
+              (successor.schemaVersion != 2 ||
+                  successor.sourceBlueprintId != blueprint)) {
+            throw const FormatException('Invalid routine successor identity');
+          }
+          successors[blueprint] = successor;
+        }
+        item = successors[blueprint] ?? original;
+      }
+      items[item.id] = item;
+    }
+    _checkSession();
+    return PublishedRoutinePage(List.unmodifiable(items.values),
+        nextCursor: results.docs.length > pageSize ? scanned.last.id : null);
   }
 
   @override

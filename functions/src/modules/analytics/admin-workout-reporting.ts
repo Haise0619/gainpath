@@ -149,14 +149,14 @@ export async function adminWorkoutReport(store: DocumentStore, auth: Auth | unde
           hasActivity = true;
           const d = bucket(at);
           add(d, 'routineAttempts');
-          const complete = entries.every(e => ['completed', 'selfReportedCompleted'].includes(String(e.status)));
+          const complete = entries.every(e => ['completed', 'selfReportedCompleted','timerCompleted'].includes(String(e.status)));
           const state = !a.finished ? 'inProgressRoutineDays' : complete && a.finishedAtMicros === null ? 'unknownCompletionDays' : complete ? 'completedRoutineDays' : 'partialRoutineDays';
           add(d, state);
           const plan = (a.routine as DocumentData).exercises as DocumentData[];
           for (const entry of entries) {
             const source = plan[Number(entry.index)], e = exercise(String(source.exerciseId));
             if (e.name === e.exerciseId && source.name) e.name = String(source.name).slice(0, 100);
-            add(d, 'manualSets', Number(entry.manualSets)); e.manualSets += Number(entry.manualSets);
+            if(entry.kind!=='timed'){add(d, 'manualSets', Number(entry.manualSets)); e.manualSets += Number(entry.manualSets);}
           }
         }
       }

@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'exercise_prescription.dart';
 
 const programLevels = ['Beginner', 'Intermediate', 'Advanced'];
 const programCategories = [
@@ -41,6 +42,8 @@ class ProgramDay {
       this.routineDay = 1,
       List<String>? muscleGroups,
       this.restSeconds = 60,
+      this.schemaVersion = 1,
+      this.restOverrideSeconds,
       Map<String, dynamic>? routineSnapshot})
       : muscleGroups =
             List.unmodifiable(muscleGroups ?? programMuscles(category)),
@@ -48,6 +51,11 @@ class ProgramDay {
             ? null
             : _freeze(routineSnapshot) as Map<String, dynamic>;
   final int week, weekday, routineDay, restSeconds;
+  final int schemaVersion;
+  final int? restOverrideSeconds;
+  int effectiveRestSeconds(int routineRestSeconds) => schemaVersion == 1
+      ? restSeconds
+      : restOverrideSeconds ?? routineRestSeconds;
   final String kind, category;
   final String? routineId;
   final List<String> muscleGroups;
@@ -55,7 +63,11 @@ class ProgramDay {
   String get key => 'w$week-d$weekday';
 
   void validate({bool published = false}) {
-    if (week < 1 ||
+    if (![1, 2].contains(schemaVersion) ||
+        (schemaVersion == 1 && restOverrideSeconds != null) ||
+        (restOverrideSeconds != null &&
+            (restOverrideSeconds! < 0 || restOverrideSeconds! > 600)) ||
+        week < 1 ||
         week > 4 ||
         weekday < 1 ||
         weekday > 7 ||
@@ -92,8 +104,10 @@ class ProgramDay {
       final s = routineSnapshot;
       if (routineId == null ||
           s == null ||
-          s['schemaVersion'] != 1 ||
-          s['kind'] != 'routine' ||
+          !(s['schemaVersion'] == 1 && s['kind'] == 'routine' ||
+              schemaVersion == 2 &&
+                  s['schemaVersion'] == 2 &&
+                  s['kind'] == 'routine_v2') ||
           s['status'] != 'published' ||
           s['exercises'] is! List ||
           (s['exercises'] as List).isEmpty ||
@@ -101,6 +115,25 @@ class ProgramDay {
               .any((e) => e is Map && (e['dayNumber'] ?? 1) == routineDay)) {
         throw const FormatException(
             'A published workout needs a published routine snapshot and valid day.');
+      }
+      if (s['schemaVersion'] == 2) {
+        final entries = <String>{};
+        for (final raw in s['exercises'] as List) {
+          if (raw is! Map ||
+              raw['entryId'] is! String ||
+              (raw['entryId'] as String).trim().isEmpty ||
+              !entries.add(raw['entryId'] as String)) {
+            throw const FormatException('Invalid routine entry identity');
+          }
+          final row = Map<String, dynamic>.from(raw);
+          final mode = ExerciseExecutionMode.fromJson(row['executionMode']);
+          final target = ExercisePrescription.fromJson(row);
+          if ((mode == ExerciseExecutionMode.videoGuidedTimed) !=
+              (target is TimedPrescription)) {
+            throw const FormatException(
+                'Routine target conflicts with execution mode');
+          }
+        }
       }
       for (final row in (s['exercises'] as List).whereType<Map>()) {
         if ((row['dayNumber'] ?? 1) != routineDay) continue;
@@ -121,7 +154,8 @@ class ProgramDay {
     }
   }
 
-  factory ProgramDay.fromJson(Map<String, dynamic> value) {
+  factory ProgramDay.fromJson(Map<String, dynamic> value,
+      {int? schemaVersion}) {
     try {
       final d = ProgramDay(
           week: value['week'] as int,
@@ -132,6 +166,8 @@ class ProgramDay {
           routineDay: value['routineDay'] as int? ?? 1,
           muscleGroups: (value['muscleGroups'] as List).cast<String>(),
           restSeconds: value['restSeconds'] as int? ?? 60,
+          schemaVersion: schemaVersion ?? value['schemaVersion'] as int? ?? 1,
+          restOverrideSeconds: value['restOverrideSeconds'] as int?,
           routineSnapshot: value['routineSnapshot'] == null
               ? null
               : Map<String, dynamic>.from(value['routineSnapshot'] as Map));
@@ -150,7 +186,9 @@ class ProgramDay {
         'category': category,
         'routineDay': routineDay,
         'muscleGroups': muscleGroups.toList(),
-        'restSeconds': restSeconds,
+        if (schemaVersion == 1) 'restSeconds': restSeconds,
+        if (schemaVersion == 2) 'schemaVersion': 2,
+        if (schemaVersion == 2) 'restOverrideSeconds': restOverrideSeconds,
         if (routineId != null) 'routineId': routineId,
         if (routineSnapshot != null)
           'routineSnapshot': jsonDecode(jsonEncode(routineSnapshot)),
@@ -165,14 +203,17 @@ class WorkoutProgram {
       required this.title,
       required this.level,
       this.weeks = 4,
+      this.schemaVersion = 1,
       required List<ProgramDay> days})
       : days = List.unmodifiable(days);
   final String id, title, level;
   final int version, weeks;
+  final int schemaVersion;
   final List<ProgramDay> days;
 
   void validate({bool published = false}) {
-    if (id.isEmpty ||
+    if (![1, 2].contains(schemaVersion) ||
+        id.isEmpty ||
         id.length > 100 ||
         !RegExp(r'^[a-zA-Z0-9_-]+$').hasMatch(id) ||
         version < 0 ||
@@ -187,6 +228,8 @@ class WorkoutProgram {
           'Program requires a title, level and four complete weeks.');
     }
     for (final d in days) {
+      if (d.schemaVersion != schemaVersion)
+        throw const FormatException('Program day contract mismatch');
       d.validate(published: published);
     }
     if (published) {
@@ -212,7 +255,7 @@ class WorkoutProgram {
 
   factory WorkoutProgram.fromJson(Map<String, dynamic> value) {
     try {
-      if (value['schemaVersion'] != 1) {
+      if (![1, 2].contains(value['schemaVersion'])) {
         throw const FormatException('Unsupported program schema.');
       }
       final p = WorkoutProgram(
@@ -221,9 +264,11 @@ class WorkoutProgram {
           title: value['title'] as String,
           level: value['level'] as String,
           weeks: value['weeks'] as int,
+          schemaVersion: value['schemaVersion'] as int,
           days: (value['days'] as List)
-              .map((d) =>
-                  ProgramDay.fromJson(Map<String, dynamic>.from(d as Map)))
+              .map((d) => ProgramDay.fromJson(
+                  Map<String, dynamic>.from(d as Map),
+                  schemaVersion: value['schemaVersion'] as int))
               .toList());
       p.validate(published: p.version > 0);
       return p;
@@ -234,7 +279,7 @@ class WorkoutProgram {
     }
   }
   Map<String, dynamic> toJson() => {
-        'schemaVersion': 1,
+        'schemaVersion': schemaVersion,
         'id': id,
         'version': version,
         'title': title,

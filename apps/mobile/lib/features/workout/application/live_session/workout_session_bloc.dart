@@ -14,23 +14,29 @@ part 'workout_session_state.dart';
 /// recalibration state machine and its auto-pause escalation. In the
 /// prototype the confidence reading is simulated; a real pose pipeline
 /// would dispatch the same [SessionTicked] with a measured value.
-class WorkoutSessionBloc extends Bloc<WorkoutSessionEvent, WorkoutSessionState> {
+class WorkoutSessionBloc
+    extends Bloc<WorkoutSessionEvent, WorkoutSessionState> {
   WorkoutSessionBloc(WorkoutRepository repo, {math.Random? random})
       : _cues = repo.voiceCues,
         _rng = random ?? math.Random(),
         super(WorkoutSessionState.initial(repo.routine)) {
     on<SessionTicked>(_onTicked);
     on<TrackingIssueSimulated>(_onTrackingIssueSimulated);
-    on<VoiceToggled>((_, emit) => emit(state.copyWith(voiceOn: !state.voiceOn)));
-    on<SessionPaused>((e, emit) => emit(state.copyWith(phase: SessionPhase.paused, pauseReason: e.reason)));
-    on<SessionResumed>((_, emit) => emit(state.copyWith(phase: SessionPhase.tracking, clearPauseReason: true)));
-    on<SessionEnded>((_, emit) => emit(state.copyWith(phase: SessionPhase.finished)));
+    on<VoiceToggled>(
+        (_, emit) => emit(state.copyWith(voiceOn: !state.voiceOn)));
+    on<SessionPaused>((e, emit) => emit(
+        state.copyWith(phase: SessionPhase.paused, pauseReason: e.reason)));
+    on<SessionResumed>((_, emit) => emit(
+        state.copyWith(phase: SessionPhase.tracking, clearPauseReason: true)));
+    on<SessionEnded>(
+        (_, emit) => emit(state.copyWith(phase: SessionPhase.finished)));
   }
 
   static const recalibrateBelowPct = 70;
   static const lostBelowPct = 50;
   static const lostTicksBeforePause = 5;
-  static const trackingLostReason = 'Tracking lost for a few seconds, so we paused for you.';
+  static const trackingLostReason =
+      'Tracking lost for a few seconds, so we paused for you.';
 
   final List<String> _cues;
   final math.Random _rng;
@@ -59,7 +65,8 @@ class WorkoutSessionBloc extends Bloc<WorkoutSessionEvent, WorkoutSessionState> 
 
   /// Demo affordance: first call drops confidence into the recalibration
   /// band; a second call while recalibrating forces the escalation path.
-  void _onTrackingIssueSimulated(TrackingIssueSimulated e, Emitter<WorkoutSessionState> emit) {
+  void _onTrackingIssueSimulated(
+      TrackingIssueSimulated e, Emitter<WorkoutSessionState> emit) {
     if (state.phase != SessionPhase.tracking) return;
     final s = state.recalibrating
         ? state.copyWith(confidence: 32, lowStreak: lostTicksBeforePause)
@@ -72,11 +79,15 @@ class WorkoutSessionBloc extends Bloc<WorkoutSessionEvent, WorkoutSessionState> 
   static WorkoutSessionState _advanceRoutineProgress(WorkoutSessionState s) {
     final current = s.currentExercise;
     if (current == null) return s;
+    final target = current.reps;
+    if (target == null) return s;
     final repsInSet = s.repsInSet + 1;
-    if (repsInSet < current.reps) return s.copyWith(repsInSet: repsInSet);
-    if (s.setNumber < current.sets) return s.copyWith(repsInSet: 0, setNumber: s.setNumber + 1);
+    if (repsInSet < target) return s.copyWith(repsInSet: repsInSet);
+    if (s.setNumber < current.sets)
+      return s.copyWith(repsInSet: 0, setNumber: s.setNumber + 1);
     if (s.exerciseIndex < s.routine.length - 1) {
-      return s.copyWith(repsInSet: 0, setNumber: 1, exerciseIndex: s.exerciseIndex + 1);
+      return s.copyWith(
+          repsInSet: 0, setNumber: 1, exerciseIndex: s.exerciseIndex + 1);
     }
     return s.copyWith(repsInSet: 0);
   }
@@ -88,13 +99,18 @@ class WorkoutSessionBloc extends Bloc<WorkoutSessionEvent, WorkoutSessionState> 
     final lowStreak = s.confidence < lostBelowPct ? s.lowStreak + 1 : 0;
     s = s.copyWith(lowStreak: lowStreak);
     if (!s.recalibrating) {
-      return s.confidence < recalibrateBelowPct ? s.copyWith(recalibrating: true) : s;
+      return s.confidence < recalibrateBelowPct
+          ? s.copyWith(recalibrating: true)
+          : s;
     }
     if (s.confidence >= recalibrateBelowPct) {
       return s.copyWith(recalibrating: false, lowStreak: 0);
     }
     if (lowStreak >= lostTicksBeforePause) {
-      return s.copyWith(recalibrating: false, phase: SessionPhase.paused, pauseReason: trackingLostReason);
+      return s.copyWith(
+          recalibrating: false,
+          phase: SessionPhase.paused,
+          pauseReason: trackingLostReason);
     }
     return s;
   }

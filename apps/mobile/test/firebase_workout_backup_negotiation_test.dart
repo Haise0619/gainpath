@@ -25,12 +25,13 @@ void main() {
     expect(calls.single, {
       'action': 'list',
       'command': {
-        'schemaVersion': 1,
+        'schemaVersion': 2,
         'organizationId': 'gainpath',
         'memberId': 'member',
         'consented': true,
         'after': 'session-a',
         'maxPoseMetricsSchemaVersion': 7,
+        'maxRoutineCheckpointSchemaVersion': 2,
       }
     });
     expect(page.records, isEmpty);

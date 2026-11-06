@@ -62,7 +62,9 @@ class MemberProgressOverview extends StatelessWidget {
     }
     for (final attempt in routines?.records ?? <RoutineAttempt>[]) {
       if (attempt.startedAtMicros != null &&
-          (attempt.trackedDurationMicros > 0 || attempt.selfReportedSets > 0)) {
+          (attempt.trackedDurationMicros > 0 ||
+              attempt.guidedDurationMicros > 0 ||
+              attempt.selfReportedSets > 0)) {
         final at = DateTime.fromMicrosecondsSinceEpoch(attempt.startedAtMicros!,
             isUtc: true);
         if (inWeek(at)) days.add(reportDate(at));

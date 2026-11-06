@@ -1,6 +1,9 @@
 import 'package:gainpath_domain/gainpath_domain.dart' show SessionScope;
 
 import 'routine_attempt.dart';
+import 'dart:convert';
+import 'guided_timed_progress.dart';
+import 'routine_plan_signature.dart';
 export 'routine_attempt.dart' show RoutineExerciseStatus;
 
 /// Local navigation/checkpoint metadata. Measurements remain in workout history.
@@ -16,6 +19,7 @@ class RoutineCheckpoint {
       this.finished = false,
       this.startedAtMicros,
       this.attempt,
+      Map<int, GuidedTimedProgress> guidedProgress = const {},
       Map<int, List<String>> sessions = const {},
       Map<int, String> pending = const {},
       Map<int, int> manualSets = const {},
@@ -24,6 +28,7 @@ class RoutineCheckpoint {
       : sessions = Map.unmodifiable(sessions.map(
             (key, value) => MapEntry(key, List<String>.unmodifiable(value)))),
         pending = Map.unmodifiable(pending),
+        guidedProgress = Map.unmodifiable(guidedProgress),
         manualSets = Map.unmodifiable(manualSets),
         reviewed = Set.unmodifiable(reviewed),
         skipped = Set.unmodifiable(skipped);
@@ -36,10 +41,14 @@ class RoutineCheckpoint {
   final Map<int, List<String>> sessions;
   final Map<int, String> pending;
   final Map<int, int> manualSets;
+  final Map<int, GuidedTimedProgress> guidedProgress;
+  int get schemaVersion =>
+      attempt?.routine.schemaVersion ?? (guidedProgress.isEmpty ? 1 : 2);
   final Set<int> reviewed, skipped;
 
   RoutineCheckpoint copyWith(
           {int? selectedIndex,
+          Map<int, GuidedTimedProgress>? guidedProgress,
           bool? finished,
           RoutineAttempt? attempt,
           Map<int, List<String>>? sessions,
@@ -58,6 +67,7 @@ class RoutineCheckpoint {
           finished: finished ?? this.finished,
           startedAtMicros: startedAtMicros,
           attempt: attempt ?? this.attempt,
+          guidedProgress: guidedProgress ?? this.guidedProgress,
           sessions: sessions ?? this.sessions,
           pending: pending ?? this.pending,
           manualSets: manualSets ?? this.manualSets,
@@ -65,7 +75,11 @@ class RoutineCheckpoint {
           skipped: skipped ?? this.skipped);
 
   Map<String, Object?> toJson() => {
-        'schemaVersion': 1,
+        'schemaVersion': schemaVersion,
+        if (schemaVersion == 2)
+          'guidedProgress': {
+            for (final e in guidedProgress.entries) '${e.key}': e.value.toJson()
+          },
         'id': id,
         'organizationId': scope.organizationId,
         'userId': scope.userId,
@@ -122,7 +136,11 @@ class RoutineCheckpoint {
     }
     final sessionMap = data['sessions'], pendingMap = data['pending'];
     final manualMap = data['manualSets'] ?? <String, dynamic>{};
-    if (data['schemaVersion'] != 1 ||
+    final rawGuided = data['guidedProgress'] ?? <String, dynamic>{};
+    if (![1, 2].contains(data['schemaVersion']) ||
+        rawGuided is! Map ||
+        rawGuided.length > 50 ||
+        data['schemaVersion'] == 1 && rawGuided.isNotEmpty ||
         data['planSignature'] is! String ||
         (data['planSignature'] as String).length > 32768 ||
         data['day'] is! int ||
@@ -169,6 +187,57 @@ class RoutineCheckpoint {
         (data['skipped'] as List).length > 50) {
       throw const FormatException('Duplicate or excessive routine progress');
     }
+    final guided = <int, GuidedTimedProgress>{};
+    for (final row in rawGuided.entries) {
+      final i = index(int.tryParse(row.key.toString()));
+      guided[i] = GuidedTimedProgress.fromJson(
+          Map<String, dynamic>.from(row.value as Map));
+    }
+    if (guided.values.map((g) => g.runId).toSet().length != guided.length)
+      throw const FormatException('Guided run belongs to another entry');
+    if (data['schemaVersion'] == 2 &&
+        (attempt == null || attempt.routine.schemaVersion != 2))
+      throw const FormatException('Missing typed routine snapshot');
+    if (attempt != null) {
+      for (final entry in attempt.entries.where((e) => e.isTimed)) {
+        final g = guided[entry.index];
+        if (jsonEncode(g?.toJson()) != jsonEncode(entry.guided?.toJson()))
+          throw const FormatException('Guided checkpoint/result disagreement');
+        final row = attempt.routine.exercises[entry.index];
+        if (g != null &&
+            (g.entryIndex != entry.index ||
+                g.entryId != row.entryId ||
+                g.exerciseId != row.exerciseId ||
+                g.mediaIdentity !=
+                    guidedTimedMediaIdentity(
+                        videoUrl: row.videoUrl!,
+                        mediaRevision: row.mediaRevision!,
+                        mediaGeneration: row.mediaGeneration!) ||
+                jsonEncode(g.prescription.toJson()) !=
+                    jsonEncode(row.prescription.toJson())))
+          throw const FormatException('Guided checkpoint identity mismatch');
+        if ((manualSets[entry.index] ?? 0) != 0 ||
+            sessions.containsKey(entry.index) ||
+            pendingMap.containsKey('${entry.index}'))
+          throw const FormatException('Measured evidence attached to timer');
+        final skipped = (data['skipped'] as List).contains(entry.index);
+        final expected = g?.completed == true
+            ? RoutineExerciseStatus.timerCompleted
+            : skipped
+                ? RoutineExerciseStatus.skipped
+                : g?.startedAt != null
+                    ? RoutineExerciseStatus.timerPartial
+                    : RoutineExerciseStatus.notStarted;
+        if (entry.status != expected)
+          throw const FormatException('Guided checkpoint status mismatch');
+      }
+      if (guided.keys
+          .any((i) => !attempt.entries.any((e) => e.index == i && e.isTimed)))
+        throw const FormatException('Unexpected guided entry');
+      if (data['schemaVersion'] == 2 &&
+          data['planSignature'] != routinePlanSignature(attempt.routine))
+        throw const FormatException('Routine prescription signature mismatch');
+    }
     return RoutineCheckpoint(
         id: id('id'),
         scope: SessionScope(
@@ -181,6 +250,7 @@ class RoutineCheckpoint {
         finished: data['finished'] as bool,
         startedAtMicros: data['startedAtMicros'] as int?,
         attempt: attempt,
+        guidedProgress: guided,
         sessions: sessions,
         manualSets: manualSets,
         pending: {

@@ -133,8 +133,11 @@ class _Query implements CollectionReference<Map<String, dynamic>> {
       final id = e.key.split('/').last;
       return (after == null || id.compareTo(after!) > 0) &&
           (from == null || id.compareTo(from!) >= 0) &&
-          filters.entries.every((f) =>
-              f.key is String ? e.value[f.key] == f.value : id == f.value);
+          filters.entries.every((f) => f.key is String
+              ? (f.value is List
+                  ? (f.value as List).contains(e.value[f.key])
+                  : e.value[f.key] == f.value)
+              : id == f.value);
     }).toList()
       ..sort((a, b) => a.key.compareTo(b.key));
     return _Snapshot(entries
@@ -146,7 +149,8 @@ class _Query implements CollectionReference<Map<String, dynamic>> {
   @override
   dynamic noSuchMethod(Invocation i) {
     if (i.memberName == #where) {
-      filters[i.positionalArguments.first] = i.namedArguments[#isEqualTo];
+      filters[i.positionalArguments.first] =
+          i.namedArguments[#whereIn] ?? i.namedArguments[#isEqualTo];
       return this;
     }
     if (i.memberName == #limit) {
@@ -189,10 +193,13 @@ void main() {
     final repository = FirebasePublishedRoutineRepository(
         scope: scope, firestore: db, auth: _Auth(), activeScope: () => scope);
     expect((await repository.loadPage()).items.map((r) => r.id), ['fictional']);
-    expect(db.reads, hasLength(1));
-    expect(db.reads.single.path, '$root/content');
-    expect(db.reads.single.filters, {'status': 'published', 'kind': 'routine'});
-    expect(db.reads.single.source, Source.server);
+    expect(db.reads, hasLength(2));
+    expect(db.reads.first.path, '$root/content');
+    expect(db.reads.first.filters, {
+      'status': 'published',
+      'kind': ['routine', 'routine_v2']
+    });
+    expect(db.reads.first.source, Source.server);
   });
   test(
       'actual adapter uses scoped published server pages and exact filtered ID lookup',
@@ -221,11 +228,11 @@ void main() {
       expect(read.path, 'orgs/org/content');
       expect(read.source, Source.server);
       expect(read.filters['status'], 'published');
-      expect(read.filters['kind'], 'routine');
+      expect(read.filters['kind'], ['routine', 'routine_v2']);
     }
     expect(db.reads.first.limit, 3);
     expect(db.reads.first.ordered, isTrue);
-    expect(db.reads[1].after, 'b');
+    expect(db.reads.any((read) => read.after == 'b'), true);
   });
   test('actual adapter rejects stale post-read account and organization state',
       () async {
@@ -241,5 +248,59 @@ void main() {
     await expectLater(request, throwsStateError);
     auth.signedIn = false;
     await expectLater(repository.loadById('a'), throwsStateError);
+  });
+  test(
+      'v2 deterministic successor on another page replaces discovery but explicit original survives',
+      () async {
+    final db = _Firestore();
+    final v2 = document('Upgraded')
+      ..['schemaVersion'] = 2
+      ..['kind'] = 'routine_v2';
+    v2['exercises'] = [
+      {
+        'exerciseId': 'exercise',
+        'entryId': 'row',
+        'executionMode': 'legacyManual',
+        'name': 'Fixture',
+        'sets': 3,
+        'reps': 8,
+        'restSeconds': 60,
+        'dayNumber': 1
+      }
+    ];
+    db.documents['orgs/org/content/routine_v2_blueprint'] = v2;
+    final scope = SessionScope(userId: 'member', organizationId: 'org');
+    final repository = FirebasePublishedRoutineRepository(
+        scope: scope,
+        firestore: db,
+        auth: _Auth(),
+        pageSize: 1,
+        activeScope: () => scope);
+    final page = await repository.loadPage();
+    expect(page.items.single.id, 'routine_v2_blueprint');
+    expect(page.nextCursor, 'a');
+    expect((await repository.loadById('a'))!.schemaVersion, 1);
+  });
+  test(
+      'unpublished successor retains original and malformed published successor fails loudly',
+      () async {
+    final db = _Firestore();
+    final scope = SessionScope(userId: 'member', organizationId: 'org');
+    final repository = FirebasePublishedRoutineRepository(
+        scope: scope,
+        firestore: db,
+        auth: _Auth(),
+        pageSize: 1,
+        activeScope: () => scope);
+    db.documents['orgs/org/content/routine_v2_blueprint'] =
+        document('Draft', status: 'draft');
+    expect((await repository.loadPage()).items.single.id, 'a');
+    db.documents['orgs/org/content/routine_v2_blueprint'] = {
+      'schemaVersion': 2,
+      'kind': 'routine_v2',
+      'status': 'published',
+      'sourceBlueprintId': 'blueprint'
+    };
+    await expectLater(repository.loadPage(), throwsFormatException);
   });
 }

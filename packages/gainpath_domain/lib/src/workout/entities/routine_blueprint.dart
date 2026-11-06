@@ -1,3 +1,5 @@
+import '../exercise_prescription.dart';
+
 /// One prescribed catalog exercise within a `RoutineDay`. The blueprint
 /// persists [exerciseId], sets, and reps; [exerciseName] is joined from the
 /// catalog for display and is never copied into the Firebase blueprint.
@@ -5,9 +7,17 @@ class RoutineExerciseRef {
   final String exerciseId;
   final String exerciseName;
   final int sets;
-  final int reps;
+  final int? reps;
+  final String entryId;
+  final ExerciseExecutionMode? executionMode;
+  final ExercisePrescription? prescription;
+  final int? sourceCatalogRevision;
   const RoutineExerciseRef(this.exerciseName, this.sets, this.reps,
-      {this.exerciseId = ''});
+      {this.exerciseId = '',
+      this.entryId = '',
+      this.executionMode,
+      this.prescription,
+      this.sourceCatalogRevision});
 }
 
 class RoutineDay {
@@ -30,6 +40,7 @@ class RoutineBlueprint {
   final bool readOnly;
   final String id;
   final RoutineEditBaseline? editBaseline;
+  final int schemaVersion;
   String name;
   String level;
   final int assignedMembers;
@@ -41,8 +52,9 @@ class RoutineBlueprint {
   String imageUrl;
   RoutineBlueprint({
     required this.id,
-    this.readOnly=false,
+    this.readOnly = false,
     this.editBaseline,
+    this.schemaVersion = 1,
     required this.name,
     required this.level,
     required this.assignedMembers,

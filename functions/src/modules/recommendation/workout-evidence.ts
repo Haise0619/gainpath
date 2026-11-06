@@ -75,6 +75,7 @@ export function extractWorkoutEvidence(scope: EvidenceScope, raw: unknown, now: 
     const id = requiredIdentifier(data.id, 'backup'), kind = data.kind;
     if (data.key !== `${kind}-${id}`) throw insightSourceError();
     const p = validateBackupPayload(kind, id, scope.organizationId, scope.memberId, JSON.parse(data.payloadJson));
+    if(kind==='routine' && p.schemaVersion===2) throw insightSourceError();
     if (digestOf(p) !== data.digest) throw insightSourceError();
     const identity = {recordKey: String(data.key), digest: data.digest, updatedAtMillis: Number(data.updatedAtMillis)};
     if (kind === 'routine') return {...identity, kind: 'routine'};

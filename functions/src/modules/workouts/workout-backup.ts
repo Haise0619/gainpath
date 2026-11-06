@@ -15,11 +15,11 @@ function input(auth: WorkoutAuth | undefined, raw: unknown, write: boolean) {
   const required = write
     ? ['schemaVersion','organizationId','memberId','consented','kind','id','baseDigest','payload']
     : ['schemaVersion','organizationId','memberId','consented','after'];
-  keys(v, write ? required : [...required,'maxPoseMetricsSchemaVersion'], required);
+  keys(v, write ? required : [...required,'maxPoseMetricsSchemaVersion',...(v.schemaVersion===2?['maxRoutineCheckpointSchemaVersion']:[])], required);
   const org = requiredIdentifier(v.organizationId,'organizationId');
   const uid = requiredIdentifier(v.memberId,'memberId');
   if (auth!.uid !== uid) throw new DomainError('permission-denied','Only your own backup is accessible.');
-  if (v.schemaVersion !== 1 || v.consented !== true) throw new InputValidationError('Explicit backup consent required.');
+  if (![1,2].includes(Number(v.schemaVersion)) || v.consented !== true) throw new InputValidationError('Explicit backup consent required.');
   return {v,org,uid};
 }
 async function member(tx: TransactionPort, auth: WorkoutAuth, org: string, uid: string) {
@@ -44,6 +44,7 @@ export async function backupWorkout(store: BackupStore, auth: WorkoutAuth | unde
   const {v,org,uid} = input(auth,raw,true);
   const kind = String(v.kind), id = requiredIdentifier(v.id,'id');
   const payload = validateBackupPayload(kind,id,org,uid,v.payload), digest = digestOf(payload);
+  if(kind==='routine' && payload.schemaVersion===2 && v.schemaVersion!==2) throw new InputValidationError('Version-two routine backup envelope required.');
   if (v.baseDigest !== null && (typeof v.baseDigest !== 'string' || !/^[a-f0-9]{64}$/.test(v.baseDigest))) {
     throw new InputValidationError('Invalid base revision.');
   }
@@ -66,6 +67,8 @@ export async function backupWorkout(store: BackupStore, auth: WorkoutAuth | unde
 }
 export async function listWorkoutBackups(store: BackupStore, auth: WorkoutAuth | undefined, raw: unknown) {
   const {v,org,uid} = input(auth,raw,false);
+  const routineMaximum=v.schemaVersion===2?v.maxRoutineCheckpointSchemaVersion:1;
+  if(![1,2].includes(Number(routineMaximum))) throw new InputValidationError('Invalid supported routine checkpoint version.');
   // Existing clients understand metric schemas 1/2 and send no negotiation.
   const maximum = 'maxPoseMetricsSchemaVersion' in v ? v.maxPoseMetricsSchemaVersion : 2;
   if (!Number.isSafeInteger(maximum) || Number(maximum) < 2 || Number(maximum) > 7) {
@@ -93,6 +96,7 @@ export async function listWorkoutBackups(store: BackupStore, auth: WorkoutAuth |
   // client schema never hides corruption. Cursor progress follows scanned docs.
   const supported = records.filter(record => {
     if (record.kind === 'session') return Number(object(record.payload.poseMetrics).schemaVersion) <= Number(maximum);
+    if(Number(record.payload.schemaVersion)>Number(routineMaximum))return false;
     if (Number(maximum) >= 7) return true;
     const routine = object(object(record.payload.attempt).routine);
     return !(routine.exercises as unknown[]).some(exercise => {

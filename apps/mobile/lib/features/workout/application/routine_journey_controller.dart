@@ -7,6 +7,11 @@ import '../domain/published_routine_view.dart';
 import '../domain/routine_journey.dart';
 import '../domain/routine_attempt.dart';
 import '../domain/workout_contracts.dart';
+import '../domain/guided_timed_progress.dart';
+import '../domain/routine_plan_signature.dart';
+import '../domain/exercise_execution_resolver.dart';
+import 'package:gainpath_domain/workout.dart'
+    show ExerciseExecutionMode, TimedPrescription;
 
 class RoutineJourneyController extends ChangeNotifier {
   RoutineJourneyController(
@@ -48,18 +53,13 @@ class RoutineJourneyController extends ChangeNotifier {
           if (routine.exercises[i].dayNumber == day) i
       ];
   int get selectedIndex => checkpoint?.selectedIndex ?? dayIndices.first;
-  String get _signature => jsonEncode([
-        routine.id,
-        routine.sourceBlueprintId,
-        for (final e in routine.exercises)
-          [
-            e.exerciseId,
-            e.dayNumber,
-            e.sets,
-            e.reps,
-            if (e.restSeconds != 60) e.restSeconds
-          ]
-      ]);
+  String get _signature => routinePlanSignature(routine);
+  bool isTimed(int index) =>
+      routine.exercises[index].executionMode ==
+      ExerciseExecutionMode.videoGuidedTimed;
+  ResolvedExerciseExecution executionFor(int index) =>
+      ExerciseExecutionResolver(dispatcher: trackers)
+          .resolve(scope: scope, exercise: routine.exercises[index]);
 
   void _guard() {
     if (!authorized) throw StateError('Routine account is no longer active');
@@ -218,6 +218,8 @@ class RoutineJourneyController extends ChangeNotifier {
       trackingFor(index).tracker == ExerciseTracker.sideViewCurl;
   String targetsFor(int index) {
     final e = routine.exercises[index];
+    if (isTimed(index))
+      return '${e.sets} sets · ${e.durationSeconds}s per set · ${e.restSeconds}s rest';
     if ((trackingFor(index).tracker == ExerciseTracker.frontViewShoulderPress ||
         trackingFor(index).tracker == ExerciseTracker.frontViewLateralRaise)) {
       return '${e.sets} sets · ${e.reps} reps per set · both arms together';
@@ -265,12 +267,17 @@ class RoutineJourneyController extends ChangeNotifier {
       0, (sum, s) => sum + (s.poseMetrics?.partialRepetitions ?? 0));
   int get trackedDurationMicros =>
       measuredSessions.fold(0, (sum, s) => sum + s.trackedDurationMicros);
+  int get guidedDurationMicros =>
+      checkpoint?.guidedProgress.values
+          .fold<int>(0, (n, g) => n + g.totalActiveMicroseconds) ??
+      0;
   int get completedExercises => !authorized
       ? 0
       : dayIndices
           .where((index) => {
                 RoutineExerciseStatus.completed,
-                RoutineExerciseStatus.selfReportedCompleted
+                RoutineExerciseStatus.selfReportedCompleted,
+                RoutineExerciseStatus.timerCompleted
               }.contains(statusFor(index)))
           .length;
   bool get allTargetsCompleted =>
@@ -280,10 +287,19 @@ class RoutineJourneyController extends ChangeNotifier {
   RoutineExerciseStatus statusFor(int index) => _statusFor(index, checkpoint);
   RoutineExerciseStatus _statusFor(int index, RoutineCheckpoint? value) {
     final sessions = _sessionsFor(index, value), e = routine.exercises[index];
+    if (isTimed(index)) {
+      final g = value?.guidedProgress[index];
+      if (g?.completed == true) return RoutineExerciseStatus.timerCompleted;
+      if (value?.skipped.contains(index) == true)
+        return RoutineExerciseStatus.skipped;
+      return g?.startedAt != null
+          ? RoutineExerciseStatus.timerPartial
+          : RoutineExerciseStatus.notStarted;
+    }
     final manualSets = (value?.manualSets[index] ?? 0).clamp(0, e.sets);
     if (sessions.any((s) =>
-        s.poseMetrics?.curlArms?.completes(e.sets, e.reps) ??
-        (s.repetitions >= e.sets * e.reps))) {
+        s.poseMetrics?.curlArms?.completes(e.sets, e.reps!) ??
+        (s.repetitions >= e.sets * e.reps!))) {
       return RoutineExerciseStatus.completed;
     }
     if (value?.skipped.contains(index) == true) {
@@ -305,6 +321,7 @@ class RoutineJourneyController extends ChangeNotifier {
   bool _handled(int index) => {
         RoutineExerciseStatus.completed,
         RoutineExerciseStatus.selfReportedCompleted,
+        RoutineExerciseStatus.timerCompleted,
         RoutineExerciseStatus.skipped
       }.contains(statusFor(index));
   List<int> get unfinishedIndices =>
@@ -337,7 +354,9 @@ class RoutineJourneyController extends ChangeNotifier {
         return id;
       });
   Future<void> reviewInstructions(int index) => _run(() async {
-        if (!dayIndices.contains(index) || supportsTracking(index)) {
+        if (!dayIndices.contains(index) ||
+            supportsTracking(index) ||
+            isTimed(index)) {
           throw StateError('Not an instructional exercise');
         }
         await _save(_checkpoint!.copyWith(
@@ -349,12 +368,16 @@ class RoutineJourneyController extends ChangeNotifier {
         if (!dayIndices.contains(index)) {
           throw ArgumentError('Exercise not in selected day');
         }
+        if (isTimed(index) &&
+            _checkpoint!.guidedProgress[index]?.completed == true) return;
         await _save(
             _checkpoint!.copyWith(skipped: {..._checkpoint!.skipped, index}));
         await _advance();
       });
   Future<void> markManualSet(int index) => _run(() async {
-        if (!dayIndices.contains(index) || supportsTracking(index)) {
+        if (!dayIndices.contains(index) ||
+            supportsTracking(index) ||
+            isTimed(index)) {
           throw StateError('Exercise is not manual');
         }
         final sets = manualSetsFor(index);
@@ -366,7 +389,9 @@ class RoutineJourneyController extends ChangeNotifier {
         if (sets + 1 == routine.exercises[index].sets) await _advance();
       });
   Future<void> undoManualSet(int index) => _run(() async {
-        if (!dayIndices.contains(index) || supportsTracking(index)) {
+        if (!dayIndices.contains(index) ||
+            supportsTracking(index) ||
+            isTimed(index)) {
           throw StateError('Exercise is not manual');
         }
         final sets = manualSetsFor(index);
@@ -399,20 +424,85 @@ class RoutineJourneyController extends ChangeNotifier {
           updatedAtMicros: value.updatedAtMicros,
           entries: [
             for (final i in dayIndices)
-              RoutineExerciseResult(
-                  index: i,
-                  status: _statusFor(i, value),
-                  sessionIds: List.unmodifiable(
-                      _sessionsFor(i, value).map((s) => s.sessionId)),
-                  fullRepetitions: _sessionsFor(i, value)
-                      .fold(0, (n, s) => n + s.repetitions),
-                  partialRepetitions: _sessionsFor(i, value).fold(0,
-                      (n, s) => n + (s.poseMetrics?.partialRepetitions ?? 0)),
-                  trackedDurationMicros: _sessionsFor(i, value)
-                      .fold(0, (n, s) => n + s.trackedDurationMicros),
-                  manualSets: (value.manualSets[i] ?? 0)
-                      .clamp(0, routine.exercises[i].sets))
+              if (isTimed(i))
+                RoutineExerciseResult.timed(
+                    index: i,
+                    status: _statusFor(i, value),
+                    guided: value.guidedProgress[i])
+              else
+                RoutineExerciseResult(
+                    index: i,
+                    status: _statusFor(i, value),
+                    sessionIds: List.unmodifiable(
+                        _sessionsFor(i, value).map((s) => s.sessionId)),
+                    fullRepetitions: _sessionsFor(i, value)
+                        .fold(0, (n, s) => n + s.repetitions),
+                    partialRepetitions: _sessionsFor(i, value).fold(0,
+                        (n, s) => n + (s.poseMetrics?.partialRepetitions ?? 0)),
+                    trackedDurationMicros: _sessionsFor(i, value)
+                        .fold(0, (n, s) => n + s.trackedDurationMicros),
+                    manualSets: (value.manualSets[i] ?? 0)
+                        .clamp(0, routine.exercises[i].sets))
           ]);
+
+  Future<GuidedTimedProgress> prepareGuidedSession(int index) => _run(() async {
+        if (!dayIndices.contains(index) ||
+            executionFor(index).kind != ExerciseExecutionKind.timed)
+          throw StateError('Timed exercise is unavailable');
+        final old = _checkpoint!.guidedProgress[index];
+        if (old != null) {
+          if (_checkpoint!.skipped.contains(index))
+            await _save(_checkpoint!.copyWith(
+                selectedIndex: index,
+                finished: false,
+                skipped: {..._checkpoint!.skipped}..remove(index)));
+          return old;
+        }
+        final e = routine.exercises[index];
+        final progress = GuidedTimedProgress(
+            runId: newId(),
+            entryId: e.entryId,
+            entryIndex: index,
+            exerciseId: e.exerciseId,
+            prescription: e.prescription as TimedPrescription,
+            mediaIdentity: guidedTimedMediaIdentity(
+                videoUrl: e.videoUrl!,
+                mediaRevision: e.mediaRevision!,
+                mediaGeneration: e.mediaGeneration!),
+            updatedAt: DateTime.now().toUtc());
+        await _save(_checkpoint!.copyWith(
+            selectedIndex: index,
+            finished: false,
+            guidedProgress: {..._checkpoint!.guidedProgress, index: progress},
+            skipped: {..._checkpoint!.skipped}..remove(index)));
+        return progress;
+      });
+
+  Future<void> saveGuidedProgress(int index, GuidedTimedProgress progress) =>
+      _run(() async {
+        if (!dayIndices.contains(index) || !isTimed(index))
+          throw StateError('Not a timed routine entry');
+        progress.validate();
+        final old = _checkpoint!.guidedProgress[index],
+            e = routine.exercises[index];
+        if (old == null ||
+            progress.runId != old.runId ||
+            progress.entryId != e.entryId ||
+            progress.entryIndex != index ||
+            progress.exerciseId != e.exerciseId ||
+            progress.mediaIdentity != old.mediaIdentity ||
+            jsonEncode(progress.prescription.toJson()) !=
+                jsonEncode(e.prescription.toJson()) ||
+            progress.totalActiveMicroseconds < old.totalActiveMicroseconds ||
+            old.completed && !progress.completed ||
+            progress.updatedAt.isBefore(old.updatedAt))
+          throw StateError(
+              'Timed progress does not match this routine attempt');
+        await _save(_checkpoint!.copyWith(
+            finished: false,
+            guidedProgress: {..._checkpoint!.guidedProgress, index: progress}));
+        if (progress.completed) await _advance();
+      });
 
   Future<void> openAttempt(String id) => _run(() async {
         if (isScheduled && id != _scheduledAttemptId) {

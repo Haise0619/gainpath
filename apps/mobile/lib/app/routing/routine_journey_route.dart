@@ -36,6 +36,8 @@ import '../di/workout_store_factory.dart';
 import 'exercise_tutorial_route.dart';
 import 'member_progress_route.dart';
 import 'exercise_tracker_route.dart';
+import 'guided_timed_workout_route.dart';
+import '../../features/workout/domain/exercise_execution_resolver.dart';
 import 'squat_result_sync.dart' show newWorkoutRequestId;
 
 enum RoutineJourneyAction { view, resume, repeat, nextDay }
@@ -131,6 +133,38 @@ class _RoutineJourneyRouteState extends State<RoutineJourneyRoute> {
   Future<void> _track(int index) async {
     final auth = context.read<AuthBloc>(), c = _controller!;
     if (!_authorized(auth)) return;
+    final execution = c.executionFor(index);
+    if (c.isTimed(index)) {
+      if (execution.kind != ExerciseExecutionKind.timed)
+        throw StateError('Video guided exercise unavailable');
+      final progress = await c.prepareGuidedSession(index);
+      if (!mounted || !_authorized(auth)) return;
+      final outcome = await Navigator.push<GuidedTimedWorkoutOutcome>(
+          context,
+          MaterialPageRoute(
+              builder: (_) => BlocProvider.value(
+                  value: auth,
+                  child: MembershipAccessGate(
+                      enabled: membershipAccessEnforcementEnabled,
+                      feature: MembershipAccessFeature.exercise,
+                      resourceId: widget.routine.exercises[index].exerciseId,
+                      child: GuidedTimedWorkoutRoute(
+                          scope: widget.scope,
+                          routine: widget.routine,
+                          exerciseIndex: index,
+                          progress: progress,
+                          persist: (value) =>
+                              c.saveGuidedProgress(index, value))))));
+      if (!mounted || !_authorized(auth)) return;
+      if (outcome == GuidedTimedWorkoutOutcome.skipped) await c.skip(index);
+      await c.refresh(completeRoutine: true);
+      if (!mounted || !_authorized(auth)) return;
+      if (c.statusFor(index) == RoutineExerciseStatus.timerCompleted &&
+          !c.checkpoint!.finished &&
+          c.unfinishedIndices.isNotEmpty)
+        await _nextExercise(widget.routine.exercises[index].name);
+      return;
+    }
     if (!c.supportsTracking(index)) {
       await _tutorial(index);
       return;
@@ -156,16 +190,16 @@ class _RoutineJourneyRouteState extends State<RoutineJourneyRoute> {
         setupConfirmationLabel: tracker == ExerciseTracker.sideViewFloorPushUp
             ? floorPushUpSetupConfirmation
             : tracker == ExerciseTracker.sideViewWallPushUp
-            ? wallPushUpSetupConfirmation
-            : tracker == ExerciseTracker.frontViewLateralRaise
-                ? lateralRaiseSetupConfirmation
-                : tracker == ExerciseTracker.frontViewShoulderPress
-                    ? shoulderPressSetupConfirmation
-                    : tracker == ExerciseTracker.sideViewRow
-                        ? rowSetupConfirmation
-                        : tracker == ExerciseTracker.sideViewReverseLunge
-                            ? reverseLungeSetupConfirmation
-                            : null,
+                ? wallPushUpSetupConfirmation
+                : tracker == ExerciseTracker.frontViewLateralRaise
+                    ? lateralRaiseSetupConfirmation
+                    : tracker == ExerciseTracker.frontViewShoulderPress
+                        ? shoulderPressSetupConfirmation
+                        : tracker == ExerciseTracker.sideViewRow
+                            ? rowSetupConfirmation
+                            : tracker == ExerciseTracker.sideViewReverseLunge
+                                ? reverseLungeSetupConfirmation
+                                : null,
         onUploadChanged: (value) => upload = value);
     if (consented != true || !mounted || !_authorized(auth)) return;
     // Persist the exact capture ID before opening the camera. Reconciliation
@@ -232,10 +266,14 @@ class _RoutineJourneyRouteState extends State<RoutineJourneyRoute> {
                       exercise: widget.routine.exercises[index],
                       completedExercises: c.completedExercises,
                       totalExercises: c.dayIndices.length,
-                      capabilityLabel: tracking.capability.displayLabel,
+                      capabilityLabel: c.isTimed(index)
+                          ? 'Video guided · Timer'
+                          : tracking.capability.displayLabel,
                       hasTracking: tracking.capability.hasPoseTracking,
                       perArmTargets: c.perArmTargetsFor(index),
-                      guidance: tracking.description)
+                      guidance: c.isTimed(index)
+                          ? 'Timer completion · Not AI verified'
+                          : tracking.description)
                   : const SafeArea(
                       child: Padding(
                           padding: EdgeInsets.all(24),

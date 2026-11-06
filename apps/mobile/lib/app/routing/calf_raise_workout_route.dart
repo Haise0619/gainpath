@@ -92,7 +92,7 @@ class _CalfRaiseWorkoutRouteState extends State<CalfRaiseWorkoutRoute>
           detectorId: 'blazepose-tflite',
           detectorVersion: BlazePoseModelContract.version,
           sets: launch.exercise.sets,
-          reps: launch.exercise.reps,
+          reps: launch.repetitionTarget.repetitions,
           saveVoiceMode: (mode) async {
             await _voicePreferences?.write(mode);
           });
@@ -156,7 +156,7 @@ class _CalfRaiseWorkoutRouteState extends State<CalfRaiseWorkoutRoute>
       return CalfRaiseSetupScreen(
           exerciseName: widget.launch.exercise.name,
           sets: widget.launch.exercise.sets,
-          reps: widget.launch.exercise.reps,
+          reps: widget.launch.repetitionTarget.repetitions,
           restSeconds: widget.launch.exercise.restSeconds,
           onStart: () {
             setState(() => _setupConfirmed = true);
@@ -186,7 +186,7 @@ class _CalfRaiseWorkoutRouteState extends State<CalfRaiseWorkoutRoute>
         alignmentInstruction:
             'Stand side-on on level ground with both heels down. Keep the camera-facing hip, knee, ankle, heel and toes visible, from hips to the floor. Hold knees straight and keep the phone stationary.',
         exerciseName: widget.launch.exercise.name,
-        targetRepetitions: widget.launch.exercise.reps,
+        targetRepetitions: widget.launch.repetitionTarget.repetitions,
         routineContext: widget.launch.routineContext,
         viewport:
             PoseCameraViewport(camera: _camera!, session: session.preview),

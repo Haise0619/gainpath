@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'firebase_data_scope.dart';
 import 'dart:math';
 
@@ -37,6 +38,8 @@ class FirebaseRoutineTemplateRepository
   }
 
   final SessionScope scope;
+  final _pendingV2Commands = <String, Map<String, Object?>>{};
+  final _pendingPublishRequests = <String, String>{};
   final TutorialRepository exerciseCatalog;
   final FirebaseFirestore _firestore;
   final FirebaseAuth _auth;
@@ -45,12 +48,11 @@ class FirebaseRoutineTemplateRepository
   final Object _lifetime = Object();
   bool _invalidated = false;
   bool _saving = false;
+  final Set<String> _v2Ids = {};
 
   CollectionReference<Map<String, dynamic>> _collection() {
     _requireCurrentUser();
-    return _firestore
-        .scopeRoot(scope)
-        .collection('routineBlueprints');
+    return _firestore.scopeRoot(scope).collection('routineBlueprints');
   }
 
   void _requireCurrentUser() {
@@ -76,11 +78,23 @@ class FirebaseRoutineTemplateRepository
       _requireAuthor(assignment.data(), membership.data());
       final docs =
           await _collection().get(const GetOptions(source: Source.server));
+      final upgraded = await _firestore
+          .scopeRoot(scope)
+          .collection('routineBlueprintsV2')
+          .get(const GetOptions(source: Source.server));
+      _v2Ids
+        ..clear()
+        ..addAll(upgraded.docs
+            .where((d) => d.data()['archived'] != true)
+            .map((d) => d.id));
       final exercises = {
         for (final item in await exerciseCatalog.load()) item.id: item
       };
       _requireCurrentUser();
-      final result = docs.docs
+      final result = [
+        ...docs.docs.where((d) => !_v2Ids.contains(d.id)),
+        ...upgraded.docs
+      ]
           .where((doc) => doc.data()['archived'] != true)
           .map((doc) => _decode(doc.id, doc.data(), exercises,
               baseline: _RoutineBaseline(_lifetime, doc.id, doc.data(),
@@ -101,10 +115,8 @@ class FirebaseRoutineTemplateRepository
 
   DocumentReference<Map<String, dynamic>> get _assignment =>
       _firestore.scopeUser(scope);
-  DocumentReference<Map<String, dynamic>> get _member => _firestore
-      .scopeRoot(scope)
-      .collection('members')
-      .doc(scope.userId);
+  DocumentReference<Map<String, dynamic>> get _member =>
+      _firestore.scopeRoot(scope).collection('members').doc(scope.userId);
 
   void _requireAuthor(
       Map<String, dynamic>? assignment, Map<String, dynamic>? membership) {
@@ -150,6 +162,7 @@ class FirebaseRoutineTemplateRepository
 
   Future<RoutineBlueprint> _save(RoutineBlueprint blueprint) async {
     _requireCurrentUser();
+    if (blueprint.schemaVersion == 2) return _saveV2(blueprint);
     // Snapshot mutable form lists BEFORE the first await. Neither retries nor
     // edits made while a request is pending may change the intended patch.
     final data = _editableFields(blueprint);
@@ -259,6 +272,85 @@ class FirebaseRoutineTemplateRepository
     }
   }
 
+  Future<RoutineBlueprint> _saveV2(RoutineBlueprint blueprint) async {
+    final baseline = blueprint.editBaseline;
+    if (blueprint.id.isNotEmpty &&
+        (baseline is! _RoutineBaseline ||
+            !identical(baseline.lifetime, _lifetime) ||
+            baseline.id != blueprint.id)) {
+      throw const RoutineEditConflict();
+    }
+    final assignment =
+        await _assignment.get(const GetOptions(source: Source.server));
+    final member = await _member.get(const GetOptions(source: Source.server));
+    _requireAuthor(assignment.data(), member.data());
+    final original = baseline is _RoutineBaseline ? baseline : null;
+    if (original != null &&
+        (!_same(original.assignment, assignment.data()) ||
+            !_same(original.membership, member.data()))) {
+      throw const RoutineEditAuthorizationChanged();
+    }
+    final catalog = await exerciseCatalog.load();
+    final data = _editableFields(blueprint);
+    data['schemaVersion'] = 2;
+    data['days'] = encodeRoutineDays(blueprint, catalog);
+    final commandKey = jsonEncode([blueprint.id, data]);
+    final pending = _pendingV2Commands[commandKey];
+    final id = pending?['blueprintId'] as String? ??
+        (blueprint.id.isEmpty
+            ? _firestore
+                .scopeRoot(scope)
+                .collection('routineBlueprintsV2')
+                .doc()
+                .id
+            : blueprint.id);
+    _requireCurrentUser();
+    final command = pending ??
+        <String, Object?>{
+          'schemaVersion': 1,
+          'action': 'saveBlueprintV2',
+          'organizationId': scope.organizationId,
+          'blueprintId': id,
+          'requestId': buildPublishRoutineRequestId(
+              timestampMicros: DateTime.now().microsecondsSinceEpoch),
+          'expectedRevision': original?.document['schemaVersion'] == 2
+              ? original!.document['editRevision'] ?? 0
+              : 0,
+          if (original?.document['schemaVersion'] == 1)
+            'expectedLegacyUpdatedAtMillis':
+                (original!.document['updatedAt'] as Timestamp)
+                    .millisecondsSinceEpoch,
+          'blueprint': data,
+        };
+    _pendingV2Commands[commandKey] = command;
+    try {
+      await firebaseScopedCallable(scope, 'exerciseCatalogCommand',
+              functions: _functions)
+          .call(command);
+    } on FirebaseFunctionsException catch (error) {
+      if (['aborted', 'already-exists', 'failed-precondition']
+          .contains(error.code)) throw const RoutineEditConflict();
+      if (['permission-denied', 'unauthenticated'].contains(error.code))
+        throw const RoutineEditAuthorizationChanged();
+      rethrow;
+    }
+    _requireCurrentUser();
+    final persisted = await _firestore
+        .scopeRoot(scope)
+        .collection('routineBlueprintsV2')
+        .doc(id)
+        .get(const GetOptions(source: Source.server));
+    _requireCurrentUser();
+    if (!persisted.exists) throw const RoutineSaveFailed();
+    final result = _decode(
+        id, persisted.data()!, {for (final e in catalog) e.id: e},
+        baseline: _RoutineBaseline(_lifetime, id, persisted.data()!,
+            assignment.data()!, member.data()!));
+    _v2Ids.add(id);
+    _pendingV2Commands.remove(commandKey);
+    return result;
+  }
+
   @override
   Future<void> archive(RoutineBlueprint blueprint) async {
     if (_saving) throw const RoutineSaveFailed();
@@ -269,8 +361,21 @@ class FirebaseRoutineTemplateRepository
       final baseline = blueprint.editBaseline;
       if (baseline is! _RoutineBaseline ||
           !identical(baseline.lifetime, _lifetime) ||
-          baseline.id != blueprint.id) {
-        throw const RoutineEditConflict();
+          baseline.id != blueprint.id) throw const RoutineEditConflict();
+      if (blueprint.schemaVersion == 2) {
+        await firebaseScopedCallable(scope, 'exerciseCatalogCommand',
+                functions: _functions)
+            .call({
+          'schemaVersion': 1,
+          'action': 'archiveBlueprintV2',
+          'organizationId': scope.organizationId,
+          'blueprintId': blueprint.id,
+          'expectedRevision': baseline.document['editRevision'] ?? 0,
+          'requestId': buildPublishRoutineRequestId(
+              timestampMicros: DateTime.now().microsecondsSinceEpoch)
+        });
+        _requireCurrentUser();
+        return;
       }
       final reference = _collection().doc(blueprint.id);
       try {
@@ -335,7 +440,15 @@ class FirebaseRoutineTemplateRepository
                       .map((e) => <String, Object?>{
                             'exerciseId': e.exerciseId,
                             'sets': e.sets,
-                            'reps': e.reps
+                            if (blueprint.schemaVersion == 1) 'reps': e.reps,
+                            if (blueprint.schemaVersion == 2) ...{
+                              'entryId': e.entryId,
+                              'executionMode': e.executionMode?.name,
+                              ...e.prescription!.toJson(),
+                              if (e.sourceCatalogRevision != null)
+                                'sourceCatalogRevision':
+                                    e.sourceCatalogRevision,
+                            },
                           })
                       .toList()
                 })
@@ -407,6 +520,7 @@ class FirebaseRoutineTemplateRepository
     Iterable<TutorialVideo> catalogEntries,
   ) {
     final catalog = {for (final entry in catalogEntries) entry.id: entry};
+    final entryIds = <String>{};
     return blueprint.days.map((day) {
       if (day.dayNumber < 1 || day.exercises.isEmpty) {
         throw StateError('Each routine day needs a number and an exercise.');
@@ -415,14 +529,43 @@ class FirebaseRoutineTemplateRepository
         'dayNumber': day.dayNumber,
         'exercises': day.exercises.map((exercise) {
           final record = catalog[exercise.exerciseId];
-          if (record == null || record.status != TutorialStatus.active) {
+          if (record == null ||
+              record.archived ||
+              record.status != TutorialStatus.active) {
             throw StateError(
                 'Select an active exercise from the catalog for every row.');
           }
+          if (blueprint.schemaVersion == 2) {
+            final target = exercise.prescription;
+            if (exercise.entryId.trim().isEmpty ||
+                !entryIds.add(exercise.entryId) ||
+                target == null ||
+                exercise.executionMode == null ||
+                target.sets != exercise.sets ||
+                (target is TimedPrescription) !=
+                    (exercise.executionMode ==
+                        ExerciseExecutionMode.videoGuidedTimed) ||
+                (target is TimedPrescription && exercise.reps != null) ||
+                (target is RepetitionPrescription &&
+                    target.repetitions != exercise.reps)) {
+              throw const FormatException(
+                  'Invalid stable routine entry or target');
+            }
+            target.validate();
+          }
           return <String, Object?>{
             'exerciseId': exercise.exerciseId,
-            'sets': exercise.sets,
-            'reps': exercise.reps,
+            if (blueprint.schemaVersion == 1) ...{
+              'sets': exercise.sets,
+              'reps': exercise.reps
+            },
+            if (blueprint.schemaVersion == 2) ...{
+              'entryId': exercise.entryId,
+              'executionMode': exercise.executionMode?.name,
+              ...exercise.prescription!.toJson(),
+              if (exercise.sourceCatalogRevision != null)
+                'sourceCatalogRevision': exercise.sourceCatalogRevision,
+            },
           };
         }).toList(growable: false),
       };
@@ -432,18 +575,45 @@ class FirebaseRoutineTemplateRepository
   @override
   Future<void> publish(String blueprintId) async {
     _requireCurrentUser();
-    final requestId = buildPublishRoutineRequestId(
-      timestampMicros: DateTime.now().microsecondsSinceEpoch,
-    );
+    final requestId = _pendingPublishRequests.putIfAbsent(
+        blueprintId,
+        () => buildPublishRoutineRequestId(
+              timestampMicros: DateTime.now().microsecondsSinceEpoch,
+            ));
     try {
-      await firebaseScopedCallable(scope, 'publishRoutineCommand', functions: _functions)
+      final response = await firebaseScopedCallable(
+              scope, 'publishRoutineCommand',
+              functions: _functions)
           .call({
-        'schemaVersion': 1,
+        'schemaVersion': _v2Ids.contains(blueprintId) ? 2 : 1,
         'requestId': requestId,
         'organizationId': scope.organizationId,
         'blueprintId': blueprintId,
       });
       _requireCurrentUser();
+      if (_v2Ids.contains(blueprintId)) {
+        final result = Map<String, dynamic>.from(response.data as Map),
+            contentId = 'routine_v2_$blueprintId';
+        if (result['schemaVersion'] != 2 ||
+            result['requestId'] != requestId ||
+            result['sourceBlueprintId'] != blueprintId ||
+            result['contentId'] != contentId ||
+            result['status'] != 'published') throw const RoutinePublishFailed();
+        final persisted = await _firestore
+            .scopeRoot(scope)
+            .collection('content')
+            .doc(contentId)
+            .get(const GetOptions(source: Source.server));
+        _requireCurrentUser();
+        if (!persisted.exists ||
+            persisted.data()?['schemaVersion'] != 2 ||
+            persisted.data()?['kind'] != 'routine_v2' ||
+            persisted.data()?['status'] != 'published' ||
+            persisted.data()?['sourceBlueprintId'] != blueprintId ||
+            persisted.data()?['publishedAtMillis'] !=
+                result['publishedAtMillis']) throw const RoutinePublishFailed();
+      }
+      _pendingPublishRequests.remove(blueprintId);
     } on RoutineEditAuthorizationChanged {
       rethrow;
     } catch (_) {
@@ -454,7 +624,7 @@ class FirebaseRoutineTemplateRepository
   RoutineBlueprint _decode(String id, Map<String, dynamic> data,
       Map<String, TutorialVideo> exercises,
       {RoutineEditBaseline? baseline}) {
-    if (data['schemaVersion'] != 1 ||
+    if (![1, 2].contains(data['schemaVersion']) ||
         data['name'] is! String ||
         data['sessionDurationMin'] is! int ||
         data['days'] is! List) {
@@ -470,7 +640,7 @@ class FirebaseRoutineTemplateRepository
         if (raw is! Map<String, dynamic> ||
             raw['exerciseId'] is! String ||
             raw['sets'] is! int ||
-            raw['reps'] is! int) {
+            (data['schemaVersion'] == 1 && raw['reps'] is! int)) {
           throw const FormatException('Routine exercise reference is invalid.');
         }
         final id = raw['exerciseId'] as String;
@@ -479,14 +649,23 @@ class FirebaseRoutineTemplateRepository
           throw FormatException('Routine references missing exercise $id.');
         }
         return RoutineExerciseRef(
-            catalogEntry.title, raw['sets'] as int, raw['reps'] as int,
-            exerciseId: id);
+            catalogEntry.title, raw['sets'] as int, raw['reps'] as int?,
+            exerciseId: id,
+            entryId: raw['entryId'] as String? ?? '',
+            executionMode: data['schemaVersion'] == 2
+                ? ExerciseExecutionMode.fromJson(raw['executionMode'])
+                : null,
+            prescription: data['schemaVersion'] == 2
+                ? ExercisePrescription.fromJson(raw)
+                : null,
+            sourceCatalogRevision: raw['sourceCatalogRevision'] as int?);
       }).toList(growable: false);
       return RoutineDay(value['dayNumber'] as int, refs);
     }).toList(growable: false);
     return RoutineBlueprint(
       id: id,
       editBaseline: baseline,
+      schemaVersion: data['schemaVersion'] as int,
       name: data['name'] as String,
       level: data['level'] is String ? data['level'] as String : 'Beginner',
       assignedMembers: 0,

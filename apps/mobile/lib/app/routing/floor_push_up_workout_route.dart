@@ -90,7 +90,7 @@ class _FloorPushUpWorkoutRouteState extends State<FloorPushUpWorkoutRoute>
           detectorId: 'blazepose-tflite',
           detectorVersion: BlazePoseModelContract.version,
           sets: launch.exercise.sets,
-          reps: launch.exercise.reps,
+          reps: launch.repetitionTarget.repetitions,
           saveVoiceMode: (mode) async {
             await _voicePreferences?.write(mode);
           });
@@ -173,7 +173,7 @@ class _FloorPushUpWorkoutRouteState extends State<FloorPushUpWorkoutRoute>
         alignmentInstruction:
             'Use Left Side View or Right Side View at floor height. Hold a floor plank with arms extended and keep shoulder, elbow, wrist, hip and ankle visible.',
         exerciseName: widget.launch.exercise.name,
-        targetRepetitions: widget.launch.exercise.reps,
+        targetRepetitions: widget.launch.repetitionTarget.repetitions,
         routineContext: widget.launch.routineContext,
         viewport:
             PoseCameraViewport(camera: _camera!, session: session.preview),
