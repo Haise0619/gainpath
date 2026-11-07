@@ -6,8 +6,51 @@ import 'package:gainpath_mobile/features/workout/presentation/member/workout_pro
 import 'routine_journey_controller_test.dart' show MemoryJourneyStore;
 import 'workout_program_controller_test.dart'
     show MemoryProgramStore, programFixture;
+import 'package:gainpath_domain/workout.dart';
+import 'package:gainpath_mobile/features/workout/domain/routine_attempt.dart';
+import 'hybrid_routine_journey_test.dart' show hybridFixture;
 
 void main() {
+  testWidgets('Program schedule renders timed targets and actual upcoming date',
+      (tester) async {
+    final json = programFixture().toJson();
+    json['schemaVersion'] = 2;
+    json['days'] = (json['days'] as List).map((raw) {
+      final day = Map<String, dynamic>.from(raw as Map)..remove('restSeconds');
+      day['schemaVersion'] = 2;
+      day['restOverrideSeconds'] = null;
+      if (day['kind'] == 'workout') {
+        day['routineId'] = hybridFixture().id;
+        day['routineSnapshot'] = routinePlanSnapshot(hybridFixture());
+      }
+      return day;
+    }).toList();
+    final program = WorkoutProgram.fromJson(json);
+    final scope = SessionScope(userId: 'member', organizationId: 'gainpath');
+    final c = WorkoutProgramController(
+        scope: scope,
+        activeScope: () => scope,
+        store: MemoryProgramStore(scope),
+        routineStore: MemoryJourneyStore(scope),
+        newId: () => 'mixed');
+    await c.open();
+    await c.enroll(program, DateTime.utc(2026, 11, 2), {1, 3, 5});
+    await tester.pumpWidget(MaterialApp(
+        home: WorkoutProgramScreen(
+            controller: c,
+            loadPrograms: () async => [program],
+            today: DateTime.utc(2026, 11, 1),
+            onOpenRoutine: (_) async {})));
+    await tester.pumpAndSettle();
+    expect(find.text('Upcoming workout'), findsOneWidget);
+    expect(find.textContaining('Mon 2026-11-02'), findsOneWidget);
+    expect(find.textContaining('2 sets × 45 sec'), findsOneWidget);
+    expect(find.text('Video Timed'), findsWidgets);
+    expect(find.textContaining('null reps'), findsNothing);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox());
+    c.dispose();
+  });
   testWidgets('Malaysia midnight refreshes today on the next minute tick',
       (tester) async {
     final scope = SessionScope(userId: 'member', organizationId: 'gym');
@@ -29,6 +72,8 @@ void main() {
             onOpenRoutine: (_) async {})));
     await tester.pumpAndSettle();
     expect(find.text('Week 1 · Mon 2026-11-02'), findsOneWidget);
+    expect(find.text("Today's workout"), findsOneWidget);
+    expect(find.textContaining('null reps'), findsNothing);
     final title = tester.widget<Text>(find.text(programFixture().title).first);
     expect(title.style?.color, const Color(0xFF211A2E));
     instant = DateTime.utc(2026, 11, 2, 16);

@@ -111,7 +111,7 @@ class _WorkoutProgramRouteState extends State<WorkoutProgramRoute> {
         }
         if (_error != null) {
           return Scaffold(
-              appBar: AppBar(title: const Text("Today's Workout")),
+              appBar: AppBar(title: const Text('Training plan')),
               body: Center(
                   child: Column(mainAxisSize: MainAxisSize.min, children: [
                 Text(_error!),

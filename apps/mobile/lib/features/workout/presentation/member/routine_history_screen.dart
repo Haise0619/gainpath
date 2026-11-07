@@ -1,16 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
 import '../../domain/routine_attempt.dart';
+import '../workout_presentation.dart';
 
 String _date(int micros) {
   final d = DateTime.fromMicrosecondsSinceEpoch(micros, isUtc: true)
       .add(const Duration(hours: 8));
   return '${d.day}/${d.month}/${d.year} ${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')} MYT';
-}
-
-String _duration(int micros) {
-  final seconds = micros ~/ 1000000;
-  return seconds < 60 ? '${seconds}s' : '${seconds ~/ 60}m ${seconds % 60}s';
 }
 
 class RoutineHistoryScreen extends StatelessWidget {
@@ -70,7 +66,7 @@ class RoutineHistoryScreen extends StatelessWidget {
                           subtitle: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text(a.statusLabel),
+                                Text(workoutAttemptLabel(a)),
                                 Text(
                                     '${a.completedExercises}/${a.entries.length} exercises'),
                                 Text(_date(
@@ -95,6 +91,29 @@ class RoutineAttemptDetailScreen extends StatelessWidget {
     final a = attempt;
     return Scaffold(
         appBar: AppBar(title: const Text('Routine result')),
+        bottomNavigationBar: (!a.isComplete && onResume != null ||
+                a.isComplete && onNextDay != null)
+            ? SafeArea(
+                top: false,
+                child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+                    child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          if (!a.isComplete && onResume != null)
+                            FilledButton.icon(
+                                onPressed: onResume,
+                                icon: const Icon(Icons.play_arrow_rounded),
+                                label:
+                                    const Text('Resume unfinished exercises')),
+                          if (a.isComplete && onNextDay != null)
+                            FilledButton.icon(
+                                onPressed: onNextDay,
+                                icon: const Icon(Icons.arrow_forward_rounded),
+                                label: const Text('Next routine day')),
+                        ])))
+            : null,
         body: ListView(
             padding: EdgeInsets.fromLTRB(
                 16, 12, 16, 32 + MediaQuery.paddingOf(context).bottom),
@@ -102,7 +121,7 @@ class RoutineAttemptDetailScreen extends StatelessWidget {
               Text('${a.routine.title} · Day ${a.day}',
                   style: Theme.of(context).textTheme.headlineSmall),
               const SizedBox(height: 8),
-              Text(a.statusLabel,
+              Text(workoutAttemptLabel(a),
                   style: Theme.of(context)
                       .textTheme
                       .titleLarge
@@ -115,19 +134,24 @@ class RoutineAttemptDetailScreen extends StatelessWidget {
                   child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                            '${a.fullRepetitions} measured full reps · ${a.partialRepetitions} partial reps'),
-                        Text(
-                            '${_duration(a.trackedDurationMicros)} camera-tracked'),
-                        Text(
-                            '${a.selfReportedSets} self-reported sets · no AI measurements'),
+                        if (a.entries.any((r) => r.sessionIds.isNotEmpty)) ...[
+                          Text(
+                              '${a.fullRepetitions} measured full reps · ${a.partialRepetitions} partial reps'),
+                          Text(
+                              '${workoutDurationLabel(a.trackedDurationMicros)} camera-tracked'),
+                        ],
+                        if (a.selfReportedSets > 0)
+                          Text('${a.selfReportedSets} self-reported sets'),
+                        if (a.entries.any((r) => r.isTimed && r.guided != null))
+                          Text(
+                              '${workoutDurationLabel(a.entries.where((r) => r.isTimed).fold<int>(0, (total, r) => total + (r.guided?.totalActiveMicroseconds ?? 0)))} active · Timer recorded'),
                         if (a.startedAtMicros != null)
                           Text('Started ${_date(a.startedAtMicros!)}'),
                         if (a.finishedAtMicros != null)
                           Text('Ended ${_date(a.finishedAtMicros!)}'),
                         if (a.elapsedDurationMicros != null)
                           Text(
-                              '${_duration(a.elapsedDurationMicros!)} elapsed · includes breaks and time away'),
+                              '${workoutDurationLabel(a.elapsedDurationMicros!)} elapsed · includes breaks and time away'),
                         if (a.finished && a.finishedAtMicros == null)
                           const Text(
                               'Completion time unavailable for this older attempt.'),
@@ -136,16 +160,6 @@ class RoutineAttemptDetailScreen extends StatelessWidget {
               for (final result in a.entries)
                 _ExerciseResult(attempt: a, result: result),
               const SizedBox(height: 12),
-              if (!a.isComplete && onResume != null)
-                FilledButton.icon(
-                    onPressed: onResume,
-                    icon: const Icon(Icons.play_arrow_rounded),
-                    label: const Text('Resume unfinished exercises')),
-              if (a.isComplete && onNextDay != null)
-                FilledButton.icon(
-                    onPressed: onNextDay,
-                    icon: const Icon(Icons.arrow_forward_rounded),
-                    label: const Text('Next routine day')),
               if (onViewProgress != null)
                 OutlinedButton(
                     onPressed: onViewProgress,
@@ -165,36 +179,30 @@ class _ExerciseResult extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final e = attempt.routine.exercises[result.index];
-    final label = switch (result.status) {
-      RoutineExerciseStatus.completed => 'Measured target complete',
-      RoutineExerciseStatus.selfReportedCompleted => 'Self-reported complete',
-      RoutineExerciseStatus.partial => 'Measured partial result',
-      RoutineExerciseStatus.selfReportedPartial => 'Self-reported partial',
-      RoutineExerciseStatus.skipped => 'Skipped',
-      RoutineExerciseStatus.timerPartial => 'Timer progress · not AI verified',
-      RoutineExerciseStatus.timerCompleted =>
-        'Timer complete · not AI verified',
-      RoutineExerciseStatus.instructionsReviewed => 'Instructions reviewed',
-      RoutineExerciseStatus.notStarted => 'Not started',
-    };
     return Card(
         child: Padding(
             padding: const EdgeInsets.all(14),
             child:
                 Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text(e.name, style: Theme.of(context).textTheme.titleMedium),
-              Text(e.durationSeconds != null
-                  ? 'Target: ${e.sets} sets × ${e.durationSeconds}s'
-                  : 'Target: ${e.sets} sets × ${e.reps} reps'),
-              if (result.isTimed)
-                Text(
-                    '${result.guided?.completedSets ?? 0} sets · ${(result.guided?.totalActiveMicroseconds ?? 0) ~/ 1000000}s active · Not AI verified'),
-              Text(label),
-              if (result.sessionIds.isNotEmpty)
-                Text(
-                    '${result.fullRepetitions} full · ${result.partialRepetitions} partial · ${_duration(result.trackedDurationMicros)} tracked'),
-              if (result.manualSets > 0)
-                Text('${result.manualSets}/${e.sets} sets self-reported'),
+              Text(ExercisePresentation.forExercise(e,
+                      organizationId: attempt.scope.organizationId)
+                  .targetsWithRest),
+              Text(ExercisePresentation.forExercise(e,
+                      organizationId: attempt.scope.organizationId)
+                  .label),
+              Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Icon(
+                    isExerciseTargetComplete(result.status)
+                        ? Icons.check_circle_rounded
+                        : result.status == RoutineExerciseStatus.skipped
+                            ? Icons.skip_next_rounded
+                            : Icons.timelapse_rounded,
+                    color: Theme.of(context).colorScheme.primary),
+                const SizedBox(width: 8),
+                Expanded(child: Text(exerciseStatusLabel(result.status))),
+              ]),
+              Text(exerciseResultSummary(result)),
             ])));
   }
 }

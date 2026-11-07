@@ -139,7 +139,7 @@ void main() {
     await tester.tap(find.text('Next'));
     await tester.pumpAndSettle();
     expect(find.text('UP NEXT'), findsOneWidget);
-    expect(find.text('2 sets · 8 reps per set'), findsOneWidget);
+    expect(find.textContaining('2 sets × 8 reps'), findsOneWidget);
     await tester.ensureVisible(find.text('Review tutorial'));
     await tester.tap(find.text('Review tutorial'));
     await tester.pumpAndSettle();

@@ -1,4 +1,5 @@
 import 'dart:async';
+import '../workout_presentation.dart';
 import 'package:flutter/material.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
 import '../../application/routine_journey_controller.dart';
@@ -43,23 +44,7 @@ class _RoutineJourneyScreenState extends State<RoutineJourneyScreen> {
     }
   }
 
-  String _status(RoutineExerciseStatus status) => switch (status) {
-        RoutineExerciseStatus.notStarted => 'Not started',
-        RoutineExerciseStatus.partial =>
-          'Partial result saved · retry exercise',
-        RoutineExerciseStatus.completed => 'Measured target complete',
-        RoutineExerciseStatus.selfReportedPartial =>
-          'Self-reported sets in progress',
-        RoutineExerciseStatus.selfReportedCompleted =>
-          'Self-reported sets complete · not AI measured',
-        RoutineExerciseStatus.instructionsReviewed =>
-          'Instructions reviewed · not measured',
-        RoutineExerciseStatus.skipped => 'Skipped',
-        RoutineExerciseStatus.timerPartial =>
-          'Timer progress saved · not AI verified',
-        RoutineExerciseStatus.timerCompleted =>
-          'Timer target complete · not AI verified',
-      };
+  String _status(RoutineExerciseStatus status) => exerciseStatusLabel(status);
   Future<void> _finish() => _act(() async {
         final c = widget.controller;
         if (!c.allTargetsCompleted) {
@@ -98,6 +83,11 @@ class _RoutineJourneyScreenState extends State<RoutineJourneyScreen> {
                                 setState(() => _showSummary = true),
                             icon: const Icon(Icons.summarize_outlined))
                     ]),
+                bottomNavigationBar: !ready
+                    ? null
+                    : summary
+                        ? _summaryAction(context)
+                        : _primaryAction(context),
                 body: !ready
                     ? Center(
                         child: c.busy
@@ -131,23 +121,38 @@ class _RoutineJourneyScreenState extends State<RoutineJourneyScreen> {
     final c = widget.controller,
         selected = c.routine.exercises[c.selectedIndex];
     final supported = c.supportsTracking(c.selectedIndex);
+    final presentation = ExercisePresentation.forExercise(selected,
+        organizationId: c.scope.organizationId);
     final status = c.statusFor(c.selectedIndex);
     final disabled = _working || c.busy;
     return [
-      Row(children: [
-        Expanded(
-            child: Text('Your workout journey',
-                style: Theme.of(context).textTheme.titleLarge)),
-        DropdownButton<int>(
-            value: c.day,
-            items: [
-              for (final day in c.days)
-                DropdownMenuItem(value: day, child: Text('Day $day'))
-            ],
-            onChanged: disabled || c.isScheduled
-                ? null
-                : (day) => _act(() => c.openDay(day!))),
-      ]),
+      Panel(
+          background: AppColors.primaryTint,
+          child:
+              Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            Text(c.routine.title,
+                style: Theme.of(context).textTheme.titleLarge),
+            Row(children: [
+              Expanded(
+                  child: Text(
+                      '${c.completedExercises}/${c.dayIndices.length} complete',
+                      style: Theme.of(context).textTheme.titleLarge)),
+              DropdownButton<int>(
+                  value: c.day,
+                  items: [
+                    for (final day in c.days)
+                      DropdownMenuItem(value: day, child: Text('Day $day'))
+                  ],
+                  onChanged: disabled || c.isScheduled
+                      ? null
+                      : (day) => _act(() => c.openDay(day!))),
+            ]),
+            LinearProgressIndicator(
+                value: c.completedExercises / c.dayIndices.length,
+                semanticsLabel: 'Routine progress'),
+            const SizedBox(height: 8),
+            Text(c.checkpoint!.finished ? 'Finished' : 'In progress'),
+          ])),
       const SizedBox(height: 8),
       const Text(
           'Progress saves on this device. Resume from your last saved exercise; unsaved camera attempts are not recovered.',
@@ -174,26 +179,15 @@ class _RoutineJourneyScreenState extends State<RoutineJourneyScreen> {
                             style: const TextStyle(color: AppColors.primary))),
                     title: Text(c.routine.exercises[index].name),
                     subtitle: Text(
-                        '${c.targetsFor(index)}\n${_status(c.statusFor(index))}'),
+                        '${ExercisePresentation.forExercise(c.routine.exercises[index], organizationId: c.scope.organizationId).targetsWithRest}\n${ExercisePresentation.forExercise(c.routine.exercises[index], organizationId: c.scope.organizationId).label} · ${_status(c.statusFor(index))}'),
                     isThreeLine: true,
-                    trailing: Tooltip(
-                        message: c.trackingFor(index).description,
-                        child:
-                            Column(mainAxisSize: MainAxisSize.min, children: [
-                          Icon(
-                              c.supportsTracking(index)
-                                  ? Icons.videocam_outlined
-                                  : Icons.menu_book_outlined,
-                              color: AppColors.primary),
-                          Text(
-                              c
-                                  .capabilityFor(index)
-                                  .displayLabel
-                                  .replaceFirst(' · ', '\n'),
-                              textAlign: TextAlign.center,
-                              style: const TextStyle(
-                                  fontSize: 10, color: AppColors.inkSoft)),
-                        ]))))),
+                    trailing: Icon(
+                        isExerciseTargetComplete(c.statusFor(index))
+                            ? Icons.check_circle_rounded
+                            : index == c.selectedIndex
+                                ? Icons.radio_button_checked
+                                : Icons.radio_button_unchecked,
+                        color: AppColors.primary)))),
       const SizedBox(height: 14),
       Text(
           '${c.completedExercises} / ${c.dayIndices.length} exercises complete',
@@ -215,9 +209,7 @@ class _RoutineJourneyScreenState extends State<RoutineJourneyScreen> {
                         ? Icons.auto_awesome_rounded
                         : Icons.menu_book_outlined,
                     size: 16),
-                label: Text(c.isTimed(c.selectedIndex)
-                    ? 'Video guided · Timer'
-                    : c.capabilityFor(c.selectedIndex).displayLabel),
+                label: Text(presentation.label),
                 backgroundColor: AppColors.primaryTint,
                 side: BorderSide.none)),
         const SizedBox(height: 6),
@@ -227,7 +219,7 @@ class _RoutineJourneyScreenState extends State<RoutineJourneyScreen> {
             child: Text(c.trackingFor(c.selectedIndex).description,
                 style: const TextStyle(color: AppColors.inkSoft)),
           ),
-        Text(c.targetsFor(c.selectedIndex),
+        Text(presentation.targetsWithRest,
             style: const TextStyle(color: AppColors.inkSoft)),
         if (selected.cue.trim().isNotEmpty)
           Padding(
@@ -246,29 +238,8 @@ class _RoutineJourneyScreenState extends State<RoutineJourneyScreen> {
               'Video guided · elapsed workout time. Repetitions and form are not measured.'),
           Text(
               '${c.checkpoint!.guidedProgress[c.selectedIndex]?.completedSets ?? 0}/${selected.sets} timed sets'),
-          FilledButton.icon(
-              onPressed:
-                  disabled || status == RoutineExerciseStatus.timerCompleted
-                      ? null
-                      : () => _act(() => widget.onTrack(c.selectedIndex)),
-              icon: const Icon(Icons.timer_outlined),
-              label: Text(status == RoutineExerciseStatus.timerPartial
-                  ? 'Resume timed exercise'
-                  : 'Start timed exercise')),
         ] else if (supported) ...[
           const SizedBox(height: 8),
-          if (status == RoutineExerciseStatus.completed)
-            const Text(
-                'Measured target complete. Select another exercise or view your routine summary.')
-          else
-            FilledButton.icon(
-                onPressed: disabled
-                    ? null
-                    : () => _act(() => widget.onTrack(c.selectedIndex)),
-                icon: const Icon(Icons.videocam_rounded),
-                label: Text(status == RoutineExerciseStatus.partial
-                    ? 'Retry guided exercise'
-                    : 'Start guided exercise')),
           if (status == RoutineExerciseStatus.partial)
             const Padding(
                 padding: EdgeInsets.only(top: 8),
@@ -278,22 +249,13 @@ class _RoutineJourneyScreenState extends State<RoutineJourneyScreen> {
         ] else ...[
           const SizedBox(height: 10),
           const Text(
-              'Guided only · mark sets as done yourself. Completion is self-reported; no AI repetitions or form score are generated.',
+              'Manual · log each completed set yourself. Repetitions and form are not measured.',
               style: TextStyle(color: AppColors.inkSoft)),
           const SizedBox(height: 10),
           Text(
               '${c.manualSetsFor(c.selectedIndex)} / ${selected.sets} sets · self-reported',
               style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 10),
-          FilledButton.icon(
-              onPressed:
-                  disabled || c.manualSetsFor(c.selectedIndex) >= selected.sets
-                      ? null
-                      : () => _act(() => c.markManualSet(c.selectedIndex)),
-              icon: const Icon(Icons.check_rounded),
-              label: Text(c.manualSetsFor(c.selectedIndex) >= selected.sets
-                  ? 'All sets marked done'
-                  : 'Mark set ${c.manualSetsFor(c.selectedIndex) + 1} done')),
           if (c.manualSetsFor(c.selectedIndex) > 0)
             TextButton(
                 onPressed: disabled
@@ -320,6 +282,95 @@ class _RoutineJourneyScreenState extends State<RoutineJourneyScreen> {
     ];
   }
 
+  Widget _primaryAction(BuildContext context) {
+    final c = widget.controller, index = widget.controller.selectedIndex;
+    final e = c.routine.exercises[index];
+    final p = ExercisePresentation.forExercise(e,
+        organizationId: c.scope.organizationId);
+    final status = c.statusFor(index);
+    final complete = isExerciseTargetComplete(status);
+    final manual = !c.isTimed(index) && !c.supportsTracking(index);
+    final label = complete
+        ? 'Exercise complete'
+        : manual
+            ? 'Mark set ${c.manualSetsFor(index) + 1} done'
+            : status == RoutineExerciseStatus.timerPartial
+                ? 'Resume Timed Workout'
+                : status == RoutineExerciseStatus.partial
+                    ? 'Retry AI Workout'
+                    : p.startLabel;
+    return SafeArea(
+        top: false,
+        child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+            child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(e.name,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.titleSmall),
+                  const SizedBox(height: 6),
+                  Text(p.targetLabel,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.bodySmall),
+                  const SizedBox(height: 6),
+                  FilledButton.icon(
+                      onPressed: _working || c.busy || complete
+                          ? null
+                          : () => _act(() => manual
+                              ? c.markManualSet(index)
+                              : widget.onTrack(index)),
+                      icon: Icon(p.icon),
+                      label: Text(label)),
+                  TextButton.icon(
+                      onPressed: _working || c.busy
+                          ? null
+                          : () => _act(() => widget.onTutorial(index)),
+                      icon: const Icon(Icons.play_circle_outline),
+                      label: const Text('Tutorial')),
+                ])));
+  }
+
+  Widget _summaryAction(BuildContext context) {
+    final c = widget.controller;
+    final label = !c.allTargetsCompleted
+        ? 'Resume unfinished exercises'
+        : c.checkpoint!.finished && c.nextDay != null
+            ? 'Next routine day'
+            : c.isScheduled
+                ? 'Back to weekly schedule'
+                : 'Back to workouts';
+    return SafeArea(
+        top: false,
+        child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+            child: FilledButton(
+                style: FilledButton.styleFrom(
+                    minimumSize: const Size.fromHeight(56)),
+                onPressed: _working || c.busy
+                    ? null
+                    : () {
+                        if (!c.allTargetsCompleted) {
+                          _act(() async {
+                            await c.resume();
+                            if (mounted) setState(() => _showSummary = false);
+                          });
+                        } else if (c.checkpoint!.finished &&
+                            c.nextDay != null) {
+                          _act(() async {
+                            await c.startNextDay();
+                            if (mounted) setState(() => _showSummary = false);
+                          });
+                        } else {
+                          Navigator.pop(context);
+                        }
+                      },
+                child: Text(label, textAlign: TextAlign.center))));
+  }
+
   List<Widget> _summary(BuildContext context) {
     final c = widget.controller;
     final complete = c.dayIndices
@@ -328,7 +379,10 @@ class _RoutineJourneyScreenState extends State<RoutineJourneyScreen> {
     return [
       Text('Routine completion',
           style: Theme.of(context).textTheme.titleMedium),
-      Text(c.checkpoint?.attempt?.statusLabel ?? 'Routine result',
+      Text(
+          c.checkpoint?.attempt == null
+              ? 'In Progress'
+              : workoutAttemptLabel(c.checkpoint!.attempt!),
           style: Theme.of(context).textTheme.headlineSmall),
       Text('${c.routine.title} · Day ${c.day}',
           style: Theme.of(context).textTheme.titleLarge),
@@ -339,17 +393,19 @@ class _RoutineJourneyScreenState extends State<RoutineJourneyScreen> {
           background: AppColors.primaryTint,
           child:
               Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(
-                '$complete measured exercise${complete == 1 ? '' : 's'} complete',
-                style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: 8),
-            Text(
-                '${c.fullRepetitions} full reps · ${c.partialRepetitions} partial reps'),
-            Text(
-                '${c.trackedDurationMicros ~/ 1000000}s tracked across ${c.measuredSessions.length} saved sessions'),
-            const Divider(),
-            Text(
-                '${c.selfReportedSets} self-reported sets · separate from AI measurements'),
+            if (c.measuredSessions.isNotEmpty) ...[
+              Text(
+                  '$complete measured exercise${complete == 1 ? '' : 's'} complete',
+                  style: Theme.of(context).textTheme.titleMedium),
+              const SizedBox(height: 8),
+              Text(
+                  '${c.fullRepetitions} full reps · ${c.partialRepetitions} partial reps'),
+              Text(
+                  '${c.trackedDurationMicros ~/ 1000000}s tracked across ${c.measuredSessions.length} saved sessions'),
+            ],
+            if (c.selfReportedSets > 0)
+              Text(
+                  '${c.selfReportedSets} self-reported sets · separate from AI measurements'),
             if (c.guidedDurationMicros > 0)
               Text(
                   '${c.guidedDurationMicros ~/ 1000000}s video-guided time · Not AI verified'),
@@ -372,7 +428,7 @@ class _RoutineJourneyScreenState extends State<RoutineJourneyScreen> {
         Card(
             child: ListTile(
                 leading: Icon(
-                    c.statusFor(index) == RoutineExerciseStatus.completed
+                    isExerciseTargetComplete(c.statusFor(index))
                         ? Icons.check_circle_rounded
                         : Icons.radio_button_unchecked_rounded,
                     color: AppColors.primary),
@@ -380,25 +436,6 @@ class _RoutineJourneyScreenState extends State<RoutineJourneyScreen> {
                 subtitle: Text(
                     '${_status(c.statusFor(index))}${c.isTimed(index) ? '\n${c.checkpoint!.guidedProgress[index]?.completedSets ?? 0} timed sets · not AI verified' : c.supportsTracking(index) ? '' : '\n${c.manualSetsFor(index)} / ${c.routine.exercises[index].sets} sets self-reported'}${c.sessionsFor(index).isEmpty ? '' : '\n${c.sessionsFor(index).fold<int>(0, (n, s) => n + s.repetitions)} measured full reps'}${c.sessionsFor(index).where((s) => s.poseMetrics?.curlArms != null).map((s) => '\n${s.poseMetrics!.curlArms!.mode.label} · ${s.poseMetrics!.curlArms!.countLabel}').join()}'))),
       const SizedBox(height: 12),
-      if (!c.allTargetsCompleted)
-        FilledButton(
-            onPressed: _working || c.busy
-                ? null
-                : () => _act(() async {
-                      await c.resume();
-                      if (mounted) setState(() => _showSummary = false);
-                    }),
-            child: const Text('Resume unfinished exercises')),
-      if (c.allTargetsCompleted && c.checkpoint!.finished && c.nextDay != null)
-        FilledButton.icon(
-            onPressed: _working || c.busy
-                ? null
-                : () => _act(() async {
-                      await c.startNextDay();
-                      if (mounted) setState(() => _showSummary = false);
-                    }),
-            icon: const Icon(Icons.arrow_forward_rounded),
-            label: const Text('Next routine day')),
       if (widget.onViewProgress != null)
         OutlinedButton(
             onPressed: widget.onViewProgress,
@@ -416,10 +453,12 @@ class _RoutineJourneyScreenState extends State<RoutineJourneyScreen> {
                       if (mounted) setState(() => _showSummary = false);
                     }),
             child: const Text('Repeat this workout')),
-      TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: Text(
-              c.isScheduled ? 'Back to weekly schedule' : 'Back to workouts')),
+      if (!c.allTargetsCompleted || c.nextDay != null)
+        TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text(c.isScheduled
+                ? 'Back to weekly schedule'
+                : 'Back to workouts')),
     ];
   }
 }

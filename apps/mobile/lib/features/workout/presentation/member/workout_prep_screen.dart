@@ -2,6 +2,8 @@ import 'dart:async';
 import '../../domain/exercise_tracker_dispatcher.dart';
 import '../../domain/published_routine_view.dart';
 import '../../application/workout_hub_program.dart';
+import '../../application/workout_hub_attempt.dart';
+import '../workout_presentation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:gainpath_identity/gainpath_identity.dart';
@@ -25,6 +27,9 @@ class WorkoutPrepScreen extends StatelessWidget {
       this.onOpenEquipment,
       this.onOpenPrograms,
       this.scheduledWorkout,
+      this.freeAttempt,
+      this.onStartFree,
+      this.recoveryDayLabel,
       this.onStartScheduled,
       this.programLoading = false,
       this.programLoadError = false,
@@ -39,6 +44,9 @@ class WorkoutPrepScreen extends StatelessWidget {
   final VoidCallback? onOpenEquipment;
   final VoidCallback? onOpenPrograms;
   final ScheduledWorkoutPreview? scheduledWorkout;
+  final WorkoutHubAttempt? freeAttempt;
+  final VoidCallback? onStartFree;
+  final String? recoveryDayLabel;
   final VoidCallback? onStartScheduled;
   final bool programLoading, programLoadError;
   final String? organizationId;
@@ -96,6 +104,7 @@ class WorkoutPrepScreen extends StatelessWidget {
               id: selectedRoutine.id,
               sourceBlueprintId: selectedRoutine.sourceBlueprintId,
               title: selectedRoutine.title,
+              schemaVersion: selectedRoutine.schemaVersion,
               estimatedMinutes: selectedRoutine.estimatedMinutes,
               exercises: routine.cast<PublishedRoutineExercise>(),
               difficulty: selectedRoutine.difficulty,
@@ -105,6 +114,7 @@ class WorkoutPrepScreen extends StatelessWidget {
           MaterialPageRoute(
               builder: (_) => live
                   ? RoutineScreen(
+                      organizationId: organizationId ?? '',
                       publishedRoutine: display,
                       tutorialBuilder: routes.tutorialBuilder)
                   : const RoutineScreen()));
@@ -119,6 +129,22 @@ class WorkoutPrepScreen extends StatelessWidget {
         SliverPadding(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
           sliver: SliverList.list(children: [
+            if (recoveryDayLabel != null) ...[
+              Panel(
+                  child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                    Text(recoveryDayLabel!,
+                        style: Theme.of(context).textTheme.titleLarge),
+                    const Text(
+                        'Follow your planned recovery. Your next workout is shown below.'),
+                    if (!hasWorkout)
+                      FilledButton(
+                          onPressed: onOpenPrograms,
+                          child: const Text('View training schedule')),
+                  ])),
+              const SizedBox(height: 12),
+            ],
             if (programLoading) ...[
               const Panel(
                   child: Row(children: [
@@ -136,13 +162,20 @@ class WorkoutPrepScreen extends StatelessWidget {
                 totalSets: totalSets,
                 minutes: duration,
                 scheduledWorkout: scheduledWorkout,
+                actionLabelOverride:
+                    recoveryDayLabel != null && onOpenPrograms != null
+                        ? 'View Training Schedule'
+                        : null,
+                freeAttempt: freeAttempt,
                 imageUrl: routine.first.imageUrl,
                 switcher: routineCatalogControls,
-                onStart: scheduledWorkout != null
-                    ? onStartScheduled ?? () => showUnavailable(context)
-                    : live
-                        ? () => _startRealSession(context)
-                        : () => _startSession(context),
+                onStart: recoveryDayLabel != null && onOpenPrograms != null
+                    ? onOpenPrograms!
+                    : scheduledWorkout != null
+                        ? onStartScheduled ?? () => showUnavailable(context)
+                        : live
+                            ? onStartFree ?? () => _startRealSession(context)
+                            : () => _startSession(context),
                 journeyFirst: live && routes.journeyBuilder != null,
               ),
               const SizedBox(height: 24),
@@ -173,6 +206,8 @@ class WorkoutPrepScreen extends StatelessWidget {
                                         .exerciseId)
                             .tracker
                         : null,
+                    organizationId: organizationId,
+                    trackers: trackers,
                     onTap: () => openExercise(i),
                   ),
                 ),
@@ -203,6 +238,15 @@ class WorkoutPrepScreen extends StatelessWidget {
             Text('Workout tools',
                 style: Theme.of(context).textTheme.titleLarge),
             const SizedBox(height: 8),
+            if (onOpenPrograms != null) ...[
+              const SizedBox(height: 8),
+              _DetourCard(
+                  icon: Icons.calendar_month_outlined,
+                  iconColor: AppColors.primary,
+                  title: 'My training plan',
+                  subtitle: 'View your schedule and saved progress',
+                  onTap: onOpenPrograms),
+            ],
             _DetourCard(
               icon: Icons.videocam_outlined,
               iconColor: AppColors.primary,
@@ -224,15 +268,6 @@ class WorkoutPrepScreen extends StatelessWidget {
                       MaterialPageRoute(
                           builder: (_) => const EquipmentScannerScreen())),
             ),
-            if (onOpenPrograms != null) ...[
-              const SizedBox(height: 8),
-              _DetourCard(
-                  icon: Icons.calendar_month_outlined,
-                  iconColor: AppColors.primary,
-                  title: 'My training plan',
-                  subtitle: 'View your schedule and saved progress',
-                  onTap: onOpenPrograms),
-            ],
             if (live) ...[
               const SizedBox(height: 8),
               _DetourCard(
@@ -444,6 +479,8 @@ class _WorkoutOverview extends StatelessWidget {
       required this.minutes,
       required this.imageUrl,
       this.scheduledWorkout,
+      this.freeAttempt,
+      this.actionLabelOverride,
       required this.onStart,
       required this.journeyFirst,
       this.switcher});
@@ -451,6 +488,8 @@ class _WorkoutOverview extends StatelessWidget {
   final int exerciseCount, totalSets;
   final int? minutes;
   final ScheduledWorkoutPreview? scheduledWorkout;
+  final WorkoutHubAttempt? freeAttempt;
+  final String? actionLabelOverride;
   final VoidCallback onStart;
   final bool journeyFirst;
   final Widget? switcher;
@@ -482,7 +521,7 @@ class _WorkoutOverview extends StatelessWidget {
                         children: [
                           Text(
                               scheduledWorkout == null
-                                  ? 'SELECTED WORKOUT'
+                                  ? 'FREE WORKOUT'
                                   : 'YOUR PROGRAM · ${scheduledWorkout!.date.day} ${const [
                                       'JAN',
                                       'FEB',
@@ -519,6 +558,25 @@ class _WorkoutOverview extends StatelessWidget {
                         '$exerciseCount ${exerciseCount == 1 ? 'exercise' : 'exercises'} · $totalSets ${totalSets == 1 ? 'set' : 'sets'}${minutes == null ? '' : ' · about $minutes min'}',
                         style:
                             const TextStyle(color: Colors.white, fontSize: 14)),
+                    const SizedBox(height: 12),
+                    if (scheduledWorkout != null)
+                      Text(_scheduledStatus(scheduledWorkout!),
+                          style: const TextStyle(color: Colors.white)),
+                    if (freeAttempt?.checkpoint != null ||
+                        scheduledWorkout?.attempt != null) ...[
+                      Text(
+                          '${scheduledWorkout?.attempt?.completedExercises ?? freeAttempt?.completed ?? 0} / ${scheduledWorkout?.attempt?.entries.length ?? freeAttempt?.total ?? exerciseCount} exercises completed · ${scheduledWorkout?.attempt?.statusLabel ?? freeAttempt?.statusLabel}',
+                          style: const TextStyle(color: Colors.white)),
+                      const SizedBox(height: 8),
+                      LinearProgressIndicator(
+                          value:
+                              (scheduledWorkout?.attempt?.completedExercises ??
+                                      freeAttempt?.completed ??
+                                      0) /
+                                  (scheduledWorkout?.attempt?.entries.length ??
+                                      freeAttempt?.total ??
+                                      exerciseCount)),
+                    ],
                     const SizedBox(height: 16),
                     SizedBox(
                         width: double.infinity,
@@ -529,9 +587,16 @@ class _WorkoutOverview extends StatelessWidget {
                                 minimumSize: const Size(0, 52)),
                             onPressed: onStart,
                             icon: const Icon(Icons.play_arrow_rounded),
-                            label: Text(scheduledWorkout?.inProgress == true
-                                ? 'Continue workout'
-                                : 'Start workout'))),
+                            label: Text(actionLabelOverride ??
+                                (scheduledWorkout != null
+                                    ? scheduledWorkout!.attempt?.finished ==
+                                            true
+                                        ? 'Resume Unfinished Exercises'
+                                        : scheduledWorkout!.inProgress
+                                            ? 'Continue workout'
+                                            : 'Start workout'
+                                    : freeAttempt?.actionLabel ??
+                                        'Start workout')))),
                     if (journeyFirst) ...[
                       const SizedBox(height: 8),
                       const Text(
@@ -549,11 +614,15 @@ class _WorkoutExerciseRow extends StatelessWidget {
       required this.exercise,
       required this.onTap,
       this.day,
-      this.tracker});
+      this.tracker,
+      this.organizationId,
+      this.trackers = const ExerciseTrackerDispatcher()});
   final int index;
   final Exercise exercise;
   final int? day;
   final ExerciseTracker? tracker;
+  final String? organizationId;
+  final ExerciseTrackerDispatcher trackers;
   final VoidCallback onTap;
   @override
   Widget build(BuildContext context) {
@@ -594,20 +663,18 @@ class _WorkoutExerciseRow extends StatelessWidget {
                         style: Theme.of(context).textTheme.titleMedium),
                     const SizedBox(height: 3),
                     Text(
-                        exercise is PublishedRoutineExercise &&
-                                (exercise as PublishedRoutineExercise)
-                                        .durationSeconds !=
-                                    null
-                            ? '${exercise.sets} sets · ${(exercise as PublishedRoutineExercise).durationSeconds}s per set'
-                            : '${exercise.sets} sets · ${exercise.reps} ${switch (tracker) {
-                                ExerciseTracker.sideViewCurl => 'reps per arm',
-                                ExerciseTracker.sideViewRow =>
-                                  'reps per selected arm',
-                                ExerciseTracker.sideViewReverseLunge =>
-                                  'reps per selected leg',
-                                _ => 'reps'
-                              }}${day == null ? '' : ' · Day $day'}',
+                        exercise is PublishedRoutineExercise
+                            ? '${ExercisePresentation.forExercise(exercise as PublishedRoutineExercise, organizationId: organizationId ?? "", trackers: trackers).targetsWithRest}${day == null ? "" : " · Day $day"}'
+                            : '${exercise.sets} sets · ${exercise.reps} reps',
                         style: Theme.of(context).textTheme.bodyMedium),
+                    if (exercise is PublishedRoutineExercise)
+                      Text(
+                          ExercisePresentation.forExercise(
+                                  exercise as PublishedRoutineExercise,
+                                  organizationId: organizationId ?? '',
+                                  trackers: trackers)
+                              .label,
+                          style: Theme.of(context).textTheme.bodySmall),
                     if (equipment.isNotEmpty)
                       Text(equipment,
                           maxLines: 2,
@@ -895,3 +962,15 @@ const lateralRaiseCaptureInstruction =
     'Front view: show both shoulders, elbows, wrists and hips with space on both sides. Hold arms at your sides until Ready, then raise both arms out to shoulder height and lower fully. One bilateral cycle is one rep. Counts are provisional; no form score or load assessment.';
 const lateralRaiseSetupConfirmation =
     'I can face the camera with both arms visible throughout the raise. I will hold my arms at my sides for automatic readiness.';
+
+String _scheduledStatus(ScheduledWorkoutPreview workout) {
+  final now = DateTime.now().toUtc().add(const Duration(hours: 8));
+  final date =
+      DateTime.utc(workout.date.year, workout.date.month, workout.date.day);
+  final today = DateTime.utc(now.year, now.month, now.day);
+  return date == today
+      ? 'Scheduled today'
+      : date.isBefore(today)
+          ? 'Missed · not completed · ${workout.date.day}/${workout.date.month}/${workout.date.year}'
+          : 'Upcoming · ${workout.date.day}/${workout.date.month}/${workout.date.year}';
+}

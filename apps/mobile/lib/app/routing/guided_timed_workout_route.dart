@@ -24,6 +24,8 @@ class GuidedTimedWorkoutRoute extends StatefulWidget {
       required this.exerciseIndex,
       required this.progress,
       required this.persist,
+      this.monotonicNow,
+      this.utcNow,
       this.playerFactory = VideoTutorialPlayer.new});
   final SessionScope scope;
   final PublishedRoutine routine;
@@ -31,6 +33,8 @@ class GuidedTimedWorkoutRoute extends StatefulWidget {
   final GuidedTimedProgress progress;
   final Future<void> Function(GuidedTimedProgress) persist;
   final TutorialPlayerFactory playerFactory;
+  final Duration Function()? monotonicNow;
+  final DateTime Function()? utcNow;
   @override
   State<GuidedTimedWorkoutRoute> createState() =>
       _GuidedTimedWorkoutRouteState();
@@ -112,15 +116,17 @@ class _GuidedTimedWorkoutRouteState extends State<GuidedTimedWorkoutRoute>
           player: player,
           activeScope: () => mounted && _authorized && _allowed(auth.state),
           persist: widget.persist,
-          monotonicNow: () => _clock.elapsed);
+          monotonicNow: widget.monotonicNow ?? () => _clock.elapsed,
+          utcNow: widget.utcNow);
       _ticker = Timer.periodic(const Duration(milliseconds: 100), (_) {
         if (_foreground && _authorized) {
           if (ModalRoute.of(context)?.isCurrent == false) {
             if (_controller!.progress.phase == GuidedTimedPhase.working ||
-                _controller!.progress.phase == GuidedTimedPhase.resting)
+                _controller!.progress.phase == GuidedTimedPhase.resting) {
               unawaited(_controller!
                   .interrupt('route obscured')
                   .catchError((Object _) {}));
+            }
           } else {
             unawaited(_controller!.tick().catchError((Object _) {}));
           }
@@ -170,7 +176,7 @@ class _GuidedTimedWorkoutRouteState extends State<GuidedTimedWorkoutRoute>
                 actions: [
                   TextButton(
                       onPressed: () => Navigator.pop(context, 'continue'),
-                      child: const Text('Continue workout')),
+                      child: const Text('Return to paused workout')),
                   TextButton(
                       onPressed: () => Navigator.pop(context, 'skip'),
                       child: const Text('Skip exercise')),

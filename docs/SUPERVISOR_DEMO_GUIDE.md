@@ -491,3 +491,7 @@ The prepared backend changes only `miniGameContentCommand` content source. Its l
 ### Fitness Arcade P1A Member walkthrough
 
 Open Rewards: claim the existing daily app check-in above the two Play cards. Each game shows its own on-device personal best or Unavailable, plus confirmed earning availability; Reach & Tap still shows Points · Not active. Tap a card for the existing managed guide and camera-consent flow. Returning refreshes the cards/wallet/rank; explicit refresh remains available. The compact rank is earned-points weekly rank, not a game-score ranking. Shop and My Rewards remain accessible below; Badges now opens a separate screen with actual first/three/seven-day check-in progress and unlock dates. Full history and rankings remain secondary routes. No new Fun/Earn mode implementation, competitive publication, reward goal or extra earning is included in P1A.
+
+## Member workout UX implementation — 7 November 2026
+
+Implemented the existing Member workout journey improvements: state-derived resume actions, typed AI Tracked/Video Timed/Manual targets, contextual tutorials, anchored controls and truthful summaries. Verification: 147 affected tests passed; analysis clean across 32 changed Dart files; Android debug APK built. Tracking algorithms, persistence contracts, Program linkage and reward restrictions are unchanged by this feature. No APK was installed while the connected app's idle state was uncertain. See [implementation details](ux/member-workout-ux-implementation.md).

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
 import '../../domain/published_routine_view.dart';
+import '../workout_presentation.dart';
 
 enum RoutineNextAction { start, tutorial }
 
@@ -14,8 +15,10 @@ class RoutineNextExerciseSheet extends StatelessWidget {
       required this.totalExercises,
       required this.capabilityLabel,
       required this.guidance,
+      this.organizationId = '',
       this.hasTracking = true,
       this.perArmTargets = false});
+  final String organizationId;
   final bool perArmTargets;
   final bool hasTracking;
   final String previousExercise, capabilityLabel, guidance;
@@ -53,14 +56,21 @@ class RoutineNextExerciseSheet extends StatelessWidget {
               Text(exercise.name,
                   style: Theme.of(context).textTheme.headlineSmall),
               const SizedBox(height: 8),
-              Text(exercise.durationSeconds != null
-                  ? '${exercise.sets} sets · ${exercise.durationSeconds}s per set · ${exercise.restSeconds}s rest'
-                  : '${exercise.sets} sets · ${exercise.reps} reps${perArmTargets ? ' per arm' : ''} per set'),
-              Text(capabilityLabel,
+              Text(ExercisePresentation.forExercise(exercise,
+                      organizationId: organizationId)
+                  .targetsWithRest),
+              Text(
+                  ExercisePresentation.forExercise(exercise,
+                          organizationId: organizationId)
+                      .label,
                   style: const TextStyle(
                       color: AppColors.primary, fontWeight: FontWeight.w600)),
               const SizedBox(height: 8),
-              Text(guidance, style: const TextStyle(color: AppColors.inkSoft)),
+              Text(
+                  ExercisePresentation.forExercise(exercise,
+                          organizationId: organizationId)
+                      .description,
+                  style: const TextStyle(color: AppColors.inkSoft)),
               const SizedBox(height: 8),
               Text(exercise.durationSeconds != null
                   ? 'Start the video-guided timer when ready. No camera is required.'

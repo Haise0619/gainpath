@@ -1,4 +1,6 @@
 import 'dart:async';
+import '../../features/workout/presentation/workout_presentation.dart';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:gainpath_domain/gainpath_domain.dart'
@@ -10,12 +12,16 @@ import '../../features/workout/domain/tutorial_player.dart';
 import '../../features/workout/presentation/member/published_exercise_tutorial_screen.dart';
 import '../../infrastructure/media/video_tutorial_player.dart';
 
+enum ExerciseTutorialOutcome { startExercise }
+
 class ExerciseTutorialRoute extends StatefulWidget {
   const ExerciseTutorialRoute(
       {super.key,
       required this.scope,
       required this.exercise,
+      this.allowStart = false,
       this.playerFactory = VideoTutorialPlayer.new});
+  final bool allowStart;
   final SessionScope scope;
   final PublishedRoutineExercise exercise;
   final TutorialPlayerFactory playerFactory;
@@ -53,6 +59,15 @@ class _ExerciseTutorialRouteState extends State<ExerciseTutorialRoute> {
         exerciseId: widget.exercise.exerciseId);
     return PublishedExerciseTutorialScreen(
       exercise: widget.exercise,
+      presentation: ExercisePresentation.forExercise(widget.exercise,
+          organizationId: widget.scope.organizationId),
+      onStart: widget.allowStart
+          ? () {
+              if (_authorized.value) {
+                Navigator.pop(context, ExerciseTutorialOutcome.startExercise);
+              }
+            }
+          : null,
       playerFactory: widget.playerFactory,
       perArmTargets: tracking.tracker == ExerciseTracker.sideViewCurl,
       targetLabel: switch (tracking.tracker) {

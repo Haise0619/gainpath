@@ -12,6 +12,53 @@ import 'package:gainpath_domain/workout.dart';
 import 'guided_timed_workout_controller_test.dart' show Player;
 
 void main() {
+  testWidgets('timed controls remain visible on a small screen with large text',
+      (tester) async {
+    tester.view.physicalSize = const Size(360, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final c = GuidedTimedWorkoutController(
+        progress: GuidedTimedProgress(
+            runId: 'r',
+            entryId: 'e',
+            entryIndex: 0,
+            exerciseId: 'x',
+            prescription: const TimedPrescription(
+                sets: 3, durationSeconds: 45, restSeconds: 30),
+            mediaIdentity: 'v',
+            updatedAt: DateTime.now().toUtc()),
+        player: Player(),
+        activeScope: () => true,
+        persist: (_) async {});
+    await c.initialize();
+    await tester.pumpWidget(MaterialApp(
+        builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(context).copyWith(
+                textScaler: TextScaler.linear(2),
+                padding: const EdgeInsets.only(bottom: 24)),
+            child: child!),
+        home: GuidedTimedWorkoutScreen(
+            controller: c,
+            exerciseName: 'Long timed exercise title',
+            onBack: () async {},
+            onSkip: () async {},
+            onCompleted: () {})));
+    expect(tester.takeException(), isNull);
+    final start = find.text('Start Timed Workout');
+    expect(tester.getRect(start).bottom, lessThanOrEqualTo(616));
+    await tester.tap(start);
+    await tester.pumpAndSettle();
+    expect(find.text('Pause'), findsOneWidget);
+    expect(find.text('Working'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await tester.tap(find.text('Pause'));
+    await tester.pumpAndSettle();
+    expect(find.text('Paused'), findsOneWidget);
+    expect(tester.getRect(find.text('Resume')).bottom, lessThanOrEqualTo(616));
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox());
+    c.dispose();
+  });
   testWidgets('camera-free timer displays truthful target and explicit start',
       (tester) async {
     final c = GuidedTimedWorkoutController(
@@ -36,9 +83,9 @@ void main() {
             onSkip: () async {},
             onCompleted: () {})));
     expect(find.text('Not AI verified'), findsOneWidget);
-    expect(find.text('Start workout'), findsOneWidget);
+    expect(find.text('Start Timed Workout'), findsOneWidget);
     expect(find.textContaining('0/3 sets'), findsOneWidget);
-    await tester.tap(find.text('Start workout'));
+    await tester.tap(find.text('Start Timed Workout'));
     await tester.pump();
     expect(c.progress.phase, GuidedTimedPhase.working);
     expect(find.text('Pause'), findsOneWidget);
@@ -100,21 +147,42 @@ void main() {
                 routine: routine,
                 exerciseIndex: 0,
                 progress: progress,
+                monotonicNow: () => Duration.zero,
                 persist: (_) async {
                   writes++;
                 },
                 playerFactory: (_) => player))));
     await tester.pump();
     await tester.pump();
-    expect(find.text('Start workout'), findsOneWidget);
-    await tester.tap(find.text('Start workout'));
+    expect(find.text('Start Timed Workout'), findsOneWidget);
+    await tester.tap(find.text('Start Timed Workout'));
     await tester.pump();
     expect(player.playing, true);
-    await tester.tap(find.byTooltip('Back to routine'));
+    // Playback can start before the initial durable save finishes. Wait for
+    // the visible back control to become enabled instead of tapping it busy.
+    for (var frame = 0;
+        frame < 10 &&
+            tester
+                    .widget<IconButton>(find.byWidgetPredicate((widget) =>
+                        widget is IconButton &&
+                        widget.tooltip == 'Back to routine'))
+                    .onPressed ==
+                null;
+        frame++) {
+      await tester.pump(const Duration(milliseconds: 1));
+    }
+    expect(
+        tester
+            .widget<IconButton>(find.byWidgetPredicate((widget) =>
+                widget is IconButton && widget.tooltip == 'Back to routine'))
+            .onPressed,
+        isNotNull);
+    await tester.tap(find.byWidgetPredicate((widget) =>
+        widget is IconButton && widget.tooltip == 'Back to routine'));
     await tester.pumpAndSettle();
     expect(find.text('Save progress & exit'), findsOneWidget);
     expect(player.playing, false);
-    await tester.tap(find.text('Continue workout'));
+    await tester.tap(find.text('Return to paused workout'));
     await tester.pumpAndSettle();
     expect(find.text('Resume'), findsOneWidget);
     final before = writes;

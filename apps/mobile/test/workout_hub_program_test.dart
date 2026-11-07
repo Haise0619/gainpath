@@ -163,7 +163,7 @@ void main() {
     await tester.tap(find.text('Free strength'));
     await tester.pumpAndSettle();
     expect(find.text('Free strength'), findsOneWidget);
-    expect(find.text('SELECTED WORKOUT'), findsOneWidget);
+    expect(find.text('FREE WORKOUT'), findsOneWidget);
     expect(store.journal.revision, revision);
     await tester.tap(find.text('Change workout'));
     await tester.pumpAndSettle();

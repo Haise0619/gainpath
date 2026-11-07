@@ -6,6 +6,7 @@ import '../../domain/published_routine_view.dart';
 import '../../domain/tutorial_media.dart';
 import '../../domain/tutorial_player.dart';
 import 'widgets/exercise_tutorial_image.dart';
+import '../workout_presentation.dart';
 
 /// Published content viewer. Viewing never creates a measured workout record.
 class PublishedExerciseTutorialScreen extends StatefulWidget {
@@ -14,10 +15,14 @@ class PublishedExerciseTutorialScreen extends StatefulWidget {
       required this.exercise,
       required this.playerFactory,
       this.authorized,
+      this.onStart,
+      this.presentation,
       this.trackingLabel,
       this.trackingDescription,
       this.targetLabel,
       this.perArmTargets = false});
+  final VoidCallback? onStart;
+  final ExercisePresentation? presentation;
   final String? trackingLabel, trackingDescription, targetLabel;
   final bool perArmTargets;
   final PublishedRoutineExercise exercise;
@@ -201,6 +206,20 @@ class _PublishedExerciseTutorialScreenState
     final ended = ready && total > 0 && position >= total;
     return Scaffold(
         appBar: AppBar(title: Text(e.name)),
+        bottomNavigationBar: widget.onStart == null
+            ? null
+            : SafeArea(
+                top: false,
+                child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: FilledButton.icon(
+                        onPressed:
+                            _foreground && !_busy ? widget.onStart : null,
+                        icon: const Icon(Icons.play_arrow_rounded),
+                        label: Text(widget.presentation?.mode ==
+                                WorkoutExerciseMode.manual
+                            ? 'Open Set Logger'
+                            : 'Start Exercise')))),
         body: PageBody(children: [
           if (e.imageUrl.isNotEmpty) ...[
             ExerciseTutorialImage(
@@ -350,19 +369,24 @@ class _PublishedExerciseTutorialScreenState
           Panel(
               child: Column(children: [
             DetailRow('Day', '${e.dayNumber}'),
-            DetailRow('Sets', '${e.sets}'),
-            DetailRow(
-                (e.durationSeconds != null
-                        ? 'Duration per set'
-                        : widget.targetLabel) ??
-                    (widget.perArmTargets
-                        ? 'Reps per arm per set'
-                        : 'Reps per set'),
-                e.durationSeconds != null
-                    ? '${e.durationSeconds}s'
-                    : '${e.reps}'),
-            DetailRow(
-                'Rest', e.restSeconds == 0 ? 'No rest' : '${e.restSeconds} sec')
+            if (widget.presentation != null) ...[
+              DetailRow('Target', widget.presentation!.targetLabel),
+              DetailRow('Rest', widget.presentation!.restLabel),
+            ] else ...[
+              DetailRow('Sets', '${e.sets}'),
+              DetailRow(
+                  (e.durationSeconds != null
+                          ? 'Duration per set'
+                          : widget.targetLabel) ??
+                      (widget.perArmTargets
+                          ? 'Reps per arm per set'
+                          : 'Reps per set'),
+                  e.durationSeconds != null
+                      ? '${e.durationSeconds}s'
+                      : '${e.reps}'),
+              DetailRow('Rest',
+                  e.restSeconds == 0 ? 'No rest' : '${e.restSeconds} sec'),
+            ],
           ])),
           if (widget.trackingLabel != null) ...[
             const SizedBox(height: 18),
@@ -371,11 +395,12 @@ class _PublishedExerciseTutorialScreenState
                 child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                  Text(widget.trackingLabel!,
+                  Text(widget.presentation?.label ?? widget.trackingLabel!,
                       style: Theme.of(context).textTheme.titleMedium),
                   if (widget.trackingDescription != null) ...[
                     const SizedBox(height: 4),
-                    Text(widget.trackingDescription!),
+                    Text(widget.presentation?.description ??
+                        widget.trackingDescription!),
                   ],
                 ])),
           ],

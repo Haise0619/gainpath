@@ -74,6 +74,9 @@ class WorkoutBackupScreen extends StatelessWidget {
                     Text(c.state.enabled
                         ? 'Results save on this device first and back up automatically while the app is open and connected. No manual sync is needed. Saved copies remain provisional; backup does not verify workouts or earn rewards.'
                         : 'Results stay saved on this device. Turning backup off stops future sync and does not delete existing cloud copies. Saved copies remain provisional; backup does not verify workouts or earn rewards.'),
+                    const SizedBox(height: 8),
+                    const Text(
+                        'Training schedules stay on this device and are not included in backup.'),
                     if (c.busy) const LinearProgressIndicator(),
                     if (c.state.lastError != null)
                       const Padding(

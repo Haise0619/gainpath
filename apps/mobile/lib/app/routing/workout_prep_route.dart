@@ -7,6 +7,7 @@ import 'package:gainpath_domain/gainpath_domain.dart'
 import 'package:gainpath_domain/membership.dart';
 import '../../navigation/membership_access_gate.dart';
 import '../../features/workout/application/workout_hub_program.dart';
+import '../../features/workout/application/workout_hub_attempt.dart';
 import '../../features/workout/application/workout_program_controller.dart';
 import '../../features/workout/domain/program_enrollment.dart';
 import '../../features/workout/domain/routine_journey.dart';
@@ -58,6 +59,7 @@ class _WorkoutPrepRouteState extends State<WorkoutPrepRoute>
   WorkoutProgramController? _controller;
   WorkoutHubProgram? _hub;
   ScheduledWorkoutPreview? _scheduled;
+  List<RoutineCheckpoint> _checkpoints = [];
   bool _loading = false,
       _loadError = false,
       _showFree = false,
@@ -112,6 +114,7 @@ class _WorkoutPrepRouteState extends State<WorkoutPrepRoute>
     _controller = null;
     _hub = null;
     _scheduled = null;
+    _checkpoints = [];
     _showFree = false;
     _scope = current;
     if (current != null) {
@@ -134,8 +137,13 @@ class _WorkoutPrepRouteState extends State<WorkoutPrepRoute>
     }
     WorkoutProgramController? candidate;
     try {
-      final store = await widget.programStoreFactory(scope);
       final routineStore = await widget.routineStoreFactory(scope);
+      final checkpoints = await routineStore.load();
+      if (!mounted || generation != _generation || _activeScope() != scope) {
+        return;
+      }
+      setState(() => _checkpoints = checkpoints);
+      final store = await widget.programStoreFactory(scope);
       if (!mounted || generation != _generation || _activeScope() != scope) {
         return;
       }
@@ -155,6 +163,7 @@ class _WorkoutPrepRouteState extends State<WorkoutPrepRoute>
         _controller = candidate;
         _hub = hub;
         _scheduled = preview;
+        _checkpoints = checkpoints;
         _loading = false;
       });
       candidate = null;
@@ -219,7 +228,11 @@ class _WorkoutPrepRouteState extends State<WorkoutPrepRoute>
                       scope: scope,
                       routine: launch.routine,
                       programAttemptId: launch.attemptId,
-                      initialDay: launch.routineDay))));
+                      initialDay: launch.routineDay,
+                      action: shown.attempt?.finished == true &&
+                              shown.attempt?.isComplete != true
+                          ? RoutineJourneyAction.resume
+                          : RoutineJourneyAction.view))));
     } catch (_) {
       if (mounted && _activeScope() == scope) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
@@ -284,9 +297,41 @@ class _WorkoutPrepRouteState extends State<WorkoutPrepRoute>
                 : () => _openPrograms(scope, auth),
             onOpenEquipment: widget.onOpenEquipment,
             publishedRoutine: widget.publishedRoutine,
+            freeAttempt: scope == null || widget.publishedRoutine == null
+                ? null
+                : WorkoutHubAttempt.fromCheckpoints(
+                    scope: scope,
+                    routine: widget.publishedRoutine!,
+                    checkpoints: _checkpoints),
+            onStartFree: scope == null ||
+                    auth == null ||
+                    widget.publishedRoutine == null
+                ? null
+                : () async {
+                    await Navigator.push(
+                        context,
+                        MaterialPageRoute<void>(
+                            builder: (_) => BlocProvider.value(
+                                value: auth,
+                                child: RoutineJourneyRoute(
+                                    scope: scope,
+                                    routine: widget.publishedRoutine!,
+                                    action: WorkoutHubAttempt.fromCheckpoints(
+                                                scope: scope,
+                                                routine:
+                                                    widget.publishedRoutine!,
+                                                checkpoints: _checkpoints)
+                                            .resumeUnfinished
+                                        ? RoutineJourneyAction.resume
+                                        : RoutineJourneyAction.view))));
+                    if (mounted && _activeScope() == scope) {
+                      await _reload(scope);
+                    }
+                  },
+            recoveryDayLabel: !_showFree ? _hub?.recoveryDayLabel : null,
             scheduledWorkout: scheduled,
             onStartScheduled: scheduled == null ? null : _startScheduled,
-            programLoading: _loading && !_showFree,
+            programLoading: _loading,
             programLoadError: _loadError,
             routineLoadFailed: widget.routineLoadFailed,
             routineStatusMessage: widget.routineStatusMessage,

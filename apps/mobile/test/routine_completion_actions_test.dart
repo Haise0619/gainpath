@@ -53,7 +53,8 @@ void main() {
         find.text('Workout rewards · Not active'), 200);
     await tester.pumpAndSettle();
     expect(find.text('Workout rewards · Not active'), findsOneWidget);
-    expect(find.textContaining('physical validation'), findsOneWidget);
+    expect(find.textContaining('Your workout progress is still saved'),
+        findsOneWidget);
     expect(find.text('Claim reward'), findsNothing);
     await tester.scrollUntilVisible(find.text('View progress'), 250);
     await tester.pumpAndSettle();

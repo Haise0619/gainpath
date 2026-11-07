@@ -359,7 +359,7 @@ class _RealWorkoutViewState extends State<RealWorkoutView> {
                                                 overflow: TextOverflow.ellipsis,
                                                 style: const TextStyle(
                                                     color: Colors.white,
-                                                    fontSize: 12,
+                                                    fontSize: 14,
                                                     fontWeight:
                                                         FontWeight.w500))),
                                       ])))),

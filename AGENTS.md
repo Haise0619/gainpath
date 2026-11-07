@@ -167,3 +167,7 @@ The current task's scope takes precedence over these defaults. Documentation Pha
 - Keep private fixtures, tokens, screenshots and device/session backups out of source control/public reports. Ignored `build/` paths contain protected evidence and authored tools; no blanket clean, move or deletion without a reviewed retention scope.
 - Use focused affected-module checks for routine changes and broader gates for integration/release. Never report historical or unrun tests as fresh passes.
 - Keep completion reports concise: changes, verification, material risks/blockers, and the next approval action if any. Update the six operational references and the requested docs/PROGRESS_REPORT.md when their facts change; do not create a long new report for every small task.
+
+## Member workout UX implementation — 7 November 2026
+
+Implemented the existing Member workout journey improvements: state-derived resume actions, typed AI Tracked/Video Timed/Manual targets, contextual tutorials, anchored controls and truthful summaries. Verification: 147 affected tests passed; analysis clean across 32 changed Dart files; Android debug APK built. Tracking algorithms, persistence contracts, Program linkage and reward restrictions are unchanged by this feature. No APK was installed while the connected app's idle state was uncertain. See [implementation details](docs/ux/member-workout-ux-implementation.md).

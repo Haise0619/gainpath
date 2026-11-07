@@ -426,9 +426,9 @@ void main() {
     expect(route.scope, auth.state.session!.scope);
     expect(identical(route.exercise, routine.exercises.single), true);
     expect(find.text('Tutorial video unavailable'), findsOneWidget);
-    await tester.scrollUntilVisible(find.text('60 sec'), 200);
-    expect(find.text('60 sec'), findsOneWidget);
-    expect(find.text('Guided only'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('60 sec rest'), 200);
+    expect(find.text('60 sec rest'), findsOneWidget);
+    expect(find.text('Manual'), findsOneWidget);
     await tester.runAsync(() async {
       auth.add(const LoggedOut());
       await auth.stream.firstWhere((s) => s.status == AuthStatus.signedOut);

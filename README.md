@@ -257,3 +257,7 @@ Side-view wall push-up is implemented and installed on the approved Xiaomi, with
 Membership is organization-wide: effective Free plus approved Basic MYR 89 and Premium MYR 129, each paid term 30 days. Manual renewal preserves paid time. Recurring billing is unavailable; Stage B rewards and Stage C vouchers remain held. [STATUS](docs/STATUS.md) records the accepted scopes and separate Billplz refund limitation.
 
 Routine authorized local work uses focused checks and concise reports. Cloud, financial, sensitive configuration, destructive data and account/role actions need explicit approval within their exact scope. Documentation Phase 1 and the subsequent local backend-selection fix do not authorize source cleanup, cache deletion, cloud changes or device actions. A source fix does not update existing APKs or served bundles. Preserve frozen workout/pose implementations, dirty work and private financial/release evidence.
+
+## Member workout UX implementation — 7 November 2026
+
+Implemented the existing Member workout journey improvements: state-derived resume actions, typed AI Tracked/Video Timed/Manual targets, contextual tutorials, anchored controls and truthful summaries. Verification: 147 affected tests passed; analysis clean across 32 changed Dart files; Android debug APK built. Tracking algorithms, persistence contracts, Program linkage and reward restrictions are unchanged by this feature. No APK was installed while the connected app's idle state was uncertain. See [implementation details](docs/ux/member-workout-ux-implementation.md).

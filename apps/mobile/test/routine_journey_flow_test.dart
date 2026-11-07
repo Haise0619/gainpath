@@ -200,16 +200,14 @@ void main() {
             })));
     await mount();
     await tester.pumpAndSettle();
-    await tester.scrollUntilVisible(find.text('Start guided exercise'), 200);
-    await tester.tap(find.text('Start guided exercise'));
+    await tester.tap(find.text('Start AI Workout'));
     await tester.pumpAndSettle();
     expect(captures, 1);
     expect(c.selectedIndex, 1);
-    await tester.scrollUntilVisible(find.text('Watch exercise tutorial'), 150);
-    await tester.tap(find.text('Watch exercise tutorial'));
+    await tester.tap(find.text('Tutorial'));
     await tester.pumpAndSettle();
     expect(tutorials, 1);
-    expect(find.textContaining('Guided only ·'), findsOneWidget);
+    expect(find.textContaining('Manual ·'), findsOneWidget);
     await tester.scrollUntilVisible(
         find.text('Mark instructions reviewed'), 150);
     await tester.tap(find.text('Mark instructions reviewed'));
@@ -224,7 +222,7 @@ void main() {
     // Finishing the last target now opens the summary without another gate.
     expect(find.text('Routine summary'), findsOneWidget);
     expect(find.text('2 full reps · 1 partial reps'), findsOneWidget);
-    expect(find.textContaining('Self-reported sets complete'), findsOneWidget);
+    expect(find.textContaining('Completed · Self-reported'), findsOneWidget);
     expect(find.text('2 self-reported sets · separate from AI measurements'),
         findsOneWidget);
     expect(c.checkpoint!.finished, true);

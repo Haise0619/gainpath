@@ -39,17 +39,7 @@ class RoutineWorkoutRewardPanel extends StatelessWidget {
                     style: Theme.of(context).textTheme.titleMedium),
                 const SizedBox(height: 8),
                 const Text(
-                    'Routine completion is saved separately. Workout rewards stay off pending physical validation and policy activation.'),
-                if (difficulty != null) ...[
-                  const SizedBox(height: 8),
-                  Text('Difficulty: $difficulty')
-                ],
-                const SizedBox(height: 8),
-                const Text(
-                    'Mixed and manual routines are excluded from automatic rewards. Provisional measurements do not qualify.'),
-                const SizedBox(height: 8),
-                const Text(
-                    'Premium 1.5×, difficulty multipliers and form-score bonuses are not active.'),
+                    'Workout points are not available yet. Your workout progress is still saved.'),
               ]));
         });
   }

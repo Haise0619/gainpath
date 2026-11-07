@@ -1,4 +1,5 @@
 import 'dart:async';
+import '../../features/workout/presentation/workout_presentation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:gainpath_domain/gainpath_domain.dart'
@@ -51,6 +52,8 @@ class RoutineJourneyRoute extends StatefulWidget {
       this.attemptId,
       this.programAttemptId,
       this.initialDay = 1,
+      this.storeFactory = createRoutineJourneyStore,
+      this.workoutStoreFactory = createWorkoutStore,
       this.action = RoutineJourneyAction.view});
   final SessionScope scope;
   final PublishedRoutine routine;
@@ -59,6 +62,8 @@ class RoutineJourneyRoute extends StatefulWidget {
   final String? programAttemptId;
   final int initialDay;
   final RoutineJourneyAction action;
+  final Future<RoutineJourneyStore> Function(SessionScope) storeFactory;
+  final Future<WorkoutSessionStore> Function(SessionScope) workoutStoreFactory;
   @override
   State<RoutineJourneyRoute> createState() => _RoutineJourneyRouteState();
 }
@@ -83,8 +88,8 @@ class _RoutineJourneyRouteState extends State<RoutineJourneyRoute> {
     final auth = context.read<AuthBloc>();
     try {
       if (!_authorized(auth)) throw StateError('Routine account unavailable');
-      final store = await createRoutineJourneyStore(widget.scope);
-      final workoutStore = await createWorkoutStore(widget.scope);
+      final store = await widget.storeFactory(widget.scope);
+      final workoutStore = await widget.workoutStoreFactory(widget.scope);
       if (!mounted || !_authorized(auth)) return;
       _workouts = WorkoutSessionRepository(
           scope: widget.scope,
@@ -135,8 +140,9 @@ class _RoutineJourneyRouteState extends State<RoutineJourneyRoute> {
     if (!_authorized(auth)) return;
     final execution = c.executionFor(index);
     if (c.isTimed(index)) {
-      if (execution.kind != ExerciseExecutionKind.timed)
+      if (execution.kind != ExerciseExecutionKind.timed) {
         throw StateError('Video guided exercise unavailable');
+      }
       final progress = await c.prepareGuidedSession(index);
       if (!mounted || !_authorized(auth)) return;
       final outcome = await Navigator.push<GuidedTimedWorkoutOutcome>(
@@ -161,8 +167,9 @@ class _RoutineJourneyRouteState extends State<RoutineJourneyRoute> {
       if (!mounted || !_authorized(auth)) return;
       if (c.statusFor(index) == RoutineExerciseStatus.timerCompleted &&
           !c.checkpoint!.finished &&
-          c.unfinishedIndices.isNotEmpty)
+          c.unfinishedIndices.isNotEmpty) {
         await _nextExercise(widget.routine.exercises[index].name);
+      }
       return;
     }
     if (!c.supportsTracking(index)) {
@@ -263,6 +270,7 @@ class _RoutineJourneyRouteState extends State<RoutineJourneyRoute> {
               builder: (context, _) => c.authorized && _authorized(auth)
                   ? RoutineNextExerciseSheet(
                       previousExercise: previousExercise,
+                      organizationId: widget.scope.organizationId,
                       exercise: widget.routine.exercises[index],
                       completedExercises: c.completedExercises,
                       totalExercises: c.dayIndices.length,
@@ -289,16 +297,38 @@ class _RoutineJourneyRouteState extends State<RoutineJourneyRoute> {
   }
 
   Future<void> _tutorial(int index) async {
-    final auth = context.read<AuthBloc>();
+    final auth = context.read<AuthBloc>(), c = _controller!;
     if (!_authorized(auth)) return;
-    await Navigator.push<void>(
+    final attemptId = c.checkpoint?.id, day = c.day;
+    final outcome = await Navigator.push<ExerciseTutorialOutcome>(
         context,
         MaterialPageRoute(
             builder: (_) => BlocProvider.value(
                 value: auth,
                 child: ExerciseTutorialRoute(
                     scope: widget.scope,
-                    exercise: widget.routine.exercises[index]))));
+                    exercise: widget.routine.exercises[index],
+                    allowStart: attemptId != null &&
+                        !c.checkpoint!.finished &&
+                        !isExerciseTargetComplete(c.statusFor(index))))));
+    if (!mounted ||
+        !_authorized(auth) ||
+        outcome != ExerciseTutorialOutcome.startExercise ||
+        c.checkpoint?.id != attemptId ||
+        c.day != day ||
+        c.checkpoint!.finished ||
+        !c.dayIndices.contains(index) ||
+        isExerciseTargetComplete(c.statusFor(index))) {
+      return;
+    }
+    await c.select(index);
+    if (!mounted ||
+        !_authorized(auth) ||
+        c.checkpoint?.id != attemptId ||
+        c.selectedIndex != index) {
+      return;
+    }
+    if (c.isTimed(index) || c.supportsTracking(index)) await _track(index);
   }
 
   Future<void> _openProgress(MemberProgressView view) async {

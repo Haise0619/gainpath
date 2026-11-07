@@ -179,9 +179,10 @@ void main() {
         ]))));
     await t.pumpAndSettle();
     expect(find.text('Workout rewards · Not active'), findsOneWidget);
-    expect(find.text('Difficulty: Intermediate'), findsOneWidget);
-    expect(find.textContaining('physical validation'), findsOneWidget);
-    expect(find.textContaining('Mixed and manual'), findsOneWidget);
+    expect(find.textContaining('Your workout progress is still saved'),
+        findsOneWidget);
+    expect(find.textContaining('policy activation'), findsNothing);
+    expect(find.textContaining('multipliers'), findsNothing);
     expect(find.byType(FilledButton), findsNothing);
     expect(t.takeException(), isNull);
   });

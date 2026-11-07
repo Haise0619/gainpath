@@ -403,3 +403,7 @@ Use [STATUS](STATUS.md) for current business holds and [the archive index](archi
 ### Standing GainPath device update authorization — 29 October
 
 The owner authorized routine verified GainPath APK updates on existing Xiaomi7c4cbff without repeated approval prompts. Build and check the requested fix, preserve the previous installed APK and signer/app identity/data, avoid interrupting an unsaved active workout/game, install in place and verify installed hash/launch. This supersedes older per-APK separate-confirmation wording. Uninstall/data clearing, new devices, unrelated publication and cloud/Rules/IAM/account/reward operations retain their own authority boundaries.
+
+## Member workout UX implementation — 7 November 2026
+
+Implemented the existing Member workout journey improvements: state-derived resume actions, typed AI Tracked/Video Timed/Manual targets, contextual tutorials, anchored controls and truthful summaries. Verification: 147 affected tests passed; analysis clean across 32 changed Dart files; Android debug APK built. Tracking algorithms, persistence contracts, Program linkage and reward restrictions are unchanged by this feature. No APK was installed while the connected app's idle state was uncertain. See [implementation details](ux/member-workout-ux-implementation.md).

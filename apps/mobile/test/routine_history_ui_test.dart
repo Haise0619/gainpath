@@ -42,6 +42,13 @@ RoutineAttempt attempt({bool complete = true}) {
 
 void main() {
   setUpAll(() => GoogleFonts.config.allowRuntimeFetching = false);
+  testWidgets('manual and skipped results omit unsupported measured totals',
+      (tester) async {
+    await tester.pumpWidget(MaterialApp(
+        home: RoutineAttemptDetailScreen(attempt: attempt(complete: false))));
+    expect(find.textContaining('0 measured full reps'), findsNothing);
+    expect(find.textContaining('0s camera-tracked'), findsNothing);
+  });
   testWidgets('routine card shows routine days separately from camera sessions',
       (tester) async {
     final a = attempt();
@@ -67,7 +74,7 @@ void main() {
     await tester.pumpWidget(MaterialApp(
         home: RoutineHistoryScreen(
             attempts: [a], onOpenAttempt: (v) => selected = v)));
-    expect(find.text('Completed'), findsOneWidget);
+    expect(find.text('Workout Completed'), findsOneWidget);
     await tester.tap(find.text('Strength days · Day 1'));
     expect(selected, a);
     var next = false, repeat = false;
@@ -102,7 +109,7 @@ void main() {
         home: RoutineAttemptDetailScreen(
             attempt: attempt(complete: false),
             onResume: () => resumed = true)));
-    expect(find.text('Partially completed'), findsOneWidget);
+    expect(find.text('Partially Completed'), findsOneWidget);
     await tester.scrollUntilVisible(
         find.text('Resume unfinished exercises'), 180);
     await tester.tap(find.text('Resume unfinished exercises'));

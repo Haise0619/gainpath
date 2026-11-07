@@ -5,10 +5,16 @@ import 'package:gainpath_domain/workout.dart';
 import '../../domain/published_routine_view.dart';
 import 'exercise_tutorial_screen.dart';
 import 'widgets/workout_media.dart';
+import '../workout_presentation.dart';
 
 class RoutineScreen extends StatelessWidget {
-  const RoutineScreen({super.key, this.publishedRoutine, this.tutorialBuilder});
+  const RoutineScreen(
+      {super.key,
+      this.publishedRoutine,
+      this.tutorialBuilder,
+      this.organizationId = ''});
   final PublishedRoutine? publishedRoutine;
+  final String organizationId;
   final Widget Function(BuildContext, PublishedRoutineExercise)?
       tutorialBuilder;
 
@@ -92,10 +98,8 @@ class RoutineScreen extends StatelessWidget {
                             Text(
                                 publishedRoutine == null
                                     ? '${e.sets} sets  ·  ${e.reps} reps  ·  90s rest'
-                                    : e is PublishedRoutineExercise &&
-                                            e.durationSeconds != null
-                                        ? '${e.sets} sets · ${e.durationSeconds}s per set'
-                                        : '${e.sets} sets  ·  ${e.reps} reps',
+                                    : '${ExercisePresentation.forExercise(publishedRoutine!.exercises[i], organizationId: organizationId).targetsWithRest}\n'
+                                        '${ExercisePresentation.forExercise(publishedRoutine!.exercises[i], organizationId: organizationId).label}',
                                 style: Theme.of(context)
                                     .textTheme
                                     .bodyMedium

@@ -2,7 +2,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:gainpath_domain/workout.dart';
 import '../../application/workout_program_controller.dart';
-import '../../domain/exercise_tracker_dispatcher.dart';
+import '../../domain/published_routine_view.dart';
+import '../workout_presentation.dart';
 import '../../domain/program_enrollment.dart';
 
 class WorkoutProgramScreen extends StatefulWidget {
@@ -196,90 +197,95 @@ class _WorkoutProgramScreenState extends State<WorkoutProgramScreen>
                 e?.schedule.where((d) => d.date == today).firstOrNull ??
                 c.nextWorkout();
         return Scaffold(
-            appBar: AppBar(title: const Text("Today's Workout"), actions: [
-              IconButton(
-                  tooltip: 'Reload program and progress',
-                  onPressed: c.busy
-                      ? null
-                      : () => _act(() async {
-                            _refreshDay();
-                            await c.open();
-                            await _load();
-                          }),
-                  icon: const Icon(Icons.refresh))
-            ]),
-            body: ListView(padding: const EdgeInsets.all(16), children: [
-              if (c.busy || _loading) const LinearProgressIndicator(),
-              if (_catalogError != null) ...[
-                Text(_catalogError!),
-                TextButton(
-                    onPressed: _load, child: const Text('Retry programs'))
-              ],
-              if (_actionError != null || c.error != null)
-                Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 8),
-                    child: Text(_actionError ?? c.error!,
-                        style: TextStyle(
-                            color: Theme.of(context).colorScheme.error))),
-              if (e != null) ...[
-                Text(e.program.title,
-                    style: Theme.of(context)
-                        .textTheme
-                        .headlineSmall
-                        ?.copyWith(color: const Color(0xFF211A2E))),
-                Text(
-                    '${e.program.level} · 4 weeks · Version ${e.program.version}'),
-                const Text(
-                    'Schedule saved on this device. Workout summaries keep measured and self-reported results separate.'),
-                if (c.journal!.enrollments.length > 1)
-                  DropdownButtonFormField<String>(
-                      key: ValueKey(e.id),
-                      initialValue: e.id,
-                      isExpanded: true,
-                      decoration: const InputDecoration(
-                          labelText: 'Saved program enrollment'),
-                      items: c.journal!.enrollments
-                          .map((item) => DropdownMenuItem(
-                              value: item.id,
-                              child: Text(
-                                  '${item.program.title} · ${_date(item.schedule.first.date)}',
-                                  overflow: TextOverflow.ellipsis)))
-                          .toList(),
-                      onChanged: c.busy
+            appBar: AppBar(
+                title: Text(
+                    selected == null ? 'Training plan' : _dayHeading(selected)),
+                actions: [
+                  IconButton(
+                      tooltip: 'Reload program and progress',
+                      onPressed: c.busy
                           ? null
-                          : (id) {
-                              if (id != null) {
-                                setState(() => _selectedKey = null);
-                                _act(() => c.selectEnrollment(id));
-                              }
-                            }),
-                if (selected != null)
-                  _dayCard(selected)
-                else
-                  const Padding(
-                      padding: EdgeInsets.all(16),
-                      child: Text(
-                          'No pending scheduled workouts. Your completed and skipped days remain below.')),
-                const SizedBox(height: 12),
-                Text('Weekly progress',
-                    style: Theme.of(context).textTheme.titleLarge),
-                for (var week = 1; week <= 4; week++) _week(e, week),
-                OutlinedButton.icon(
-                    onPressed: c.busy
-                        ? null
-                        : () => setState(() => _choosing = !_choosing),
-                    icon: const Icon(Icons.calendar_month),
-                    label: const Text('Choose another program')),
-              ],
-              if (e == null || _choosing) _onboarding(),
-            ]));
+                          : () => _act(() async {
+                                _refreshDay();
+                                await c.open();
+                                await _load();
+                              }),
+                      icon: const Icon(Icons.refresh))
+                ]),
+            body: ListView(
+                padding: EdgeInsets.fromLTRB(
+                    16, 16, 16, 16 + MediaQuery.paddingOf(context).bottom),
+                children: [
+                  if (c.busy || _loading) const LinearProgressIndicator(),
+                  if (_catalogError != null) ...[
+                    Text(_catalogError!),
+                    TextButton(
+                        onPressed: _load, child: const Text('Retry programs'))
+                  ],
+                  if (_actionError != null || c.error != null)
+                    Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                        child: Text(_actionError ?? c.error!,
+                            style: TextStyle(
+                                color: Theme.of(context).colorScheme.error))),
+                  if (e != null) ...[
+                    Text(e.program.title,
+                        style: Theme.of(context)
+                            .textTheme
+                            .headlineSmall
+                            ?.copyWith(color: const Color(0xFF211A2E))),
+                    Text(
+                        '${e.program.level} · 4 weeks · Version ${e.program.version}'),
+                    const Text(
+                        'Schedule saved on this device for your account. Open a day to start or resume.'),
+                    if (c.journal!.enrollments.length > 1)
+                      DropdownButtonFormField<String>(
+                          key: ValueKey(e.id),
+                          initialValue: e.id,
+                          isExpanded: true,
+                          decoration: const InputDecoration(
+                              labelText: 'Saved program enrollment'),
+                          items: c.journal!.enrollments
+                              .map((item) => DropdownMenuItem(
+                                  value: item.id,
+                                  child: Text(
+                                      '${item.program.title} · ${_date(item.schedule.first.date)}',
+                                      overflow: TextOverflow.ellipsis)))
+                              .toList(),
+                          onChanged: c.busy
+                              ? null
+                              : (id) {
+                                  if (id != null) {
+                                    setState(() => _selectedKey = null);
+                                    _act(() => c.selectEnrollment(id));
+                                  }
+                                }),
+                    if (selected != null)
+                      _dayCard(selected)
+                    else
+                      const Padding(
+                          padding: EdgeInsets.all(16),
+                          child: Text(
+                              'No pending scheduled workouts. Your completed and skipped days remain below.')),
+                    const SizedBox(height: 12),
+                    Text('Weekly progress',
+                        style: Theme.of(context).textTheme.titleLarge),
+                    for (var week = 1; week <= 4; week++) _week(e, week),
+                    OutlinedButton.icon(
+                        onPressed: c.busy
+                            ? null
+                            : () => setState(() => _choosing = !_choosing),
+                        icon: const Icon(Icons.calendar_month),
+                        label: const Text('Choose another program')),
+                  ],
+                  if (e == null || _choosing) _onboarding(),
+                ]));
       });
   Widget _onboarding() {
     if (!_loading && _programs.isEmpty) {
       return const Padding(
           padding: EdgeInsets.all(16),
-          child: Text(
-              'No published programs are available yet. Admin must publish a program with real routine assignments.'));
+          child: Text('No programs are available yet. Check back later.'));
     }
     if (_choice == null) return const SizedBox.shrink();
     final count =
@@ -312,7 +318,7 @@ class _WorkoutProgramScreenState extends State<WorkoutProgramScreen>
                       icon: const Icon(Icons.event),
                       label: Text('Start date: ${_date(_start!)}')),
                   Text(
-                      'Choose $count available training days each week. Recovery checks apply before saving.'),
+                      'Choose $count training days each week (${_weekdays.length}/$count selected). We check recovery spacing before saving.'),
                   Wrap(spacing: 6, children: [
                     for (var i = 1; i <= 7; i++)
                       FilterChip(
@@ -370,12 +376,32 @@ class _WorkoutProgramScreenState extends State<WorkoutProgramScreen>
         ]);
   }
 
+  String _dayHeading(ScheduledProgramDay day) {
+    if (day.definition.kind == 'rest') {
+      return day.date == _today ? "Today's rest day" : 'Rest day';
+    }
+    if (day.definition.kind != 'workout') {
+      return day.date == _today ? "Today's recovery" : 'Active recovery day';
+    }
+    if (day.date == _today) return "Today's workout";
+    if (day.date.isAfter(_today)) return 'Upcoming workout';
+    if (day.definition.kind == 'workout' &&
+        !c.isComplete(day.key) &&
+        c.status(day.key, _today).startsWith('Missed')) {
+      return 'Missed workout';
+    }
+    return 'Scheduled day';
+  }
+
   Widget _dayCard(ScheduledProgramDay day) {
     final d = day.definition, a = c.attempt(day.key);
-    final snapshot = d.routineSnapshot;
-    final exercises = snapshot?['exercises'] is List
-        ? snapshot!['exercises'] as List
-        : const [];
+    final exercises = d.routineSnapshot == null
+        ? <PublishedRoutineExercise>[]
+        : PublishedRoutine.fromDocument(
+                d.routineId!, Map<String, dynamic>.from(d.routineSnapshot!))
+            .exercises
+            .where((e) => e.dayNumber == d.routineDay)
+            .toList();
     final next = c.nextWorkout(afterKey: day.key);
     return Card(
         child: Padding(
@@ -391,31 +417,32 @@ class _WorkoutProgramScreenState extends State<WorkoutProgramScreen>
                   Text(c.status(day.key, _today)),
                   if (d.kind != 'workout')
                     Text(d.kind == 'rest'
-                        ? 'Rest today. No workout is required.'
-                        : 'Keep activity gentle and recover. This day does not award workout completion.'),
-                  for (final raw in exercises
-                      .whereType<Map>()
-                      .where((e) => (e['dayNumber'] ?? 1) == d.routineDay)) ...[
+                        ? 'Rest day. No workout is required.'
+                        : 'Active recovery: keep activity gentle. No workout completion is required.'),
+                  for (final exercise in exercises) ...[
                     const Divider(),
-                    Text(
-                        '${raw['name']} · ${raw['sets']} sets × ${raw['reps']} reps · ${raw['restSeconds'] ?? d.restSeconds}s rest'),
-                    Text(const ExerciseTrackerDispatcher()
-                        .resolve(
-                            organizationId: c.scope.organizationId,
-                            exerciseId: raw['exerciseId'] as String)
-                        .capability
-                        .displayLabel),
+                    Text(exercise.name,
+                        style: Theme.of(context).textTheme.titleMedium),
+                    Text(ExercisePresentation.forExercise(exercise,
+                            organizationId: c.scope.organizationId)
+                        .targetsWithRest),
+                    Text(ExercisePresentation.forExercise(exercise,
+                            organizationId: c.scope.organizationId)
+                        .label),
                   ],
                   if (a != null) ...[
                     const Divider(),
-                    Text('Summary · ${a.statusLabel}'),
+                    Text('Summary · ${workoutAttemptLabel(a)}'),
                     Text(
-                        'Measured: ${a.fullRepetitions} full reps · ${a.partialRepetitions} partial reps'),
-                    Text('Self-reported: ${a.selfReportedSets} sets'),
+                        '${a.completedExercises}/${a.entries.length} exercises completed'),
                     for (final result in a.entries)
-                      Text('${a.routine.exercises[result.index].name}: '
-                          '${result.fullRepetitions} measured full reps, ${result.partialRepetitions} partial reps; '
-                          '${result.manualSets} self-reported sets · ${result.status.name}'),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 4),
+                        child:
+                            Text('${a.routine.exercises[result.index].name}: '
+                                '${exerciseStatusLabel(result.status)} · '
+                                '${exerciseResultSummary(result)}'),
+                      ),
                   ],
                   if (d.kind == 'workout' && !c.isComplete(day.key)) ...[
                     FilledButton(

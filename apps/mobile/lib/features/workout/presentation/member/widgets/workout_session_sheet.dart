@@ -247,7 +247,7 @@ class _WorkoutSessionSheetState extends State<WorkoutSessionSheet> {
                         style: FilledButton.styleFrom(
                             backgroundColor: AppColors.primary,
                             foregroundColor: Colors.white,
-                            minimumSize: const Size(48, 48),
+                            minimumSize: const Size(56, 56),
                             padding: const EdgeInsets.symmetric(horizontal: 12),
                             shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(16))),
@@ -255,34 +255,40 @@ class _WorkoutSessionSheetState extends State<WorkoutSessionSheet> {
                             (active || retry) && !saving && !c.isRecalibrating
                                 ? primary
                                 : null,
-                        child: retry
-                            ? const Text('Retry save')
-                            : saving
-                                ? const SizedBox(
-                                    width: 18,
-                                    height: 18,
-                                    child: CircularProgressIndicator(
-                                        strokeWidth: 2))
-                                : complete && widget.routineContext != null
-                                    ? const Text('Continue')
-                                    : switching && !paused
-                                        ? const Text('Switch')
-                                        : resting && !paused
-                                            ? const Row(
-                                                mainAxisSize: MainAxisSize.min,
-                                                children: [
-                                                    Text('Next'),
-                                                    SizedBox(width: 2),
-                                                    Icon(
-                                                        Icons
-                                                            .chevron_right_rounded,
-                                                        size: 20)
-                                                  ])
-                                            : Icon(complete
-                                                ? Icons.check_rounded
-                                                : paused
-                                                    ? Icons.play_arrow_rounded
-                                                    : Icons.pause_rounded))),
+                        child: Semantics(
+                            label: primaryLabel,
+                            excludeSemantics: true,
+                            child: retry
+                                ? const Text('Retry save')
+                                : saving
+                                    ? const SizedBox(
+                                        width: 18,
+                                        height: 18,
+                                        child: CircularProgressIndicator(
+                                            strokeWidth: 2))
+                                    : complete && widget.routineContext != null
+                                        ? const Text('Continue')
+                                        : switching && !paused
+                                            ? const Text('Switch')
+                                            : resting && !paused
+                                                ? const Row(
+                                                    mainAxisSize:
+                                                        MainAxisSize.min,
+                                                    children: [
+                                                        Text('Next'),
+                                                        SizedBox(width: 2),
+                                                        Icon(
+                                                            Icons
+                                                                .chevron_right_rounded,
+                                                            size: 20)
+                                                      ])
+                                                : Icon(complete
+                                                    ? Icons.check_rounded
+                                                    : paused
+                                                        ? Icons
+                                                            .play_arrow_rounded
+                                                        : Icons
+                                                            .pause_rounded)))),
                 const SizedBox(width: 6),
                 IconButton.filledTonal(
                     tooltip: widget.routineContext == null
