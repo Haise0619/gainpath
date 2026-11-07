@@ -1,4 +1,7 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:gainpath_mobile/features/workout/application/workout_preferences_controller.dart';
+import 'workout_preferences_test.dart' show MemoryWorkoutPreferencesStore;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:gainpath_mobile/features/workout/presentation/member/workout_result_screen.dart';
@@ -20,8 +23,91 @@ import 'package:gainpath_mobile/features/workout/presentation/member/workout_pre
 import 'package:gainpath_mobile/features/workout/data/published_routine.dart';
 import 'package:gainpath_mobile/navigation/workout_navigation.dart';
 
+final preferenceControllers = <SessionScope, WorkoutPreferencesController>{};
+Future<WorkoutPreferencesController> preferencesFor(SessionScope scope) async =>
+    preferenceControllers.putIfAbsent(
+        scope,
+        () => WorkoutPreferencesController(
+            scope: scope, store: MemoryWorkoutPreferencesStore()));
+
+Future<void> acceptPrivacy(WidgetTester tester) async {
+  await tester.tap(find.byType(Checkbox).first);
+  await tester.pump();
+  await tester.tap(find.text('Accept AI Tracking'));
+  await tester.pumpAndSettle();
+}
+
 void main() {
+  setUp(preferenceControllers.clear);
   setUpAll(() => GoogleFonts.config.allowRuntimeFetching = false);
+  testWidgets(
+      'background and return during consent persistence cannot open setup or capture',
+      (tester) async {
+    tester.view.physicalSize = const Size(1000, 1600);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    late AuthBloc auth;
+    await tester.runAsync(() async {
+      auth = AuthBloc(
+          repository: InMemoryAuthRepository(organizationId: 'gainpath'));
+      await Future<void>.delayed(Duration.zero);
+      auth.add(const LoginSubmitted(
+          email: 'member@example.com', password: 'password123'));
+      await auth.stream.firstWhere((s) => s.status == AuthStatus.signedIn);
+    });
+    final preferencesStore = MemoryWorkoutPreferencesStore()
+      ..writeGate = Completer<void>();
+    final preferences = WorkoutPreferencesController(
+        scope: auth.state.session!.scope, store: preferencesStore);
+    var launches = 0;
+    final routine = PublishedRoutine.fromDocument('published', {
+      'schemaVersion': 1,
+      'kind': 'routine',
+      'status': 'published',
+      'sourceBlueprintId': 'blueprint',
+      'title': 'Squat practice',
+      'estimatedMinutes': 10,
+      'exercises': [
+        {
+          'exerciseId': 'F3b8xIr8ynBDd3gEICKX',
+          'name': 'Squat',
+          'sets': 1,
+          'reps': 2
+        }
+      ],
+    });
+    await tester.pumpWidget(BlocProvider.value(
+        value: auth,
+        child: MaterialApp(
+            home: WorkoutPrepScreen(
+                live: true,
+                publishedRoutine: routine,
+                preferencesFactory: (_) async => preferences,
+                routes: WorkoutPrepRoutes(realSessionBuilder: (_, __) {
+                  launches++;
+                  return const SizedBox();
+                })))));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Start workout'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(Checkbox).first);
+    await tester.pump();
+    await tester.tap(find.text('Accept AI Tracking'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(preferences.busy, isTrue);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    preferencesStore.writeGate!.complete();
+    await tester.pumpAndSettle();
+    expect(preferences.validConsent, isTrue);
+    expect(launches, 0);
+    expect(find.text('Prepare your exercise'), findsNothing);
+    expect(find.text('Squat practice'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox());
+    await tester.runAsync(auth.close);
+  });
   testWidgets(
       'supported published squat requires both consent and camera setup confirmation',
       (tester) async {
@@ -56,22 +142,34 @@ void main() {
     await tester.pumpWidget(BlocProvider.value(
         value: auth,
         child: MaterialApp(
-            home: WorkoutPrepScreen(live: true, publishedRoutine: routine))));
+            home: WorkoutPrepScreen(
+                preferencesFactory: preferencesFor,
+                live: true,
+                publishedRoutine: routine))));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Start workout'));
     await tester.pumpAndSettle();
-    final accept = find.widgetWithText(FilledButton, 'Accept and start');
-    expect(tester.widget<FilledButton>(accept).onPressed, isNull);
-    await tester.tap(find.byType(Checkbox).first);
-    await tester.pump();
+    final privacy = find.widgetWithText(FilledButton, 'Accept AI Tracking');
+    expect(tester.widget<FilledButton>(privacy).onPressed, isNull);
+    await acceptPrivacy(tester);
+    final accept = find.widgetWithText(FilledButton, 'Ready to continue');
     expect(tester.widget<FilledButton>(accept).onPressed, isNull);
     expect(tester.widget<Checkbox>(find.byType(Checkbox).last).value, false);
-    await tester.tap(find.byType(Checkbox).at(1));
+    await tester.tap(find.byType(Checkbox).first);
     await tester.pump();
     expect(tester.widget<FilledButton>(accept).onPressed, isNotNull);
     await tester.tap(find.text('Not now'));
     await tester.pumpAndSettle();
     expect(find.text('Squat practice'), findsOneWidget);
+    // Cancelling setup does not discard the separately saved privacy decision.
+    await tester.tap(find.text('Start workout'));
+    await tester.pumpAndSettle();
+    expect(find.text('AI Tracking privacy'), findsNothing);
+    expect(find.text('Prepare your exercise'), findsOneWidget);
+    expect(find.text('Ready to continue'), findsOneWidget);
+    expect(preferenceControllers.values.single.validConsent, isTrue);
+    await tester.tap(find.text('Not now'));
+    await tester.pumpAndSettle();
     await tester.pumpWidget(const SizedBox());
     await tester.runAsync(() => auth.close());
   });
@@ -108,14 +206,17 @@ void main() {
     await tester.pumpWidget(BlocProvider.value(
         value: auth,
         child: MaterialApp(
-            home: WorkoutPrepScreen(live: true, publishedRoutine: routine))));
+            home: WorkoutPrepScreen(
+                preferencesFactory: preferencesFor,
+                live: true,
+                publishedRoutine: routine))));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Start workout'));
     await tester.pumpAndSettle();
+    await acceptPrivacy(tester);
     await tester.tap(find.byType(Checkbox).first);
-    await tester.tap(find.byType(Checkbox).at(1));
     await tester.pump();
-    await tester.tap(find.text('Accept and start'));
+    await tester.tap(find.text('Ready to continue'));
     await tester.pump();
     await tester.pump(const Duration(seconds: 1));
     expect(find.text('Squat practice'), findsOneWidget);
@@ -163,6 +264,7 @@ void main() {
           value: auth,
           child: MaterialApp(
               home: WorkoutPrepScreen(
+                  preferencesFactory: preferencesFor,
                   live: true,
                   publishedRoutine: routine,
                   routes:
@@ -175,11 +277,11 @@ void main() {
       await tester.tap(find.text('Start workout'));
       await tester.pumpAndSettle();
       expect(launched, isNull);
+      await acceptPrivacy(tester);
       await tester.tap(find.byType(Checkbox).first);
-      await tester.tap(find.byType(Checkbox).at(1));
       if (upload) await tester.tap(find.byType(Checkbox).last);
       await tester.pump();
-      await tester.tap(find.text('Accept and start'));
+      await tester.tap(find.text('Ready to continue'));
       await tester.pumpAndSettle();
       expect(find.text('published-identity'), findsOneWidget);
       expect(launched!.scope, scope);
@@ -227,6 +329,7 @@ void main() {
         value: auth,
         child: MaterialApp(
             home: WorkoutPrepScreen(
+                preferencesFactory: preferencesFor,
                 live: true,
                 publishedRoutine: routine,
                 routes: WorkoutPrepRoutes(realSessionBuilder: (_, __) {
@@ -235,14 +338,14 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Start workout'));
     await tester.pumpAndSettle();
+    await acceptPrivacy(tester);
     await tester.tap(find.byType(Checkbox).first);
-    await tester.tap(find.byType(Checkbox).at(1));
     await tester.runAsync(() async {
       auth.add(const LoggedOut());
       await auth.stream.firstWhere((s) => s.status == AuthStatus.signedOut);
     });
     await tester.pump();
-    await tester.tap(find.text('Accept and start'));
+    await tester.tap(find.text('Ready to continue'));
     await tester.pumpAndSettle();
     expect(find.text('Squat practice'), findsOneWidget);
     await tester.pumpWidget(const SizedBox());

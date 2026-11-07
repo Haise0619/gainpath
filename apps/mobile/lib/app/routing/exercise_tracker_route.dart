@@ -46,6 +46,7 @@ class ExerciseTrackerRoute extends StatelessWidget {
           routineId: launch.routineId,
           exercise: launch.exercise,
           consented: launch.consented,
+          consentCurrent: launch.consentCurrent,
           setupConfirmed: launch.setupConfirmed,
           requestServerUpload: launch.requestServerUpload,
           sessionId: launch.sessionId,

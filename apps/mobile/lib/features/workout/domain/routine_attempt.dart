@@ -74,8 +74,9 @@ class RoutineExerciseResult {
   factory RoutineExerciseResult.fromJson(Map<String, dynamic> data) {
     if (data['kind'] == 'timed') {
       if (data.keys
-          .any((k) => !{'kind', 'index', 'status', 'guided'}.contains(k)))
+          .any((k) => !{'kind', 'index', 'status', 'guided'}.contains(k))) {
         throw const FormatException('Unexpected timed result measurement');
+      }
       final status =
           RoutineExerciseStatus.values.byName(data['status'] as String);
       final guided = data['guided'] == null
@@ -91,8 +92,9 @@ class RoutineExerciseResult {
           status == RoutineExerciseStatus.timerCompleted &&
               guided?.completed != true ||
           status == RoutineExerciseStatus.timerPartial &&
-              guided?.startedAt == null)
+              guided?.startedAt == null) {
         throw const FormatException('Invalid timer result status');
+      }
       return RoutineExerciseResult.timed(
           index: _number(data, 'index', max: 49),
           status: status,
@@ -136,6 +138,8 @@ Map<String, dynamic> routinePlanSnapshot(PublishedRoutine routine) => {
       'sourceBlueprintId': routine.sourceBlueprintId,
       'title': routine.title,
       'estimatedMinutes': routine.estimatedMinutes,
+      if (routine.betweenExerciseRestSeconds != null)
+        'betweenExerciseRestSeconds': routine.betweenExerciseRestSeconds,
       if (routine.difficulty != null) 'difficulty': routine.difficulty,
       'exercises': [
         for (final e in routine.exercises)
@@ -246,22 +250,26 @@ class RoutineAttempt {
         .map((e) =>
             RoutineExerciseResult.fromJson(Map<String, dynamic>.from(e as Map)))
         .toList();
-    if (routine.schemaVersion != data['schemaVersion'])
+    if (routine.schemaVersion != data['schemaVersion']) {
       throw const FormatException('Routine contract mismatch');
+    }
     for (final result in entries) {
-      if (result.index >= routine.exercises.length)
+      if (result.index >= routine.exercises.length) {
         throw const FormatException('Invalid result index');
+      }
       final row = routine.exercises[result.index];
       if ((row.executionMode == ExerciseExecutionMode.videoGuidedTimed) !=
-          result.isTimed)
+          result.isTimed) {
         throw const FormatException('Result execution mismatch');
+      }
       if (result.guided case final g?) {
         if (g.entryIndex != result.index ||
             g.entryId != row.entryId ||
             g.exerciseId != row.exerciseId ||
             jsonEncode(g.prescription.toJson()) !=
-                jsonEncode(row.prescription.toJson()))
+                jsonEncode(row.prescription.toJson())) {
           throw const FormatException('Guided result identity mismatch');
+        }
       }
     }
     final indices = [

@@ -1,4 +1,10 @@
 import 'dart:async';
+import '../di/workout_preferences_factory.dart';
+import '../../features/workout/application/workout_preferences_controller.dart';
+import '../../features/workout/presentation/member/workout_ai_consent_guard.dart';
+import 'between_exercise_rest_route.dart';
+import '../../features/workout/domain/tutorial_player.dart';
+import '../../infrastructure/media/video_tutorial_player.dart';
 import '../../features/workout/presentation/workout_presentation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -54,6 +60,9 @@ class RoutineJourneyRoute extends StatefulWidget {
       this.initialDay = 1,
       this.storeFactory = createRoutineJourneyStore,
       this.workoutStoreFactory = createWorkoutStore,
+      this.preferencesFactory = createWorkoutPreferences,
+      this.timedPlayerFactory = VideoTutorialPlayer.new,
+      this.measuredBuilder,
       this.action = RoutineJourneyAction.view});
   final SessionScope scope;
   final PublishedRoutine routine;
@@ -64,16 +73,36 @@ class RoutineJourneyRoute extends StatefulWidget {
   final RoutineJourneyAction action;
   final Future<RoutineJourneyStore> Function(SessionScope) storeFactory;
   final Future<WorkoutSessionStore> Function(SessionScope) workoutStoreFactory;
+  final Future<WorkoutPreferencesController> Function(SessionScope)
+      preferencesFactory;
+  final TutorialPlayerFactory timedPlayerFactory;
+  final Widget Function(RealWorkoutLaunch)? measuredBuilder;
   @override
   State<RoutineJourneyRoute> createState() => _RoutineJourneyRouteState();
 }
 
-class _RoutineJourneyRouteState extends State<RoutineJourneyRoute> {
+class _RoutineJourneyRouteState extends State<RoutineJourneyRoute>
+    with WidgetsBindingObserver {
+  WorkoutPreferencesController? _preferences;
+  bool _foreground = true, _launching = false;
+  int _interruptionEpoch = 0;
   RoutineJourneyController? _controller;
   WorkoutSessionRepository? _workouts;
   StreamSubscription<AuthState>? _subscription;
   bool _opening = false;
   String? _error;
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    _foreground = state == AppLifecycleState.resumed;
+    if (!_foreground) _interruptionEpoch++;
+  }
+
   bool _authorized(AuthBloc auth) =>
       auth.state.session?.scope == widget.scope &&
       AuthRolePolicy.canEnter(auth.state, allowed: const {AppRole.member});
@@ -90,6 +119,11 @@ class _RoutineJourneyRouteState extends State<RoutineJourneyRoute> {
       if (!_authorized(auth)) throw StateError('Routine account unavailable');
       final store = await widget.storeFactory(widget.scope);
       final workoutStore = await widget.workoutStoreFactory(widget.scope);
+      try {
+        _preferences = await widget.preferencesFactory(widget.scope);
+      } catch (_) {
+        /* Manual work remains available; automatic launch fails closed. */
+      }
       if (!mounted || !_authorized(auth)) return;
       _workouts = WorkoutSessionRepository(
           scope: widget.scope,
@@ -136,15 +170,46 @@ class _RoutineJourneyRouteState extends State<RoutineJourneyRoute> {
   }
 
   Future<void> _track(int index) async {
+    if (_launching ||
+        !_foreground ||
+        ModalRoute.of(context)?.isCurrent != true) {
+      return;
+    }
+    _launching = true;
+    try {
+      await _trackOnce(index);
+    } finally {
+      _launching = false;
+    }
+  }
+
+  Future<void> _trackOnce(int index, {bool automatic = false}) async {
+    final launchEpoch = _interruptionEpoch;
     final auth = context.read<AuthBloc>(), c = _controller!;
-    if (!_authorized(auth)) return;
+    if (!_authorized(auth) ||
+        !_foreground ||
+        c.checkpoint?.finished != false ||
+        isExerciseTargetComplete(c.statusFor(index))) {
+      return;
+    }
     final execution = c.executionFor(index);
+    final attemptId = c.checkpoint!.id, day = c.day;
+    bool currentLaunch() =>
+        mounted &&
+        _authorized(auth) &&
+        _foreground &&
+        ModalRoute.of(context)?.isCurrent == true &&
+        c.checkpoint?.id == attemptId &&
+        c.day == day &&
+        c.selectedIndex == index &&
+        launchEpoch == _interruptionEpoch &&
+        c.checkpoint?.finished == false;
     if (c.isTimed(index)) {
       if (execution.kind != ExerciseExecutionKind.timed) {
         throw StateError('Video guided exercise unavailable');
       }
       final progress = await c.prepareGuidedSession(index);
-      if (!mounted || !_authorized(auth)) return;
+      if (!currentLaunch()) return;
       final outcome = await Navigator.push<GuidedTimedWorkoutOutcome>(
           context,
           MaterialPageRoute(
@@ -155,6 +220,9 @@ class _RoutineJourneyRouteState extends State<RoutineJourneyRoute> {
                       feature: MembershipAccessFeature.exercise,
                       resourceId: widget.routine.exercises[index].exerciseId,
                       child: GuidedTimedWorkoutRoute(
+                          autoStart: automatic,
+                          playerFactory: widget.timedPlayerFactory,
+                          autoContinue: _preferences?.autoContinue == true,
                           scope: widget.scope,
                           routine: widget.routine,
                           exerciseIndex: index,
@@ -168,7 +236,9 @@ class _RoutineJourneyRouteState extends State<RoutineJourneyRoute> {
       if (c.statusFor(index) == RoutineExerciseStatus.timerCompleted &&
           !c.checkpoint!.finished &&
           c.unfinishedIndices.isNotEmpty) {
-        await _nextExercise(widget.routine.exercises[index].name);
+        if (launchEpoch == _interruptionEpoch) {
+          await _nextExercise(widget.routine.exercises[index].name);
+        }
       }
       return;
     }
@@ -177,8 +247,20 @@ class _RoutineJourneyRouteState extends State<RoutineJourneyRoute> {
       return;
     }
     var upload = false;
+    _preferences ??= await widget.preferencesFactory(widget.scope);
+    if (!mounted || !_authorized(auth) || !_foreground) return;
     final tracker = c.trackingFor(index).tracker;
     final consented = await showWorkoutCaptureConsent(context,
+        preferences: _preferences,
+        requireSetup: !(automatic &&
+            {
+              ExerciseTracker.frontViewLateralRaise,
+              ExerciseTracker.frontViewShoulderPress,
+              ExerciseTracker.sideViewCurl,
+              ExerciseTracker.sideViewRow,
+              ExerciseTracker.sideViewReverseLunge,
+              ExerciseTracker.sideViewCalfRaise,
+            }.contains(tracker)),
         allowUpload: tracker == ExerciseTracker.sideViewSquat,
         exerciseInstruction: switch (tracker) {
           ExerciseTracker.frontViewLateralRaise =>
@@ -208,15 +290,40 @@ class _RoutineJourneyRouteState extends State<RoutineJourneyRoute> {
                                 ? reverseLungeSetupConfirmation
                                 : null,
         onUploadChanged: (value) => upload = value);
-    if (consented != true || !mounted || !_authorized(auth)) return;
+    if (consented != true ||
+        launchEpoch != _interruptionEpoch ||
+        !mounted ||
+        !_authorized(auth) ||
+        !_foreground ||
+        ModalRoute.of(context)?.isCurrent != true) {
+      return;
+    }
     // Persist the exact capture ID before opening the camera. Reconciliation
     // can recover a durable result after interruption without duplicate activity.
     final sessionId = await c.prepareCapture(index);
-    if (!mounted || !_authorized(auth)) return;
+    if (!currentLaunch() || _preferences?.validConsent != true) return;
     final exercise = widget.routine.exercises[index];
     final nextIndex = c.unfinishedIndices
         .where((candidate) => candidate != index)
         .firstOrNull;
+    final launch = RealWorkoutLaunch(
+        scope: widget.scope,
+        routineId: widget.routine.id,
+        exercise: exercise,
+        consented: true,
+        consentCurrent: () => _preferences?.validConsent == true,
+        setupConfirmed: true,
+        requestServerUpload: upload,
+        sessionId: sessionId,
+        routineContext: RoutineWorkoutContext(
+            routineTitle: widget.routine.title,
+            day: c.day,
+            exerciseNumber: c.dayIndices.indexOf(index) + 1,
+            totalExercises: c.dayIndices.length,
+            nextExerciseName: nextIndex == null
+                ? null
+                : widget.routine.exercises[nextIndex].name),
+        returnToRoutine: true);
     final saved = await Navigator.push<WorkoutSessionSummary>(
         context,
         MaterialPageRoute<WorkoutSessionSummary>(
@@ -226,25 +333,12 @@ class _RoutineJourneyRouteState extends State<RoutineJourneyRoute> {
                     enabled: membershipAccessEnforcementEnabled,
                     feature: MembershipAccessFeature.exercise,
                     resourceId: exercise.exerciseId,
-                    child: ExerciseTrackerRoute(
-                        trackers: widget.trackers,
-                        launch: RealWorkoutLaunch(
-                            scope: widget.scope,
-                            routineId: widget.routine.id,
-                            exercise: exercise,
-                            consented: true,
-                            setupConfirmed: true,
-                            requestServerUpload: upload,
-                            sessionId: sessionId,
-                            routineContext: RoutineWorkoutContext(
-                                routineTitle: widget.routine.title,
-                                day: c.day,
-                                exerciseNumber: c.dayIndices.indexOf(index) + 1,
-                                totalExercises: c.dayIndices.length,
-                                nextExerciseName: nextIndex == null
-                                    ? null
-                                    : widget.routine.exercises[nextIndex].name),
-                            returnToRoutine: true))))));
+                    child: WorkoutAiConsentGuard(
+                        scope: widget.scope,
+                        preferencesFactory: widget.preferencesFactory,
+                        child: widget.measuredBuilder?.call(launch) ??
+                            ExerciseTrackerRoute(
+                                trackers: widget.trackers, launch: launch))))));
     if (!mounted || !_authorized(auth)) return;
     await c.refresh(completeRoutine: true);
     if (!mounted || !_authorized(auth) || saved == null) return;
@@ -253,12 +347,60 @@ class _RoutineJourneyRouteState extends State<RoutineJourneyRoute> {
       return;
     }
     if (!c.checkpoint!.finished && c.unfinishedIndices.isNotEmpty) {
-      await _nextExercise(exercise.name);
+      if (launchEpoch == _interruptionEpoch) await _nextExercise(exercise.name);
     }
   }
 
   Future<void> _nextExercise(String previousExercise) async {
     final auth = context.read<AuthBloc>(), c = _controller!;
+    if (!mounted ||
+        !_foreground ||
+        !_authorized(auth) ||
+        ModalRoute.of(context)?.isCurrent != true) {
+      return;
+    }
+    if (_preferences?.autoContinue == true &&
+        !c.busy &&
+        c.error == null &&
+        c.checkpoint?.finished == false &&
+        c.unfinishedIndices.isNotEmpty &&
+        _foreground &&
+        ModalRoute.of(context)?.isCurrent == true) {
+      final attemptId = c.checkpoint!.id, day = c.day, index = c.selectedIndex;
+      bool valid() =>
+          mounted &&
+          _authorized(auth) &&
+          c.checkpoint?.id == attemptId &&
+          c.day == day &&
+          c.selectedIndex == index &&
+          c.checkpoint?.finished == false &&
+          c.error == null &&
+          !c.busy &&
+          c.unfinishedIndices.contains(index);
+      final outcome = await Navigator.push<BetweenExerciseRestOutcome>(
+          context,
+          MaterialPageRoute(
+              builder: (_) => BetweenExerciseRestRoute(
+                  previousExercise: previousExercise,
+                  upcomingExercise: widget.routine.exercises[index],
+                  organizationId: widget.scope.organizationId,
+                  restSeconds: widget.routine.betweenExerciseRestSeconds ??
+                      _preferences!.suggestedRestSeconds,
+                  prescribed: widget.routine.betweenExerciseRestSeconds != null,
+                  canAdvance: () =>
+                      valid() && _preferences?.autoContinue == true)));
+      if (outcome != BetweenExerciseRestOutcome.advance ||
+          !valid() ||
+          !_foreground ||
+          _preferences?.autoContinue != true) {
+        return;
+      }
+      // Manual selection is the logger itself; navigation never grants a set.
+      if (c.isTimed(index) || c.supportsTracking(index)) {
+        await _trackOnce(index, automatic: true);
+      }
+      return;
+    }
     while (mounted && _authorized(auth) && c.unfinishedIndices.isNotEmpty) {
       final index = c.selectedIndex, tracking = c.trackingFor(c.selectedIndex);
       final action = await showModalBottomSheet<RoutineNextAction>(
@@ -290,7 +432,7 @@ class _RoutineJourneyRouteState extends State<RoutineJourneyRoute> {
       if (action == RoutineNextAction.tutorial) {
         await _tutorial(index);
       } else {
-        await _track(index);
+        await _trackOnce(index);
         return;
       }
     }
@@ -331,6 +473,27 @@ class _RoutineJourneyRouteState extends State<RoutineJourneyRoute> {
     if (c.isTimed(index) || c.supportsTracking(index)) await _track(index);
   }
 
+  Future<void> _manualSet(int index) async {
+    final epoch = _interruptionEpoch;
+    if (_launching) return;
+    _launching = true;
+    try {
+      final c = _controller!;
+      await c.markManualSet(index);
+      if (c.allTargetsCompleted) {
+        await c.finish();
+        return;
+      }
+      if (mounted &&
+          epoch == _interruptionEpoch &&
+          c.statusFor(index) == RoutineExerciseStatus.selfReportedCompleted) {
+        await _nextExercise(widget.routine.exercises[index].name);
+      }
+    } finally {
+      _launching = false;
+    }
+  }
+
   Future<void> _openProgress(MemberProgressView view) async {
     final c = _controller!, auth = context.read<AuthBloc>();
     final id = c.checkpoint?.id;
@@ -352,6 +515,7 @@ class _RoutineJourneyRouteState extends State<RoutineJourneyRoute> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     unawaited(_subscription?.cancel());
     _controller?.dispose();
     _workouts?.dispose();
@@ -391,6 +555,7 @@ class _RoutineJourneyRouteState extends State<RoutineJourneyRoute> {
         return RoutineJourneyScreen(
             controller: c,
             onTrack: _track,
+            onManualSet: _manualSet,
             onTutorial: _tutorial,
             onViewProgress: () => _openProgress(MemberProgressView.dashboard),
             onViewHistory: () => _openProgress(MemberProgressView.routines));

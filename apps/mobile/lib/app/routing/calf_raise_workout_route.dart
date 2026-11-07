@@ -38,11 +38,14 @@ class _CalfRaiseWorkoutRouteState extends State<CalfRaiseWorkoutRoute>
   bool _setupConfirmed = false;
   String? _error;
   bool _authorized(AuthBloc auth) =>
+      (widget.launch.consentCurrent?.call() ?? true) &&
       auth.state.session?.scope == widget.launch.scope &&
       AuthRolePolicy.canEnter(auth.state, allowed: const {AppRole.member});
   @override
   void initState() {
     super.initState();
+    _foreground = WidgetsBinding.instance.lifecycleState == null ||
+        WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed;
     WidgetsBinding.instance.addObserver(this);
   }
 

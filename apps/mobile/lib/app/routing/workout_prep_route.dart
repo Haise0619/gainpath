@@ -1,4 +1,5 @@
 import 'dart:async';
+import '../../features/workout/presentation/member/workout_ai_consent_guard.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:gainpath_identity/gainpath_identity.dart';
@@ -364,7 +365,8 @@ Widget _realSession(BuildContext context, RealWorkoutLaunch launch) =>
         enabled: membershipAccessEnforcementEnabled,
         feature: MembershipAccessFeature.exercise,
         resourceId: launch.exercise.exerciseId,
-        child: ExerciseTrackerRoute(launch: launch));
+        child: WorkoutAiConsentGuard(
+            scope: launch.scope, child: ExerciseTrackerRoute(launch: launch)));
 Widget _savedSessions(BuildContext context, SessionScope scope) =>
     SavedSquatSessionsRoute(scope: scope);
 Widget _posePreview(BuildContext context) => const PosePreviewRoute();

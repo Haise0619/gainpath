@@ -26,6 +26,8 @@ class GuidedTimedWorkoutRoute extends StatefulWidget {
       required this.persist,
       this.monotonicNow,
       this.utcNow,
+      this.autoStart = false,
+      this.autoContinue = false,
       this.playerFactory = VideoTutorialPlayer.new});
   final SessionScope scope;
   final PublishedRoutine routine;
@@ -35,6 +37,7 @@ class GuidedTimedWorkoutRoute extends StatefulWidget {
   final TutorialPlayerFactory playerFactory;
   final Duration Function()? monotonicNow;
   final DateTime Function()? utcNow;
+  final bool autoStart, autoContinue;
   @override
   State<GuidedTimedWorkoutRoute> createState() =>
       _GuidedTimedWorkoutRouteState();
@@ -47,6 +50,7 @@ class _GuidedTimedWorkoutRouteState extends State<GuidedTimedWorkoutRoute>
   StreamSubscription<AuthState>? _auth;
   Timer? _ticker;
   bool _revoked = false;
+  bool _automaticLaunchInterrupted = false;
   bool _authorized = false,
       _opened = false,
       _exiting = false,
@@ -58,6 +62,8 @@ class _GuidedTimedWorkoutRouteState extends State<GuidedTimedWorkoutRoute>
   @override
   void initState() {
     super.initState();
+    _foreground = WidgetsBinding.instance.lifecycleState == null ||
+        WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed;
     WidgetsBinding.instance.addObserver(this);
   }
 
@@ -121,6 +127,7 @@ class _GuidedTimedWorkoutRouteState extends State<GuidedTimedWorkoutRoute>
       _ticker = Timer.periodic(const Duration(milliseconds: 100), (_) {
         if (_foreground && _authorized) {
           if (ModalRoute.of(context)?.isCurrent == false) {
+            _automaticLaunchInterrupted = true;
             if (_controller!.progress.phase == GuidedTimedPhase.working ||
                 _controller!.progress.phase == GuidedTimedPhase.resting) {
               unawaited(_controller!
@@ -128,14 +135,44 @@ class _GuidedTimedWorkoutRouteState extends State<GuidedTimedWorkoutRoute>
                   .catchError((Object _) {}));
             }
           } else {
-            unawaited(_controller!.tick().catchError((Object _) {}));
+            unawaited(_tick().catchError((Object _) {}));
           }
         }
       });
-      unawaited(_controller!.initialize().catchError((Object _) {}));
+      unawaited(_initialize().catchError((Object _) {}));
     } catch (_) {
       _error =
           'This timed workout is unavailable. Return to the routine and try again.';
+    }
+  }
+
+  Future<void> _initialize() async {
+    await _controller!.initialize();
+    if (widget.autoStart &&
+        !_automaticLaunchInterrupted &&
+        mounted &&
+        _authorized &&
+        _foreground &&
+        ModalRoute.of(context)?.isCurrent == true &&
+        _controller!.progress.phase == GuidedTimedPhase.ready) {
+      await _controller!.start();
+    }
+  }
+
+  Future<void> _tick() async {
+    await _controller!.tick();
+    if (!mounted ||
+        !_authorized ||
+        !_foreground ||
+        _exiting ||
+        _automaticLaunchInterrupted ||
+        ModalRoute.of(context)?.isCurrent != true ||
+        !widget.autoContinue) {
+      return;
+    }
+    if (_controller!.progress.phase == GuidedTimedPhase.completed) {
+      _exiting = true;
+      Navigator.pop(context, GuidedTimedWorkoutOutcome.completed);
     }
   }
 
@@ -143,6 +180,7 @@ class _GuidedTimedWorkoutRouteState extends State<GuidedTimedWorkoutRoute>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     _foreground = state == AppLifecycleState.resumed;
     if (!_foreground && _authorized) {
+      _automaticLaunchInterrupted = true;
       unawaited(_controller?.interrupt('background').catchError((Object _) {}));
     }
   }

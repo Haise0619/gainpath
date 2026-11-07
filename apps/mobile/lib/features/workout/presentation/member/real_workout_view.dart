@@ -62,6 +62,7 @@ class _RealWorkoutViewState extends State<RealWorkoutView> {
         _completionScheduled ||
         _ending ||
         _leaving ||
+        widget.session.isManuallyPaused ||
         widget.session.viewPhase != MeasuredWorkoutPhase.active ||
         widget.session.guidance?.stage != GuidedWorkoutStage.complete) {
       return;
@@ -71,6 +72,7 @@ class _RealWorkoutViewState extends State<RealWorkoutView> {
       _completionScheduled = false;
       if (mounted &&
           widget.routineContext != null &&
+          !widget.session.isManuallyPaused &&
           widget.session.viewPhase == MeasuredWorkoutPhase.active &&
           widget.session.guidance?.stage == GuidedWorkoutStage.complete) {
         unawaited(_end(automatic: true));

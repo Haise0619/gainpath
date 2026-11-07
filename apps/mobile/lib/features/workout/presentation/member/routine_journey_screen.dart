@@ -13,11 +13,13 @@ class RoutineJourneyScreen extends StatefulWidget {
       required this.controller,
       required this.onTrack,
       required this.onTutorial,
+      this.onManualSet,
       this.onViewProgress,
       this.onViewHistory});
   final RoutineJourneyController controller;
   final VoidCallback? onViewProgress, onViewHistory;
   final Future<void> Function(int index) onTrack, onTutorial;
+  final Future<void> Function(int index)? onManualSet;
   @override
   State<RoutineJourneyScreen> createState() => _RoutineJourneyScreenState();
 }
@@ -321,7 +323,8 @@ class _RoutineJourneyScreenState extends State<RoutineJourneyScreen> {
                       onPressed: _working || c.busy || complete
                           ? null
                           : () => _act(() => manual
-                              ? c.markManualSet(index)
+                              ? (widget.onManualSet?.call(index) ??
+                                  c.markManualSet(index))
                               : widget.onTrack(index)),
                       icon: Icon(p.icon),
                       label: Text(label)),

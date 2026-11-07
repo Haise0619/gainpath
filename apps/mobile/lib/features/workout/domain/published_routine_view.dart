@@ -70,6 +70,7 @@ class PublishedRoutine {
     required this.exercises,
     this.difficulty,
     this.schemaVersion = 1,
+    this.betweenExerciseRestSeconds,
   });
 
   final String id;
@@ -80,7 +81,15 @@ class PublishedRoutine {
   final String? difficulty;
   final int schemaVersion;
 
+  /// Explicit between-exercise prescription, independent of per-set rest.
+  final int? betweenExerciseRestSeconds;
+
   static PublishedRoutine fromDocument(String id, Map<String, dynamic> data) {
+    final betweenRest = data['betweenExerciseRestSeconds'];
+    if (betweenRest != null &&
+        (betweenRest is! int || betweenRest < 0 || betweenRest > 600)) {
+      throw const FormatException('Invalid between-exercise rest');
+    }
     final version = data['schemaVersion'];
     if (!(version == 1 && data['kind'] == 'routine' ||
             version == 2 && data['kind'] == 'routine_v2') ||
@@ -187,6 +196,7 @@ class PublishedRoutine {
       exercises: exercises,
       difficulty: data['difficulty'] as String?,
       schemaVersion: version as int,
+      betweenExerciseRestSeconds: betweenRest as int?,
     );
   }
 }

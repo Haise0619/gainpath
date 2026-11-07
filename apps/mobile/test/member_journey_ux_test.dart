@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:gainpath_mobile/features/workout/application/workout_preferences_controller.dart';
+import 'workout_preferences_test.dart' show MemoryWorkoutPreferencesStore;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gainpath_mobile/features/workout/presentation/member/published_exercise_tutorial_screen.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -40,6 +42,8 @@ void main() {
             home: RoutineJourneyRoute(
                 scope: scope,
                 routine: routineFixture(),
+                preferencesFactory: (s) async => WorkoutPreferencesController(
+                    scope: s, store: MemoryWorkoutPreferencesStore()),
                 storeFactory: (_) async => store,
                 workoutStoreFactory: (_) async => workouts))));
     await tester.pumpAndSettle();
@@ -191,6 +195,8 @@ void main() {
             home: RoutineJourneyRoute(
                 scope: scope,
                 routine: routineFixture(),
+                preferencesFactory: (s) async => WorkoutPreferencesController(
+                    scope: s, store: MemoryWorkoutPreferencesStore()),
                 storeFactory: (_) async => store,
                 workoutStoreFactory: (_) async => workouts))));
     await tester.pumpAndSettle();
@@ -199,10 +205,11 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Start Exercise'));
     await tester.pumpAndSettle();
-    expect(find.text('Before we turn on the camera'), findsOneWidget);
+    expect(find.text('AI Tracking privacy'), findsOneWidget);
     expect(store.records.keys.single, initialId);
     expect(store.records.values.single.selectedIndex, 0);
     expect(await workouts.read(), isEmpty);
+    await tester.ensureVisible(find.text('Not now'));
     await tester.tap(find.text('Not now'));
     await tester.pumpAndSettle();
     expect(store.records.keys.single, initialId);

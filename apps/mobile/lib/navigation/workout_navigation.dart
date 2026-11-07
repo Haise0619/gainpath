@@ -20,6 +20,7 @@ class RealWorkoutLaunch {
     this.sessionId,
     this.returnToRoutine = false,
     this.routineContext,
+    this.consentCurrent,
   });
 
   final SessionScope scope;
@@ -29,6 +30,9 @@ class RealWorkoutLaunch {
   final String? sessionId;
   final bool returnToRoutine;
   final RoutineWorkoutContext? routineContext;
+
+  /// Live revocation check; persistent consent is separate from launch setup.
+  final bool Function()? consentCurrent;
   RepetitionPrescription get repetitionTarget {
     return exercise.repetitionTarget;
   }

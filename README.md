@@ -261,3 +261,7 @@ Routine authorized local work uses focused checks and concise reports. Cloud, fi
 ## Member workout UX implementation — 7 November 2026
 
 Implemented the existing Member workout journey improvements: state-derived resume actions, typed AI Tracked/Video Timed/Manual targets, contextual tutorials, anchored controls and truthful summaries. Verification: 147 affected tests passed; analysis clean across 32 changed Dart files; Android debug APK built. Tracking algorithms, persistence contracts, Program linkage and reward restrictions are unchanged by this feature. No APK was installed while the connected app's idle state was uncertain. See [implementation details](docs/ux/member-workout-ux-implementation.md).
+
+## Workout continuity and AI consent — 7 November 2026
+
+Implemented versioned account-scoped AI consent and Settings controls, plus saved-result rest countdowns and safe automatic exercise handoffs with accessible purple UI. Verification: 181 affected tests passed; analysis clean across 40 changed Dart files; Android debug APK built. Required tracker setup remains; lifecycle interruption cancels unsafe launch intents. Tracking algorithms, workout credit, history, Program linkage and reward restrictions are unchanged. Physical-device acceptance remains pending; no APK was installed. See [implementation details](docs/ux/workout-continuity-implementation.md).

@@ -6,6 +6,7 @@ import 'package:gainpath_domain/coaching.dart';
 import 'member_contact_details_panel.dart';
 import 'member_deactivation_dialog.dart';
 import 'privacy_and_data_settings_screen.dart';
+import '../../../workout/presentation/member/workout_privacy_settings_screen.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:gainpath_identity/gainpath_identity.dart';
 
@@ -37,6 +38,17 @@ class AccountSettingsScreen extends StatefulWidget {
 }
 
 class _AccountSettingsScreenState extends State<AccountSettingsScreen> {
+  bool _workoutSettingsCurrent(SessionScope scope) {
+    if (widget.isSessionCurrent != null) return widget.isSessionCurrent!();
+    try {
+      final state = context.read<AuthBloc>().state;
+      return state.session?.scope == scope &&
+          AuthRolePolicy.canEnter(state, allowed: const {AppRole.member});
+    } catch (_) {
+      return false;
+    }
+  }
+
   bool _push = true;
   bool _email = false;
   bool _voice = true;
@@ -208,6 +220,31 @@ class _AccountSettingsScreenState extends State<AccountSettingsScreen> {
                     ),
                     const SizedBox(height: 18),
                     const Eyebrow('Workout'),
+                    if (widget.contactSession?.scope != null ||
+                        widget.repository != null)
+                      Panel(
+                          padding: EdgeInsets.zero,
+                          child: ListTile(
+                            leading: const Icon(Icons.privacy_tip_outlined),
+                            title: const Text('Privacy & AI Tracking'),
+                            subtitle: const Text(
+                                'Consent, Auto-Continue and rest preferences'),
+                            trailing: const Icon(Icons.chevron_right),
+                            onTap: () => Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                    builder: (_) =>
+                                        WorkoutPrivacySettingsScreen(
+                                            scope: widget
+                                                    .contactSession?.scope ??
+                                                widget.repository!.scope,
+                                            isCurrent: () =>
+                                                _workoutSettingsCurrent(
+                                                    widget.contactSession
+                                                            ?.scope ??
+                                                        widget.repository!
+                                                            .scope)))),
+                          )),
                     Panel(
                       padding: EdgeInsets.zero,
                       child: SwitchListTile(
@@ -250,7 +287,8 @@ class _AccountSettingsScreenState extends State<AccountSettingsScreen> {
                           ListTile(
                             leading: const Icon(Icons.privacy_tip_outlined),
                             title: const Text('Privacy and data'),
-                            subtitle: const Text('Posture & camera data sharing'),
+                            subtitle:
+                                const Text('Posture & camera data sharing'),
                             trailing: const Icon(
                                 Icons.arrow_forward_ios_rounded,
                                 size: 14),

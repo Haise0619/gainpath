@@ -36,6 +36,7 @@ class RealSquatRoute extends StatefulWidget {
       required this.exercise,
       required this.scope,
       required this.consented,
+      this.consentCurrent,
       required this.setupConfirmed,
       this.requestServerUpload = false,
       this.sessionId,
@@ -47,6 +48,7 @@ class RealSquatRoute extends StatefulWidget {
   final PublishedRoutineExercise exercise;
   final SessionScope scope;
   final bool consented, setupConfirmed;
+  final bool Function()? consentCurrent;
   final bool requestServerUpload;
   final String? sessionId;
   final bool returnToRoutine;
@@ -93,6 +95,7 @@ class _RealSquatRouteState extends State<RealSquatRoute>
     _opening = true;
     final auth = context.read<AuthBloc>();
     bool authorized() =>
+        (widget.consentCurrent?.call() ?? true) &&
         auth.state.session?.scope == widget.scope &&
         AuthRolePolicy.canEnter(auth.state, allowed: const {AppRole.member});
     try {

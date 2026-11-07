@@ -1,4 +1,7 @@
 import 'dart:async';
+import '../../../../app/di/workout_preferences_factory.dart';
+import '../../application/workout_preferences_controller.dart';
+import 'workout_privacy_settings_screen.dart';
 import '../../domain/exercise_tracker_dispatcher.dart';
 import '../../domain/published_routine_view.dart';
 import '../../application/workout_hub_program.dart';
@@ -35,8 +38,10 @@ class WorkoutPrepScreen extends StatelessWidget {
       this.programLoadError = false,
       this.organizationId,
       this.trackers = const ExerciseTrackerDispatcher(),
+      this.preferencesFactory = createWorkoutPreferences,
       this.routes = const WorkoutPrepRoutes()});
   final bool live;
+  final WorkoutPreferencesFactory preferencesFactory;
   final PublishedRoutine? publishedRoutine;
   final bool routineLoadFailed;
   final String? routineStatusMessage;
@@ -105,6 +110,8 @@ class WorkoutPrepScreen extends StatelessWidget {
               sourceBlueprintId: selectedRoutine.sourceBlueprintId,
               title: selectedRoutine.title,
               schemaVersion: selectedRoutine.schemaVersion,
+              betweenExerciseRestSeconds:
+                  selectedRoutine.betweenExerciseRestSeconds,
               estimatedMinutes: selectedRoutine.estimatedMinutes,
               exercises: routine.cast<PublishedRoutineExercise>(),
               difficulty: selectedRoutine.difficulty,
@@ -321,6 +328,16 @@ class WorkoutPrepScreen extends StatelessWidget {
   }
 
   Future<void> _startRealSession(BuildContext context) async {
+    final lease = _CaptureLaunchLease(context);
+    try {
+      await _startRealSessionWithLease(context, lease);
+    } finally {
+      lease.dispose();
+    }
+  }
+
+  Future<void> _startRealSessionWithLease(
+      BuildContext context, _CaptureLaunchLease lease) async {
     if (routes.journeyBuilder != null) {
       _openRoutineJourney(context);
       return;
@@ -360,52 +377,56 @@ class WorkoutPrepScreen extends StatelessWidget {
       return;
     }
     final exercise = candidates.first;
+    WorkoutPreferencesController preferences;
+    try {
+      preferences = await preferencesFactory(scope);
+    } catch (_) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('Workout preferences are unavailable. Try again.')));
+      }
+      return;
+    }
+    if (!lease.current || auth.state.session?.scope != scope) return;
     var uploadRequested = false;
     final tracker = trackers
         .resolve(
             organizationId: scope.organizationId,
             exerciseId: exercise.exerciseId)
         .tracker;
-    final consented = await showModalBottomSheet<bool>(
-        context: context,
-        isScrollControlled: true,
-        builder: (_) => _ConsentSheet(
-            realWorkout: true,
-            allowUpload: tracker == ExerciseTracker.sideViewSquat,
-            exerciseInstruction: switch (tracker) {
-              ExerciseTracker.frontViewLateralRaise =>
-                lateralRaiseCaptureInstruction,
-              ExerciseTracker.frontViewShoulderPress =>
-                shoulderPressCaptureInstruction,
-              ExerciseTracker.sideViewCurl => curlCaptureInstruction,
-              ExerciseTracker.sideViewRow => rowCaptureInstruction,
-              ExerciseTracker.sideViewReverseLunge =>
-                reverseLungeCaptureInstruction,
-              ExerciseTracker.sideViewCalfRaise => calfRaiseCaptureInstruction,
-              ExerciseTracker.sideViewWallPushUp =>
-                wallPushUpCaptureInstruction,
-              ExerciseTracker.sideViewFloorPushUp =>
-                floorPushUpCaptureInstruction,
-              _ => null,
-            },
-            setupConfirmationLabel:
-                tracker == ExerciseTracker.sideViewFloorPushUp
-                    ? floorPushUpSetupConfirmation
-                    : tracker == ExerciseTracker.sideViewWallPushUp
-                        ? wallPushUpSetupConfirmation
-                        : tracker == ExerciseTracker.frontViewLateralRaise
-                            ? lateralRaiseSetupConfirmation
-                            : tracker == ExerciseTracker.frontViewShoulderPress
-                                ? shoulderPressSetupConfirmation
-                                : tracker == ExerciseTracker.sideViewRow
-                                    ? rowSetupConfirmation
-                                    : tracker ==
-                                            ExerciseTracker.sideViewReverseLunge
-                                        ? reverseLungeSetupConfirmation
-                                        : null,
-            onUploadChanged: (value) => uploadRequested = value));
+    final consented = await showWorkoutCaptureConsent(context,
+        preferences: preferences,
+        allowUpload: tracker == ExerciseTracker.sideViewSquat,
+        exerciseInstruction: switch (tracker) {
+          ExerciseTracker.frontViewLateralRaise =>
+            lateralRaiseCaptureInstruction,
+          ExerciseTracker.frontViewShoulderPress =>
+            shoulderPressCaptureInstruction,
+          ExerciseTracker.sideViewCurl => curlCaptureInstruction,
+          ExerciseTracker.sideViewRow => rowCaptureInstruction,
+          ExerciseTracker.sideViewReverseLunge =>
+            reverseLungeCaptureInstruction,
+          ExerciseTracker.sideViewCalfRaise => calfRaiseCaptureInstruction,
+          ExerciseTracker.sideViewWallPushUp => wallPushUpCaptureInstruction,
+          ExerciseTracker.sideViewFloorPushUp => floorPushUpCaptureInstruction,
+          _ => null,
+        },
+        setupConfirmationLabel: tracker == ExerciseTracker.sideViewFloorPushUp
+            ? floorPushUpSetupConfirmation
+            : tracker == ExerciseTracker.sideViewWallPushUp
+                ? wallPushUpSetupConfirmation
+                : tracker == ExerciseTracker.frontViewLateralRaise
+                    ? lateralRaiseSetupConfirmation
+                    : tracker == ExerciseTracker.frontViewShoulderPress
+                        ? shoulderPressSetupConfirmation
+                        : tracker == ExerciseTracker.sideViewRow
+                            ? rowSetupConfirmation
+                            : tracker == ExerciseTracker.sideViewReverseLunge
+                                ? reverseLungeSetupConfirmation
+                                : null,
+        onUploadChanged: (value) => uploadRequested = value);
     if (consented != true ||
-        !context.mounted ||
+        !lease.current ||
         auth.state.session?.scope != scope) {
       return;
     }
@@ -419,6 +440,7 @@ class WorkoutPrepScreen extends StatelessWidget {
         routineId: publishedRoutine!.id,
         exercise: exercise,
         consented: true,
+        consentCurrent: () => preferences.validConsent,
         requestServerUpload: uploadRequested,
         setupConfirmed: true);
     Navigator.push(
@@ -469,6 +491,27 @@ class WorkoutPrepScreen extends StatelessWidget {
                   value: auth, child: Builder(builder: destination))));
     }
   }
+}
+
+/// A camera launch begun in the foreground cannot survive an interruption.
+class _CaptureLaunchLease with WidgetsBindingObserver {
+  _CaptureLaunchLease(this.context) {
+    final state = WidgetsBinding.instance.lifecycleState;
+    _interrupted = state != null && state != AppLifecycleState.resumed;
+    WidgetsBinding.instance.addObserver(this);
+  }
+  final BuildContext context;
+  bool _interrupted = false;
+  bool get current =>
+      !_interrupted &&
+      context.mounted &&
+      ModalRoute.of(context)?.isCurrent == true;
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed) _interrupted = true;
+  }
+
+  void dispose() => WidgetsBinding.instance.removeObserver(this);
 }
 
 class _WorkoutOverview extends StatelessWidget {
@@ -752,19 +795,65 @@ class _DetourCard extends StatelessWidget {
 }
 
 Future<bool?> showWorkoutCaptureConsent(BuildContext context,
-        {required ValueChanged<bool> onUploadChanged,
-        bool allowUpload = true,
-        String? exerciseInstruction,
-        String? setupConfirmationLabel}) =>
-    showModalBottomSheet<bool>(
+    {required ValueChanged<bool> onUploadChanged,
+    bool allowUpload = true,
+    String? exerciseInstruction,
+    String? setupConfirmationLabel,
+    bool requireSetup = true,
+    WorkoutPreferencesController? preferences}) async {
+  final auth = context.read<AuthBloc>();
+  final scope = auth.state.session?.scope;
+  if (scope == null) return false;
+  final lease = _CaptureLaunchLease(context);
+  try {
+    final saved = preferences ?? await createWorkoutPreferences(scope);
+    await saved.load();
+    if (!lease.current ||
+        auth.state.session?.scope != scope ||
+        saved.scope != scope) {
+      return false;
+    }
+    if (!saved.validConsent) {
+      final accepted = await showAiTrackingPrivacyConsent(context);
+      if (accepted != true ||
+          !lease.current ||
+          auth.state.session?.scope != scope) {
+        return false;
+      }
+      await saved.grantConsent();
+    }
+    if (!lease.current ||
+        auth.state.session?.scope != scope ||
+        !saved.validConsent) {
+      return false;
+    }
+    onUploadChanged(false);
+    if (!requireSetup) return true;
+    final ready = await showModalBottomSheet<bool>(
         context: context,
         isScrollControlled: true,
         builder: (_) => _ConsentSheet(
+            privacyAccepted: true,
             realWorkout: true,
             onUploadChanged: onUploadChanged,
             allowUpload: allowUpload,
             exerciseInstruction: exerciseInstruction,
             setupConfirmationLabel: setupConfirmationLabel));
+    return lease.current &&
+        auth.state.session?.scope == scope &&
+        saved.validConsent &&
+        ready == true;
+  } catch (_) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text(
+              'AI Tracking preferences could not be saved. Retry before starting.')));
+    }
+    return false;
+  } finally {
+    lease.dispose();
+  }
+}
 
 const curlCaptureInstruction =
     'Choose both arms, left only or right only before the camera starts. Reps are per selected arm per set. Keep the selected arm closest to the camera, lower it to calibrate, and switch only when prompted. Keep the shoulder, elbow, wrist and hip visible. Results stay on this device; upload and rewards are unavailable.';
@@ -800,6 +889,7 @@ const floorPushUpSetupConfirmation =
 class _ConsentSheet extends StatefulWidget {
   const _ConsentSheet(
       {this.previewOnly = false,
+      this.privacyAccepted = false,
       this.realWorkout = false,
       this.allowUpload = true,
       this.exerciseInstruction,
@@ -811,6 +901,7 @@ class _ConsentSheet extends StatefulWidget {
   final ValueChanged<bool>? onUploadChanged;
   final bool previewOnly;
   final bool realWorkout;
+  final bool privacyAccepted;
 
   @override
   State<_ConsentSheet> createState() => _ConsentSheetState();
@@ -841,29 +932,36 @@ class _ConsentSheetState extends State<_ConsentSheet> {
                   borderRadius: BorderRadius.circular(999)),
             ),
           ),
-          Text('Before we turn on the camera',
+          Text(
+              widget.privacyAccepted
+                  ? 'Prepare your exercise'
+                  : 'Before we turn on the camera',
               style: Theme.of(context).textTheme.titleLarge),
           const SizedBox(height: 12),
-          Text(
-            widget.previewOnly
-                ? 'GainPath uses your camera to display your body landmarks on this device.'
-                : 'GainPath reads your body position from the camera to check your form '
-                    'and count your reps.',
-            style: Theme.of(context).textTheme.bodyLarge,
-          ),
+          if (!widget.privacyAccepted)
+            Text(
+              widget.previewOnly
+                  ? 'GainPath uses your camera to display your body landmarks on this device.'
+                  : 'GainPath reads your body position from the camera to check your form '
+                      'and count your reps.',
+              style: Theme.of(context).textTheme.bodyLarge,
+            ),
           const SizedBox(height: 14),
           Panel(
             background: AppColors.primaryTint,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _point(context, 'Everything is processed on this device.'),
-                _point(context, 'No video is recorded, stored, or uploaded.'),
-                _point(
-                    context,
-                    widget.previewOnly
-                        ? 'This preview does not save activity or count reps.'
-                        : 'Only your movement scores are saved.'),
+                if (!widget.privacyAccepted)
+                  _point(context, 'Everything is processed on this device.'),
+                if (!widget.privacyAccepted)
+                  _point(context, 'No video is recorded, stored, or uploaded.'),
+                if (!widget.privacyAccepted)
+                  _point(
+                      context,
+                      widget.previewOnly
+                          ? 'This preview does not save activity or count reps.'
+                          : 'Only your movement scores are saved.'),
                 if (widget.realWorkout)
                   _point(
                       context,
@@ -876,27 +974,28 @@ class _ConsentSheetState extends State<_ConsentSheet> {
             ),
           ),
           const SizedBox(height: 16),
-          InkWell(
-            onTap: () => setState(() => _checked = !_checked),
-            borderRadius: BorderRadius.circular(10),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 4),
-              child: Row(
-                children: [
-                  Checkbox(
-                    value: _checked,
-                    onChanged: (v) => setState(() => _checked = v ?? false),
-                  ),
-                  Expanded(
-                    child: Text(
-                      'I agree to camera-based movement tracking as described above.',
-                      style: Theme.of(context).textTheme.bodyLarge,
+          if (!widget.privacyAccepted)
+            InkWell(
+              onTap: () => setState(() => _checked = !_checked),
+              borderRadius: BorderRadius.circular(10),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: Row(
+                  children: [
+                    Checkbox(
+                      value: _checked,
+                      onChanged: (v) => setState(() => _checked = v ?? false),
                     ),
-                  ),
-                ],
+                    Expanded(
+                      child: Text(
+                        'I agree to camera-based movement tracking as described above.',
+                        style: Theme.of(context).textTheme.bodyLarge,
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
-          ),
           const SizedBox(height: 16),
           if (widget.realWorkout)
             CheckboxListTile(
@@ -909,10 +1008,13 @@ class _ConsentSheetState extends State<_ConsentSheet> {
                 contentPadding: EdgeInsets.zero),
           FilledButton(
             // Camera consent and setup are required; server upload is optional.
-            onPressed: _checked && (!widget.realWorkout || _setupChecked)
+            onPressed: (_checked || widget.privacyAccepted) &&
+                    (!widget.realWorkout || _setupChecked)
                 ? () => Navigator.pop(context, true)
                 : null,
-            child: const Text('Accept and start'),
+            child: Text(widget.privacyAccepted
+                ? 'Ready to continue'
+                : 'Accept and start'),
           ),
           if (widget.realWorkout && widget.allowUpload)
             CheckboxListTile(

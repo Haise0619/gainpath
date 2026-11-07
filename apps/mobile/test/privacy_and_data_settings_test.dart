@@ -79,11 +79,13 @@ void main() {
     await tester.tap(switchFinder);
     await tester.pumpAndSettle();
     expect(tester.widget<SwitchListTile>(switchFinder).value, isTrue);
-    expect(find.text('Could not verify this change. Reload before trying again.'),
+    expect(
+        find.text('Could not verify this change. Reload before trying again.'),
         findsOneWidget);
   });
 
-  testWidgets('AccountSettings navigates to Privacy & Data with Posture sharing',
+  testWidgets(
+      'AccountSettings navigates to Privacy & Data with Posture sharing',
       (tester) async {
     final prefRepo = _FakePreferencesRepo();
     final module9Repo = FakeModule9Sharing();
@@ -101,6 +103,8 @@ void main() {
     expect(find.text('Privacy and data'), findsOneWidget);
     expect(find.text('Posture & camera data sharing'), findsOneWidget);
 
+    await tester.ensureVisible(find.text('Privacy and data'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Privacy and data'));
     await tester.pumpAndSettle();
 
