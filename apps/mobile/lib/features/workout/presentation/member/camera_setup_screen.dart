@@ -21,8 +21,8 @@ class _CameraSetupScreenState extends State<CameraSetupScreen> {
       Icons.stay_current_portrait_rounded
     ],
     [
-      'Face the camera side-on',
-      'A side view reads squat and hinge depth best.',
+      'Use the exercise’s required view',
+      'This picture shows a side-view example for exercises such as squats. Shoulder press and lateral raise require a front view. Follow your exercise setup screen for the correct angle.',
       Icons.switch_camera_rounded
     ],
     [

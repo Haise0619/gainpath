@@ -83,9 +83,13 @@ class RoutineAttemptDetailScreen extends StatelessWidget {
       this.onResume,
       this.onRepeat,
       this.onNextDay,
-      this.onViewProgress});
+      this.onViewProgress,
+      this.availableSessionIds = const {},
+      this.onOpenSession});
   final RoutineAttempt attempt;
   final VoidCallback? onResume, onRepeat, onNextDay, onViewProgress;
+  final Set<String> availableSessionIds;
+  final ValueChanged<String>? onOpenSession;
   @override
   Widget build(BuildContext context) {
     final a = attempt;
@@ -128,6 +132,9 @@ class RoutineAttemptDetailScreen extends StatelessWidget {
                       ?.copyWith(color: AppColors.primary)),
               Text(
                   '${a.completedExercises}/${a.entries.length} exercises completed'),
+              const SizedBox(height: 6),
+              const Text(
+                  'Saved on this device · This entry is a routine attempt. Each camera session below is one exercise, not another completed workout.'),
               const SizedBox(height: 12),
               Panel(
                   background: AppColors.primaryTint,
@@ -158,7 +165,11 @@ class RoutineAttemptDetailScreen extends StatelessWidget {
                       ])),
               const SizedBox(height: 16),
               for (final result in a.entries)
-                _ExerciseResult(attempt: a, result: result),
+                _ExerciseResult(
+                    attempt: a,
+                    result: result,
+                    availableSessionIds: availableSessionIds,
+                    onOpenSession: onOpenSession),
               const SizedBox(height: 12),
               if (onViewProgress != null)
                 OutlinedButton(
@@ -173,9 +184,15 @@ class RoutineAttemptDetailScreen extends StatelessWidget {
 }
 
 class _ExerciseResult extends StatelessWidget {
-  const _ExerciseResult({required this.attempt, required this.result});
+  const _ExerciseResult(
+      {required this.attempt,
+      required this.result,
+      required this.availableSessionIds,
+      this.onOpenSession});
   final RoutineAttempt attempt;
   final RoutineExerciseResult result;
+  final Set<String> availableSessionIds;
+  final ValueChanged<String>? onOpenSession;
   @override
   Widget build(BuildContext context) {
     final e = attempt.routine.exercises[result.index];
@@ -203,6 +220,13 @@ class _ExerciseResult extends StatelessWidget {
                 Expanded(child: Text(exerciseStatusLabel(result.status))),
               ]),
               Text(exerciseResultSummary(result)),
+              if (onOpenSession != null)
+                for (final id
+                    in result.sessionIds.where(availableSessionIds.contains))
+                  TextButton.icon(
+                      onPressed: () => onOpenSession!(id),
+                      icon: const Icon(Icons.receipt_long_outlined),
+                      label: const Text('View saved exercise session')),
             ])));
   }
 }

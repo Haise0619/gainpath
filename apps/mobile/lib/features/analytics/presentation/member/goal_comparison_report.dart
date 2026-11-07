@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'widgets/workout_measurement_scope.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:gainpath_domain/analytics.dart';
 import 'package:gainpath_domain/gainpath_domain.dart';
@@ -295,6 +296,7 @@ class _GoalComparisonReportState extends State<GoalComparisonReport> {
               ]));
         }
         return PageBody(children: [
+          const WorkoutMeasurementScope(),
           const Text(
               'Your saved targets compared with available camera captures and self-reported profile facts.'),
           const SizedBox(height: 12),

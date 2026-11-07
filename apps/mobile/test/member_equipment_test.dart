@@ -1,3 +1,5 @@
+import 'workout_program_controller_test.dart' show MemoryProgramStore;
+import 'routine_journey_controller_test.dart' show MemoryJourneyStore;
 import 'support/signed_out_firebase.dart';
 import 'package:gainpath_mobile/features/workout/presentation/member/equipment_scanner_screen.dart';
 import 'dart:async';
@@ -61,6 +63,8 @@ void main() {
         authRepository: auth,
         profileRepositoryFactory: profiles.repository,
         routineLoaderFactory: (_) async => null,
+        programStoreFactory: (scope) async => MemoryProgramStore(scope),
+        routineJourneyStoreFactory: (scope) async => MemoryJourneyStore(scope),
         equipmentReaderFactory: (scope, active) {
           expect(scope, session.scope);
           expect(active(), session.scope);

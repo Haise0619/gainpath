@@ -203,7 +203,7 @@ class _GuidedTimedWorkoutScreenState extends State<GuidedTimedWorkoutScreen> {
                               Text(
                                   complete
                                       ? 'Saved on this device · Timer recorded'
-                                      : '${p.prescription.durationSeconds} sec per set · ${p.prescription.restSeconds} sec rest',
+                                      : '${p.prescription.durationSeconds} sec per set · ${p.prescription.restSeconds} sec rest between sets',
                                   textAlign: TextAlign.center),
                             ])),
                         if (showRest)
@@ -225,7 +225,10 @@ class _GuidedTimedWorkoutScreenState extends State<GuidedTimedWorkoutScreen> {
                                               : c.interruptionReason ==
                                                       'save failed'
                                                   ? 'Save failed. Retry to retain this progress.'
-                                                  : 'Your workout is paused. Check the video before resuming.'),
+                                                  : c.player.error != null ||
+                                                          !c.player.ready
+                                                      ? 'Video playback is unavailable. Retry video before continuing; inactive time is not recorded.'
+                                                      : 'Your workout is paused. Resume when you are ready; inactive time is not recorded.'),
                                       style: TextStyle(
                                           color: _error != null
                                               ? Theme.of(context)

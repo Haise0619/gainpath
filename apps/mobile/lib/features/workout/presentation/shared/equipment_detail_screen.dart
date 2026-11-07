@@ -115,101 +115,102 @@ class _EquipmentDetailScreenState extends State<EquipmentDetailScreen>
                   children: [
                     Padding(
                       padding: const EdgeInsets.all(10.0),
-                      child: _networkHero(equipment.imageUrl, fit: BoxFit.contain),
+                      child:
+                          _networkHero(equipment.imageUrl, fit: BoxFit.contain),
                     ),
                     if (!widget.live && _playing)
                       DecoratedBox(
                         decoration: BoxDecoration(
                             color: AppColors.ink.withValues(alpha: 0.5)),
                       ),
-                  if (!widget.live)
-                    Center(
-                      child: GestureDetector(
-                        onTap: _togglePlay,
-                        child: Container(
-                          width: 64,
-                          height: 64,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: Colors.white.withValues(alpha: 0.92),
-                            boxShadow: const [
-                              BoxShadow(color: Colors.black26, blurRadius: 14)
-                            ],
-                          ),
-                          child: Icon(
-                            _finished
-                                ? Icons.replay_rounded
-                                : _playing
-                                    ? Icons.pause_rounded
-                                    : Icons.play_arrow_rounded,
-                            color: AppColors.primary,
-                            size: 34,
+                    if (!widget.live)
+                      Center(
+                        child: GestureDetector(
+                          onTap: _togglePlay,
+                          child: Container(
+                            width: 64,
+                            height: 64,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: Colors.white.withValues(alpha: 0.92),
+                              boxShadow: const [
+                                BoxShadow(color: Colors.black26, blurRadius: 14)
+                              ],
+                            ),
+                            child: Icon(
+                              _finished
+                                  ? Icons.replay_rounded
+                                  : _playing
+                                      ? Icons.pause_rounded
+                                      : Icons.play_arrow_rounded,
+                              color: AppColors.primary,
+                              size: 34,
+                            ),
                           ),
                         ),
                       ),
-                    ),
-                  Positioned(
-                    left: 14,
-                    top: 12,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 10, vertical: 5),
-                      decoration: BoxDecoration(
-                        color: AppColors.ink.withValues(alpha: 0.72),
-                        borderRadius: BorderRadius.circular(999),
-                      ),
-                      child: Text(
-                          widget.live ? 'EQUIPMENT IMAGE' : 'TUTORIAL VIDEO',
-                          style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 10,
-                              fontWeight: FontWeight.w800,
-                              letterSpacing: 1)),
-                    ),
-                  ),
-                  if (!widget.live)
                     Positioned(
                       left: 14,
-                      right: 14,
-                      bottom: 12,
-                      child: AnimatedBuilder(
-                        animation: _progress,
-                        builder: (context, child) {
-                          final elapsed =
-                              _progress.value * _demoDuration.inSeconds;
-                          return Row(
-                            children: [
-                              Expanded(
-                                child: ClipRRect(
-                                  borderRadius: BorderRadius.circular(999),
-                                  child: LinearProgressIndicator(
-                                    value: _progress.value,
-                                    minHeight: 4,
-                                    backgroundColor:
-                                        Colors.white.withValues(alpha: 0.3),
-                                    valueColor: const AlwaysStoppedAnimation(
-                                        AppColors.overlay),
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              Text(
-                                '0:${elapsed.round().toString().padLeft(2, '0')} / 0:${_demoDuration.inSeconds}',
-                                style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w700),
-                              ),
-                            ],
-                          );
-                        },
+                      top: 12,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 5),
+                        decoration: BoxDecoration(
+                          color: AppColors.ink.withValues(alpha: 0.72),
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                        child: Text(
+                            widget.live ? 'EQUIPMENT IMAGE' : 'TUTORIAL VIDEO',
+                            style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 10,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: 1)),
                       ),
                     ),
-                ],
+                    if (!widget.live)
+                      Positioned(
+                        left: 14,
+                        right: 14,
+                        bottom: 12,
+                        child: AnimatedBuilder(
+                          animation: _progress,
+                          builder: (context, child) {
+                            final elapsed =
+                                _progress.value * _demoDuration.inSeconds;
+                            return Row(
+                              children: [
+                                Expanded(
+                                  child: ClipRRect(
+                                    borderRadius: BorderRadius.circular(999),
+                                    child: LinearProgressIndicator(
+                                      value: _progress.value,
+                                      minHeight: 4,
+                                      backgroundColor:
+                                          Colors.white.withValues(alpha: 0.3),
+                                      valueColor: const AlwaysStoppedAnimation(
+                                          AppColors.overlay),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  '0:${elapsed.round().toString().padLeft(2, '0')} / 0:${_demoDuration.inSeconds}',
+                                  style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w700),
+                                ),
+                              ],
+                            );
+                          },
+                        ),
+                      ),
+                  ],
+                ),
               ),
             ),
           ),
-        ),
           const SizedBox(height: 16),
           Text(equipment.name, style: Theme.of(context).textTheme.titleLarge),
           const SizedBox(height: 6),
@@ -232,11 +233,6 @@ class _EquipmentDetailScreenState extends State<EquipmentDetailScreen>
             ],
           ),
           const SizedBox(height: 18),
-          if (equipment.tutorialVideoUrl.isNotEmpty) ...[
-            const Eyebrow('Tutorial video'),
-            EquipmentTutorialVideo(key: ValueKey(equipment.tutorialVideoUrl), url: equipment.tutorialVideoUrl),
-            const SizedBox(height: 18),
-          ],
           const Eyebrow('Introduction'),
           Panel(
             child: Text(equipment.description,
@@ -288,6 +284,18 @@ class _EquipmentDetailScreenState extends State<EquipmentDetailScreen>
             ),
           ),
           const SizedBox(height: 18),
+          if (equipment.tutorialVideoUrl.isNotEmpty) ...[
+            const Eyebrow('Tutorial video'),
+            EquipmentTutorialVideo(
+                key: ValueKey(equipment.tutorialVideoUrl),
+                url: equipment.tutorialVideoUrl),
+            const SizedBox(height: 18),
+          ],
+          if (equipment.tutorialVideoUrl.isEmpty)
+            const Padding(
+                padding: EdgeInsets.only(bottom: 18),
+                child: Text(
+                    'No tutorial video is available. Follow the written setup and safety instructions above.')),
           const Eyebrow('Related exercises'),
           if (related.isEmpty)
             Panel(

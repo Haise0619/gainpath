@@ -1,3 +1,5 @@
+import '../workout_presentation.dart';
+import 'widgets/exercise_setup_layout.dart';
 import 'package:flutter/material.dart';
 
 /// Floor contact is user-confirmed, never inferred from the pose projection.
@@ -21,16 +23,29 @@ class _CalfRaiseSetupScreenState extends State<CalfRaiseSetupScreen> {
   @override
   Widget build(BuildContext context) => Scaffold(
         appBar: AppBar(title: const Text('Calf raise setup')),
+        bottomNavigationBar: SetupActionBar(
+            child: FilledButton.icon(
+                key: const ValueKey('calf-start-camera'),
+                style: FilledButton.styleFrom(minimumSize: const Size(44, 48)),
+                onPressed: !_heelsDown || _starting
+                    ? null
+                    : () {
+                        setState(() => _starting = true);
+                        widget.onStart();
+                      },
+                icon: const Icon(Icons.videocam_outlined),
+                label: const Text('Start camera'))),
         body: SafeArea(
             child: SingleChildScrollView(
                 padding: const EdgeInsets.all(24),
                 child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
+                      const SetupViewBanner(frontView: false),
                       Text(widget.exerciseName,
                           style: Theme.of(context).textTheme.headlineSmall),
                       const SizedBox(height: 12),
-                      Text('${widget.sets} sets · ${widget.reps} reps per set'),
+                      Text(workoutRepetitionTarget(widget.sets, widget.reps)),
                       Text('${widget.restSeconds}s rest between sets'),
                       const SizedBox(height: 24),
                       const Text(
@@ -42,8 +57,13 @@ class _CalfRaiseSetupScreenState extends State<CalfRaiseSetupScreen> {
                       const Text(
                           'After a brief tracking interruption, lower your heels and hold to restart. The interrupted movement is discarded. Longer interruptions require a new setup hold.'),
                       const SizedBox(height: 12),
-                      const Text(
-                          'Only the visible leg is measured. Counts and form guidance are provisional; equal work by both legs, balance and load are not assessed. Results stay on this device; verified workout acceptance and rewards remain unavailable.'),
+                      ExpansionTile(
+                          tilePadding: EdgeInsets.zero,
+                          title: const Text('What the camera measures'),
+                          children: const [
+                            Text(
+                                'Only the visible leg is measured. Counts and form guidance are provisional; equal work by both legs, balance and load are not assessed. Results stay on this device; verified workout acceptance and rewards remain unavailable.')
+                          ]),
                       const SizedBox(height: 16),
                       CheckboxListTile(
                           contentPadding: EdgeInsets.zero,
@@ -55,18 +75,6 @@ class _CalfRaiseSetupScreenState extends State<CalfRaiseSetupScreen> {
                           title: const Text(
                               'I am side-on on level ground, with both heels down and the whole visible foot in view.')),
                       const SizedBox(height: 16),
-                      FilledButton.icon(
-                          key: const ValueKey('calf-start-camera'),
-                          style: FilledButton.styleFrom(
-                              minimumSize: const Size(44, 48)),
-                          onPressed: !_heelsDown || _starting
-                              ? null
-                              : () {
-                                  setState(() => _starting = true);
-                                  widget.onStart();
-                                },
-                          icon: const Icon(Icons.videocam_outlined),
-                          label: const Text('Start camera')),
                     ]))),
       );
 }

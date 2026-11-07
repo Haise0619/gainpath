@@ -64,7 +64,7 @@ void main() {
             reps: 7,
             restSeconds: 45,
             onStart: () => starts++)));
-    expect(find.text('2 sets · 7 reps per set'), findsOneWidget);
+    expect(find.text('2 sets × 7 reps'), findsOneWidget);
     final start = find.byKey(const ValueKey('calf-start-camera'));
     expect(tester.widget<FilledButton>(start).onPressed, isNull);
     await tester.ensureVisible(find.byType(CheckboxListTile));

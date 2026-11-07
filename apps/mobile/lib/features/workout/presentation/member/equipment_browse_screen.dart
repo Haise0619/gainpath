@@ -117,7 +117,7 @@ class _EquipmentBrowseScreenState extends State<EquipmentBrowseScreen> {
             const Padding(
                 padding: EdgeInsets.all(12),
                 child: Text(
-                    'Organization equipment catalog. Camera recognition and equipment video playback are unavailable.')),
+                    'Organization equipment catalog · Browsing does not start a workout. Open an item for its instructions and available tutorial media.')),
           if (_loading) const LinearProgressIndicator(),
           if (_error != null)
             Panel(

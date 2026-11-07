@@ -24,6 +24,14 @@ PublishedRoutineExercise exercise(
         restSeconds: 30);
 
 void main() {
+  test('target grammar and next action distinguish setup from work', () {
+    expect(workoutRepetitionTarget(1, 1), '1 set × 1 rep');
+    expect(workoutCount(2, 'set'), '2 sets');
+    final ai = ExercisePresentation.forExercise(exercise(),
+        organizationId: 'gainpath');
+    expect(ai.nextActionDescription, contains('Camera setup'));
+    expect(ai.restLabel, '30 sec rest between sets');
+  });
   test('exact registered identity presents AI targets and available scope only',
       () {
     final value = ExercisePresentation.forExercise(exercise(),
@@ -47,7 +55,7 @@ void main() {
         organizationId: 'gainpath');
     expect(timed.mode, WorkoutExerciseMode.videoTimed);
     expect(timed.label, 'Video Timed');
-    expect(timed.targetLabel, '3 sets × 45 sec');
+    expect(timed.targetLabel, '3 sets × 45 sec per set');
     expect(timed.targetsWithRest, contains('30 sec rest'));
     expect(timed.targetLabel, isNot(contains('reps')));
     expect(timed.provenance, 'Timer recorded');

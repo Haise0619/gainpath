@@ -73,6 +73,36 @@ void main() {
         newId: () => 'id_${++id}');
   });
   tearDown(() => c.dispose());
+  test(
+      'ending the current plan preserves all enrollments and allows later enrollment',
+      () async {
+    await c.open();
+    await c.enroll(programFixture(), DateTime.utc(2026, 11, 2), {1, 3, 5});
+    final old = c.enrollment!.toJson();
+    final revision = store.journal.revision;
+    await c.endCurrentPlan();
+    expect(c.enrollment, isNull);
+    expect(store.journal.revision, revision + 1);
+    expect(store.journal.enrollments.single.toJson(), old);
+    await c.enroll(programFixture(), DateTime.utc(2026, 11, 9), {1, 3, 5});
+    expect(store.journal.enrollments, hasLength(2));
+    expect(store.journal.enrollments.first.toJson(), old);
+  });
+  test('ending fails safely on revision conflict and revoked account',
+      () async {
+    await c.open();
+    await c.enroll(programFixture(), DateTime.utc(2026, 11, 2), {1, 3, 5});
+    final id = c.enrollment!.id;
+    store.journal = ProgramJournal(
+        revision: store.journal.revision + 1,
+        activeId: id,
+        enrollments: store.journal.enrollments);
+    await expectLater(c.endCurrentPlan(), throwsStateError);
+    expect(store.journal.activeId, id);
+    active = null;
+    await expectLater(c.endCurrentPlan(), throwsStateError);
+    expect(store.journal.activeId, id);
+  });
   test('enrollment preserves version, schedule and one durable attempt per day',
       () async {
     await c.open();

@@ -1,3 +1,5 @@
+import 'workout_program_controller_test.dart' show MemoryProgramStore;
+import 'routine_journey_controller_test.dart' show MemoryJourneyStore;
 import 'package:gainpath_mobile/features/analytics/presentation/member/goal_comparison_report.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:gainpath_identity/gainpath_identity.dart';
@@ -85,6 +87,8 @@ void main() {
         memberRewardsBuilder: (_) => const SizedBox(),
         profileRepositoryFactory: profiles.repository,
         routineLoaderFactory: (_) async => null,
+        programStoreFactory: (scope) async => MemoryProgramStore(scope),
+        routineJourneyStoreFactory: (scope) async => MemoryJourneyStore(scope),
         progressRepositoryFactory: (scope, active) async =>
             StoredLocalMemberProgressRepository(
                 scope: scope,

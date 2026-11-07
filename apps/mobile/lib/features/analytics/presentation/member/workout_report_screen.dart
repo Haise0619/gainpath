@@ -6,6 +6,7 @@ import 'package:gainpath_ui/gainpath_ui.dart';
 import 'package:syncfusion_flutter_charts/charts.dart';
 import '../../domain/member_workout_report.dart';
 import '../../domain/local_member_progress_repository.dart';
+import 'widgets/workout_measurement_scope.dart';
 
 class WorkoutReportScreen extends StatefulWidget {
   const WorkoutReportScreen(
@@ -234,6 +235,7 @@ class _WorkoutReportScreenState extends State<WorkoutReportScreen> {
                           const SizedBox(height: 8),
                           const Text(
                               'Routine completion requires the whole day’s targets. Manual sets reflect matching saved routine snapshots.'),
+                          const WorkoutMeasurementScope(),
                           if (report.unknownCompletionDays > 0)
                             Text(
                                 '${report.unknownCompletionDays} completed routine day(s) have no known completion date.'),

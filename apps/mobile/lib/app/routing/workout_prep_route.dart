@@ -1,4 +1,5 @@
 import 'dart:async';
+import '../../features/workout/presentation/member/workout_privacy_settings_screen.dart';
 import '../../features/workout/presentation/member/workout_ai_consent_guard.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -293,6 +294,19 @@ class _WorkoutPrepRouteState extends State<WorkoutPrepRoute>
           child: WorkoutPrepScreen(
             live: widget.live,
             organizationId: scope?.organizationId,
+            onOpenSettings: scope == null
+                ? null
+                : () async {
+                    await Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                            builder: (_) => WorkoutPrivacySettingsScreen(
+                                scope: scope,
+                                isCurrent: () => _activeScope() == scope)));
+                    if (mounted && _activeScope() == scope) {
+                      await _reload(scope);
+                    }
+                  },
             onOpenPrograms: scope == null || auth == null
                 ? null
                 : () => _openPrograms(scope, auth),

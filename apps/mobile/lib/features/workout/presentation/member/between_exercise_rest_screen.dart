@@ -134,7 +134,7 @@ class BetweenExerciseRestScreen extends StatelessWidget {
                                 ? 'Could not prepare the next exercise. Resume to try again, or view your routine. Your completed exercise is saved.'
                                 : controller.paused
                                     ? 'Resume when you are ready. Tracking will not restart while paused.'
-                                    : 'Your next exercise opens after rest. Any required setup still applies.',
+                                    : presentation.nextActionDescription,
                         textAlign: TextAlign.center),
                   ])),
           bottomNavigationBar: SafeArea(

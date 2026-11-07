@@ -50,8 +50,8 @@ void main() {
     expect(appBar.titleTextStyle, isNull);
     final start = find.text('Start workout');
     expect(start, findsOneWidget);
-    final button = tester.widget<FilledButton>(
-        find.ancestor(of: start, matching: find.byWidgetPredicate((w) => w is FilledButton)));
+    final button = tester.widget<FilledButton>(find.ancestor(
+        of: start, matching: find.byWidgetPredicate((w) => w is FilledButton)));
     expect(button.style?.backgroundColor?.resolve({}), AppColors.primary);
     expect(button.style?.foregroundColor?.resolve({}), Colors.white);
     expect(tester.getBottomLeft(start).dy, lessThan(700));
@@ -66,6 +66,26 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Start workout'), findsNothing);
     expect(find.text('No workout selected'), findsOneWidget);
+  });
+  testWidgets('workout settings is reachable above the fold with large text',
+      (tester) async {
+    tester.view.physicalSize = const Size(320, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    var opened = 0;
+    await tester.pumpWidget(MaterialApp(
+        builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(context)
+                .copyWith(textScaler: const TextScaler.linear(2)),
+            child: child!),
+        home: WorkoutPrepScreen(
+            live: true,
+            publishedRoutine: routine,
+            onOpenSettings: () => opened++)));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Workout settings'));
+    expect(opened, 1);
+    expect(tester.takeException(), isNull);
   });
   testWidgets('workout chooser shows a name without exposing internal IDs',
       (tester) async {

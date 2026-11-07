@@ -1,3 +1,5 @@
+import '../workout_presentation.dart';
+import 'widgets/exercise_setup_layout.dart';
 import 'package:flutter/material.dart';
 import 'package:gainpath_pose/gainpath_pose.dart' show LungeSide;
 
@@ -24,16 +26,29 @@ class _ReverseLungeSetupScreenState extends State<ReverseLungeSetupScreen> {
   @override
   Widget build(BuildContext context) => Scaffold(
         appBar: AppBar(title: const Text('Reverse lunge setup')),
+        bottomNavigationBar: SetupActionBar(
+            child: FilledButton.icon(
+                key: const ValueKey('reverse-lunge-start-camera'),
+                style: FilledButton.styleFrom(minimumSize: const Size(48, 48)),
+                onPressed: _side == null || _starting
+                    ? null
+                    : () {
+                        setState(() => _starting = true);
+                        widget.onStart(_side!);
+                      },
+                icon: const Icon(Icons.videocam_outlined),
+                label: const Text('Start camera'))),
         body: SafeArea(
             child: SingleChildScrollView(
           padding: const EdgeInsets.all(24),
           child:
               Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            const SetupViewBanner(frontView: false),
             Text(widget.exerciseName,
                 style: Theme.of(context).textTheme.headlineSmall),
             const SizedBox(height: 12),
-            Text(
-                '${widget.sets} sets · ${widget.reps} reps per selected front leg per set'),
+            Text(workoutRepetitionTarget(widget.sets, widget.reps,
+                qualifier: 'per selected front leg')),
             Text('${widget.restSeconds}s rest between sets'),
             const SizedBox(height: 24),
             const Text('Which front leg will stay planted?'),
@@ -58,20 +73,14 @@ class _ReverseLungeSetupScreenState extends State<ReverseLungeSetupScreen> {
             const Text(
                 'Stand tall with a small comfortable gap between your feet to keep both ankles visible. Step the other foot backward, lower with control, then return both feet to the same standing start between reps. Do not alternate legs within a set.'),
             const SizedBox(height: 12),
-            const Text(
-                'Counts use projected movement and remain provisional. Balance, load, floor contact and three-dimensional alignment are not assessed. No form score is produced. Results stay on this device; verified upload and workout rewards are unavailable.'),
+            ExpansionTile(
+                tilePadding: EdgeInsets.zero,
+                title: const Text('What the camera measures'),
+                children: const [
+                  Text(
+                      'Counts use projected movement and remain provisional. Balance, load, floor contact and three-dimensional alignment are not assessed. No form score is produced. Results stay on this device; verified upload and workout rewards are unavailable.')
+                ]),
             const SizedBox(height: 24),
-            FilledButton.icon(
-                key: const ValueKey('reverse-lunge-start-camera'),
-                style: FilledButton.styleFrom(minimumSize: const Size(48, 48)),
-                onPressed: _side == null || _starting
-                    ? null
-                    : () {
-                        setState(() => _starting = true);
-                        widget.onStart(_side!);
-                      },
-                icon: const Icon(Icons.videocam_outlined),
-                label: const Text('Start camera')),
           ]),
         )),
       );

@@ -221,6 +221,63 @@ class _PublishedExerciseTutorialScreenState
                             ? 'Open Set Logger'
                             : 'Start Exercise')))),
         body: PageBody(children: [
+          const Eyebrow('Published target'),
+          Panel(
+              child: Column(children: [
+            DetailRow('Day', '${e.dayNumber}'),
+            if (widget.presentation != null) ...[
+              DetailRow('Target', widget.presentation!.targetLabel),
+              DetailRow('Rest', widget.presentation!.restLabel),
+            ] else ...[
+              DetailRow('Sets', '${e.sets}'),
+              DetailRow(
+                  (e.durationSeconds != null
+                          ? 'Duration per set'
+                          : widget.targetLabel) ??
+                      (widget.perArmTargets
+                          ? 'Reps per arm per set'
+                          : 'Reps per set'),
+                  e.durationSeconds != null
+                      ? '${e.durationSeconds} sec per set'
+                      : '${e.reps}'),
+              DetailRow(
+                  'Rest',
+                  e.restSeconds == 0
+                      ? 'No rest between sets'
+                      : '${e.restSeconds} sec between sets'),
+            ],
+          ])),
+          if (widget.trackingLabel != null) ...[
+            const SizedBox(height: 18),
+            const Eyebrow('Training mode'),
+            Panel(
+                child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                  Text(widget.presentation?.label ?? widget.trackingLabel!,
+                      style: Theme.of(context).textTheme.titleMedium),
+                  if (widget.trackingDescription != null) ...[
+                    const SizedBox(height: 4),
+                    Text(widget.presentation?.description ??
+                        widget.trackingDescription!),
+                  ],
+                ])),
+          ],
+          if (e.cue.trim().isNotEmpty) ...[
+            const SizedBox(height: 18),
+            const Eyebrow('Published cue'),
+            Panel(child: Text(e.cue))
+          ],
+          if (e.tutorial.description.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Text(e.tutorial.description),
+          ],
+          if (e.tutorial.equipment.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            const Eyebrow('Equipment & setup'),
+            Text(e.tutorial.equipment),
+          ],
+          const SizedBox(height: 18),
           if (e.imageUrl.isNotEmpty) ...[
             ExerciseTutorialImage(
                 url: e.imageUrl, label: '${e.name} cover', isCover: true),
@@ -228,6 +285,7 @@ class _PublishedExerciseTutorialScreenState
           ],
           if (!missing)
             ClipRRect(
+                key: const ValueKey('tutorial-media'),
                 borderRadius: BorderRadius.circular(18),
                 child: AspectRatio(
                   aspectRatio: ready &&
@@ -313,15 +371,6 @@ class _PublishedExerciseTutorialScreenState
                   label: Text('${e.tutorial.steps.length} tutorial steps'),
                   side: BorderSide.none),
           ]),
-          if (e.tutorial.description.isNotEmpty) ...[
-            const SizedBox(height: 8),
-            Text(e.tutorial.description),
-          ],
-          if (e.tutorial.equipment.isNotEmpty) ...[
-            const SizedBox(height: 12),
-            const Eyebrow('Equipment & setup'),
-            Text(e.tutorial.equipment),
-          ],
           if (missing)
             const Padding(
                 padding: EdgeInsets.only(top: 12),
@@ -365,50 +414,6 @@ class _PublishedExerciseTutorialScreenState
                       ]))),
           ],
           const SizedBox(height: 18),
-          const Eyebrow('Published target'),
-          Panel(
-              child: Column(children: [
-            DetailRow('Day', '${e.dayNumber}'),
-            if (widget.presentation != null) ...[
-              DetailRow('Target', widget.presentation!.targetLabel),
-              DetailRow('Rest', widget.presentation!.restLabel),
-            ] else ...[
-              DetailRow('Sets', '${e.sets}'),
-              DetailRow(
-                  (e.durationSeconds != null
-                          ? 'Duration per set'
-                          : widget.targetLabel) ??
-                      (widget.perArmTargets
-                          ? 'Reps per arm per set'
-                          : 'Reps per set'),
-                  e.durationSeconds != null
-                      ? '${e.durationSeconds}s'
-                      : '${e.reps}'),
-              DetailRow('Rest',
-                  e.restSeconds == 0 ? 'No rest' : '${e.restSeconds} sec'),
-            ],
-          ])),
-          if (widget.trackingLabel != null) ...[
-            const SizedBox(height: 18),
-            const Eyebrow('Training mode'),
-            Panel(
-                child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                  Text(widget.presentation?.label ?? widget.trackingLabel!,
-                      style: Theme.of(context).textTheme.titleMedium),
-                  if (widget.trackingDescription != null) ...[
-                    const SizedBox(height: 4),
-                    Text(widget.presentation?.description ??
-                        widget.trackingDescription!),
-                  ],
-                ])),
-          ],
-          if (e.cue.trim().isNotEmpty) ...[
-            const SizedBox(height: 18),
-            const Eyebrow('Published cue'),
-            Panel(child: Text(e.cue))
-          ],
           const SizedBox(height: 16),
           const Text(
               'Watching a tutorial does not record a workout or award points.'),

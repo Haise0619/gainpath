@@ -42,6 +42,7 @@ void main() {
     await tester.tap(find.text('Enable backup'));
     await tester.pumpAndSettle();
     expect(meta.state.enabled, true);
+    await tester.scrollUntilVisible(find.text('Backed up'), 180);
     expect(find.text('Backed up'), findsOneWidget);
     await tester.pumpWidget(const SizedBox());
     c.dispose();
@@ -67,6 +68,8 @@ void main() {
     expect(find.textContaining('automatically'), findsWidgets);
     expect(find.textContaining('local results are retained'), findsOneWidget);
     remote.offline = false;
+    await tester.ensureVisible(find.text('Retry now'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Retry now'));
     await tester.pumpAndSettle();
     expect(find.text('Backed up'), findsOneWidget);

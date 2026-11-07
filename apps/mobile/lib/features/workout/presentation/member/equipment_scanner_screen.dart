@@ -558,7 +558,9 @@ class _EquipmentScannerScreenState extends State<EquipmentScannerScreen>
                                   ),
                                 ),
                                 const SizedBox(height: 8),
-                                Row(
+                                Wrap(
+                                  spacing: 12,
+                                  runSpacing: 8,
                                   children: [
                                     TextButton(
                                       style: TextButton.styleFrom(
@@ -568,7 +570,6 @@ class _EquipmentScannerScreenState extends State<EquipmentScannerScreen>
                                       onPressed: _openBrowseCatalog,
                                       child: const Text('Browse catalogue'),
                                     ),
-                                    const SizedBox(width: 16),
                                     TextButton(
                                       style: TextButton.styleFrom(
                                         foregroundColor: Colors.white,
@@ -577,7 +578,6 @@ class _EquipmentScannerScreenState extends State<EquipmentScannerScreen>
                                       onPressed: _retry,
                                       child: const Text('Retry'),
                                     ),
-                                    const SizedBox(width: 16),
                                     TextButton(
                                       style: TextButton.styleFrom(
                                         foregroundColor: AppColors.overlay,
@@ -776,8 +776,8 @@ class _EquipmentScannerScreenState extends State<EquipmentScannerScreen>
                             decoration: BoxDecoration(
                               shape: BoxShape.circle,
                               color: Colors.white.withValues(alpha: 0.16),
-                              border: Border.all(
-                                  color: Colors.white24, width: 1.5),
+                              border:
+                                  Border.all(color: Colors.white24, width: 1.5),
                             ),
                             child: const Icon(
                               Icons.photo_library_rounded,

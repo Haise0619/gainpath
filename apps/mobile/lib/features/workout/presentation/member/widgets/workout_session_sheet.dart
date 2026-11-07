@@ -368,11 +368,13 @@ class _WorkoutSessionSheetState extends State<WorkoutSessionSheet> {
                 ? 2
                 : 4;
             final stats = [
-              ('${u?.repetitions ?? 0}', 'Full reps'),
-              ('${u?.partialRepetitions ?? 0}', 'Partial reps'),
+              (u == null ? '—' : '${u.repetitions}', 'Full reps'),
+              (u == null ? '—' : '${u.partialRepetitions}', 'Partial reps'),
               (
-                '${((u?.trackedDurationMicros ?? 0) / 1000000).floor()}s',
-                'Tracked'
+                u == null
+                    ? '—'
+                    : '${(u.trackedDurationMicros / 1000000).floor()}s',
+                'Tracked time'
               ),
               (
                 u?.formScorePercent == null

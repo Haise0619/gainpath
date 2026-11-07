@@ -1,4 +1,5 @@
 import 'member_progress_overview.dart';
+import '../member/widgets/workout_measurement_scope.dart';
 import 'package:flutter/material.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
 import '../member/activity_timeline_screen.dart';
@@ -278,6 +279,7 @@ class _ProgressDashboardScreenState extends State<ProgressDashboardScreen>
           if (local != null) ...[
             const SizedBox(height: 20),
             const Eyebrow('Measured camera activity'),
+            const WorkoutMeasurementScope(),
             LocalProgressPeriod(progress: local),
             const SizedBox(height: 10),
             GridView(

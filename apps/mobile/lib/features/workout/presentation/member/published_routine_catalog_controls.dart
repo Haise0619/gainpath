@@ -241,7 +241,7 @@ class _RoutineBrowser extends StatelessWidget {
                                         .titleMedium),
                                 const SizedBox(height: 3),
                                 Text(
-                                    '${item.exercises.length} exercises · about ${item.estimatedMinutes} min',
+                                    '${item.exercises.length} ${item.exercises.length == 1 ? 'exercise' : 'exercises'} · Estimated ${item.estimatedMinutes} min',
                                     style:
                                         Theme.of(context).textTheme.bodyMedium),
                                 if (duplicate)
@@ -254,6 +254,8 @@ class _RoutineBrowser extends StatelessWidget {
                                       style: Theme.of(context)
                                           .textTheme
                                           .bodySmall),
+                                const Text(
+                                    'Free workout · Does not change your training plan'),
                               ])),
                           Icon(
                               isSelected

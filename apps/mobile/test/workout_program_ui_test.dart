@@ -8,9 +8,48 @@ import 'workout_program_controller_test.dart'
     show MemoryProgramStore, programFixture;
 import 'package:gainpath_domain/workout.dart';
 import 'package:gainpath_mobile/features/workout/domain/routine_attempt.dart';
+import 'package:gainpath_mobile/features/workout/domain/program_enrollment.dart';
 import 'hybrid_routine_journey_test.dart' show hybridFixture;
 
 void main() {
+  for (final catalogFails in [false, true]) {
+    testWidgets(
+        'fresh discovery blocks withdrawn or unavailable enrollment: failure=$catalogFails',
+        (tester) async {
+      final scope = SessionScope(userId: 'member', organizationId: 'gym');
+      final store = MemoryProgramStore(scope);
+      final c = WorkoutProgramController(
+          scope: scope,
+          activeScope: () => scope,
+          store: store,
+          routineStore: MemoryJourneyStore(scope),
+          newId: () => 'new');
+      await c.open();
+      var calls = 0;
+      await tester.pumpWidget(MaterialApp(
+          home: WorkoutProgramScreen(
+              controller: c,
+              today: DateTime.utc(2026, 11, 2),
+              onOpenRoutine: (_) async {},
+              loadPrograms: () async {
+                calls++;
+                if (calls == 1) return [programFixture()];
+                if (catalogFails) throw StateError('offline');
+                return [];
+              })));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Start program'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Start program'));
+      await tester.pumpAndSettle();
+      expect(calls, 2);
+      expect(c.enrollment, isNull);
+      expect(store.journal.enrollments, isEmpty);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox());
+      c.dispose();
+    });
+  }
   testWidgets('Program schedule renders timed targets and actual upcoming date',
       (tester) async {
     final json = programFixture().toJson();
@@ -140,6 +179,8 @@ void main() {
             })));
     await tester.pumpAndSettle();
     expect(find.text('Choose your program'), findsOneWidget);
+    await tester.ensureVisible(find.text('Start program'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Start program'));
     await tester.pumpAndSettle();
     expect(find.text('Week 1 · 0/3 workouts completed'), findsOneWidget);
@@ -149,6 +190,61 @@ void main() {
     expect(opened, 'routine_full');
     expect(find.text('Resume scheduled routine'), findsOneWidget);
     expect(c.completedDays(1), 0);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox());
+    c.dispose();
+  });
+  testWidgets(
+      'end plan confirmation cancels safely and conflict retains active history',
+      (tester) async {
+    final scope = SessionScope(userId: 'member', organizationId: 'gym');
+    final store = MemoryProgramStore(scope);
+    final c = WorkoutProgramController(
+        scope: scope,
+        activeScope: () => scope,
+        store: store,
+        routineStore: MemoryJourneyStore(scope),
+        newId: () => 'enrollment');
+    await c.open();
+    await c.enroll(programFixture(), DateTime.utc(2026, 11, 2), {1, 3, 5});
+    final saved = store.journal.enrollments.single.toJson();
+    await tester.pumpWidget(MaterialApp(
+        home: WorkoutProgramScreen(
+            controller: c,
+            loadPrograms: () async => [programFixture()],
+            today: DateTime.utc(2026, 11, 2),
+            onOpenRoutine: (_) async {})));
+    await tester.pumpAndSettle();
+    Future<void> openEnd() async {
+      await tester.scrollUntilVisible(find.text('End current plan'), 180);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('End current plan').first);
+      await tester.pumpAndSettle();
+    }
+
+    await openEnd();
+    await tester.tap(find.text('Keep plan'));
+    await tester.pumpAndSettle();
+    expect(c.enrollment, isNotNull);
+    expect(store.journal.enrollments.single.toJson(), saved);
+    store.journal = ProgramJournal(
+        revision: store.journal.revision + 1,
+        activeId: store.journal.activeId,
+        enrollments: store.journal.enrollments);
+    await openEnd();
+    await tester.tap(find.widgetWithText(FilledButton, 'End current plan'));
+    await tester.pumpAndSettle();
+    expect(c.enrollment, isNotNull);
+    expect(store.journal.activeId, 'enrollment');
+    expect(store.journal.enrollments.single.toJson(), saved);
+    await c.open();
+    await tester.pumpAndSettle();
+    await openEnd();
+    await tester.tap(find.widgetWithText(FilledButton, 'End current plan'));
+    await tester.pumpAndSettle();
+    expect(c.enrollment, isNull);
+    expect(store.journal.activeId, isNull);
+    expect(store.journal.enrollments.single.toJson(), saved);
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox());
     c.dispose();

@@ -29,6 +29,7 @@ class WorkoutPrepScreen extends StatelessWidget {
       this.routineCatalogControls,
       this.onOpenEquipment,
       this.onOpenPrograms,
+      this.onOpenSettings,
       this.scheduledWorkout,
       this.freeAttempt,
       this.onStartFree,
@@ -48,6 +49,7 @@ class WorkoutPrepScreen extends StatelessWidget {
   final Widget? routineCatalogControls;
   final VoidCallback? onOpenEquipment;
   final VoidCallback? onOpenPrograms;
+  final VoidCallback? onOpenSettings;
   final ScheduledWorkoutPreview? scheduledWorkout;
   final WorkoutHubAttempt? freeAttempt;
   final VoidCallback? onStartFree;
@@ -61,6 +63,16 @@ class WorkoutPrepScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final selectedRoutine = scheduledWorkout?.routine ?? publishedRoutine;
+    String? savedStatus(Exercise row) {
+      final attempt = scheduledWorkout?.attempt ?? freeAttempt?.attempt;
+      final index = row is PublishedRoutineExercise
+          ? selectedRoutine?.exercises.indexOf(row) ?? -1
+          : -1;
+      if (attempt == null || index < 0) return null;
+      final result = attempt.entries.where((e) => e.index == index).firstOrNull;
+      return result == null ? null : exerciseStatusLabel(result.status);
+    }
+
     final routine = live
         ? selectedRoutine?.exercises
                 .where((e) =>
@@ -132,6 +144,13 @@ class WorkoutPrepScreen extends StatelessWidget {
         SliverAppBar(
           pinned: true,
           title: const Text('Workout'),
+          actions: [
+            if (onOpenSettings != null)
+              IconButton(
+                  tooltip: 'Workout settings',
+                  onPressed: onOpenSettings,
+                  icon: const Icon(Icons.settings_outlined))
+          ],
         ),
         SliverPadding(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
@@ -174,7 +193,6 @@ class WorkoutPrepScreen extends StatelessWidget {
                         ? 'View Training Schedule'
                         : null,
                 freeAttempt: freeAttempt,
-                imageUrl: routine.first.imageUrl,
                 switcher: routineCatalogControls,
                 onStart: recoveryDayLabel != null && onOpenPrograms != null
                     ? onOpenPrograms!
@@ -200,6 +218,7 @@ class WorkoutPrepScreen extends StatelessWidget {
                   child: _WorkoutExerciseRow(
                     index: i + 1,
                     exercise: routine[i],
+                    statusLabel: savedStatus(routine[i]),
                     day: multipleDays
                         ? (routine[i] as PublishedRoutineExercise).dayNumber
                         : null,
@@ -520,14 +539,13 @@ class _WorkoutOverview extends StatelessWidget {
       required this.exerciseCount,
       required this.totalSets,
       required this.minutes,
-      required this.imageUrl,
       this.scheduledWorkout,
       this.freeAttempt,
       this.actionLabelOverride,
       required this.onStart,
       required this.journeyFirst,
       this.switcher});
-  final String title, imageUrl;
+  final String title;
   final int exerciseCount, totalSets;
   final int? minutes;
   final ScheduledWorkoutPreview? scheduledWorkout;
@@ -541,8 +559,7 @@ class _WorkoutOverview extends StatelessWidget {
   Widget build(BuildContext context) => ClipRRect(
         borderRadius: BorderRadius.circular(18),
         child: Stack(children: [
-          Positioned.fill(
-              child: WorkoutExerciseImage(url: imageUrl, hero: true)),
+          const Positioned.fill(child: ColoredBox(color: AppColors.primary)),
           const Positioned.fill(
               child: DecoratedBox(
                   decoration: BoxDecoration(
@@ -588,7 +605,7 @@ class _WorkoutOverview extends StatelessWidget {
                         ],
                       ),
                     ),
-                    const SizedBox(height: 46),
+                    const SizedBox(height: 16),
                     Text(title,
                         style: Theme.of(context)
                             .textTheme
@@ -629,21 +646,37 @@ class _WorkoutOverview extends StatelessWidget {
                                 foregroundColor: Colors.white,
                                 minimumSize: const Size(0, 52)),
                             onPressed: onStart,
-                            icon: const Icon(Icons.play_arrow_rounded),
+                            icon: Icon(actionLabelOverride != null
+                                ? Icons.calendar_month_outlined
+                                : (scheduledWorkout?.attempt?.isComplete ==
+                                            true ||
+                                        freeAttempt?.attempt?.isComplete ==
+                                            true)
+                                    ? Icons.summarize_outlined
+                                    : Icons.play_arrow_rounded),
                             label: Text(actionLabelOverride ??
                                 (scheduledWorkout != null
-                                    ? scheduledWorkout!.attempt?.finished ==
+                                    ? scheduledWorkout!.attempt?.isComplete ==
                                             true
-                                        ? 'Resume Unfinished Exercises'
-                                        : scheduledWorkout!.inProgress
-                                            ? 'Continue workout'
-                                            : 'Start workout'
+                                        ? 'View Workout Summary'
+                                        : scheduledWorkout!.attempt?.finished ==
+                                                true
+                                            ? 'Resume Unfinished Exercises'
+                                            : scheduledWorkout!.inProgress
+                                                ? 'Continue workout'
+                                                : 'Start workout'
                                     : freeAttempt?.actionLabel ??
                                         'Start workout')))),
                     if (journeyFirst) ...[
                       const SizedBox(height: 8),
-                      const Text(
-                          'Choose an exercise next. Progress saves on this device.',
+                      Text(
+                          actionLabelOverride != null
+                              ? 'Your saved workout remains available in your training schedule.'
+                              : (scheduledWorkout?.attempt?.isComplete ==
+                                          true ||
+                                      freeAttempt?.attempt?.isComplete == true)
+                                  ? 'Workout completed. Review your saved results.'
+                                  : 'Choose an exercise next. Progress saves on this device.',
                           style: TextStyle(color: Colors.white, fontSize: 12)),
                     ],
                   ])),
@@ -659,12 +692,14 @@ class _WorkoutExerciseRow extends StatelessWidget {
       this.day,
       this.tracker,
       this.organizationId,
+      this.statusLabel,
       this.trackers = const ExerciseTrackerDispatcher()});
   final int index;
   final Exercise exercise;
   final int? day;
   final ExerciseTracker? tracker;
   final String? organizationId;
+  final String? statusLabel;
   final ExerciseTrackerDispatcher trackers;
   final VoidCallback onTap;
   @override
@@ -722,6 +757,9 @@ class _WorkoutExerciseRow extends StatelessWidget {
                       Text(equipment,
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.bodySmall),
+                    if (statusLabel != null)
+                      Text(statusLabel!,
                           style: Theme.of(context).textTheme.bodySmall),
                   ])),
               const Icon(Icons.chevron_right_rounded, color: AppColors.inkSoft),

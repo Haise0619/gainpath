@@ -15,9 +15,11 @@ class RoutineJourneyScreen extends StatefulWidget {
       required this.onTutorial,
       this.onManualSet,
       this.onViewProgress,
+      this.onOpenSettings,
       this.onViewHistory});
   final RoutineJourneyController controller;
   final VoidCallback? onViewProgress, onViewHistory;
+  final VoidCallback? onOpenSettings;
   final Future<void> Function(int index) onTrack, onTutorial;
   final Future<void> Function(int index)? onManualSet;
   @override
@@ -78,6 +80,11 @@ class _RoutineJourneyScreenState extends State<RoutineJourneyScreen> {
                 appBar: AppBar(
                     title: Text(summary ? 'Routine summary' : c.routine.title),
                     actions: [
+                      if (widget.onOpenSettings != null)
+                        IconButton(
+                            tooltip: 'Workout settings',
+                            onPressed: widget.onOpenSettings,
+                            icon: const Icon(Icons.settings_outlined)),
                       if (ready && !summary)
                         IconButton(
                             tooltip: 'Routine summary',
@@ -391,6 +398,10 @@ class _RoutineJourneyScreenState extends State<RoutineJourneyScreen> {
           style: Theme.of(context).textTheme.titleLarge),
       Text(
           '${c.completedExercises}/${c.dayIndices.length} exercise targets completed'),
+      Text(
+          '${c.dayIndices.where((i) => c.statusFor(i) == RoutineExerciseStatus.skipped).length} skipped · ${c.dayIndices.where((i) => !isExerciseTargetComplete(c.statusFor(i)) && c.statusFor(i) != RoutineExerciseStatus.skipped).length} unfinished'),
+      if (c.checkpoint?.finished == true && c.error == null)
+        const Text('Saved on this device'),
       const SizedBox(height: 12),
       Panel(
           background: AppColors.primaryTint,

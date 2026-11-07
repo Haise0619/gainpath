@@ -2,6 +2,13 @@ import 'package:flutter/material.dart';
 import '../../application/workout_backup_coordinator.dart';
 import '../../domain/workout_backup.dart';
 
+String _backupDate(int millis) {
+  final date = DateTime.fromMillisecondsSinceEpoch(millis, isUtc: true)
+      .add(const Duration(hours: 8));
+  return '${date.day}/${date.month}/${date.year} '
+      '${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')} MYT';
+}
+
 class WorkoutBackupScreen extends StatelessWidget {
   const WorkoutBackupScreen(
       {super.key, this.coordinator, this.error, this.onRetry, this.onChanged});
@@ -62,6 +69,35 @@ class WorkoutBackupScreen extends StatelessWidget {
                   else ...[
                     Text(c.label,
                         style: Theme.of(context).textTheme.headlineSmall),
+                    const SizedBox(height: 12),
+                    Card(
+                        child: Padding(
+                            padding: const EdgeInsets.all(16),
+                            child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                      c.state.enabled
+                                          ? 'Backup enabled'
+                                          : 'Backup off',
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .titleMedium),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                      '${c.records.where((r) => c.statusFor(r) == BackupRecordStatus.backedUp).length} backed up · '
+                                      '${c.records.where((r) => {
+                                            BackupRecordStatus.pendingBackup,
+                                            BackupRecordStatus.retryNeeded,
+                                            BackupRecordStatus.syncing
+                                          }.contains(c.statusFor(r))).length} pending'),
+                                  Text(c.state.lastSuccessMillis == null
+                                      ? 'No successful backup recorded on this device'
+                                      : 'Last successful backup: ${_backupDate(c.state.lastSuccessMillis!)}'),
+                                  if (c.state.conflicts.isNotEmpty)
+                                    Text(
+                                        '${c.state.conflicts.length} conflicting copies need review'),
+                                ]))),
                     SwitchListTile(
                         contentPadding: EdgeInsets.zero,
                         title: const Text('Automatic workout backup'),
@@ -77,6 +113,15 @@ class WorkoutBackupScreen extends StatelessWidget {
                     const SizedBox(height: 8),
                     const Text(
                         'Training schedules stay on this device and are not included in backup.'),
+                    const ExpansionTile(
+                        tilePadding: EdgeInsets.zero,
+                        title: Text('What is included in backup?'),
+                        children: [
+                          Padding(
+                              padding: EdgeInsets.only(bottom: 12),
+                              child: Text(
+                                  'Exercise summaries and routine progress only. Training schedules stay on this device and are not included in backup. AI consent, workout preferences and camera video are not included. A local save is not a successful backup.'))
+                        ]),
                     if (c.busy) const LinearProgressIndicator(),
                     if (c.state.lastError != null)
                       const Padding(

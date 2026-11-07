@@ -32,9 +32,11 @@ class _WorkoutProgramScreenState extends State<WorkoutProgramScreen>
   DateTime? _start;
   Set<int> _weekdays = {};
   bool _loading = true, _choosing = false;
+  bool _acting = false;
   String? _catalogError, _actionError, _selectedKey;
   late DateTime _today;
   Timer? _dayTimer;
+  final _scroll = ScrollController();
   WorkoutProgramController get c => widget.controller;
   static const _weekdayNames = [
     'Mon',
@@ -82,6 +84,7 @@ class _WorkoutProgramScreenState extends State<WorkoutProgramScreen>
 
   @override
   void dispose() {
+    _scroll.dispose();
     _dayTimer?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
@@ -118,7 +121,11 @@ class _WorkoutProgramScreenState extends State<WorkoutProgramScreen>
   }
 
   Future<void> _act(Future<void> Function() action) async {
-    setState(() => _actionError = null);
+    if (_acting || c.busy) return;
+    setState(() {
+      _actionError = null;
+      _acting = true;
+    });
     try {
       await action();
     } catch (error) {
@@ -127,6 +134,8 @@ class _WorkoutProgramScreenState extends State<WorkoutProgramScreen>
             ? error.message.toString()
             : 'Could not update the program. Reload and retry; saved progress is retained.');
       }
+    } finally {
+      if (mounted) setState(() => _acting = false);
     }
   }
 
@@ -213,6 +222,7 @@ class _WorkoutProgramScreenState extends State<WorkoutProgramScreen>
                       icon: const Icon(Icons.refresh))
                 ]),
             body: ListView(
+                controller: _scroll,
                 padding: EdgeInsets.fromLTRB(
                     16, 16, 16, 16 + MediaQuery.paddingOf(context).bottom),
                 children: [
@@ -229,6 +239,8 @@ class _WorkoutProgramScreenState extends State<WorkoutProgramScreen>
                             style: TextStyle(
                                 color: Theme.of(context).colorScheme.error))),
                   if (e != null) ...[
+                    const Text('CURRENT PLAN',
+                        style: TextStyle(fontWeight: FontWeight.w700)),
                     Text(e.program.title,
                         style: Theme.of(context)
                             .textTheme
@@ -244,7 +256,7 @@ class _WorkoutProgramScreenState extends State<WorkoutProgramScreen>
                           initialValue: e.id,
                           isExpanded: true,
                           decoration: const InputDecoration(
-                              labelText: 'Saved program enrollment'),
+                              labelText: 'Resume a saved enrollment'),
                           items: c.journal!.enrollments
                               .map((item) => DropdownMenuItem(
                                   value: item.id,
@@ -277,6 +289,48 @@ class _WorkoutProgramScreenState extends State<WorkoutProgramScreen>
                             : () => setState(() => _choosing = !_choosing),
                         icon: const Icon(Icons.calendar_month),
                         label: const Text('Choose another program')),
+                    TextButton.icon(
+                        onPressed: c.busy
+                            ? null
+                            : () async {
+                                final confirmed = await showDialog<bool>(
+                                    context: context,
+                                    builder: (context) => AlertDialog(
+                                            title:
+                                                const Text('End current plan?'),
+                                            content: const Text(
+                                                'This clears your active plan selection. Your saved enrollment, workout results and history stay on this device. You can choose a new program afterward.'),
+                                            actions: [
+                                              TextButton(
+                                                  onPressed: () =>
+                                                      Navigator.pop(
+                                                          context, false),
+                                                  child:
+                                                      const Text('Keep plan')),
+                                              FilledButton(
+                                                  onPressed: () =>
+                                                      Navigator.pop(
+                                                          context, true),
+                                                  child: const Text(
+                                                      'End current plan'))
+                                            ]));
+                                if (!mounted ||
+                                    confirmed != true ||
+                                    !c.authorized) {
+                                  return;
+                                }
+                                await _act(() async {
+                                  await c.endCurrentPlan();
+                                  if (mounted) {
+                                    setState(() {
+                                      _selectedKey = null;
+                                      _choosing = false;
+                                    });
+                                  }
+                                });
+                              },
+                        icon: const Icon(Icons.stop_circle_outlined),
+                        label: const Text('End current plan')),
                   ],
                   if (e == null || _choosing) _onboarding(),
                 ]));
@@ -313,6 +367,21 @@ class _WorkoutProgramScreenState extends State<WorkoutProgramScreen>
                           ? null
                           : (id) => setState(() => _selectProgram(
                               _programs.singleWhere((p) => p.id == id)))),
+                  const SizedBox(height: 16),
+                  Text('$count workouts per week · ${_choice!.weeks} weeks',
+                      style: Theme.of(context).textTheme.titleMedium),
+                  const SizedBox(height: 8),
+                  for (final day in _choice!.days
+                      .where((d) => d.week == 1 && d.kind == 'workout'))
+                    ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: const Icon(Icons.fitness_center_outlined),
+                        title: Text(day.routineSnapshot?['title'] as String? ??
+                            day.category),
+                        subtitle: Text(
+                            '${day.category}${day.routineSnapshot?['estimatedMinutes'] == null ? '' : ' · Estimated ${day.routineSnapshot!['estimatedMinutes']} min'}')),
+                  const Text(
+                      'Recovery days separate training sessions. Your chosen weekdays must preserve the published recovery spacing.'),
                   TextButton.icon(
                       onPressed: c.busy ? null : _pickStart,
                       icon: const Icon(Icons.event),
@@ -334,12 +403,37 @@ class _WorkoutProgramScreenState extends State<WorkoutProgramScreen>
                                     }
                                   }))
                   ]),
+                  if (_weekdays.length != count)
+                    Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                        child: Text(
+                            'Select exactly $count training days to continue.',
+                            style: TextStyle(
+                                color: Theme.of(context).colorScheme.error))),
                   FilledButton(
-                      onPressed: c.busy || _weekdays.length != count
+                      onPressed: c.busy || _acting || _weekdays.length != count
                           ? null
                           : () => _act(() async {
-                                await c.enroll(_choice!, _start!, _weekdays);
+                                final choice = _choice!;
+                                final start = _start!;
+                                final weekdays = Set<int>.of(_weekdays);
+                                final available = await widget.loadPrograms();
+                                if (!mounted || !c.authorized) return;
+                                final current = available
+                                    .where((p) =>
+                                        p.id == choice.id &&
+                                        p.version == choice.version)
+                                    .firstOrNull;
+                                if (current == null ||
+                                    canonicalProgramJson(current.toJson()) !=
+                                        canonicalProgramJson(choice.toJson())) {
+                                  setState(() => _catalogError =
+                                      'This program is no longer available for new enrollment. Reload programs to choose another. Your saved history is retained.');
+                                  return;
+                                }
+                                await c.enroll(current, start, weekdays);
                                 if (mounted) {
+                                  if (_scroll.hasClients) _scroll.jumpTo(0);
                                   setState(() {
                                     _choosing = false;
                                     _selectedKey = null;

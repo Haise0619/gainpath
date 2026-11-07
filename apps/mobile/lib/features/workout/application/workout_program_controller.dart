@@ -70,7 +70,7 @@ class WorkoutProgramController extends ChangeNotifier {
         _journal = journal;
         _checkpoints = checkpoints.where((c) => c.scope == scope).toList();
       });
-  Future<void> _save(List<ProgramEnrollment> records, String activeId) async {
+  Future<void> _save(List<ProgramEnrollment> records, String? activeId) async {
     _guard();
     final previous =
         _journal ?? (throw StateError('Open program progress first'));
@@ -107,6 +107,14 @@ class WorkoutProgramController extends ChangeNotifier {
           throw ArgumentError('Unknown enrollment');
         }
         await _save(all, id);
+      });
+
+  /// Ends the current selection, never an enrollment or its historical evidence.
+  Future<void> endCurrentPlan() => _run(() async {
+        final journal =
+            _journal ?? (throw StateError('Open program progress first'));
+        if (journal.activeId == null) return;
+        await _save(journal.enrollments, null);
       });
   ScheduledProgramDay _day(String key) =>
       enrollment?.schedule.singleWhere((d) => d.key == key) ??

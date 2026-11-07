@@ -67,6 +67,15 @@ class _PosePreviewViewState extends State<PosePreviewView>
                 backgroundColor: AppColors.ink,
                 body: SafeArea(
                     child: Column(children: [
+                  const Padding(
+                      padding:
+                          EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      child: Text(
+                          'Camera Preview — No workout is being recorded',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w600))),
                   Expanded(
                       child: Stack(fit: StackFit.expand, children: [
                     if (tracking)

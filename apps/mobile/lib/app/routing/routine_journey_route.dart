@@ -1,4 +1,5 @@
 import 'dart:async';
+import '../../features/workout/presentation/member/workout_privacy_settings_screen.dart';
 import '../di/workout_preferences_factory.dart';
 import '../../features/workout/application/workout_preferences_controller.dart';
 import '../../features/workout/presentation/member/workout_ai_consent_guard.dart';
@@ -556,6 +557,15 @@ class _RoutineJourneyRouteState extends State<RoutineJourneyRoute>
             controller: c,
             onTrack: _track,
             onManualSet: _manualSet,
+            onOpenSettings: () async {
+              final auth = context.read<AuthBloc>();
+              await Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                      builder: (_) => WorkoutPrivacySettingsScreen(
+                          scope: widget.scope,
+                          isCurrent: () => mounted && _authorized(auth))));
+            },
             onTutorial: _tutorial,
             onViewProgress: () => _openProgress(MemberProgressView.dashboard),
             onViewHistory: () => _openProgress(MemberProgressView.routines));

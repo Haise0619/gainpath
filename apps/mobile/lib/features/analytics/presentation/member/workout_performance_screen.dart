@@ -8,6 +8,7 @@ import '../../domain/member_workout_report.dart';
 import '../../../workout/domain/routine_attempt.dart';
 import 'widgets/contextual_progress_filter.dart';
 import 'widgets/exercise_improvement_card.dart';
+import 'widgets/workout_measurement_scope.dart';
 
 /// AD-M5.2 (Workout performance) — weekly lifted volume as a column
 /// chart, paired with a doughnut breakdown of muscle-group split. Column
@@ -45,6 +46,7 @@ class WorkoutPerformanceScreen extends StatelessWidget {
             title: const Text('Measured workout trends'), actions: const []),
         body: PageBody(children: [
           const Text('Saved camera captures · provisional measurements'),
+          const WorkoutMeasurementScope(),
           const SizedBox(height: 12),
           const ExpansionTile(
               tilePadding: EdgeInsets.zero,

@@ -27,6 +27,7 @@ void main() {
             })));
     expect(mode, isNull);
     expect(find.text('5 reps per arm per set'), findsOneWidget);
+    await tester.ensureVisible(find.text('Right only'));
     await tester.tap(find.text('Right only'));
     await tester.pump();
     await tester.ensureVisible(find.text('Start camera'));
@@ -49,6 +50,7 @@ void main() {
               mode = m;
               side = s;
             })));
+    await tester.ensureVisible(find.text('Right arm'));
     await tester.tap(find.text('Right arm'));
     await tester.pump();
     await tester.tap(find.text('Start camera'));

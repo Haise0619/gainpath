@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'widgets/workout_measurement_scope.dart';
 import 'package:syncfusion_flutter_charts/charts.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -192,6 +193,7 @@ class PostureAccuracyScreen extends StatelessWidget {
             ]),
         const SizedBox(height: 20),
         const Eyebrow('Estimated form by version'),
+        const WorkoutMeasurementScope(formOnly: true),
         if (progress.formSeries.isEmpty)
           const Panel(child: Text('No estimated form measurements yet.')),
         for (final group in progress.formSeries) ...[

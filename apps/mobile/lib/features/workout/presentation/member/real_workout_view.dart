@@ -262,7 +262,9 @@ class _RealWorkoutViewState extends State<RealWorkoutView> {
       return 'Session closed · account changed';
     }
     if (c.errorMessage != null) return c.errorMessage!;
-    if (c.isManuallyPaused) return 'Paused · ready when you are';
+    if (c.isManuallyPaused) {
+      return 'Workout paused · Resume when ready. No repetitions are counted while paused.';
+    }
     if (c is UnilateralWorkoutSession &&
         (c as UnilateralWorkoutSession).awaitingArmSwitch) {
       return '${(c as UnilateralWorkoutSession).armLabel} complete · turn to bring your ${(c as UnilateralWorkoutSession).nextArmLabel.toLowerCase()} closest to the camera';
@@ -273,7 +275,7 @@ class _RealWorkoutViewState extends State<RealWorkoutView> {
           : 'Exercise complete · saving routine progress';
     }
     if (c.guidance?.stage == GuidedWorkoutStage.resting) {
-      return 'Rest · counting paused';
+      return 'Rest between sets · counting paused';
     }
     final u = c.analysis;
     if (c is WorkoutReadinessFeedback) {

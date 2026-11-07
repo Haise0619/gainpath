@@ -1,3 +1,5 @@
+import '../workout_presentation.dart';
+import 'widgets/exercise_setup_layout.dart';
 import 'package:flutter/material.dart';
 import 'package:gainpath_pose/gainpath_pose.dart' show CurlSide;
 import 'package:gainpath_ui/gainpath_ui.dart';
@@ -24,6 +26,17 @@ class _CurlArmSetupScreenState extends State<CurlArmSetupScreen> {
   @override
   Widget build(BuildContext context) => Scaffold(
         appBar: AppBar(title: const Text('Curl setup')),
+        bottomNavigationBar: SetupActionBar(
+            child: FilledButton.icon(
+                onPressed: () => widget.onStart(
+                    _mode,
+                    _mode == CurlArmMode.leftOnly
+                        ? CurlSide.left
+                        : _mode == CurlArmMode.rightOnly
+                            ? CurlSide.right
+                            : _first),
+                icon: const Icon(Icons.videocam_outlined),
+                label: const Text('Start camera'))),
         body: SafeArea(
             child: SingleChildScrollView(
                 padding: const EdgeInsets.all(24),
@@ -33,11 +46,13 @@ class _CurlArmSetupScreenState extends State<CurlArmSetupScreen> {
                       const Icon(Icons.fitness_center_rounded,
                           size: 42, color: AppColors.primary),
                       const SizedBox(height: 16),
+                      const SetupViewBanner(frontView: false),
                       Text(widget.exerciseName,
                           style: Theme.of(context).textTheme.headlineSmall),
-                      Text('${widget.sets} sets',
+                      Text(workoutCount(widget.sets, 'set'),
                           style: Theme.of(context).textTheme.titleMedium),
-                      Text('${widget.reps} reps per arm per set'),
+                      Text(
+                          '${workoutCount(widget.reps, 'rep')} per arm per set'),
                       const SizedBox(height: 24),
                       const Text('Which arms are you training?'),
                       Wrap(spacing: 8, children: [
@@ -70,16 +85,6 @@ class _CurlArmSetupScreenState extends State<CurlArmSetupScreen> {
                           'Left and right mean your own arms. Stand side-on with the selected arm closest to the camera. Lower it and hold still to calibrate.',
                           style: TextStyle(color: AppColors.inkSoft)),
                       const SizedBox(height: 24),
-                      FilledButton.icon(
-                          onPressed: () => widget.onStart(
-                              _mode,
-                              _mode == CurlArmMode.leftOnly
-                                  ? CurlSide.left
-                                  : _mode == CurlArmMode.rightOnly
-                                      ? CurlSide.right
-                                      : _first),
-                          icon: const Icon(Icons.videocam_outlined),
-                          label: const Text('Start camera')),
                     ]))),
       );
 }

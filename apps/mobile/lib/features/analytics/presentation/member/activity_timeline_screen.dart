@@ -8,6 +8,7 @@ import 'widgets/local_progress_widgets.dart';
 import '../../domain/member_workout_report.dart';
 import '../../../workout/domain/routine_attempt.dart';
 import 'widgets/contextual_progress_filter.dart';
+import 'widgets/workout_measurement_scope.dart';
 
 /// AD-M5.2 (Activity timeline) — a weekly session-frequency column chart
 /// up top (this report's own characteristic: density over time, not
@@ -53,6 +54,7 @@ class ActivityTimelineScreen extends StatelessWidget {
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
                             const Eyebrow('Sessions per week'),
+                            const WorkoutMeasurementScope(),
                             LocalProgressPeriod(progress: filtered),
                             LocalWeeklyChart(progress: filtered),
                             const SizedBox(height: 20),

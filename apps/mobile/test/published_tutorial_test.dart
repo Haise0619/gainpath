@@ -92,6 +92,14 @@ class PendingControlPlayer extends FakePlayer {
   }
 }
 
+Future<void> revealTutorialMedia(WidgetTester tester) async {
+  await tester.scrollUntilVisible(
+      find.byKey(const ValueKey('tutorial-media')), 240,
+      scrollable: find.byType(Scrollable).first);
+  await tester.ensureVisible(find.byKey(const ValueKey('tutorial-media')));
+  await tester.pump();
+}
+
 void main() {
   setUpAll(() => GoogleFonts.config.allowRuntimeFetching = false);
 
@@ -158,6 +166,7 @@ void main() {
       playerFactory: (_) => player,
     )));
     await tester.pumpAndSettle();
+    await revealTutorialMedia(tester);
     await tester.tap(find.byTooltip('Play tutorial'));
     await tester.pump();
     await tester.pump(const Duration(seconds: 21));
@@ -188,6 +197,7 @@ void main() {
     active.value = true;
     await tester.pumpAndSettle();
     expect(first.disposed, true);
+    await revealTutorialMedia(tester);
     expect(find.byTooltip('Play tutorial'), findsOneWidget);
     expect(replacement.plays, 0);
     await tester.pumpWidget(const SizedBox());
@@ -203,6 +213,7 @@ void main() {
       playerFactory: (_) => player,
     )));
     await tester.pumpAndSettle();
+    await revealTutorialMedia(tester);
     await tester.tap(find.byTooltip('Play tutorial'));
     await tester.pump();
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
@@ -225,6 +236,7 @@ void main() {
     )));
     await tester.pump(const Duration(seconds: 21));
     expect(player.disposed, true);
+    await revealTutorialMedia(tester);
     expect(find.textContaining('Could not play this tutorial'), findsOneWidget);
     pending.complete();
     await tester.pumpAndSettle();
@@ -262,14 +274,18 @@ void main() {
       exercise: row(url: 'https://media.example.test/exact.mp4'),
       playerFactory: (_) => player,
     )));
+    await revealTutorialMedia(tester);
     expect(find.text('Loading tutorial…'), findsOneWidget);
     pending.complete();
     await tester.pumpAndSettle();
     expect(player.plays, 0);
+    await revealTutorialMedia(tester);
     expect(find.text('0:00 / 1:00'), findsOneWidget);
+    await revealTutorialMedia(tester);
     await tester.tap(find.byTooltip('Play tutorial'));
     await tester.pump();
     expect(player.playing, true);
+    await revealTutorialMedia(tester);
     await tester.tap(find.byTooltip('Pause tutorial'));
     await tester.pump();
     expect(player.playing, false);
@@ -279,6 +295,7 @@ void main() {
     player.position = player.duration;
     player.notifyListeners();
     await tester.pump();
+    await revealTutorialMedia(tester);
     await tester.tap(find.byTooltip('Replay tutorial'));
     await tester.pump();
     expect(player.position, Duration.zero);
@@ -298,6 +315,7 @@ void main() {
       playerFactory: (_) => calls++ == 0 ? failed : replacement,
     )));
     await tester.pumpAndSettle();
+    await revealTutorialMedia(tester);
     expect(find.textContaining('Could not play this tutorial'), findsOneWidget);
     expect(find.textContaining('secret'), findsNothing);
     await tester.tap(find.text('Retry'));
@@ -307,6 +325,7 @@ void main() {
     replacement.error = 'decoder private path';
     replacement.notifyListeners();
     await tester.pump();
+    await revealTutorialMedia(tester);
     expect(find.textContaining('Could not play this tutorial'), findsOneWidget);
     expect(find.textContaining('private'), findsNothing);
     await tester.pumpWidget(const SizedBox());
@@ -320,6 +339,7 @@ void main() {
       playerFactory: (_) => player,
     )));
     await tester.pumpAndSettle();
+    await revealTutorialMedia(tester);
     await tester.tap(find.byTooltip('Play tutorial'));
     await tester.pump();
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
@@ -375,6 +395,7 @@ void main() {
               playerFactory: (_) => player),
         )));
     await tester.pumpAndSettle();
+    await revealTutorialMedia(tester);
     await tester.tap(find.byTooltip('Play tutorial'));
     await tester.pump();
     await tester.runAsync(() async {
@@ -426,8 +447,8 @@ void main() {
     expect(route.scope, auth.state.session!.scope);
     expect(identical(route.exercise, routine.exercises.single), true);
     expect(find.text('Tutorial video unavailable'), findsOneWidget);
-    await tester.scrollUntilVisible(find.text('60 sec rest'), 200);
-    expect(find.text('60 sec rest'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('60 sec rest between sets'), 200);
+    expect(find.text('60 sec rest between sets'), findsOneWidget);
     expect(find.text('Manual'), findsOneWidget);
     await tester.runAsync(() async {
       auth.add(const LoggedOut());

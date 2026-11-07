@@ -6,6 +6,11 @@ import '../domain/routine_attempt.dart';
 
 enum WorkoutExerciseMode { aiTracked, videoTimed, manual, unavailable }
 
+String workoutCount(int count, String noun) =>
+    '$count $noun${count == 1 ? '' : 's'}';
+String workoutRepetitionTarget(int sets, int reps, {String qualifier = ''}) =>
+    '${workoutCount(sets, 'set')} × ${workoutCount(reps, 'rep')}${qualifier.isEmpty ? '' : ' · $qualifier'}';
+
 /// Display-only projection. Existing routes/resolvers still authorize execution.
 class ExercisePresentation {
   const ExercisePresentation._(this.mode, this.targetLabel, this.restLabel,
@@ -16,8 +21,8 @@ class ExercisePresentation {
     final tracking = trackers.resolve(
         organizationId: organizationId, exerciseId: exercise.exerciseId);
     final rest = exercise.restSeconds == 0
-        ? 'No rest'
-        : '${exercise.restSeconds} sec rest';
+        ? 'No rest between sets'
+        : '${exercise.restSeconds} sec rest between sets';
     ExercisePrescription target;
     try {
       target = exercise.prescription;
@@ -35,11 +40,13 @@ class ExercisePresentation {
         return ExercisePresentation._(
             WorkoutExerciseMode.unavailable, 'Targets unavailable', rest);
       }
-      return ExercisePresentation._(WorkoutExerciseMode.videoTimed,
-          '${target.sets} sets × ${target.durationSeconds} sec', rest);
+      return ExercisePresentation._(
+          WorkoutExerciseMode.videoTimed,
+          '${workoutCount(target.sets, 'set')} × ${target.durationSeconds} sec per set',
+          rest);
     }
     final reps = (target as RepetitionPrescription).repetitions;
-    final base = '${target.sets} sets × $reps reps';
+    final base = workoutRepetitionTarget(target.sets, reps);
     if (exercise.executionMode == ExerciseExecutionMode.legacyManual &&
             tracking.registeredCapability.hasPoseTracking ||
         exercise.executionMode == ExerciseExecutionMode.aiTracked &&
@@ -102,6 +109,17 @@ class ExercisePresentation {
         WorkoutExerciseMode.manual => 'Self-reported',
         WorkoutExerciseMode.unavailable => 'Not measured',
       };
+
+  String get nextActionDescription => switch (mode) {
+        WorkoutExerciseMode.aiTracked =>
+          'Camera setup opens after rest. Counting begins only after permission, setup and readiness checks.',
+        WorkoutExerciseMode.videoTimed =>
+          'The next video prepares after rest. Active time starts only when playback is ready.',
+        WorkoutExerciseMode.manual =>
+          'The set logger opens after rest. Mark each completed set yourself.',
+        WorkoutExerciseMode.unavailable =>
+          'Return to the routine to review this unavailable exercise.',
+      };
 }
 
 bool isExerciseTargetComplete(RoutineExerciseStatus status) => const {
@@ -135,12 +153,14 @@ String exerciseResultSummary(RoutineExerciseResult result) {
   if (result.isTimed) {
     final progress = result.guided;
     if (progress == null) return exerciseStatusLabel(result.status);
-    return '${progress.completedSets} timed sets · ${workoutDurationLabel(progress.totalActiveMicroseconds)} active · Timer recorded';
+    return '${workoutCount(progress.completedSets, 'timed set')} · ${workoutDurationLabel(progress.totalActiveMicroseconds)} active · Timer recorded';
   }
   if (result.sessionIds.isNotEmpty) {
     return '${result.fullRepetitions} full reps · ${result.partialRepetitions} partial reps · ${workoutDurationLabel(result.trackedDurationMicros)} tracked · AI measured';
   }
-  if (result.manualSets > 0) return '${result.manualSets} sets · Self-reported';
+  if (result.manualSets > 0) {
+    return '${workoutCount(result.manualSets, 'set')} · Self-reported';
+  }
   return exerciseStatusLabel(result.status);
 }
 

@@ -1,3 +1,5 @@
+import '../workout_presentation.dart';
+import 'widgets/exercise_setup_layout.dart';
 import 'package:flutter/material.dart';
 import 'package:gainpath_pose/gainpath_pose.dart' show RowSide;
 
@@ -23,16 +25,28 @@ class _RowSetupScreenState extends State<RowSetupScreen> {
   @override
   Widget build(BuildContext context) => Scaffold(
         appBar: AppBar(title: const Text('Row setup')),
+        bottomNavigationBar: SetupActionBar(
+            child: FilledButton.icon(
+                key: const ValueKey('row-start-camera'),
+                onPressed: _side == null || _starting
+                    ? null
+                    : () {
+                        setState(() => _starting = true);
+                        widget.onStart(_side!);
+                      },
+                icon: const Icon(Icons.videocam_outlined),
+                label: const Text('Start camera'))),
         body: SafeArea(
             child: SingleChildScrollView(
           padding: const EdgeInsets.all(24),
           child:
               Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            const SetupViewBanner(frontView: false),
             Text(widget.exerciseName,
                 style: Theme.of(context).textTheme.headlineSmall),
             const SizedBox(height: 12),
-            Text(
-                '${widget.sets} sets · ${widget.reps} reps per selected arm per set'),
+            Text(workoutRepetitionTarget(widget.sets, widget.reps,
+                qualifier: 'per selected arm')),
             Text('${widget.restSeconds}s rest between sets'),
             const SizedBox(height: 24),
             const Text('Which arm will you train in this session?'),
@@ -52,19 +66,14 @@ class _RowSetupScreenState extends State<RowSetupScreen> {
             const Text(
                 'Support your other hand and knee on a stable bench. Hold your torso nearly horizontal and let the selected arm hang straight down to calibrate. Pull the elbow toward your hip, then lower with control.'),
             const SizedBox(height: 12),
-            const Text(
-                'This session measures the selected arm only. Train the other arm in a separate session. The camera cannot verify the weight, bench contact, spinal shape or three-dimensional rotation. No form score is produced.'),
+            ExpansionTile(
+                tilePadding: EdgeInsets.zero,
+                title: const Text('What the camera measures'),
+                children: const [
+                  Text(
+                      'This session measures the selected arm only. Train the other arm in a separate session. The camera cannot verify the weight, bench contact, spinal shape or three-dimensional rotation. No form score is produced.')
+                ]),
             const SizedBox(height: 24),
-            FilledButton.icon(
-                key: const ValueKey('row-start-camera'),
-                onPressed: _side == null || _starting
-                    ? null
-                    : () {
-                        setState(() => _starting = true);
-                        widget.onStart(_side!);
-                      },
-                icon: const Icon(Icons.videocam_outlined),
-                label: const Text('Start camera')),
           ]),
         )),
       );

@@ -151,7 +151,8 @@ class _MemberProgressHostState extends State<MemberProgressHost>
   }
 
   bool get _backupConfigured =>
-      widget.scope.datasetScope == null && (workoutCloudBackupEnabled || widget.backupFactory != null);
+      widget.scope.datasetScope == null &&
+      (workoutCloudBackupEnabled || widget.backupFactory != null);
   Future<void> _initializeBackup() async {
     if (!mounted ||
         _activeScope() == null ||
@@ -279,7 +280,8 @@ class _MemberProgressHostState extends State<MemberProgressHost>
                         }
                         return WorkoutResultScreen.measured(
                             summary: summary,
-                            fictionalObservation: widget.scope.datasetScope != null,
+                            fictionalObservation:
+                                widget.scope.datasetScope != null,
                             syncPanel: LocalProgressRecordTile(
                                 record: matches.first,
                                 utcOffset: state.progress!.utcOffset));
@@ -551,7 +553,8 @@ Widget _progressContent(
         available: state.routines != null,
         onOpenBackup: () => open(MemberProgressView.backup),
         onRefresh: refresh,
-        onOpenAttempt: (a) => openRoutineAttempt(context, a, refresh)),
+        onOpenAttempt: (a) => openRoutineAttempt(context, a, refresh,
+            sessionRecords: progress.records, onOpenSession: openWorkout)),
     MemberProgressView.backup => WorkoutBackupScreen(
         coordinator: backup,
         error: backupError,
@@ -588,7 +591,9 @@ Widget _progressContent(
 
 /// The detail route remains guarded even if the account changes while it is open.
 Future<void> openRoutineAttempt(BuildContext context, RoutineAttempt attempt,
-    Future<void> Function() refresh) async {
+    Future<void> Function() refresh,
+    {List<LocalWorkoutProgressRecord> sessionRecords = const [],
+    ValueChanged<LocalWorkoutProgressRecord>? onOpenSession}) async {
   final auth = context.read<AuthBloc>();
   bool authorized() =>
       auth.state.session?.scope == attempt.scope &&
@@ -623,6 +628,29 @@ Future<void> openRoutineAttempt(BuildContext context, RoutineAttempt attempt,
                     .any((e) => e.dayNumber > attempt.day);
                 return RoutineAttemptDetailScreen(
                     attempt: attempt,
+                    availableSessionIds: {
+                      for (final entry in attempt.entries)
+                        for (final record in sessionRecords)
+                          if (record.scope == attempt.scope &&
+                              entry.sessionIds.contains(record.sessionId) &&
+                              record.exerciseId ==
+                                  attempt.routine.exercises[entry.index]
+                                      .exerciseId)
+                            record.sessionId
+                    },
+                    onOpenSession: onOpenSession == null
+                        ? null
+                        : (id) {
+                            if (!authorized()) return;
+                            final records = sessionRecords
+                                .where((r) =>
+                                    r.scope == attempt.scope &&
+                                    r.sessionId == id)
+                                .toList();
+                            if (records.length == 1) {
+                              onOpenSession(records.single);
+                            }
+                          },
                     onResume: () => continueAttempt(
                         detailContext, RoutineJourneyAction.resume),
                     onRepeat: () => continueAttempt(

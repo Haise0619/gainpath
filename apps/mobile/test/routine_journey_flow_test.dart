@@ -98,6 +98,8 @@ void main() {
             },
             onTutorial: (_) async {})));
     await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+        find.textContaining('AI tracking is unavailable'), 180);
     expect(find.textContaining('AI tracking is unavailable'), findsOneWidget);
     expect(find.text('Start guided exercise'), findsNothing);
     await expectLater(c.prepareCapture(0), throwsStateError);
@@ -204,6 +206,8 @@ void main() {
     await tester.pumpAndSettle();
     expect(captures, 1);
     expect(c.selectedIndex, 1);
+    await tester.ensureVisible(find.text('Tutorial'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Tutorial'));
     await tester.pumpAndSettle();
     expect(tutorials, 1);
