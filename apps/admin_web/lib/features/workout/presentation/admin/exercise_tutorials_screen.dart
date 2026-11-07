@@ -285,6 +285,12 @@ class _TutorialFormPageState extends State<_TutorialFormPage> {
           widget.existing!.executionMode ==
               ExerciseExecutionMode.videoGuidedTimed);
   late String _category = widget.existing?.category ?? _categories.first;
+  // Registered and older catalog entries can use categories outside the
+  // creation presets. Preserve their exact saved value and avoid duplicates.
+  late final _categoryOptions = <String>{
+    ..._categories,
+    if (widget.existing != null) widget.existing!.category,
+  }.toList();
   late String _difficulty = widget.existing?.difficulty ?? _difficulties.first;
   late String _status = widget.existing?.status.label ?? 'Draft';
   late String? _coversExercise = widget.existing?.coversExercise.isEmpty ?? true
@@ -641,7 +647,7 @@ class _TutorialFormPageState extends State<_TutorialFormPage> {
                         isExpanded: true,
                         decoration: const InputDecoration(
                             labelText: 'Category', isDense: true),
-                        items: _categories
+                        items: _categoryOptions
                             .map((c) =>
                                 DropdownMenuItem(value: c, child: Text(c)))
                             .toList(),

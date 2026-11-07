@@ -74,6 +74,37 @@ class _RoutineRepository implements RoutineTemplateRepository {
 }
 
 void main() {
+  for (final category in ['Shoulders', 'Back', 'Compound Lower-Body']) {
+    testWidgets(
+        'editing preserves saved category $category without dropdown assertion',
+        (tester) async {
+      GoogleFonts.config.allowRuntimeFetching = false;
+      final exercises = _ExerciseCatalog()..entries.clear();
+      exercises.entries.add(TutorialVideo(
+          id: 'standing-lateral-raise-front-v1',
+          title: 'Standing Lateral Raise',
+          category: category,
+          status: TutorialStatus.active));
+      await tester.pumpWidget(RepositoryProvider<TutorialRepository>.value(
+          value: exercises,
+          child: MaterialApp(
+              theme: AppTheme.build(), home: const ExerciseTutorialsScreen())));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Edit'));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      final dropdown = tester.widget<DropdownButton<String>>(
+          find.byType(DropdownButton<String>).first);
+      expect(dropdown.items!.where((item) => item.value == category),
+          hasLength(1));
+      final save = find.widgetWithText(FilledButton, 'Save changes');
+      await tester.ensureVisible(save);
+      await tester.tap(save);
+      await tester.pumpAndSettle();
+      expect(exercises.entries.single.category, category);
+      expect(tester.takeException(), isNull);
+    });
+  }
   testWidgets('timed routine copies defaults and keeps overrides on save',
       (tester) async {
     GoogleFonts.config.allowRuntimeFetching = false;
