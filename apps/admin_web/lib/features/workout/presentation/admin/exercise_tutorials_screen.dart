@@ -414,11 +414,13 @@ class _TutorialFormPageState extends State<_TutorialFormPage> {
               ? const TutorialEditConflict().toString()
               : error is TutorialEditAuthorizationChanged
                   ? const TutorialEditAuthorizationChanged().toString()
-                  : error is TutorialMediaUploadFailed
-                      ? const TutorialMediaUploadFailed().toString()
-                      : _catalogOnly
-                          ? const TutorialCatalogSaveFailed().toString()
-                          : 'Could not save exercise. Please try again.';
+                  : error is TutorialCatalogWriteRejected
+                      ? const TutorialCatalogWriteRejected().toString()
+                      : error is TutorialMediaUploadFailed
+                          ? const TutorialMediaUploadFailed().toString()
+                          : _catalogOnly
+                              ? const TutorialCatalogSaveFailed().toString()
+                              : 'Could not save exercise. Please try again.';
         });
       }
       return;

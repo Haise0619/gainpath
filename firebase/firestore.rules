@@ -88,10 +88,9 @@ service cloud.firestore {
       return d.isActive == false && !('mediaValidation' in d)
         && d.editRevision is int && d.editRevision >= 1;
     }
-    function validExerciseCatalogEntry() {
+    function validExerciseCatalogFields() {
       let d = request.resource.data;
       return d.keys().hasAll(['schemaVersion', 'exerciseName', 'muscleCategory', 'videoUrl', 'isActive', 'createdAt', 'updatedAt'])
-        && d.keys().hasOnly(['schemaVersion', 'exerciseName', 'muscleCategory', 'videoUrl', 'isActive', 'createdAt', 'updatedAt', 'description', 'coverImageUrl', 'difficulty', 'equipment', 'tutorialSteps', 'archived', 'executionMode', 'workoutDefaults', 'editRevision'])
         && d.schemaVersion == 1
         && d.exerciseName is string && d.exerciseName.size() > 0 && d.exerciseName.size() <= 100
         && d.muscleCategory is string && d.muscleCategory.size() > 0 && d.muscleCategory.size() <= 80
@@ -106,6 +105,18 @@ service cloud.firestore {
         && d.isActive is bool
         && d.createdAt is timestamp
         && d.updatedAt == request.time;
+    }
+
+    function validExerciseCatalogEntry() {
+      return request.resource.data.keys().hasOnly(['schemaVersion', 'exerciseName', 'muscleCategory', 'videoUrl', 'isActive', 'createdAt', 'updatedAt', 'description', 'coverImageUrl', 'difficulty', 'equipment', 'tutorialSteps', 'archived', 'executionMode', 'workoutDefaults', 'editRevision'])
+        && validExerciseCatalogFields();
+    }
+
+    // Existing registered records may carry system metadata. Validate authored
+    // fields while requiring every field outside this edit list to stay intact.
+    function validExerciseCatalogEdit() {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['exerciseName', 'muscleCategory', 'videoUrl', 'isActive', 'updatedAt', 'description', 'coverImageUrl', 'difficulty', 'equipment', 'tutorialSteps', 'archived', 'executionMode', 'workoutDefaults', 'editRevision'])
+        && validExerciseCatalogFields();
     }
 
     // CLI-registered exercises can carry immutable system/author metadata.
@@ -662,7 +673,7 @@ service cloud.firestore {
         validExerciseCatalogStatusUpdate()
         || (!resource.data.get('archived', false)
           && !request.resource.data.get('archived', false)
-          && validExerciseCatalogEntry()
+          && validExerciseCatalogEdit()
           && request.resource.data.createdAt == resource.data.createdAt));
       allow delete: if false;
     }

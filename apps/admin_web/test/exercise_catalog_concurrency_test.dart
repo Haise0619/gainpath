@@ -333,6 +333,28 @@ void main() {
         throwsA(predicate((Object error) =>
             !error.toString().contains('private-media-credential-sentinel'))));
   });
+  test('a rejected write with unchanged authority does not claim sign-out',
+      () async {
+    final original = (await repository.load()).single;
+    store.failure =
+        FirebaseException(plugin: 'cloud_firestore', code: 'permission-denied');
+    await expectLater(
+        repository.save(edited(original)),
+        throwsA(predicate<Object>((error) =>
+            error.toString().contains('catalog rejected') &&
+            error is! TutorialEditAuthorizationChanged)));
+    store.failure = null;
+    expect(await repository.load(), hasLength(1));
+  });
+  test('a rejected write still invalidates genuinely revoked authority',
+      () async {
+    final original = (await repository.load()).single;
+    store.failure =
+        FirebaseException(plugin: 'cloud_firestore', code: 'permission-denied');
+    store.membership!['status'] = 'inactive';
+    await expectLater(repository.save(edited(original)),
+        throwsA(isA<TutorialEditAuthorizationChanged>()));
+  });
   test(
       'server assignment switch blocks edit with old active membership retained',
       () async {

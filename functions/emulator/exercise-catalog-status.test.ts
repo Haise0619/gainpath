@@ -52,6 +52,27 @@ it.each(['admin', 'staff'])('%s can deactivate, archive and restore CLI-authored
   await assertFails(deleteDoc(reference));
 });
 
+it.each(['admin', 'staff'])('%s can change cover and instructions while preserving registered metadata', async uid => {
+  const reference = refFor(uid);
+  await assertSucceeds(updateDoc(reference, {
+    coverImageUrl: 'https://firebasestorage.googleapis.com/v0/b/example/o/cover.png?alt=media&token=test',
+    description: 'Updated instructions.',
+    tutorialSteps: Array.from({length: 12}, (_, i) => ({title: `Step ${i + 1}`, description: 'Move slowly.', imageUrl: ''})),
+    updatedAt: serverTimestamp(),
+  }));
+  const saved = (await getDoc(reference)).data()!;
+  for (const key of ['createdBy', 'updatedBy', 'aiSupported', 'trackerId', 'futureField', 'createdAt']) {
+    expect(saved[key]).toEqual(original[key as keyof typeof original]);
+  }
+  await assertSucceeds(updateDoc(reference, {coverImageUrl: '', updatedAt: serverTimestamp()}));
+});
+
+it.each([{createdBy: 'forged'}, {updatedBy: 'forged'}, {trackerId: 'forged'}, {aiSupported: false},
+  {futureField: {}}, {newSystemField: true}, {schemaVersion: 2}, {createdAt: Timestamp.fromMillis(5000)}])(
+  'cover edits cannot mutate or introduce protected metadata %#', async patch => {
+    await assertFails(updateDoc(refFor(), {...patch, coverImageUrl: 'https://example.test/new.png', updatedAt: serverTimestamp()}));
+  });
+
 it.each([
   {exerciseName: 'Changed'}, {videoUrl: 'https://media.example.test/new.mp4'},
   {coverImageUrl: ''}, {tutorialSteps: []}, {createdBy: 'admin'}, {updatedBy: 'admin'},

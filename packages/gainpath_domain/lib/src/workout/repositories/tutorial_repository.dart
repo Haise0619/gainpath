@@ -22,6 +22,13 @@ class TutorialCatalogSaveFailed implements Exception {
       'Could not verify the exercise save. Reload the catalog before retrying.';
 }
 
+class TutorialCatalogWriteRejected implements Exception {
+  const TutorialCatalogWriteRejected();
+  @override
+  String toString() =>
+      'The catalog rejected this change. Your sign-in is still valid. Reload the catalog before retrying.';
+}
+
 /// Data access contract for the workout feature. Implemented in-memory for the
 /// prototype; a Firebase implementation will sit behind the same interface.
 abstract class TutorialRepository {

@@ -160,9 +160,14 @@ class FirebaseExerciseCatalogRepository
       rethrow;
     } on TutorialCatalogSaveFailed {
       rethrow;
+    } on TutorialCatalogWriteRejected {
+      rethrow;
     } on FirebaseException catch (error) {
-      if (error.code == 'permission-denied' ||
-          error.code == 'unauthenticated') {
+      if (error.code == 'permission-denied') {
+        await _recheckAuthorAfterDeniedWrite(tutorial);
+        throw const TutorialMediaUploadFailed();
+      }
+      if (error.code == 'unauthenticated') {
         _invalidated = true;
         throw const TutorialEditAuthorizationChanged();
       }
@@ -222,8 +227,11 @@ class FirebaseExerciseCatalogRepository
       _invalidated = true;
       rethrow;
     } on FirebaseException catch (error) {
-      if (error.code == 'permission-denied' ||
-          error.code == 'unauthenticated') {
+      if (error.code == 'permission-denied') {
+        await _recheckAuthorAfterDeniedWrite(tutorial);
+        throw const TutorialCatalogWriteRejected();
+      }
+      if (error.code == 'unauthenticated') {
         _invalidated = true;
         throw const TutorialEditAuthorizationChanged();
       }
@@ -497,6 +505,31 @@ class FirebaseExerciseCatalogRepository
     }
     // Successful form closes. Another edit must explicitly reload a baseline.
     return _fromDocument(id, persisted);
+  }
+
+  Future<void> _recheckAuthorAfterDeniedWrite(TutorialVideo tutorial) async {
+    _requireCurrentUser();
+    try {
+      final assignment = await _store.readAssignment();
+      final membership = await _store.readMembership();
+      _requireAssignment(assignment);
+      _requireAuthor(membership);
+      _requireCurrentUser();
+      final baseline = tutorial.editBaseline;
+      if (baseline is _CatalogBaseline &&
+          (!_same(assignment, baseline.assignment) ||
+              !_same(membership, baseline.membership))) {
+        _invalidated = true;
+        throw const TutorialEditAuthorizationChanged();
+      }
+    } on FirebaseException catch (error) {
+      if (error.code == 'permission-denied' ||
+          error.code == 'unauthenticated') {
+        _invalidated = true;
+        throw const TutorialEditAuthorizationChanged();
+      }
+      throw const TutorialCatalogSaveFailed();
+    }
   }
 
   void _requireAuthor(Map<String, dynamic>? membership) {
