@@ -91,7 +91,7 @@ Private test/file manifests, logs, isolated source, screenshots, source hashes, 
 
 ## H. Git integration
 
-The final integration is committed as one cohesive change because the shared copy/layout changes and their exact-label regression updates span all four phases. The implementation plan, review plan and this report are included. The exact commit hash is reported in the final delivery; baseline is `7affa0a`. Unrelated working changes remain unstaged.
+Implementation commit: `ee550a3` — Complete four-phase member workout UX optimization. The final integration is one cohesive change because shared copy/layout changes and exact-label regression updates span all four phases. The implementation plan, review plan and this report are included; baseline is `7affa0a`. Unrelated working changes remain unstaged.
 
 ## Exact application and test paths
 
