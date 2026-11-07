@@ -83,6 +83,7 @@ flutter:
   assets:
     - assets/images/ai_coach_mascot.png
     - assets/images/workout_hub_fallback.png
+    - assets/images/camera_setup/
     - assets/fonts/BarlowCondensed-OFL.txt
     - assets/fonts/Barlow-OFL.txt
     - assets/models/pose_detection.tflite
