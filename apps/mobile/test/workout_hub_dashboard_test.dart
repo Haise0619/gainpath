@@ -41,6 +41,13 @@ void main() {
               publishedRoutine: routine,
               onOpenPrograms: () => plans++)));
       await tester.pumpAndSettle();
+      expect(
+          find.byKey(const ValueKey('workout-progress-ring')), findsOneWidget);
+      expect(find.text('0 / 1'), findsOneWidget);
+      expect(find.text('Exercises'), findsOneWidget);
+      expect(find.text('Sets'), findsOneWidget);
+      expect(find.text('~10'), findsOneWidget);
+      expect(find.text('View your schedule and saved progress'), findsNothing);
       expect(find.textContaining('rest between sets'), findsNothing);
       expect(routine.exercises.single.restSeconds, 60);
       await tester.scrollUntilVisible(find.text('My training plan'), 200);

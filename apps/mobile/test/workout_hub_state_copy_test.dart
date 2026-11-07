@@ -74,6 +74,10 @@ void main() {
                 onStartFree: () {},
                 onOpenSettings: () => settings++)));
         await tester.pumpAndSettle();
+        final progress = tester.widget<CircularProgressIndicator>(
+            find.byKey(const ValueKey('workout-progress-ring')));
+        expect(progress.value, completed ? 1 : 0);
+        expect(find.text(completed ? '1 / 1' : '0 / 1'), findsOneWidget);
         expect(
             find.text(completed
                 ? 'View Workout Summary'
@@ -117,10 +121,7 @@ void main() {
             recoveryDayLabel: 'Rest day today',
             onOpenPrograms: () => schedules++)));
     await tester.pumpAndSettle();
-    expect(
-        find.text(
-            'Your saved workout remains available in your training schedule.'),
-        findsOneWidget);
+    expect(find.text('Available in your schedule'), findsOneWidget);
     expect(find.text('Start workout'), findsNothing);
     await tester.tap(find.text('View Training Schedule'));
     expect(schedules, 1);

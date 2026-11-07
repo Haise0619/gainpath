@@ -371,3 +371,7 @@ All four Workout UX optimization phases are integrated: compact state-aware hub 
 ## Member Workout Hub redesign — 7 November 2026
 
 Light lavender overview, real initial progress, compact exercise rows and responsive two-column tools reuse current state/navigation. One-set rows hide between-set rest without changing prescriptions. 32 focused tests plus one render test passed; scoped analysis clean; isolated Android debug build passed. Phone preflight preserved prior APK and 22 protected files; black screen prevented safe-idle confirmation, so installation remains pending. See [implementation details](ux/workout-hub-redesign.md).
+
+## Visual-first Workout Hub — 7 November 2026
+
+Workout Hub now uses icon-led metrics, actual checkpoint progress ring, compact provenance badges and colored tool icons with less visible copy. Existing capability resolution, target qualifiers, action/navigation and data logic remain unchanged. 33 focused tests passed; three-file analysis clean; fresh renders inspected; isolated Android debug build passed. Physical acceptance/install remains pending because safe phone idle was not established. See [design and verification](ux/workout-hub-visual-design.md).

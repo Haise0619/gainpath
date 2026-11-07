@@ -278,7 +278,7 @@ class WorkoutPrepScreen extends StatelessWidget {
                     onTap: onOpenPrograms),
               _DetourCard(
                 icon: Icons.videocam_outlined,
-                iconColor: AppColors.primary,
+                iconColor: AppColors.info,
                 title: 'Review camera setup',
                 subtitle: 'Check your distance and camera angle',
                 onTap: () => Navigator.push(
@@ -288,7 +288,7 @@ class WorkoutPrepScreen extends StatelessWidget {
               ),
               _DetourCard(
                 icon: Icons.qr_code_scanner_rounded,
-                iconColor: AppColors.primary,
+                iconColor: AppColors.info,
                 title: 'Scan equipment',
                 subtitle: 'Find instructions and safety tips',
                 onTap: live
@@ -609,28 +609,39 @@ class _WorkoutOverview extends StatelessWidget {
                             ?.copyWith(
                                 color: AppColors.ink,
                                 fontWeight: FontWeight.w700)),
-                    const SizedBox(height: 6),
-                    Text(
-                        '$exerciseCount ${exerciseCount == 1 ? 'exercise' : 'exercises'} · $totalSets ${totalSets == 1 ? 'set' : 'sets'}${minutes == null ? '' : ' · about $minutes min'}',
-                        style: const TextStyle(
-                            color: AppColors.ink, fontSize: 14)),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 16),
+                    Wrap(spacing: 8, runSpacing: 8, children: [
+                      _OverviewMetric(
+                          icon: Icons.fitness_center_rounded,
+                          value: '$exerciseCount',
+                          label: 'Exercises'),
+                      _OverviewMetric(
+                          icon: Icons.layers_outlined,
+                          value: '$totalSets',
+                          label: 'Sets'),
+                      if (minutes != null)
+                        _OverviewMetric(
+                            icon: Icons.schedule_rounded,
+                            value: '~$minutes',
+                            label: 'Minutes'),
+                    ]),
+                    const SizedBox(height: 16),
                     if (scheduledWorkout != null)
                       Text(_scheduledStatus(scheduledWorkout!),
                           style: const TextStyle(color: AppColors.ink)),
                     ...[
-                      Text(
-                          '${scheduledWorkout?.attempt?.completedExercises ?? freeAttempt?.completed ?? 0} / ${scheduledWorkout?.attempt?.entries.length ?? freeAttempt?.total ?? exerciseCount} exercises completed · ${scheduledWorkout?.attempt?.statusLabel ?? freeAttempt?.statusLabel ?? 'Not started'}',
-                          style: const TextStyle(color: AppColors.ink)),
-                      const SizedBox(height: 8),
-                      LinearProgressIndicator(
-                          value:
-                              (scheduledWorkout?.attempt?.completedExercises ??
-                                      freeAttempt?.completed ??
-                                      0) /
-                                  (scheduledWorkout?.attempt?.entries.length ??
-                                      freeAttempt?.total ??
-                                      exerciseCount)),
+                      _OverviewProgress(
+                        completed:
+                            scheduledWorkout?.attempt?.completedExercises ??
+                                freeAttempt?.completed ??
+                                0,
+                        total: scheduledWorkout?.attempt?.entries.length ??
+                            freeAttempt?.total ??
+                            exerciseCount,
+                        status: scheduledWorkout?.attempt?.statusLabel ??
+                            freeAttempt?.statusLabel ??
+                            'Not started',
+                      ),
                     ],
                     const SizedBox(height: 16),
                     SizedBox(
@@ -664,19 +675,102 @@ class _WorkoutOverview extends StatelessWidget {
                                         'Start workout')))),
                     if (journeyFirst) ...[
                       const SizedBox(height: 8),
-                      Text(
-                          actionLabelOverride != null
+                      Semantics(
+                          label: actionLabelOverride != null
                               ? 'Your saved workout remains available in your training schedule.'
                               : (scheduledWorkout?.attempt?.isComplete ==
                                           true ||
                                       freeAttempt?.attempt?.isComplete == true)
                                   ? 'Workout completed. Review your saved results.'
                                   : 'Choose an exercise next. Progress saves on this device.',
-                          style: TextStyle(color: AppColors.ink, fontSize: 12)),
+                          child: Row(children: [
+                            const Icon(Icons.save_outlined,
+                                size: 16, color: AppColors.inkSoft),
+                            const SizedBox(width: 6),
+                            Expanded(
+                                child: Text(
+                                    actionLabelOverride != null
+                                        ? 'Available in your schedule'
+                                        : (scheduledWorkout
+                                                        ?.attempt?.isComplete ==
+                                                    true ||
+                                                freeAttempt
+                                                        ?.attempt?.isComplete ==
+                                                    true)
+                                            ? 'Workout completed. Review your saved results.'
+                                            : 'Saves on this device',
+                                    style:
+                                        Theme.of(context).textTheme.bodySmall)),
+                          ])),
                     ],
                   ])),
         ]),
       );
+}
+
+class _OverviewMetric extends StatelessWidget {
+  const _OverviewMetric(
+      {required this.icon, required this.value, required this.label});
+  final IconData icon;
+  final String value, label;
+  @override
+  Widget build(BuildContext context) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+            color: AppColors.surface.withValues(alpha: .8),
+            borderRadius: BorderRadius.circular(14)),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          Icon(icon, size: 20, color: AppColors.primary),
+          const SizedBox(width: 8),
+          Flexible(
+              child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                Text(value, style: Theme.of(context).textTheme.titleLarge),
+                Text(label, style: Theme.of(context).textTheme.bodySmall),
+              ])),
+        ]),
+      );
+}
+
+class _OverviewProgress extends StatelessWidget {
+  const _OverviewProgress(
+      {required this.completed, required this.total, required this.status});
+  final int completed, total;
+  final String status;
+  @override
+  Widget build(BuildContext context) {
+    final done = total > 0 && completed >= total;
+    final color = done ? AppColors.success : AppColors.primary;
+    return Row(children: [
+      Semantics(
+          label: '$completed of $total exercises completed',
+          child: SizedBox(
+              width: 44,
+              height: 44,
+              child: Stack(alignment: Alignment.center, children: [
+                SizedBox.expand(
+                    child: CircularProgressIndicator(
+                        key: const ValueKey('workout-progress-ring'),
+                        value: total <= 0
+                            ? 0
+                            : (completed / total).clamp(0.0, 1.0),
+                        strokeWidth: 4,
+                        backgroundColor: AppColors.hairline,
+                        color: color)),
+                Icon(done ? Icons.check_rounded : Icons.fitness_center_rounded,
+                    size: 20, color: color),
+              ]))),
+      const SizedBox(width: 12),
+      Expanded(
+          child:
+              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text('$completed / $total',
+            style: Theme.of(context).textTheme.titleMedium),
+        Text(status, style: Theme.of(context).textTheme.bodySmall),
+      ])),
+    ]);
+  }
 }
 
 class _WorkoutExerciseRow extends StatelessWidget {
@@ -702,66 +796,109 @@ class _WorkoutExerciseRow extends StatelessWidget {
     final equipment = exercise is PublishedRoutineExercise
         ? (exercise as PublishedRoutineExercise).tutorial.equipment.trim()
         : '';
-    return Material(
-      color: AppColors.surface,
-      shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(14),
-          side: const BorderSide(color: AppColors.hairline)),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(14),
-        onTap: onTap,
-        child: Padding(
-            padding: const EdgeInsets.all(10),
-            child: Row(children: [
-              SizedBox(
-                  width: 26,
-                  child: Text('$index',
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(
-                          color: AppColors.inkSoft,
-                          fontWeight: FontWeight.w700))),
-              const SizedBox(width: 8),
-              ClipRRect(
-                  borderRadius: BorderRadius.circular(10),
-                  child: SizedBox(
-                      width: 60,
-                      height: 60,
-                      child: WorkoutExerciseImage(url: exercise.imageUrl))),
-              const SizedBox(width: 12),
-              Expanded(
-                  child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                    Text(exercise.name,
-                        style: Theme.of(context).textTheme.titleMedium),
-                    const SizedBox(height: 3),
-                    Text(
-                        exercise is PublishedRoutineExercise
-                            ? '${exercise.sets == 1 ? ExercisePresentation.forExercise(exercise as PublishedRoutineExercise, organizationId: organizationId ?? "", trackers: trackers).targetLabel : ExercisePresentation.forExercise(exercise as PublishedRoutineExercise, organizationId: organizationId ?? "", trackers: trackers).targetsWithRest}${day == null ? "" : " · Day $day"}'
-                            : '${exercise.sets} sets · ${exercise.reps} reps',
-                        style: Theme.of(context).textTheme.bodyMedium),
-                    if (exercise is PublishedRoutineExercise)
-                      Text(
-                          ExercisePresentation.forExercise(
-                                  exercise as PublishedRoutineExercise,
-                                  organizationId: organizationId ?? '',
-                                  trackers: trackers)
-                              .label,
-                          style: Theme.of(context).textTheme.bodySmall),
-                    if (equipment.isNotEmpty)
-                      Text(equipment,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: Theme.of(context).textTheme.bodySmall),
-                    if (statusLabel != null)
-                      Text(statusLabel!,
-                          style: Theme.of(context).textTheme.bodySmall),
-                  ])),
-              const Icon(Icons.chevron_right_rounded, color: AppColors.inkSoft),
-            ])),
-      ),
-    );
+    final presentation = exercise is PublishedRoutineExercise
+        ? ExercisePresentation.forExercise(exercise as PublishedRoutineExercise,
+            organizationId: organizationId ?? '', trackers: trackers)
+        : null;
+    final modeColor = switch (presentation?.mode) {
+      WorkoutExerciseMode.videoTimed => AppColors.info,
+      WorkoutExerciseMode.unavailable => AppColors.danger,
+      WorkoutExerciseMode.manual => AppColors.inkSoft,
+      _ => AppColors.primary,
+    };
+    final target =
+        presentation?.targetLabel.replaceAll(' · Self-reported', '') ??
+            '${exercise.sets} sets × ${exercise.reps} reps';
+    final details = [
+      if (exercise.sets > 1 && presentation != null) presentation.restLabel,
+      if (equipment.isNotEmpty) equipment,
+      if (day != null) 'Day $day',
+    ].join(' · ');
+    return Tooltip(
+        message: details.isEmpty ? exercise.name : details,
+        child: Semantics(
+            label: details,
+            child: Material(
+              color: AppColors.surface,
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                  side: const BorderSide(color: AppColors.hairline)),
+              child: InkWell(
+                borderRadius: BorderRadius.circular(14),
+                onTap: onTap,
+                child: Padding(
+                    padding: const EdgeInsets.all(10),
+                    child: Row(children: [
+                      SizedBox(
+                          width: 26,
+                          child: Text('$index',
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(
+                                  color: AppColors.inkSoft,
+                                  fontWeight: FontWeight.w700))),
+                      const SizedBox(width: 8),
+                      ClipRRect(
+                          borderRadius: BorderRadius.circular(10),
+                          child: SizedBox(
+                              width: 60,
+                              height: 60,
+                              child: WorkoutExerciseImage(
+                                  url: exercise.imageUrl))),
+                      const SizedBox(width: 12),
+                      Expanded(
+                          child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                            Text(exercise.name,
+                                style: Theme.of(context).textTheme.titleMedium),
+                            const SizedBox(height: 3),
+                            Text(target,
+                                style: Theme.of(context).textTheme.bodyMedium),
+                            if (presentation != null) ...[
+                              const SizedBox(height: 6),
+                              _ModeBadge(
+                                  icon: presentation.icon,
+                                  label: presentation.mode ==
+                                          WorkoutExerciseMode.manual
+                                      ? 'Self-reported'
+                                      : presentation.label,
+                                  color: modeColor),
+                            ],
+                            if (statusLabel != null)
+                              Text(statusLabel!,
+                                  style: Theme.of(context).textTheme.bodySmall),
+                          ])),
+                      const Icon(Icons.chevron_right_rounded,
+                          color: AppColors.inkSoft),
+                    ])),
+              ),
+            )));
   }
+}
+
+class _ModeBadge extends StatelessWidget {
+  const _ModeBadge(
+      {required this.icon, required this.label, required this.color});
+  final IconData icon;
+  final String label;
+  final Color color;
+  @override
+  Widget build(BuildContext context) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+        decoration: BoxDecoration(
+            color: color.withValues(alpha: .08),
+            borderRadius: BorderRadius.circular(7)),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          Icon(icon, size: 14, color: color),
+          const SizedBox(width: 4),
+          Flexible(
+              child: Text(label,
+                  style: Theme.of(context)
+                      .textTheme
+                      .bodySmall
+                      ?.copyWith(color: color))),
+        ]),
+      );
 }
 
 class _WorkoutTools extends StatelessWidget {
@@ -792,20 +929,29 @@ class _DetourCard extends StatelessWidget {
   final String title, subtitle;
   final VoidCallback? onTap;
   @override
-  Widget build(BuildContext context) => Panel(
-        padding: const EdgeInsets.all(16),
-        onTap: onTap,
-        child: ConstrainedBox(
-            constraints: const BoxConstraints(minHeight: 110),
-            child:
-                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Icon(icon, color: iconColor, size: 26),
-              const SizedBox(height: 12),
-              Text(title, style: Theme.of(context).textTheme.titleSmall),
-              const SizedBox(height: 4),
-              Text(subtitle, style: Theme.of(context).textTheme.bodySmall),
-            ])),
-      );
+  Widget build(BuildContext context) => Tooltip(
+      message: subtitle,
+      child: Semantics(
+          label: subtitle,
+          child: Panel(
+            padding: const EdgeInsets.all(16),
+            onTap: onTap,
+            child: ConstrainedBox(
+                constraints: const BoxConstraints(minHeight: 88),
+                child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                              color: iconColor.withValues(alpha: .1),
+                              borderRadius: BorderRadius.circular(12)),
+                          child: Icon(icon, color: iconColor, size: 24)),
+                      const SizedBox(height: 12),
+                      Text(title,
+                          style: Theme.of(context).textTheme.titleSmall),
+                    ])),
+          )));
 }
 
 Future<bool?> showWorkoutCaptureConsent(BuildContext context,
