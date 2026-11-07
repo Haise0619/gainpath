@@ -70,7 +70,7 @@ class PublishedRoutineCatalogControls extends StatelessWidget {
         icon: const Icon(Icons.swap_horiz_rounded, size: 19),
         label: const Text('Change workout'),
         style: TextButton.styleFrom(
-            foregroundColor: Colors.white,
+            foregroundColor: AppColors.primary,
             padding: const EdgeInsets.symmetric(horizontal: 8)),
       );
     }

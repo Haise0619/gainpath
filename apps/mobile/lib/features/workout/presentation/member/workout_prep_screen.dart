@@ -204,13 +204,17 @@ class WorkoutPrepScreen extends StatelessWidget {
                 journeyFirst: live && routes.journeyBuilder != null,
               ),
               const SizedBox(height: 24),
-              Row(children: [
-                Expanded(
-                    child: Text('Exercises in this workout',
-                        style: Theme.of(context).textTheme.titleLarge)),
-                TextButton(
-                    onPressed: openRoutine, child: const Text('View routine')),
-              ]),
+              Wrap(
+                  alignment: WrapAlignment.spaceBetween,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: 8,
+                  children: [
+                    Text('Exercises in this workout',
+                        style: Theme.of(context).textTheme.titleLarge),
+                    TextButton(
+                        onPressed: openRoutine,
+                        child: const Text('View routine')),
+                  ]),
               const SizedBox(height: 8),
               for (var i = 0; i < routine.length; i++)
                 Padding(
@@ -264,62 +268,61 @@ class WorkoutPrepScreen extends StatelessWidget {
             Text('Workout tools',
                 style: Theme.of(context).textTheme.titleLarge),
             const SizedBox(height: 8),
-            if (onOpenPrograms != null) ...[
-              const SizedBox(height: 8),
+            _WorkoutTools(children: [
+              if (onOpenPrograms != null)
+                _DetourCard(
+                    icon: Icons.calendar_month_outlined,
+                    iconColor: AppColors.primary,
+                    title: 'My training plan',
+                    subtitle: 'View your schedule and saved progress',
+                    onTap: onOpenPrograms),
               _DetourCard(
-                  icon: Icons.calendar_month_outlined,
-                  iconColor: AppColors.primary,
-                  title: 'My training plan',
-                  subtitle: 'View your schedule and saved progress',
-                  onTap: onOpenPrograms),
-            ],
-            _DetourCard(
-              icon: Icons.videocam_outlined,
-              iconColor: AppColors.primary,
-              title: 'Review camera setup',
-              subtitle: 'Check your distance and camera angle',
-              onTap: () => Navigator.push(context,
-                  MaterialPageRoute(builder: (_) => const CameraSetupScreen())),
-            ),
-            const SizedBox(height: 8),
-            _DetourCard(
-              icon: Icons.qr_code_scanner_rounded,
-              iconColor: AppColors.primary,
-              title: 'Scan equipment',
-              subtitle: 'Find instructions and safety tips',
-              onTap: live
-                  ? onOpenEquipment ?? () => showUnavailable(context)
-                  : () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                          builder: (_) => const EquipmentScannerScreen())),
-            ),
-            if (live) ...[
-              const SizedBox(height: 8),
+                icon: Icons.videocam_outlined,
+                iconColor: AppColors.primary,
+                title: 'Review camera setup',
+                subtitle: 'Check your distance and camera angle',
+                onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                        builder: (_) => const CameraSetupScreen())),
+              ),
               _DetourCard(
-                  icon: Icons.history_rounded,
-                  iconColor: AppColors.primary,
-                  title: 'Saved workout sessions',
-                  subtitle: 'Review your saved workout results',
-                  onTap: () {
-                    final auth = context.read<AuthBloc>();
-                    final scope = auth.state.session?.scope;
-                    if (scope == null) return;
-                    final destination = routes.savedSessionsBuilder;
-                    if (destination == null) {
-                      showUnavailable(context);
-                      return;
-                    }
-                    Navigator.push(
+                icon: Icons.qr_code_scanner_rounded,
+                iconColor: AppColors.primary,
+                title: 'Scan equipment',
+                subtitle: 'Find instructions and safety tips',
+                onTap: live
+                    ? onOpenEquipment ?? () => showUnavailable(context)
+                    : () => Navigator.push(
                         context,
-                        MaterialPageRoute<void>(
-                            builder: (_) => BlocProvider.value(
-                                value: auth,
-                                child: Builder(
-                                    builder: (context) =>
-                                        destination(context, scope)))));
-                  }),
-            ],
+                        MaterialPageRoute(
+                            builder: (_) => const EquipmentScannerScreen())),
+              ),
+              if (live)
+                _DetourCard(
+                    icon: Icons.history_rounded,
+                    iconColor: AppColors.primary,
+                    title: 'Saved workout sessions',
+                    subtitle: 'Review your saved workout results',
+                    onTap: () {
+                      final auth = context.read<AuthBloc>();
+                      final scope = auth.state.session?.scope;
+                      if (scope == null) return;
+                      final destination = routes.savedSessionsBuilder;
+                      if (destination == null) {
+                        showUnavailable(context);
+                        return;
+                      }
+                      Navigator.push(
+                          context,
+                          MaterialPageRoute<void>(
+                              builder: (_) => BlocProvider.value(
+                                  value: auth,
+                                  child: Builder(
+                                      builder: (context) =>
+                                          destination(context, scope)))));
+                    }),
+            ]),
             if (const bool.fromEnvironment('GAINPATH_POSE_PREVIEW'))
               TextButton(
                   onPressed: () => _startPosePreview(context),
@@ -557,17 +560,10 @@ class _WorkoutOverview extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => ClipRRect(
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(22),
         child: Stack(children: [
-          const Positioned.fill(child: ColoredBox(color: AppColors.primary)),
           const Positioned.fill(
-              child: DecoratedBox(
-                  decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                          begin: Alignment.topCenter,
-                          end: Alignment.bottomCenter,
-                          colors: [Color(0x66200C35), Color(0xE510081D)],
-                          stops: [0, 1])))),
+              child: ColoredBox(color: AppColors.primaryTint)),
           Padding(
               padding: const EdgeInsets.fromLTRB(18, 10, 18, 18),
               child: Column(
@@ -597,7 +593,7 @@ class _WorkoutOverview extends StatelessWidget {
                                       'DEC'
                                     ][scheduledWorkout!.date.month - 1]}',
                               style: TextStyle(
-                                  color: Colors.white,
+                                  color: AppColors.ink,
                                   fontSize: 11,
                                   fontWeight: FontWeight.w800,
                                   letterSpacing: .7)),
@@ -611,22 +607,21 @@ class _WorkoutOverview extends StatelessWidget {
                             .textTheme
                             .headlineMedium
                             ?.copyWith(
-                                color: Colors.white,
+                                color: AppColors.ink,
                                 fontWeight: FontWeight.w700)),
                     const SizedBox(height: 6),
                     Text(
                         '$exerciseCount ${exerciseCount == 1 ? 'exercise' : 'exercises'} · $totalSets ${totalSets == 1 ? 'set' : 'sets'}${minutes == null ? '' : ' · about $minutes min'}',
-                        style:
-                            const TextStyle(color: Colors.white, fontSize: 14)),
+                        style: const TextStyle(
+                            color: AppColors.ink, fontSize: 14)),
                     const SizedBox(height: 12),
                     if (scheduledWorkout != null)
                       Text(_scheduledStatus(scheduledWorkout!),
-                          style: const TextStyle(color: Colors.white)),
-                    if (freeAttempt?.checkpoint != null ||
-                        scheduledWorkout?.attempt != null) ...[
+                          style: const TextStyle(color: AppColors.ink)),
+                    ...[
                       Text(
-                          '${scheduledWorkout?.attempt?.completedExercises ?? freeAttempt?.completed ?? 0} / ${scheduledWorkout?.attempt?.entries.length ?? freeAttempt?.total ?? exerciseCount} exercises completed · ${scheduledWorkout?.attempt?.statusLabel ?? freeAttempt?.statusLabel}',
-                          style: const TextStyle(color: Colors.white)),
+                          '${scheduledWorkout?.attempt?.completedExercises ?? freeAttempt?.completed ?? 0} / ${scheduledWorkout?.attempt?.entries.length ?? freeAttempt?.total ?? exerciseCount} exercises completed · ${scheduledWorkout?.attempt?.statusLabel ?? freeAttempt?.statusLabel ?? 'Not started'}',
+                          style: const TextStyle(color: AppColors.ink)),
                       const SizedBox(height: 8),
                       LinearProgressIndicator(
                           value:
@@ -677,7 +672,7 @@ class _WorkoutOverview extends StatelessWidget {
                                       freeAttempt?.attempt?.isComplete == true)
                                   ? 'Workout completed. Review your saved results.'
                                   : 'Choose an exercise next. Progress saves on this device.',
-                          style: TextStyle(color: Colors.white, fontSize: 12)),
+                          style: TextStyle(color: AppColors.ink, fontSize: 12)),
                     ],
                   ])),
         ]),
@@ -742,7 +737,7 @@ class _WorkoutExerciseRow extends StatelessWidget {
                     const SizedBox(height: 3),
                     Text(
                         exercise is PublishedRoutineExercise
-                            ? '${ExercisePresentation.forExercise(exercise as PublishedRoutineExercise, organizationId: organizationId ?? "", trackers: trackers).targetsWithRest}${day == null ? "" : " · Day $day"}'
+                            ? '${exercise.sets == 1 ? ExercisePresentation.forExercise(exercise as PublishedRoutineExercise, organizationId: organizationId ?? "", trackers: trackers).targetLabel : ExercisePresentation.forExercise(exercise as PublishedRoutineExercise, organizationId: organizationId ?? "", trackers: trackers).targetsWithRest}${day == null ? "" : " · Day $day"}'
                             : '${exercise.sets} sets · ${exercise.reps} reps',
                         style: Theme.of(context).textTheme.bodyMedium),
                     if (exercise is PublishedRoutineExercise)
@@ -769,67 +764,48 @@ class _WorkoutExerciseRow extends StatelessWidget {
   }
 }
 
+class _WorkoutTools extends StatelessWidget {
+  const _WorkoutTools({required this.children});
+  final List<Widget> children;
+  @override
+  Widget build(BuildContext context) =>
+      LayoutBuilder(builder: (context, constraints) {
+        final single = constraints.maxWidth < 330 ||
+            MediaQuery.textScalerOf(context).scale(14) > 21;
+        final width =
+            single ? constraints.maxWidth : (constraints.maxWidth - 12) / 2;
+        return Wrap(spacing: 12, runSpacing: 12, children: [
+          for (final child in children) SizedBox(width: width, child: child)
+        ]);
+      });
+}
+
 class _DetourCard extends StatelessWidget {
+  const _DetourCard(
+      {required this.icon,
+      required this.iconColor,
+      required this.title,
+      required this.subtitle,
+      required this.onTap});
   final IconData icon;
   final Color iconColor;
-  final String title;
-  final String subtitle;
+  final String title, subtitle;
   final VoidCallback? onTap;
-
-  const _DetourCard({
-    required this.icon,
-    required this.iconColor,
-    required this.title,
-    required this.subtitle,
-    required this.onTap,
-  });
-
   @override
-  Widget build(BuildContext context) {
-    return Panel(
-      padding: EdgeInsets.zero,
-      onTap: onTap,
-      child: Row(
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Container(
-              width: 46,
-              height: 46,
-              decoration: BoxDecoration(
-                color: iconColor.withValues(alpha: 0.13),
-                borderRadius: BorderRadius.circular(13),
-              ),
-              child: Icon(icon, color: iconColor, size: 23),
-            ),
-          ),
-          const SizedBox(width: 4),
-          Expanded(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 14),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(title, style: Theme.of(context).textTheme.titleMedium),
-                  const SizedBox(height: 2),
-                  Text(subtitle,
-                      style: Theme.of(context)
-                          .textTheme
-                          .bodyMedium
-                          ?.copyWith(fontSize: 12.5)),
-                ],
-              ),
-            ),
-          ),
-          const Padding(
-            padding: EdgeInsets.only(right: 16),
-            child: Icon(Icons.arrow_forward_ios_rounded,
-                size: 14, color: AppColors.inkSoft),
-          ),
-        ],
-      ),
-    );
-  }
+  Widget build(BuildContext context) => Panel(
+        padding: const EdgeInsets.all(16),
+        onTap: onTap,
+        child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: 110),
+            child:
+                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Icon(icon, color: iconColor, size: 26),
+              const SizedBox(height: 12),
+              Text(title, style: Theme.of(context).textTheme.titleSmall),
+              const SizedBox(height: 4),
+              Text(subtitle, style: Theme.of(context).textTheme.bodySmall),
+            ])),
+      );
 }
 
 Future<bool?> showWorkoutCaptureConsent(BuildContext context,

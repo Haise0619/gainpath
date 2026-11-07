@@ -427,3 +427,7 @@ Workout Camera setup now uses the four owner-supplied local step 1-4 PNGs, switc
 ## Complete Workout UX phases 1–4 — 7 November 2026
 
 All four Workout UX optimization phases are integrated: compact state-aware hub and Settings access, actual Program preview and safe End Current Plan, explicit camera/setup/timed/rest information, truthful results/history cross-links and analytics/backup/equipment explanations. Verification: 366 tests passed across 73 affected files; analysis clean across 50 changed Dart files; normal/large-text renders inspected; isolated Android debug build passed. No tracking, work-credit, scoring, backup contract, cloud catalog or reward changes. Phone installation is pending because its black screen did not establish safe idle state; existing app/data preserved. See [implementation details](ux/workout-page-optimization-implementation.md).
+
+## Member Workout Hub redesign — 7 November 2026
+
+Light lavender overview, real initial progress, compact exercise rows and responsive two-column tools reuse current state/navigation. One-set rows hide between-set rest without changing prescriptions. 32 focused tests plus one render test passed; scoped analysis clean; isolated Android debug build passed. Phone preflight preserved prior APK and 22 protected files; black screen prevented safe-idle confirmation, so installation remains pending. See [implementation details](ux/workout-hub-redesign.md).
