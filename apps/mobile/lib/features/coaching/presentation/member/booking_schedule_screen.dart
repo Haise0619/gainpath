@@ -48,6 +48,8 @@ class BookingScheduleScreen extends StatefulWidget {
       this.onRescheduleBooking,
       this.onCancelBooking,
       this.header,
+      this.onRefresh,
+      this.historyRange,
       this.embedded = false});
   final int? serverNowMillis;
   final Widget? Function(Booking)? coachPhotoBuilder;
@@ -67,6 +69,8 @@ class BookingScheduleScreen extends StatefulWidget {
   final void Function(Booking b)? onRescheduleBooking;
   final void Function(Booking b)? onCancelBooking;
   final Widget? header;
+  final Future<void> Function()? onRefresh;
+  final bool? historyRange;
 
   @override
   State<BookingScheduleScreen> createState() => _BookingScheduleScreenState();
@@ -79,6 +83,18 @@ enum _HistoryFilter { all, past, completed, cancelled, expired, refunded }
 class _BookingScheduleScreenState extends State<BookingScheduleScreen> {
   _MainBookingTab? _userSelectedTab;
   _HistoryFilter _historyFilter = _HistoryFilter.all;
+
+  @override
+  void didUpdateWidget(covariant BookingScheduleScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.historyRange != oldWidget.historyRange &&
+        widget.historyRange != null) {
+      _userSelectedTab = widget.historyRange!
+          ? _MainBookingTab.history
+          : _MainBookingTab.upcoming;
+      _historyFilter = _HistoryFilter.all;
+    }
+  }
 
   _MainBookingTab _currentTab(int upcomingCount, int historyCount) {
     if (_userSelectedTab != null) return _userSelectedTab!;
@@ -604,41 +620,56 @@ class _BookingScheduleScreenState extends State<BookingScheduleScreen> {
           _historyFilter == _HistoryFilter.expired)
         (title: 'Expired holds', rows: expired),
     ];
-    final body = PageBody(children: [
-      if (widget.header != null) widget.header!,
-      _buildMainTabs(tab, upcoming.length, historyCount),
-      if (tab == _MainBookingTab.upcoming) ...[
-        _sectionHeader('Upcoming', upcoming.length),
-        if (upcoming.isEmpty)
-          _emptyState(context,
-              icon: Icons.event_available_outlined,
-              title: 'No upcoming sessions',
-              subtitle:
-                  'You have no scheduled sessions. Find a coach to book a consultation.',
-              action: _buildFindCoachButton()),
-        ...upcoming.map((b) => _card(b, live)),
-      ] else ...[
-        _buildHistoryFilterChips(
-            historyCount, completed.length, cancelled.length,
-            pastCount: past.length + elapsed.length,
-            expiredCount: expired.length,
-            refundedCount: refunded.length),
-        if (sections.every((s) => s.rows.isEmpty))
-          _emptyState(context,
-              icon: Icons.history_rounded,
-              title: _historyFilter == _HistoryFilter.all
-                  ? 'No session history'
-                  : 'No ${_historyFilter.name} sessions',
-              subtitle:
-                  'Past coaching sessions and booking updates will appear here.',
-              action: _buildFindCoachButton()),
-        for (final section in sections)
-          if (section.rows.isNotEmpty) ...[
-            _sectionHeader(section.title, section.rows.length),
-            ...section.rows.map((b) => _card(b, live)),
+    Widget body = ListView(
+        key: const PageStorageKey('member-booking-scroll'),
+        physics: widget.onRefresh == null
+            ? null
+            : const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(16, 4, 16, 32),
+        children: [
+          if (widget.header != null) widget.header!,
+          _buildMainTabs(tab, upcoming.length, historyCount),
+          if (tab == _MainBookingTab.upcoming) ...[
+            _sectionHeader('Upcoming', upcoming.length),
+            if (upcoming.isEmpty)
+              _emptyState(context,
+                  icon: Icons.event_available_outlined,
+                  title: 'No upcoming sessions',
+                  subtitle:
+                      'You have no scheduled sessions. Find a coach to book a consultation.',
+                  action: _buildFindCoachButton()),
+            ...upcoming.map((b) => _card(b, live)),
+          ] else ...[
+            _buildHistoryFilterChips(
+                historyCount, completed.length, cancelled.length,
+                pastCount: past.length + elapsed.length,
+                expiredCount: expired.length,
+                refundedCount: refunded.length),
+            if (sections.every((s) => s.rows.isEmpty))
+              _emptyState(context,
+                  icon: Icons.history_rounded,
+                  title: _historyFilter == _HistoryFilter.all
+                      ? 'No session history'
+                      : 'No ${_historyFilter.name} sessions',
+                  subtitle:
+                      'Past coaching sessions and booking updates will appear here.',
+                  action: _buildFindCoachButton()),
+            for (final section in sections)
+              if (section.rows.isNotEmpty) ...[
+                _sectionHeader(section.title, section.rows.length),
+                ...section.rows.map((b) => _card(b, live)),
+              ],
           ],
-      ],
-    ]);
+        ]);
+    if (widget.onRefresh != null) {
+      body = RefreshIndicator(
+        onRefresh: widget.onRefresh!,
+        notificationPredicate: (notification) =>
+            notification.depth == 0 &&
+            notification.metrics.axis == Axis.vertical,
+        child: body,
+      );
+    }
     return widget.embedded
         ? body
         : Scaffold(

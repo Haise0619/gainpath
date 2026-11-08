@@ -189,21 +189,18 @@ class BookingListCubit extends Cubit<BookingListState> {
 
   String? _firstLocalDate, _todayLocalDate;
   bool recentHistory = false;
+  String _historyStart(String today) => DateTime.parse('${today}T00:00:00Z')
+      .subtract(Duration(days: coachId == null ? 29 : 30))
+      .toIso8601String()
+      .substring(0, 10);
   Future<void> showRecentHistory(bool recent) async {
     if (state.busy || _todayLocalDate == null) return;
-    recentHistory = recent;
-    _firstLocalDate = recent
-        ? DateTime.parse('${_todayLocalDate}T00:00:00Z')
-            .subtract(const Duration(days: 30))
-            .toIso8601String()
-            .substring(0, 10)
-        : null;
-    await _load(false);
+    await _load(false, history: recent);
   }
 
   Future<void> refresh() => _load(false);
   Future<void> loadMore() => _load(true);
-  Future<void> _load(bool more) async {
+  Future<void> _load(bool more, {bool? history}) async {
     if (state.busy ||
         !_current(_generation) ||
         (more && state.page?.nextCursor == null)) {
@@ -211,18 +208,37 @@ class BookingListCubit extends Cubit<BookingListState> {
     }
     final generation = ++_generation;
     final previous = state;
+    final requestedHistory = history ?? recentHistory;
+    var requestedToday = _todayLocalDate;
+    var requestedFirst = history == null
+        ? _firstLocalDate
+        : requestedHistory
+            ? _historyStart(_todayLocalDate!)
+            : null;
     emit(BookingListState(
-        page: previous.page,
-        records: previous.records,
-        busy: true));
+        page: previous.page, records: previous.records, busy: true));
     try {
+      if (requestedHistory && coachId == null && !more) {
+        // Obtain today's organization-local date from the server. Manual
+        // historical refresh must advance correctly across midnight/DST and
+        // must not depend on the phone's timezone or a stale initial page.
+        final anchor = await repository.load(dayCount: 1);
+        if (!_current(generation)) return;
+        requestedToday = anchor.firstLocalDate;
+        requestedFirst = _historyStart(requestedToday);
+      }
       final page = await repository.load(
           coachId: coachId,
-          firstLocalDate:
-              more ? previous.page!.firstLocalDate : _firstLocalDate,
+          dayCount: coachId == null ? 30 : null,
+          firstLocalDate: more ? previous.page!.firstLocalDate : requestedFirst,
           cursor: more ? previous.page!.nextCursor : null);
       if (_current(generation)) {
-        if (!more && !recentHistory) _todayLocalDate = page.firstLocalDate;
+        if (!more) {
+          recentHistory = requestedHistory;
+          _firstLocalDate = requestedFirst;
+          _todayLocalDate =
+              requestedHistory ? requestedToday : page.firstLocalDate;
+        }
         emit(BookingListState(
             page: page,
             records: List.unmodifiable(
@@ -231,7 +247,8 @@ class BookingListCubit extends Cubit<BookingListState> {
     } catch (error) {
       if (_current(generation)) {
         emit(BookingListState(
-            page: previous.page, records: previous.records,
+            page: previous.page,
+            records: previous.records,
             message: error is BookingException
                 ? error.message
                 : const BookingException('unknown').message));

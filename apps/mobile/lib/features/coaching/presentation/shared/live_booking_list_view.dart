@@ -225,7 +225,7 @@ class _LiveBookingListViewState extends State<LiveBookingListView> {
   void initState() {
     super.initState();
     final source = widget.repository;
-    if (source is BookingChangeSource) {
+    if (widget.coachId != null && source is BookingChangeSource) {
       var firstSnapshot = true;
       _liveUpdates =
           (source as BookingChangeSource).watchBookingChanges().listen((_) {
@@ -236,12 +236,14 @@ class _LiveBookingListViewState extends State<LiveBookingListView> {
         _refreshCurrent();
       }, onError: (_) {/* The periodic/manual refresh remains available. */});
     }
-    _updates = Timer.periodic(const Duration(seconds: 30), (_) {
-      _refreshCurrent();
-    });
+    if (widget.coachId != null) {
+      _updates = Timer.periodic(const Duration(seconds: 30), (_) {
+        _refreshCurrent();
+      });
+    }
   }
 
-  void _refreshCurrent() {
+  Future<void> _refreshCurrent() async {
     if (mounted &&
         (!widget.embedded || TickerMode.of(context)) &&
         widget.isCurrent() &&
@@ -249,7 +251,7 @@ class _LiveBookingListViewState extends State<LiveBookingListView> {
         !cancellation.state.uncertain &&
         !controller.state.busy &&
         (ModalRoute.of(context)?.isCurrent ?? true)) {
-      controller.refresh();
+      await controller.refresh();
     }
   }
 
@@ -670,17 +672,20 @@ class _LiveBookingListViewState extends State<LiveBookingListView> {
                         ),
                       ),
                     ),
-                    const SizedBox(width: 6),
-                    IconButton(
-                      tooltip: 'Refresh bookings',
-                      iconSize: 20,
-                      padding: const EdgeInsets.all(6),
-                      constraints: const BoxConstraints(),
-                      onPressed:
-                          action.busy || state.busy ? null : controller.refresh,
-                      icon: const Icon(Icons.refresh_rounded,
-                          color: AppColors.inkSoft),
-                    ),
+                    if (widget.coachId != null) ...[
+                      const SizedBox(width: 6),
+                      IconButton(
+                        tooltip: 'Refresh bookings',
+                        iconSize: 20,
+                        padding: const EdgeInsets.all(6),
+                        constraints: const BoxConstraints(),
+                        onPressed: action.busy || state.busy
+                            ? null
+                            : controller.refresh,
+                        icon: const Icon(Icons.refresh_rounded,
+                            color: AppColors.inkSoft),
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -701,7 +706,7 @@ class _LiveBookingListViewState extends State<LiveBookingListView> {
                       const SizedBox(width: 6),
                       Expanded(
                         child: Text(
-                          '${state.page!.timeZone} · Auto-syncs 30s · ${state.records.length} loaded session${state.records.length == 1 ? '' : 's'}',
+                          '${state.page!.timeZone}${widget.coachId == null ? '' : ' · Auto-syncs 30s'} · ${state.records.length} loaded session${state.records.length == 1 ? '' : 's'}',
                           style: const TextStyle(
                             fontSize: 11,
                             color: AppColors.inkSoft,
@@ -885,6 +890,8 @@ class _LiveBookingListViewState extends State<LiveBookingListView> {
                   header: header);
             }
             return BookingScheduleScreen(
+                onRefresh: _refreshCurrent,
+                historyRange: controller.recentHistory,
                 embedded: widget.embedded,
                 serverNowMillis: state.page?.serverNowMillis,
                 coachInfoFor: (id) => _coachResults[id]?.future,
@@ -899,20 +906,8 @@ class _LiveBookingListViewState extends State<LiveBookingListView> {
                 onReview: widget.review == null || state.busy
                     ? null
                     : _showReviewDialog,
-                onMessage: widget.communication == null
-                    ? null
-                    : (booking) => Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                            builder: (_) => CoachMessageThreadScreen(
-                                booking: booking,
-                                repository: widget.communication,
-                                isCurrent: widget.isCurrent,
-                                loadCoachName: widget.loadCoachName == null
-                                    ? null
-                                    : () =>
-                                        widget.loadCoachName!(booking.coachId),
-                                ownRole: 'Member'))),
+                onMessage:
+                    widget.communication == null ? null : _openConversation,
                 persistedBookings: bookings,
                 statusLabels: labels,
                 header: header,
