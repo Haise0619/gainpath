@@ -117,6 +117,8 @@ void main() {
     void Function(Booking)? onNotes,
     void Function(Booking)? onCancel,
     VoidCallback? onOpenMessages,
+    void Function(bool)? onRangeChanged,
+    bool? historyRange,
     Size size = const Size(1000, 1800),
     double textScale = 1.0,
   }) {
@@ -143,6 +145,8 @@ void main() {
             onNotes: onNotes,
             onCancel: onCancel,
             onOpenMessages: onOpenMessages,
+            onRangeChanged: onRangeChanged,
+            historyRange: historyRange,
           ),
         ),
       ),
@@ -281,6 +285,30 @@ void main() {
 
     expect(find.text('No past sessions'), findsOneWidget);
     expect(find.text('Return to Schedule'), findsOneWidget);
+  });
+
+  testWidgets(
+      'Switching between Schedule and History triggers onRangeChanged and eliminates conflicting date toggle',
+      (tester) async {
+    bool? requestedHistory;
+    await tester.pumpWidget(createTestWidget(
+      onRangeChanged: (showHistory) => requestedHistory = showHistory,
+    ));
+    await tester.pumpAndSettle();
+
+    // Verify neither the redundant date toggle pill nor the refresh icon button exist
+    expect(find.byTooltip('Refresh bookings'), findsNothing);
+    expect(find.byIcon(Icons.swap_horiz_rounded), findsNothing);
+
+    // Tap History -> triggers onRangeChanged(true)
+    await tester.tap(find.text('History'));
+    await tester.pumpAndSettle();
+    expect(requestedHistory, isTrue);
+
+    // Tap Schedule -> triggers onRangeChanged(false)
+    await tester.tap(find.text('Schedule'));
+    await tester.pumpAndSettle();
+    expect(requestedHistory, isFalse);
   });
 
   testWidgets('Card tap navigates to dedicated CoachSessionDetailsScreen with 9 sections',

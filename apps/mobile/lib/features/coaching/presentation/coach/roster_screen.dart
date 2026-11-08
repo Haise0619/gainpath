@@ -58,6 +58,8 @@ class CoachRosterScreen extends StatefulWidget {
     this.onCancel,
     this.onPosture,
     this.showAllDates = false,
+    this.historyRange,
+    this.onRangeChanged,
     this.onOpenMessages,
     this.todayLocalDate,
     this.serverNowMillis,
@@ -75,6 +77,8 @@ class CoachRosterScreen extends StatefulWidget {
   final void Function(Booking)? onCancel;
   final void Function(Booking)? onPosture;
   final bool showAllDates;
+  final bool? historyRange;
+  final void Function(bool showHistory)? onRangeChanged;
   final VoidCallback? onOpenMessages;
   final String? todayLocalDate;
   final int? serverNowMillis;
@@ -119,6 +123,10 @@ class _CoachRosterScreenState extends State<CoachRosterScreen>
   void initState() {
     super.initState();
     _selectedDate = _parseToday();
+    if (widget.historyRange != null) {
+      _currentTab =
+          widget.historyRange! ? _RosterTab.history : _RosterTab.schedule;
+    }
     if (widget.showAllDates) {
       _dateScope = CoachDateScope.allDates;
     }
@@ -131,6 +139,13 @@ class _CoachRosterScreenState extends State<CoachRosterScreen>
   @override
   void didUpdateWidget(CoachRosterScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (widget.historyRange != oldWidget.historyRange &&
+        widget.historyRange != null) {
+      setState(() {
+        _currentTab =
+            widget.historyRange! ? _RosterTab.history : _RosterTab.schedule;
+      });
+    }
     if (widget.todayLocalDate != oldWidget.todayLocalDate &&
         widget.todayLocalDate != null) {
       final parsed = _parseToday();
@@ -763,6 +778,7 @@ class _CoachRosterScreenState extends State<CoachRosterScreen>
               onTap: () {
                 if (_currentTab != _RosterTab.schedule) {
                   setState(() => _currentTab = _RosterTab.schedule);
+                  widget.onRangeChanged?.call(false);
                 }
               },
             ),
@@ -776,6 +792,7 @@ class _CoachRosterScreenState extends State<CoachRosterScreen>
               onTap: () {
                 if (_currentTab != _RosterTab.history) {
                   setState(() => _currentTab = _RosterTab.history);
+                  widget.onRangeChanged?.call(true);
                 }
               },
             ),
@@ -1367,7 +1384,10 @@ class _CoachRosterScreenState extends State<CoachRosterScreen>
             message:
                 'You have no past ${_historySubFilter == "All" ? "" : _historySubFilter.toLowerCase()} sessions recorded.',
             actionLabel: 'Return to Schedule',
-            onAction: () => setState(() => _currentTab = _RosterTab.schedule),
+            onAction: () {
+              setState(() => _currentTab = _RosterTab.schedule);
+              widget.onRangeChanged?.call(false);
+            },
           )
         else
           Padding(
