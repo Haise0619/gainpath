@@ -14,6 +14,8 @@ import 'coach_directory_flow_test.dart' show DriftingCoachAuth, DirectoryFake;
 import 'coach_profile_state_test.dart' show ProfileFake;
 import 'live_booking_composition_test.dart' show Lists;
 import 'support/fitness_profile_fake.dart';
+import 'workout_program_controller_test.dart' show MemoryProgramStore;
+import 'routine_journey_controller_test.dart' show MemoryJourneyStore;
 
 import 'support/coach_availability_fake.dart';
 
@@ -161,6 +163,8 @@ void main() {
         profileRepositoryFactory: profiles.repository,
         routineLoaderFactory: (_) async => null,
         coachDirectoryFactory: (scope, current) => DirectoryFake(scope),
+        programStoreFactory: (scope) async => MemoryProgramStore(scope),
+        routineJourneyStoreFactory: (scope) async => MemoryJourneyStore(scope),
         coachAvailabilityFactory: (_, current) => repo));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Coaches').last);

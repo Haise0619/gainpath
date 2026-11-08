@@ -1,136 +1,184 @@
 import 'package:flutter/material.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
 import 'package:gainpath_domain/identity.dart';
+import '../../shared/member_coach_presentation.dart';
 
-/// A coach summary card for the Browse Coaches list: online avatar,
-/// verified badge, top specialization tags, rating, and fee — enough to
-/// compare coaches at a glance without opening every profile.
+/// Member comparison card using published facts without live-status claims.
 class CoachCard extends StatelessWidget {
-  final Coach coach;
-  final VoidCallback onTap;
-  final PublishedCoachProfile? published;
-  final Widget? photo;
   const CoachCard(
       {super.key,
       required this.coach,
       required this.onTap,
       this.published,
-      this.photo});
+      this.photo,
+      this.branchNames = const {}});
+  final Coach coach;
+  final VoidCallback onTap;
+  final PublishedCoachProfile? published;
+  final Widget? photo;
+  final Map<String, String> branchNames;
 
   @override
   Widget build(BuildContext context) {
-    return Panel(
-      onTap: onTap,
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          ClipRRect(
-            borderRadius: BorderRadius.circular(15),
-            child: SizedBox(
-                width: 58,
-                height: 58,
-                child: photo ?? networkAvatar(coach.imageUrl)),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
+    final colors = Theme.of(context).colorScheme;
+    final text = memberCoachTypography(context);
+    final fee = memberCoachFeeMinor(coach, published);
+    final tags = coach.specializationTags
+        .where((t) =>
+            t.trim().toLowerCase() != coach.specialty.trim().toLowerCase())
+        .take(2);
+    return Semantics(
+      button: true,
+      label: 'Open ${coach.name} coach profile',
+      child: Card(
+        margin: EdgeInsets.zero,
+        elevation: 0,
+        color: colors.surface,
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+            side: BorderSide(color: colors.onSurface.withValues(alpha: .12))),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+            onTap: onTap,
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Flexible(
-                      child: Text(coach.name,
-                          style: Theme.of(context).textTheme.titleMedium),
-                    ),
-                    if (coach.verified) ...[
-                      const SizedBox(width: 5),
-                      const Icon(Icons.verified_rounded,
-                          size: 15, color: AppColors.primary),
-                    ],
-                  ],
-                ),
-                const SizedBox(height: 2),
-                Text(coach.specialty,
-                    style: Theme.of(context).textTheme.bodyMedium,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis),
-                const SizedBox(height: 6),
-                Wrap(
-                  spacing: 6,
-                  runSpacing: 6,
-                  children: coach.specializationTags
-                      .take(2)
-                      .map((t) => _Tag(t))
-                      .toList(),
-                ),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    const Icon(Icons.star_rounded,
-                        size: 15, color: AppColors.accent),
-                    const SizedBox(width: 3),
-                    Text(published != null ? (published!.averageRating?.toStringAsFixed(1) ?? 'Not rated') : '${coach.rating}',
-                        style: const TextStyle(
-                            fontSize: 13, fontWeight: FontWeight.w700)),
-                    Text(published != null ? '  (${published!.reviewCount})' : '  (${coach.reviews})',
-                        style: Theme.of(context).textTheme.bodyMedium),
-                    const Spacer(),
-                    Builder(builder: (context) {
-                      final bool hasValidFee;
-                      final String feeText;
-                      if (published != null) {
-                        final minor = published!.fields.consultationFeeMinor;
-                        hasValidFee = minor != null && minor > 0;
-                        feeText = hasValidFee
-                            ? 'RM ${(minor / 100).toStringAsFixed(2)}/session'
-                            : '—';
-                      } else {
-                        hasValidFee = coach.fee > 0;
-                        feeText = hasValidFee
-                            ? 'RM ${coach.fee.toStringAsFixed(2)}/session'
-                            : '—';
-                      }
-                      return Text(
-                        feeText,
-                        style: const TextStyle(
-                            fontSize: 12.5,
-                            fontWeight: FontWeight.w700,
-                            color: AppColors.primary),
-                      );
+                    LayoutBuilder(builder: (context, constraints) {
+                      final avatar = ClipRRect(
+                          borderRadius: BorderRadius.circular(16),
+                          child: SizedBox(
+                              width: 56,
+                              height: 56,
+                              child: photo ?? networkAvatar(coach.imageUrl)));
+                      final identity = Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(coach.name,
+                                style: text.titleMedium?.copyWith(
+                                    color: colors.onSurface,
+                                    fontWeight: FontWeight.w700)),
+                            const SizedBox(height: 4),
+                            Text(coach.specialty,
+                                style: text.bodyMedium
+                                    ?.copyWith(color: colors.onSurfaceVariant)),
+                            if (coach.verified)
+                              Padding(
+                                  padding: const EdgeInsets.only(top: 6),
+                                  child: Tooltip(
+                                      message:
+                                          'At least one certification approved by GainPath.',
+                                      child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Icon(Icons.verified_rounded,
+                                                size: 16,
+                                                color: colors.primary),
+                                            const SizedBox(width: 4),
+                                            Flexible(
+                                                child: Text('Verified',
+                                                    style: text.labelMedium
+                                                        ?.copyWith(
+                                                            color: colors
+                                                                .primary))),
+                                          ]))),
+                          ]);
+                      return MediaQuery.textScalerOf(context).scale(14) > 19
+                          ? Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                  avatar,
+                                  const SizedBox(height: 12),
+                                  identity
+                                ])
+                          : Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                  avatar,
+                                  const SizedBox(width: 12),
+                                  Expanded(child: identity),
+                                  const SizedBox(width: 4),
+                                  Icon(Icons.chevron_right_rounded,
+                                      color: colors.onSurfaceVariant, size: 20)
+                                ]);
                     }),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 6),
-          const Padding(
-            padding: EdgeInsets.only(top: 4),
-            child: Icon(Icons.arrow_forward_ios_rounded,
-                size: 13, color: AppColors.inkSoft),
-          ),
-        ],
+                    const SizedBox(height: 14),
+                    Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Icon(Icons.star_rounded,
+                              size: 18,
+                              color: colors.brightness == Brightness.dark
+                                  ? AppColors.accent
+                                  : AppColors.accentDark),
+                          const SizedBox(width: 6),
+                          Expanded(
+                              child: Text(memberCoachRating(coach, published),
+                                  style: text.bodyMedium?.copyWith(
+                                      color: colors.onSurface,
+                                      fontWeight: FontWeight.w600))),
+                        ]),
+                    const SizedBox(height: 8),
+                    Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Icon(Icons.location_on_outlined,
+                              size: 18, color: colors.onSurfaceVariant),
+                          const SizedBox(width: 6),
+                          Expanded(
+                              child: Text(
+                                  memberCoachLocation(
+                                      published?.branchIds ?? const [],
+                                      branchNames: branchNames),
+                                  style: text.bodySmall?.copyWith(
+                                      color: colors.onSurfaceVariant))),
+                        ]),
+                    if (tags.isNotEmpty) ...[
+                      const SizedBox(height: 12),
+                      Wrap(
+                          spacing: 6,
+                          runSpacing: 6,
+                          children: tags
+                              .map((tag) => Container(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 10, vertical: 5),
+                                    decoration: BoxDecoration(
+                                        color: colors.primary.withValues(
+                                            alpha: colors.brightness ==
+                                                    Brightness.dark
+                                                ? .18
+                                                : .07),
+                                        borderRadius:
+                                            BorderRadius.circular(10)),
+                                    child: Text(tag,
+                                        style: text.labelMedium?.copyWith(
+                                            color: colors.onSurface)),
+                                  ))
+                              .toList()),
+                    ],
+                    const SizedBox(height: 14),
+                    Divider(height: 1, color: colors.outlineVariant),
+                    const SizedBox(height: 12),
+                    Wrap(
+                        spacing: 6,
+                        runSpacing: 2,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          Text(memberCoachPrice(fee),
+                              style: text.titleSmall?.copyWith(
+                                  color: fee == null
+                                      ? colors.onSurfaceVariant
+                                      : colors.primary,
+                                  fontWeight: FontWeight.w700)),
+                          if (fee != null)
+                            Text('/ session',
+                                style: text.bodySmall
+                                    ?.copyWith(color: colors.onSurfaceVariant)),
+                        ]),
+                  ]),
+            )),
       ),
-    );
-  }
-}
-
-class _Tag extends StatelessWidget {
-  final String label;
-  const _Tag(this.label);
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(
-          color: AppColors.surfaceAlt,
-          borderRadius: BorderRadius.circular(999)),
-      child: Text(label,
-          style: const TextStyle(
-              fontSize: 10.5,
-              fontWeight: FontWeight.w600,
-              color: AppColors.inkSoft)),
     );
   }
 }

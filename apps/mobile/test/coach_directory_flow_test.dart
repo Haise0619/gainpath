@@ -18,21 +18,23 @@ import 'support/coach_availability_fake.dart';
 import 'workout_program_controller_test.dart' show MemoryProgramStore;
 import 'routine_journey_controller_test.dart' show MemoryJourneyStore;
 
-PublishedCoachProfile published(String bio) => PublishedCoachProfile(
-    id: 'coach',
-    fields: CoachProfessionalFields(
-        displayName: 'Real contract Coach',
-        specialty: 'Strength',
-        bio: bio,
-        specializationTags: ['Strength'],
-        yearsExperience: null),
-    revision: 1,
-    sourceRevision: 1,
-    status: 'published',
-    branchIds: ['main'],
-    createdAtMillis: 1,
-    updatedAtMillis: 2,
-    publishedAtMillis: 2);
+PublishedCoachProfile published(String bio, {int? fee}) =>
+    PublishedCoachProfile(
+        id: 'coach',
+        fields: CoachProfessionalFields(
+            displayName: 'Real contract Coach',
+            specialty: 'Strength',
+            bio: bio,
+            specializationTags: ['Strength'],
+            yearsExperience: null,
+            consultationFeeMinor: fee),
+        revision: 1,
+        sourceRevision: 1,
+        status: 'published',
+        branchIds: ['main'],
+        createdAtMillis: 1,
+        updatedAtMillis: 2,
+        publishedAtMillis: 2);
 
 class DirectoryFake implements CoachDirectoryRepository {
   DirectoryFake(this.scope);

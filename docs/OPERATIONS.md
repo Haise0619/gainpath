@@ -435,3 +435,8 @@ Light lavender overview, real initial progress, compact exercise rows and respon
 ## Visual-first Workout Hub — 7 November 2026
 
 Workout Hub now uses icon-led metrics, actual checkpoint progress ring, compact provenance badges and colored tool icons with less visible copy. Existing capability resolution, target qualifiers, action/navigation and data logic remain unchanged. 33 focused tests passed; three-file analysis clean; fresh renders inspected; isolated Android debug build passed. Physical acceptance/install remains pending because safe phone idle was not established. See [design and verification](ux/workout-hub-visual-design.md).
+
+
+## Mobile Member Coach UX — 8 November 2026
+
+The owner-approved Member coach discovery/profile redesign is implemented: responsive factual cards, explicit ratings/reviews/location fallback, honest price sorting and empty/error/loading states, retained search/filter/pagination/navigation, compact profile and persistent SafeArea booking access. Unsupported metrics/testimonials are omitted. Existing publication, scoped authorization, certification, booking/payment/cancellation and privacy contracts are preserved. Fresh 64 affected tests, 8 render scenarios (24 PNGs), scoped analysis, independent review and isolated Android debug build pass. No backend/Admin/product-data changes or phone installation; physical acceptance is pending. The Admin optimization plan remains deferred. Details: docs/ux/mobile-member-coach-ux-implementation.md; evidence and prior-source backups: build/member-coach-ux-20261108/.

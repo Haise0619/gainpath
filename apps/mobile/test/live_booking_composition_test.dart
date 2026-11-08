@@ -6,7 +6,8 @@ import 'package:gainpath_domain/gainpath_domain.dart';
 import 'package:gainpath_identity/gainpath_identity.dart';
 import 'package:gainpath_mobile/app/di/coach_profile_factory.dart';
 import 'package:gainpath_mobile/features/coaching/presentation/member/booking_confirmed_screen.dart';
-import 'coach_directory_flow_test.dart' show DirectoryFake, DriftingCoachAuth;
+import 'coach_directory_flow_test.dart'
+    show DirectoryFake, DriftingCoachAuth, published;
 import 'live_booking_cubit_test.dart' show Options, Writer;
 import 'firebase_booking_repository_test.dart' show pageJson;
 
@@ -46,7 +47,8 @@ void main() {
         value: bloc,
         child: MaterialApp(
             home: buildFirebaseCoachDirectory(session,
-                factory: (scope, _) => DirectoryFake(scope),
+                factory: (scope, _) => DirectoryFake(scope)
+                  ..profile = published('Public bio', fee: 10000),
                 bookingFactory: (_, __) {
                   created++;
                   return (options: Options(), writer: writer);
