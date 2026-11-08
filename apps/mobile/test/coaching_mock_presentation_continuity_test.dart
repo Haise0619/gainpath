@@ -24,10 +24,10 @@ void main() {
                 SessionScope(userId: 'member', organizationId: 'org')),
             isCurrent: () => true,
             onOpenPublished: (_) {},
-            onOpenBookings: () {})));
+            bookingsBuilder: (_) => const Text('No bookings yet.'))));
     await tester.pumpAndSettle();
     expect(find.byType(CoachCard), findsOneWidget);
-    expect(find.text('Search name or specialty'), findsOneWidget);
+    expect(find.text('Search coaches…'), findsOneWidget);
     expect(find.widgetWithText(ChoiceChip, 'Strength'), findsOneWidget);
     expect(find.text('Real contract Coach'), findsOneWidget);
     expect(find.text('RM 0/session'), findsNothing);

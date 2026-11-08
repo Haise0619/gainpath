@@ -18,12 +18,12 @@ class BrowseCoachesScreen extends StatefulWidget {
       this.liveRepository,
       this.isCurrent,
       this.onOpenPublished,
-      this.onOpenBookings});
+      this.bookingsBuilder});
   final bool live;
   final CoachDirectoryRepository? liveRepository;
   final bool Function()? isCurrent;
   final void Function(String)? onOpenPublished;
-  final VoidCallback? onOpenBookings;
+  final WidgetBuilder? bookingsBuilder;
   @override
   State<BrowseCoachesScreen> createState() => _BrowseCoachesScreenState();
 }
@@ -34,6 +34,8 @@ class _BrowseCoachesScreenState extends State<BrowseCoachesScreen> {
   final _searchController = TextEditingController();
   String _query = '';
   CoachDirectoryCubit? _directory;
+  int _tab = 0;
+  Widget? _bookings;
   @override
   void initState() {
     super.initState();
@@ -62,6 +64,8 @@ class _BrowseCoachesScreenState extends State<BrowseCoachesScreen> {
       _searchController.clear();
       _query = '';
       _specialtyFilter = 'All';
+      _tab = 0;
+      _bookings = null;
       _bind();
     }
   }
@@ -78,11 +82,171 @@ class _BrowseCoachesScreenState extends State<BrowseCoachesScreen> {
         _searchController.clear();
         _specialtyFilter = 'All';
       });
-  String get _sortLabel => switch (_sortBy) {
-        _SortBy.rating => 'Highest rated',
-        _SortBy.priceLow => 'Price: low to high',
-        _SortBy.experience => 'Most experienced',
-      };
+  Widget _tabs(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return Container(
+        padding: const EdgeInsets.all(4),
+        decoration: BoxDecoration(
+            color: colors.primary.withValues(alpha: .08),
+            borderRadius: BorderRadius.circular(18)),
+        child: Row(children: [
+          for (var index = 0; index < 2; index++)
+            Expanded(
+                child: Padding(
+                    padding: EdgeInsets.only(left: index == 1 ? 4 : 0),
+                    child: Semantics(
+                        selected: _tab == index,
+                        child: TextButton(
+                            onPressed: () => setState(() {
+                                  _tab = index;
+                                  if (index == 1 && _bookings == null) {
+                                    _bookings = widget.bookingsBuilder
+                                            ?.call(context) ??
+                                        (widget.live
+                                            ? const Center(
+                                                child: Text(
+                                                    'Bookings unavailable in this view.'))
+                                            : const BookingScheduleScreen(
+                                                embedded: true));
+                                  }
+                                }),
+                            style: TextButton.styleFrom(
+                                backgroundColor: _tab == index
+                                    ? colors.primary
+                                    : Colors.transparent,
+                                foregroundColor: _tab == index
+                                    ? colors.onPrimary
+                                    : colors.onSurface,
+                                minimumSize: const Size(0, 48),
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 8, vertical: 10),
+                                textStyle: memberCoachTypography(context)
+                                    .titleSmall
+                                    ?.copyWith(
+                                        fontWeight: FontWeight.w700,
+                                        fontSize: 13),
+                                shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(14))),
+                            child: Text(
+                                index == 0 ? 'Find Coach' : 'My Bookings',
+                                textAlign: TextAlign.center))))),
+        ]));
+  }
+
+  Future<void> _filters(List<String> specialties) async {
+    var specialty = _specialtyFilter;
+    var sort = _sortBy;
+    final result = await showModalBottomSheet<
+            ({String specialty, _SortBy sort})>(
+        context: context,
+        isScrollControlled: true,
+        useSafeArea: true,
+        showDragHandle: true,
+        builder: (context) => FractionallySizedBox(
+            heightFactor: .8,
+            child: StatefulBuilder(builder: (context, update) {
+              final text = memberCoachTypography(context);
+              return SafeArea(
+                  top: false,
+                  child: Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+                      child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(children: [
+                              Expanded(
+                                  child: Text('Filter and sort',
+                                      style: text.titleLarge)),
+                              IconButton(
+                                  tooltip: 'Close filters',
+                                  onPressed: () => Navigator.pop(context),
+                                  icon: const Icon(Icons.close_rounded))
+                            ]),
+                            const SizedBox(height: 8),
+                            Expanded(
+                                child: SingleChildScrollView(
+                                    child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                  Text('Specialty', style: text.titleSmall),
+                                  const SizedBox(height: 8),
+                                  Wrap(
+                                      spacing: 8,
+                                      runSpacing: 4,
+                                      children: specialties
+                                          .map((s) => ChoiceChip(
+                                              label: Text(s),
+                                              selected: specialty == s,
+                                              selectedColor: Theme.of(context)
+                                                  .colorScheme
+                                                  .primary,
+                                              checkmarkColor: Theme.of(context)
+                                                  .colorScheme
+                                                  .onPrimary,
+                                              labelStyle: text.labelLarge
+                                                  ?.copyWith(
+                                                      color: specialty == s
+                                                          ? Theme.of(context)
+                                                              .colorScheme
+                                                              .onPrimary
+                                                          : Theme.of(context)
+                                                              .colorScheme
+                                                              .onSurface),
+                                              onSelected: (_) =>
+                                                  update(() => specialty = s)))
+                                          .toList()),
+                                  const SizedBox(height: 20),
+                                  Text('Sort by', style: text.titleSmall),
+                                  RadioGroup<_SortBy>(
+                                      groupValue: sort,
+                                      onChanged: (value) {
+                                        if (value != null) {
+                                          update(() => sort = value);
+                                        }
+                                      },
+                                      child: Column(children: [
+                                        for (final option in _SortBy.values)
+                                          RadioListTile<_SortBy>(
+                                              contentPadding: EdgeInsets.zero,
+                                              value: option,
+                                              title: Text(switch (option) {
+                                                _SortBy.rating =>
+                                                  'Highest rated',
+                                                _SortBy.priceLow =>
+                                                  'Price: low to high',
+                                                _SortBy.experience =>
+                                                  'Most experienced'
+                                              })),
+                                      ])),
+                                  const SizedBox(height: 12),
+                                  Text(
+                                      'Search and sorting apply to loaded coaches. Load more results to include more coaches.',
+                                      style: text.bodySmall),
+                                ]))),
+                            const SizedBox(height: 12),
+                            Wrap(spacing: 12, runSpacing: 8, children: [
+                              OutlinedButton(
+                                  onPressed: () => update(() {
+                                        specialty = 'All';
+                                        sort = _SortBy.rating;
+                                      }),
+                                  child: const Text('Reset')),
+                              FilledButton(
+                                  onPressed: () => Navigator.pop(context,
+                                      (specialty: specialty, sort: sort)),
+                                  child: const Text('Apply')),
+                            ]),
+                          ])));
+            })));
+    if (result != null && mounted) {
+      setState(() {
+        _specialtyFilter = result.specialty;
+        _sortBy = result.sort;
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_directory != null) {
@@ -184,217 +348,245 @@ class _BrowseCoachesScreenState extends State<BrowseCoachesScreen> {
     final error = state?.message != null;
     final loading = state?.loading == true;
     return Scaffold(
-      appBar: AppBar(title: const Text('Coaches'), actions: [
-        PopupMenuButton<_SortBy>(
-            tooltip: 'Sort coaches',
-            icon: const Icon(Icons.sort_rounded),
-            initialValue: _sortBy,
-            onSelected: (value) => setState(() => _sortBy = value),
-            itemBuilder: (_) => const [
-                  PopupMenuItem(
-                      value: _SortBy.rating, child: Text('Highest rated')),
-                  PopupMenuItem(
-                      value: _SortBy.priceLow,
-                      child: Text('Price: low to high')),
-                  PopupMenuItem(
-                      value: _SortBy.experience,
-                      child: Text('Most experienced')),
-                ]),
-        IconButton(
-            tooltip: 'My bookings',
-            icon: const Icon(Icons.event_note_rounded),
-            onPressed: widget.live
-                ? (current ? widget.onOpenBookings : null)
-                : () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                        builder: (_) => const BookingScheduleScreen()))),
-      ]),
-      body: RefreshIndicator(
-          onRefresh: () async {
-            await _directory?.refresh();
-          },
-          child: CustomScrollView(
-              key: const PageStorageKey('member-coaches-list'),
-              physics: const AlwaysScrollableScrollPhysics(),
-              slivers: [
-                SliverPadding(
-                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-                    sliver: SliverToBoxAdapter(
-                        child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                          Text('Find your coach',
-                              style: text.titleLarge?.copyWith(
-                                  color: colors.onSurface,
-                                  fontWeight: FontWeight.w700)),
-                          const SizedBox(height: 6),
-                          Text('Compare expertise, reviews and session prices.',
-                              style: text.bodyMedium
-                                  ?.copyWith(color: colors.onSurfaceVariant)),
-                          const SizedBox(height: 16),
-                          TextField(
-                              controller: _searchController,
-                              onChanged: (value) =>
-                                  setState(() => _query = value),
-                              decoration: InputDecoration(
-                                  hintText: 'Search name or specialty',
-                                  prefixIcon: const Icon(Icons.search_rounded),
-                                  suffixIcon: _query.isEmpty
-                                      ? null
-                                      : IconButton(
-                                          tooltip: 'Clear search',
-                                          icon: const Icon(Icons.close_rounded),
-                                          onPressed: () => setState(() {
-                                                _query = '';
-                                                _searchController.clear();
-                                              })))),
-                          const SizedBox(height: 12),
-                          SingleChildScrollView(
-                              scrollDirection: Axis.horizontal,
-                              child: Row(
-                                  children: specialties
-                                      .map((s) => Padding(
-                                          padding:
-                                              const EdgeInsets.only(right: 8),
-                                          child: ChoiceChip(
-                                              label: Text(s),
-                                              selected: s == _specialtyFilter,
-                                              onSelected: (_) => setState(
-                                                  () => _specialtyFilter = s),
-                                              selectedColor: colors.primary,
-                                              checkmarkColor: colors.onPrimary,
-                                              labelStyle: text.labelLarge
-                                                  ?.copyWith(
-                                                      color: s ==
-                                                              _specialtyFilter
-                                                          ? colors.onPrimary
-                                                          : colors.onSurface),
-                                              materialTapTargetSize:
-                                                  MaterialTapTargetSize
-                                                      .padded)))
-                                      .toList())),
-                          if (!loading && coaches.isNotEmpty) ...[
-                            const SizedBox(height: 12),
-                            Wrap(
-                                spacing: 8,
-                                runSpacing: 4,
-                                crossAxisAlignment: WrapCrossAlignment.center,
-                                children: [
-                                  Text(
-                                      '${visible.length} ${visible.length == 1 ? 'coach' : 'coaches'} · $_sortLabel',
-                                      style: text.bodySmall?.copyWith(
-                                          color: colors.onSurfaceVariant)),
+      appBar: AppBar(title: const Text('Coaches')),
+      body: Column(children: [
+        Padding(
+            padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+            child: _tabs(context)),
+        Expanded(
+            child: IndexedStack(index: _tab, children: [
+          TickerMode(
+              enabled: _tab == 0,
+              child: RefreshIndicator(
+                  onRefresh: () async {
+                    await _directory?.refresh();
+                  },
+                  child: CustomScrollView(
+                      key: const PageStorageKey('member-coaches-list'),
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      slivers: [
+                        SliverPadding(
+                            padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                            sliver: SliverToBoxAdapter(
+                                child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                  Row(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Expanded(
+                                            child: TextField(
+                                                controller: _searchController,
+                                                onChanged: (value) => setState(
+                                                    () => _query = value),
+                                                decoration: InputDecoration(
+                                                    hintText: MediaQuery.textScalerOf(
+                                                                    context)
+                                                                .scale(14) >
+                                                            19
+                                                        ? 'Search…'
+                                                        : 'Search coaches…',
+                                                    isDense: true,
+                                                    contentPadding:
+                                                        const EdgeInsets.symmetric(
+                                                            horizontal: 12,
+                                                            vertical: 13),
+                                                    prefixIcon: const Icon(
+                                                        Icons.search_rounded,
+                                                        size: 20),
+                                                    suffixIcon: _query.isEmpty
+                                                        ? null
+                                                        : IconButton(
+                                                            tooltip:
+                                                                'Clear search',
+                                                            icon: const Icon(
+                                                                Icons.close_rounded,
+                                                                size: 18),
+                                                            onPressed: () => setState(() {
+                                                                  _query = '';
+                                                                  _searchController
+                                                                      .clear();
+                                                                }))))),
+                                        const SizedBox(width: 8),
+                                        Badge(
+                                            isLabelVisible:
+                                                _specialtyFilter != 'All' ||
+                                                    _sortBy != _SortBy.rating,
+                                            label: Text(((_specialtyFilter == 'All'
+                                                        ? 0
+                                                        : 1) +
+                                                    (_sortBy == _SortBy.rating
+                                                        ? 0
+                                                        : 1))
+                                                .toString()),
+                                            child: IconButton.filledTonal(
+                                                tooltip:
+                                                    'Filter and sort coaches',
+                                                onPressed: () =>
+                                                    _filters(specialties),
+                                                style: IconButton.styleFrom(
+                                                    backgroundColor: colors
+                                                        .primary
+                                                        .withValues(alpha: .08),
+                                                    foregroundColor:
+                                                        colors.primary,
+                                                    minimumSize: const Size(48, 48),
+                                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14))),
+                                                icon: const Icon(Icons.tune_rounded, size: 22))),
+                                      ]),
+                                  const SizedBox(height: 12),
+                                  SingleChildScrollView(
+                                      scrollDirection: Axis.horizontal,
+                                      child: Row(
+                                          children: specialties
+                                              .map((s) => Padding(
+                                                  padding: const EdgeInsets.only(
+                                                      right: 8),
+                                                  child: ChoiceChip(
+                                                      label: Text(s),
+                                                      selected:
+                                                          s == _specialtyFilter,
+                                                      onSelected: (_) => setState(() =>
+                                                          _specialtyFilter = s),
+                                                      selectedColor:
+                                                          colors.primary,
+                                                      checkmarkColor:
+                                                          colors.onPrimary,
+                                                      labelStyle: text.labelLarge?.copyWith(
+                                                          color: s == _specialtyFilter
+                                                              ? colors.onPrimary
+                                                              : colors
+                                                                  .onSurface),
+                                                      materialTapTargetSize:
+                                                          MaterialTapTargetSize
+                                                              .padded)))
+                                              .toList())),
                                   if (filtered)
-                                    TextButton(
-                                        onPressed: _clear,
-                                        child: const Text('Clear filters')),
-                                ]),
-                            if (widget.live)
-                              Text(
-                                  'Search and sorting apply to loaded coaches.',
-                                  style: text.bodySmall?.copyWith(
-                                      color: colors.onSurfaceVariant)),
-                          ],
-                        ]))),
-                if (!current)
-                  SliverToBoxAdapter(
-                      child: status(Icons.lock_outline, 'Coaches unavailable',
-                          'Your session has changed. Return and sign in again.'))
-                else if (loading)
-                  const SliverToBoxAdapter(
-                      child: Padding(
-                          padding: EdgeInsets.all(32),
-                          child: Column(children: [
-                            CircularProgressIndicator(),
-                            SizedBox(height: 16),
-                            Text('Finding your coaches…')
-                          ])))
-                else if (error && coaches.isEmpty)
-                  SliverToBoxAdapter(
-                      child: status(
-                          Icons.cloud_off_outlined,
-                          'Could not load coaches',
-                          'Check your connection and try again.',
-                          retry: true))
-                else if (visible.isEmpty)
-                  SliverToBoxAdapter(
-                      child: filtered
-                          ? status(
-                              Icons.search_off_rounded,
-                              'No matching coaches',
-                              'Try another name or specialty, or clear your filters.',
-                              clear: true)
-                          : status(
-                              Icons.people_outline,
-                              'No coaches available yet.',
-                              'Published coaches will appear here. Pull down to refresh.'))
-                else
-                  SliverPadding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      sliver: SliverList.builder(
-                          itemCount: visible.length,
-                          itemBuilder: (context, index) {
-                            final c = visible[index], p = published[c.id];
-                            return Padding(
-                                padding: const EdgeInsets.only(bottom: 12),
-                                child: CoachCard(
-                                    key: ValueKey('member-coach-${c.id}'),
-                                    coach: c,
-                                    published: p,
-                                    photo: p == null
-                                        ? null
-                                        : PublishedCoachPhoto(
-                                            coach: p,
-                                            repository: widget.liveRepository!,
-                                            isCurrent: widget.isCurrent!,
-                                            size: 56),
-                                    onTap: () {
-                                      if (widget.live &&
-                                          widget.isCurrent?.call() != true) {
-                                        _directory?.invalidate();
-                                        return;
-                                      }
-                                      if (p != null) {
-                                        widget.onOpenPublished?.call(c.id);
-                                      } else {
-                                        Navigator.push(
-                                            context,
-                                            MaterialPageRoute(
-                                                builder: (_) =>
-                                                    CoachProfileScreen(
-                                                        coach: c)));
-                                      }
-                                    }));
-                          })),
-                if (current && !loading && state?.nextCursor != null)
-                  SliverPadding(
-                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-                      sliver: SliverToBoxAdapter(
-                          child: Column(children: [
-                        if (error)
-                          Padding(
-                              padding: const EdgeInsets.only(bottom: 8),
-                              child: Text(
-                                  'Could not load more coaches. Try again.',
-                                  style: text.bodyMedium?.copyWith(
-                                      color: colors.onSurfaceVariant))),
-                        SizedBox(
-                            width: double.infinity,
-                            child: OutlinedButton(
-                                onPressed: state!.loadingMore
-                                    ? null
-                                    : _directory!.loadMore,
-                                style: OutlinedButton.styleFrom(
-                                    minimumSize: const Size(0, 48)),
-                                child: Text(state.loadingMore
-                                    ? 'Loading…'
-                                    : error
-                                        ? 'Retry loading more'
-                                        : 'Load more coaches'))),
+                                    Align(
+                                        alignment: Alignment.centerLeft,
+                                        child: TextButton(
+                                            onPressed: _clear,
+                                            child:
+                                                const Text('Clear filters'))),
+                                ]))),
+                        if (!current)
+                          SliverToBoxAdapter(
+                              child: status(
+                                  Icons.lock_outline,
+                                  'Coaches unavailable',
+                                  'Your session has changed. Return and sign in again.'))
+                        else if (loading)
+                          const SliverToBoxAdapter(
+                              child: Padding(
+                                  padding: EdgeInsets.all(32),
+                                  child: Column(children: [
+                                    CircularProgressIndicator(),
+                                    SizedBox(height: 16),
+                                    Text('Finding your coaches…')
+                                  ])))
+                        else if (error && coaches.isEmpty)
+                          SliverToBoxAdapter(
+                              child: status(
+                                  Icons.cloud_off_outlined,
+                                  'Could not load coaches',
+                                  'Check your connection and try again.',
+                                  retry: true))
+                        else if (visible.isEmpty)
+                          SliverToBoxAdapter(
+                              child: filtered
+                                  ? status(
+                                      Icons.search_off_rounded,
+                                      'No matching coaches',
+                                      'Try another name or specialty, or clear your filters.',
+                                      clear: true)
+                                  : status(
+                                      Icons.people_outline,
+                                      'No coaches available yet.',
+                                      'Published coaches will appear here. Pull down to refresh.'))
+                        else
+                          SliverPadding(
+                              padding:
+                                  const EdgeInsets.symmetric(horizontal: 16),
+                              sliver: SliverList.builder(
+                                  itemCount: visible.length,
+                                  itemBuilder: (context, index) {
+                                    final c = visible[index],
+                                        p = published[c.id];
+                                    return Padding(
+                                        padding:
+                                            const EdgeInsets.only(bottom: 12),
+                                        child: CoachCard(
+                                            key: ValueKey(
+                                                'member-coach-${c.id}'),
+                                            coach: c,
+                                            published: p,
+                                            photo: p == null
+                                                ? null
+                                                : PublishedCoachPhoto(
+                                                    coach: p,
+                                                    repository:
+                                                        widget.liveRepository!,
+                                                    isCurrent:
+                                                        widget.isCurrent!,
+                                                    size: 56),
+                                            onTap: () {
+                                              if (widget.live &&
+                                                  widget.isCurrent?.call() !=
+                                                      true) {
+                                                _directory?.invalidate();
+                                                return;
+                                              }
+                                              if (p != null) {
+                                                widget.onOpenPublished
+                                                    ?.call(c.id);
+                                              } else {
+                                                Navigator.push(
+                                                    context,
+                                                    MaterialPageRoute(
+                                                        builder: (_) =>
+                                                            CoachProfileScreen(
+                                                                coach: c)));
+                                              }
+                                            }));
+                                  })),
+                        if (current && !loading && state?.nextCursor != null)
+                          SliverPadding(
+                              padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                              sliver: SliverToBoxAdapter(
+                                  child: Column(children: [
+                                if (error)
+                                  Padding(
+                                      padding: const EdgeInsets.only(bottom: 8),
+                                      child: Text(
+                                          'Could not load more coaches. Try again.',
+                                          style: text.bodyMedium?.copyWith(
+                                              color: colors.onSurfaceVariant))),
+                                SizedBox(
+                                    width: double.infinity,
+                                    child: OutlinedButton(
+                                        onPressed: state!.loadingMore
+                                            ? null
+                                            : _directory!.loadMore,
+                                        style: OutlinedButton.styleFrom(
+                                            minimumSize: const Size(0, 48)),
+                                        child: Text(state.loadingMore
+                                            ? 'Loading…'
+                                            : error
+                                                ? 'Retry loading more'
+                                                : 'Load more coaches'))),
+                              ]))),
+                        const SliverToBoxAdapter(child: SizedBox(height: 24)),
                       ]))),
-                const SliverToBoxAdapter(child: SizedBox(height: 24)),
-              ])),
+          TickerMode(
+              enabled: _tab == 1,
+              child: !current
+                  ? const Center(
+                      child: Text('Bookings unavailable for this session.'))
+                  : _bookings ?? const SizedBox.shrink()),
+        ])),
+      ]),
     );
   }
 }

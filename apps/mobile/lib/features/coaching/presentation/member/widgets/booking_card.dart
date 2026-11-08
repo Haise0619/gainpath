@@ -73,9 +73,12 @@ class BookingCard extends StatelessWidget {
                   ],
                 ),
               ),
-              statusPill(statusLabel ?? booking.status.label),
             ],
           ),
+          const SizedBox(height: 8),
+          Align(
+              alignment: Alignment.centerLeft,
+              child: statusPill(statusLabel ?? booking.status.label)),
           if (booking.status == BookingStatus.cancelled &&
               booking.cancellationReason != null) ...[
             const SizedBox(height: 12),

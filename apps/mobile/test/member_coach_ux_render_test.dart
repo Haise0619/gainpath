@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gainpath_mobile/app/member_typography_theme.dart';
 import 'package:gainpath_mobile/features/coaching/presentation/member/browse_coaches_screen.dart';
+import 'package:gainpath_mobile/features/coaching/presentation/member/booking_schedule_screen.dart';
 import 'package:gainpath_mobile/features/coaching/presentation/shared/coach_profile_screen.dart';
 import 'package:gainpath_mobile/features/coaching/presentation/shared/published_coach_presentation.dart';
 import '../../../test_support/fyp_render_support.dart';
@@ -65,7 +66,7 @@ void main() {
               final bytes =
                   await image.toByteData(format: ui.ImageByteFormat.png);
               final file = File(
-                  '../../build/member-coach-ux-20261108/renders/$kind-${width.toInt()}-${scale.toInt()}x-${dark ? 'dark' : 'light'}.png');
+                  '../../build/member-coach-tabs-20261108/renders/$kind-${width.toInt()}-${scale.toInt()}x-${dark ? 'dark' : 'light'}.png');
               await file.parent.create(recursive: true);
               await file.writeAsBytes(bytes!.buffer.asUint8List());
               image.dispose();
@@ -89,9 +90,17 @@ void main() {
               live: true,
               liveRepository: MemberDirectoryFake(),
               isCurrent: () => true,
-              onOpenBookings: () {},
+              bookingsBuilder: (_) => const BookingScheduleScreen(
+                  persistedBookings: [], embedded: true),
               onOpenPublished: (_) {})));
           await capture('directory');
+          await tester.tap(find.byTooltip('Filter and sort coaches'));
+          await capture('filters');
+          expect(find.text('Apply').hitTestable(), findsOneWidget);
+          await tester.tap(find.byTooltip('Close filters'));
+          await tester.pumpAndSettle();
+          await tester.tap(find.text('My Bookings'));
+          await capture('bookings');
         });
       }
     }

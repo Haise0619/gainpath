@@ -181,7 +181,7 @@ void main() {
               ? 'Not yet rated'
               : '4.0 · $count ${count == 1 ? 'review' : 'reviews'}'),
           findsOneWidget);
-      expect(find.text('Location confirmed when booking'), findsOneWidget);
+      expect(find.text('Location confirmed when booking'), findsNothing);
       expect(find.text('branch_internal_42'), findsNothing);
     });
   }
@@ -214,9 +214,10 @@ void main() {
     await tester.pumpWidget(shell(BrowseCoachesScreen(
         live: true, liveRepository: repo, isCurrent: () => true)));
     await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('Sort coaches'));
+    await tester.tap(find.byTooltip('Filter and sort coaches'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Price: low to high').last);
+    await tester.tap(find.text('Apply'));
     await tester.pumpAndSettle();
     final cards = tester.widgetList<CoachCard>(find.byType(CoachCard)).toList();
     expect(cards.take(2).map((c) => c.coach.id), ['low', 'high']);
@@ -315,15 +316,21 @@ void main() {
             live: true,
             liveRepository: repo,
             isCurrent: () => true,
-            onOpenBookings: () => bookings++,
+            bookingsBuilder: (_) {
+              bookings++;
+              return const Text('Booking content');
+            },
             onOpenPublished: (id) => navigator.currentState!.push(
                 MaterialPageRoute(
                     builder: (_) => Scaffold(
                         appBar: AppBar(title: Text('Profile $id')),
                         body: const Text('Profile body')))))));
     await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('My bookings'));
+    await tester.tap(find.text('My Bookings'));
+    await tester.pumpAndSettle();
     expect(bookings, 1);
+    await tester.tap(find.text('Find Coach'));
+    await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(ChoiceChip, 'Strength'));
     await tester.enterText(find.byType(TextField), 'Jack');
     await tester.pumpAndSettle();

@@ -57,24 +57,15 @@ Widget buildFirebaseCoachShell(AuthSession session,
             liveRosterBuilder: (_) => LiveBookingListView(
                 notes:
                     FirebaseConsultationNotesRepository(scope: session.scope, isCurrent: isCurrent),
-                coachCancellation:
-                    FirebaseCoachBookingCancellationRepository(scope: session.scope, isCurrent: isCurrent),
-                posture:
-                    FirebaseClientPostureRepository(scope: session.scope, isCurrent: isCurrent),
+                coachCancellation: FirebaseCoachBookingCancellationRepository(scope: session.scope, isCurrent: isCurrent),
+                posture: FirebaseClientPostureRepository(scope: session.scope, isCurrent: isCurrent),
                 communication: FirebaseBookingCommunicationRepository(scope: session.scope, isCurrent: isCurrent),
                 title: 'Roster',
                 coachId: session.userId,
                 repository: createBookingList(session, isCurrent, bookingListFactory),
                 isCurrent: isCurrent),
             liveAvailabilityBuilder: (_) => AvailabilityScreen(googleIntegration: firebaseGoogleIntegration(session.scope, isCurrent), liveRepository: availabilityFactory?.call(session.scope, isCurrent) ?? FirebaseCoachAvailabilityRepository(scope: session.scope, isCurrent: isCurrent), coachId: session.userId, isCurrent: isCurrent),
-            liveEarningsBuilder: (_) => LiveCoachEarningsView(
-                performance: FirebaseModule9Repository(scope: session.scope, isCurrent: isCurrent),
-                exportPdf: const AndroidCoachStatementExporter().save,
-                scope: session.scope,
-                isCurrent: isCurrent,
-                coachId: session.userId,
-                bookingListRepo: createBookingList(session, isCurrent, bookingListFactory),
-                bookingMapper: persistedBookingPresentation)));
+            liveEarningsBuilder: (_) => LiveCoachEarningsView(performance: FirebaseModule9Repository(scope: session.scope, isCurrent: isCurrent), exportPdf: const AndroidCoachStatementExporter().save, scope: session.scope, isCurrent: isCurrent, coachId: session.userId, bookingListRepo: createBookingList(session, isCurrent, bookingListFactory), bookingMapper: persistedBookingPresentation)));
 Widget buildFirebaseCoachDirectory(AuthSession session,
         {CoachDirectoryFactory? factory,
         CoachAvailabilityFactory? availabilityFactory,
@@ -91,8 +82,9 @@ Widget buildFirebaseCoachDirectory(AuthSession session,
               live: true,
               liveRepository: repository,
               isCurrent: isCurrent,
-              onOpenBookings: () => openBookingList(context, session,
-                  factory: bookingListFactory),
+              bookingsBuilder: (tabContext) => buildBookingListContent(
+                  tabContext, session, isCurrent,
+                  factory: bookingListFactory, embedded: true),
               onOpenPublished: (id) => Navigator.push(
                   context,
                   MaterialPageRoute(
@@ -105,10 +97,7 @@ Widget buildFirebaseCoachDirectory(AuthSession session,
                                   context, session, id,
                                   factory: bookingFactory,
                                   listFactory: bookingListFactory),
-                              onOpenSchedule: () => Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                      builder: (_) =>
-                                          CoachSessionHost(session: session, builder: (_, scheduleCurrent) => LiveCoachScheduleView(coachId: id, onOpenBooking: () => openMemberBooking(context, session, id, factory: bookingFactory, listFactory: bookingListFactory), repository: availabilityFactory?.call(session.scope, scheduleCurrent) ?? FirebaseCoachAvailabilityRepository(scope: session.scope, isCurrent: scheduleCurrent), isCurrent: scheduleCurrent)))),
+                              onOpenSchedule: () => Navigator.push(context,
+                                  MaterialPageRoute(builder: (_) => CoachSessionHost(session: session, builder: (_, scheduleCurrent) => LiveCoachScheduleView(coachId: id, onOpenBooking: () => openMemberBooking(context, session, id, factory: bookingFactory, listFactory: bookingListFactory), repository: availabilityFactory?.call(session.scope, scheduleCurrent) ?? FirebaseCoachAvailabilityRepository(scope: session.scope, isCurrent: scheduleCurrent), isCurrent: scheduleCurrent)))),
                               isCurrent: () => current() && isCurrent())))));
         });

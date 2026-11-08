@@ -30,7 +30,9 @@ class BookingScheduleScreen extends StatefulWidget {
       this.onCancelHold,
       this.onReview,
       this.onMessage,
-      this.header});
+      this.header,
+      this.embedded = false});
+  final bool embedded;
   final List<Booking>? persistedBookings;
   final Map<String, String> statusLabels;
   final Map<String, Widget> details;
@@ -72,79 +74,82 @@ class _BookingScheduleScreenState extends State<BookingScheduleScreen> {
         bookings!.memberCancelled;
     final live = widget.persistedBookings != null;
 
-    return Scaffold(
-      appBar: AppBar(title: const Text('My bookings')),
-      body: PageBody(
-        children: [
-          if (widget.header != null) widget.header!,
-          const Eyebrow('Upcoming'),
-          if (upcoming.isEmpty)
-            _emptyRow(context, 'Nothing booked yet.')
-          else
-            ...upcoming.map((b) => Padding(
-                  padding: const EdgeInsets.only(bottom: 10),
-                  child: BookingCard(
-                    booking: b,
-                    live: live,
-                    statusLabel: widget.statusLabels[b.id],
-                    details: widget.details[b.id],
-                    onReschedule: live ? null : () => _reschedule(b),
-                    onCancel: live
-                        ? (widget.onCancelHold == null ||
-                                widget.statusLabels[b.id] != 'Pending hold'
-                            ? null
-                            : () => widget.onCancelHold!(b.id))
-                        : () => _cancel(b),
-                    onMessage: live
-                        ? (widget.onMessage == null
-                            ? null
-                            : () => widget.onMessage!(b))
-                        : () => _message(b),
-                  ),
-                )),
-          const SizedBox(height: 14),
-          const Eyebrow('Completed'),
-          if (completed.isEmpty)
-            _emptyRow(context, 'No completed sessions yet.')
-          else
-            ...completed.map((b) => Padding(
-                  padding: const EdgeInsets.only(bottom: 10),
-                  child: BookingCard(
-                    booking: b,
-                    live: live,
-                    statusLabel: widget.statusLabels[b.id],
-                    details: widget.details[b.id],
-                    onMessage: live
-                        ? (widget.onMessage == null
-                            ? null
-                            : () => widget.onMessage!(b))
-                        : () => _message(b),
-                    onRate: live
-                        ? (widget.onReview == null ? null : () => widget.onReview!(b.id))
-                        : () => _rate(b),
-                  ),
-                )),
-          const SizedBox(height: 14),
-          const Eyebrow('Cancelled'),
-          if (cancelled.isEmpty)
-            _emptyRow(context, 'No cancelled sessions.')
-          else
-            ...cancelled.map((b) => Padding(
-                  padding: const EdgeInsets.only(bottom: 10),
-                  child: BookingCard(
-                    booking: b,
-                    live: live,
-                    statusLabel: widget.statusLabels[b.id],
-                    details: widget.details[b.id],
-                    onBookAgain: live ? null : () => _bookAgain(b),
-                    onMessage: live && widget.onMessage != null
-                        ? () => widget.onMessage!(b)
-                        : null,
-                  ),
-                )),
-        ],
-      ),
+    final body = PageBody(
+      children: [
+        if (widget.header != null) widget.header!,
+        const Eyebrow('Upcoming'),
+        if (upcoming.isEmpty)
+          _emptyRow(context, 'Nothing booked yet.')
+        else
+          ...upcoming.map((b) => Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: BookingCard(
+                  booking: b,
+                  live: live,
+                  statusLabel: widget.statusLabels[b.id],
+                  details: widget.details[b.id],
+                  onReschedule: live ? null : () => _reschedule(b),
+                  onCancel: live
+                      ? (widget.onCancelHold == null ||
+                              widget.statusLabels[b.id] != 'Pending hold'
+                          ? null
+                          : () => widget.onCancelHold!(b.id))
+                      : () => _cancel(b),
+                  onMessage: live
+                      ? (widget.onMessage == null
+                          ? null
+                          : () => widget.onMessage!(b))
+                      : () => _message(b),
+                ),
+              )),
+        const SizedBox(height: 14),
+        const Eyebrow('Completed'),
+        if (completed.isEmpty)
+          _emptyRow(context, 'No completed sessions yet.')
+        else
+          ...completed.map((b) => Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: BookingCard(
+                  booking: b,
+                  live: live,
+                  statusLabel: widget.statusLabels[b.id],
+                  details: widget.details[b.id],
+                  onMessage: live
+                      ? (widget.onMessage == null
+                          ? null
+                          : () => widget.onMessage!(b))
+                      : () => _message(b),
+                  onRate: live
+                      ? (widget.onReview == null
+                          ? null
+                          : () => widget.onReview!(b.id))
+                      : () => _rate(b),
+                ),
+              )),
+        const SizedBox(height: 14),
+        const Eyebrow('Cancelled'),
+        if (cancelled.isEmpty)
+          _emptyRow(context, 'No cancelled sessions.')
+        else
+          ...cancelled.map((b) => Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: BookingCard(
+                  booking: b,
+                  live: live,
+                  statusLabel: widget.statusLabels[b.id],
+                  details: widget.details[b.id],
+                  onBookAgain: live ? null : () => _bookAgain(b),
+                  onMessage: live && widget.onMessage != null
+                      ? () => widget.onMessage!(b)
+                      : null,
+                ),
+              )),
+      ],
     );
+    return widget.embedded
+        ? body
+        : Scaffold(
+            appBar: AppBar(title: const Text('My bookings')), body: body);
   }
 
   Widget _emptyRow(BuildContext context, String message) {

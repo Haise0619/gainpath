@@ -14,18 +14,18 @@ class LiveCoachDirectoryView extends StatelessWidget {
       required this.repository,
       required this.isCurrent,
       required this.onOpen,
-      this.onOpenBookings});
+      this.bookingsBuilder});
   final CoachDirectoryRepository repository;
   final bool Function() isCurrent;
   final void Function(String) onOpen;
-  final VoidCallback? onOpenBookings;
+  final WidgetBuilder? bookingsBuilder;
   @override
   Widget build(BuildContext context) => BrowseCoachesScreen(
       live: true,
       liveRepository: repository,
       isCurrent: isCurrent,
       onOpenPublished: onOpen,
-      onOpenBookings: onOpenBookings);
+      bookingsBuilder: bookingsBuilder);
 }
 
 class LiveCoachDetailView extends StatefulWidget {
