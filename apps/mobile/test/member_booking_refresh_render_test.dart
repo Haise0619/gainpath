@@ -75,7 +75,7 @@ void main() {
         }
 
         await capture('next');
-        await t.tap(find.text('Next 30 days'));
+        await t.tap(find.byKey(const ValueKey('tab_history')));
         await t.pumpAndSettle();
         expect(find.text('Session ended'), findsOneWidget);
         await capture('past');

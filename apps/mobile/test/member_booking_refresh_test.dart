@@ -165,7 +165,7 @@ void main() {
     await t.pumpAndSettle();
     await t.tap(find.byKey(const ValueKey('tab_upcoming')));
     await t.pumpAndSettle();
-    await t.tap(find.text('Next 30 days'));
+    await t.tap(find.byKey(const ValueKey('tab_history')));
     await t.pumpAndSettle();
     expect(repo.calls.last.first, '2026-10-10');
     expect(repo.calls.last.days, 30);
@@ -173,9 +173,9 @@ void main() {
     expect(find.text('Session ended'), findsOneWidget);
     await t.tap(find.byKey(const ValueKey('filter_completed')));
     await t.pumpAndSettle();
-    await t.tap(find.text('Past 30 days'));
+    await t.tap(find.byKey(const ValueKey('tab_upcoming')));
     await t.pumpAndSettle();
-    await t.tap(find.text('Next 30 days'));
+    await t.tap(find.byKey(const ValueKey('tab_history')));
     await t.pumpAndSettle();
     expect(find.text('Session ended'), findsOneWidget);
   });
@@ -236,7 +236,7 @@ void main() {
     await t.pumpWidget(
         shell(LiveBookingListView(repository: repo, isCurrent: () => true)));
     await t.pumpAndSettle();
-    await t.tap(find.text('Next 30 days'));
+    await t.tap(find.byKey(const ValueKey('tab_history')));
     await t.pumpAndSettle();
     final indicator = t.widget<RefreshIndicator>(find.byType(RefreshIndicator));
     repo.pending = Completer<void>();
@@ -251,7 +251,7 @@ void main() {
     await t.pumpAndSettle();
     expect(done, true);
     expect(repo.calls.last.first, '2026-10-10');
-    expect(find.text('Past 30 days'), findsOneWidget);
+    expect(find.textContaining('Past 30 days'), findsOneWidget);
   });
   test(
       'historical refresh includes today and advances its server-day range after midnight',

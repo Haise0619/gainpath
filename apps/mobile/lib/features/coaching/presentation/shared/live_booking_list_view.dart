@@ -608,71 +608,71 @@ class _LiveBookingListViewState extends State<LiveBookingListView> {
                     ],
                   ),
                 ),
-              Padding(
-                padding: const EdgeInsets.only(bottom: 6),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Align(
-                        alignment: Alignment.centerLeft,
-                        child: Material(
-                          color: Colors.transparent,
-                          child: InkWell(
-                            onTap:
-                                state.busy || action.busy || state.page == null
-                                    ? null
-                                    : () => controller.showRecentHistory(
-                                        !controller.recentHistory),
-                            borderRadius: BorderRadius.circular(10),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 10, vertical: 6),
-                              decoration: BoxDecoration(
-                                color: AppColors.primaryTint,
-                                borderRadius: BorderRadius.circular(10),
-                                border: Border.all(
-                                  color:
-                                      AppColors.primary.withValues(alpha: .2),
+              if (widget.coachId != null)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 6),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Align(
+                          alignment: Alignment.centerLeft,
+                          child: Material(
+                            color: Colors.transparent,
+                            child: InkWell(
+                              onTap:
+                                  state.busy || action.busy || state.page == null
+                                      ? null
+                                      : () => controller.showRecentHistory(
+                                          !controller.recentHistory),
+                              borderRadius: BorderRadius.circular(10),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 10, vertical: 6),
+                                decoration: BoxDecoration(
+                                  color: AppColors.primaryTint,
+                                  borderRadius: BorderRadius.circular(10),
+                                  border: Border.all(
+                                    color:
+                                        AppColors.primary.withValues(alpha: .2),
+                                  ),
                                 ),
-                              ),
-                              child: FittedBox(
-                                fit: BoxFit.scaleDown,
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(
-                                      controller.recentHistory
-                                          ? Icons.history_rounded
-                                          : Icons.calendar_month_rounded,
-                                      size: 15,
-                                      color: AppColors.primary,
-                                    ),
-                                    const SizedBox(width: 6),
-                                    Text(
-                                      controller.recentHistory
-                                          ? 'Past 30 days'
-                                          : 'Next 30 days',
-                                      style: const TextStyle(
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w700,
+                                child: FittedBox(
+                                  fit: BoxFit.scaleDown,
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        controller.recentHistory
+                                            ? Icons.history_rounded
+                                            : Icons.calendar_month_rounded,
+                                        size: 15,
                                         color: AppColors.primary,
                                       ),
-                                    ),
-                                    const SizedBox(width: 4),
-                                    const Icon(
-                                      Icons.swap_horiz_rounded,
-                                      size: 14,
-                                      color: AppColors.primary,
-                                    ),
-                                  ],
+                                      const SizedBox(width: 6),
+                                      Text(
+                                        controller.recentHistory
+                                            ? 'Past 30 days'
+                                            : 'Next 30 days',
+                                        style: const TextStyle(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w700,
+                                          color: AppColors.primary,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 4),
+                                      const Icon(
+                                        Icons.swap_horiz_rounded,
+                                        size: 14,
+                                        color: AppColors.primary,
+                                      ),
+                                    ],
+                                  ),
                                 ),
                               ),
                             ),
                           ),
                         ),
                       ),
-                    ),
-                    if (widget.coachId != null) ...[
                       const SizedBox(width: 6),
                       IconButton(
                         tooltip: 'Refresh bookings',
@@ -686,9 +686,8 @@ class _LiveBookingListViewState extends State<LiveBookingListView> {
                             color: AppColors.inkSoft),
                       ),
                     ],
-                  ],
+                  ),
                 ),
-              ),
               if (state.page != null)
                 Padding(
                   padding: const EdgeInsets.only(bottom: 6),
@@ -706,7 +705,7 @@ class _LiveBookingListViewState extends State<LiveBookingListView> {
                       const SizedBox(width: 6),
                       Expanded(
                         child: Text(
-                          '${state.page!.timeZone}${widget.coachId == null ? '' : ' · Auto-syncs 30s'} · ${state.records.length} loaded session${state.records.length == 1 ? '' : 's'}',
+                          '${controller.recentHistory ? "Past 30 days" : "Next 30 days"} · ${state.page!.timeZone}${widget.coachId == null ? '' : ' · Auto-syncs 30s'} · ${state.records.length} loaded session${state.records.length == 1 ? '' : 's'}',
                           style: const TextStyle(
                             fontSize: 11,
                             color: AppColors.inkSoft,
@@ -892,6 +891,13 @@ class _LiveBookingListViewState extends State<LiveBookingListView> {
             return BookingScheduleScreen(
                 onRefresh: _refreshCurrent,
                 historyRange: controller.recentHistory,
+                onRangeChanged: (showHistory) {
+                  if (controller.recentHistory != showHistory &&
+                      !state.busy &&
+                      !action.busy) {
+                    controller.showRecentHistory(showHistory);
+                  }
+                },
                 embedded: widget.embedded,
                 serverNowMillis: state.page?.serverNowMillis,
                 coachInfoFor: (id) => _coachResults[id]?.future,

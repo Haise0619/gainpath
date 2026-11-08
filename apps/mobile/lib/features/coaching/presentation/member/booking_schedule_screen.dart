@@ -50,6 +50,7 @@ class BookingScheduleScreen extends StatefulWidget {
       this.header,
       this.onRefresh,
       this.historyRange,
+      this.onRangeChanged,
       this.embedded = false});
   final int? serverNowMillis;
   final Widget? Function(Booking)? coachPhotoBuilder;
@@ -71,6 +72,7 @@ class BookingScheduleScreen extends StatefulWidget {
   final Widget? header;
   final Future<void> Function()? onRefresh;
   final bool? historyRange;
+  final void Function(bool showHistory)? onRangeChanged;
 
   @override
   State<BookingScheduleScreen> createState() => _BookingScheduleScreenState();
@@ -83,6 +85,8 @@ enum _HistoryFilter { all, past, completed, cancelled, expired, refunded }
 class _BookingScheduleScreenState extends State<BookingScheduleScreen> {
   _MainBookingTab? _userSelectedTab;
   _HistoryFilter _historyFilter = _HistoryFilter.all;
+  int? _lastKnownUpcomingCount;
+  int? _lastKnownHistoryCount;
 
   @override
   void didUpdateWidget(covariant BookingScheduleScreen oldWidget) {
@@ -160,6 +164,13 @@ class _BookingScheduleScreenState extends State<BookingScheduleScreen> {
               count: upcomingCount,
               isSelected: currentTab == _MainBookingTab.upcoming,
               icon: Icons.event_available_rounded,
+              onTap: () {
+                if (currentTab != _MainBookingTab.upcoming ||
+                    widget.historyRange == true) {
+                  setState(() => _userSelectedTab = _MainBookingTab.upcoming);
+                  widget.onRangeChanged?.call(false);
+                }
+              },
             ),
           ),
           const SizedBox(width: 4),
@@ -170,6 +181,16 @@ class _BookingScheduleScreenState extends State<BookingScheduleScreen> {
               count: historyCount,
               isSelected: currentTab == _MainBookingTab.history,
               icon: Icons.history_rounded,
+              onTap: () {
+                if (currentTab != _MainBookingTab.history ||
+                    widget.historyRange == false) {
+                  setState(() {
+                    _userSelectedTab = _MainBookingTab.history;
+                    _historyFilter = _HistoryFilter.all;
+                  });
+                  widget.onRangeChanged?.call(true);
+                }
+              },
             ),
           ),
         ],
@@ -183,12 +204,17 @@ class _BookingScheduleScreenState extends State<BookingScheduleScreen> {
     required int count,
     required bool isSelected,
     required IconData icon,
+    VoidCallback? onTap,
   }) {
     return Material(
       color: Colors.transparent,
       child: InkWell(
         key: ValueKey('tab_${tab.name}'),
-        onTap: () => setState(() => _userSelectedTab = tab),
+        onTap: onTap ??
+            () {
+              setState(() => _userSelectedTab = tab);
+              widget.onRangeChanged?.call(tab == _MainBookingTab.history);
+            },
         borderRadius: BorderRadius.circular(11),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 180),
@@ -599,6 +625,26 @@ class _BookingScheduleScreenState extends State<BookingScheduleScreen> {
         cancelled.length +
         expired.length +
         refunded.length;
+
+    if (widget.historyRange == false || widget.historyRange == null) {
+      _lastKnownUpcomingCount = upcoming.length;
+    }
+    if (widget.historyRange == true || widget.historyRange == null) {
+      _lastKnownHistoryCount = historyCount;
+    }
+
+    final displayUpcomingCount = (widget.historyRange == true &&
+            upcoming.isEmpty &&
+            _lastKnownUpcomingCount != null)
+        ? _lastKnownUpcomingCount!
+        : upcoming.length;
+
+    final displayHistoryCount = (widget.historyRange == false &&
+            historyCount == 0 &&
+            _lastKnownHistoryCount != null)
+        ? _lastKnownHistoryCount!
+        : historyCount;
+
     final live = widget.persistedBookings != null;
     final tab = _currentTab(upcoming.length, historyCount);
     final sections = <({String title, List<Booking> rows})>[
@@ -628,7 +674,7 @@ class _BookingScheduleScreenState extends State<BookingScheduleScreen> {
         padding: const EdgeInsets.fromLTRB(16, 4, 16, 32),
         children: [
           if (widget.header != null) widget.header!,
-          _buildMainTabs(tab, upcoming.length, historyCount),
+          _buildMainTabs(tab, displayUpcomingCount, displayHistoryCount),
           if (tab == _MainBookingTab.upcoming) ...[
             _sectionHeader('Upcoming', upcoming.length),
             if (upcoming.isEmpty)
