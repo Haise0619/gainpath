@@ -94,7 +94,8 @@ class _CoachRosterScreenState extends State<CoachRosterScreen>
   _RosterTab _currentTab = _RosterTab.schedule;
   CoachStatusFilter _statusFilter = CoachStatusFilter.all;
   CoachDateScope _dateScope = CoachDateScope.selectedDay;
-  String _historySubFilter = 'All'; // 'All', 'Completed', 'Cancelled', 'Expired'
+  String _historySubFilter =
+      'All'; // 'All', 'Completed', 'Cancelled', 'Expired'
 
   bool _isSearchExpanded = false;
   final _searchController = TextEditingController();
@@ -427,12 +428,10 @@ class _CoachRosterScreenState extends State<CoachRosterScreen>
                           backgroundColor: AppColors.surfaceAlt,
                           labelStyle: TextStyle(
                             fontSize: 12.5,
-                            fontWeight: isSelected
-                                ? FontWeight.w700
-                                : FontWeight.w500,
-                            color: isSelected
-                                ? AppColors.primary
-                                : AppColors.ink,
+                            fontWeight:
+                                isSelected ? FontWeight.w700 : FontWeight.w500,
+                            color:
+                                isSelected ? AppColors.primary : AppColors.ink,
                           ),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(10),
@@ -466,12 +465,10 @@ class _CoachRosterScreenState extends State<CoachRosterScreen>
                           backgroundColor: AppColors.surfaceAlt,
                           labelStyle: TextStyle(
                             fontSize: 12.5,
-                            fontWeight: isSelected
-                                ? FontWeight.w700
-                                : FontWeight.w500,
-                            color: isSelected
-                                ? AppColors.primary
-                                : AppColors.ink,
+                            fontWeight:
+                                isSelected ? FontWeight.w700 : FontWeight.w500,
+                            color:
+                                isSelected ? AppColors.primary : AppColors.ink,
                           ),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(10),
@@ -588,7 +585,22 @@ class _CoachRosterScreenState extends State<CoachRosterScreen>
 
   PreferredSizeWidget _buildAppBar(
       BuildContext context, List<Booking> allBookings) {
+    final chipHeight = _currentTab == _RosterTab.history
+        ? (MediaQuery.textScalerOf(context).scale(12) * 1.4 + 20)
+                .clamp(48.0, 100.0) +
+            16
+        : 0.0;
     return AppBar(
+      bottom: PreferredSize(
+        preferredSize: Size.fromHeight(64 + chipHeight),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+              child: _buildMainTabs()),
+          if (_currentTab == _RosterTab.history)
+            SizedBox(height: chipHeight, child: _buildPinnedHistoryFilters()),
+        ]),
+      ),
       title: _isSearchExpanded
           ? TextField(
               controller: _searchController,
@@ -683,18 +695,6 @@ class _CoachRosterScreenState extends State<CoachRosterScreen>
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
             child: widget.header!,
           ),
-
-        // Main Tabs: Schedule vs History
-        Padding(
-          padding: EdgeInsets.fromLTRB(
-            16,
-            widget.header != null ? 8 : 12,
-            16,
-            8,
-          ),
-          child: _buildMainTabs(),
-        ),
-
         if (_currentTab == _RosterTab.schedule) ...[
           // Date strip & quick jump
           _buildDateNavigation(today, allBookings),
@@ -762,7 +762,6 @@ class _CoachRosterScreenState extends State<CoachRosterScreen>
           // History tab view
           _buildHistorySection(filteredBookings),
         ],
-
         const SizedBox(height: 48),
       ],
     );
@@ -1074,8 +1073,7 @@ class _CoachRosterScreenState extends State<CoachRosterScreen>
     );
   }
 
-  Widget _buildNextSessionHighlight(
-      List<Booking> allBookings, DateTime today) {
+  Widget _buildNextSessionHighlight(List<Booking> allBookings, DateTime today) {
     // Next upcoming confirmed or in-progress session today
     final todaySessions = allBookings.where((b) {
       return _matchesDateScope(b, CoachDateScope.selectedDay, today);
@@ -1153,9 +1151,7 @@ class _CoachRosterScreenState extends State<CoachRosterScreen>
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
-                  color: inProgress
-                      ? AppColors.primary
-                      : AppColors.primaryTint,
+                  color: inProgress ? AppColors.primary : AppColors.primaryTint,
                   borderRadius: BorderRadius.circular(6),
                 ),
                 child: Row(
@@ -1322,6 +1318,43 @@ class _CoachRosterScreenState extends State<CoachRosterScreen>
     );
   }
 
+  Widget _buildPinnedHistoryFilters() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: ['All', 'Completed', 'Cancelled', 'Expired'].map((sub) {
+            final isSelected = _historySubFilter == sub;
+            return Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: FilterChip(
+                label: Text(sub),
+                selected: isSelected,
+                selectedColor: AppColors.primaryTint,
+                backgroundColor: AppColors.surface,
+                labelStyle: TextStyle(
+                  fontSize: 12,
+                  fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                  color: isSelected ? AppColors.primary : AppColors.inkSoft,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  side: BorderSide(
+                    color: isSelected ? AppColors.primary : AppColors.hairline,
+                  ),
+                ),
+                onSelected: (_) {
+                  setState(() => _historySubFilter = sub);
+                },
+              ),
+            );
+          }).toList(),
+        ),
+      ),
+    );
+  }
+
   Widget _buildHistorySection(List<Booking> filteredBookings) {
     final historySessions = filteredBookings.where((b) {
       if (!_isSessionHistory(b)) return false;
@@ -1349,44 +1382,6 @@ class _CoachRosterScreenState extends State<CoachRosterScreen>
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Sub-filter chips for History
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
-          child: SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: ['All', 'Completed', 'Cancelled', 'Expired'].map((sub) {
-                final isSelected = _historySubFilter == sub;
-                return Padding(
-                  padding: const EdgeInsets.only(right: 8),
-                  child: FilterChip(
-                    label: Text(sub),
-                    selected: isSelected,
-                    selectedColor: AppColors.primaryTint,
-                    backgroundColor: AppColors.surface,
-                    labelStyle: TextStyle(
-                      fontSize: 12,
-                      fontWeight:
-                          isSelected ? FontWeight.w700 : FontWeight.w500,
-                      color: isSelected ? AppColors.primary : AppColors.inkSoft,
-                    ),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                      side: BorderSide(
-                        color:
-                            isSelected ? AppColors.primary : AppColors.hairline,
-                      ),
-                    ),
-                    onSelected: (_) {
-                      setState(() => _historySubFilter = sub);
-                    },
-                  ),
-                );
-              }).toList(),
-            ),
-          ),
-        ),
-
         if (historySessions.isEmpty)
           _buildEmptyState(
             title: 'No past sessions',
@@ -1773,8 +1768,29 @@ class _SessionAppointmentCard extends StatelessWidget {
 
     final start = booking.start;
     final end = start.add(Duration(minutes: booking.durationMin));
-    final timeStr =
-        '${start.hour.toString().padLeft(2, '0')}:${start.minute.toString().padLeft(2, '0')} – ${end.hour.toString().padLeft(2, '0')}:${end.minute.toString().padLeft(2, '0')}';
+    String clock(DateTime d) =>
+        '${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
+    final timeStr = record == null
+        ? '${clock(start)} – ${clock(end)}'
+        : '${record!.startLabel} – ${record!.endLabel}';
+    final localDate =
+        record == null ? start : DateTime.tryParse(record!.localDate) ?? start;
+    const months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec'
+    ];
+    final dateStr =
+        '${localDate.day} ${months[localDate.month - 1]} ${localDate.year}';
 
     final displayName =
         booking.memberName.isNotEmpty && booking.memberName != '-'
@@ -1823,77 +1839,49 @@ class _SessionAppointmentCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Header: Time & Status Pill
-                Row(
-                  children: [
-                    Icon(
-                      Icons.schedule_rounded,
-                      size: 15,
-                      color: _isInProgress
-                          ? AppColors.primary
-                          : AppColors.inkSoft,
-                    ),
-                    const SizedBox(width: 6),
-                    Text(
-                      timeStr,
-                      style: TextStyle(
-                        fontSize: 13.5,
-                        fontWeight: FontWeight.w700,
-                        color: _isInProgress
-                            ? AppColors.primary
-                            : AppColors.ink,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 6, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: AppColors.surfaceAlt,
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: Text(
-                        '${booking.durationMin}m',
-                        style: const TextStyle(
-                          fontSize: 10.5,
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.inkSoft,
-                        ),
-                      ),
-                    ),
-                    const Spacer(),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 3),
-                      decoration: BoxDecoration(
-                        color: badgeColor.withValues(alpha: .14),
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Container(
-                            width: 6,
-                            height: 6,
-                            decoration: BoxDecoration(
-                              color: badgeColor,
-                              shape: BoxShape.circle,
-                            ),
-                          ),
-                          const SizedBox(width: 5),
-                          Text(
-                            statusText,
-                            style: TextStyle(
-                              fontSize: 11,
+                Text(dateStr,
+                    key: ValueKey('coach-session-date-${booking.id}'),
+                    style: const TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.inkSoft)),
+                const SizedBox(height: 6),
+                Wrap(
+                    spacing: 8,
+                    runSpacing: 6,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      Text(timeStr,
+                          key: ValueKey('coach-session-time-${booking.id}'),
+                          style: TextStyle(
+                              fontSize: 13.5,
                               fontWeight: FontWeight.w700,
-                              color: badgeColor,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
+                              color: _isInProgress
+                                  ? AppColors.primary
+                                  : AppColors.ink)),
+                      Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                              color: AppColors.surfaceAlt,
+                              borderRadius: BorderRadius.circular(6)),
+                          child: Text('${booking.durationMin}m',
+                              style: const TextStyle(
+                                  fontSize: 10.5,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppColors.inkSoft))),
+                      Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 3),
+                          decoration: BoxDecoration(
+                              color: badgeColor.withValues(alpha: .14),
+                              borderRadius: BorderRadius.circular(6)),
+                          child: Text(statusText,
+                              style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
+                                  color: badgeColor))),
+                    ]),
                 const SizedBox(height: 12),
 
                 // Member info row
@@ -1944,7 +1932,10 @@ class _SessionAppointmentCard extends StatelessWidget {
                 const SizedBox(height: 12),
 
                 // Actions bar
-                Row(
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 6,
+                  crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
                     // Lifecycle button
                     if (!_isEnded &&
@@ -1975,8 +1966,10 @@ class _SessionAppointmentCard extends StatelessWidget {
                                     booking.status ==
                                         BookingStatus.confirmed))) &&
                         onNotes != null) ...[
-                      if (booking.notes != null &&
-                          booking.notes!.trim().isNotEmpty)
+                      if (rawStatus == 'completed' ||
+                          booking.status == BookingStatus.completed ||
+                          (booking.notes != null &&
+                              booking.notes!.trim().isNotEmpty))
                         OutlinedButton.icon(
                           style: OutlinedButton.styleFrom(
                             visualDensity: VisualDensity.compact,
@@ -2023,8 +2016,6 @@ class _SessionAppointmentCard extends StatelessWidget {
                       label:
                           const Text('Details', style: TextStyle(fontSize: 12)),
                     ),
-
-                    const Spacer(),
 
                     // Coach cancellation button (mandatory tooltip for test matching)
                     if (_canCancel && onCancel != null)
@@ -2076,9 +2067,10 @@ class ClientStats {
     List<Booking>? persistedList,
   }) {
     if (persistedList != null) {
-      final forMember =
-          persistedList.where((b) => b.memberName == memberName).toList()
-            ..sort((a, b) => a.start.compareTo(b.start));
+      final forMember = persistedList
+          .where((b) => b.memberName == memberName)
+          .toList()
+        ..sort((a, b) => a.start.compareTo(b.start));
       final completedList =
           forMember.where((b) => b.status == BookingStatus.completed).toList();
       final cancelledList =
@@ -2121,7 +2113,8 @@ class ClientStats {
         mostRecentNote: withNotes.isEmpty
             ? null
             : withNotes
-                .firstWhere((b) => b.notes != null, orElse: () => withNotes.first)
+                .firstWhere((b) => b.notes != null,
+                    orElse: () => withNotes.first)
                 .notes,
       );
     } catch (_) {

@@ -4,7 +4,6 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:gainpath_domain/gainpath_domain.dart';
 import 'package:gainpath_domain/coaching.dart'
     show
-        BookingChangeSource,
         Booking,
         BookingCommunicationRepository,
         ConsultationNotesRepository,
@@ -206,8 +205,6 @@ class _LiveBookingListViewState extends State<LiveBookingListView> {
     }
   }
 
-  Timer? _updates;
-  StreamSubscription<void>? _liveUpdates;
   bool? _wasActive;
   @override
   void didChangeDependencies() {
@@ -219,28 +216,6 @@ class _LiveBookingListViewState extends State<LiveBookingListView> {
       });
     }
     _wasActive = active;
-  }
-
-  @override
-  void initState() {
-    super.initState();
-    final source = widget.repository;
-    if (widget.coachId != null && source is BookingChangeSource) {
-      var firstSnapshot = true;
-      _liveUpdates =
-          (source as BookingChangeSource).watchBookingChanges().listen((_) {
-        if (firstSnapshot) {
-          firstSnapshot = false;
-          return;
-        }
-        _refreshCurrent();
-      }, onError: (_) {/* The periodic/manual refresh remains available. */});
-    }
-    if (widget.coachId != null) {
-      _updates = Timer.periodic(const Duration(seconds: 30), (_) {
-        _refreshCurrent();
-      });
-    }
   }
 
   Future<void> _refreshCurrent() async {
@@ -267,8 +242,6 @@ class _LiveBookingListViewState extends State<LiveBookingListView> {
     for (final result in _coachResults.values) {
       if (!result.isCompleted) result.complete(unavailableBookingCoachInfo);
     }
-    _updates?.cancel();
-    unawaited(_liveUpdates?.cancel());
     controller.close();
     cancellation.close();
     super.dispose();
@@ -608,7 +581,7 @@ class _LiveBookingListViewState extends State<LiveBookingListView> {
                     ],
                   ),
                 ),
-              if (state.page != null)
+              if (state.page != null && widget.coachId == null)
                 Padding(
                   padding: const EdgeInsets.only(bottom: 6),
                   child: Row(
@@ -625,7 +598,7 @@ class _LiveBookingListViewState extends State<LiveBookingListView> {
                       const SizedBox(width: 6),
                       Expanded(
                         child: Text(
-                          '${controller.recentHistory ? "Past 30 days" : "Next 30 days"} · ${state.page!.timeZone}${widget.coachId == null ? '' : ' · Auto-syncs 30s'} · ${state.records.length} loaded session${state.records.length == 1 ? '' : 's'}',
+                          '${controller.recentHistory ? "Past 30 days" : "Next 30 days"} · ${state.page!.timeZone} · ${state.records.length} loaded session${state.records.length == 1 ? '' : 's'}',
                           style: const TextStyle(
                             fontSize: 11,
                             color: AppColors.inkSoft,
@@ -808,8 +781,8 @@ class _LiveBookingListViewState extends State<LiveBookingListView> {
                   onOpenMessages: widget.communication == null
                       ? null
                       : () => _openInbox(bookings),
-                  todayLocalDate: controller.todayLocalDate ??
-                      state.page?.firstLocalDate,
+                  todayLocalDate:
+                      controller.todayLocalDate ?? state.page?.firstLocalDate,
                   serverNowMillis: state.page?.serverNowMillis,
                   recordFor: (id) => recordMap[id],
                   onRefresh: _refreshCurrent,
@@ -818,7 +791,14 @@ class _LiveBookingListViewState extends State<LiveBookingListView> {
                   persistedBookings: bookings,
                   statusLabels: labels,
                   details: details,
-                  header: header);
+                  header: state.busy ||
+                          action.busy ||
+                          state.message != null ||
+                          action.message != null ||
+                          state.page?.nextCursor != null ||
+                          action.uncertain
+                      ? header
+                      : null);
             }
             return BookingScheduleScreen(
                 onRefresh: _refreshCurrent,
