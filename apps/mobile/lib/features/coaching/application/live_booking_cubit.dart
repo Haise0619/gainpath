@@ -188,6 +188,7 @@ class BookingListCubit extends Cubit<BookingListState> {
   }
 
   String? _firstLocalDate, _todayLocalDate;
+  String? get todayLocalDate => _todayLocalDate;
   bool recentHistory = false;
   String _historyStart(String today) => DateTime.parse('${today}T00:00:00Z')
       .subtract(Duration(days: coachId == null ? 29 : 30))

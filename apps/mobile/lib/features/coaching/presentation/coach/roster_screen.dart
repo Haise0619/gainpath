@@ -1,36 +1,71 @@
 import 'package:flutter/material.dart';
-import '../../application/booking_bloc.dart';
-import 'package:gainpath_domain/coaching.dart';
-import 'package:gainpath_ui/gainpath_ui.dart';
-import 'client_posture_screen.dart';
-import 'consultation_notes_screen.dart';
-import 'message_inbox_screen.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:gainpath_domain/coaching.dart';
+import 'package:gainpath_domain/gainpath_domain.dart'
+    show PersistedBookingRecord;
+import 'package:gainpath_ui/gainpath_ui.dart';
 
-/// AD-M9.1 — View Upcoming Session Schedule. Built around a day-rail +
-/// vertical timeline rather than the flat panel list every other module
-/// this session uses — a coach's schedule is inherently about *when*,
-/// so the layout leads with time instead of a plain list.
+import '../../application/booking_bloc.dart';
+import '../member/booking_details_screen.dart' show resolveBranchLocation;
+import 'coach_session_details_screen.dart';
+
+/// Available status filters for coach appointment schedule.
+enum CoachStatusFilter {
+  all('All'),
+  confirmed('Confirmed'),
+  pending('Pending hold'),
+  completed('Completed'),
+  cancelled('Cancelled'),
+  expired('Expired');
+
+  const CoachStatusFilter(this.label);
+  final String label;
+}
+
+/// Date range scoping within the Coach schedule.
+enum CoachDateScope {
+  selectedDay('Selected Day'),
+  next7Days('Next 7 Days'),
+  thisWeek('This Week'),
+  allDates('All Dates');
+
+  const CoachDateScope(this.label);
+  final String label;
+}
+
+/// Main tabs for the Coach Roster Dashboard.
+enum _RosterTab { schedule, history }
+
+/// AD-M9.1 / Mindbody & Square Appointments-inspired Coach Schedule Dashboard.
 ///
-/// Picking a status filter other than "All" switches to a cross-day view
-/// instead of ANDing with whatever day happens to be selected — that's
-/// what makes "Completed" a real shortcut to "sessions I still need to
-/// write notes for" rather than something that only shows results if you
-/// also happen to be looking at a day with a completed session on it.
+/// Provides a clear, modern Daily Schedule & Session Management experience:
+/// - Sticky header with expandable search, status/date filter sheet, and message inbox badge.
+/// - Schedule / History tabs.
+/// - Interactive 7-day horizontal calendar rail with quick "Today" jump and date picker.
+/// - Daily summary (total sessions, completed, pending notes).
+/// - Next session highlight card with direct quick actions.
+/// - Needs Attention banner for ended sessions without notes.
+/// - Compact, chronologically ordered session appointment cards (~130–160dp).
+/// - Dedicated 9-section CoachSessionDetailsScreen on tap.
 class CoachRosterScreen extends StatefulWidget {
-  const CoachRosterScreen(
-      {super.key,
-      this.persistedBookings,
-      this.statusLabels = const {},
-      this.details = const {},
-      this.onMessage,
-      this.onNotes,
-      this.onCancel,
-      this.onPosture,
-      this.showAllDates = false,
-      this.onOpenMessages,
-      this.todayLocalDate,
-      this.header});
+  const CoachRosterScreen({
+    super.key,
+    this.persistedBookings,
+    this.statusLabels = const {},
+    this.details = const {},
+    this.onMessage,
+    this.onNotes,
+    this.onCancel,
+    this.onPosture,
+    this.showAllDates = false,
+    this.onOpenMessages,
+    this.todayLocalDate,
+    this.serverNowMillis,
+    this.recordFor,
+    this.onRefresh,
+    this.header,
+  });
+
   final List<Booking>? persistedBookings;
   final Map<String, String> statusLabels;
   final Map<String, Widget> details;
@@ -42,6 +77,9 @@ class CoachRosterScreen extends StatefulWidget {
   final bool showAllDates;
   final VoidCallback? onOpenMessages;
   final String? todayLocalDate;
+  final int? serverNowMillis;
+  final PersistedBookingRecord? Function(String bookingId)? recordFor;
+  final Future<void> Function()? onRefresh;
 
   @override
   State<CoachRosterScreen> createState() => _CoachRosterScreenState();
@@ -49,11 +87,16 @@ class CoachRosterScreen extends StatefulWidget {
 
 class _CoachRosterScreenState extends State<CoachRosterScreen>
     with SingleTickerProviderStateMixin {
-  String _statusFilter = 'All';
-  int _dayIndex = 0;
-  String _clientFilter = '';
-  final _clientController = TextEditingController();
-  DateTime? _pickedDate;
+  _RosterTab _currentTab = _RosterTab.schedule;
+  CoachStatusFilter _statusFilter = CoachStatusFilter.all;
+  CoachDateScope _dateScope = CoachDateScope.selectedDay;
+  String _historySubFilter = 'All'; // 'All', 'Completed', 'Cancelled', 'Expired'
+
+  bool _isSearchExpanded = false;
+  final _searchController = TextEditingController();
+  String _searchQuery = '';
+
+  late DateTime _selectedDate;
   late final AnimationController _reveal;
 
   static const _dayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
@@ -75,514 +118,1539 @@ class _CoachRosterScreenState extends State<CoachRosterScreen>
   @override
   void initState() {
     super.initState();
+    _selectedDate = _parseToday();
+    if (widget.showAllDates) {
+      _dateScope = CoachDateScope.allDates;
+    }
     _reveal = AnimationController(
-        vsync: this, duration: const Duration(milliseconds: 450))
-      ..forward();
+      vsync: this,
+      duration: const Duration(milliseconds: 350),
+    )..forward();
+  }
+
+  @override
+  void didUpdateWidget(CoachRosterScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.todayLocalDate != oldWidget.todayLocalDate &&
+        widget.todayLocalDate != null) {
+      final parsed = _parseToday();
+      if (_isSameDay(_selectedDate, _parseDate(oldWidget.todayLocalDate))) {
+        setState(() => _selectedDate = parsed);
+      }
+    }
   }
 
   @override
   void dispose() {
-    _clientController.dispose();
+    _searchController.dispose();
     _reveal.dispose();
     super.dispose();
   }
 
-  void _selectDay(int i) {
-    if (i == _dayIndex && _statusFilter == 'All' && _pickedDate == null) return;
-    setState(() {
-      _pickedDate = null;
-      _dayIndex = i;
-      _statusFilter = 'All';
-    });
-    _reveal
-      ..reset()
-      ..forward();
-  }
-
-  void _selectStatus(String s) {
-    if (s == _statusFilter) return;
-    setState(() => _statusFilter = s);
-    _reveal
-      ..reset()
-      ..forward();
-  }
-
-  List<DateTime> get _days {
-    final today = widget.todayLocalDate == null
-        ? DateTime.now()
-        : DateTime.parse(widget.todayLocalDate!);
-    return List.generate(7, (i) {
-      final d = today.add(Duration(days: i));
+  DateTime _parseToday() {
+    if (widget.todayLocalDate != null && widget.todayLocalDate!.contains('-')) {
+      final parsed = _parseDate(widget.todayLocalDate);
+      if (parsed != null) return parsed;
+    }
+    if (widget.serverNowMillis != null) {
+      final d = DateTime.fromMillisecondsSinceEpoch(widget.serverNowMillis!);
       return DateTime(d.year, d.month, d.day);
+    }
+    final now = DateTime.now();
+    return DateTime(now.year, now.month, now.day);
+  }
+
+  DateTime? _parseDate(String? raw) {
+    if (raw == null) return null;
+    final parts = raw.split('-');
+    if (parts.length == 3) {
+      final y = int.tryParse(parts[0]);
+      final m = int.tryParse(parts[1]);
+      final d = int.tryParse(parts[2]);
+      if (y != null && m != null && d != null) {
+        return DateTime(y, m, d);
+      }
+    }
+    return null;
+  }
+
+  bool _isSameDay(DateTime? a, DateTime? b) {
+    if (a == null || b == null) return false;
+    return a.year == b.year && a.month == b.month && a.day == b.day;
+  }
+
+  int get _nowMillis =>
+      widget.serverNowMillis ?? DateTime.now().millisecondsSinceEpoch;
+
+  List<Booking> _getRawBookings(bool live) {
+    if (widget.persistedBookings != null) {
+      return widget.persistedBookings!;
+    }
+    if (live) {
+      return const <Booking>[];
+    }
+    try {
+      return context.watch<BookingBloc>().state.coachRoster;
+    } catch (_) {
+      try {
+        return context.read<BookingRepository>().coachRoster;
+      } catch (_) {
+        return const <Booking>[];
+      }
+    }
+  }
+
+  bool _matchesStatus(Booking b, CoachStatusFilter filter) {
+    if (filter == CoachStatusFilter.all) return true;
+    final record = widget.recordFor?.call(b.id);
+    final rawStatus = record?.rawStatus.toLowerCase();
+
+    switch (filter) {
+      case CoachStatusFilter.confirmed:
+        return rawStatus == 'confirmed' || b.status == BookingStatus.confirmed;
+      case CoachStatusFilter.pending:
+        return rawStatus == 'pending_hold' ||
+            rawStatus == 'pending' ||
+            b.status == BookingStatus.pending;
+      case CoachStatusFilter.completed:
+        return rawStatus == 'completed' || b.status == BookingStatus.completed;
+      case CoachStatusFilter.cancelled:
+        return rawStatus == 'cancelled' || b.status == BookingStatus.cancelled;
+      case CoachStatusFilter.expired:
+        return rawStatus == 'expired' ||
+            (b.status == BookingStatus.pending &&
+                record != null &&
+                record.holdExpiresAtMillis <= _nowMillis);
+      case CoachStatusFilter.all:
+        return true;
+    }
+  }
+
+  bool _isSessionEnded(Booking b) {
+    final record = widget.recordFor?.call(b.id);
+    if (record != null) {
+      return record.endAtMillis <= _nowMillis;
+    }
+    return b.start
+            .add(Duration(minutes: b.durationMin))
+            .millisecondsSinceEpoch <=
+        _nowMillis;
+  }
+
+  bool _isSessionInProgress(Booking b) {
+    final record = widget.recordFor?.call(b.id);
+    final start = record?.startAtMillis ?? b.start.millisecondsSinceEpoch;
+    final end = record?.endAtMillis ??
+        b.start.add(Duration(minutes: b.durationMin)).millisecondsSinceEpoch;
+    return _nowMillis >= start && _nowMillis < end;
+  }
+
+  bool _isSessionHistory(Booking b) {
+    final record = widget.recordFor?.call(b.id);
+    final rawStatus = record?.rawStatus.toLowerCase();
+    if (rawStatus == 'completed' ||
+        rawStatus == 'cancelled' ||
+        rawStatus == 'expired') {
+      return true;
+    }
+    if (b.status == BookingStatus.completed ||
+        b.status == BookingStatus.cancelled) {
+      return true;
+    }
+    return _isSessionEnded(b);
+  }
+
+  bool _matchesDateScope(Booking b, CoachDateScope scope, DateTime anchorDay) {
+    final record = widget.recordFor?.call(b.id);
+    DateTime sessionDate;
+    if (record != null) {
+      final parsed = _parseDate(record.localDate);
+      if (parsed != null) {
+        sessionDate = parsed;
+      } else {
+        final d = DateTime.fromMillisecondsSinceEpoch(record.startAtMillis);
+        sessionDate = DateTime(d.year, d.month, d.day);
+      }
+    } else {
+      sessionDate = DateTime(b.start.year, b.start.month, b.start.day);
+    }
+
+    switch (scope) {
+      case CoachDateScope.selectedDay:
+        return _isSameDay(sessionDate, anchorDay);
+      case CoachDateScope.next7Days:
+        final diff = sessionDate.difference(anchorDay).inDays;
+        return diff >= 0 && diff < 7;
+      case CoachDateScope.thisWeek:
+        final startOfWeek =
+            anchorDay.subtract(Duration(days: anchorDay.weekday - 1));
+        final endOfWeek = startOfWeek.add(const Duration(days: 6));
+        return !sessionDate.isBefore(startOfWeek) &&
+            !sessionDate.isAfter(endOfWeek);
+      case CoachDateScope.allDates:
+        return true;
+    }
+  }
+
+  int get _activeFilterCount {
+    var count = 0;
+    if (_statusFilter != CoachStatusFilter.all) count++;
+    if (_dateScope != CoachDateScope.selectedDay) count++;
+    return count;
+  }
+
+  void _clearFilters() {
+    setState(() {
+      _statusFilter = CoachStatusFilter.all;
+      _dateScope = CoachDateScope.selectedDay;
+      _searchController.clear();
+      _searchQuery = '';
+      _isSearchExpanded = false;
     });
   }
 
-  bool _isSameDay(DateTime a, DateTime b) =>
-      a.year == b.year && a.month == b.month && a.day == b.day;
-
-  @override
-  Widget build(BuildContext context) {
-    final roster = widget.persistedBookings ??
-        context.watch<BookingBloc>().state.coachRoster;
-    final days = _days;
-    final selectedDay = _pickedDate ?? days[_dayIndex];
-    final now = widget.todayLocalDate == null
-        ? DateTime.now()
-        : DateTime.parse(widget.todayLocalDate!);
-    final weekEnd = now.add(const Duration(days: 7));
-    final filtering =
-        _statusFilter != 'All' || (widget.showAllDates && _pickedDate == null);
-
-    final candidates = roster.where((b) => '${b.memberName} ${b.id}'
-        .toLowerCase()
-        .contains(_clientFilter.toLowerCase()));
-    final visible = filtering
-        ? (candidates
-            .where((b) =>
-                _statusFilter == 'All' ||
-                (widget.statusLabels[b.id] ?? b.status.label)
-                        .replaceAll('_', ' ')
-                        .toLowerCase() ==
-                    _statusFilter.toLowerCase())
-            .toList()
-          ..sort((a, b) => a.start.compareTo(b.start)))
-        : (candidates.where((b) => _isSameDay(b.start, selectedDay)).toList()
-          ..sort((a, b) => a.start.compareTo(b.start)));
-
-    final needsReply = roster
-        .where((b) =>
-            b.messages.isNotEmpty && b.messages.last.senderRole == 'Member')
-        .length;
-    final todayCount = roster
-        .where(
-            (b) => _isSameDay(b.start, DateTime(now.year, now.month, now.day)))
-        .length;
-    final weekCount = roster
-        .where((b) => b.start.isAfter(now) && b.start.isBefore(weekEnd))
-        .length;
-
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('My schedule'),
-        actions: [
-          Padding(
-            padding: const EdgeInsets.only(right: 8),
-            child: Stack(
-              clipBehavior: Clip.none,
-              children: [
-                IconButton(
-                  icon: const Icon(Icons.forum_outlined),
-                  tooltip: 'Messages',
-                  onPressed: widget.persistedBookings != null
-                      ? widget.onOpenMessages
-                      : () => Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                              builder: (_) => const CoachMessageInboxScreen())),
-                ),
-                if (needsReply > 0)
-                  Positioned(
-                    right: 6,
-                    top: 6,
-                    child: Container(
-                      padding: const EdgeInsets.all(4),
-                      decoration: const BoxDecoration(
-                          color: AppColors.danger, shape: BoxShape.circle),
-                      child: Text('$needsReply',
-                          style: const TextStyle(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w700,
-                              color: Colors.white)),
-                    ),
-                  ),
-              ],
-            ),
-          ),
-        ],
+  void _openDetails(Booking booking) {
+    final record = widget.recordFor?.call(booking.id);
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => CoachSessionDetailsScreen(
+          booking: booking,
+          record: record,
+          live: widget.persistedBookings != null,
+          statusLabel: widget.statusLabels[booking.id],
+          onMessage: widget.onMessage != null
+              ? () => widget.onMessage!(booking)
+              : null,
+          onNotes:
+              widget.onNotes != null ? () => widget.onNotes!(booking) : null,
+          onCancel:
+              widget.onCancel != null ? () => widget.onCancel!(booking) : null,
+          onPosture: widget.onPosture != null
+              ? () => widget.onPosture!(booking)
+              : null,
+          serverNowMillis: widget.serverNowMillis,
+        ),
       ),
-      body: CustomScrollView(
-        slivers: [
-          SliverToBoxAdapter(
+    );
+  }
+
+  void _openFilterSheet() {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: AppColors.surface,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (sheetContext) {
+        return StatefulBuilder(
+          builder: (context, setSheetState) {
+            final hasActive = _statusFilter != CoachStatusFilter.all ||
+                _dateScope != CoachDateScope.selectedDay;
+
+            return SafeArea(
               child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: TextField(
-                    controller: _clientController,
-                    onChanged: (value) => setState(() => _clientFilter = value),
-                    decoration: const InputDecoration(
-                        labelText: 'Search client or booking',
-                        prefixIcon: Icon(Icons.search)),
-                  ))),
-          SliverToBoxAdapter(
-              child: Row(children: [
-            TextButton.icon(
-                icon: const Icon(Icons.calendar_month),
-                label: const Text('Choose date'),
-                onPressed: () async {
-                  final day = await showDatePicker(
-                      context: context,
-                      initialDate: selectedDay,
-                      firstDate: days.first,
-                      lastDate: days.first.add(const Duration(days: 30)));
-                  if (day != null && mounted) {
-                    setState(() {
-                      _pickedDate = day;
-                      _statusFilter = 'All';
-                    });
-                  }
-                }),
-            TextButton(
-                onPressed: () => setState(() {
-                      _pickedDate = null;
-                      _dayIndex = 0;
-                      _statusFilter = 'All';
-                      _clientFilter = '';
-                      _clientController.clear();
-                    }),
-                child: const Text('Reset filters')),
-          ])),
-          if (widget.header != null)
-            SliverToBoxAdapter(
-                child: Padding(
-                    padding: const EdgeInsets.all(16), child: widget.header!)),
-          SliverPadding(
-            padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
-            sliver: SliverToBoxAdapter(
-              child: Row(
-                children: [
-                  Expanded(
-                      child: StatTile('${roster.length}', 'Sessions',
-                          compact: true)),
-                  const SizedBox(width: 8),
-                  Expanded(
-                      child:
-                          StatTile('$weekCount', 'This week', compact: true)),
-                  const SizedBox(width: 8),
-                  Expanded(
-                      child: StatTile('$todayCount', 'Today',
-                          compact: true, valueColor: AppColors.accent)),
-                ],
-              ),
-            ),
-          ),
-          if (!filtering) ...[
-            SliverPadding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-              sliver: SliverToBoxAdapter(
-                child: Text(
-                  '${_monthNames[selectedDay.month - 1]} ${selectedDay.year}',
-                  style: const TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 0.6,
-                      color: AppColors.inkSoft),
-                ),
-              ),
-            ),
-            SliverToBoxAdapter(
-              child: SizedBox(
-                height: 72,
-                child: ListView.builder(
-                  scrollDirection: Axis.horizontal,
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  itemCount: days.length,
-                  itemBuilder: (ctx, i) {
-                    final d = days[i];
-                    final selected = i == _dayIndex;
-                    final count =
-                        roster.where((b) => _isSameDay(b.start, d)).length;
-                    return Padding(
-                      padding: const EdgeInsets.only(right: 8),
-                      child: Material(
-                        color: selected ? AppColors.primary : AppColors.surface,
-                        borderRadius: BorderRadius.circular(14),
-                        elevation: selected ? 3 : 0,
-                        shadowColor: AppColors.primary.withValues(alpha: 0.35),
-                        child: InkWell(
-                          borderRadius: BorderRadius.circular(14),
-                          onTap: () => _selectDay(i),
-                          child: Container(
-                            width: 56,
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(14),
-                              border: Border.all(
-                                  color: selected
-                                      ? AppColors.primary
-                                      : AppColors.hairline),
-                            ),
-                            child: Stack(
-                              alignment: Alignment.center,
-                              children: [
-                                Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Text(
-                                        i == 0
-                                            ? 'Today'
-                                            : _dayNames[d.weekday - 1],
-                                        style: TextStyle(
-                                            fontSize: 10.5,
-                                            fontWeight: FontWeight.w600,
-                                            color: selected
-                                                ? Colors.white70
-                                                : AppColors.inkSoft)),
-                                    const SizedBox(height: 4),
-                                    Text('${d.day}',
-                                        style: TextStyle(
-                                            fontSize: 19,
-                                            fontWeight: FontWeight.w700,
-                                            color: selected
-                                                ? Colors.white
-                                                : AppColors.ink)),
-                                  ],
-                                ),
-                                if (count > 0)
-                                  Positioned(
-                                    top: 6,
-                                    right: 6,
-                                    child: Container(
-                                      width: 7,
-                                      height: 7,
-                                      decoration: BoxDecoration(
-                                        shape: BoxShape.circle,
-                                        color: selected
-                                            ? Colors.white
-                                            : AppColors.accent,
-                                      ),
-                                    ),
+                padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Center(
+                      child: Container(
+                        width: 36,
+                        height: 4,
+                        decoration: BoxDecoration(
+                          color: AppColors.hairline,
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        Text(
+                          'Filter Schedule',
+                          style:
+                              Theme.of(context).textTheme.titleLarge?.copyWith(
+                                    fontWeight: FontWeight.w800,
+                                    color: AppColors.ink,
                                   ),
-                              ],
+                        ),
+                        const Spacer(),
+                        if (hasActive)
+                          TextButton(
+                            onPressed: () {
+                              setState(() {
+                                _statusFilter = CoachStatusFilter.all;
+                                _dateScope = CoachDateScope.selectedDay;
+                              });
+                              setSheetState(() {});
+                            },
+                            child: const Text(
+                              'Clear all',
+                              style: TextStyle(
+                                color: AppColors.primary,
+                                fontWeight: FontWeight.w600,
+                              ),
                             ),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    const Eyebrow('DATE SCOPE'),
+                    const SizedBox(height: 10),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: CoachDateScope.values.map((scope) {
+                        final isSelected = _dateScope == scope;
+                        return ChoiceChip(
+                          label: Text(scope.label),
+                          selected: isSelected,
+                          selectedColor: AppColors.primaryTint,
+                          backgroundColor: AppColors.surfaceAlt,
+                          labelStyle: TextStyle(
+                            fontSize: 12.5,
+                            fontWeight: isSelected
+                                ? FontWeight.w700
+                                : FontWeight.w500,
+                            color: isSelected
+                                ? AppColors.primary
+                                : AppColors.ink,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                            side: BorderSide(
+                              color: isSelected
+                                  ? AppColors.primary
+                                  : AppColors.hairline,
+                            ),
+                          ),
+                          onSelected: (selected) {
+                            if (selected) {
+                              setState(() => _dateScope = scope);
+                              setSheetState(() {});
+                            }
+                          },
+                        );
+                      }).toList(),
+                    ),
+                    const SizedBox(height: 20),
+                    const Eyebrow('STATUS'),
+                    const SizedBox(height: 10),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: CoachStatusFilter.values.map((status) {
+                        final isSelected = _statusFilter == status;
+                        return ChoiceChip(
+                          label: Text(status.label),
+                          selected: isSelected,
+                          selectedColor: AppColors.primaryTint,
+                          backgroundColor: AppColors.surfaceAlt,
+                          labelStyle: TextStyle(
+                            fontSize: 12.5,
+                            fontWeight: isSelected
+                                ? FontWeight.w700
+                                : FontWeight.w500,
+                            color: isSelected
+                                ? AppColors.primary
+                                : AppColors.ink,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                            side: BorderSide(
+                              color: isSelected
+                                  ? AppColors.primary
+                                  : AppColors.hairline,
+                            ),
+                          ),
+                          onSelected: (selected) {
+                            if (selected) {
+                              setState(() => _statusFilter = status);
+                              setSheetState(() {});
+                            }
+                          },
+                        );
+                      }).toList(),
+                    ),
+                    const SizedBox(height: 24),
+                    SizedBox(
+                      width: double.infinity,
+                      height: 48,
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.primary,
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        onPressed: () => Navigator.pop(sheetContext),
+                        child: const Text(
+                          'Apply Filters',
+                          style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w700,
                           ),
                         ),
                       ),
-                    );
-                  },
-                ),
-              ),
-            ),
-            const SliverToBoxAdapter(child: SizedBox(height: 12)),
-          ] else
-            const SliverToBoxAdapter(child: SizedBox(height: 12)),
-          SliverToBoxAdapter(
-            child: SizedBox(
-              height: 40,
-              child: ListView(
-                scrollDirection: Axis.horizontal,
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                children: (widget.persistedBookings == null
-                        ? ['All', 'Confirmed', 'Pending', 'Completed']
-                        : [
-                            'All',
-                            'Confirmed',
-                            'Pending hold',
-                            'Completed',
-                            'Cancelled',
-                            'Expired',
-                            'Refunded'
-                          ])
-                    .map((s) {
-                  final selected = s == _statusFilter;
-                  return Padding(
-                    padding: const EdgeInsets.only(right: 8),
-                    child: ChoiceChip(
-                      label: Text(s),
-                      selected: selected,
-                      onSelected: (_) => _selectStatus(s),
-                      backgroundColor: AppColors.surface,
-                      selectedColor: AppColors.primary,
-                      labelStyle: TextStyle(
-                        fontSize: 12.5,
-                        fontWeight: FontWeight.w600,
-                        color: selected ? Colors.white : AppColors.ink,
-                      ),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(999),
-                        side: const BorderSide(color: AppColors.hairline),
-                      ),
                     ),
-                  );
-                }).toList(),
-              ),
-            ),
-          ),
-          SliverPadding(
-            padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
-            sliver: SliverToBoxAdapter(
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      filtering
-                          ? '$_statusFilter sessions'
-                          : _dayIndex == 0
-                              ? "Today's sessions"
-                              : '${_dayNames[selectedDay.weekday - 1]}, ${selectedDay.day} ${_monthNames[selectedDay.month - 1]}',
-                      style: Theme.of(context).textTheme.titleMedium,
-                    ),
-                  ),
-                  Text(
-                      '${visible.length} session${visible.length == 1 ? '' : 's'}',
-                      style: Theme.of(context).textTheme.bodyMedium),
-                ],
-              ),
-            ),
-          ),
-          SliverPadding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            sliver: SliverToBoxAdapter(child: const Divider(height: 18)),
-          ),
-          if (visible.isEmpty)
-            SliverFillRemaining(
-              hasScrollBody: false,
-              child: Center(
-                child: Padding(
-                  padding: const EdgeInsets.all(32),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(Icons.event_available_outlined,
-                          size: 40, color: AppColors.hairline),
-                      const SizedBox(height: 14),
-                      Text(
-                        filtering
-                            ? 'No $_statusFilter sessions.'
-                            : 'No sessions this day.',
-                        textAlign: TextAlign.center,
-                        style: Theme.of(context).textTheme.bodyMedium,
-                      ),
-                    ],
-                  ),
+                  ],
                 ),
               ),
-            )
-          else
-            SliverPadding(
-              padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
-              sliver: SliverList(
-                delegate: SliverChildBuilderDelegate(
-                  (ctx, i) {
-                    final start = (i / visible.length).clamp(0.0, 1.0);
-                    final end =
-                        ((i + 1) / visible.length * 0.7 + 0.3).clamp(0.0, 1.0);
-                    final anim = CurvedAnimation(
-                      parent: _reveal,
-                      curve: Interval(start * 0.6, end, curve: Curves.easeOut),
-                    );
-                    return FadeTransition(
-                      opacity: anim,
-                      child: SlideTransition(
-                        position: anim.drive(Tween(
-                            begin: const Offset(0, 0.05), end: Offset.zero)),
-                        child: _TimelineRow(
-                          booking: visible[i],
-                          live: widget.persistedBookings != null,
-                          statusLabel: widget.statusLabels[visible[i].id],
-                          details: widget.details[visible[i].id],
-                          onMessage: widget.onMessage == null ||
-                                  (widget.persistedBookings != null &&
-                                      ![
-                                        BookingStatus.confirmed,
-                                        BookingStatus.completed
-                                      ].contains(visible[i].status))
-                              ? null
-                              : () => widget.onMessage!(visible[i]),
-                          onNotes: widget.onNotes == null
-                              ? null
-                              : () => widget.onNotes!(visible[i]),
-                          onCancel: widget.onCancel == null
-                              ? null
-                              : () => widget.onCancel!(visible[i]),
-                          onPosture: widget.onPosture == null
-                              ? null
-                              : () => widget.onPosture!(visible[i]),
-                          isLast: i == visible.length - 1,
-                          showConnector: !filtering,
-                        ),
-                      ),
-                    );
-                  },
-                  childCount: visible.length,
-                ),
-              ),
-            ),
-        ],
-      ),
+            );
+          },
+        );
+      },
     );
   }
-}
 
-/// One entry in the timeline: a time label + connecting dot/line on the
-/// left, the session card on the right. The connecting line is only
-/// drawn in day view (`showConnector`) — in the cross-day filtered view
-/// the rows aren't actually adjacent in time, so a line linking them
-/// would misleadingly imply they are.
-class _TimelineRow extends StatelessWidget {
-  final Booking booking;
-  final bool live;
-  final String? statusLabel;
-  final Widget? details;
-  final VoidCallback? onMessage;
-  final VoidCallback? onNotes;
-  final VoidCallback? onCancel;
-  final VoidCallback? onPosture;
-  final bool isLast;
-  final bool showConnector;
-  const _TimelineRow(
-      {required this.booking,
-      this.live = false,
-      this.statusLabel,
-      this.details,
-      this.onMessage,
-      this.onNotes,
-      this.onCancel,
-      this.onPosture,
-      required this.isLast,
-      required this.showConnector});
+  Future<void> _pickDate() async {
+    final today = _parseToday();
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _selectedDate,
+      firstDate: today.subtract(const Duration(days: 365)),
+      lastDate: today.add(const Duration(days: 365)),
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: const ColorScheme.light(
+              primary: AppColors.primary,
+              onPrimary: Colors.white,
+              onSurface: AppColors.ink,
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+    if (picked != null && !_isSameDay(picked, _selectedDate)) {
+      setState(() {
+        _selectedDate = DateTime(picked.year, picked.month, picked.day);
+      });
+      _reveal
+        ..reset()
+        ..forward();
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    final h = booking.start.hour.toString().padLeft(2, '0');
-    final m = booking.start.minute.toString().padLeft(2, '0');
-    return IntrinsicHeight(
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          SizedBox(
-            width: 44,
-            child: Column(
-              children: [
-                Text('$h:$m',
-                    style: const TextStyle(
-                        fontSize: 11.5,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.inkSoft)),
-                const SizedBox(height: 6),
-                Container(
-                  width: 10,
-                  height: 10,
-                  decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: _statusColor(booking.status)),
+    final live = widget.persistedBookings != null;
+    final allBookings = _getRawBookings(live);
+    final today = _parseToday();
+
+    // Query / search filtering
+    final filteredBookings = allBookings.where((b) {
+      if (_searchQuery.isNotEmpty) {
+        final q = _searchQuery.toLowerCase();
+        final record = widget.recordFor?.call(b.id);
+        final nameMatch = b.memberName.toLowerCase().contains(q) ||
+            ((record?.memberDisplayName ?? '').toLowerCase().contains(q));
+        final branchMatch =
+            ((record?.branchId ?? '').toLowerCase().contains(q)) ||
+                b.branch.toLowerCase().contains(q);
+        if (!nameMatch && !branchMatch) return false;
+      }
+      return true;
+    }).toList();
+
+    return Scaffold(
+      backgroundColor: AppColors.bg,
+      appBar: _buildAppBar(context, allBookings),
+      body: widget.onRefresh != null
+          ? RefreshIndicator(
+              onRefresh: widget.onRefresh!,
+              color: AppColors.primary,
+              child: _buildBody(context, filteredBookings, allBookings, today),
+            )
+          : _buildBody(context, filteredBookings, allBookings, today),
+    );
+  }
+
+  PreferredSizeWidget _buildAppBar(
+      BuildContext context, List<Booking> allBookings) {
+    return AppBar(
+      title: _isSearchExpanded
+          ? TextField(
+              controller: _searchController,
+              autofocus: true,
+              decoration: InputDecoration(
+                hintText: 'Search member or branch...',
+                hintStyle:
+                    const TextStyle(color: AppColors.inkSoft, fontSize: 14),
+                border: InputBorder.none,
+                isDense: true,
+                suffixIcon: IconButton(
+                  icon: const Icon(Icons.close_rounded, size: 20),
+                  onPressed: () {
+                    setState(() {
+                      _searchController.clear();
+                      _searchQuery = '';
+                      _isSearchExpanded = false;
+                    });
+                  },
                 ),
-                if (showConnector && !isLast)
-                  Expanded(
-                      child: Container(width: 2, color: AppColors.hairline)),
+              ),
+              style: const TextStyle(fontSize: 15, color: AppColors.ink),
+              onChanged: (val) => setState(() => _searchQuery = val.trim()),
+            )
+          : const Text('My schedule'),
+      actions: [
+        if (!_isSearchExpanded)
+          IconButton(
+            icon: const Icon(Icons.search_rounded),
+            tooltip: 'Search schedule',
+            onPressed: () => setState(() => _isSearchExpanded = true),
+          ),
+        Stack(
+          alignment: Alignment.center,
+          children: [
+            IconButton(
+              icon: const Icon(Icons.tune_rounded),
+              tooltip: 'Filter schedule',
+              onPressed: _openFilterSheet,
+            ),
+            if (_activeFilterCount > 0)
+              Positioned(
+                top: 8,
+                right: 8,
+                child: Container(
+                  padding: const EdgeInsets.all(4),
+                  decoration: const BoxDecoration(
+                    color: AppColors.primary,
+                    shape: BoxShape.circle,
+                  ),
+                  constraints: const BoxConstraints(
+                    minWidth: 16,
+                    minHeight: 16,
+                  ),
+                  child: Center(
+                    child: Text(
+                      '$_activeFilterCount',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 9.5,
+                        fontWeight: FontWeight.w700,
+                        height: 1,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
+        if (widget.onOpenMessages != null)
+          IconButton(
+            icon: const Icon(Icons.chat_bubble_outline_rounded),
+            tooltip: 'Client messages',
+            onPressed: widget.onOpenMessages,
+          ),
+      ],
+    );
+  }
+
+  Widget _buildBody(
+    BuildContext context,
+    List<Booking> filteredBookings,
+    List<Booking> allBookings,
+    DateTime today,
+  ) {
+    return ListView(
+      physics: const AlwaysScrollableScrollPhysics(),
+      padding: EdgeInsets.zero,
+      children: [
+        if (widget.header != null) widget.header!,
+
+        // Main Tabs: Schedule vs History
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+          child: _buildMainTabs(),
+        ),
+
+        if (_currentTab == _RosterTab.schedule) ...[
+          // Date strip & quick jump
+          _buildDateNavigation(today, allBookings),
+          const SizedBox(height: 12),
+
+          // Daily summary
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: _buildDailySummary(allBookings, today),
+          ),
+          const SizedBox(height: 14),
+
+          // Needs Attention banner (if applicable)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: _buildNeedsAttentionSection(allBookings),
+          ),
+
+          // Next Session Highlight (nearest upcoming today)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: _buildNextSessionHighlight(allBookings, today),
+          ),
+
+          // Section Title & active filters reminder
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+            child: Row(
+              children: [
+                Text(
+                  _dateScope == CoachDateScope.selectedDay
+                      ? 'Appointments'
+                      : 'Appointments (${_dateScope.label})',
+                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.inkSoft,
+                        letterSpacing: .3,
+                      ),
+                ),
+                const Spacer(),
+                if (_statusFilter != CoachStatusFilter.all)
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: AppColors.primaryTint,
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Text(
+                      _statusFilter.label,
+                      style: const TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.primary,
+                      ),
+                    ),
+                  ),
               ],
             ),
           ),
-          const SizedBox(width: 10),
+
+          // Sessions List for Schedule tab
+          _buildScheduleSessionList(filteredBookings),
+        ] else ...[
+          // History tab view
+          _buildHistorySection(filteredBookings),
+        ],
+
+        const SizedBox(height: 48),
+      ],
+    );
+  }
+
+  Widget _buildMainTabs() {
+    return Container(
+      height: 44,
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceAlt,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.hairline),
+      ),
+      child: Row(
+        children: [
           Expanded(
-            child: Padding(
-              padding: const EdgeInsets.only(bottom: 16),
-              child: _SessionCard(
-                  booking: booking,
-                  live: live,
-                  statusLabel: statusLabel,
-                  details: details,
-                  onMessage: onMessage,
-                  onNotes: onNotes,
-                  onCancel: onCancel,
-                  onPosture: onPosture),
+            child: _TabButton(
+              title: 'Schedule',
+              icon: Icons.calendar_today_rounded,
+              isSelected: _currentTab == _RosterTab.schedule,
+              onTap: () {
+                if (_currentTab != _RosterTab.schedule) {
+                  setState(() => _currentTab = _RosterTab.schedule);
+                }
+              },
+            ),
+          ),
+          const SizedBox(width: 4),
+          Expanded(
+            child: _TabButton(
+              title: 'History',
+              icon: Icons.history_rounded,
+              isSelected: _currentTab == _RosterTab.history,
+              onTap: () {
+                if (_currentTab != _RosterTab.history) {
+                  setState(() => _currentTab = _RosterTab.history);
+                }
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDateNavigation(DateTime today, List<Booking> allBookings) {
+    final isTodaySelected = _isSameDay(_selectedDate, today);
+
+    // Build 7 consecutive days anchored around selected date or today
+    final startAnchor = _selectedDate.subtract(const Duration(days: 3));
+    final days = List.generate(7, (i) => startAnchor.add(Duration(days: i)));
+
+    // Days with sessions
+    final sessionDayKeys = <String>{};
+    for (final b in allBookings) {
+      final record = widget.recordFor?.call(b.id);
+      if (record != null) {
+        sessionDayKeys.add(record.localDate);
+      } else {
+        final d = b.start;
+        final y = d.year.toString().padLeft(4, '0');
+        final m = d.month.toString().padLeft(2, '0');
+        final day = d.day.toString().padLeft(2, '0');
+        sessionDayKeys.add('$y-$m-$day');
+      }
+    }
+
+    final dateTitle = isTodaySelected
+        ? 'Today · ${_dayNames[_selectedDate.weekday - 1]}, ${_selectedDate.day} ${_monthNames[_selectedDate.month - 1]}'
+        : '${_dayNames[_selectedDate.weekday - 1]}, ${_selectedDate.day} ${_monthNames[_selectedDate.month - 1]} ${_selectedDate.year}';
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  dateTitle,
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w800,
+                        color: AppColors.ink,
+                      ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              if (!isTodaySelected)
+                TextButton.icon(
+                  style: TextButton.styleFrom(
+                    visualDensity: VisualDensity.compact,
+                    foregroundColor: AppColors.primary,
+                  ),
+                  onPressed: () {
+                    setState(() => _selectedDate = today);
+                    _reveal
+                      ..reset()
+                      ..forward();
+                  },
+                  icon: const Icon(Icons.today_rounded, size: 16),
+                  label: const Text(
+                    'Today',
+                    style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
+                  ),
+                ),
+              IconButton(
+                icon: const Icon(Icons.calendar_month_outlined, size: 20),
+                tooltip: 'Choose date',
+                color: AppColors.inkSoft,
+                visualDensity: VisualDensity.compact,
+                onPressed: _pickDate,
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 8),
+
+        // Horizontal 7-Day calendar rail
+        SizedBox(
+          height: 76,
+          child: ListView.separated(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            scrollDirection: Axis.horizontal,
+            itemCount: days.length,
+            separatorBuilder: (_, __) => const SizedBox(width: 8),
+            itemBuilder: (context, index) {
+              final d = days[index];
+              final isSelected = _isSameDay(d, _selectedDate);
+              final isDayToday = _isSameDay(d, today);
+
+              final yStr = d.year.toString().padLeft(4, '0');
+              final mStr = d.month.toString().padLeft(2, '0');
+              final dStr = d.day.toString().padLeft(2, '0');
+              final hasSession = sessionDayKeys.contains('$yStr-$mStr-$dStr');
+
+              return _DayRailCell(
+                weekday: _dayNames[d.weekday - 1],
+                dayNumber: '${d.day}',
+                isSelected: isSelected,
+                isToday: isDayToday,
+                hasSession: hasSession,
+                onTap: () {
+                  if (!isSelected) {
+                    setState(() => _selectedDate = d);
+                    _reveal
+                      ..reset()
+                      ..forward();
+                  }
+                },
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildDailySummary(List<Booking> allBookings, DateTime today) {
+    // Calculate sessions on the selected day
+    final daySessions = allBookings.where((b) {
+      return _matchesDateScope(b, CoachDateScope.selectedDay, _selectedDate);
+    }).toList();
+
+    final total = daySessions.length;
+    final completed = daySessions.where((b) {
+      final record = widget.recordFor?.call(b.id);
+      return record?.rawStatus == 'completed' ||
+          b.status == BookingStatus.completed;
+    }).length;
+
+    final pendingNotes = daySessions.where((b) {
+      if (b.status == BookingStatus.cancelled) return false;
+      final record = widget.recordFor?.call(b.id);
+      if (record?.rawStatus == 'completed' || _isSessionEnded(b)) {
+        return b.notes == null || b.notes!.trim().isEmpty;
+      }
+      return false;
+    }).length;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.hairline),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: .03),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: _SummaryColumn(
+              value: '$total',
+              label: 'Scheduled',
+              color: AppColors.primary,
+            ),
+          ),
+          Container(width: 1, height: 28, color: AppColors.hairline),
+          Expanded(
+            child: _SummaryColumn(
+              value: '$completed',
+              label: 'Completed',
+              color: AppColors.success,
+            ),
+          ),
+          Container(width: 1, height: 28, color: AppColors.hairline),
+          Expanded(
+            child: _SummaryColumn(
+              value: '$pendingNotes',
+              label: 'Notes Due',
+              color: pendingNotes > 0 ? AppColors.warning : AppColors.inkSoft,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildNeedsAttentionSection(List<Booking> allBookings) {
+    final pendingNotesBookings = allBookings.where((b) {
+      if (b.status == BookingStatus.cancelled) return false;
+      final record = widget.recordFor?.call(b.id);
+      if (record?.rawStatus == 'completed' || _isSessionEnded(b)) {
+        return b.notes == null || b.notes!.trim().isEmpty;
+      }
+      return false;
+    }).toList();
+
+    if (pendingNotesBookings.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    final count = pendingNotesBookings.length;
+    final first = pendingNotesBookings.first;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.accentTint,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.warning.withValues(alpha: .3)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: AppColors.warning.withValues(alpha: .15),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(
+              Icons.assignment_late_outlined,
+              color: AppColors.warning,
+              size: 18,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  count == 1
+                      ? '1 session needs consultation notes'
+                      : '$count sessions need consultation notes',
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.ink,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'Tap to write notes for ${first.memberName}',
+                  style: const TextStyle(
+                    fontSize: 11.5,
+                    color: AppColors.inkSoft,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (widget.onNotes != null)
+            TextButton(
+              style: TextButton.styleFrom(
+                foregroundColor: AppColors.primary,
+                visualDensity: VisualDensity.compact,
+                padding: const EdgeInsets.symmetric(horizontal: 10),
+              ),
+              onPressed: () => widget.onNotes!(first),
+              child: const Text(
+                'Write',
+                style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildNextSessionHighlight(
+      List<Booking> allBookings, DateTime today) {
+    // Next upcoming confirmed or in-progress session today
+    final todaySessions = allBookings.where((b) {
+      return _matchesDateScope(b, CoachDateScope.selectedDay, today);
+    }).toList();
+
+    Booking? nextSession;
+    var earliestStart = double.infinity;
+
+    for (final b in todaySessions) {
+      final record = widget.recordFor?.call(b.id);
+      final rawStatus = record?.rawStatus.toLowerCase();
+      final isConfirmed =
+          rawStatus == 'confirmed' || b.status == BookingStatus.confirmed;
+
+      if (!isConfirmed) continue;
+      final start =
+          (record?.startAtMillis ?? b.start.millisecondsSinceEpoch).toDouble();
+      final end = (record?.endAtMillis ??
+              b.start
+                  .add(Duration(minutes: b.durationMin))
+                  .millisecondsSinceEpoch)
+          .toDouble();
+
+      if (end > _nowMillis && start < earliestStart) {
+        earliestStart = start;
+        nextSession = b;
+      }
+    }
+
+    if (nextSession == null) {
+      return const SizedBox.shrink();
+    }
+
+    final record = widget.recordFor?.call(nextSession.id);
+    final inProgress = _isSessionInProgress(nextSession);
+    final resolvedBranch = resolveBranchLocation(
+      record?.branchId ?? nextSession.branch,
+    );
+
+    final start =
+        record?.startAtMillis ?? nextSession.start.millisecondsSinceEpoch;
+    final diffMinutes = ((start - _nowMillis) / 60000).round();
+
+    final timeLabel = inProgress
+        ? 'In progress now'
+        : diffMinutes <= 0
+            ? 'Starting now'
+            : diffMinutes < 60
+                ? 'Starting in $diffMinutes mins'
+                : 'Today at ${nextSession.start.hour.toString().padLeft(2, '0')}:${nextSession.start.minute.toString().padLeft(2, '0')}';
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: AppColors.primary.withValues(alpha: .35),
+          width: 1.5,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.primary.withValues(alpha: .06),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: inProgress
+                      ? AppColors.primary
+                      : AppColors.primaryTint,
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      inProgress
+                          ? Icons.play_circle_fill_rounded
+                          : Icons.access_time_filled_rounded,
+                      size: 13,
+                      color: inProgress ? Colors.white : AppColors.primary,
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      inProgress ? 'ACTIVE SESSION' : 'NEXT UP',
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w800,
+                        color: inProgress ? Colors.white : AppColors.primary,
+                        letterSpacing: .4,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const Spacer(),
+              Text(
+                timeLabel,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: inProgress ? AppColors.primary : AppColors.inkSoft,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              CircleAvatar(
+                radius: 20,
+                backgroundColor: AppColors.primaryTint,
+                child: Text(
+                  nextSession.memberName
+                      .split(' ')
+                      .where((s) => s.isNotEmpty)
+                      .map((s) => s[0].toUpperCase())
+                      .take(2)
+                      .join(),
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.primary,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'with ${nextSession.memberName}',
+                      style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.ink,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      '${nextSession.durationMin} min Consultation · $resolvedBranch',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: AppColors.inkSoft,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              if (widget.onMessage != null)
+                OutlinedButton.icon(
+                  style: OutlinedButton.styleFrom(
+                    visualDensity: VisualDensity.compact,
+                    foregroundColor: AppColors.primary,
+                    side: const BorderSide(color: AppColors.hairline),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                  onPressed: () => widget.onMessage!(nextSession!),
+                  icon: const Icon(Icons.chat_bubble_outline_rounded, size: 14),
+                  label: const Text('Message', style: TextStyle(fontSize: 12)),
+                ),
+              const SizedBox(width: 8),
+              ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  visualDensity: VisualDensity.compact,
+                  backgroundColor: AppColors.primary,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+                onPressed: () => _openDetails(nextSession!),
+                icon: const Icon(Icons.arrow_forward_rounded, size: 14),
+                label: const Text('Details', style: TextStyle(fontSize: 12)),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildScheduleSessionList(List<Booking> filteredBookings) {
+    final activeSessions = filteredBookings.where((b) {
+      if (!_matchesStatus(b, _statusFilter)) return false;
+      return _matchesDateScope(b, _dateScope, _selectedDate);
+    }).toList()
+      ..sort((a, b) => a.start.compareTo(b.start));
+
+    if (activeSessions.isEmpty) {
+      return _buildEmptyState(
+        title: _statusFilter != CoachStatusFilter.all
+            ? 'No ${_statusFilter.label.toLowerCase()} sessions found'
+            : 'No sessions scheduled',
+        message: _dateScope == CoachDateScope.selectedDay
+            ? 'No appointments are booked for ${_selectedDate.day} ${_monthNames[_selectedDate.month - 1]}.'
+            : 'No appointments match the current filter criteria.',
+        actionLabel:
+            _activeFilterCount > 0 ? 'Clear filters' : 'Choose another date',
+        onAction: _activeFilterCount > 0 ? _clearFilters : _pickDate,
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Column(
+        children: activeSessions.map((b) {
+          final record = widget.recordFor?.call(b.id);
+          return _SessionAppointmentCard(
+            booking: b,
+            record: record,
+            serverNowMillis: _nowMillis,
+            statusLabel: widget.statusLabels[b.id],
+            onTap: () => _openDetails(b),
+            onMessage:
+                widget.onMessage != null ? () => widget.onMessage!(b) : null,
+            onNotes: widget.onNotes != null ? () => widget.onNotes!(b) : null,
+            onCancel:
+                widget.onCancel != null ? () => widget.onCancel!(b) : null,
+          );
+        }).toList(),
+      ),
+    );
+  }
+
+  Widget _buildHistorySection(List<Booking> filteredBookings) {
+    final historySessions = filteredBookings.where((b) {
+      if (!_isSessionHistory(b)) return false;
+      if (_historySubFilter == 'Completed') {
+        final record = widget.recordFor?.call(b.id);
+        return record?.rawStatus == 'completed' ||
+            b.status == BookingStatus.completed;
+      }
+      if (_historySubFilter == 'Cancelled') {
+        final record = widget.recordFor?.call(b.id);
+        return record?.rawStatus == 'cancelled' ||
+            b.status == BookingStatus.cancelled;
+      }
+      if (_historySubFilter == 'Expired') {
+        final record = widget.recordFor?.call(b.id);
+        return record?.rawStatus == 'expired' ||
+            (b.status == BookingStatus.pending &&
+                record != null &&
+                record.holdExpiresAtMillis <= _nowMillis);
+      }
+      return true;
+    }).toList()
+      ..sort((a, b) => b.start.compareTo(a.start)); // newest first
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Sub-filter chips for History
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: ['All', 'Completed', 'Cancelled', 'Expired'].map((sub) {
+                final isSelected = _historySubFilter == sub;
+                return Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: FilterChip(
+                    label: Text(sub),
+                    selected: isSelected,
+                    selectedColor: AppColors.primaryTint,
+                    backgroundColor: AppColors.surface,
+                    labelStyle: TextStyle(
+                      fontSize: 12,
+                      fontWeight:
+                          isSelected ? FontWeight.w700 : FontWeight.w500,
+                      color: isSelected ? AppColors.primary : AppColors.inkSoft,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      side: BorderSide(
+                        color:
+                            isSelected ? AppColors.primary : AppColors.hairline,
+                      ),
+                    ),
+                    onSelected: (_) {
+                      setState(() => _historySubFilter = sub);
+                    },
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
+        ),
+
+        if (historySessions.isEmpty)
+          _buildEmptyState(
+            title: 'No past sessions',
+            message:
+                'You have no past ${_historySubFilter == "All" ? "" : _historySubFilter.toLowerCase()} sessions recorded.',
+            actionLabel: 'Return to Schedule',
+            onAction: () => setState(() => _currentTab = _RosterTab.schedule),
+          )
+        else
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Column(
+              children: historySessions.map((b) {
+                final record = widget.recordFor?.call(b.id);
+                return _SessionAppointmentCard(
+                  booking: b,
+                  record: record,
+                  serverNowMillis: _nowMillis,
+                  statusLabel: widget.statusLabels[b.id],
+                  onTap: () => _openDetails(b),
+                  onMessage: widget.onMessage != null
+                      ? () => widget.onMessage!(b)
+                      : null,
+                  onNotes:
+                      widget.onNotes != null ? () => widget.onNotes!(b) : null,
+                  onCancel: widget.onCancel != null
+                      ? () => widget.onCancel!(b)
+                      : null,
+                );
+              }).toList(),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildEmptyState({
+    required String title,
+    required String message,
+    required String actionLabel,
+    required VoidCallback onAction,
+  }) {
+    return Container(
+      margin: const EdgeInsets.all(24),
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 36),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.hairline),
+      ),
+      child: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: const BoxDecoration(
+                color: AppColors.surfaceAlt,
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.event_busy_rounded,
+                size: 32,
+                color: AppColors.inkSoft,
+              ),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              title,
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.ink,
+                  ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 6),
+            Text(
+              message,
+              style: const TextStyle(
+                fontSize: 13,
+                color: AppColors.inkSoft,
+                height: 1.4,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 20),
+            OutlinedButton(
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppColors.primary,
+                side: const BorderSide(color: AppColors.primary),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+              onPressed: onAction,
+              child: Text(actionLabel),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// SUB-WIDGETS & PRESENTATION COMPONENTS
+// ---------------------------------------------------------------------------
+
+class _TabButton extends StatelessWidget {
+  const _TabButton({
+    required this.title,
+    required this.icon,
+    required this.isSelected,
+    required this.onTap,
+  });
+
+  final String title;
+  final IconData icon;
+  final bool isSelected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(9),
+      child: Container(
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: isSelected ? Colors.white : Colors.transparent,
+          borderRadius: BorderRadius.circular(9),
+          boxShadow: isSelected
+              ? [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: .06),
+                    blurRadius: 4,
+                    offset: const Offset(0, 1),
+                  ),
+                ]
+              : null,
+        ),
+        child: FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  icon,
+                  size: 16,
+                  color: isSelected ? AppColors.primary : AppColors.inkSoft,
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  title,
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                    color: isSelected ? AppColors.primary : AppColors.inkSoft,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _DayRailCell extends StatelessWidget {
+  const _DayRailCell({
+    required this.weekday,
+    required this.dayNumber,
+    required this.isSelected,
+    required this.isToday,
+    required this.hasSession,
+    required this.onTap,
+  });
+
+  final String weekday;
+  final String dayNumber;
+  final bool isSelected;
+  final bool isToday;
+  final bool hasSession;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        width: 56,
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? AppColors.primary
+              : isToday
+                  ? AppColors.primaryTint
+                  : AppColors.surface,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: isSelected
+                ? AppColors.primary
+                : isToday
+                    ? AppColors.primary.withValues(alpha: .3)
+                    : AppColors.hairline,
+          ),
+        ),
+        child: FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(
+                weekday,
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+                  color: isSelected
+                      ? Colors.white.withValues(alpha: .85)
+                      : AppColors.inkSoft,
+                ),
+              ),
+              const SizedBox(height: 3),
+              Text(
+                dayNumber,
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w800,
+                  color: isSelected
+                      ? Colors.white
+                      : isToday
+                          ? AppColors.primary
+                          : AppColors.ink,
+                ),
+              ),
+              const SizedBox(height: 3),
+              Container(
+                width: 5,
+                height: 5,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: hasSession
+                      ? (isSelected ? Colors.white : AppColors.primary)
+                      : Colors.transparent,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SummaryColumn extends StatelessWidget {
+  const _SummaryColumn({
+    required this.value,
+    required this.label,
+    required this.color,
+  });
+
+  final String value;
+  final String label;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return FittedBox(
+      fit: BoxFit.scaleDown,
+      child: Column(
+        children: [
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w800,
+              color: color,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            label,
+            style: const TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: AppColors.inkSoft,
             ),
           ),
         ],
@@ -591,33 +1659,373 @@ class _TimelineRow extends StatelessWidget {
   }
 }
 
-Color _statusColor(BookingStatus status) {
-  switch (status) {
-    case BookingStatus.confirmed:
-    case BookingStatus.completed:
-      return AppColors.success;
-    case BookingStatus.pending:
-      return AppColors.warning;
-    case BookingStatus.cancelled:
+/// Compact (~130–160dp) Session Appointment Card
+class _SessionAppointmentCard extends StatelessWidget {
+  const _SessionAppointmentCard({
+    required this.booking,
+    this.record,
+    required this.serverNowMillis,
+    this.statusLabel,
+    required this.onTap,
+    this.onMessage,
+    this.onNotes,
+    this.onCancel,
+  });
+
+  final Booking booking;
+  final PersistedBookingRecord? record;
+  final int serverNowMillis;
+  final String? statusLabel;
+  final VoidCallback onTap;
+  final VoidCallback? onMessage;
+  final VoidCallback? onNotes;
+  final VoidCallback? onCancel;
+
+  bool get _isEnded {
+    if (record != null) return record!.endAtMillis <= serverNowMillis;
+    return booking.start
+            .add(Duration(minutes: booking.durationMin))
+            .millisecondsSinceEpoch <=
+        serverNowMillis;
+  }
+
+  bool get _isInProgress {
+    final start = record?.startAtMillis ?? booking.start.millisecondsSinceEpoch;
+    final end = record?.endAtMillis ??
+        booking.start
+            .add(Duration(minutes: booking.durationMin))
+            .millisecondsSinceEpoch;
+    return serverNowMillis >= start && serverNowMillis < end;
+  }
+
+  bool get _canCancel {
+    if (record != null) {
+      return record!.rawStatus == 'confirmed' && !_isEnded;
+    }
+    return booking.status == BookingStatus.confirmed && !_isEnded;
+  }
+
+  Color _statusColor(BookingStatus status, String? rawStatus) {
+    if (rawStatus == 'cancelled' || status == BookingStatus.cancelled) {
       return AppColors.danger;
+    }
+    if (rawStatus == 'expired') return AppColors.inkSoft;
+    if (rawStatus == 'completed' || status == BookingStatus.completed) {
+      return AppColors.accent;
+    }
+    if (_isInProgress) return AppColors.primary;
+    if (rawStatus == 'confirmed' || status == BookingStatus.confirmed) {
+      return AppColors.success;
+    }
+    return AppColors.warning;
+  }
+
+  String _computedStatusLabel() {
+    if (statusLabel != null) return statusLabel!;
+    if (record?.rawStatus == 'expired') return 'Expired';
+    if (_isInProgress) return 'In Progress';
+    switch (booking.status) {
+      case BookingStatus.confirmed:
+        return _isEnded ? 'Awaiting notes' : 'Confirmed';
+      case BookingStatus.completed:
+        return 'Completed';
+      case BookingStatus.pending:
+        return 'Pending hold';
+      case BookingStatus.cancelled:
+        return 'Cancelled';
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final rawStatus = record?.rawStatus.toLowerCase();
+    final badgeColor = _statusColor(booking.status, rawStatus);
+    final statusText = _computedStatusLabel();
+
+    final start = booking.start;
+    final end = start.add(Duration(minutes: booking.durationMin));
+    final timeStr =
+        '${start.hour.toString().padLeft(2, '0')}:${start.minute.toString().padLeft(2, '0')} – ${end.hour.toString().padLeft(2, '0')}:${end.minute.toString().padLeft(2, '0')}';
+
+    final displayName =
+        booking.memberName.isNotEmpty && booking.memberName != '-'
+            ? booking.memberName
+            : (record?.memberDisplayName ?? 'Member');
+
+    final initials = displayName
+        .trim()
+        .split(' ')
+        .where((s) => s.isNotEmpty)
+        .map((s) => s[0].toUpperCase())
+        .take(2)
+        .join();
+
+    final resolvedBranch = resolveBranchLocation(
+      record?.branchId ?? booking.branch,
+    );
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: _isInProgress
+              ? AppColors.primary.withValues(alpha: .4)
+              : AppColors.hairline,
+          width: _isInProgress ? 1.5 : 1,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: .025),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(14),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(14),
+          child: Padding(
+            padding: const EdgeInsets.all(14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Header: Time & Status Pill
+                Row(
+                  children: [
+                    Icon(
+                      Icons.schedule_rounded,
+                      size: 15,
+                      color: _isInProgress
+                          ? AppColors.primary
+                          : AppColors.inkSoft,
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      timeStr,
+                      style: TextStyle(
+                        fontSize: 13.5,
+                        fontWeight: FontWeight.w700,
+                        color: _isInProgress
+                            ? AppColors.primary
+                            : AppColors.ink,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: AppColors.surfaceAlt,
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        '${booking.durationMin}m',
+                        style: const TextStyle(
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.inkSoft,
+                        ),
+                      ),
+                    ),
+                    const Spacer(),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: badgeColor.withValues(alpha: .14),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(
+                            width: 6,
+                            height: 6,
+                            decoration: BoxDecoration(
+                              color: badgeColor,
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                          const SizedBox(width: 5),
+                          Text(
+                            statusText,
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                              color: badgeColor,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+
+                // Member info row
+                Row(
+                  children: [
+                    CircleAvatar(
+                      radius: 19,
+                      backgroundColor: AppColors.primaryTint,
+                      child: Text(
+                        initials.isNotEmpty ? initials : 'M',
+                        style: const TextStyle(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.primary,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            displayName,
+                            style: const TextStyle(
+                              fontSize: 14.5,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.ink,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            '1-on-1 Consultation · $resolvedBranch',
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: AppColors.inkSoft,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+
+                // Actions bar
+                Row(
+                  children: [
+                    // Lifecycle button
+                    if (!_isEnded &&
+                        (rawStatus == 'confirmed' ||
+                            booking.status == BookingStatus.confirmed) &&
+                        onMessage != null) ...[
+                      OutlinedButton.icon(
+                        style: OutlinedButton.styleFrom(
+                          visualDensity: VisualDensity.compact,
+                          foregroundColor: AppColors.primary,
+                          side: const BorderSide(color: AppColors.hairline),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                        onPressed: onMessage,
+                        icon: const Icon(Icons.chat_bubble_outline_rounded,
+                            size: 14),
+                        label: const Text('Message',
+                            style: TextStyle(fontSize: 12)),
+                      ),
+                      const SizedBox(width: 8),
+                    ],
+
+                    if ((rawStatus == 'completed' ||
+                            (_isEnded &&
+                                (rawStatus == 'confirmed' ||
+                                    booking.status ==
+                                        BookingStatus.confirmed))) &&
+                        onNotes != null) ...[
+                      if (booking.notes != null &&
+                          booking.notes!.trim().isNotEmpty)
+                        OutlinedButton.icon(
+                          style: OutlinedButton.styleFrom(
+                            visualDensity: VisualDensity.compact,
+                            foregroundColor: AppColors.primary,
+                            side: const BorderSide(color: AppColors.hairline),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                          ),
+                          onPressed: onNotes,
+                          icon: const Icon(Icons.sticky_note_2_outlined,
+                              size: 14),
+                          label: const Text('View notes',
+                              style: TextStyle(fontSize: 12)),
+                        )
+                      else
+                        ElevatedButton.icon(
+                          style: ElevatedButton.styleFrom(
+                            visualDensity: VisualDensity.compact,
+                            backgroundColor: AppColors.primary,
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                          ),
+                          onPressed: onNotes,
+                          icon: const Icon(Icons.edit_note_rounded, size: 14),
+                          label: const Text('Write notes',
+                              style: TextStyle(fontSize: 12)),
+                        ),
+                      const SizedBox(width: 8),
+                    ],
+
+                    TextButton.icon(
+                      style: TextButton.styleFrom(
+                        visualDensity: VisualDensity.compact,
+                        foregroundColor: AppColors.inkSoft,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                      onPressed: onTap,
+                      icon: const Icon(Icons.info_outline_rounded, size: 14),
+                      label:
+                          const Text('Details', style: TextStyle(fontSize: 12)),
+                    ),
+
+                    const Spacer(),
+
+                    // Coach cancellation button (mandatory tooltip for test matching)
+                    if (_canCancel && onCancel != null)
+                      IconButton(
+                        tooltip: 'Cancel session',
+                        icon: const Icon(
+                          Icons.cancel_outlined,
+                          size: 20,
+                          color: AppColors.danger,
+                        ),
+                        onPressed: onCancel,
+                      ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }
 
-/// Everything the coach's own booking history says about one client,
-/// computed from `coachRoster` rather than stored anywhere — the roster
-/// is the only real record of the relationship that exists in this data
-/// model, so this surfaces what's genuinely there instead of inventing
-/// demographic details the system was never given for anyone but the
-/// signed-in member.
-class _ClientStats {
-  final int sessionsTogether;
-  final int completed;
-  final int cancelled;
-  final double revenue;
-  final DateTime clientSince;
-  final String? mostRecentNote;
+// ---------------------------------------------------------------------------
+// PUBLIC CLIENT STATS HELPER
+// ---------------------------------------------------------------------------
 
-  const _ClientStats({
+/// Client statistics snapshot model used by Coach Session Details and Roster.
+class ClientStats {
+  const ClientStats({
     required this.sessionsTogether,
     required this.completed,
     required this.cancelled,
@@ -626,549 +2034,76 @@ class _ClientStats {
     required this.mostRecentNote,
   });
 
-  factory _ClientStats.of(BuildContext context, String memberName) {
-    final bookings = context
-        .read<BookingRepository>()
-        .coachRoster
-        .where((b) => b.memberName == memberName)
-        .toList()
-      ..sort((a, b) => a.start.compareTo(b.start));
-    final completed =
-        bookings.where((b) => b.status == BookingStatus.completed).toList();
-    final withNotes = [...completed]
-      ..sort((a, b) => b.start.compareTo(a.start));
-    return _ClientStats(
-      sessionsTogether: bookings.length,
-      completed: completed.length,
-      cancelled:
-          bookings.where((b) => b.status == BookingStatus.cancelled).length,
-      revenue: completed.fold(0, (sum, b) => sum + b.fee),
-      clientSince: bookings.first.start,
-      mostRecentNote: withNotes.isEmpty
-          ? null
-          : withNotes
-              .firstWhere((b) => b.notes != null, orElse: () => withNotes.first)
-              .notes,
-    );
-  }
-}
+  final int sessionsTogether;
+  final int completed;
+  final int cancelled;
+  final double revenue;
+  final DateTime clientSince;
+  final String? mostRecentNote;
 
-void _showClientSnapshot(BuildContext context, Booking booking) {
-  final stats = _ClientStats.of(context, booking.memberName);
-  const months = [
-    'Jan',
-    'Feb',
-    'Mar',
-    'Apr',
-    'May',
-    'Jun',
-    'Jul',
-    'Aug',
-    'Sep',
-    'Oct',
-    'Nov',
-    'Dec'
-  ];
-  showModalBottomSheet(
-    context: context,
-    backgroundColor: AppColors.surface,
-    shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
-    builder: (ctx) => Padding(
-      padding: EdgeInsets.fromLTRB(
-          20, 20, 20, 20 + MediaQuery.of(ctx).padding.bottom),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                width: 48,
-                height: 48,
-                decoration: BoxDecoration(
-                    color: AppColors.primaryTint,
-                    borderRadius: BorderRadius.circular(14)),
-                child: Center(
-                  child: Text(
-                    booking.memberName
-                        .split(' ')
-                        .map((w) => w[0])
-                        .take(2)
-                        .join(),
-                    style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.primary),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(booking.memberName,
-                        style: Theme.of(ctx).textTheme.titleLarge),
-                    Text(
-                      'Client since ${stats.clientSince.day} ${months[stats.clientSince.month - 1]} ${stats.clientSince.year}',
-                      style: Theme.of(ctx).textTheme.bodyMedium,
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 18),
-          Row(
-            children: [
-              Expanded(
-                  child: StatTile('${stats.sessionsTogether}', 'Together',
-                      compact: true)),
-              const SizedBox(width: 8),
-              Expanded(
-                  child: StatTile('${stats.completed}', 'Completed',
-                      compact: true)),
-              const SizedBox(width: 8),
-              Expanded(
-                  child: StatTile(
-                      'RM ${stats.revenue.toStringAsFixed(0)}', 'Revenue',
-                      compact: true, valueColor: AppColors.success)),
-            ],
-          ),
-          if (stats.mostRecentNote != null) ...[
-            const SizedBox(height: 14),
-            const Eyebrow('Most recent note'),
-            Panel(
-              background: AppColors.surfaceAlt,
-              child: Text(stats.mostRecentNote!,
-                  style: const TextStyle(fontSize: 13.5, height: 1.45)),
-            ),
-          ],
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton.icon(
-                  style:
-                      OutlinedButton.styleFrom(minimumSize: const Size(0, 46)),
-                  onPressed: () {
-                    Navigator.pop(ctx);
-                    Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                            builder: (_) =>
-                                ClientPostureScreen(name: booking.memberName)));
-                  },
-                  icon: const Icon(Icons.insights_rounded, size: 18),
-                  label: const Text('Form history'),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: FilledButton.icon(
-                  style: FilledButton.styleFrom(minimumSize: const Size(0, 46)),
-                  onPressed: () {
-                    Navigator.pop(ctx);
-                    Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                            builder: (_) =>
-                                CoachMessageThreadScreen(booking: booking)));
-                  },
-                  icon: const Icon(Icons.chat_bubble_outline_rounded, size: 18),
-                  label: const Text('Message'),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    ),
-  );
-}
+  factory ClientStats.of(
+    BuildContext context,
+    String memberName, {
+    List<Booking>? persistedList,
+  }) {
+    if (persistedList != null) {
+      final forMember =
+          persistedList.where((b) => b.memberName == memberName).toList()
+            ..sort((a, b) => a.start.compareTo(b.start));
+      final completedList =
+          forMember.where((b) => b.status == BookingStatus.completed).toList();
+      final cancelledList =
+          forMember.where((b) => b.status == BookingStatus.cancelled).toList();
+      final notesList = forMember
+          .where((b) => b.notes != null && b.notes!.trim().isNotEmpty)
+          .toList()
+        ..sort((a, b) => b.start.compareTo(a.start));
 
-/// The session card, with a status-colored left accent bar — a quick-scan
-/// cue borrowed from calendar apps — and a one-line relationship summary
-/// ("New client" / "3rd session together") computed from the coach's own
-/// booking history with this member. Tapping the member row opens the
-/// fuller client snapshot.
-///
-/// The fee/duration/branch line used to be one long `Text` that wrapped
-/// awkwardly on narrow widths; it's now a `Wrap` of small info bits,
-/// which reflows instead of overflowing. Cancel used to share the bottom
-/// action row with Form history and Message — three widgets fighting for
-/// the same width squeezed "Form history" down to an ellipsis. Cancel now
-/// lives beside the status pill in the header instead, so the action row
-/// is always exactly two buttons and never needs to shrink their labels.
-class _SessionCard extends StatelessWidget {
-  final Booking booking;
-  final bool live;
-  final String? statusLabel;
-  final Widget? details;
-  final VoidCallback? onMessage;
-  final VoidCallback? onNotes;
-  final VoidCallback? onCancel;
-  final VoidCallback? onPosture;
-  const _SessionCard(
-      {required this.booking,
-      this.live = false,
-      this.statusLabel,
-      this.details,
-      this.onMessage,
-      this.onNotes,
-      this.onCancel,
-      this.onPosture});
-
-  @override
-  Widget build(BuildContext context) {
-    final isPast = booking.start.isBefore(DateTime.now());
-    final stats = live ? null : _ClientStats.of(context, booking.memberName);
-    final relationship = live
-        ? '-'
-        : stats!.sessionsTogether <= 1
-            ? 'New client'
-            : '${_ordinal(stats.sessionsTogether)} session together';
-
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(16),
-      child: Container(
-        decoration: BoxDecoration(
-            color: AppColors.surface,
-            border: Border.all(color: AppColors.hairline)),
-        child: IntrinsicHeight(
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Container(width: 4, color: _statusColor(booking.status)),
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Expanded(
-                            child: InkWell(
-                              onTap: live
-                                  ? null
-                                  : () => _showClientSnapshot(context, booking),
-                              borderRadius: BorderRadius.circular(10),
-                              child: Row(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Container(
-                                    width: 44,
-                                    height: 44,
-                                    decoration: BoxDecoration(
-                                      color: AppColors.primaryTint,
-                                      borderRadius: BorderRadius.circular(13),
-                                    ),
-                                    child: Center(
-                                      child: Text(
-                                        booking.memberName
-                                            .split(' ')
-                                            .map((w) => w[0])
-                                            .take(2)
-                                            .join(),
-                                        style: const TextStyle(
-                                            fontSize: 15,
-                                            fontWeight: FontWeight.w700,
-                                            color: AppColors.primary),
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 14),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Text(booking.memberName,
-                                            style: Theme.of(context)
-                                                .textTheme
-                                                .titleMedium),
-                                        const SizedBox(height: 3),
-                                        Wrap(
-                                          spacing: 10,
-                                          runSpacing: 3,
-                                          crossAxisAlignment:
-                                              WrapCrossAlignment.center,
-                                          children: [
-                                            _InfoBit(
-                                                Icons.payments_outlined,
-                                                live
-                                                    ? '-'
-                                                    : 'RM ${booking.fee.toStringAsFixed(0)}'),
-                                            _InfoBit(Icons.schedule_outlined,
-                                                '${booking.durationMin} min'),
-                                            _InfoBit(Icons.location_on_outlined,
-                                                booking.branch),
-                                          ],
-                                        ),
-                                        const SizedBox(height: 4),
-                                        Row(
-                                          children: [
-                                            const Icon(Icons.badge_outlined,
-                                                size: 12,
-                                                color: AppColors.primary),
-                                            const SizedBox(width: 4),
-                                            Flexible(
-                                              child: Text(relationship,
-                                                  maxLines: 1,
-                                                  overflow:
-                                                      TextOverflow.ellipsis,
-                                                  style: const TextStyle(
-                                                      fontSize: 11.5,
-                                                      fontWeight:
-                                                          FontWeight.w600,
-                                                      color:
-                                                          AppColors.primary)),
-                                            ),
-                                          ],
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.end,
-                            children: [
-                              statusPill(statusLabel ?? booking.status.label),
-                              if (!isPast) ...[
-                                const SizedBox(height: 6),
-                                SizedBox(
-                                  width: 30,
-                                  height: 30,
-                                  child: IconButton(
-                                    padding: EdgeInsets.zero,
-                                    style: IconButton.styleFrom(
-                                      backgroundColor: AppColors.dangerTint,
-                                      foregroundColor: AppColors.danger,
-                                    ),
-                                    tooltip: 'Cancel session',
-                                    onPressed: live
-                                        ? (onCancel != null &&
-                                                booking.status ==
-                                                    BookingStatus.confirmed
-                                            ? onCancel
-                                            : null)
-                                        : () => confirmSheet(context,
-                                            title: 'Cancel this session?',
-                                            message:
-                                                'The member is notified and the slot reopens for booking. Any refund is handled separately by staff.',
-                                            confirmLabel: 'Cancel session',
-                                            destructive: true),
-                                    icon: const Icon(Icons.close_rounded,
-                                        size: 15),
-                                  ),
-                                ),
-                              ],
-                            ],
-                          ),
-                        ],
-                      ),
-                      if (details != null) details!,
-                      if (booking.notes != null) ...[
-                        const SizedBox(height: 10),
-                        Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.all(10),
-                          decoration: BoxDecoration(
-                              color: AppColors.surfaceAlt,
-                              borderRadius: BorderRadius.circular(10)),
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Icon(Icons.sticky_note_2_outlined,
-                                  size: 14, color: AppColors.inkSoft),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Text(booking.notes!,
-                                    maxLines: 2,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: const TextStyle(
-                                        fontSize: 12.5, height: 1.4)),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                      const SizedBox(height: 12),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: _ActionButton(
-                              icon: Icons.insights_rounded,
-                              label: 'Form history',
-                              filled: false,
-                              onPressed: live
-                                  ? onPosture
-                                  : () => Navigator.push(
-                                      context,
-                                      MaterialPageRoute(
-                                          builder: (_) => ClientPostureScreen(
-                                              name: booking.memberName))),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          if (isPast ||
-                              (live &&
-                                  booking.status == BookingStatus.completed))
-                            Expanded(
-                              child: _ActionButton(
-                                icon: Icons.edit_note_rounded,
-                                label: live &&
-                                        booking.status ==
-                                            BookingStatus.completed
-                                    ? 'View notes'
-                                    : 'Write notes',
-                                filled: true,
-                                onPressed: live
-                                    ? (booking.status ==
-                                                BookingStatus.confirmed ||
-                                            booking.status ==
-                                                BookingStatus.completed
-                                        ? onNotes
-                                        : null)
-                                    : () => Navigator.push(
-                                        context,
-                                        MaterialPageRoute(
-                                            builder: (_) =>
-                                                ConsultationNotesScreen(
-                                                    booking: booking))),
-                              ),
-                            )
-                          else
-                            Expanded(
-                              child: _ActionButton(
-                                icon: Icons.chat_bubble_outline_rounded,
-                                label: 'Message',
-                                filled: false,
-                                onPressed: live
-                                    ? onMessage
-                                    : () => Navigator.push(
-                                        context,
-                                        MaterialPageRoute(
-                                            builder: (_) =>
-                                                CoachMessageThreadScreen(
-                                                    booking: booking))),
-                              ),
-                            ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  String _ordinal(int n) {
-    if (n % 100 >= 11 && n % 100 <= 13) return '${n}th';
-    switch (n % 10) {
-      case 1:
-        return '${n}st';
-      case 2:
-        return '${n}nd';
-      case 3:
-        return '${n}rd';
-      default:
-        return '${n}th';
+      return ClientStats(
+        sessionsTogether: forMember.length,
+        completed: completedList.length,
+        cancelled: cancelledList.length,
+        revenue: completedList.fold(0.0, (sum, b) => sum + b.fee),
+        clientSince:
+            forMember.isNotEmpty ? forMember.first.start : DateTime.now(),
+        mostRecentNote: notesList.isEmpty ? null : notesList.first.notes,
+      );
     }
-  }
-}
 
-/// One small icon+label fact (fee, duration, branch) inside the session
-/// card's info `Wrap`. Using `Wrap` instead of one long `Text` joined
-/// with "·" means this reflows onto a second line on narrow widths
-/// instead of triggering a `Row`/`Text` overflow.
-class _InfoBit extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  const _InfoBit(this.icon, this.label);
+    try {
+      final bookings = context
+          .read<BookingRepository>()
+          .coachRoster
+          .where((b) => b.memberName == memberName)
+          .toList()
+        ..sort((a, b) => a.start.compareTo(b.start));
+      final completed =
+          bookings.where((b) => b.status == BookingStatus.completed).toList();
+      final withNotes = [...completed]
+        ..sort((a, b) => b.start.compareTo(a.start));
 
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(icon, size: 12, color: AppColors.inkSoft),
-        const SizedBox(width: 3),
-        Text(label,
-            style: const TextStyle(
-                fontSize: 11.5,
-                fontWeight: FontWeight.w500,
-                color: AppColors.inkSoft)),
-      ],
-    );
-  }
-}
-
-/// A small, icon + label action button with an explicit, non-scaling
-/// font size shared by every call site. The previous version wrapped
-/// only the longer labels in `FittedBox(scaleDown)` — the ones needing
-/// no scaling rendered at the theme's default size while the ones that
-/// did scale rendered visibly smaller, so two buttons in the same row
-/// showed different-sized text. Giving every instance the same fixed
-/// size up front removes the inconsistency instead of papering over it.
-class _ActionButton extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final bool filled;
-  final VoidCallback? onPressed;
-  const _ActionButton({
-    required this.icon,
-    required this.label,
-    required this.filled,
-    required this.onPressed,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final child = Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        Icon(icon, size: 16, color: filled ? Colors.white : AppColors.primary),
-        const SizedBox(width: 6),
-        Flexible(
-          child: Text(
-            label,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                color: filled ? Colors.white : AppColors.primary),
-          ),
-        ),
-      ],
-    );
-    return SizedBox(
-      height: 42,
-      child: filled
-          ? FilledButton(
-              style: FilledButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(horizontal: 8)),
-              onPressed: onPressed,
-              child: child,
-            )
-          : OutlinedButton(
-              style: OutlinedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(horizontal: 8)),
-              onPressed: onPressed,
-              child: child,
-            ),
-    );
+      return ClientStats(
+        sessionsTogether: bookings.length,
+        completed: completed.length,
+        cancelled:
+            bookings.where((b) => b.status == BookingStatus.cancelled).length,
+        revenue: completed.fold(0.0, (sum, b) => sum + b.fee),
+        clientSince: bookings.isEmpty ? DateTime.now() : bookings.first.start,
+        mostRecentNote: withNotes.isEmpty
+            ? null
+            : withNotes
+                .firstWhere((b) => b.notes != null, orElse: () => withNotes.first)
+                .notes,
+      );
+    } catch (_) {
+      return ClientStats(
+        sessionsTogether: 1,
+        completed: 0,
+        cancelled: 0,
+        revenue: 0.0,
+        clientSince: DateTime.now(),
+        mostRecentNote: null,
+      );
+    }
   }
 }

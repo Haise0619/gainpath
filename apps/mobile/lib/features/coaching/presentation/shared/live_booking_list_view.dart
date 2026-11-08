@@ -880,7 +880,11 @@ class _LiveBookingListViewState extends State<LiveBookingListView> {
                   onOpenMessages: widget.communication == null
                       ? null
                       : () => _openInbox(bookings),
-                  todayLocalDate: state.page?.firstLocalDate,
+                  todayLocalDate: controller.todayLocalDate ??
+                      state.page?.firstLocalDate,
+                  serverNowMillis: state.page?.serverNowMillis,
+                  recordFor: (id) => recordMap[id],
+                  onRefresh: _refreshCurrent,
                   onMessage:
                       widget.communication == null ? null : _openConversation,
                   persistedBookings: bookings,
