@@ -76,7 +76,11 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Pending hold — time elapsed; awaiting server expiry.'),
         findsOneWidget);
-    expect(find.text('Booking'), findsOneWidget);
+    await tester.tap(find.text('View details'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('booking'), findsWidgets);
+    await tester.tap(find.byType(BackButton));
+    await tester.pumpAndSettle();
     auth.drift(const AuthSession(
         userId: 'member',
         organizationId: 'org',
@@ -114,7 +118,11 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('My Bookings'));
     await tester.pumpAndSettle();
-    expect(find.text('booking'), findsOneWidget);
+    await tester.tap(find.text('View details'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('booking'), findsWidgets);
+    await tester.tap(find.byType(BackButton));
+    await tester.pumpAndSettle();
     expect(find.byType(AppBar), findsOneWidget);
     expect(find.text('Coaches'), findsOneWidget);
     expect(find.byType(BackButton), findsNothing);

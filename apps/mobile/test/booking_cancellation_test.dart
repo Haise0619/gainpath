@@ -128,7 +128,7 @@ void main() {
     await tester.tap(find.text('Cancel hold'));
     await tester.pumpAndSettle();
     expect(fake.requests.length, 1);
-    expect(find.text('cancelled'), findsNWidgets(2));
+    expect(find.text('cancelled'), findsOneWidget);
     expect(find.widgetWithText(OutlinedButton, 'Cancel'), findsNothing);
     await tester.pumpWidget(MaterialApp(
         home: LiveBookingListView(

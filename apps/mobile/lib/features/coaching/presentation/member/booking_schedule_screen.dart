@@ -7,6 +7,7 @@ import 'reschedule_screen.dart';
 import 'widgets/booking_card.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:gainpath_domain/coaching.dart';
+import 'package:gainpath_domain/gainpath_domain.dart' show PersistedBookingRecord;
 import 'package:gainpath_domain/identity.dart';
 
 const _cancelReasons = [
@@ -34,6 +35,11 @@ class BookingScheduleScreen extends StatefulWidget {
       this.onReview,
       this.onMessage,
       this.onFindCoach,
+      this.recordFor,
+      this.onPayment,
+      this.onNotes,
+      this.onRescheduleBooking,
+      this.onCancelBooking,
       this.header,
       this.embedded = false});
   final bool embedded;
@@ -44,6 +50,11 @@ class BookingScheduleScreen extends StatefulWidget {
   final void Function(String)? onReview;
   final void Function(Booking)? onMessage;
   final VoidCallback? onFindCoach;
+  final PersistedBookingRecord? Function(String id)? recordFor;
+  final void Function(String id)? onPayment;
+  final void Function(Booking b)? onNotes;
+  final void Function(Booking b)? onRescheduleBooking;
+  final void Function(Booking b)? onCancelBooking;
   final Widget? header;
 
   @override
@@ -255,6 +266,7 @@ class _BookingScheduleScreenState extends State<BookingScheduleScreen> {
     return Material(
       color: Colors.transparent,
       child: InkWell(
+        key: ValueKey('filter_${filter.name}'),
         onTap: () => setState(() => _historyFilter = filter),
         borderRadius: BorderRadius.circular(10),
         child: AnimatedContainer(
@@ -472,15 +484,29 @@ class _BookingScheduleScreenState extends State<BookingScheduleScreen> {
                   padding: const EdgeInsets.only(bottom: 10),
                   child: BookingCard(
                     booking: b,
+                    record: widget.recordFor?.call(b.id),
                     live: live,
                     statusLabel: widget.statusLabels[b.id],
                     details: widget.details[b.id],
-                    onReschedule: live ? null : () => _reschedule(b),
+                    onPayment: widget.onPayment != null
+                        ? () => widget.onPayment!(b.id)
+                        : null,
+                    onNotes: widget.onNotes != null
+                        ? () => widget.onNotes!(b)
+                        : null,
+                    onReschedule: live
+                        ? (widget.onRescheduleBooking != null
+                            ? () => widget.onRescheduleBooking!(b)
+                            : null)
+                        : () => _reschedule(b),
                     onCancel: live
-                        ? (widget.onCancelHold == null ||
-                                widget.statusLabels[b.id] != 'Pending hold'
-                            ? null
-                            : () => widget.onCancelHold!(b.id))
+                        ? (widget.statusLabels[b.id]?.toLowerCase().contains('pending') == true
+                            ? (widget.onCancelHold == null
+                                ? null
+                                : () => widget.onCancelHold!(b.id))
+                            : (widget.onCancelBooking != null
+                                ? () => widget.onCancelBooking!(b)
+                                : null))
                         : () => _cancel(b),
                     onMessage: live
                         ? (widget.onMessage == null
@@ -512,9 +538,13 @@ class _BookingScheduleScreenState extends State<BookingScheduleScreen> {
                       padding: const EdgeInsets.only(bottom: 10),
                       child: BookingCard(
                         booking: b,
+                        record: widget.recordFor?.call(b.id),
                         live: live,
                         statusLabel: widget.statusLabels[b.id],
                         details: widget.details[b.id],
+                        onNotes: widget.onNotes != null
+                            ? () => widget.onNotes!(b)
+                            : null,
                         onMessage: live
                             ? (widget.onMessage == null
                                 ? null
@@ -535,6 +565,7 @@ class _BookingScheduleScreenState extends State<BookingScheduleScreen> {
                       padding: const EdgeInsets.only(bottom: 10),
                       child: BookingCard(
                         booking: b,
+                        record: widget.recordFor?.call(b.id),
                         live: live,
                         statusLabel: widget.statusLabels[b.id],
                         details: widget.details[b.id],
@@ -562,9 +593,13 @@ class _BookingScheduleScreenState extends State<BookingScheduleScreen> {
                     padding: const EdgeInsets.only(bottom: 10),
                     child: BookingCard(
                       booking: b,
+                      record: widget.recordFor?.call(b.id),
                       live: live,
                       statusLabel: widget.statusLabels[b.id],
                       details: widget.details[b.id],
+                      onNotes: widget.onNotes != null
+                          ? () => widget.onNotes!(b)
+                          : null,
                       onMessage: live
                           ? (widget.onMessage == null
                               ? null
@@ -592,6 +627,7 @@ class _BookingScheduleScreenState extends State<BookingScheduleScreen> {
                     padding: const EdgeInsets.only(bottom: 10),
                     child: BookingCard(
                       booking: b,
+                      record: widget.recordFor?.call(b.id),
                       live: live,
                       statusLabel: widget.statusLabels[b.id],
                       details: widget.details[b.id],

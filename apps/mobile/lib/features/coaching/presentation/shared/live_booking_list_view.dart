@@ -406,9 +406,11 @@ class _LiveBookingListViewState extends State<LiveBookingListView> {
             }
             final labels = {
               for (final record in state.records)
-                record.bookingId: record.status == BookingStatus.pendingHold
-                    ? 'Pending hold'
-                    : record.rawStatus
+                record.bookingId: state.page != null
+                    ? bookingStatusLabel(record, state.page!.serverNowMillis)
+                    : (record.status == BookingStatus.pendingHold
+                        ? 'Pending hold'
+                        : record.rawStatus)
             };
             final header =
                 Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -621,6 +623,7 @@ class _LiveBookingListViewState extends State<LiveBookingListView> {
                 ),
               ],
             ]);
+            final recordMap = {for (final r in state.records) r.bookingId: r};
             final bookings = state.records.map((r) {
               final b = persistedBookingPresentation(r);
               b.rated = b.rated || _reviewed.containsKey(r.bookingId);
@@ -757,6 +760,21 @@ class _LiveBookingListViewState extends State<LiveBookingListView> {
                 persistedBookings: bookings,
                 statusLabels: labels,
                 header: header,
+                recordFor: (id) => recordMap[id],
+                onPayment: widget.onPayment,
+                onNotes: widget.notes != null ? (b) => _notes(b) : null,
+                onRescheduleBooking: widget.memberChanges != null
+                    ? (b) {
+                        final r = recordMap[b.id];
+                        if (r != null) _changeMemberBooking(r, reschedule: true);
+                      }
+                    : null,
+                onCancelBooking: widget.memberChanges != null
+                    ? (b) {
+                        final r = recordMap[b.id];
+                        if (r != null) _changeMemberBooking(r, reschedule: false);
+                      }
+                    : null,
                 onCancelHold: widget.cancellation == null ||
                         state.busy ||
                         action.busy ||
