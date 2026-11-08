@@ -13,7 +13,12 @@ class CoachProfileScreen extends StatelessWidget {
       this.onOpenBooking,
       this.onOpenSchedule,
       this.onRefresh,
-      this.branchNames = const {}});
+      this.branchNames = const {},
+      this.previewOnly = false,
+      this.previewRatingUnavailable = false,
+      this.previewHeader});
+  final bool previewOnly, previewRatingUnavailable;
+  final Widget? previewHeader;
   final Coach coach;
   final PublishedCoachProfile? published;
   final Widget? photo;
@@ -29,7 +34,9 @@ class CoachProfileScreen extends StatelessWidget {
         ? published!.fields.yearsExperience
         : coach.yearsExperience;
     final bio = (published?.fields.bio ?? coach.bio).trim();
-    final canBook = fee != null && (published == null || onOpenBooking != null);
+    final canBook = !previewOnly &&
+        fee != null &&
+        (published == null || onOpenBooking != null);
     final location = memberCoachLocation(published?.branchIds ?? const [],
         branchNames: branchNames);
     void book() {
@@ -52,16 +59,22 @@ class CoachProfileScreen extends StatelessWidget {
           child,
         ]));
     return Scaffold(
-      appBar: AppBar(title: const Text('Coach profile'), actions: [
-        if (onRefresh != null)
-          IconButton(
-              tooltip: 'Refresh profile',
-              onPressed: onRefresh,
-              icon: const Icon(Icons.refresh_rounded)),
-      ]),
+      appBar: AppBar(
+          title: Text(previewOnly ? 'Profile preview' : 'Coach profile'),
+          actions: [
+            if (onRefresh != null)
+              IconButton(
+                  tooltip: 'Refresh profile',
+                  onPressed: onRefresh,
+                  icon: const Icon(Icons.refresh_rounded)),
+          ]),
       body: ListView(
           padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
           children: [
+            if (previewHeader != null) ...[
+              previewHeader!,
+              const SizedBox(height: 16)
+            ],
             Container(
                 padding: const EdgeInsets.all(18),
                 decoration: BoxDecoration(
@@ -118,7 +131,10 @@ class CoachProfileScreen extends StatelessWidget {
                                     : AppColors.accentDark),
                             const SizedBox(width: 6),
                             Expanded(
-                                child: Text(memberCoachRating(coach, published),
+                                child: Text(
+                                    previewOnly && previewRatingUnavailable
+                                        ? 'Rating unavailable'
+                                        : memberCoachRating(coach, published),
                                     style: text.bodyMedium?.copyWith(
                                         color: colors.onSurface,
                                         fontWeight: FontWeight.w700))),
@@ -197,7 +213,7 @@ class CoachProfileScreen extends StatelessWidget {
                       'Choose your duration and time in booking. Availability, eligibility and the final price are checked there.',
                       style: text.bodySmall
                           ?.copyWith(color: colors.onSurfaceVariant)),
-                  if (onOpenSchedule != null) ...[
+                  if (!previewOnly && onOpenSchedule != null) ...[
                     const SizedBox(height: 14),
                     SizedBox(
                         width: double.infinity,
@@ -239,11 +255,13 @@ class CoachProfileScreen extends StatelessWidget {
                     style:
                         FilledButton.styleFrom(minimumSize: const Size(0, 48)),
                     child: const Text('Book a session'));
-                final reason = fee == null
-                    ? 'Booking unavailable until a session price is published.'
-                    : onOpenBooking == null && published != null
-                        ? 'Booking is unavailable in this view.'
-                        : null;
+                final reason = previewOnly
+                    ? 'Preview only — booking actions are disabled.'
+                    : fee == null
+                        ? 'Booking unavailable until a session price is published.'
+                        : onOpenBooking == null && published != null
+                            ? 'Booking is unavailable in this view.'
+                            : null;
                 return Column(
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.start,

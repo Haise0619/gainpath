@@ -34,6 +34,10 @@ class _CoachAccountScreenState extends State<CoachAccountScreen> {
     ..reload();
   bool current() => (widget.isCurrent ?? widget.accountRepository.isCurrent)();
   int? approvedCount, pendingCount;
+  CoachAccountMetrics? accountMetrics;
+  bool metricsLoading = false;
+  String? metricsError;
+  int metricsGeneration = 0;
   bool? credentialsVerified;
   String? cachedPhotoPath;
   int? cachedPhotoRevision;
@@ -42,6 +46,33 @@ class _CoachAccountScreenState extends State<CoachAccountScreen> {
   void initState() {
     super.initState();
     loadCertificationSummary();
+    loadMetrics();
+  }
+
+  Future<void> loadMetrics() async {
+    final repository = widget.accountRepository;
+    if (repository is! CoachAccountMetricsSource || !current()) return;
+    final generation = ++metricsGeneration;
+    setState(() {
+      metricsLoading = true;
+      metricsError = null;
+    });
+    try {
+      final metrics =
+          await (repository as CoachAccountMetricsSource).loadMetrics();
+      if (!mounted || !current() || generation != metricsGeneration) return;
+      setState(() {
+        accountMetrics = metrics;
+        metricsLoading = false;
+      });
+    } catch (_) {
+      if (!mounted || !current() || generation != metricsGeneration) return;
+      setState(() {
+        accountMetrics = null;
+        metricsLoading = false;
+        metricsError = 'Statistics unavailable. Refresh to retry.';
+      });
+    }
   }
 
   Future<void> loadCertificationSummary() async {
@@ -77,6 +108,7 @@ class _CoachAccountScreenState extends State<CoachAccountScreen> {
     if (mounted && current()) {
       await controller.reload();
       await loadCertificationSummary();
+      await loadMetrics();
     }
   }
 
@@ -85,6 +117,7 @@ class _CoachAccountScreenState extends State<CoachAccountScreen> {
     cachedPhoto = null;
     await controller.reload();
     await loadCertificationSummary();
+    await loadMetrics();
   }
 
   Future<Uint8List?> photoFor(String? path, int revision) {
@@ -108,7 +141,7 @@ class _CoachAccountScreenState extends State<CoachAccountScreen> {
     final verified =
         credentialsVerified ?? publication?.certificationVerified ?? false;
     final published = publication?.isPublished == true && verified;
-    final metrics = widget.accountRepository.metrics;
+    final metrics = accountMetrics ?? widget.accountRepository.metrics;
     return CoachAccountData(
         name: fields?.displayName ?? '-',
         specialty: fields?.specialty ?? '-',
@@ -117,9 +150,16 @@ class _CoachAccountScreenState extends State<CoachAccountScreen> {
                     widget.accountRepository.publicAvatarUrl != null
                 ? NetworkImage(widget.accountRepository.publicAvatarUrl!)
                 : null),
-        branch: metrics.branch,
-        rating: metrics.rating?.toString(),
-        sessions: metrics.sessions?.toString(),
+        branch: metrics.branch ??
+            (metricsLoading ? 'Loading branch' : 'Branch unavailable'),
+        rating: metrics.rating?.toStringAsFixed(1) ??
+            (metrics.reviews == 0
+                ? 'Not rated'
+                : metricsLoading
+                    ? 'Loading'
+                    : 'Unavailable'),
+        sessions: metrics.sessions?.toString() ??
+            (metricsLoading ? 'Loading' : 'Unavailable'),
         reviews: metrics.reviews?.toString(),
         verified: verified,
         published: published && !draftPreview,
@@ -151,6 +191,7 @@ class _CoachAccountScreenState extends State<CoachAccountScreen> {
                 : 'Saved draft / pending Admin publication. Previous public content remains until Admin republishes or deactivates.',
         bio: fields?.bio,
         tags: fields?.specializationTags ?? const [],
+        branchNames: metrics.branchNames,
         fee: fields?.consultationFeeMinor == null
             ? null
             : 'MYR ${(fields!.consultationFeeMinor! / 100).toStringAsFixed(2)}');
@@ -178,7 +219,26 @@ class _CoachAccountScreenState extends State<CoachAccountScreen> {
       data = dataFor(
           state, publication.fields, bytes == null ? null : MemoryImage(bytes));
     }
+    PublishedCoachProfile snapshot(CoachProfessionalFields fields) =>
+        PublishedCoachProfile(
+            id: state.profile!.id,
+            fields: fields,
+            revision: state.profile!.revision,
+            sourceRevision: state.profile!.revision,
+            status: 'inactive',
+            branchIds:
+                (accountMetrics?.branchNames.keys ?? const <String>[]).toList(),
+            createdAtMillis: state.profile!.createdAtMillis,
+            updatedAtMillis: state.profile!.updatedAtMillis,
+            publishedAtMillis: 0,
+            certificationVerified: draft.verified,
+            approvedCertificationCount: draft.approvedCertifications ?? 0,
+            averageRating: accountMetrics?.rating,
+            reviewCount: accountMetrics?.reviews ?? 0);
     final child = CoachAccountProfilePreview(
+        profile: (publication ?? snapshot(state.profile!.fields))
+            .withRatings(accountMetrics?.rating, accountMetrics?.reviews ?? 0),
+        draftProfile: snapshot(state.profile!.fields),
         data: data,
         label: publication == null
             ? 'Owner draft preview — not published'
@@ -254,12 +314,13 @@ class _CoachAccountScreenState extends State<CoachAccountScreen> {
                   return CoachAccountPresentation(
                       data: data,
                       loading: state.status == CoachProfileStatus.loading,
-                      message: state.message,
+                      message: metricsError ?? state.message,
                       onRefresh: refresh,
                       onSignOut: signOut,
-                      onPreview: ready && state.profile != null
-                          ? () => preview(state)
-                          : null,
+                      onPreview:
+                          ready && state.profile != null && !metricsLoading
+                              ? () => preview(state)
+                              : null,
                       onEdit: ready ? openEditor : null,
                       onPhoto: ready ? openEditor : null,
                       onCertifications: ready

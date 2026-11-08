@@ -1,3 +1,6 @@
+import 'package:gainpath_domain/identity.dart';
+import '../../../coaching/presentation/shared/coach_profile_screen.dart';
+import '../../../coaching/presentation/shared/published_coach_presentation.dart';
 import 'package:flutter/material.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
 
@@ -20,7 +23,9 @@ class CoachAccountData {
       this.publicationStatus,
       this.bio,
       this.tags = const [],
-      this.fee});
+      this.fee,
+      this.branchNames = const {}});
+  final Map<String, String> branchNames;
   final String name, specialty, directoryLabel;
   final String? branch,
       rating,
@@ -83,7 +88,8 @@ class CoachAccountPresentation extends StatelessWidget {
                       valueColor: AppColors.accent)),
               const SizedBox(width: 10),
               Expanded(
-                  child: _CoachSummaryTile(data.sessions ?? '-', 'Sessions')),
+                  child: _CoachSummaryTile(
+                      data.sessions ?? 'Unavailable', 'Completed')),
               const SizedBox(width: 10),
               Expanded(
                   child:
@@ -280,9 +286,13 @@ class CoachProfessionalHeader extends StatelessWidget {
                           fontWeight: FontWeight.w600,
                           fontSize: 13.5)),
                 ),
-                Text('${data.reviews ?? '-'} reviews',
-                    style:
-                        const TextStyle(color: Colors.white70, fontSize: 12.5)),
+                Flexible(
+                    child: Text(
+                        data.reviews == null
+                            ? 'Reviews unavailable'
+                            : '${data.reviews} ${data.reviews == '1' ? 'review' : 'reviews'}',
+                        style: const TextStyle(
+                            color: Colors.white70, fontSize: 12.5))),
               ],
             ),
           ),
@@ -345,30 +355,63 @@ class CoachProfessionalDetails extends StatelessWidget {
 }
 
 /// Owner-only preview reuses the same card and fields as the account hub.
-class CoachAccountProfilePreview extends StatelessWidget {
+class CoachAccountProfilePreview extends StatefulWidget {
   const CoachAccountProfilePreview(
-      {super.key, required this.data, required this.label, this.draft});
+      {super.key,
+      required this.data,
+      required this.label,
+      required this.profile,
+      required this.draftProfile,
+      this.draft});
   final CoachAccountData data;
   final String label;
   final CoachAccountData? draft;
+  final PublishedCoachProfile profile, draftProfile;
   @override
-  Widget build(BuildContext context) => Scaffold(
-      appBar: AppBar(title: const Text('Profile preview')),
-      body: PageBody(children: [
-        Text(label),
-        const SizedBox(height: 12),
-        CoachProfessionalHeader(data: data),
-        const SizedBox(height: 16),
-        CoachProfessionalDetails(data: data),
-        if (draft != null) ...[
-          const SizedBox(height: 20),
-          const Text('Owner draft preview — pending Admin publication'),
+  State<CoachAccountProfilePreview> createState() =>
+      _CoachAccountProfilePreviewState();
+}
+
+class _CoachAccountProfilePreviewState
+    extends State<CoachAccountProfilePreview> {
+  bool showDraft = false;
+  @override
+  Widget build(BuildContext context) {
+    final profile = showDraft ? widget.draftProfile : widget.profile;
+    final data = showDraft ? widget.draft! : widget.data;
+    return CoachProfileScreen(
+      coach: publishedCoachPresentation(profile),
+      published: profile,
+      branchNames: data.branchNames,
+      previewOnly: true,
+      previewRatingUnavailable: data.reviews == null,
+      photo: data.photo == null
+          ? const Icon(Icons.person)
+          : Image(
+              image: data.photo!,
+              fit: BoxFit.cover,
+              errorBuilder: (_, error, stack) => const Icon(Icons.person)),
+      previewHeader:
+          Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text(showDraft
+            ? 'Owner draft preview — pending Admin publication'
+            : widget.label),
+        if (widget.draft != null) ...[
           const SizedBox(height: 12),
-          CoachProfessionalHeader(data: draft!),
-          const SizedBox(height: 16),
-          CoachProfessionalDetails(data: draft!)
-        ],
-      ]));
+          Wrap(spacing: 8, children: [
+            ChoiceChip(
+                label: const Text('Published version'),
+                selected: !showDraft,
+                onSelected: (_) => setState(() => showDraft = false)),
+            ChoiceChip(
+                label: const Text('Draft version'),
+                selected: showDraft,
+                onSelected: (_) => setState(() => showDraft = true)),
+          ])
+        ]
+      ]),
+    );
+  }
 }
 
 class _CoachSummaryTile extends StatelessWidget {
@@ -390,6 +433,9 @@ class _CoachSummaryTile extends StatelessWidget {
         FittedBox(
             fit: BoxFit.scaleDown,
             child: Text(label,
-                maxLines: 1, style: Theme.of(context).textTheme.bodySmall))
+                maxLines: 1,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    fontFamily:
+                        Theme.of(context).textTheme.bodyMedium?.fontFamily)))
       ]));
 }

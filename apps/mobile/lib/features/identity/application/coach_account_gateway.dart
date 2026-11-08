@@ -25,10 +25,65 @@ class CoachCertificationDetail {
 
 class CoachAccountMetrics {
   const CoachAccountMetrics(
-      {this.branch, this.rating, this.sessions, this.reviews});
+      {this.branch,
+      this.rating,
+      this.sessions,
+      this.reviews,
+      this.branchNames = const {}});
   final String? branch;
   final double? rating;
   final int? sessions, reviews;
+  final Map<String, String> branchNames;
+  factory CoachAccountMetrics.fromJson(
+      Map<String, dynamic> data, String coachId) {
+    final records = data['records'], summary = data['accountSummary'];
+    if (data['schemaVersion'] != 1 ||
+        records is! List ||
+        records.length != 1 ||
+        records.single is! Map ||
+        summary is! Map) {
+      throw const FormatException('Invalid account summary.');
+    }
+    final r = records.single as Map,
+        count = r['reviewCount'],
+        rating = r['averageRating'],
+        sessions = summary['completedSessions'],
+        branches = summary['branches'];
+    if (r['coachId'] != coachId ||
+        count is! int ||
+        count < 0 ||
+        sessions is! int ||
+        sessions < 0 ||
+        branches is! List ||
+        (count == 0
+            ? rating != null
+            : rating is! num || !rating.isFinite || rating < 1 || rating > 5)) {
+      throw const FormatException('Invalid account statistics.');
+    }
+    final names = <String, String>{};
+    for (final b in branches) {
+      if (b is! Map ||
+          b['id'] is! String ||
+          (b['name'] != null && b['name'] is! String)) {
+        throw const FormatException('Invalid branch.');
+      }
+      if (b['name'] is String && (b['name'] as String).trim().isNotEmpty) {
+        names[b['id'] as String] = (b['name'] as String).trim();
+      }
+    }
+    return CoachAccountMetrics(
+        branch: names.isEmpty
+            ? 'No branch name available'
+            : names.values.join(' · '),
+        rating: (rating as num?)?.toDouble(),
+        sessions: sessions,
+        reviews: count,
+        branchNames: Map.unmodifiable(names));
+  }
+}
+
+abstract interface class CoachAccountMetricsSource {
+  Future<CoachAccountMetrics> loadMetrics();
 }
 
 /// Data/capabilities only. Every backend uses the same Module 8 screen classes.

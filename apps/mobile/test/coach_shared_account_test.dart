@@ -88,7 +88,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byType(CoachAccountScreen), findsOneWidget);
     expect(find.byType(CoachAccountPresentation), findsOneWidget);
-    expect(find.text('-'), findsWidgets);
+    expect(find.text('Unavailable'), findsWidgets);
     expect(find.byType(CoachProfessionalDetails), findsNothing);
     expect(tester.takeException(), isNull);
     await snapshot(tester, boundary, 'canonical-firebase-profile');
@@ -118,6 +118,8 @@ void main() {
     await snapshot(tester, boundary, 'canonical-draft-preview');
     await tester.pageBack();
     await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(find.text('Bio & specialties'), 200,
+        scrollable: find.byType(Scrollable).first);
     await tester.tap(find.text('Bio & specialties'));
     await tester.pumpAndSettle();
     expect(find.byType(EditCoachProfileScreen), findsOneWidget);

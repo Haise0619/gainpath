@@ -14,7 +14,8 @@ import 'firebase_password_actions.dart';
 import 'firebase_coach_direct_reads.dart';
 import 'firebase_function_transport.dart';
 
-class FirebaseCoachAccountRepository implements CoachAccountGateway {
+class FirebaseCoachAccountRepository
+    implements CoachAccountGateway, CoachAccountMetricsSource {
   FirebaseCoachAccountRepository(
       {required this.scope,
       required this.isCurrent,
@@ -39,7 +40,9 @@ class FirebaseCoachAccountRepository implements CoachAccountGateway {
   final FirebaseStorage? _providedStorage;
   final CoachDirectReads? _providedDirectReads;
   late final CoachDirectReads? _directReads = _providedDirectReads ??
-      (directCoachReadsEnabled && scope.datasetScope == null && _providedFunctions == null
+      (directCoachReadsEnabled &&
+              scope.datasetScope == null &&
+              _providedFunctions == null
           ? firebaseCoachDirectReads(
               scope: scope, checkSession: check, auth: _auth)
           : null);
@@ -52,6 +55,17 @@ class FirebaseCoachAccountRepository implements CoachAccountGateway {
   bool get passwordManagementAvailable => true;
   @override
   CoachAccountMetrics get metrics => const CoachAccountMetrics();
+  @override
+  Future<CoachAccountMetrics> loadMetrics() async {
+    check();
+    final data = await command('getCoachRatingsCommand', {
+      'coachIds': [scope.userId],
+      'includeAccountSummary': true
+    });
+    check();
+    return CoachAccountMetrics.fromJson(data, scope.userId);
+  }
+
   late final FirebasePasswordActions _passwordActions =
       FirebasePasswordActions(scope: scope, auth: _auth);
   @override
@@ -96,7 +110,8 @@ class FirebaseCoachAccountRepository implements CoachAccountGateway {
       [Map<String, dynamic> values = const {}]) async {
     check();
     try {
-      final result = await firebaseScopedCallable(scope, name, functions: _providedFunctions)
+      final result = await firebaseScopedCallable(scope, name,
+              functions: _providedFunctions)
           .call<Map<String, dynamic>>({
         'schemaVersion': 1,
         'organizationId': scope.organizationId,
@@ -255,8 +270,7 @@ class FirebaseCoachAccountRepository implements CoachAccountGateway {
   Future<Uint8List?> loadProfilePhoto(String? photoPath) async {
     check();
     if (photoPath == null) return null;
-    final prefix =
-        '${scope.dataRootPath}/coachProfilePhotos/${scope.userId}/';
+    final prefix = '${scope.dataRootPath}/coachProfilePhotos/${scope.userId}/';
     if (!photoPath.startsWith(prefix) ||
         !RegExp(r'^[a-f0-9]{32}$')
             .hasMatch(photoPath.substring(prefix.length))) {

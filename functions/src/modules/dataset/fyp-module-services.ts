@@ -93,7 +93,7 @@ export async function fypModuleRead(operation: string, request: InsightsRequest,
   let result: unknown;
   switch (operation) {
     case 'module/getCoachRatingsCommand':
-      result = await coachRatings(store, auth, d, {aggregate: async (organizationId, coachId) => {
+      result = await coachRatings(store, auth, d, {countCompleted: async (organizationId, coachId) => { checkOrg(organizationId); return (await deps.db.collection(`${root}/bookings`).where('coachId','==',coachId).where('status','==','completed').count().get()).data().count; }, aggregate: async (organizationId, coachId) => {
         checkOrg(organizationId); requiredIdentifier(coachId, 'coachId');
         const data = (await deps.db.collection(`${root}/coaches/${coachId}/reviews`).where('stars', '>=', 1).where('stars', '<=', 5)
           .aggregate({count: AggregateField.count(), total: AggregateField.sum('stars')}).get()).data();
