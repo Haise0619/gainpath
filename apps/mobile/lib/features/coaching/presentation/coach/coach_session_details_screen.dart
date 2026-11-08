@@ -1,17 +1,54 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:gainpath_domain/coaching.dart';
-import 'package:gainpath_domain/gainpath_domain.dart' show PersistedBookingRecord;
+import 'package:gainpath_domain/gainpath_domain.dart'
+    show PersistedBookingRecord;
 import 'package:gainpath_ui/gainpath_ui.dart';
 import '../member/booking_details_screen.dart' show resolveBranchLocation;
 import 'client_posture_screen.dart';
 import 'consultation_notes_screen.dart';
 import 'message_inbox_screen.dart';
 import 'roster_screen.dart' show ClientStats;
+import '../shared/coach_session_presentation.dart';
+import '../shared/booking_status_clock.dart';
+
+class CoachSessionDetailsScreen extends StatelessWidget {
+  const CoachSessionDetailsScreen(
+      {super.key,
+      required this.booking,
+      this.record,
+      this.live = false,
+      this.statusLabel,
+      this.onMessage,
+      this.onNotes,
+      this.onCancel,
+      this.onPosture,
+      this.serverNowMillis});
+  final Booking booking;
+  final PersistedBookingRecord? record;
+  final bool live;
+  final String? statusLabel;
+  final VoidCallback? onMessage, onNotes, onCancel, onPosture;
+  final int? serverNowMillis;
+  @override
+  Widget build(BuildContext context) => BookingStatusClock(
+      serverNowMillis: serverNowMillis,
+      boundaryMillis: coachSessionBoundaries(booking, record),
+      builder: (context, now) => _CoachSessionDetailsContent(
+          booking: booking,
+          record: record,
+          live: live,
+          statusLabel: statusLabel,
+          onMessage: onMessage,
+          onNotes: onNotes,
+          onCancel: onCancel,
+          onPosture: onPosture,
+          serverNowMillis: now));
+}
 
 /// Detailed Session & Member Management screen for coaches.
 /// Structured into 9 distinct sections following professional appointment patterns.
-class CoachSessionDetailsScreen extends StatelessWidget {
+class _CoachSessionDetailsContent extends StatelessWidget {
   final Booking booking;
   final PersistedBookingRecord? record;
   final bool live;
@@ -22,8 +59,7 @@ class CoachSessionDetailsScreen extends StatelessWidget {
   final VoidCallback? onPosture;
   final int? serverNowMillis;
 
-  const CoachSessionDetailsScreen({
-    super.key,
+  const _CoachSessionDetailsContent({
     required this.booking,
     this.record,
     this.live = false,
@@ -74,44 +110,12 @@ class CoachSessionDetailsScreen extends StatelessWidget {
     return '$sh:$sm - $eh:$em';
   }
 
-  Color _statusColor(BookingStatus status) {
-    switch (status) {
-      case BookingStatus.confirmed:
-        return AppColors.success;
-      case BookingStatus.completed:
-        return AppColors.accent;
-      case BookingStatus.pending:
-        return AppColors.warning;
-      case BookingStatus.cancelled:
-        return AppColors.danger;
-    }
-  }
-
-  bool get _hasSessionEnded {
-    final now = serverNowMillis ?? DateTime.now().millisecondsSinceEpoch;
-    if (record != null) {
-      return record!.endAtMillis <= now;
-    }
-    final end = booking.start.add(Duration(minutes: booking.durationMin));
-    return end.millisecondsSinceEpoch <= now;
-  }
-
-  bool get _canWriteNotes {
-    if (booking.status == BookingStatus.cancelled) return false;
-    if (record != null) {
-      return record!.rawStatus == 'completed' ||
-          (record!.rawStatus == 'confirmed' && _hasSessionEnded);
-    }
-    return booking.status == BookingStatus.completed ||
-        (booking.status == BookingStatus.confirmed && _hasSessionEnded);
-  }
-
-  bool get _canCancel {
-    if (record != null) {
-      return record!.rawStatus == 'confirmed' && !_hasSessionEnded;
-    }
-    return booking.status == BookingStatus.confirmed && !_hasSessionEnded;
-  }
+  CoachSessionPhase get _phase => coachSessionPhase(booking,
+      record: record,
+      serverNowMillis:
+          serverNowMillis ?? DateTime.now().millisecondsSinceEpoch);
+  bool get _canWriteNotes => _phase.canWriteNotes || _phase.canViewNotes;
+  bool get _canCancel => _phase.canCancel;
 
   @override
   Widget build(BuildContext context) {
@@ -125,7 +129,7 @@ class CoachSessionDetailsScreen extends StatelessWidget {
       appBar: AppBar(
         title: const Text('Session details'),
         actions: [
-          if (onMessage != null)
+          if (_phase.canOpenConversation && onMessage != null)
             IconButton(
               icon: const Icon(Icons.chat_bubble_outline_rounded),
               tooltip: 'Message member',
@@ -178,17 +182,21 @@ class CoachSessionDetailsScreen extends StatelessWidget {
   }
 
   Widget _buildSessionOverview(BuildContext context) {
-    final color = _statusColor(booking.status);
-    final label = statusLabel ?? booking.status.label;
+    final color = _phase.color;
+    final label = _phase.label;
 
     return Panel(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: [
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(
                   color: color.withValues(alpha: .14),
                   borderRadius: BorderRadius.circular(8),
@@ -199,23 +207,25 @@ class CoachSessionDetailsScreen extends StatelessWidget {
                     Container(
                       width: 7,
                       height: 7,
-                      decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+                      decoration:
+                          BoxDecoration(color: color, shape: BoxShape.circle),
                     ),
                     const SizedBox(width: 6),
-                    Text(
+                    Flexible(
+                        child: Text(
                       label,
                       style: TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w700,
                         color: color,
                       ),
-                    ),
+                    )),
                   ],
                 ),
               ),
-              const Spacer(),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3.5),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 9, vertical: 3.5),
                 decoration: BoxDecoration(
                   color: AppColors.surfaceAlt,
                   borderRadius: BorderRadius.circular(8),
@@ -358,16 +368,20 @@ class CoachSessionDetailsScreen extends StatelessWidget {
           SizedBox(
             width: double.infinity,
             child: OutlinedButton.icon(
-              onPressed: onMessage ??
-                  () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) =>
-                            CoachMessageThreadScreen(booking: booking),
-                      ),
-                    );
-                  },
+              onPressed: _phase.canOpenConversation
+                  ? (onMessage ??
+                      (live
+                          ? null
+                          : () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => CoachMessageThreadScreen(
+                                      booking: booking),
+                                ),
+                              );
+                            }))
+                  : null,
               style: OutlinedButton.styleFrom(
                 minimumSize: const Size(0, 42),
                 shape: RoundedRectangleBorder(
@@ -405,29 +419,11 @@ class CoachSessionDetailsScreen extends StatelessWidget {
   }
 
   Widget _buildStatusSection(BuildContext context) {
-    final isConfirmed = booking.status == BookingStatus.confirmed;
-    final isCompleted = booking.status == BookingStatus.completed;
-    final isCancelled = booking.status == BookingStatus.cancelled;
-    final isPending = booking.status == BookingStatus.pending;
-
-    String statusDescription;
-    if (isCompleted) {
-      statusDescription =
-          'This consultation has completed. Consultation notes and feedback are saved in member history.';
-    } else if (isConfirmed) {
-      statusDescription = _hasSessionEnded
-          ? 'Session time has passed. Please complete consultation notes to finalize member records.'
-          : 'Appointment confirmed. Please arrive at the consultation area 5 minutes before scheduled start.';
-    } else if (isPending) {
-      statusDescription =
-          'Reservation hold is pending payment. Slot will automatically release if unconfirmed.';
-    } else if (isCancelled) {
-      statusDescription = booking.cancellationReason != null
-          ? 'Session was cancelled. Reason: ${booking.cancellationReason}'
-          : 'This session was cancelled and released.';
-    } else {
-      statusDescription = 'Booking status is registered on the schedule.';
-    }
+    final statusDescription = _phase.description +
+        (_phase == CoachSessionPhase.cancelled &&
+                booking.cancellationReason?.trim().isNotEmpty == true
+            ? ' Reason: ${booking.cancellationReason}'
+            : '');
 
     return Panel(
       child: Column(
@@ -461,15 +457,11 @@ class CoachSessionDetailsScreen extends StatelessWidget {
         children: [
           const Eyebrow('PAYMENT INFORMATION'),
           const SizedBox(height: 12),
-          _detailRow('Consultation Fee', feeText ?? 'Included in Plan'),
+          _detailRow('Consultation Fee', feeText ?? 'Fee not available'),
           const Divider(height: 16, color: AppColors.hairline),
           _detailRow(
             'Payment Status',
-            booking.status == BookingStatus.cancelled
-                ? 'Cancelled / Released'
-                : (booking.status == BookingStatus.pending
-                    ? 'Pending hold'
-                    : 'Confirmed & Settled'),
+            'Check with Admin',
           ),
         ],
       ),
@@ -515,8 +507,10 @@ class CoachSessionDetailsScreen extends StatelessWidget {
           ] else ...[
             Text(
               _canWriteNotes
-                  ? 'Consultation notes have not been published yet. Share observations and workout recommendations.'
-                  : 'Notes can be published once the confirmed consultation ends.',
+                  ? (_phase.canViewNotes
+                      ? 'View the published consultation notes. These notes are read-only.'
+                      : 'Publish consultation notes to complete this session.')
+                  : 'Notes are available only for completed sessions or confirmed sessions that have ended.',
               style: const TextStyle(
                 fontSize: 12.5,
                 color: AppColors.inkSoft,
@@ -529,16 +523,20 @@ class CoachSessionDetailsScreen extends StatelessWidget {
             SizedBox(
               width: double.infinity,
               child: FilledButton.icon(
-                onPressed: onNotes ??
-                    () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) =>
-                              ConsultationNotesScreen(booking: booking),
-                        ),
-                      );
-                    },
+                onPressed: _canWriteNotes
+                    ? (onNotes ??
+                        (live
+                            ? null
+                            : () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => ConsultationNotesScreen(
+                                        booking: booking),
+                                  ),
+                                );
+                              }))
+                    : null,
                 style: FilledButton.styleFrom(
                   backgroundColor: AppColors.primary,
                   minimumSize: const Size(0, 42),
@@ -551,7 +549,9 @@ class CoachSessionDetailsScreen extends StatelessWidget {
                   size: 16,
                 ),
                 label: Text(
-                  hasNotes ? 'Edit Consultation Notes' : 'Write Consultation Notes',
+                  _phase.canViewNotes
+                      ? 'View Consultation Notes'
+                      : 'Write Consultation Notes',
                   style: const TextStyle(fontWeight: FontWeight.w700),
                 ),
               ),
@@ -580,16 +580,20 @@ class CoachSessionDetailsScreen extends StatelessWidget {
           SizedBox(
             width: double.infinity,
             child: OutlinedButton.icon(
-              onPressed: onPosture ??
-                  () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) =>
-                            ClientPostureScreen(name: booking.memberName),
-                      ),
-                    );
-                  },
+              onPressed: _phase.canViewFormHistory
+                  ? (onPosture ??
+                      (live
+                          ? null
+                          : () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => ClientPostureScreen(
+                                      name: booking.memberName),
+                                ),
+                              );
+                            }))
+                  : null,
               style: OutlinedButton.styleFrom(
                 minimumSize: const Size(0, 42),
                 shape: RoundedRectangleBorder(
@@ -682,7 +686,8 @@ class CoachSessionDetailsScreen extends StatelessWidget {
                       onPressed: () {
                         Clipboard.setData(ClipboardData(text: bookingId));
                         ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Booking ID copied to clipboard')),
+                          const SnackBar(
+                              content: Text('Booking ID copied to clipboard')),
                         );
                       },
                     ),
@@ -691,6 +696,8 @@ class CoachSessionDetailsScreen extends StatelessWidget {
                 if (record?.requestId != null) ...[
                   const Divider(height: 14, color: AppColors.hairline),
                   _detailRow('Request ID', record!.requestId),
+                  const Divider(height: 14, color: AppColors.hairline),
+                  _detailRow('Recorded status', record!.rawStatus),
                 ],
                 if (record?.timeZone != null) ...[
                   const Divider(height: 14, color: AppColors.hairline),

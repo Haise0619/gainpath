@@ -8,15 +8,21 @@ import 'package:gainpath_ui/gainpath_ui.dart';
 import '../../application/booking_bloc.dart';
 import '../member/booking_details_screen.dart' show resolveBranchLocation;
 import 'coach_session_details_screen.dart';
+import '../shared/coach_session_presentation.dart';
+import '../shared/booking_status_clock.dart';
 
 /// Available status filters for coach appointment schedule.
 enum CoachStatusFilter {
   all('All'),
   confirmed('Confirmed'),
+  inProgress('In progress'),
+  awaitingNotes('Awaiting notes'),
   pending('Pending hold'),
   completed('Completed'),
   cancelled('Cancelled'),
-  expired('Expired');
+  expired('Expired'),
+  holdElapsed('Hold time elapsed'),
+  refunded('Refunded');
 
   const CoachStatusFilter(this.label);
   final String label;
@@ -103,6 +109,7 @@ class _CoachRosterScreenState extends State<CoachRosterScreen>
 
   late DateTime _selectedDate;
   late final AnimationController _reveal;
+  final _phaseElapsed = Stopwatch();
 
   static const _dayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
   static const _monthNames = [
@@ -123,6 +130,7 @@ class _CoachRosterScreenState extends State<CoachRosterScreen>
   @override
   void initState() {
     super.initState();
+    _phaseElapsed.start();
     _selectedDate = _parseToday();
     if (widget.historyRange != null) {
       _currentTab =
@@ -140,6 +148,9 @@ class _CoachRosterScreenState extends State<CoachRosterScreen>
   @override
   void didUpdateWidget(CoachRosterScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (widget.serverNowMillis != oldWidget.serverNowMillis) {
+      _phaseElapsed.reset();
+    }
     if (widget.historyRange != oldWidget.historyRange &&
         widget.historyRange != null) {
       setState(() {
@@ -160,6 +171,7 @@ class _CoachRosterScreenState extends State<CoachRosterScreen>
   void dispose() {
     _searchController.dispose();
     _reveal.dispose();
+    _phaseElapsed.stop();
     super.dispose();
   }
 
@@ -195,8 +207,11 @@ class _CoachRosterScreenState extends State<CoachRosterScreen>
     return a.year == b.year && a.month == b.month && a.day == b.day;
   }
 
-  int get _nowMillis =>
-      widget.serverNowMillis ?? DateTime.now().millisecondsSinceEpoch;
+  int get _nowMillis => widget.serverNowMillis == null
+      ? DateTime.now().millisecondsSinceEpoch
+      : widget.serverNowMillis! + _phaseElapsed.elapsedMilliseconds;
+  CoachSessionPhase _phase(Booking booking) => coachSessionPhase(booking,
+      record: widget.recordFor?.call(booking.id), serverNowMillis: _nowMillis);
 
   List<Booking> _getRawBookings(bool live) {
     if (widget.persistedBookings != null) {
@@ -218,63 +233,23 @@ class _CoachRosterScreenState extends State<CoachRosterScreen>
 
   bool _matchesStatus(Booking b, CoachStatusFilter filter) {
     if (filter == CoachStatusFilter.all) return true;
-    final record = widget.recordFor?.call(b.id);
-    final rawStatus = record?.rawStatus.toLowerCase();
-
-    switch (filter) {
-      case CoachStatusFilter.confirmed:
-        return rawStatus == 'confirmed' || b.status == BookingStatus.confirmed;
-      case CoachStatusFilter.pending:
-        return rawStatus == 'pending_hold' ||
-            rawStatus == 'pending' ||
-            b.status == BookingStatus.pending;
-      case CoachStatusFilter.completed:
-        return rawStatus == 'completed' || b.status == BookingStatus.completed;
-      case CoachStatusFilter.cancelled:
-        return rawStatus == 'cancelled' || b.status == BookingStatus.cancelled;
-      case CoachStatusFilter.expired:
-        return rawStatus == 'expired' ||
-            (b.status == BookingStatus.pending &&
-                record != null &&
-                record.holdExpiresAtMillis <= _nowMillis);
-      case CoachStatusFilter.all:
-        return true;
-    }
+    final target = switch (filter) {
+      CoachStatusFilter.confirmed => CoachSessionPhase.confirmed,
+      CoachStatusFilter.inProgress => CoachSessionPhase.inProgress,
+      CoachStatusFilter.awaitingNotes => CoachSessionPhase.awaitingNotes,
+      CoachStatusFilter.pending => CoachSessionPhase.pendingHold,
+      CoachStatusFilter.holdElapsed => CoachSessionPhase.holdElapsed,
+      CoachStatusFilter.completed => CoachSessionPhase.completed,
+      CoachStatusFilter.cancelled => CoachSessionPhase.cancelled,
+      CoachStatusFilter.expired => CoachSessionPhase.expired,
+      CoachStatusFilter.refunded => CoachSessionPhase.refunded,
+      CoachStatusFilter.all => null,
+    };
+    return _phase(b) == target;
   }
 
-  bool _isSessionEnded(Booking b) {
-    final record = widget.recordFor?.call(b.id);
-    if (record != null) {
-      return record.endAtMillis <= _nowMillis;
-    }
-    return b.start
-            .add(Duration(minutes: b.durationMin))
-            .millisecondsSinceEpoch <=
-        _nowMillis;
-  }
-
-  bool _isSessionInProgress(Booking b) {
-    final record = widget.recordFor?.call(b.id);
-    final start = record?.startAtMillis ?? b.start.millisecondsSinceEpoch;
-    final end = record?.endAtMillis ??
-        b.start.add(Duration(minutes: b.durationMin)).millisecondsSinceEpoch;
-    return _nowMillis >= start && _nowMillis < end;
-  }
-
-  bool _isSessionHistory(Booking b) {
-    final record = widget.recordFor?.call(b.id);
-    final rawStatus = record?.rawStatus.toLowerCase();
-    if (rawStatus == 'completed' ||
-        rawStatus == 'cancelled' ||
-        rawStatus == 'expired') {
-      return true;
-    }
-    if (b.status == BookingStatus.completed ||
-        b.status == BookingStatus.cancelled) {
-      return true;
-    }
-    return _isSessionEnded(b);
-  }
+  bool _isSessionInProgress(Booking b) =>
+      _phase(b) == CoachSessionPhase.inProgress;
 
   bool _matchesDateScope(Booking b, CoachDateScope scope, DateTime anchorDay) {
     final record = widget.recordFor?.call(b.id);
@@ -345,7 +320,7 @@ class _CoachRosterScreenState extends State<CoachRosterScreen>
           onPosture: widget.onPosture != null
               ? () => widget.onPosture!(booking)
               : null,
-          serverNowMillis: widget.serverNowMillis,
+          serverNowMillis: _nowMillis,
         ),
       ),
     );
@@ -550,7 +525,17 @@ class _CoachRosterScreenState extends State<CoachRosterScreen>
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => BookingStatusClock(
+        serverNowMillis: widget.serverNowMillis,
+        elapsedMillis: () => _phaseElapsed.elapsedMilliseconds,
+        boundaryMillis: [
+          for (final b in widget.persistedBookings ?? <Booking>[])
+            ...coachSessionBoundaries(b, widget.recordFor?.call(b.id))
+        ],
+        builder: (context, _) => _buildRoster(context),
+      );
+
+  Widget _buildRoster(BuildContext context) {
     final live = widget.persistedBookings != null;
     final allBookings = _getRawBookings(live);
     final today = _parseToday();
@@ -937,14 +922,8 @@ class _CoachRosterScreenState extends State<CoachRosterScreen>
           b.status == BookingStatus.completed;
     }).length;
 
-    final pendingNotes = daySessions.where((b) {
-      if (b.status == BookingStatus.cancelled) return false;
-      final record = widget.recordFor?.call(b.id);
-      if (record?.rawStatus == 'completed' || _isSessionEnded(b)) {
-        return b.notes == null || b.notes!.trim().isEmpty;
-      }
-      return false;
-    }).length;
+    final pendingNotes =
+        daySessions.where((b) => _phase(b).canWriteNotes).length;
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
@@ -991,14 +970,8 @@ class _CoachRosterScreenState extends State<CoachRosterScreen>
   }
 
   Widget _buildNeedsAttentionSection(List<Booking> allBookings) {
-    final pendingNotesBookings = allBookings.where((b) {
-      if (b.status == BookingStatus.cancelled) return false;
-      final record = widget.recordFor?.call(b.id);
-      if (record?.rawStatus == 'completed' || _isSessionEnded(b)) {
-        return b.notes == null || b.notes!.trim().isEmpty;
-      }
-      return false;
-    }).toList();
+    final pendingNotesBookings =
+        allBookings.where((b) => _phase(b).canWriteNotes).toList();
 
     if (pendingNotesBookings.isEmpty) {
       return const SizedBox.shrink();
@@ -1324,7 +1297,15 @@ class _CoachRosterScreenState extends State<CoachRosterScreen>
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
         child: Row(
-          children: ['All', 'Completed', 'Cancelled', 'Expired'].map((sub) {
+          children: [
+            'All',
+            'Awaiting notes',
+            'Completed',
+            'Cancelled',
+            'Expired',
+            'Hold time elapsed',
+            'Refunded'
+          ].map((sub) {
             final isSelected = _historySubFilter == sub;
             return Padding(
               padding: const EdgeInsets.only(right: 8),
@@ -1357,25 +1338,9 @@ class _CoachRosterScreenState extends State<CoachRosterScreen>
 
   Widget _buildHistorySection(List<Booking> filteredBookings) {
     final historySessions = filteredBookings.where((b) {
-      if (!_isSessionHistory(b)) return false;
-      if (_historySubFilter == 'Completed') {
-        final record = widget.recordFor?.call(b.id);
-        return record?.rawStatus == 'completed' ||
-            b.status == BookingStatus.completed;
-      }
-      if (_historySubFilter == 'Cancelled') {
-        final record = widget.recordFor?.call(b.id);
-        return record?.rawStatus == 'cancelled' ||
-            b.status == BookingStatus.cancelled;
-      }
-      if (_historySubFilter == 'Expired') {
-        final record = widget.recordFor?.call(b.id);
-        return record?.rawStatus == 'expired' ||
-            (b.status == BookingStatus.pending &&
-                record != null &&
-                record.holdExpiresAtMillis <= _nowMillis);
-      }
-      return true;
+      final phase = _phase(b);
+      return phase.isHistory &&
+          (_historySubFilter == 'All' || phase.label == _historySubFilter);
     }).toList()
       ..sort((a, b) => b.start.compareTo(a.start)); // newest first
 
@@ -1705,66 +1670,15 @@ class _SessionAppointmentCard extends StatelessWidget {
   final VoidCallback? onNotes;
   final VoidCallback? onCancel;
 
-  bool get _isEnded {
-    if (record != null) return record!.endAtMillis <= serverNowMillis;
-    return booking.start
-            .add(Duration(minutes: booking.durationMin))
-            .millisecondsSinceEpoch <=
-        serverNowMillis;
-  }
-
-  bool get _isInProgress {
-    final start = record?.startAtMillis ?? booking.start.millisecondsSinceEpoch;
-    final end = record?.endAtMillis ??
-        booking.start
-            .add(Duration(minutes: booking.durationMin))
-            .millisecondsSinceEpoch;
-    return serverNowMillis >= start && serverNowMillis < end;
-  }
-
-  bool get _canCancel {
-    if (record != null) {
-      return record!.rawStatus == 'confirmed' && !_isEnded;
-    }
-    return booking.status == BookingStatus.confirmed && !_isEnded;
-  }
-
-  Color _statusColor(BookingStatus status, String? rawStatus) {
-    if (rawStatus == 'cancelled' || status == BookingStatus.cancelled) {
-      return AppColors.danger;
-    }
-    if (rawStatus == 'expired') return AppColors.inkSoft;
-    if (rawStatus == 'completed' || status == BookingStatus.completed) {
-      return AppColors.accent;
-    }
-    if (_isInProgress) return AppColors.primary;
-    if (rawStatus == 'confirmed' || status == BookingStatus.confirmed) {
-      return AppColors.success;
-    }
-    return AppColors.warning;
-  }
-
-  String _computedStatusLabel() {
-    if (statusLabel != null) return statusLabel!;
-    if (record?.rawStatus == 'expired') return 'Expired';
-    if (_isInProgress) return 'In Progress';
-    switch (booking.status) {
-      case BookingStatus.confirmed:
-        return _isEnded ? 'Awaiting notes' : 'Confirmed';
-      case BookingStatus.completed:
-        return 'Completed';
-      case BookingStatus.pending:
-        return 'Pending hold';
-      case BookingStatus.cancelled:
-        return 'Cancelled';
-    }
-  }
+  CoachSessionPhase get _phase => coachSessionPhase(booking,
+      record: record, serverNowMillis: serverNowMillis);
+  bool get _isInProgress => _phase == CoachSessionPhase.inProgress;
+  bool get _canCancel => _phase.canCancel;
 
   @override
   Widget build(BuildContext context) {
-    final rawStatus = record?.rawStatus.toLowerCase();
-    final badgeColor = _statusColor(booking.status, rawStatus);
-    final statusText = _computedStatusLabel();
+    final badgeColor = _phase.color;
+    final statusText = _phase.label;
 
     final start = booking.start;
     final end = start.add(Duration(minutes: booking.durationMin));
@@ -1938,10 +1852,7 @@ class _SessionAppointmentCard extends StatelessWidget {
                   crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
                     // Lifecycle button
-                    if (!_isEnded &&
-                        (rawStatus == 'confirmed' ||
-                            booking.status == BookingStatus.confirmed) &&
-                        onMessage != null) ...[
+                    if (_phase.canOpenConversation && onMessage != null) ...[
                       OutlinedButton.icon(
                         style: OutlinedButton.styleFrom(
                           visualDensity: VisualDensity.compact,
@@ -1960,16 +1871,9 @@ class _SessionAppointmentCard extends StatelessWidget {
                       const SizedBox(width: 8),
                     ],
 
-                    if ((rawStatus == 'completed' ||
-                            (_isEnded &&
-                                (rawStatus == 'confirmed' ||
-                                    booking.status ==
-                                        BookingStatus.confirmed))) &&
+                    if ((_phase.canWriteNotes || _phase.canViewNotes) &&
                         onNotes != null) ...[
-                      if (rawStatus == 'completed' ||
-                          booking.status == BookingStatus.completed ||
-                          (booking.notes != null &&
-                              booking.notes!.trim().isNotEmpty))
+                      if (_phase.canViewNotes)
                         OutlinedButton.icon(
                           style: OutlinedButton.styleFrom(
                             visualDensity: VisualDensity.compact,
