@@ -20,6 +20,7 @@ import '../../features/coaching/presentation/shared/live_coach_schedule_view.dar
 import '../shells/coach_shell.dart';
 import '../../features/coaching/presentation/member/browse_coaches_screen.dart';
 import '../../features/coaching/presentation/shared/live_coach_directory_views.dart';
+import '../../features/coaching/presentation/shared/pair_chat_screen.dart';
 import 'coach_module8_dependencies.dart';
 import '../../features/coaching/presentation/shared/live_booking_list_view.dart';
 import 'booking_factory.dart';
@@ -79,6 +80,16 @@ Widget buildFirebaseCoachDirectory(AuthSession session,
               FirebaseCoachDirectoryRepository(
                   scope: session.scope, isCurrent: isCurrent);
           return BrowseCoachesScreen(
+              onMessages: () => Navigator.push(
+                  context,
+                  MaterialPageRoute<void>(
+                      builder: (_) => PairChatInboxScreen(
+                          repository: FirebaseBookingCommunicationRepository(
+                              scope: session.scope, isCurrent: isCurrent),
+                          isCurrent: isCurrent,
+                          ownRole: 'member',
+                          onBookAgain: (coachId) =>
+                              openMemberBooking(context, session, coachId)))),
               live: true,
               liveRepository: repository,
               isCurrent: isCurrent,
@@ -90,14 +101,5 @@ Widget buildFirebaseCoachDirectory(AuthSession session,
                   MaterialPageRoute(
                       builder: (_) => CoachSessionHost(
                           session: session,
-                          builder: (_, current) => LiveCoachDetailView(
-                              coachId: id,
-                              repository: repository,
-                              onOpenBooking: () => openMemberBooking(
-                                  context, session, id,
-                                  factory: bookingFactory,
-                                  listFactory: bookingListFactory),
-                              onOpenSchedule: () => Navigator.push(context,
-                                  MaterialPageRoute(builder: (_) => CoachSessionHost(session: session, builder: (_, scheduleCurrent) => LiveCoachScheduleView(coachId: id, onOpenBooking: () => openMemberBooking(context, session, id, factory: bookingFactory, listFactory: bookingListFactory), repository: availabilityFactory?.call(session.scope, scheduleCurrent) ?? FirebaseCoachAvailabilityRepository(scope: session.scope, isCurrent: scheduleCurrent), isCurrent: scheduleCurrent)))),
-                              isCurrent: () => current() && isCurrent())))));
+                          builder: (_, current) => LiveCoachDetailView(coachId: id, repository: repository, onOpenBooking: () => openMemberBooking(context, session, id, factory: bookingFactory, listFactory: bookingListFactory), onOpenSchedule: () => Navigator.push(context, MaterialPageRoute(builder: (_) => CoachSessionHost(session: session, builder: (_, scheduleCurrent) => LiveCoachScheduleView(coachId: id, onOpenBooking: () => openMemberBooking(context, session, id, factory: bookingFactory, listFactory: bookingListFactory), repository: availabilityFactory?.call(session.scope, scheduleCurrent) ?? FirebaseCoachAvailabilityRepository(scope: session.scope, isCurrent: scheduleCurrent), isCurrent: scheduleCurrent)))), isCurrent: () => current() && isCurrent())))));
         });

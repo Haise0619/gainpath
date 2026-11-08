@@ -11,7 +11,7 @@ export interface BookingMessageRecord {
   sequence: number; senderRole: 'member' | 'coach'; text: string; sentAtMillis: number;
 }
 export async function bookingCommunication(store: DocumentStore,
-  auth: { uid: string; token: Record<string, unknown> } | undefined, raw: unknown, clock = Date.now) {
+  auth: { uid: string; token: Record<string, unknown> } | undefined, raw: unknown, _clock = Date.now) {
   requireVerifiedEmail(auth);
   const input = object(raw);
   allowed(input, ['schemaVersion', 'organizationId', 'bookingId', 'requestId', 'text', 'beforeSequence']);
@@ -44,10 +44,11 @@ export async function bookingCommunication(store: DocumentStore,
     const receipt = sending ? await tx.get(receiptPath) : undefined;
     const fingerprint = keyOf(org, id, text);
     if (receipt && receipt.fingerprint !== fingerprint) throw new DomainError('already-exists', 'This request was already used for another message.');
-    if (sending && !receipt && (!['pending_hold', 'confirmed'].includes(b.status) || (b.status === 'pending_hold' && clock() >= b.holdExpiresAtMillis))) {
-      throw new DomainError('failed-precondition', 'This booking no longer accepts new messages.');
+    // Old app versions can read/reconcile existing messages, but must not bypass
+    // the pair conversation's server-owned eligibility through a v1 send.
+    if (sending && !receipt) {
+      throw new DomainError('failed-precondition', 'Update GainPath to continue in your shared coach conversation.');
     }
-    if (sending && !receipt && count >= 1000000) throw new DomainError('resource-exhausted', 'Message history limit reached.');
     const end = Math.min(count, before === undefined ? count : before - 1);
     const first = Math.max(1, end - 49);
     const messages: BookingMessageRecord[] = [];
@@ -57,13 +58,6 @@ export async function bookingCommunication(store: DocumentStore,
         throw new DomainError('failed-precondition', 'Message history requires review.');
       }
       messages.push({ sequence, senderRole: m.senderRole as 'member' | 'coach', text: m.text, sentAtMillis: Number(m.sentAtMillis) });
-    }
-    if (sending && !receipt) {
-      const message: BookingMessageRecord = { sequence: count + 1, senderRole: role as 'member' | 'coach', text, sentAtMillis: integer(clock(), 1) };
-      tx.create(`${root}/messages/${message.sequence}`, message);
-      tx.set(statePath, { schemaVersion: 1, count: message.sequence, updatedAtMillis: message.sentAtMillis });
-      tx.create(receiptPath, { schemaVersion: 1, command: 'bookingMessage', actorId: uid, fingerprint, bookingId: id, sequence: message.sequence, createdAtMillis: message.sentAtMillis });
-      messages.push(message);
     }
     return { schemaVersion: 1, bookingId: id, messages, ...(first > 1 ? { nextBeforeSequence: first } : {}) };
   });

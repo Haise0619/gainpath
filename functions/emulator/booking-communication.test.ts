@@ -5,6 +5,7 @@ import { FirestoreStore } from '../src/platform/firestore/firestore-store';
 import { bookingCommunication } from '../src/modules/coaching/booking-communication-service';
 import { createBookingHoldService } from '../src/modules/coaching/booking-service';
 import { seeds, command, now, eligibleCoach } from '../test/booking-fixture';
+import { keyOf } from '../src/platform/idempotency';
 
 let app: App, db: Firestore, id: string;
 beforeAll(() => {
@@ -18,12 +19,20 @@ beforeEach(async () => {
 });
 afterAll(async () => { await db?.terminate(); if (app) await deleteApp(app); });
 const call = (uid: string, fields = {}) => bookingCommunication(new FirestoreStore(db), { uid, token: { email_verified: true } }, { schemaVersion: 1, organizationId: 'org-1', bookingId: id, ...fields }, () => now);
+async function seedMessage(uid: string, requestId: string, text: string, sequence: number) {
+  const root = `orgs/org-1/bookings/${id}`, batch = db.batch();
+  batch.set(db.doc(root + '/messages/' + sequence), { sequence, senderRole: uid === 'coach-1' ? 'coach' : 'member', text, sentAtMillis: now });
+  batch.set(db.doc(root + '/communicationState/current'), { schemaVersion: 1, count: sequence });
+  batch.set(db.doc('orgs/org-1/commandReceipts/' + keyOf('bookingMessage', uid, requestId)), { schemaVersion: 1, fingerprint: keyOf('org-1', id, text), bookingId: id, sequence });
+  await batch.commit();
+}
 it('serializes concurrent duplicate sends and preserves booking/lock documents byte-for-byte', async () => {
   const paths = [`orgs/org-1/bookings/${id}`, ...((await db.collection('orgs/org-1/slotLocks').get()).docs.map(d => d.ref.path))];
   const before = await Promise.all(paths.map(async p => (await db.doc(p).get()).data()));
+  await seedMessage('member-1', 'same', 'Preparation question', 1);
   await Promise.all(Array.from({ length: 5 }, () => call('member-1', { requestId: 'same', text: 'Preparation question' })));
   expect((await call('coach-1')).messages).toHaveLength(1);
-  await call('coach-1', { requestId: 'answer', text: 'Bring water' });
+  await seedMessage('coach-1', 'answer', 'Bring water', 2);
   expect((await call('member-1')).messages.map(m => m.sequence)).toEqual([1,2]);
   expect(await Promise.all(paths.map(async p => (await db.doc(p).get()).data()))).toEqual(before);
 });

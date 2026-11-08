@@ -25,8 +25,8 @@ it('clients cannot bypass the callable to read or overwrite messages or sequence
   });
   for (const uid of ['member-1', 'coach-1', 'admin-1']) {
     const db = env.authenticatedContext(uid, { email_verified: true }).firestore();
-    for (const suffix of ['messages/1', 'communicationState/current']) {
-      const ref = doc(db, `orgs/org-1/bookings/booking-1/${suffix}`);
+    for (const path of ['orgs/org-1/bookings/booking-1/messages/1', 'orgs/org-1/bookings/booking-1/communicationState/current', 'orgs/org-1/coachingConversations/pair', 'orgs/org-1/coachingConversations/pair/messages/0000000001', 'orgs/org-1/coachingConversations/pair/receipts/receipt']) {
+      const ref = doc(db, path);
       await assertFails(getDoc(ref));
       await assertFails(setDoc(ref, { schemaVersion: 1, text: 'Forged', sequence: 1 }));
     }

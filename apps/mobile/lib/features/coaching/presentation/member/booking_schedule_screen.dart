@@ -504,7 +504,10 @@ class _BookingScheduleScreenState extends State<BookingScheduleScreen> {
           booking: booking,
           record: record,
           live: live,
-          statusLabel: widget.statusLabels[booking.id],
+          statusLabel: widget.statusLabels[booking.id] ??
+              (record != null && now != null
+                  ? memberBookingStatus(record, now)
+                  : null),
           photo: widget.coachPhotoBuilder?.call(booking),
           coachInfoFuture: widget.coachInfoFor?.call(booking.coachId),
           coachSpecialty: widget.coachSpecialtyFor?.call(booking.coachId),
@@ -532,11 +535,15 @@ class _BookingScheduleScreenState extends State<BookingScheduleScreen> {
                           : () => widget.onCancelBooking!(booking)
                   : () => _cancel(booking))
               : null,
-          onMessage: live
-              ? widget.onMessage == null
-                  ? null
-                  : () => widget.onMessage!(booking)
-              : () => _message(booking),
+          onMessage: live &&
+                  record != null &&
+                  !['confirmed', 'completed'].contains(record.rawStatus)
+              ? null
+              : live
+                  ? widget.onMessage == null
+                      ? null
+                      : () => widget.onMessage!(booking)
+                  : () => _message(booking),
           onRate: booking.status == BookingStatus.completed
               ? (live
                   ? widget.onReview == null

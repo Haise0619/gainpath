@@ -44,6 +44,7 @@ Widget buildBookingListContent(BuildContext context, AuthSession session, bool F
         {BookingListFactory? factory, bool embedded = false}) =>
     LiveBookingListView(
         embedded: embedded,
+        onBookAgain: (coachId) => openMemberBooking(context, session, coachId),
         notes: FirebaseConsultationNotesRepository(
             scope: session.scope, isCurrent: current),
         review: FirebaseBookingReviewRepository(

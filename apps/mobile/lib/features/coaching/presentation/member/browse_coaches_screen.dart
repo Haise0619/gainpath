@@ -18,12 +18,13 @@ class BrowseCoachesScreen extends StatefulWidget {
       this.liveRepository,
       this.isCurrent,
       this.onOpenPublished,
-      this.bookingsBuilder});
+      this.bookingsBuilder, this.onMessages});
   final bool live;
   final CoachDirectoryRepository? liveRepository;
   final bool Function()? isCurrent;
   final void Function(String)? onOpenPublished;
   final WidgetBuilder? bookingsBuilder;
+  final VoidCallback? onMessages;
   @override
   State<BrowseCoachesScreen> createState() => _BrowseCoachesScreenState();
 }
@@ -603,7 +604,7 @@ class _BrowseCoachesScreenState extends State<BrowseCoachesScreen> {
     final error = state?.message != null;
     final loading = state?.loading == true;
     return Scaffold(
-      appBar: AppBar(title: const Text('Coaches')),
+      appBar: AppBar(title: const Text('Coaches'), actions: [if (widget.onMessages != null) IconButton(tooltip: 'Messages', onPressed: widget.onMessages, icon: const Icon(Icons.chat_bubble_outline_rounded))]),
       body: Column(children: [
         Padding(
             padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),

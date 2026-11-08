@@ -478,7 +478,12 @@ class _CoachRosterScreenState extends State<CoachRosterScreen>
                           live: widget.persistedBookings != null,
                           statusLabel: widget.statusLabels[visible[i].id],
                           details: widget.details[visible[i].id],
-                          onMessage: widget.onMessage == null
+                          onMessage: widget.onMessage == null ||
+                                  (widget.persistedBookings != null &&
+                                      ![
+                                        BookingStatus.confirmed,
+                                        BookingStatus.completed
+                                      ].contains(visible[i].status))
                               ? null
                               : () => widget.onMessage!(visible[i]),
                           onNotes: widget.onNotes == null
@@ -949,7 +954,11 @@ class _SessionCard extends StatelessWidget {
                                     ),
                                     tooltip: 'Cancel session',
                                     onPressed: live
-                                        ? (onCancel != null && booking.status == BookingStatus.confirmed ? onCancel : null)
+                                        ? (onCancel != null &&
+                                                booking.status ==
+                                                    BookingStatus.confirmed
+                                            ? onCancel
+                                            : null)
                                         : () => confirmSheet(context,
                                             title: 'Cancel this session?',
                                             message:

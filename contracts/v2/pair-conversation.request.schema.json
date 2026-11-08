@@ -1,0 +1,131 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Member Coach pair conversation request v2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "organizationId"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": 2
+    },
+    "organizationId": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{1,128}$"
+    },
+    "bookingId": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{1,128}$"
+    },
+    "peerId": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{1,128}$"
+    },
+    "action": {
+      "enum": [
+        "thread",
+        "inbox"
+      ]
+    },
+    "requestId": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{1,128}$"
+    },
+    "text": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 500
+    },
+    "before": {
+      "type": "string",
+      "maxLength": 1800
+    },
+    "inboxCursor": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{1,128}$"
+    },
+    "markRead": {
+      "type": "boolean"
+    }
+  },
+  "dependencies": {
+    "requestId": [
+      "text"
+    ],
+    "text": [
+      "requestId"
+    ]
+  },
+  "allOf": [
+    {
+      "not": {
+        "required": [
+          "bookingId",
+          "peerId"
+        ]
+      }
+    },
+    {
+      "not": {
+        "required": [
+          "text",
+          "before"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "action": {
+            "const": "inbox"
+          }
+        },
+        "required": [
+          "action"
+        ]
+      },
+      "then": {
+        "not": {
+          "anyOf": [
+            {
+              "required": [
+                "bookingId"
+              ]
+            },
+            {
+              "required": [
+                "peerId"
+              ]
+            },
+            {
+              "required": [
+                "text"
+              ]
+            },
+            {
+              "required": [
+                "before"
+              ]
+            }
+          ]
+        }
+      },
+      "else": {
+        "oneOf": [
+          {
+            "required": [
+              "bookingId"
+            ]
+          },
+          {
+            "required": [
+              "peerId"
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

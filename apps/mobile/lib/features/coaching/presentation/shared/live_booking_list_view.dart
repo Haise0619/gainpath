@@ -10,7 +10,8 @@ import 'package:gainpath_domain/coaching.dart'
         ConsultationNotesRepository,
         CoachBookingCancellationRepository,
         ClientPostureRepository,
-        BookingReviewRepository;
+        BookingReviewRepository,
+        PairConversationRepository;
 import '../coach/client_posture_screen.dart';
 import '../coach/consultation_notes_screen.dart';
 import '../../application/live_booking_cubit.dart';
@@ -25,6 +26,7 @@ import 'package:gainpath_domain/identity.dart' show PublishedCoachProfile;
 import 'package:gainpath_ui/gainpath_ui.dart';
 import '../../application/booking_cancellation_cubit.dart';
 import '../coach/message_inbox_screen.dart';
+import 'pair_chat_screen.dart';
 
 class LiveBookingListView extends StatefulWidget {
   const LiveBookingListView(
@@ -44,6 +46,7 @@ class LiveBookingListView extends StatefulWidget {
       this.coachPhotoBuilder,
       this.coachId,
       this.onFindCoach,
+      this.onBookAgain,
       this.title = 'My bookings',
       this.embedded = false});
   final bool embedded;
@@ -63,12 +66,52 @@ class LiveBookingListView extends StatefulWidget {
   final Widget? Function(PublishedCoachProfile)? coachPhotoBuilder;
   final String? coachId;
   final VoidCallback? onFindCoach;
+  final void Function(String coachId)? onBookAgain;
   final String title;
   @override
   State<LiveBookingListView> createState() => _LiveBookingListViewState();
 }
 
 class _LiveBookingListViewState extends State<LiveBookingListView> {
+  void _openConversation(Booking booking) {
+    final repository = widget.communication;
+    Navigator.push(
+        context,
+        MaterialPageRoute<void>(
+            builder: (_) => repository is PairConversationRepository
+                ? PairChatScreen(
+                    repository: repository as PairConversationRepository,
+                    isCurrent: widget.isCurrent,
+                    ownRole: widget.coachId == null ? 'member' : 'coach',
+                    bookingId: booking.id,
+                    onBookAgain: widget.onBookAgain)
+                : CoachMessageThreadScreen(
+                    booking: booking,
+                    repository: repository,
+                    isCurrent: widget.isCurrent,
+                    ownRole: widget.coachId == null ? 'Member' : 'Coach',
+                    loadCoachName: widget.loadCoachName == null
+                        ? null
+                        : () => widget.loadCoachName!(booking.coachId))));
+  }
+
+  void _openInbox(List<Booking> bookings) {
+    final repository = widget.communication;
+    Navigator.push(
+        context,
+        MaterialPageRoute<void>(
+            builder: (_) => repository is PairConversationRepository
+                ? PairChatInboxScreen(
+                    repository: repository as PairConversationRepository,
+                    isCurrent: widget.isCurrent,
+                    ownRole: widget.coachId == null ? 'member' : 'coach',
+                    onBookAgain: widget.onBookAgain)
+                : CoachMessageInboxScreen(
+                    bookings: bookings,
+                    repository: repository,
+                    isCurrent: widget.isCurrent)));
+  }
+
   final Map<String, int> _reviewed = {};
   final Map<String, PublishedCoachProfile?> _coachProfiles = {};
   final Map<String, String> _coachNames = {};
@@ -832,23 +875,10 @@ class _LiveBookingListViewState extends State<LiveBookingListView> {
                       : (b) => _openPosture(b, memberIds[b.id] ?? ''),
                   onOpenMessages: widget.communication == null
                       ? null
-                      : () => Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                              builder: (_) => CoachMessageInboxScreen(
-                                  bookings: bookings,
-                                  repository: widget.communication,
-                                  isCurrent: widget.isCurrent))),
+                      : () => _openInbox(bookings),
                   todayLocalDate: state.page?.firstLocalDate,
-                  onMessage: widget.communication == null
-                      ? null
-                      : (booking) => Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                              builder: (_) => CoachMessageThreadScreen(
-                                  booking: booking,
-                                  repository: widget.communication,
-                                  isCurrent: widget.isCurrent))),
+                  onMessage:
+                      widget.communication == null ? null : _openConversation,
                   persistedBookings: bookings,
                   statusLabels: labels,
                   details: details,

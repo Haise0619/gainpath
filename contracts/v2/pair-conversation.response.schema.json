@@ -1,0 +1,200 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Member Coach pair conversation response v2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "conversationId",
+    "memberId",
+    "coachId",
+    "peerName",
+    "serverNowMillis",
+    "canSend",
+    "reason",
+    "messages",
+    "unreadCount"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": 2
+    },
+    "conversationId": {
+      "type": "string"
+    },
+    "memberId": {
+      "type": "string"
+    },
+    "coachId": {
+      "type": "string"
+    },
+    "peerName": {
+      "type": "string"
+    },
+    "serverNowMillis": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "canSend": {
+      "type": "boolean"
+    },
+    "reason": {
+      "type": "string"
+    },
+    "messages": {
+      "type": "array",
+      "maxItems": 51,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "orderKey",
+          "senderRole",
+          "text",
+          "sentAtMillis"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "orderKey": {
+            "type": "string"
+          },
+          "senderRole": {
+            "enum": [
+              "member",
+              "coach",
+              "system"
+            ]
+          },
+          "text": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          },
+          "sentAtMillis": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "sourceBookingId": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,128}$"
+          },
+          "sourceBookingLabel": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "unreadCount": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "nextBefore": {
+      "type": "string"
+    },
+    "nextInboxCursor": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{1,128}$"
+    },
+    "context": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "bookingId",
+        "kind",
+        "startAtMillis",
+        "endAtMillis",
+        "timeZone",
+        "durationMinutes",
+        "status",
+        "dateLabel"
+      ],
+      "properties": {
+        "bookingId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{1,128}$"
+        },
+        "kind": {
+          "enum": [
+            "current",
+            "next",
+            "follow_up"
+          ]
+        },
+        "startAtMillis": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "endAtMillis": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "timeZone": {
+          "type": "string"
+        },
+        "durationMinutes": {
+          "enum": [
+            30,
+            60
+          ]
+        },
+        "status": {
+          "enum": [
+            "confirmed",
+            "completed"
+          ]
+        },
+        "dateLabel": {
+          "type": "string"
+        },
+        "followUpUntilMillis": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "followUpLabel": {
+          "type": "string"
+        }
+      }
+    },
+    "conversations": {
+      "type": "array",
+      "maxItems": 50,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "peerId",
+          "name",
+          "conversationId",
+          "unreadCount"
+        ],
+        "properties": {
+          "peerId": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,128}$"
+          },
+          "name": {
+            "type": "string"
+          },
+          "conversationId": {
+            "type": "string"
+          },
+          "unreadCount": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "preview": {
+            "type": "string",
+            "maxLength": 500
+          },
+          "updatedAtMillis": {
+            "type": "integer",
+            "minimum": 1
+          }
+        }
+      }
+    }
+  }
+}

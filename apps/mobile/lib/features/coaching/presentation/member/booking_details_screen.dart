@@ -716,7 +716,9 @@ class _BookingDetailsScreenState extends State<BookingDetailsScreen> {
                     onPressed: widget.onMessage,
                     icon:
                         const Icon(Icons.chat_bubble_outline_rounded, size: 17),
-                    label: Text('Message $coachName'),
+                    label: Text(sessionEnded || isCompleted
+                        ? 'View conversation'
+                        : 'Message $coachName'),
                   ),
                   const SizedBox(height: 10),
                 ],
