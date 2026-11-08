@@ -678,11 +678,20 @@ class _CoachRosterScreenState extends State<CoachRosterScreen>
       physics: const AlwaysScrollableScrollPhysics(),
       padding: EdgeInsets.zero,
       children: [
-        if (widget.header != null) widget.header!,
+        if (widget.header != null)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+            child: widget.header!,
+          ),
 
         // Main Tabs: Schedule vs History
         Padding(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+          padding: EdgeInsets.fromLTRB(
+            16,
+            widget.header != null ? 8 : 12,
+            16,
+            8,
+          ),
           child: _buildMainTabs(),
         ),
 

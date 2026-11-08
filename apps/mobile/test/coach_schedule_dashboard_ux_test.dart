@@ -119,6 +119,7 @@ void main() {
     VoidCallback? onOpenMessages,
     void Function(bool)? onRangeChanged,
     bool? historyRange,
+    Widget? header,
     Size size = const Size(1000, 1800),
     double textScale = 1.0,
   }) {
@@ -147,6 +148,7 @@ void main() {
             onOpenMessages: onOpenMessages,
             onRangeChanged: onRangeChanged,
             historyRange: historyRange,
+            header: header,
           ),
         ),
       ),
@@ -382,5 +384,23 @@ void main() {
 
     expect(tester.takeException(), isNull);
     expect(find.text('My schedule'), findsOneWidget);
+  });
+
+  testWidgets(
+      'Roster header is rendered with 16dp horizontal and 12dp top padding',
+      (tester) async {
+    final headerKey = GlobalKey();
+    await tester.pumpWidget(createTestWidget(
+      header: Container(key: headerKey, height: 20, color: Colors.blue),
+    ));
+    await tester.pumpAndSettle();
+
+    final paddingFinder = find.ancestor(
+      of: find.byKey(headerKey),
+      matching: find.byType(Padding),
+    );
+    expect(paddingFinder, findsWidgets);
+    final paddingWidget = tester.widget<Padding>(paddingFinder.first);
+    expect(paddingWidget.padding, const EdgeInsets.fromLTRB(16, 12, 16, 4));
   });
 }
