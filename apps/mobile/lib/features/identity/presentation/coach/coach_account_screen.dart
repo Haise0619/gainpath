@@ -201,24 +201,20 @@ class _CoachAccountScreenState extends State<CoachAccountScreen> {
     final repository = widget.accountRepository;
     if (!current() || state.profile == null) return;
     final publication = state.publication;
-    final draftBytes = await photoFor(
-        state.profile!.fields.photoPath, state.profile!.revision);
-    if (!mounted || !current()) return;
-    final draft = dataFor(state, state.profile!.fields,
-        draftBytes == null ? null : MemoryImage(draftBytes),
-        draftPreview: true);
-    CoachAccountData data = draft;
-    if (publication != null) {
-      Uint8List? bytes;
-      try {
-        bytes = await repository.loadProfilePhoto(publication.fields.photoPath);
-      } catch (_) {
-        bytes = null;
-      }
-      if (!mounted || !current()) return;
-      data = dataFor(
-          state, publication.fields, bytes == null ? null : MemoryImage(bytes));
-    }
+    final draftPhoto =
+        photoFor(state.profile!.fields.photoPath, state.profile!.revision)
+            .timeout(const Duration(seconds: 20), onTimeout: () => null);
+    final draft =
+        dataFor(state, state.profile!.fields, null, draftPreview: true);
+    final data =
+        publication == null ? draft : dataFor(state, publication.fields, null);
+    final publicPhoto = publication == null ||
+            publication.fields.photoPath == state.profile!.fields.photoPath
+        ? draftPhoto
+        : repository
+            .loadProfilePhoto(publication.fields.photoPath)
+            .timeout(const Duration(seconds: 20), onTimeout: () => null)
+            .catchError((_) => null);
     PublishedCoachProfile snapshot(CoachProfessionalFields fields) =>
         PublishedCoachProfile(
             id: state.profile!.id,
@@ -236,6 +232,8 @@ class _CoachAccountScreenState extends State<CoachAccountScreen> {
             averageRating: accountMetrics?.rating,
             reviewCount: accountMetrics?.reviews ?? 0);
     final child = CoachAccountProfilePreview(
+        photo: publicPhoto,
+        draftPhoto: draftPhoto,
         profile: (publication ?? snapshot(state.profile!.fields))
             .withRatings(accountMetrics?.rating, accountMetrics?.reviews ?? 0),
         draftProfile: snapshot(state.profile!.fields),

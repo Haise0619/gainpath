@@ -9,10 +9,12 @@ class CoachPublicProfilePreview extends StatelessWidget {
       {super.key,
       required this.profile,
       required this.data,
-      required this.header});
+      required this.header,
+      this.avatar});
   final PublishedCoachProfile profile;
   final CoachAccountData data;
   final Widget header;
+  final Widget? avatar;
 
   @override
   Widget build(BuildContext context) {
@@ -68,16 +70,17 @@ class CoachPublicProfilePreview extends StatelessWidget {
                       child: SizedBox(
                           width: 88,
                           height: 88,
-                          child: data.photo == null
-                              ? const Icon(Icons.person,
-                                  color: Colors.white70, size: 42)
-                              : Image(
-                                  image: data.photo!,
-                                  fit: BoxFit.cover,
-                                  errorBuilder: (_, error, stack) => const Icon(
-                                      Icons.person,
-                                      color: Colors.white70,
-                                      size: 42)))),
+                          child: avatar ??
+                              (data.photo == null
+                                  ? const Icon(Icons.person,
+                                      color: Colors.white70, size: 42)
+                                  : Image(
+                                      image: data.photo!,
+                                      fit: BoxFit.cover,
+                                      errorBuilder: (_, error, stack) =>
+                                          const Icon(Icons.person,
+                                              color: Colors.white70,
+                                              size: 42))))),
                   const SizedBox(height: 16),
                   Row(mainAxisAlignment: MainAxisAlignment.center, children: [
                     Flexible(

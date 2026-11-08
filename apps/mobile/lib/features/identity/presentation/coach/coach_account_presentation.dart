@@ -1,3 +1,4 @@
+import 'dart:typed_data';
 import 'package:gainpath_domain/identity.dart';
 import 'coach_public_profile_preview.dart';
 import 'package:flutter/material.dart';
@@ -366,10 +367,13 @@ class CoachAccountProfilePreview extends StatefulWidget {
       required this.label,
       required this.profile,
       required this.draftProfile,
-      this.draft});
+      this.draft,
+      this.photo,
+      this.draftPhoto});
   final CoachAccountData data;
   final String label;
   final CoachAccountData? draft;
+  final Future<Uint8List?>? photo, draftPhoto;
   final PublishedCoachProfile profile, draftProfile;
   @override
   State<CoachAccountProfilePreview> createState() =>
@@ -386,6 +390,11 @@ class _CoachAccountProfilePreviewState
     return CoachPublicProfilePreview(
       profile: profile,
       data: data,
+      avatar: (showDraft ? widget.draftPhoto : widget.photo) == null
+          ? null
+          : _PreviewPhoto(
+              key: ValueKey(showDraft),
+              future: (showDraft ? widget.draftPhoto : widget.photo)!),
       header: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Text(showDraft
             ? 'Owner draft preview — pending Admin publication'
@@ -406,4 +415,39 @@ class _CoachAccountProfilePreviewState
       ]),
     );
   }
+}
+
+class _PreviewPhoto extends StatelessWidget {
+  const _PreviewPhoto({super.key, required this.future});
+  final Future<Uint8List?> future;
+  @override
+  Widget build(BuildContext context) => FutureBuilder<Uint8List?>(
+      future: future,
+      builder: (context, snapshot) {
+        const fallback = Icon(Icons.person,
+            key: Key('preview-photo-fallback'),
+            color: Colors.white70,
+            size: 42);
+        final Widget child = snapshot.connectionState != ConnectionState.done
+            ? const Center(
+                key: Key('preview-photo-loading'),
+                child: SizedBox(
+                    width: 24,
+                    height: 24,
+                    child: CircularProgressIndicator(
+                        strokeWidth: 2.5,
+                        color: Colors.white,
+                        semanticsLabel: 'Loading profile photo')))
+            : snapshot.hasError || snapshot.data == null
+                ? fallback
+                : Image.memory(snapshot.data!,
+                    key: const Key('preview-photo-image'),
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, error, stack) => fallback);
+        return AnimatedSwitcher(
+            duration: MediaQuery.disableAnimationsOf(context)
+                ? Duration.zero
+                : const Duration(milliseconds: 180),
+            child: child);
+      });
 }
