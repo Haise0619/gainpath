@@ -74,8 +74,7 @@ void main() {
     expect(find.byType(BookingConfirmedScreen), findsNothing);
     await tester.tap(find.text('View persisted bookings'));
     await tester.pumpAndSettle();
-    expect(find.text('Pending hold — time elapsed; awaiting server expiry.'),
-        findsOneWidget);
+    expect(find.text('Hold time elapsed'), findsOneWidget);
     await tester.tap(find.text('View details'));
     await tester.pumpAndSettle();
     expect(find.textContaining('booking'), findsWidgets);

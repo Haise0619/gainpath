@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:gainpath_domain/coaching.dart';
-import 'package:gainpath_domain/gainpath_domain.dart' show PersistedBookingRecord;
+import 'package:gainpath_domain/gainpath_domain.dart'
+    show PersistedBookingRecord;
 import 'package:gainpath_domain/identity.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
 import '../booking_details_screen.dart';
+import '../../shared/booking_coach_info.dart';
+import '../../shared/member_coach_presentation.dart';
 
 /// Compact, modern Member appointment card (approximately 150–190dp height)
 /// displaying only essential booking information:
@@ -21,6 +24,9 @@ class BookingCard extends StatelessWidget {
   final String? statusLabel;
   final String? locationLabel;
   final Widget? details;
+  final Widget? photo;
+  final Future<BookingCoachInfo>? coachInfoFuture;
+  final String? coachSpecialty;
   final VoidCallback? onViewDetails;
   final VoidCallback? onReschedule;
   final VoidCallback? onCancel;
@@ -38,6 +44,9 @@ class BookingCard extends StatelessWidget {
     this.statusLabel,
     this.locationLabel,
     this.details,
+    this.photo,
+    this.coachInfoFuture,
+    this.coachSpecialty,
     this.onViewDetails,
     this.onReschedule,
     this.onCancel,
@@ -72,6 +81,9 @@ class BookingCard extends StatelessWidget {
           statusLabel: statusLabel,
           locationLabel: locationLabel,
           coach: live ? null : _coach(context),
+          coachPhoto: photo,
+          coachInfoFuture: coachInfoFuture,
+          coachSpecialty: coachSpecialty,
           onCancel: onCancel,
           onReschedule: onReschedule,
           onMessage: onMessage,
@@ -100,7 +112,8 @@ class BookingCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final coach = live ? null : _coach(context);
-    final coachName = resolveCoachName(booking.coachName, fallback: coach?.name);
+    final coachName =
+        resolveCoachName(booking.coachName, fallback: coach?.name);
     final initial = coachName.isNotEmpty ? coachName[0].toUpperCase() : 'C';
     final location = locationLabel ?? resolveBranchLocation(booking.branch);
     final feeText = resolveBookingFee(booking.fee, feeMinor: record?.feeMinor);
@@ -127,21 +140,22 @@ class BookingCard extends StatelessWidget {
                 child: SizedBox(
                   width: 46,
                   height: 46,
-                  child: coach != null && coach.imageUrl.isNotEmpty
-                      ? networkAvatar(coach.imageUrl)
-                      : Container(
-                          color: AppColors.primaryTint,
-                          child: Center(
-                            child: Text(
-                              initial,
-                              style: const TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 17,
-                                color: AppColors.primary,
+                  child: photo ??
+                      (coach != null && coach.imageUrl.isNotEmpty
+                          ? networkAvatar(coach.imageUrl)
+                          : Container(
+                              color: AppColors.primaryTint,
+                              child: Center(
+                                child: Text(
+                                  initial,
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 17,
+                                    color: AppColors.primary,
+                                  ),
+                                ),
                               ),
-                            ),
-                          ),
-                        ),
+                            )),
                 ),
               ),
               const SizedBox(width: 12),
@@ -179,17 +193,21 @@ class BookingCard extends StatelessWidget {
                         const SizedBox(width: 4),
                         Expanded(
                           child: Text(
-                            '${_formatDate(booking.start)}  ·  $location',
+                            _formatDate(booking.start),
                             style: Theme.of(context)
                                 .textTheme
                                 .bodyMedium
                                 ?.copyWith(fontSize: 12.5),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
+                            softWrap: true,
                           ),
                         ),
                       ],
                     ),
+                    const SizedBox(height: 3),
+                    Text(location,
+                        style: memberCoachTypography(context)
+                            .bodySmall
+                            ?.copyWith(color: AppColors.inkSoft)),
                   ],
                 ),
               ),
@@ -365,6 +383,6 @@ class BookingCard extends StatelessWidget {
     ];
     final h = d.hour.toString().padLeft(2, '0');
     final m = d.minute.toString().padLeft(2, '0');
-    return '${d.day} ${months[d.month - 1]}  ·  $h:$m';
+    return '${d.day} ${months[d.month - 1]} ${d.year}  ·  $h:$m';
   }
 }

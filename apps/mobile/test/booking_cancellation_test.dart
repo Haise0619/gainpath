@@ -22,6 +22,8 @@ class LifecycleFake
       int? dayCount,
       BookingCursor? cursor}) async {
     final data = pageJson();
+    // Exercise an active hold; an elapsed hold is now correctly historical.
+    data['serverNowMillis'] = 1791936599999;
     if (cancelled) {
       final record = (data['records'] as List).first as Map<String, dynamic>;
       record['status'] = 'cancelled';
@@ -128,7 +130,7 @@ void main() {
     await tester.tap(find.text('Cancel hold'));
     await tester.pumpAndSettle();
     expect(fake.requests.length, 1);
-    expect(find.text('cancelled'), findsOneWidget);
+    expect(find.text('Cancelled'), findsWidgets);
     expect(find.widgetWithText(OutlinedButton, 'Cancel'), findsNothing);
     await tester.pumpWidget(MaterialApp(
         home: LiveBookingListView(

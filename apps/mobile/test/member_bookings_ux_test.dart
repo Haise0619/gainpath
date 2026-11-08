@@ -64,7 +64,11 @@ void main() {
       await tester.pumpWidget(
         _testShell(
           BookingScheduleScreen(
-            persistedBookings: [sampleUpcoming, sampleCompleted, sampleCancelled],
+            persistedBookings: [
+              sampleUpcoming,
+              sampleCompleted,
+              sampleCancelled
+            ],
             embedded: true,
           ),
         ),
@@ -94,7 +98,11 @@ void main() {
       await tester.pumpWidget(
         _testShell(
           BookingScheduleScreen(
-            persistedBookings: [sampleUpcoming, sampleCompleted, sampleCancelled],
+            persistedBookings: [
+              sampleUpcoming,
+              sampleCompleted,
+              sampleCancelled
+            ],
             embedded: true,
           ),
         ),
@@ -126,7 +134,11 @@ void main() {
       await tester.pumpWidget(
         _testShell(
           BookingScheduleScreen(
-            persistedBookings: [sampleUpcoming, sampleCompleted, sampleCancelled],
+            persistedBookings: [
+              sampleUpcoming,
+              sampleCompleted,
+              sampleCancelled
+            ],
             embedded: true,
           ),
         ),
@@ -153,7 +165,11 @@ void main() {
       await tester.pumpWidget(
         _testShell(
           BookingScheduleScreen(
-            persistedBookings: [sampleUpcoming, sampleCompleted, sampleCancelled],
+            persistedBookings: [
+              sampleUpcoming,
+              sampleCompleted,
+              sampleCancelled
+            ],
             embedded: true,
           ),
         ),
@@ -203,7 +219,7 @@ void main() {
       expect(find.text('No upcoming sessions'), findsOneWidget);
       expect(
         find.text(
-          'You have no scheduled sessions. Connect with a top coach to plan your next workout.',
+          'You have no scheduled sessions. Find a coach to book a consultation.',
         ),
         findsOneWidget,
       );
@@ -264,7 +280,11 @@ void main() {
       await tester.pumpWidget(
         _testShell(
           BookingScheduleScreen(
-            persistedBookings: [sampleUpcoming, sampleCompleted, sampleCancelled],
+            persistedBookings: [
+              sampleUpcoming,
+              sampleCompleted,
+              sampleCancelled
+            ],
             embedded: true,
           ),
           width: 320,
@@ -285,15 +305,20 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
-    test('formatters resolve locations, fees, coach names, and distinct expired status', () {
+    test(
+        'formatters resolve locations, fees, coach names, and distinct expired status',
+        () {
       // Human-readable branch formatting (never raw IDs)
-      expect(resolveBranchLocation('branch_internal_42'), 'Location confirmed when booking');
-      expect(resolveBranchLocation('removed-branch'), 'Location confirmed when booking');
+      expect(resolveBranchLocation('branch_internal_42'),
+          'Location confirmed when booking');
+      expect(resolveBranchLocation('removed-branch'),
+          'Location confirmed when booking');
       expect(resolveBranchLocation(''), 'Location confirmed when booking');
       expect(resolveBranchLocation('-'), 'Location confirmed when booking');
       expect(resolveBranchLocation('Mid Valley'), 'Mid Valley');
       expect(
-        resolveBranchLocation('branch_internal_42', branchNames: {'branch_internal_42': 'Pavilion Bukit Jalil'}),
+        resolveBranchLocation('branch_internal_42',
+            branchNames: {'branch_internal_42': 'Pavilion Bukit Jalil'}),
         'Pavilion Bukit Jalil',
       );
 
@@ -311,9 +336,15 @@ void main() {
       expect(resolveCoachName('Sarah Jenkins'), 'Sarah Jenkins');
 
       // Distinct Expired status from Cancelled
-      expect(resolveStatusLabel(BookingStatus.cancelled, rawStatus: 'expired'), 'Expired');
-      expect(resolveStatusLabel(BookingStatus.cancelled, resolution: 'hold_expired'), 'Expired');
-      expect(resolveStatusLabel(BookingStatus.cancelled, labelOverride: 'Expired'), 'Expired');
+      expect(resolveStatusLabel(BookingStatus.cancelled, rawStatus: 'expired'),
+          'Expired');
+      expect(
+          resolveStatusLabel(BookingStatus.cancelled,
+              resolution: 'hold_expired'),
+          'Expired');
+      expect(
+          resolveStatusLabel(BookingStatus.cancelled, labelOverride: 'Expired'),
+          'Expired');
       expect(resolveStatusLabel(BookingStatus.cancelled), 'Cancelled');
       expect(resolveStatusLabel(BookingStatus.pending), 'Pending hold');
       expect(resolveStatusLabel(BookingStatus.confirmed), 'Confirmed');
@@ -349,7 +380,8 @@ void main() {
       expect(find.text('Coach'), findsOneWidget);
       // Raw branch ID is converted to human-readable
       expect(find.text('branch_internal_42'), findsNothing);
-      expect(find.textContaining('Location confirmed when booking'), findsOneWidget);
+      expect(find.textContaining('Location confirmed when booking'),
+          findsOneWidget);
       // Missing/zero price is NOT displayed (never RM 0.00 or Free)
       expect(find.text('RM 0.00'), findsNothing);
       expect(find.text('Free'), findsNothing);

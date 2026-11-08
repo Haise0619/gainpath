@@ -14,6 +14,8 @@ import '../../infrastructure/firebase/firebase_booking_communication_repository.
 import '../../infrastructure/firebase/firebase_consultation_notes_repository.dart';
 import '../../infrastructure/firebase/firebase_booking_review_repository.dart';
 import '../../infrastructure/firebase/firebase_coach_directory_repository.dart';
+import '../../features/coaching/presentation/shared/live_coach_directory_views.dart'
+    show PublishedCoachPhoto;
 
 typedef BookingServices = ({
   MemberBookingOptionsRepository options,
@@ -57,10 +59,12 @@ Widget buildBookingListContent(BuildContext context, AuthSession session, bool F
                         bookingId: id,
                         isCurrent: current))),
         loadCoachName: (id) async =>
-            (await FirebaseCoachDirectoryRepository(scope: session.scope, isCurrent: current)
-                    .loadPublished(id))
+            (await FirebaseCoachDirectoryRepository(scope: session.scope, isCurrent: current).loadPublished(id))
                 ?.fields
                 .displayName,
+        loadCoachProfile: (id) =>
+            FirebaseCoachDirectoryRepository(scope: session.scope, isCurrent: current).loadPublished(id),
+        coachPhotoBuilder: (profile) => PublishedCoachPhoto(coach: profile, repository: FirebaseCoachDirectoryRepository(scope: session.scope, isCurrent: current), isCurrent: current, size: 48),
         communication: FirebaseBookingCommunicationRepository(scope: session.scope, isCurrent: current),
         repository: createBookingList(session, current, factory),
         coachId: session.role == AppRole.coach ? session.userId : null,

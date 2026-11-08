@@ -5,9 +5,12 @@ import '../shared/coach_profile_screen.dart';
 import 'message_coach_screen.dart';
 import 'reschedule_screen.dart';
 import 'widgets/booking_card.dart';
+import '../shared/persisted_booking_presentation.dart';
+import '../shared/booking_coach_info.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:gainpath_domain/coaching.dart';
-import 'package:gainpath_domain/gainpath_domain.dart' show PersistedBookingRecord;
+import 'package:gainpath_domain/gainpath_domain.dart'
+    show PersistedBookingRecord;
 import 'package:gainpath_domain/identity.dart';
 
 const _cancelReasons = [
@@ -36,12 +39,20 @@ class BookingScheduleScreen extends StatefulWidget {
       this.onMessage,
       this.onFindCoach,
       this.recordFor,
+      this.serverNowMillis,
+      this.coachPhotoBuilder,
+      this.coachSpecialtyFor,
+      this.coachInfoFor,
       this.onPayment,
       this.onNotes,
       this.onRescheduleBooking,
       this.onCancelBooking,
       this.header,
       this.embedded = false});
+  final int? serverNowMillis;
+  final Widget? Function(Booking)? coachPhotoBuilder;
+  final String? Function(String)? coachSpecialtyFor;
+  final Future<BookingCoachInfo>? Function(String)? coachInfoFor;
   final bool embedded;
   final List<Booking>? persistedBookings;
   final Map<String, String> statusLabels;
@@ -63,7 +74,7 @@ class BookingScheduleScreen extends StatefulWidget {
 
 enum _MainBookingTab { upcoming, history }
 
-enum _HistoryFilter { all, completed, cancelled }
+enum _HistoryFilter { all, past, completed, cancelled, expired, refunded }
 
 class _BookingScheduleScreenState extends State<BookingScheduleScreen> {
   _MainBookingTab? _userSelectedTab;
@@ -160,6 +171,7 @@ class _BookingScheduleScreenState extends State<BookingScheduleScreen> {
     return Material(
       color: Colors.transparent,
       child: InkWell(
+        key: ValueKey('tab_${tab.name}'),
         onTap: () => setState(() => _userSelectedTab = tab),
         borderRadius: BorderRadius.circular(11),
         child: AnimatedContainer(
@@ -226,34 +238,52 @@ class _BookingScheduleScreenState extends State<BookingScheduleScreen> {
   }
 
   Widget _buildHistoryFilterChips(
-      int totalCount, int completedCount, int cancelledCount) {
+      int totalCount, int completedCount, int cancelledCount,
+      {int pastCount = 0, int expiredCount = 0, int refundedCount = 0}) {
+    final chips = <Widget>[
+      _buildHistoryFilterChip(
+          filter: _HistoryFilter.all,
+          label: 'All',
+          count: totalCount,
+          icon: Icons.dashboard_outlined),
+      if (pastCount > 0)
+        _buildHistoryFilterChip(
+            filter: _HistoryFilter.past,
+            label: 'Past',
+            count: pastCount,
+            icon: Icons.schedule_outlined),
+      if (expiredCount > 0)
+        _buildHistoryFilterChip(
+            filter: _HistoryFilter.expired,
+            label: 'Expired',
+            count: expiredCount,
+            icon: Icons.timer_off_outlined),
+      _buildHistoryFilterChip(
+          filter: _HistoryFilter.completed,
+          label: 'Completed',
+          count: completedCount,
+          icon: Icons.task_alt_outlined),
+      _buildHistoryFilterChip(
+          filter: _HistoryFilter.cancelled,
+          label: 'Cancelled',
+          count: cancelledCount,
+          icon: Icons.event_busy_outlined),
+      if (refundedCount > 0)
+        _buildHistoryFilterChip(
+            filter: _HistoryFilter.refunded,
+            label: 'Refunded',
+            count: refundedCount,
+            icon: Icons.receipt_long_outlined),
+    ];
     return Padding(
-      padding: const EdgeInsets.only(bottom: 14),
-      child: Wrap(
-        spacing: 8,
-        runSpacing: 8,
-        children: [
-          _buildHistoryFilterChip(
-            filter: _HistoryFilter.all,
-            label: 'All',
-            count: totalCount,
-            icon: Icons.dashboard_outlined,
-          ),
-          _buildHistoryFilterChip(
-            filter: _HistoryFilter.completed,
-            label: 'Completed',
-            count: completedCount,
-            icon: Icons.task_alt_outlined,
-          ),
-          _buildHistoryFilterChip(
-            filter: _HistoryFilter.cancelled,
-            label: 'Cancelled',
-            count: cancelledCount,
-            icon: Icons.event_busy_outlined,
-          ),
-        ],
-      ),
-    );
+        padding: const EdgeInsets.only(bottom: 14),
+        child: SingleChildScrollView(
+            key: const ValueKey('booking-history-filters'),
+            scrollDirection: Axis.horizontal,
+            child: Row(children: [
+              for (final chip in chips)
+                Padding(padding: const EdgeInsets.only(right: 8), child: chip)
+            ])));
   }
 
   Widget _buildHistoryFilterChip({
@@ -339,7 +369,7 @@ class _BookingScheduleScreenState extends State<BookingScheduleScreen> {
   Widget _sectionHeader(String title, int count) {
     return Row(
       children: [
-        Eyebrow(title),
+        Flexible(child: Eyebrow(title)),
         const SizedBox(width: 8),
         Container(
           margin: const EdgeInsets.only(bottom: 6),
@@ -436,211 +466,172 @@ class _BookingScheduleScreenState extends State<BookingScheduleScreen> {
     );
   }
 
+  MemberBookingPhase _phase(Booking booking) {
+    final record = widget.recordFor?.call(booking.id);
+    if (record != null && widget.serverNowMillis != null) {
+      return memberBookingPhase(record, widget.serverNowMillis!);
+    }
+    return switch (booking.status) {
+      BookingStatus.confirmed ||
+      BookingStatus.pending =>
+        MemberBookingPhase.upcoming,
+      BookingStatus.completed => MemberBookingPhase.completed,
+      BookingStatus.cancelled => MemberBookingPhase.cancelled
+    };
+  }
+
+  Widget _card(Booking booking, bool live) {
+    final record = widget.recordFor?.call(booking.id);
+    final phase = _phase(booking);
+    final elapsed = phase == MemberBookingPhase.past ||
+        phase == MemberBookingPhase.holdElapsed;
+    final pending = record != null
+        ? record.rawStatus == 'pending_hold'
+        : booking.status == BookingStatus.pending;
+    final now = widget.serverNowMillis;
+    final canReschedule = !elapsed &&
+        (record == null ||
+            now == null ||
+            record.startAtMillis - now >= 24 * 3600000);
+    final canCancel = !elapsed &&
+        (pending ||
+            record == null ||
+            now == null ||
+            record.startAtMillis - now >= 12 * 3600000);
+    return Padding(
+        padding: const EdgeInsets.only(bottom: 10),
+        child: BookingCard(
+          booking: booking,
+          record: record,
+          live: live,
+          statusLabel: widget.statusLabels[booking.id],
+          photo: widget.coachPhotoBuilder?.call(booking),
+          coachInfoFuture: widget.coachInfoFor?.call(booking.coachId),
+          coachSpecialty: widget.coachSpecialtyFor?.call(booking.coachId),
+          details: widget.details[booking.id],
+          onPayment: widget.onPayment == null
+              ? null
+              : () => widget.onPayment!(booking.id),
+          onNotes:
+              widget.onNotes == null ? null : () => widget.onNotes!(booking),
+          onReschedule: canReschedule
+              ? (live
+                  ? widget.onRescheduleBooking == null
+                      ? null
+                      : () => widget.onRescheduleBooking!(booking)
+                  : () => _reschedule(booking))
+              : null,
+          onCancel: canCancel
+              ? (live
+                  ? pending
+                      ? widget.onCancelHold == null
+                          ? null
+                          : () => widget.onCancelHold!(booking.id)
+                      : widget.onCancelBooking == null
+                          ? null
+                          : () => widget.onCancelBooking!(booking)
+                  : () => _cancel(booking))
+              : null,
+          onMessage: live
+              ? widget.onMessage == null
+                  ? null
+                  : () => widget.onMessage!(booking)
+              : () => _message(booking),
+          onRate: booking.status == BookingStatus.completed
+              ? (live
+                  ? widget.onReview == null
+                      ? null
+                      : () => widget.onReview!(booking.id)
+                  : () => _rate(booking))
+              : null,
+          onBookAgain: !live && booking.status == BookingStatus.cancelled
+              ? () => _bookAgain(booking)
+              : null,
+        ));
+  }
+
   @override
   Widget build(BuildContext context) {
-    final bookings = widget.persistedBookings == null
+    final mock = widget.persistedBookings == null
         ? context.watch<BookingBloc>().state
         : null;
-    final upcoming = widget.persistedBookings
-            ?.where((b) =>
-                b.status == BookingStatus.pending ||
-                b.status == BookingStatus.confirmed)
-            .toList() ??
-        bookings!.memberUpcoming;
-    final completed = widget.persistedBookings
-            ?.where((b) => b.status == BookingStatus.completed)
-            .toList() ??
-        bookings!.memberCompleted;
-    final cancelled = widget.persistedBookings
-            ?.where((b) => b.status == BookingStatus.cancelled)
-            .toList() ??
-        bookings!.memberCancelled;
+    final bookings = widget.persistedBookings ??
+        [
+          ...mock!.memberUpcoming,
+          ...mock.memberCompleted,
+          ...mock.memberCancelled
+        ];
+    List<Booking> group(MemberBookingPhase phase) =>
+        bookings.where((b) => _phase(b) == phase).toList();
+    final upcoming = group(MemberBookingPhase.upcoming);
+    final past = group(MemberBookingPhase.past),
+        elapsed = group(MemberBookingPhase.holdElapsed);
+    final completed = group(MemberBookingPhase.completed),
+        cancelled = group(MemberBookingPhase.cancelled),
+        expired = group(MemberBookingPhase.expired),
+        refunded = group(MemberBookingPhase.refunded);
+    final historyCount = past.length +
+        elapsed.length +
+        completed.length +
+        cancelled.length +
+        expired.length +
+        refunded.length;
     final live = widget.persistedBookings != null;
-
-    final currentTab =
-        _currentTab(upcoming.length, completed.length + cancelled.length);
-
-    final body = PageBody(
-      children: [
-        if (widget.header != null) widget.header!,
-        _buildMainTabs(
-          currentTab,
-          upcoming.length,
-          completed.length + cancelled.length,
-        ),
-        if (currentTab == _MainBookingTab.upcoming) ...[
-          _sectionHeader('Upcoming', upcoming.length),
-          if (upcoming.isEmpty)
-            _emptyState(
-              context,
+    final tab = _currentTab(upcoming.length, historyCount);
+    final sections = <({String title, List<Booking> rows})>[
+      if (_historyFilter == _HistoryFilter.all ||
+          _historyFilter == _HistoryFilter.refunded)
+        (title: 'Refunded', rows: refunded),
+      if (_historyFilter == _HistoryFilter.all ||
+          _historyFilter == _HistoryFilter.past) ...[
+        (title: 'Past sessions', rows: past),
+        (title: 'Elapsed holds', rows: elapsed)
+      ],
+      if (_historyFilter == _HistoryFilter.all ||
+          _historyFilter == _HistoryFilter.completed)
+        (title: 'Completed', rows: completed),
+      if (_historyFilter == _HistoryFilter.all ||
+          _historyFilter == _HistoryFilter.cancelled)
+        (title: 'Cancelled', rows: cancelled),
+      if (_historyFilter == _HistoryFilter.all ||
+          _historyFilter == _HistoryFilter.expired)
+        (title: 'Expired holds', rows: expired),
+    ];
+    final body = PageBody(children: [
+      if (widget.header != null) widget.header!,
+      _buildMainTabs(tab, upcoming.length, historyCount),
+      if (tab == _MainBookingTab.upcoming) ...[
+        _sectionHeader('Upcoming', upcoming.length),
+        if (upcoming.isEmpty)
+          _emptyState(context,
               icon: Icons.event_available_outlined,
               title: 'No upcoming sessions',
               subtitle:
-                  'You have no scheduled sessions. Connect with a top coach to plan your next workout.',
-              action: _buildFindCoachButton(),
-            )
-          else
-            ...upcoming.map((b) => Padding(
-                  padding: const EdgeInsets.only(bottom: 10),
-                  child: BookingCard(
-                    booking: b,
-                    record: widget.recordFor?.call(b.id),
-                    live: live,
-                    statusLabel: widget.statusLabels[b.id],
-                    details: widget.details[b.id],
-                    onPayment: widget.onPayment != null
-                        ? () => widget.onPayment!(b.id)
-                        : null,
-                    onNotes: widget.onNotes != null
-                        ? () => widget.onNotes!(b)
-                        : null,
-                    onReschedule: live
-                        ? (widget.onRescheduleBooking != null
-                            ? () => widget.onRescheduleBooking!(b)
-                            : null)
-                        : () => _reschedule(b),
-                    onCancel: live
-                        ? (widget.statusLabels[b.id]?.toLowerCase().contains('pending') == true
-                            ? (widget.onCancelHold == null
-                                ? null
-                                : () => widget.onCancelHold!(b.id))
-                            : (widget.onCancelBooking != null
-                                ? () => widget.onCancelBooking!(b)
-                                : null))
-                        : () => _cancel(b),
-                    onMessage: live
-                        ? (widget.onMessage == null
-                            ? null
-                            : () => widget.onMessage!(b))
-                        : () => _message(b),
-                  ),
-                )),
-        ] else ...[
-          _buildHistoryFilterChips(
-            completed.length + cancelled.length,
-            completed.length,
-            cancelled.length,
-          ),
-          if (_historyFilter == _HistoryFilter.all) ...[
-            if (completed.isEmpty && cancelled.isEmpty)
-              _emptyState(
-                context,
-                icon: Icons.history_rounded,
-                title: 'No session history',
-                subtitle:
-                    'Completed workouts and coach notes will appear here once you finish a session.',
-                action: _buildFindCoachButton(),
-              )
-            else ...[
-              if (completed.isNotEmpty) ...[
-                _sectionHeader('Completed', completed.length),
-                ...completed.map((b) => Padding(
-                      padding: const EdgeInsets.only(bottom: 10),
-                      child: BookingCard(
-                        booking: b,
-                        record: widget.recordFor?.call(b.id),
-                        live: live,
-                        statusLabel: widget.statusLabels[b.id],
-                        details: widget.details[b.id],
-                        onNotes: widget.onNotes != null
-                            ? () => widget.onNotes!(b)
-                            : null,
-                        onMessage: live
-                            ? (widget.onMessage == null
-                                ? null
-                                : () => widget.onMessage!(b))
-                            : () => _message(b),
-                        onRate: live
-                            ? (widget.onReview == null
-                                ? null
-                                : () => widget.onReview!(b.id))
-                            : () => _rate(b),
-                      ),
-                    )),
-              ],
-              if (cancelled.isNotEmpty) ...[
-                if (completed.isNotEmpty) const SizedBox(height: 14),
-                _sectionHeader('Cancelled', cancelled.length),
-                ...cancelled.map((b) => Padding(
-                      padding: const EdgeInsets.only(bottom: 10),
-                      child: BookingCard(
-                        booking: b,
-                        record: widget.recordFor?.call(b.id),
-                        live: live,
-                        statusLabel: widget.statusLabels[b.id],
-                        details: widget.details[b.id],
-                        onBookAgain: live ? null : () => _bookAgain(b),
-                        onMessage: live && widget.onMessage != null
-                            ? () => widget.onMessage!(b)
-                            : null,
-                      ),
-                    )),
-              ],
-            ],
-          ] else if (_historyFilter == _HistoryFilter.completed) ...[
-            _sectionHeader('Completed', completed.length),
-            if (completed.isEmpty)
-              _emptyState(
-                context,
-                icon: Icons.task_alt_rounded,
-                title: 'No completed sessions',
-                subtitle:
-                    'Past sessions, ratings, and coach consultation notes will appear here.',
-                action: _buildFindCoachButton(),
-              )
-            else
-              ...completed.map((b) => Padding(
-                    padding: const EdgeInsets.only(bottom: 10),
-                    child: BookingCard(
-                      booking: b,
-                      record: widget.recordFor?.call(b.id),
-                      live: live,
-                      statusLabel: widget.statusLabels[b.id],
-                      details: widget.details[b.id],
-                      onNotes: widget.onNotes != null
-                          ? () => widget.onNotes!(b)
-                          : null,
-                      onMessage: live
-                          ? (widget.onMessage == null
-                              ? null
-                              : () => widget.onMessage!(b))
-                          : () => _message(b),
-                      onRate: live
-                          ? (widget.onReview == null
-                              ? null
-                              : () => widget.onReview!(b.id))
-                          : () => _rate(b),
-                    ),
-                  )),
-          ] else if (_historyFilter == _HistoryFilter.cancelled) ...[
-            _sectionHeader('Cancelled', cancelled.length),
-            if (cancelled.isEmpty)
-              _emptyState(
-                context,
-                icon: Icons.event_busy_outlined,
-                title: 'No cancelled sessions',
-                subtitle:
-                    'Any cancelled appointments or expired slot holds will be logged here.',
-              )
-            else
-              ...cancelled.map((b) => Padding(
-                    padding: const EdgeInsets.only(bottom: 10),
-                    child: BookingCard(
-                      booking: b,
-                      record: widget.recordFor?.call(b.id),
-                      live: live,
-                      statusLabel: widget.statusLabels[b.id],
-                      details: widget.details[b.id],
-                      onBookAgain: live ? null : () => _bookAgain(b),
-                      onMessage: live && widget.onMessage != null
-                          ? () => widget.onMessage!(b)
-                          : null,
-                    ),
-                  )),
+                  'You have no scheduled sessions. Find a coach to book a consultation.',
+              action: _buildFindCoachButton()),
+        ...upcoming.map((b) => _card(b, live)),
+      ] else ...[
+        _buildHistoryFilterChips(
+            historyCount, completed.length, cancelled.length,
+            pastCount: past.length + elapsed.length,
+            expiredCount: expired.length,
+            refundedCount: refunded.length),
+        if (sections.every((s) => s.rows.isEmpty))
+          _emptyState(context,
+              icon: Icons.history_rounded,
+              title: _historyFilter == _HistoryFilter.all
+                  ? 'No session history'
+                  : 'No ${_historyFilter.name} sessions',
+              subtitle:
+                  'Past coaching sessions and booking updates will appear here.',
+              action: _buildFindCoachButton()),
+        for (final section in sections)
+          if (section.rows.isNotEmpty) ...[
+            _sectionHeader(section.title, section.rows.length),
+            ...section.rows.map((b) => _card(b, live)),
           ],
-        ],
       ],
-    );
+    ]);
     return widget.embedded
         ? body
         : Scaffold(
@@ -1003,8 +994,8 @@ class _BookingScheduleScreenState extends State<BookingScheduleScreen> {
                     ),
                     focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(14),
-                      borderSide:
-                          const BorderSide(color: AppColors.primary, width: 1.5),
+                      borderSide: const BorderSide(
+                          color: AppColors.primary, width: 1.5),
                     ),
                   ),
                 ),

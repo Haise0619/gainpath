@@ -64,10 +64,10 @@ void main() {
         home: LiveBookingListView(repository: Lists(), isCurrent: () => true)));
     await tester.pumpAndSettle();
     expect(find.byType(BookingScheduleScreen), findsOneWidget);
-    expect(find.text('UPCOMING'), findsOneWidget);
-    await tester.tap(find.text('History'));
+    expect(find.text('ELAPSED HOLDS'), findsOneWidget);
+    await tester.tap(find.text('Upcoming'));
     await tester.pumpAndSettle();
-    expect(find.text('No session history'), findsOneWidget);
+    expect(find.text('No upcoming sessions'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 }

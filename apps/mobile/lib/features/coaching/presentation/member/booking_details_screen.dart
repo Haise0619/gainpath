@@ -2,10 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:gainpath_domain/coaching.dart';
-import 'package:gainpath_domain/gainpath_domain.dart' show PersistedBookingRecord;
+import 'package:gainpath_domain/gainpath_domain.dart'
+    show PersistedBookingRecord;
 import 'package:gainpath_domain/identity.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
 import '../shared/coach_profile_screen.dart';
+import '../shared/booking_coach_info.dart';
 
 /// Formats a branch ID into a human-readable location name.
 /// Never exposes raw IDs like 'branch_internal_42' or 'removed-branch'.
@@ -22,7 +24,7 @@ String resolveBranchLocation(String branchId,
       (trimmed.contains('_') && !trimmed.contains(' '))) {
     return 'Location confirmed when booking';
   }
-  return trimmed;
+  return trimmed.contains(' ') ? trimmed : 'Location confirmed when booking';
 }
 
 /// Resolves fee for display. Returns null if missing or <= 0.
@@ -84,6 +86,9 @@ class BookingDetailsScreen extends StatefulWidget {
   final String? statusLabel;
   final String? locationLabel;
   final Coach? coach;
+  final Widget? coachPhoto;
+  final Future<BookingCoachInfo>? coachInfoFuture;
+  final String? coachSpecialty;
   final VoidCallback? onCancel;
   final VoidCallback? onReschedule;
   final VoidCallback? onMessage;
@@ -100,6 +105,9 @@ class BookingDetailsScreen extends StatefulWidget {
     this.statusLabel,
     this.locationLabel,
     this.coach,
+    this.coachPhoto,
+    this.coachInfoFuture,
+    this.coachSpecialty,
     this.onCancel,
     this.onReschedule,
     this.onMessage,
@@ -125,7 +133,7 @@ class _BookingDetailsScreenState extends State<BookingDetailsScreen> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    if (_resolvedCoach == null) {
+    if (_resolvedCoach == null && !widget.live) {
       try {
         final coaches = context.read<CoachRepository>().coaches;
         for (final c in coaches) {
@@ -231,6 +239,14 @@ class _BookingDetailsScreenState extends State<BookingDetailsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    return widget.coachInfoFuture == null
+        ? _build(context)
+        : FutureBuilder<BookingCoachInfo>(
+            future: widget.coachInfoFuture,
+            builder: (context, snapshot) => _build(context, snapshot.data));
+  }
+
+  Widget _build(BuildContext context, [BookingCoachInfo? coachInfo]) {
     final b = widget.booking;
     final r = widget.record;
     final statusText = resolveStatusLabel(
@@ -239,15 +255,23 @@ class _BookingDetailsScreenState extends State<BookingDetailsScreen> {
       labelOverride: widget.statusLabel,
       resolution: r?.resolution,
     );
-    final coachName = resolveCoachName(b.coachName, fallback: _resolvedCoach?.name);
+    final coachName = resolveCoachName(coachInfo?.name ?? b.coachName,
+        fallback: _resolvedCoach?.name);
     final location = widget.locationLabel ?? resolveBranchLocation(b.branch);
     final feeText = resolveBookingFee(b.fee, feeMinor: r?.feeMinor);
 
     final isExpired = statusText.toLowerCase() == 'expired';
     final isCancelled = statusText.toLowerCase() == 'cancelled';
-    final isCompleted = statusText.toLowerCase() == 'completed' || b.status == BookingStatus.completed;
-    final isConfirmed = statusText.toLowerCase() == 'confirmed' || b.status == BookingStatus.confirmed;
-    final isPending = statusText.toLowerCase().contains('pending') || b.status == BookingStatus.pending;
+    final isCompleted = statusText.toLowerCase() == 'completed' ||
+        b.status == BookingStatus.completed;
+    final sessionEnded = statusText == 'Session ended';
+    final holdElapsed = statusText == 'Hold time elapsed';
+    final isConfirmed = !sessionEnded &&
+        (statusText.toLowerCase() == 'confirmed' ||
+            b.status == BookingStatus.confirmed);
+    final isPending = !holdElapsed &&
+        (statusText.toLowerCase().contains('pending') ||
+            b.status == BookingStatus.pending);
 
     return Scaffold(
       appBar: AppBar(
@@ -270,7 +294,8 @@ class _BookingDetailsScreenState extends State<BookingDetailsScreen> {
                   children: [
                     statusPill(statusText),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 3),
                       decoration: BoxDecoration(
                         color: AppColors.primaryTint,
                         borderRadius: BorderRadius.circular(6),
@@ -286,6 +311,18 @@ class _BookingDetailsScreenState extends State<BookingDetailsScreen> {
                     ),
                   ],
                 ),
+                if (sessionEnded) ...[
+                  const SizedBox(height: 12),
+                  const Text('The scheduled session time has passed.'),
+                  const Text('Completion has not been recorded.'),
+                  if (r != null)
+                    Text('Recorded booking status: ${r.rawStatus}'),
+                ],
+                if (holdElapsed) ...[
+                  const SizedBox(height: 12),
+                  const Text(
+                      'The hold time has elapsed. Awaiting a server status update; this is not a confirmed reservation.'),
+                ],
                 const SizedBox(height: 12),
                 Text(
                   '1-on-1 Consultation',
@@ -377,24 +414,27 @@ class _BookingDetailsScreenState extends State<BookingDetailsScreen> {
                       child: SizedBox(
                         width: 48,
                         height: 48,
-                        child: _resolvedCoach != null &&
-                                _resolvedCoach!.imageUrl.isNotEmpty
-                            ? networkAvatar(_resolvedCoach!.imageUrl)
-                            : Container(
-                                color: AppColors.primaryTint,
-                                child: Center(
-                                  child: Text(
-                                    coachName.isNotEmpty
-                                        ? coachName[0].toUpperCase()
-                                        : 'C',
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 18,
-                                      color: AppColors.primary,
+                        child: (coachInfo == null
+                                ? widget.coachPhoto
+                                : coachInfo.photo) ??
+                            (_resolvedCoach != null &&
+                                    _resolvedCoach!.imageUrl.isNotEmpty
+                                ? networkAvatar(_resolvedCoach!.imageUrl)
+                                : Container(
+                                    color: AppColors.primaryTint,
+                                    child: Center(
+                                      child: Text(
+                                        coachName.isNotEmpty
+                                            ? coachName[0].toUpperCase()
+                                            : 'C',
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 18,
+                                          color: AppColors.primary,
+                                        ),
+                                      ),
                                     ),
-                                  ),
-                                ),
-                              ),
+                                  )),
                       ),
                     ),
                     const SizedBox(width: 12),
@@ -413,9 +453,15 @@ class _BookingDetailsScreenState extends State<BookingDetailsScreen> {
                           Text(
                             _resolvedCoach?.specialty.isNotEmpty == true
                                 ? _resolvedCoach!.specialty
-                                : (_resolvedCoach?.specializationTags.isNotEmpty == true
-                                    ? _resolvedCoach!.specializationTags.join(' · ')
-                                    : 'Certified Fitness Coach'),
+                                : (_resolvedCoach
+                                            ?.specializationTags.isNotEmpty ==
+                                        true
+                                    ? _resolvedCoach!.specializationTags
+                                        .join(' · ')
+                                    : ((coachInfo == null
+                                            ? widget.coachSpecialty
+                                            : coachInfo.specialty) ??
+                                        'Coach information unavailable')),
                             style: const TextStyle(
                               fontSize: 12,
                               color: AppColors.inkSoft,
@@ -492,21 +538,23 @@ class _BookingDetailsScreenState extends State<BookingDetailsScreen> {
                 ),
                 _detailRow(
                   'Payment Status',
-                  isConfirmed
-                      ? 'Paid'
-                      : isPending
-                          ? 'Pending payment'
-                          : isCancelled
-                              ? 'Cancelled'
-                              : isExpired
-                                  ? 'Expired'
-                                  : 'Completed',
-                  trailing: isConfirmed || isCompleted
+                  widget.live
+                      ? 'See payment details'
+                      : isConfirmed
+                          ? 'Paid'
+                          : isPending
+                              ? 'Pending payment'
+                              : isCancelled
+                                  ? 'Cancelled'
+                                  : isExpired
+                                      ? 'Expired'
+                                      : 'Completed',
+                  trailing: !widget.live && (isConfirmed || isCompleted)
                       ? const Icon(Icons.check_circle_rounded,
                           size: 16, color: AppColors.success)
                       : null,
                 ),
-                if (widget.onPayment != null && isPending) ...[
+                if (widget.onPayment != null) ...[
                   const SizedBox(height: 10),
                   SizedBox(
                     width: double.infinity,
@@ -519,7 +567,9 @@ class _BookingDetailsScreenState extends State<BookingDetailsScreen> {
                         ),
                       ),
                       onPressed: widget.onPayment,
-                      child: const Text('View payment / continue'),
+                      child: Text(isPending && !holdElapsed
+                          ? 'View payment / continue'
+                          : 'View payment details'),
                     ),
                   ),
                 ],
@@ -537,7 +587,10 @@ class _BookingDetailsScreenState extends State<BookingDetailsScreen> {
                   if (isPending && widget.onCancel != null) ...[
                     const Text(
                       'This slot is held for you. If you changed your mind, you can cancel the hold to free the slot.',
-                      style: TextStyle(fontSize: 12.5, color: AppColors.inkSoft, height: 1.35),
+                      style: TextStyle(
+                          fontSize: 12.5,
+                          color: AppColors.inkSoft,
+                          height: 1.35),
                     ),
                     const SizedBox(height: 10),
                     OutlinedButton.icon(
@@ -557,7 +610,8 @@ class _BookingDetailsScreenState extends State<BookingDetailsScreen> {
                   if (isConfirmed) ...[
                     const Text(
                       'Member policies: cancellations require 12 hours and rescheduling requires 24 hours before session start.',
-                      style: TextStyle(fontSize: 12, color: AppColors.inkSoft, height: 1.35),
+                      style: TextStyle(
+                          fontSize: 12, color: AppColors.inkSoft, height: 1.35),
                     ),
                     const SizedBox(height: 12),
                     Wrap(
@@ -573,7 +627,8 @@ class _BookingDetailsScreenState extends State<BookingDetailsScreen> {
                               ),
                             ),
                             onPressed: widget.onReschedule,
-                            icon: const Icon(Icons.edit_calendar_outlined, size: 16),
+                            icon: const Icon(Icons.edit_calendar_outlined,
+                                size: 16),
                             label: const Text('Reschedule'),
                           ),
                         if (widget.onCancel != null)
@@ -659,7 +714,8 @@ class _BookingDetailsScreenState extends State<BookingDetailsScreen> {
                       ),
                     ),
                     onPressed: widget.onMessage,
-                    icon: const Icon(Icons.chat_bubble_outline_rounded, size: 17),
+                    icon:
+                        const Icon(Icons.chat_bubble_outline_rounded, size: 17),
                     label: Text('Message $coachName'),
                   ),
                   const SizedBox(height: 10),
@@ -716,7 +772,8 @@ class _BookingDetailsScreenState extends State<BookingDetailsScreen> {
                 if (isCompleted) ...[
                   if (b.rated)
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 8),
                       decoration: BoxDecoration(
                         color: AppColors.accentTint,
                         borderRadius: BorderRadius.circular(8),
@@ -759,7 +816,8 @@ class _BookingDetailsScreenState extends State<BookingDetailsScreen> {
           _sectionTitle('Booking Reference'),
           Panel(
             child: Theme(
-              data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+              data:
+                  Theme.of(context).copyWith(dividerColor: Colors.transparent),
               child: ExpansionTile(
                 tilePadding: EdgeInsets.zero,
                 childrenPadding: const EdgeInsets.only(top: 8),
@@ -789,7 +847,8 @@ class _BookingDetailsScreenState extends State<BookingDetailsScreen> {
                       padding: EdgeInsets.zero,
                       constraints: const BoxConstraints(),
                       tooltip: 'Copy ID',
-                      icon: const Icon(Icons.copy_rounded, color: AppColors.primary),
+                      icon: const Icon(Icons.copy_rounded,
+                          color: AppColors.primary),
                       onPressed: () {
                         Clipboard.setData(ClipboardData(text: b.id));
                         showToast(context, 'Booking ID copied to clipboard');
@@ -800,10 +859,10 @@ class _BookingDetailsScreenState extends State<BookingDetailsScreen> {
                     _detailRow('Request ID', r!.requestId),
                   if (r?.policyVersion != null)
                     _detailRow('Policy Version', r!.policyVersion),
-                  if (r?.timeZone != null)
-                    _detailRow('Timezone', r!.timeZone),
+                  if (r?.timeZone != null) _detailRow('Timezone', r!.timeZone),
                   if (r?.createdAtMillis != null)
-                    _detailRow('Created At', _formatTimestamp(r!.createdAtMillis)),
+                    _detailRow(
+                        'Created At', _formatTimestamp(r!.createdAtMillis)),
                   if (r?.resolvedAtMillis != null)
                     _detailRow('Resolved At',
                         '${_formatTimestamp(r!.resolvedAtMillis)} (${r.resolution ?? '-'})'),

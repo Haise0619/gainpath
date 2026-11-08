@@ -20,6 +20,8 @@ import 'package:gainpath_domain/coaching.dart'
     show MemberBookingChangeRepository;
 import '../coach/roster_screen.dart';
 import 'persisted_booking_presentation.dart';
+import 'booking_coach_info.dart';
+import 'package:gainpath_domain/identity.dart' show PublishedCoachProfile;
 import 'package:gainpath_ui/gainpath_ui.dart';
 import '../../application/booking_cancellation_cubit.dart';
 import '../coach/message_inbox_screen.dart';
@@ -38,6 +40,8 @@ class LiveBookingListView extends StatefulWidget {
       this.posture,
       this.review,
       this.loadCoachName,
+      this.loadCoachProfile,
+      this.coachPhotoBuilder,
       this.coachId,
       this.onFindCoach,
       this.title = 'My bookings',
@@ -54,6 +58,9 @@ class LiveBookingListView extends StatefulWidget {
   final ClientPostureRepository? posture;
   final BookingReviewRepository? review;
   final Future<String?> Function(String coachId)? loadCoachName;
+  final Future<PublishedCoachProfile?> Function(String coachId)?
+      loadCoachProfile;
+  final Widget? Function(PublishedCoachProfile)? coachPhotoBuilder;
   final String? coachId;
   final VoidCallback? onFindCoach;
   final String title;
@@ -63,6 +70,99 @@ class LiveBookingListView extends StatefulWidget {
 
 class _LiveBookingListViewState extends State<LiveBookingListView> {
   final Map<String, int> _reviewed = {};
+  final Map<String, PublishedCoachProfile?> _coachProfiles = {};
+  final Map<String, String> _coachNames = {};
+  final Set<String> _requestedCoaches = {};
+  final Map<String, DateTime> _coachReadAt = {};
+  final Map<String, Completer<BookingCoachInfo>> _coachResults = {};
+
+  Future<void> _loadCoachInfo(List<PersistedBookingRecord> records) async {
+    if (widget.coachId != null ||
+        !widget.isCurrent() ||
+        (widget.loadCoachProfile == null && widget.loadCoachName == null)) {
+      return;
+    }
+    final scope = widget.repository.scope;
+    final ids = records
+        .map((r) => r.coachId)
+        .toSet()
+        .where((id) =>
+            !_requestedCoaches.contains(id) ||
+            (_coachReadAt[id] != null &&
+                DateTime.now().difference(_coachReadAt[id]!) >=
+                    const Duration(minutes: 2)))
+        .toList();
+    _requestedCoaches.addAll(ids);
+    for (final id in ids) {
+      _coachResults[id] = Completer<BookingCoachInfo>();
+    }
+    for (final id in ids) {
+      _coachReadAt.remove(id);
+    }
+    for (var offset = 0; offset < ids.length; offset += 4) {
+      if (!mounted || !widget.isCurrent() || widget.repository.scope != scope) {
+        for (final id in ids.skip(offset)) {
+          final result = _coachResults[id];
+          if (result != null && !result.isCompleted) {
+            result.complete(unavailableBookingCoachInfo);
+          }
+        }
+        return;
+      }
+      await Future.wait(ids.skip(offset).take(4).map((id) async {
+        PublishedCoachProfile? profile;
+        String? name;
+        var failed = false;
+        try {
+          if (widget.loadCoachProfile != null) {
+            profile = await widget.loadCoachProfile!(id);
+            if (profile != null && (profile.id != id || !profile.isPublished)) {
+              profile = null;
+            }
+            name = profile?.fields.displayName;
+          } else {
+            name = await widget.loadCoachName!(id);
+          }
+        } catch (_) {
+          failed = true;
+        }
+        if (!mounted ||
+            !widget.isCurrent() ||
+            widget.repository.scope != scope) {
+          final result = _coachResults[id];
+          if (result != null && !result.isCompleted) {
+            result.complete(unavailableBookingCoachInfo);
+          }
+          return;
+        }
+        setState(() {
+          // Failed optional identity reads retry after a short backoff; successful
+          // public profile snapshots are refreshed without a query per card.
+          _coachReadAt[id] = DateTime.now()
+              .subtract(failed ? const Duration(seconds: 90) : Duration.zero);
+          if (!failed) {
+            _coachProfiles[id] = profile;
+          }
+          _coachNames[id] = name?.trim().isNotEmpty == true
+              ? name!.trim()
+              : failed
+                  ? 'Coach information unavailable'
+                  : 'Coach profile unavailable';
+          final result = _coachResults[id];
+          if (result != null && !result.isCompleted) {
+            result.complete((
+              name: _coachNames[id]!,
+              specialty: profile?.fields.specialty,
+              photo: profile == null
+                  ? null
+                  : widget.coachPhotoBuilder?.call(profile)
+            ));
+          }
+        });
+      }));
+    }
+  }
+
   Timer? _updates;
   StreamSubscription<void>? _liveUpdates;
   bool? _wasActive;
@@ -119,6 +219,9 @@ class _LiveBookingListViewState extends State<LiveBookingListView> {
     ..refresh();
   @override
   void dispose() {
+    for (final result in _coachResults.values) {
+      if (!result.isCompleted) result.complete(unavailableBookingCoachInfo);
+    }
     _updates?.cancel();
     unawaited(_liveUpdates?.cancel());
     controller.close();
@@ -396,8 +499,11 @@ class _LiveBookingListViewState extends State<LiveBookingListView> {
       BlocBuilder<BookingCancellationCubit, BookingCancellationState>(
         bloc: cancellation,
         builder: (context, action) =>
-            BlocBuilder<BookingListCubit, BookingListState>(
+            BlocConsumer<BookingListCubit, BookingListState>(
           bloc: controller,
+          listener: (context, state) {
+            unawaited(_loadCoachInfo(state.records));
+          },
           builder: (context, state) {
             if (!widget.isCurrent()) {
               return const Scaffold(
@@ -407,7 +513,11 @@ class _LiveBookingListViewState extends State<LiveBookingListView> {
             final labels = {
               for (final record in state.records)
                 record.bookingId: state.page != null
-                    ? bookingStatusLabel(record, state.page!.serverNowMillis)
+                    ? widget.coachId == null
+                        ? memberBookingStatus(
+                            record, state.page!.serverNowMillis)
+                        : bookingStatusLabel(
+                            record, state.page!.serverNowMillis)
                     : (record.status == BookingStatus.pendingHold
                         ? 'Pending hold'
                         : record.rawStatus)
@@ -463,10 +573,11 @@ class _LiveBookingListViewState extends State<LiveBookingListView> {
                         child: Material(
                           color: Colors.transparent,
                           child: InkWell(
-                            onTap: state.busy || action.busy || state.page == null
-                                ? null
-                                : () => controller.showRecentHistory(
-                                    !controller.recentHistory),
+                            onTap:
+                                state.busy || action.busy || state.page == null
+                                    ? null
+                                    : () => controller.showRecentHistory(
+                                        !controller.recentHistory),
                             borderRadius: BorderRadius.circular(10),
                             child: Container(
                               padding: const EdgeInsets.symmetric(
@@ -475,7 +586,8 @@ class _LiveBookingListViewState extends State<LiveBookingListView> {
                                 color: AppColors.primaryTint,
                                 borderRadius: BorderRadius.circular(10),
                                 border: Border.all(
-                                  color: AppColors.primary.withValues(alpha: .2),
+                                  color:
+                                      AppColors.primary.withValues(alpha: .2),
                                 ),
                               ),
                               child: FittedBox(
@@ -521,9 +633,8 @@ class _LiveBookingListViewState extends State<LiveBookingListView> {
                       iconSize: 20,
                       padding: const EdgeInsets.all(6),
                       constraints: const BoxConstraints(),
-                      onPressed: action.busy || state.busy
-                          ? null
-                          : controller.refresh,
+                      onPressed:
+                          action.busy || state.busy ? null : controller.refresh,
                       icon: const Icon(Icons.refresh_rounded,
                           color: AppColors.inkSoft),
                     ),
@@ -625,7 +736,13 @@ class _LiveBookingListViewState extends State<LiveBookingListView> {
             ]);
             final recordMap = {for (final r in state.records) r.bookingId: r};
             final bookings = state.records.map((r) {
-              final b = persistedBookingPresentation(r);
+              final b = persistedBookingPresentation(r,
+                  coachName: _coachNames[r.coachId] ??
+                      ((widget.loadCoachProfile != null ||
+                                  widget.loadCoachName != null) &&
+                              widget.coachId == null
+                          ? 'Loading coach…'
+                          : null));
               b.rated = b.rated || _reviewed.containsKey(r.bookingId);
               b.reviewStars ??= _reviewed[r.bookingId];
               return b;
@@ -739,6 +856,15 @@ class _LiveBookingListViewState extends State<LiveBookingListView> {
             }
             return BookingScheduleScreen(
                 embedded: widget.embedded,
+                serverNowMillis: state.page?.serverNowMillis,
+                coachInfoFor: (id) => _coachResults[id]?.future,
+                coachSpecialtyFor: (id) => _coachProfiles[id]?.fields.specialty,
+                coachPhotoBuilder: (booking) {
+                  final profile = _coachProfiles[booking.coachId];
+                  return profile == null
+                      ? null
+                      : widget.coachPhotoBuilder?.call(profile);
+                },
                 onFindCoach: widget.onFindCoach,
                 onReview: widget.review == null || state.busy
                     ? null
@@ -766,13 +892,17 @@ class _LiveBookingListViewState extends State<LiveBookingListView> {
                 onRescheduleBooking: widget.memberChanges != null
                     ? (b) {
                         final r = recordMap[b.id];
-                        if (r != null) _changeMemberBooking(r, reschedule: true);
+                        if (r != null) {
+                          _changeMemberBooking(r, reschedule: true);
+                        }
                       }
                     : null,
                 onCancelBooking: widget.memberChanges != null
                     ? (b) {
                         final r = recordMap[b.id];
-                        if (r != null) _changeMemberBooking(r, reschedule: false);
+                        if (r != null) {
+                          _changeMemberBooking(r, reschedule: false);
+                        }
                       }
                     : null,
                 onCancelHold: widget.cancellation == null ||
