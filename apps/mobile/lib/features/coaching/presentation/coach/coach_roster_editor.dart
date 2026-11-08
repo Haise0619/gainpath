@@ -90,6 +90,29 @@ class CoachRosterEditor extends ChangeNotifier {
   CoachWeeklyDay? dayFor(int dayOfWeek) =>
       schedule.where((d) => d.dayOfWeek == dayOfWeek).firstOrNull;
 
+  void copyDay(int sourceDay, Iterable<int> targets) {
+    final days = targets.toSet();
+    if (days.any((d) => d < 1 || d > 7)) {
+      throw ArgumentError('Choose weekdays 1–7.');
+    }
+    if (!enabled) return;
+    final source = dayFor(sourceDay);
+    if (source == null) return;
+    final updated = {for (final day in schedule) day.dayOfWeek: day};
+    for (final day in days) {
+      if (day == sourceDay) continue;
+      updated[day] = CoachWeeklyDay(
+          dayOfWeek: day,
+          isActive: source.isActive,
+          startMinute: source.startMinute,
+          endMinute: source.endMinute,
+          branchId: source.branchId);
+    }
+    schedule = updated.values.toList()
+      ..sort((a, b) => a.dayOfWeek.compareTo(b.dayOfWeek));
+    notifyListeners();
+  }
+
   void toggleDay(int dayOfWeek, bool active) {
     if (!enabled) return;
     final defaultBranch = (baseline?.assignedBranchIds.isNotEmpty == true)
@@ -228,6 +251,7 @@ class CoachRosterEditor extends ChangeNotifier {
     }
     return 'Could not load or save the roster. Reload or retry.';
   }
+
   @override
   void dispose() {
     _disposed = true;

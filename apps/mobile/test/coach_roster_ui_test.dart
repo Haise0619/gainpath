@@ -85,17 +85,24 @@ void main() {
     expect(repo.loads, 1);
     expect(find.byKey(const ValueKey('edit-selected-date-btn')), findsNothing);
     await tester.scrollUntilVisible(
-        find.byKey(const ValueKey('weekly-day-1')), 250);
+        find.byKey(const ValueKey('weekly-day-1')), 250,
+        scrollable: find.byType(Scrollable).first);
+    await Scrollable.ensureVisible(
+        tester.element(find.byKey(const ValueKey('weekly-day-1'))),
+        alignment: .5);
+    await tester.pumpAndSettle();
     await tester.tap(find.byType(Switch).first);
     await tester.pumpAndSettle();
     await tester.scrollUntilVisible(
-        find.byKey(const ValueKey('save-roster')), 350);
+        find.byKey(const ValueKey('save-roster')), 350,
+        scrollable: find.byType(Scrollable).first);
     await tester.tap(find.byKey(const ValueKey('save-roster')));
     await tester.pumpAndSettle();
     expect(repo.loads, 2);
     expect(repo.rosterRequests, hasLength(1));
     await tester.scrollUntilVisible(
-        find.byKey(const ValueKey('open-specific-date-btn')), -250);
+        find.byKey(const ValueKey('open-specific-date-btn')), -250,
+        scrollable: find.byType(Scrollable).first);
     expect(
         find.byKey(const ValueKey('open-specific-date-btn')), findsOneWidget);
     // The expanded page can align ensureVisible behind the pinned app bar.
@@ -130,8 +137,8 @@ void main() {
         home: LiveCoachAvailabilityView(
             repository: repo, coachId: 'coach', isCurrent: () => true)));
     await tester.pumpAndSettle();
-    expect(find.text('0.5h'), findsOneWidget);
-    expect(find.text('Blocked periods on 2026-10-16'), findsOneWidget);
+    expect(find.textContaining('10:00 GMT+8 – 10:30 GMT+8'), findsOneWidget);
+    expect(find.text('Breaks & time off'), findsOneWidget);
     expect(find.textContaining('10:30 GMT+8 – 11:00 GMT+8'), findsOneWidget);
     expect(find.byTooltip('1 blocked period'), findsOneWidget);
     expect(tester.takeException(), isNull);
@@ -270,12 +277,14 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('DATED OVERRIDES'), findsNothing);
     await tester.scrollUntilVisible(
-        find.text('Load your schedule to configure booking limits.'), 300);
-    expect(find.text('Load your schedule to configure booking limits.'),
-        findsOneWidget);
+        find.byKey(const Key('availability-booking-limits')), 250,
+        scrollable: find.byType(Scrollable).first);
+    await tester.tap(find.text('Booking limits'));
+    await tester.pumpAndSettle();
+    expect(
+        find.text('Load your schedule to set booking limits.'), findsOneWidget);
   });
-  testWidgets(
-      'loading and unset roster show hyphens then all seven editable cards',
+  testWidgets('unset roster stays distinct from Off until explicit setup',
       (tester) async {
     final repo = RosterUiFake()
       ..weekly = null
@@ -287,20 +296,18 @@ void main() {
     expect(find.byType(LinearProgressIndicator), findsWidgets);
     repo.rosterPending!.complete(repo.snapshot());
     await tester.pumpAndSettle();
-    await tester.scrollUntilVisible(find.text('Monday'), 250);
-    expect(find.text('Monday'), findsOneWidget);
-    expect(find.text('-'), findsWidgets);
-    await tester.tap(find.byKey(const ValueKey('weekly-day-1')));
+    await tester.scrollUntilVisible(find.text('Set up weekly hours'), 200,
+        scrollable: find.byType(Scrollable).first);
+    await Scrollable.ensureVisible(
+        tester.element(find.text('Set up weekly hours')),
+        alignment: .5);
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Apply day'));
+    expect(find.text('Not configured'), findsWidgets);
+    await tester.tap(find.text('Set up weekly hours'));
     await tester.pumpAndSettle();
     expect(repo.weekly, isNull);
-    expect(
-        find.descendant(
-            of: find.ancestor(
-                of: find.text('Monday'), matching: find.byType(ListTile)),
-            matching: find.text('Off')),
-        findsOneWidget);
+    expect(find.byKey(const Key('availability-save-bar')), findsOneWidget);
+    await tester.pumpWidget(const SizedBox());
   });
   testWidgets(
       'exception sheet uses returned boundaries and does not write until aggregate save',
@@ -324,8 +331,8 @@ void main() {
     await tester.tap(find.text('Open'));
     await tester.pumpAndSettle();
     expect(find.text('10:00 GMT+8'), findsOneWidget);
-    await tester.ensureVisible(find.text('Apply blocked time'));
-    await tester.tap(find.text('Apply blocked time'));
+    await tester.ensureVisible(find.text('Done'));
+    await tester.tap(find.text('Done'));
     await tester.pumpAndSettle();
     expect(result!.startAtMillis, 1792116000000);
     expect(result!.endAtMillis, 1792117800000);
@@ -343,11 +350,12 @@ void main() {
     expect(
         find.textContaining('App Check or authentication verification failed'),
         findsOneWidget);
-    expect(find.text('Retry loading roster'), findsWidgets);
+    expect(find.text('Retry loading schedule'), findsWidgets);
     fail = false;
-    await tester.tap(find.text('Retry loading roster').first);
+    await tester.tap(find.text('Retry loading schedule').first);
     await tester.pumpAndSettle();
-    await tester.scrollUntilVisible(find.text('Monday'), 250);
+    await tester.scrollUntilVisible(find.text('Monday'), 250,
+        scrollable: find.byType(Scrollable).first);
     expect(find.text('Monday'), findsOneWidget);
   });
 }

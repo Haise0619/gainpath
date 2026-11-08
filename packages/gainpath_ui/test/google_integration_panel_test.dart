@@ -123,6 +123,33 @@ void main() {
     expect(loads, 1);
     expect(find.text('Gym connection: Connected'), findsOneWidget);
   });
+  testWidgets(
+      'compact summary distinguishes connected from synchronized and expands real details',
+      (tester) async {
+    await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+            body: SingleChildScrollView(
+                child: GoogleIntegrationPanel(
+                    compact: true,
+                    coachId: 'coach',
+                    actions: _actions(
+                        load: ({coachId}) async =>
+                            const GoogleIntegrationPanelStatus(
+                                connectionStatus: 'connected',
+                                calendarStatus: 'ready',
+                                syncStatus: 'not_synced',
+                                emailSyncStatus: 'uncertain',
+                                lastSyncedAtMillis: 1)))))));
+    await tester.pumpAndSettle();
+    expect(find.text('Connected · Not synchronized'), findsOneWidget);
+    expect(find.textContaining('Last successful sync:'), findsNothing);
+    await tester.tap(find.text('Google Calendar & Email'));
+    await tester.pumpAndSettle();
+    expect(find.text('Coach calendar: Calendar ready'), findsOneWidget);
+    expect(find.textContaining('Email: Outcome uncertain'), findsOneWidget);
+    expect(find.textContaining('Last successful sync:'), findsOneWidget);
+    expect(find.text('Connect gym account'), findsNothing);
+  });
 }
 
 GoogleIntegrationPanelActions _actions({

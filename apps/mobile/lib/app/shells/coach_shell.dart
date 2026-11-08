@@ -1,3 +1,4 @@
+import '../../features/coaching/presentation/coach/availability_navigation_scope.dart';
 import 'package:flutter/material.dart';
 import '../../features/coaching/presentation/coach/roster_screen.dart';
 import '../../features/coaching/presentation/coach/availability_screens.dart';
@@ -16,7 +17,9 @@ class CoachShell extends StatefulWidget {
       this.restrictUnsupportedWorkflows = false,
       this.initialIndex = 0});
   final CoachModule8Dependencies? module8;
-  final WidgetBuilder? liveAvailabilityBuilder, liveRosterBuilder, liveEarningsBuilder;
+  final WidgetBuilder? liveAvailabilityBuilder,
+      liveRosterBuilder,
+      liveEarningsBuilder;
   final bool restrictUnsupportedWorkflows;
   final int initialIndex;
   @override
@@ -25,6 +28,28 @@ class CoachShell extends StatefulWidget {
 
 class _CoachShellState extends State<CoachShell> {
   late int _index = widget.initialIndex;
+  final _availabilityNavigation = AvailabilityNavigationController();
+  bool _selectingTab = false;
+  Future<void> _selectTab(int i) async {
+    if (i == _index || _selectingTab) return;
+    _selectingTab = true;
+    try {
+      if (_index == 1 &&
+          _availabilityNavigation.beforeLeave != null &&
+          !await _availabilityNavigation.beforeLeave!()) {
+        return;
+      }
+      if (!mounted) return;
+      setState(() {
+        _index = i;
+        if (i == 1) _availabilityVisited = true;
+        if (i == 0) _rosterVisited = true;
+      });
+    } finally {
+      _selectingTab = false;
+    }
+  }
+
   CoachModule8Dependencies? _module8;
   late bool _availabilityVisited = widget.initialIndex == 1;
   late bool _rosterVisited = widget.initialIndex == 0;
@@ -43,35 +68,34 @@ class _CoachShellState extends State<CoachShell> {
   Widget build(BuildContext context) {
     final dependencies = _module8!;
     return Scaffold(
-        body: IndexedStack(index: _index, children: [
-          widget.liveRosterBuilder != null
-              ? (_rosterVisited
-                  ? widget.liveRosterBuilder!(context)
-                  : const SizedBox.shrink())
-              : widget.restrictUnsupportedWorkflows
-                  ? unavailable('Roster')
-                  : const CoachRosterScreen(),
-          widget.liveAvailabilityBuilder != null
-              ? (_availabilityVisited
-                  ? widget.liveAvailabilityBuilder!(context)
-                  : const SizedBox.shrink())
-              : widget.restrictUnsupportedWorkflows
-                  ? unavailable('Availability')
-                  : const AvailabilityScreen(),
-          widget.liveEarningsBuilder != null
-              ? widget.liveEarningsBuilder!(context)
-              : EarningsScreen(connected: widget.restrictUnsupportedWorkflows),
-          CoachAccountScreen(
-              profileRepository: dependencies.profile,
-              accountRepository: dependencies.account),
-        ]),
+        body: AvailabilityNavigationScope(
+            controller: _availabilityNavigation,
+            child: IndexedStack(index: _index, children: [
+              widget.liveRosterBuilder != null
+                  ? (_rosterVisited
+                      ? widget.liveRosterBuilder!(context)
+                      : const SizedBox.shrink())
+                  : widget.restrictUnsupportedWorkflows
+                      ? unavailable('Roster')
+                      : const CoachRosterScreen(),
+              widget.liveAvailabilityBuilder != null
+                  ? (_availabilityVisited
+                      ? widget.liveAvailabilityBuilder!(context)
+                      : const SizedBox.shrink())
+                  : widget.restrictUnsupportedWorkflows
+                      ? unavailable('Availability')
+                      : const AvailabilityScreen(),
+              widget.liveEarningsBuilder != null
+                  ? widget.liveEarningsBuilder!(context)
+                  : EarningsScreen(
+                      connected: widget.restrictUnsupportedWorkflows),
+              CoachAccountScreen(
+                  profileRepository: dependencies.profile,
+                  accountRepository: dependencies.account),
+            ])),
         bottomNavigationBar: NavigationBar(
             selectedIndex: _index,
-            onDestinationSelected: (i) => setState(() {
-                  _index = i;
-                  if (i == 1) _availabilityVisited = true;
-                  if (i == 0) _rosterVisited = true;
-                }),
+            onDestinationSelected: _selectTab,
             destinations: const [
               NavigationDestination(
                   icon: Icon(Icons.event_note_outlined),

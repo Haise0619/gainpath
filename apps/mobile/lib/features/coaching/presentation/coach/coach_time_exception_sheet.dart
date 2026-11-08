@@ -10,11 +10,13 @@ class CoachTimeExceptionSheet extends StatefulWidget {
       required this.repository,
       required this.roster,
       required this.isCurrent,
-      this.initial});
+      this.initial,
+      this.initialDate});
   final CoachAvailabilityRepository repository;
   final CoachRosterSnapshot roster;
   final bool Function() isCurrent;
   final CoachTimeException? initial;
+  final String? initialDate;
   @override
   State<CoachTimeExceptionSheet> createState() =>
       _CoachTimeExceptionSheetState();
@@ -115,10 +117,13 @@ class _CoachTimeExceptionSheetState extends State<CoachTimeExceptionSheet> {
               _end == endDay.boundaries.last.atMillis;
         }
       } else {
-        _startDate = days.first.localDate;
+        final selected =
+            days.where((d) => d.localDate == widget.initialDate).firstOrNull ??
+                days.first;
+        _startDate = selected.localDate;
         _endDate = _startDate;
-        _start = _starts(days.first).first.atMillis;
-        _end = days.first.boundaries
+        _start = _starts(selected).first.atMillis;
+        _end = selected.boundaries
             .firstWhere((b) => b.atMillis > _start!)
             .atMillis;
       }
@@ -185,6 +190,8 @@ class _CoachTimeExceptionSheetState extends State<CoachTimeExceptionSheet> {
                               : 'Edit time off or break',
                           style: Theme.of(context).textTheme.titleLarge),
                       Text('Organization time: ${widget.roster.timeZone}'),
+                      const Text(
+                          'Done updates your draft. Save Changes to publish it.'),
                       if (_loading) const LinearProgressIndicator(),
                       if (_message != null) Text(_message!),
                       if (!_current)
@@ -313,7 +320,7 @@ class _CoachTimeExceptionSheetState extends State<CoachTimeExceptionSheet> {
                                             endAtMillis: _end!));
                                   }
                                 : null,
-                            child: const Text('Apply blocked time'))
+                            child: const Text('Done'))
                       ]),
                     ]))));
   }

@@ -1,3 +1,5 @@
+import 'weekly_hours_sheet.dart';
+import 'availability_navigation_scope.dart';
 import '../../../../navigation/google_integration.dart';
 import 'dart:convert';
 import 'package:flutter/material.dart';
@@ -43,17 +45,21 @@ const _weekdayNames = [
   'Sunday'
 ];
 
-const _weekdayInitials = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
-
 /// Canonical unified Coach Availability screen for mobile.
 /// Feeds both real Firebase and mock/test adapters through the same production widgets.
 class AvailabilityScreen extends StatefulWidget {
   const AvailabilityScreen(
-      {super.key, this.liveRepository, this.coachId, this.isCurrent, this.googleIntegration});
+      {super.key,
+      this.liveRepository,
+      this.coachId,
+      this.isCurrent,
+      this.googleIntegration,
+      this.loadBranchNames});
 
   final CoachAvailabilityRepository? liveRepository;
   final GoogleIntegrationRepository? googleIntegration;
   final String? coachId;
+  final Future<Map<String, String>> Function()? loadBranchNames;
   final bool Function()? isCurrent;
 
   @override
@@ -61,6 +67,8 @@ class AvailabilityScreen extends StatefulWidget {
 }
 
 class _AvailabilityScreenState extends State<AvailabilityScreen> {
+  AvailabilityNavigationController? _navigation;
+  Map<String, String> _branchNames = const {};
   CoachRosterEditor? roster;
   CoachAvailabilityCubit? availabilityCubit;
   CoachAvailabilityRepository? _effectiveRepo;
@@ -70,7 +78,9 @@ class _AvailabilityScreenState extends State<AvailabilityScreen> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    if (roster != null) return;
+    _navigation = AvailabilityNavigationScope.of(context);
+    if (_navigation != null) _navigation!.beforeLeave = _beforeLeave;
+    if (availabilityCubit != null) return;
 
     final repo = widget.liveRepository;
     if (repo != null) {
@@ -98,6 +108,7 @@ class _AvailabilityScreenState extends State<AvailabilityScreen> {
         ..reload();
     }
 
+    _loadBranchNames();
     availabilityCubit = CoachAvailabilityCubit(
       repository: _effectiveRepo!,
       coachId: _effectiveCoachId,
@@ -111,6 +122,9 @@ class _AvailabilityScreenState extends State<AvailabilityScreen> {
 
   @override
   void dispose() {
+    if (_navigation?.beforeLeave == _beforeLeave) {
+      _navigation!.beforeLeave = null;
+    }
     roster?.removeListener(_onRosterChanged);
     roster?.dispose();
     availabilityCubit?.close();
@@ -118,11 +132,42 @@ class _AvailabilityScreenState extends State<AvailabilityScreen> {
   }
 
   bool get enabled =>
-      (roster == null ||
-          (roster!.enabled && !roster!.busy && !roster!.conflict)) &&
-      _effectiveIsCurrent();
+      (roster == null || roster!.enabled) && _effectiveIsCurrent();
+  String _branchLabel(String id) => _branchNames[id] ?? id;
+  Future<void> _loadBranchNames() async {
+    if (widget.loadBranchNames == null) return;
+    try {
+      final names =
+          await widget.loadBranchNames!().timeout(const Duration(seconds: 20));
+      if (mounted && _effectiveIsCurrent()) {
+        setState(() => _branchNames = Map.unmodifiable(names));
+      }
+    } catch (_) {/* IDs remain explicit if trusted names are unavailable. */}
+  }
+
+  Future<bool> _beforeLeave() async {
+    if (!_effectiveIsCurrent()) return false;
+    if (roster?.busy == true) {
+      showToast(context, 'Please wait for the current save or refresh.');
+      return false;
+    }
+    if (roster?.dirty != true && roster?.uncertain != true) return true;
+    final discard = await confirmSheet(context,
+        title: 'Unsaved Changes',
+        message: roster?.uncertain == true
+            ? 'The last save could not be confirmed. Reload the server version before leaving?'
+            : 'Save your changes first, or discard this draft to leave.',
+        confirmLabel: 'Discard & reload');
+    if (!discard || !mounted || !_effectiveIsCurrent()) return false;
+    await roster?.reload(discard: true);
+    return mounted &&
+        _effectiveIsCurrent() &&
+        roster?.dirty != true &&
+        roster?.uncertain != true;
+  }
 
   Future<void> _reload() async {
+    if (roster?.busy == true || availabilityCubit?.state.saving == true) return;
     if (roster?.dirty == true) {
       final discard = await confirmSheet(
         context,
@@ -132,158 +177,30 @@ class _AvailabilityScreenState extends State<AvailabilityScreen> {
       );
       if (!discard || !mounted) return;
     }
-    roster?.reload(discard: true);
-    availabilityCubit?.discardAndReload();
+    await Future.wait<void>([
+      if (roster != null) roster!.reload(discard: true),
+      if (availabilityCubit != null) availabilityCubit!.discardAndReload()
+    ]);
   }
 
   Future<void> _editDayHours(int dayOfWeek) async {
     if (!enabled || roster?.baseline == null) return;
-    final baseline = roster!.baseline!;
     final old = roster!.dayFor(dayOfWeek);
-    var active = old?.isActive ?? false;
-    var start = old?.startMinute ?? 540;
-    var end = old?.endMinute ?? 1020;
-    var branch = old?.branchId ??
-        (baseline.assignedBranchIds.isNotEmpty
-            ? baseline.assignedBranchIds.first
-            : 'main');
-    var dirty = false;
-
-    final result = await showModalBottomSheet<CoachWeeklyDay>(
-      context: context,
-      isScrollControlled: true,
-      builder: (sheetContext) => StatefulBuilder(
-        builder: (sheetContext, update) => PopScope(
-          canPop: !dirty,
-          onPopInvokedWithResult: (didPop, _) async {
-            if (didPop) return;
-            final discard = await confirmSheet(
-              sheetContext,
-              title: 'Discard unsaved changes?',
-              message: 'Your working hours have not been applied.',
-              confirmLabel: 'Discard changes',
-            );
-            if (discard && sheetContext.mounted) {
-              Navigator.pop(sheetContext);
-            }
-          },
-          child: SafeArea(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    _weekdayNames[dayOfWeek - 1],
-                    style: Theme.of(context).textTheme.titleLarge,
-                  ),
-                  const SizedBox(height: 12),
-                  SwitchListTile(
-                    title: const Text('Working day'),
-                    value: active,
-                    onChanged: (v) => update(() {
-                      active = v;
-                      dirty = true;
-                    }),
-                  ),
-                  if (baseline.assignedBranchIds.length > 1)
-                    DropdownButtonFormField<String>(
-                      initialValue: branch,
-                      decoration: const InputDecoration(labelText: 'Branch'),
-                      items: baseline.assignedBranchIds
-                          .map(
-                              (b) => DropdownMenuItem(value: b, child: Text(b)))
-                          .toList(),
-                      onChanged: (v) => update(() {
-                        branch = v!;
-                        dirty = true;
-                      }),
-                    ),
-                  DropdownButtonFormField<int>(
-                    initialValue: start,
-                    decoration: const InputDecoration(labelText: 'Start time'),
-                    items: List.generate(
-                      48,
-                      (i) => DropdownMenuItem(
-                        value: i * 30,
-                        child: Text(rosterMinute(i * 30)),
-                      ),
-                    ),
-                    onChanged: !active
-                        ? null
-                        : (v) => update(() {
-                              start = v!;
-                              if (end <= start) end = start + 30;
-                              dirty = true;
-                            }),
-                  ),
-                  DropdownButtonFormField<int>(
-                    key: ValueKey((start, end)),
-                    initialValue: end,
-                    decoration: const InputDecoration(labelText: 'End time'),
-                    items: [
-                      for (var minute = start + 30;
-                          minute <= 1440;
-                          minute += 30)
-                        DropdownMenuItem(
-                          value: minute,
-                          child: Text(rosterMinute(minute)),
-                        ),
-                    ],
-                    onChanged: !active
-                        ? null
-                        : (v) => update(() {
-                              end = v!;
-                              dirty = true;
-                            }),
-                  ),
-                  const SizedBox(height: 16),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    children: [
-                      TextButton(
-                        onPressed: () async {
-                          if (!dirty ||
-                              await confirmSheet(
-                                sheetContext,
-                                title: 'Discard unsaved changes?',
-                                message:
-                                    'Your working hours have not been applied.',
-                                confirmLabel: 'Discard changes',
-                              )) {
-                            if (sheetContext.mounted) {
-                              Navigator.pop(sheetContext);
-                            }
-                          }
-                        },
-                        child: const Text('Cancel'),
-                      ),
-                      FilledButton(
-                        onPressed: () => Navigator.pop(
-                          sheetContext,
-                          CoachWeeklyDay(
-                            dayOfWeek: dayOfWeek,
-                            isActive: active,
-                            startMinute: start,
-                            endMinute: end,
-                            branchId: branch,
-                          ),
-                        ),
-                        child: const Text('Apply day'),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-
-    if (result != null && mounted && enabled) {
-      roster!.day(result);
+    if (old == null) {
+      showToast(context, 'Set up weekly hours first.');
+      return;
     }
+    final result = await showModalBottomSheet<WeeklyHoursEdit>(
+        context: context,
+        isScrollControlled: true,
+        enableDrag: false,
+        builder: (_) => WeeklyHoursSheet(
+            day: old,
+            branches: roster!.baseline!.assignedBranchIds,
+            branchNames: _branchNames));
+    if (result == null || !mounted || !enabled) return;
+    roster!.day(result.day);
+    roster!.copyDay(result.day.dayOfWeek, result.copyTo);
   }
 
   Future<void> _addException() async {
@@ -305,6 +222,7 @@ class _AvailabilityScreenState extends State<AvailabilityScreen> {
       context: context,
       isScrollControlled: true,
       builder: (_) => CoachTimeExceptionSheet(
+        initialDate: availabilityCubit?.state.day?.localDate,
         repository: _effectiveRepo!,
         roster: roster!.baseline!,
         isCurrent: _effectiveIsCurrent,
@@ -337,7 +255,8 @@ class _AvailabilityScreenState extends State<AvailabilityScreen> {
     final ok = await confirmSheet(
       context,
       title: 'Remove this block?',
-      message: 'That time reopens for members to book.',
+      message:
+          'Removing this block may reopen time within your working hours after you save.',
       confirmLabel: 'Remove',
       destructive: true,
     );
@@ -376,6 +295,7 @@ class _AvailabilityScreenState extends State<AvailabilityScreen> {
         isCurrent: _effectiveIsCurrent,
         initialDate: date,
         initialContext: availabilityCubit?.state.context,
+        branchNames: _branchNames,
         onSaved: () {
           availabilityCubit?.discardAndReload();
         },
@@ -388,8 +308,14 @@ class _AvailabilityScreenState extends State<AvailabilityScreen> {
     await roster!.save();
     if (!mounted) return;
     if (roster?.dirty == false && roster?.message != null) {
-      showToast(context, 'Availability changes saved.');
       await availabilityCubit?.discardAndReload();
+      if (mounted && _effectiveIsCurrent()) {
+        showToast(
+            context,
+            availabilityCubit?.state.message == null
+                ? 'Saved'
+                : 'Changes saved. Schedule preview could not refresh.');
+      }
     } else if (roster?.message != null) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -528,168 +454,197 @@ class _AvailabilityScreenState extends State<AvailabilityScreen> {
     return maskWindowsWithExceptions(base, exceptions);
   }
 
-  String _formatDayDuration(
-      CoachAvailabilityDay day, CoachAvailabilityState cubitState) {
-    final effective = _effectiveWindowsForDate(day, cubitState);
-    if (effective.isEmpty) return 'Off';
-    final minutes = effective.fold<int>(
-        0, (sum, w) => sum + (w.endAtMillis - w.startAtMillis) ~/ 60000);
-    if (minutes == 0) return 'Off';
-    final hours = minutes / 60;
-    return '${hours % 1 == 0 ? hours.toInt() : hours.toStringAsFixed(1)}h';
+  String _readableDate(String value) {
+    final date = DateTime.parse(value);
+    const months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec'
+    ];
+    return '${_weekdayNames[date.weekday - 1].substring(0, 3)}, ${date.day} ${months[date.month - 1]} ${date.year}';
   }
 
   Widget _weekAtGlance(CoachAvailabilityState state) {
     final data = state.context, selected = state.day;
     if (data == null || selected == null) {
       return Panel(
-          child: Text(state.loading
-              ? 'Loading your schedule…'
-              : state.message ??
-                  'Schedule preview is unavailable. Refresh to retry.'));
+          child:
+              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text(state.loading
+            ? 'Loading schedule…'
+            : state.message ?? 'Schedule unavailable.'),
+        if (!state.loading)
+          TextButton(onPressed: _reload, child: const Text('Retry'))
+      ]));
     }
-    final windows = _effectiveWindowsForDate(selected, state);
-    final minutes = windows.fold<int>(
-        0, (sum, w) => sum + (w.endAtMillis - w.startAtMillis) ~/ 60000);
-    final cap = roster?.dailyHours;
-    final blocks = _blocksForDate(selected);
+    final windows = _effectiveWindowsForDate(selected, state),
+        blocks = _blocksForDate(selected);
     final custom = (selected.revision ?? 0) > 0;
-    final limit = roster?.advanceDays;
-    final lastDate = limit == null
-        ? null
-        : DateTime.parse(data.todayLocalDate)
-            .add(Duration(days: limit))
-            .toIso8601String()
-            .substring(0, 10);
-    final outside =
-        lastDate != null && selected.localDate.compareTo(lastDate) > 0;
+    final loadingWeekly = roster != null && roster!.baseline == null;
+    final weeklyConfigured = roster == null || roster!.schedule.isNotEmpty;
+    final outside = roster?.advanceDays != null &&
+        DateTime.parse(selected.localDate).isAfter(
+            DateTime.parse(data.todayLocalDate)
+                .add(Duration(days: roster!.advanceDays!)));
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      const Text(
-          'Read-only preview · select a day to see how your settings apply.',
-          style: TextStyle(color: AppColors.inkSoft, height: 1.5)),
+      Wrap(
+          spacing: 8,
+          runSpacing: 6,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            Text(
+                '${_readableDate(data.days.first.localDate)} – ${_readableDate(data.days.last.localDate)}',
+                style: Theme.of(context).textTheme.titleMedium),
+            Text(data.timeZone,
+                style: const TextStyle(fontSize: 12, color: AppColors.inkSoft))
+          ]),
       const SizedBox(height: 12),
-      Row(children: [
-        for (final day in data.days)
-          Expanded(
-              child: Padding(
-            padding: const EdgeInsets.only(right: 4),
-            child: Tooltip(
-                message:
-                    '${day.localDate} · ${_formatDayDuration(day, state)} after breaks',
-                child: OutlinedButton(
-                  onPressed: state.loading
-                      ? null
-                      : () => availabilityCubit?.openDay(day.localDate),
-                  style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      minimumSize: const Size(0, 76),
-                      backgroundColor: selected.localDate == day.localDate
-                          ? AppColors.primaryTint
-                          : AppColors.surface,
-                      side: BorderSide(
-                          color: selected.localDate == day.localDate
-                              ? AppColors.primary
-                              : AppColors.hairline)),
-                  child: Column(children: [
-                    Text(_weekdayInitials[
-                        DateTime.parse(day.localDate).weekday - 1]),
-                    const SizedBox(height: 4),
-                    Text('${DateTime.parse(day.localDate).day}'),
-                    const SizedBox(height: 4),
-                    Text(_formatDayDuration(day, state),
-                        style: const TextStyle(fontSize: 11)),
-                    if (_blocksForDate(day).isNotEmpty)
-                      Tooltip(
-                          message:
-                              '${_blocksForDate(day).length} blocked ${_blocksForDate(day).length == 1 ? 'period' : 'periods'}',
-                          child: const Icon(Icons.block, size: 12)),
-                  ]),
-                )),
-          ))
-      ]),
+      SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(children: [
+            for (final day in data.days)
+              Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: Semantics(
+                      selected: selected.localDate == day.localDate,
+                      child: OutlinedButton(
+                          key: ValueKey('availability-date-${day.localDate}'),
+                          onPressed: state.loading
+                              ? null
+                              : () => availabilityCubit?.openDay(day.localDate),
+                          style: OutlinedButton.styleFrom(
+                              minimumSize: const Size(68, 78),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 12, vertical: 10),
+                              backgroundColor:
+                                  selected.localDate == day.localDate
+                                      ? AppColors.primaryTint
+                                      : AppColors.surface,
+                              side: BorderSide(
+                                  color: selected.localDate == day.localDate
+                                      ? AppColors.primary
+                                      : AppColors.hairline)),
+                          child:
+                              Column(mainAxisSize: MainAxisSize.min, children: [
+                            Text(_weekdayNames[
+                                    DateTime.parse(day.localDate).weekday - 1]
+                                .substring(0, 3)),
+                            Text('${DateTime.parse(day.localDate).day}',
+                                style: const TextStyle(
+                                    fontSize: 20, fontWeight: FontWeight.w700)),
+                            if (day.localDate == data.todayLocalDate)
+                              const Text('Today',
+                                  style: TextStyle(fontSize: 12)),
+                            if (_blocksForDate(day).isNotEmpty)
+                              Tooltip(
+                                  message:
+                                      '${_blocksForDate(day).length} blocked period${_blocksForDate(day).length == 1 ? '' : 's'}',
+                                  child: const Icon(Icons.block, size: 14))
+                          ]))))
+          ])),
       const SizedBox(height: 12),
       Panel(
           child:
               Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text(selected.localDate,
-            style: Theme.of(context).textTheme.titleMedium),
-        const SizedBox(height: 8),
-        Wrap(spacing: 8, runSpacing: 8, children: [
-          Chip(label: Text(custom ? 'Custom date hours' : 'Weekly schedule')),
-          if (roster?.dirty == true) const Chip(label: Text('Unsaved preview'))
+        Text(_readableDate(selected.localDate),
+            style: Theme.of(context).textTheme.titleLarge),
+        const SizedBox(height: 6),
+        Wrap(spacing: 8, runSpacing: 6, children: [
+          _sourceBadge(custom
+              ? 'Custom hours'
+              : loadingWeekly
+                  ? 'Loading schedule'
+                  : weeklyConfigured
+                      ? 'Weekly hours'
+                      : 'Not configured'),
+          if (roster?.dirty == true) _sourceBadge('Unsaved preview')
         ]),
-        const SizedBox(height: 10),
+        const SizedBox(height: 12),
         Text(
-            'Open hours after breaks: ${minutes == 0 ? 'Off' : '${minutes / 60}h'}',
-            style: const TextStyle(fontWeight: FontWeight.w600)),
-        if (cap != null)
-          Text('Daily booking cap: ${cap}h total across all Members.'),
+            windows.isEmpty
+                ? (loadingWeekly
+                    ? 'Loading weekly hours…'
+                    : !custom && !weeklyConfigured
+                        ? 'Set up weekly hours to begin.'
+                        : 'No working hours')
+                : windows
+                    .map((w) =>
+                        '${selected.labelFor(w.startAtMillis)} – ${selected.labelFor(w.endAtMillis)}')
+                    .join('\n'),
+            style: const TextStyle(fontWeight: FontWeight.w600, height: 1.5)),
+        for (final branch in windows.map((w) => w.branchId).toSet())
+          Text(_branchLabel(branch)),
+        if (roster?.dailyHours != null)
+          Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Text(
+                  'Daily capacity · ${roster!.dailyHours} booked hours total')),
+        if (blocks.isNotEmpty) ...[
+          const SizedBox(height: 10),
+          Text('Breaks & time off',
+              style: Theme.of(context).textTheme.titleMedium),
+          for (final block in blocks)
+            Text(
+                '${rosterExceptionType(block.type)} · ${_formatBlockInterval(selected, block)}')
+        ],
         if (outside)
           const Padding(
               padding: EdgeInsets.only(top: 8),
-              child: Text(
-                  'Outside your advance-booking window. Members cannot book this date yet.',
-                  style: TextStyle(color: AppColors.danger))),
+              child: Text('Outside the advance booking window.',
+                  style: TextStyle(color: AppColors.warning))),
         const SizedBox(height: 10),
-        for (final window in windows)
-          Padding(
-              padding: const EdgeInsets.only(bottom: 6),
+        const Text('Working hours are not remaining bookable slots.',
+            style: TextStyle(fontSize: 12, color: AppColors.inkSoft)),
+        if (custom)
+          const Padding(
+              padding: EdgeInsets.only(top: 6),
               child: Text(
-                  '${selected.labelFor(window.startAtMillis)} – ${selected.labelFor(window.endAtMillis)} · ${window.branchId}',
-                  style: const TextStyle(height: 1.5))),
-        if (windows.isEmpty)
-          const Text('No working windows remain on this date.'),
-        if (blocks.isNotEmpty) ...[
-          const Divider(height: 24),
-          Text('Blocked periods on ${selected.localDate}',
-              style: const TextStyle(fontWeight: FontWeight.w600)),
-          for (final block in blocks)
-            Padding(
-                padding: const EdgeInsets.only(top: 8),
-                child: Text(
-                    '${rosterExceptionType(block.type)} · ${_formatBlockInterval(selected, block)}${block.reason.isEmpty ? '' : '\n${block.reason}'}')),
-        ],
-        const Divider(height: 24),
-        Text(
-            custom
-                ? 'This date has its own hours; weekly changes do not replace them. Manage this under One-off date changes below.'
-                : 'Changes to weekly hours and breaks are previewed here immediately. Save changes to apply them to Member booking.',
-            style: const TextStyle(color: AppColors.inkSoft, height: 1.5)),
-        const SizedBox(height: 8),
-        const Text(
-            'Open hours are not remaining free slots. Existing bookings, active holds, the daily cap and advance window are checked by the server.',
-            style:
-                TextStyle(fontSize: 12, color: AppColors.inkSoft, height: 1.5)),
-      ])),
+                  'Custom hours replace the weekly schedule for this date.',
+                  style: TextStyle(fontSize: 12, color: AppColors.inkSoft))),
+        const SizedBox(height: 12),
+        Wrap(spacing: 8, runSpacing: 8, children: [
+          OutlinedButton.icon(
+              onPressed: enabled
+                  ? () =>
+                      _editDayHours(DateTime.parse(selected.localDate).weekday)
+                  : null,
+              icon: const Icon(Icons.edit_outlined, size: 18),
+              label: const Text('Edit Weekly Hours')),
+          OutlinedButton.icon(
+              key: const ValueKey('open-specific-date-btn'),
+              onPressed: enabled
+                  ? () => _openSpecificDateSheet(date: selected.localDate)
+                  : null,
+              icon: const Icon(Icons.edit_calendar_outlined, size: 18),
+              label: const Text('Change This Date')),
+          TextButton.icon(
+              onPressed: enabled ? _addException : null,
+              icon: const Icon(Icons.add, size: 18),
+              label: const Text('Add Time Off')),
+        ])
+      ]))
     ]);
   }
 
-  Widget _oneOffSection() => Panel(
-          child:
-              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text('One-off date changes',
-            style: Theme.of(context).textTheme.titleMedium),
-        const SizedBox(height: 8),
-        const Text(
-            'Use different hours for one date only, including extra hours. This replaces that date’s schedule; your weekly hours stay unchanged. For a break or day off, use Time off and breaks instead.',
-            style: TextStyle(height: 1.5, color: AppColors.inkSoft)),
-        const SizedBox(height: 12),
-        OutlinedButton.icon(
-            key: const ValueKey('open-specific-date-btn'),
-            onPressed: enabled
-                ? () => _openSpecificDateSheet(
-                    date: availabilityCubit?.state.day?.localDate)
-                : null,
-            icon: const Icon(Icons.edit_calendar_outlined),
-            label: const Text('Change hours for one date')),
-        const SizedBox(height: 6),
-        const Text('Date changes are saved separately inside their editor.',
-            style: TextStyle(fontSize: 12, color: AppColors.inkSoft)),
-      ]));
+  Widget _sourceBadge(String label) => Container(
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+      decoration: BoxDecoration(
+          color: AppColors.primaryTint, borderRadius: BorderRadius.circular(8)),
+      child: Text(label,
+          style: const TextStyle(fontSize: 12, color: AppColors.primary)));
 
   Widget _recurringHours() {
     if (roster?.loading == true && roster?.baseline == null) {
-      return const Panel(child: Text('-'));
+      return const Panel(child: Text('Loading weekly hours…'));
     }
     if (roster?.baseline == null && roster?.message != null) {
       return const SizedBox.shrink();
@@ -709,38 +664,58 @@ class _AvailabilityScreenState extends State<AvailabilityScreen> {
 
           return Column(
             children: [
-              if (i > 0) const Divider(height: 1, indent: 16, endIndent: 16),
-              ListTile(
-                contentPadding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
-                title: Text(
-                  _weekdayNames[number - 1],
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
-                subtitle: Text(
-                  day == null
-                      ? '-'
-                      : active
-                          ? '${rosterMinute(day.startMinute)} – ${rosterMinute(day.endMinute)} · ${day.branchId}'
-                          : 'Off',
-                ),
-                trailing: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Switch(
-                      value: active,
-                      onChanged:
-                          enabled ? (v) => roster!.toggleDay(number, v) : null,
-                    ),
-                    IconButton(
-                      key: ValueKey('weekly-day-$number'),
-                      tooltip: 'Edit ${_weekdayNames[number - 1]}',
-                      onPressed: enabled ? () => _editDayHours(number) : null,
-                      icon: const Icon(Icons.edit_outlined),
-                    ),
-                  ],
-                ),
-              ),
+              if (i > 0)
+                const Divider(
+                    height: 1,
+                    indent: 16,
+                    endIndent: 16,
+                    color: AppColors.hairline),
+              Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  child: LayoutBuilder(builder: (context, constraints) {
+                    final large =
+                        MediaQuery.textScalerOf(context).scale(14) > 19;
+                    final controls = <Widget>[
+                      Semantics(
+                          label: '${_weekdayNames[number - 1]} working day',
+                          child: Switch(
+                              value: active,
+                              onChanged: enabled && day != null
+                                  ? (v) => roster!.toggleDay(number, v)
+                                  : null)),
+                      IconButton(
+                          key: ValueKey('weekly-day-$number'),
+                          tooltip: 'Edit ${_weekdayNames[number - 1]}',
+                          onPressed: enabled && day != null
+                              ? () => _editDayHours(number)
+                              : null,
+                          icon: const Icon(Icons.edit_outlined)),
+                    ];
+                    return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(children: [
+                            Expanded(
+                                child: Text(_weekdayNames[number - 1],
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .titleMedium)),
+                            if (!large) ...controls
+                          ]),
+                          Text(
+                              day == null
+                                  ? 'Not configured'
+                                  : active
+                                      ? '${rosterMinute(day.startMinute)} – ${rosterMinute(day.endMinute)} · ${_branchLabel(day.branchId)}'
+                                      : 'Off',
+                              style: Theme.of(context).textTheme.bodyMedium),
+                          if (large)
+                            Row(
+                                mainAxisAlignment: MainAxisAlignment.end,
+                                children: controls),
+                        ]);
+                  })),
             ],
           );
         }),
@@ -751,7 +726,7 @@ class _AvailabilityScreenState extends State<AvailabilityScreen> {
   List<Widget> _timeOffSection() {
     if (roster?.baseline == null && roster?.message != null) return [];
     if (roster?.baseline == null) {
-      return const [Panel(child: Text('-'))];
+      return const [Panel(child: Text('Loading time off…'))];
     }
     if (roster!.exceptions.isEmpty) {
       return [
@@ -823,249 +798,205 @@ class _AvailabilityScreenState extends State<AvailabilityScreen> {
 
   Widget _limitsSection() {
     if (roster?.baseline == null) {
-      return const Panel(
-          child: Text('Load your schedule to configure booking limits.'));
+      return const Text('Load your schedule to set booking limits.');
     }
-    final daily = roster!.dailyHours, advance = roster!.advanceDays;
-    final today = availabilityCubit?.state.context?.todayLocalDate;
-    final lastDate = today == null || advance == null
-        ? null
-        : DateTime.parse(today)
-            .add(Duration(days: advance))
-            .toIso8601String()
-            .substring(0, 10);
-    return Panel(
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Text('Daily coaching capacity',
-          style: Theme.of(context).textTheme.titleMedium),
-      const SizedBox(height: 8),
-      const Text(
-          'Limit the total booked coaching time across all Members, not per Member. Confirmed bookings and unexpired payment holds count toward this limit.',
-          style: TextStyle(height: 1.5, color: AppColors.inkSoft)),
-      const SizedBox(height: 14),
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      const Text('Daily Coaching Capacity',
+          style: TextStyle(fontWeight: FontWeight.w600)),
+      const SizedBox(height: 4),
+      const Text('Total booked hours across all members.'),
+      const SizedBox(height: 10),
       DropdownButtonFormField<int>(
-          key: ValueKey(('daily-capacity', daily)),
-          initialValue: daily,
+          key: ValueKey(('daily-capacity', roster!.dailyHours)),
+          initialValue: roster!.dailyHours,
+          isExpanded: true,
           decoration: const InputDecoration(
-              labelText: 'Maximum booked hours per day',
-              border: OutlineInputBorder()),
+              labelText: 'Maximum hours per day', border: OutlineInputBorder()),
           items: [
-            for (var n = 1; n <= 24; n++)
-              DropdownMenuItem(value: n, child: Text('$n hours total'))
+            for (var i = 1; i <= 24; i++)
+              DropdownMenuItem(value: i, child: Text('$i hours total'))
           ],
           onChanged: enabled ? (v) => roster!.limits(hours: v) : null),
-      const SizedBox(height: 12),
-      const Text(
-          'Example: working 09:00–17:00 with a 6-hour cap allows at most 6 booked hours within those windows. A larger cap never adds working hours.',
-          style: TextStyle(fontSize: 13, height: 1.5)),
-      const Divider(height: 32),
-      Text('Advance-booking window',
-          style: Theme.of(context).textTheme.titleMedium),
-      const SizedBox(height: 8),
-      const Text(
-          'Choose how many days ahead Members can book. It does not change your weekly hours or the length of a session.',
-          style: TextStyle(height: 1.5, color: AppColors.inkSoft)),
-      const SizedBox(height: 14),
+      const SizedBox(height: 20),
+      const Text('Advance Booking Window',
+          style: TextStyle(fontWeight: FontWeight.w600)),
+      const SizedBox(height: 4),
+      const Text('How far ahead members can book.'),
+      const SizedBox(height: 10),
       DropdownButtonFormField<int>(
-          key: ValueKey(('advance-window', advance)),
-          initialValue: advance,
+          key: ValueKey(('advance-window', roster!.advanceDays)),
+          initialValue: roster!.advanceDays,
+          isExpanded: true,
           decoration: const InputDecoration(
-              labelText: 'Days ahead Members can book',
-              border: OutlineInputBorder()),
+              labelText: 'Days ahead', border: OutlineInputBorder()),
           items: [
-            for (var n = 1; n <= 30; n++)
-              DropdownMenuItem(value: n, child: Text('$n days ahead'))
+            for (var i = 1; i <= 30; i++)
+              DropdownMenuItem(value: i, child: Text('$i days ahead'))
           ],
           onChanged: enabled ? (v) => roster!.limits(days: v) : null),
-      if (lastDate != null)
-        Padding(
-            padding: const EdgeInsets.only(top: 12),
-            child: Text(
-                'Last bookable date: $lastDate (inclusive, organization time). Past times are not bookable.',
-                style: const TextStyle(fontSize: 13, height: 1.5))),
-      const SizedBox(height: 10),
-      const Text(
-          'Lowering a limit preserves existing reservations; it restricts new bookings.',
-          style:
-              TextStyle(fontSize: 12, color: AppColors.inkSoft, height: 1.5)),
-    ]));
+      ExpansionTile(
+          tilePadding: EdgeInsets.zero,
+          title: const Text('Learn More'),
+          children: const [
+            Text(
+                'Confirmed bookings and valid payment holds count toward capacity. Lower limits preserve existing reservations. Capacity never adds working hours; final booking eligibility is checked when booking.',
+                style: TextStyle(height: 1.5))
+          ])
+    ]);
   }
 
-  List<Widget> _footerSection() {
+  Widget? _saveBar() {
+    final draft = roster;
+    if (draft == null || (!draft.dirty && !draft.uncertain && !draft.saving)) {
+      return null;
+    }
+    return SafeArea(
+        top: false,
+        child: Container(
+            key: const Key('availability-save-bar'),
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+            decoration: const BoxDecoration(
+                color: AppColors.surface,
+                border: Border(top: BorderSide(color: AppColors.hairline))),
+            child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                      draft.saving
+                          ? 'Saving…'
+                          : draft.conflict
+                              ? 'Changes need attention'
+                              : draft.uncertain
+                                  ? "Couldn’t Save · Retry"
+                                  : 'Unsaved Changes',
+                      style: const TextStyle(
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.primary)),
+                  const SizedBox(height: 8),
+                  FilledButton(
+                      key: const ValueKey('save-roster'),
+                      onPressed: canSave ? _saveChanges : null,
+                      child: draft.saving
+                          ? const Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                  SizedBox(
+                                      width: 18,
+                                      height: 18,
+                                      child: CircularProgressIndicator(
+                                          strokeWidth: 2, color: Colors.white)),
+                                  SizedBox(width: 10),
+                                  Flexible(child: Text('Saving…'))
+                                ])
+                          : Text(
+                              draft.uncertain ? 'Retry Save' : 'Save Changes')),
+                  if (draft.conflict)
+                    TextButton(
+                        onPressed: draft.busy ? null : _reload,
+                        child: const Text('Review & Reload')),
+                ])));
+  }
+
+  List<Widget> _feedback() {
+    if (roster?.message == null) return const [];
+    final saved = roster!.message == 'Roster saved and refreshed.';
     return [
-      const Text(
-          'Save weekly hours, time off and booking limits together. One-off dates are saved separately in their editor.',
-          style: TextStyle(color: AppColors.inkSoft, height: 1.5)),
-      const SizedBox(height: 12),
-      if (roster?.message != null && roster!.message!.isNotEmpty) ...[
-        Panel(
-          background: roster!.conflict
-              ? AppColors.danger.withValues(alpha: 0.1)
-              : roster!.uncertain
-                  ? AppColors.warning.withValues(alpha: 0.1)
-                  : (roster!.message!.contains('saved')
-                      ? AppColors.success.withValues(alpha: 0.1)
-                      : AppColors.primary.withValues(alpha: 0.08)),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Icon(
-                roster!.conflict
-                    ? Icons.error_outline_rounded
-                    : roster!.uncertain
-                        ? Icons.warning_amber_rounded
-                        : (roster!.message!.contains('saved')
-                            ? Icons.check_circle_outline_rounded
-                            : Icons.info_outline_rounded),
-                color: roster!.conflict
-                    ? AppColors.danger
-                    : roster!.uncertain
-                        ? AppColors.warning
-                        : (roster!.message!.contains('saved')
-                            ? AppColors.success
-                            : AppColors.primary),
-                size: 20,
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
+      Padding(
+          padding: const EdgeInsets.only(bottom: 12),
+          child: Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                  color: saved
+                      ? AppColors.successTint
+                      : AppColors.warning.withValues(alpha: .1),
+                  borderRadius: BorderRadius.circular(12)),
+              child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      roster!.message!,
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                        color: roster!.conflict
-                            ? AppColors.danger
-                            : roster!.uncertain
-                                ? AppColors.ink
-                                : (roster!.message!.contains('saved')
-                                    ? AppColors.success
-                                    : AppColors.ink),
-                      ),
-                    ),
-                    if (roster!.conflict) ...[
-                      const SizedBox(height: 8),
-                      FilledButton.tonalIcon(
-                        onPressed: _reload,
-                        icon: const Icon(Icons.refresh, size: 16),
-                        label: const Text('Discard and reload'),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 12),
-      ],
-      SizedBox(
-        width: double.infinity,
-        child: FilledButton(
-          key: const ValueKey('save-roster'),
-          onPressed: canSave ? _saveChanges : null,
-          child: roster?.saving == true
-              ? const Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: Colors.white,
-                      ),
-                    ),
-                    SizedBox(width: 8),
-                    Text('Saving changes…'),
-                  ],
-                )
-              : Text(
-                  roster?.uncertain == true ? 'Retry save' : 'Save changes',
-                ),
-        ),
-      ),
-      const SizedBox(height: 8),
-      Center(
-        child: Text(
-          roster?.saving == true
-              ? 'Saving changes to Firebase…'
-              : roster?.uncertain == true
-                  ? 'Save could not be confirmed. Tap Retry save.'
-                  : (roster?.dirty == true
-                      ? 'You have unsaved changes'
-                      : 'No unsaved changes'),
-          style: TextStyle(
-            fontSize: 12.5,
-            fontWeight:
-                roster?.dirty == true ? FontWeight.w600 : FontWeight.w500,
-            color:
-                roster?.dirty == true ? AppColors.primary : AppColors.inkSoft,
-          ),
-        ),
-      ),
+                    Text(saved ? 'Saved' : roster!.message!,
+                        style: TextStyle(
+                            color: saved ? AppColors.success : AppColors.ink)),
+                    if (roster!.conflict)
+                      TextButton(
+                          onPressed: _reload,
+                          child: const Text('Review & Reload'))
+                  ])))
     ];
   }
 
   @override
   Widget build(BuildContext context) {
     final busy = roster?.busy == true;
-    final dirty = roster?.dirty == true;
-
     return BlocBuilder<CoachAvailabilityCubit, CoachAvailabilityState>(
-      bloc: availabilityCubit,
-      builder: (context, cubitState) {
-        return UnsavedChangesGuard(
-          dirty: dirty,
-          busy: busy,
-          child: AvailabilityPage(
-            workingHoursTitle:
-                roster == null ? 'Date-specific hours' : 'Weekly working hours',
-            limitsTitle: 'Booking limits',
-            actions: [
-              IconButton(
-                tooltip: 'Discard and reload',
-                onPressed: busy ? null : _reload,
-                icon: const Icon(Icons.refresh),
-              ),
-            ],
-            header: [
-              if (roster?.baseline == null && roster?.message != null)
-                Panel(
-                    child: Column(
+        bloc: availabilityCubit,
+        builder: (context, state) => UnsavedChangesGuard(
+            dirty: roster?.dirty == true,
+            busy: busy,
+            child: AvailabilityPage(
+              workingHoursTitle: 'Weekly Working Hours',
+              saveBar: _saveBar(),
+              onRefresh: _reload,
+              actions: [
+                IconButton(
+                    tooltip: 'Refresh availability',
+                    onPressed: busy ? null : _reload,
+                    icon: const Icon(Icons.refresh_rounded))
+              ],
+              timeOffSummary: roster?.baseline == null
+                  ? 'Not loaded'
+                  : '${roster!.exceptions.length} blocked periods',
+              limitsSummary:
+                  '${roster?.dailyHours == null ? 'Set capacity' : '${roster!.dailyHours} hours / day'} · ${roster?.advanceDays == null ? 'Set advance window' : '${roster!.advanceDays} days ahead'}',
+              header: [
+                ..._feedback(),
+                if (state.message != null && state.context != null)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: Panel(
+                      background: AppColors.warning.withValues(alpha: .1),
+                      child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                      Text(roster!.message!,
-                          style: const TextStyle(color: AppColors.danger)),
-                      TextButton.icon(
-                          onPressed: () => roster!.reload(discard: true),
-                          icon: const Icon(Icons.refresh),
-                          label: const Text('Retry loading roster')),
-                    ])),
-              if (busy || cubitState.loading || cubitState.saving)
-                const LinearProgressIndicator(),
-              if (cubitState.message != null)
-                Padding(
-                    padding: const EdgeInsets.only(bottom: 12),
-                    child: Text(cubitState.message!)),
-            ],
-            weekAtGlance: _weekAtGlance(cubitState),
-            workingHours: [
-              _recurringHours(),
-              const SizedBox(height: 16),
-              _oneOffSection(),
-            ],
-            onAddTimeOff: enabled ? _addException : null,
-            timeOff: _timeOffSection(),
-            limits: [
-              _limitsSection(),
-            ],
-            footer: [..._footerSection(), const SizedBox(height: 16), GoogleIntegrationPanel(actions: googleIntegrationPanelActions(widget.googleIntegration ?? const DisconnectedGoogleIntegrationRepository()), coachId: _effectiveCoachId)],
-          ),
-        );
-      },
-    );
+                          Text(state.message!),
+                          const Text('Showing the last loaded schedule.'),
+                          TextButton(
+                              onPressed: _reload, child: const Text('Retry')),
+                        ],
+                      ),
+                    ),
+                  ),
+                if (busy || state.loading || state.saving)
+                  const LinearProgressIndicator(),
+                if (roster?.baseline == null && roster?.message != null)
+                  TextButton(
+                      onPressed: _reload,
+                      child: const Text('Retry loading schedule'))
+              ],
+              weekAtGlance: _weekAtGlance(state),
+              workingHours: [
+                if (roster?.baseline != null && roster!.schedule.isEmpty)
+                  Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: OutlinedButton.icon(
+                          onPressed: enabled
+                              ? () => roster!.initializeAllDays()
+                              : null,
+                          icon: const Icon(Icons.add),
+                          label: const Text('Set up weekly hours'))),
+                _recurringHours()
+              ],
+              onAddTimeOff: enabled ? _addException : null,
+              timeOff: _timeOffSection(),
+              limits: [_limitsSection()],
+              footer: [
+                GoogleIntegrationPanel(
+                    compact: true,
+                    actions: googleIntegrationPanelActions(
+                        widget.googleIntegration ??
+                            const DisconnectedGoogleIntegrationRepository()),
+                    coachId: _effectiveCoachId)
+              ],
+            )));
   }
 }

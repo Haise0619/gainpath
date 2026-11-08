@@ -14,6 +14,7 @@ class CoachSpecificDateSheet extends StatefulWidget {
     this.initialDate,
     this.initialContext,
     this.onSaved,
+    this.branchNames = const {},
   });
 
   final CoachAvailabilityRepository repository;
@@ -22,6 +23,7 @@ class CoachSpecificDateSheet extends StatefulWidget {
   final String? initialDate;
   final CoachAvailabilityContext? initialContext;
   final VoidCallback? onSaved;
+  final Map<String, String> branchNames;
 
   @override
   State<CoachSpecificDateSheet> createState() => _CoachSpecificDateSheetState();
@@ -106,7 +108,8 @@ class _CoachSpecificDateSheetState extends State<CoachSpecificDateSheet> {
             initialValue: _branch,
             decoration: const InputDecoration(labelText: 'Branch'),
             items: state.context!.assignedBranchIds
-                .map((b) => DropdownMenuItem(value: b, child: Text(b)))
+                .map((b) => DropdownMenuItem(
+                    value: b, child: Text(widget.branchNames[b] ?? b)))
                 .toList(),
             onChanged: enabled ? (b) => setState(() => _branch = b!) : null,
           ),
@@ -202,10 +205,11 @@ class _CoachSpecificDateSheetState extends State<CoachSpecificDateSheet> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text(
+                      Expanded(
+                          child: Text(
                         'Edit specific date',
                         style: Theme.of(context).textTheme.titleLarge,
-                      ),
+                      )),
                       IconButton(
                         onPressed: busy ? null : _close,
                         icon: const Icon(Icons.close),
@@ -213,10 +217,13 @@ class _CoachSpecificDateSheetState extends State<CoachSpecificDateSheet> {
                     ],
                   ),
                   const SizedBox(height: 8),
+                  const Text('Changes to this date only',
+                      style: TextStyle(fontWeight: FontWeight.w600)),
                   if (data != null)
                     Text(
-                      'Organization time: ${data.timeZone}. Specific date windows replace your recurring weekly hours for this day.',
-                      style: Theme.of(context).textTheme.bodySmall,
+                      '${data.timeZone} · saved separately from weekly hours.',
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          fontSize: 12, color: AppColors.inkSoft),
                     ),
                   if (busy) const LinearProgressIndicator(),
                   if (state.message != null) ...[
@@ -305,7 +312,9 @@ class _CoachSpecificDateSheetState extends State<CoachSpecificDateSheet> {
                             title: Text(
                               '${day.labelFor(entry.$2.startAtMillis)} – ${day.labelFor(entry.$2.endAtMillis)}',
                             ),
-                            subtitle: Text(entry.$2.branchId),
+                            subtitle: Text(
+                                widget.branchNames[entry.$2.branchId] ??
+                                    entry.$2.branchId),
                             trailing: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
@@ -338,7 +347,9 @@ class _CoachSpecificDateSheetState extends State<CoachSpecificDateSheet> {
                       ),
                     if (_editingDay == day.localDate) _editor(state, canEdit),
                     const SizedBox(height: 12),
-                    Row(
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
                       children: [
                         OutlinedButton.icon(
                           onPressed:
@@ -348,7 +359,6 @@ class _CoachSpecificDateSheetState extends State<CoachSpecificDateSheet> {
                           icon: const Icon(Icons.add),
                           label: const Text('Add window'),
                         ),
-                        const Spacer(),
                         FilledButton(
                           onPressed: canEdit && !editing && state.dirty
                               ? () async {
