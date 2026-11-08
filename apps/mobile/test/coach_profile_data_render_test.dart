@@ -18,7 +18,8 @@ void main() {
   setUpAll(loadDemoRenderFonts);
   for (final width in [320.0, 360.0]) {
     for (final scale in [1.0, 2.0]) {
-      testWidgets('Coach Profile and shared preview render $width $scale',
+      testWidgets(
+          'Coach original preview and visible labels render $width $scale',
           (t) async {
         final restore = await installFypOfflineFonts();
         addTearDown(restore);
@@ -50,7 +51,7 @@ void main() {
             final img = await boundary.toImage();
             final data = await img.toByteData(format: ui.ImageByteFormat.png);
             final file = File(
-                '../../build/coach-profile-data-20261108/renders/$label-${width.toInt()}-${scale.toInt()}x.png');
+                '../../build/coach-preview-restore-20261108/renders/$label-${width.toInt()}-${scale.toInt()}x.png');
             await file.parent.create(recursive: true);
             await file.writeAsBytes(data!.buffer.asUint8List());
             img.dispose();

@@ -1,10 +1,12 @@
+import 'package:gainpath_mobile/features/identity/presentation/coach/coach_account_presentation.dart'
+    show CoachAccountData;
 import 'dart:async';
 import 'package:gainpath_domain/identity.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gainpath_mobile/features/identity/application/coach_account_gateway.dart';
 import 'package:gainpath_mobile/features/identity/presentation/coach/coach_account_screen.dart';
-import 'package:gainpath_mobile/features/coaching/presentation/shared/coach_profile_screen.dart';
+import 'package:gainpath_mobile/features/identity/presentation/coach/coach_public_profile_preview.dart';
 import 'support/coach_account_gateway_fake.dart';
 import 'coach_profile_state_test.dart' show ProfileFake;
 import 'coach_shared_account_test.dart' show draft, frame;
@@ -87,7 +89,7 @@ void main() {
         throwsFormatException);
   });
   testWidgets(
-      'loads real metrics and preview reuses Member UI without booking actions',
+      'loads real metrics and restores original owner preview without booking actions',
       (t) async {
     final account = MetricsAccount();
     await t.pumpWidget(frame(CoachAccountScreen(
@@ -100,8 +102,14 @@ void main() {
     expect(find.text('1 review'), findsOneWidget);
     await t.tap(find.text('Preview public profile'));
     await t.pumpAndSettle();
-    expect(find.byType(CoachProfileScreen), findsOneWidget);
+    expect(find.byType(CoachPublicProfilePreview), findsOneWidget);
+    expect(find.byKey(const Key('coach-preview-hero')), findsOneWidget);
+    expect(find.text('Experience'), findsOneWidget);
+    expect(find.text('Sessions'), findsOneWidget);
+    expect(find.text('Reviews'), findsOneWidget);
     expect(find.text('Owner draft biography'), findsOneWidget);
+    await t.scrollUntilVisible(
+        find.widgetWithText(FilledButton, 'Book a session'), 250);
     final book = t.widget<FilledButton>(
         find.widgetWithText(FilledButton, 'Book a session'));
     expect(book.onPressed, isNull);
@@ -146,12 +154,15 @@ void main() {
     await t.pumpAndSettle();
     expect(
         t
-            .widget<CoachProfileScreen>(find.byType(CoachProfileScreen))
-            .coach
-            .name,
+            .widget<CoachPublicProfilePreview>(
+                find.byType(CoachPublicProfilePreview))
+            .profile
+            .fields
+            .displayName,
         'Published Coach');
     expect(
-        MediaQuery.textScalerOf(t.element(find.byType(CoachProfileScreen)))
+        MediaQuery.textScalerOf(
+                t.element(find.byType(CoachPublicProfilePreview)))
             .scale(14),
         28);
     await t.scrollUntilVisible(
@@ -164,9 +175,11 @@ void main() {
     await t.pumpAndSettle();
     expect(
         t
-            .widget<CoachProfileScreen>(find.byType(CoachProfileScreen))
-            .coach
-            .name,
+            .widget<CoachPublicProfilePreview>(
+                find.byType(CoachPublicProfilePreview))
+            .profile
+            .fields
+            .displayName,
         'Actual Coach');
     expect(t.takeException(), isNull);
     await t.pumpWidget(const SizedBox());
@@ -208,4 +221,39 @@ void main() {
     expect(find.text('4.0 · 1 review'), findsOneWidget);
     await t.pumpWidget(const SizedBox());
   });
+  for (final fee in [null, 0]) {
+    testWidgets('historical preview preserves unavailable price for fee $fee',
+        (t) async {
+      final profile = PublishedCoachProfile(
+          id: 'coach',
+          fields: CoachProfessionalFields(
+              displayName: 'Coach',
+              specialty: 'Strength',
+              bio: 'Bio',
+              specializationTags: ['Strength'],
+              yearsExperience: null,
+              consultationFeeMinor: fee),
+          revision: 1,
+          sourceRevision: 1,
+          status: 'published',
+          branchIds: ['main'],
+          createdAtMillis: 1,
+          updatedAtMillis: 1,
+          publishedAtMillis: 1);
+      await t.pumpWidget(MaterialApp(
+          home: CoachPublicProfilePreview(
+              profile: profile,
+              data: const CoachAccountData(
+                  name: 'Coach',
+                  specialty: 'Strength',
+                  directoryLabel: 'Published',
+                  reviews: '0'),
+              header: const Text('Preview'))));
+      await t.pumpAndSettle();
+      await t.scrollUntilVisible(find.text('Price unavailable'), 250);
+      expect(find.text('RM 0.00'), findsNothing);
+      expect(find.text('Price unavailable'), findsOneWidget);
+      await t.pumpWidget(const SizedBox());
+    });
+  }
 }

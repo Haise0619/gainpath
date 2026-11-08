@@ -1,6 +1,5 @@
 import 'package:gainpath_domain/identity.dart';
-import '../../../coaching/presentation/shared/coach_profile_screen.dart';
-import '../../../coaching/presentation/shared/published_coach_presentation.dart';
+import 'coach_public_profile_preview.dart';
 import 'package:flutter/material.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
 
@@ -84,16 +83,21 @@ class CoachAccountPresentation extends StatelessWidget {
           Row(
             children: [
               Expanded(
-                  child: _CoachSummaryTile(data.rating ?? '-', 'Rating',
+                  child: CoachProfileStat(
+                      value: data.rating ?? 'Unavailable',
+                      label: 'Rating',
                       valueColor: AppColors.accent)),
               const SizedBox(width: 10),
               Expanded(
-                  child: _CoachSummaryTile(
-                      data.sessions ?? 'Unavailable', 'Completed')),
+                  child: CoachProfileStat(
+                      value: data.sessions ?? 'Unavailable',
+                      label: 'Sessions',
+                      semanticLabel: 'Completed sessions')),
               const SizedBox(width: 10),
               Expanded(
-                  child:
-                      _CoachSummaryTile(data.experience ?? '-', 'Experience')),
+                  child: CoachProfileStat(
+                      value: data.experience ?? 'Not provided',
+                      label: 'Experience')),
             ],
           ),
           const SizedBox(height: 12),
@@ -379,20 +383,10 @@ class _CoachAccountProfilePreviewState
   Widget build(BuildContext context) {
     final profile = showDraft ? widget.draftProfile : widget.profile;
     final data = showDraft ? widget.draft! : widget.data;
-    return CoachProfileScreen(
-      coach: publishedCoachPresentation(profile),
-      published: profile,
-      branchNames: data.branchNames,
-      previewOnly: true,
-      previewRatingUnavailable: data.reviews == null,
-      photo: data.photo == null
-          ? const Icon(Icons.person)
-          : Image(
-              image: data.photo!,
-              fit: BoxFit.cover,
-              errorBuilder: (_, error, stack) => const Icon(Icons.person)),
-      previewHeader:
-          Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+    return CoachPublicProfilePreview(
+      profile: profile,
+      data: data,
+      header: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Text(showDraft
             ? 'Owner draft preview — pending Admin publication'
             : widget.label),
@@ -412,30 +406,4 @@ class _CoachAccountProfilePreviewState
       ]),
     );
   }
-}
-
-class _CoachSummaryTile extends StatelessWidget {
-  const _CoachSummaryTile(this.value, this.label, {this.valueColor});
-  final String value, label;
-  final Color? valueColor;
-  @override
-  Widget build(BuildContext context) => Panel(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 14),
-      child: Column(children: [
-        Text(value,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-                fontSize: 22,
-                fontWeight: FontWeight.w800,
-                color: valueColor ?? AppColors.ink)),
-        const SizedBox(height: 4),
-        FittedBox(
-            fit: BoxFit.scaleDown,
-            child: Text(label,
-                maxLines: 1,
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    fontFamily:
-                        Theme.of(context).textTheme.bodyMedium?.fontFamily)))
-      ]));
 }
