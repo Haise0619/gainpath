@@ -39,6 +39,7 @@ class LiveBookingListView extends StatefulWidget {
       this.review,
       this.loadCoachName,
       this.coachId,
+      this.onFindCoach,
       this.title = 'My bookings',
       this.embedded = false});
   final bool embedded;
@@ -54,6 +55,7 @@ class LiveBookingListView extends StatefulWidget {
   final BookingReviewRepository? review;
   final Future<String?> Function(String coachId)? loadCoachName;
   final String? coachId;
+  final VoidCallback? onFindCoach;
   final String title;
   @override
   State<LiveBookingListView> createState() => _LiveBookingListViewState();
@@ -410,44 +412,213 @@ class _LiveBookingListViewState extends State<LiveBookingListView> {
             };
             final header =
                 Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              if (state.busy || action.busy) const LinearProgressIndicator(),
-              if (state.message != null) Text(state.message!),
-              if (action.message != null) Text(action.message!),
-              if (state.page != null)
-                Text(
-                    '${state.page!.firstLocalDate} – ${state.page!.throughLocalDate} · ${state.page!.timeZone}'),
-              const Text(
-                  'Updates every 30 seconds. Counts and filters use loaded bookings; load more for the full date range.'),
-              Wrap(children: [
-                TextButton.icon(
-                    onPressed: state.busy || action.busy || state.page == null
-                        ? null
-                        : () => controller
-                            .showRecentHistory(!controller.recentHistory),
-                    icon: const Icon(Icons.history),
-                    label: Text(controller.recentHistory
-                        ? 'Upcoming bookings'
-                        : 'Past 30 days')),
-                TextButton.icon(
-                    onPressed:
-                        action.busy || state.busy ? null : controller.refresh,
-                    icon: const Icon(Icons.refresh),
-                    label: const Text('Refresh bookings')),
-                if (state.page?.nextCursor != null)
-                  TextButton(
-                      onPressed: state.busy || action.busy
+              if (state.busy || action.busy)
+                const Padding(
+                  padding: EdgeInsets.only(bottom: 8),
+                  child: LinearProgressIndicator(
+                    minHeight: 2.5,
+                    color: AppColors.primary,
+                    backgroundColor: AppColors.surfaceAlt,
+                  ),
+                ),
+              if (state.message != null || action.message != null)
+                Container(
+                  margin: const EdgeInsets.only(bottom: 10),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: AppColors.dangerTint,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: AppColors.danger.withValues(alpha: .2),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.error_outline_rounded,
+                          size: 16, color: AppColors.danger),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          state.message ?? action.message!,
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: AppColors.danger,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: Material(
+                          color: Colors.transparent,
+                          child: InkWell(
+                            onTap: state.busy || action.busy || state.page == null
+                                ? null
+                                : () => controller.showRecentHistory(
+                                    !controller.recentHistory),
+                            borderRadius: BorderRadius.circular(10),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 10, vertical: 6),
+                              decoration: BoxDecoration(
+                                color: AppColors.primaryTint,
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(
+                                  color: AppColors.primary.withValues(alpha: .2),
+                                ),
+                              ),
+                              child: FittedBox(
+                                fit: BoxFit.scaleDown,
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      controller.recentHistory
+                                          ? Icons.history_rounded
+                                          : Icons.calendar_month_rounded,
+                                      size: 15,
+                                      color: AppColors.primary,
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Text(
+                                      controller.recentHistory
+                                          ? 'Past 30 days'
+                                          : 'Next 30 days',
+                                      style: const TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w700,
+                                        color: AppColors.primary,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 4),
+                                    const Icon(
+                                      Icons.swap_horiz_rounded,
+                                      size: 14,
+                                      color: AppColors.primary,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    IconButton(
+                      tooltip: 'Refresh bookings',
+                      iconSize: 20,
+                      padding: const EdgeInsets.all(6),
+                      constraints: const BoxConstraints(),
+                      onPressed: action.busy || state.busy
                           ? null
-                          : controller.loadMore,
-                      child: const Text('Load more bookings')),
-              ]),
+                          : controller.refresh,
+                      icon: const Icon(Icons.refresh_rounded,
+                          color: AppColors.inkSoft),
+                    ),
+                  ],
+                ),
+              ),
+              if (state.page != null)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 6),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Padding(
+                        padding: EdgeInsets.only(top: 2),
+                        child: Icon(
+                          Icons.info_outline_rounded,
+                          size: 13,
+                          color: AppColors.inkSoft,
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          '${state.page!.timeZone} · Auto-syncs 30s · ${state.records.length} loaded session${state.records.length == 1 ? '' : 's'}',
+                          style: const TextStyle(
+                            fontSize: 11,
+                            color: AppColors.inkSoft,
+                            height: 1.3,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              if (state.page?.nextCursor != null)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: OutlinedButton.icon(
+                    onPressed:
+                        state.busy || action.busy ? null : controller.loadMore,
+                    style: OutlinedButton.styleFrom(
+                      minimumSize: const Size(double.infinity, 38),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
+                    icon: const Icon(Icons.expand_more_rounded, size: 18),
+                    label: const Text(
+                      'Load more bookings',
+                      style: TextStyle(
+                          fontSize: 12.5, fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                ),
               if (action.uncertain && action.request != null) ...[
-                const Text(
-                    'Cancellation outcome unknown. Retry the same request or refresh server status.'),
-                TextButton(
-                    onPressed: action.busy || state.busy
-                        ? null
-                        : () => _cancel(action.request!.bookingId, retry: true),
-                    child: const Text('Retry same cancellation')),
+                Container(
+                  margin: const EdgeInsets.only(bottom: 10),
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: AppColors.accentTint,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: AppColors.warning.withValues(alpha: .3),
+                    ),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Cancellation outcome unknown. Retry the same request or refresh server status.',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: AppColors.ink,
+                          height: 1.35,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      TextButton(
+                        onPressed: action.busy || state.busy
+                            ? null
+                            : () =>
+                                _cancel(action.request!.bookingId, retry: true),
+                        style: TextButton.styleFrom(
+                          foregroundColor: AppColors.primary,
+                          padding: EdgeInsets.zero,
+                          minimumSize: Size.zero,
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        ),
+                        child: const Text(
+                          'Retry same cancellation',
+                          style: TextStyle(
+                              fontWeight: FontWeight.w700, fontSize: 12.5),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               ],
             ]);
             final bookings = state.records.map((r) {
@@ -461,7 +632,7 @@ class _LiveBookingListViewState extends State<LiveBookingListView> {
                 record.bookingId: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const SizedBox(height: 12),
+                      const SizedBox(height: 6),
                       DetailRow('Booking', record.bookingId),
                       if (widget.onPayment != null)
                         TextButton(
@@ -565,6 +736,7 @@ class _LiveBookingListViewState extends State<LiveBookingListView> {
             }
             return BookingScheduleScreen(
                 embedded: widget.embedded,
+                onFindCoach: widget.onFindCoach,
                 onReview: widget.review == null || state.busy
                     ? null
                     : _showReviewDialog,

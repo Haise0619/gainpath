@@ -65,10 +65,9 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byType(BookingScheduleScreen), findsOneWidget);
     expect(find.text('UPCOMING'), findsOneWidget);
-    await tester.scrollUntilVisible(find.text('COMPLETED'), 300);
-    expect(find.text('COMPLETED'), findsOneWidget);
-    await tester.scrollUntilVisible(find.text('CANCELLED'), 300);
-    expect(find.text('CANCELLED'), findsOneWidget);
+    await tester.tap(find.text('History'));
+    await tester.pumpAndSettle();
+    expect(find.text('No session history'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 }
