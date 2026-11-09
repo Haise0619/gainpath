@@ -35,3 +35,35 @@ List<DatedCoachWindow> previewScheduledWindows({
   }
   return windows;
 }
+
+List<DatedCoachWindow> maskWindowsWithExceptions(
+    List<DatedCoachWindow> windows, List<CoachTimeException> exceptions) {
+  final result = <DatedCoachWindow>[];
+  for (final window in windows) {
+    var pieces = [window];
+    for (final e in exceptions) {
+      pieces = pieces.expand((w) {
+        if (e.endAtMillis <= w.startAtMillis ||
+            e.startAtMillis >= w.endAtMillis) {
+          return [w];
+        }
+        return [
+          if (e.startAtMillis > w.startAtMillis)
+            DatedCoachWindow(
+              branchId: w.branchId,
+              startAtMillis: w.startAtMillis,
+              endAtMillis: e.startAtMillis,
+            ),
+          if (e.endAtMillis < w.endAtMillis)
+            DatedCoachWindow(
+              branchId: w.branchId,
+              startAtMillis: e.endAtMillis,
+              endAtMillis: w.endAtMillis,
+            ),
+        ];
+      }).toList();
+    }
+    result.addAll(pieces);
+  }
+  return result;
+}

@@ -215,17 +215,21 @@ void main() {
     await t.tap(find.byKey(const ValueKey('availability-date-2026-11-10')));
     await t.pumpAndSettle();
     expect(find.text('Tue, 10 Nov 2026'), findsOneWidget);
-    await t.scrollUntilVisible(find.text('Change This Date'), 100,
+    await t.scrollUntilVisible(find.text('Manage This Day'), 100,
         scrollable: find.byType(Scrollable).first);
-    await Scrollable.ensureVisible(t.element(find.text('Change This Date')),
+    await Scrollable.ensureVisible(t.element(find.text('Manage This Day')),
         alignment: .4);
     await t.pumpAndSettle();
-    await t.tap(find.text('Change This Date'));
+    await t.tap(find.text('Manage This Day'));
+    await t.pumpAndSettle();
+    await t.tap(find.text('Edit Day Hours'));
     await t.pumpAndSettle();
     expect(find.text('Changes to this date only'), findsOneWidget);
     await t.tap(find.byIcon(Icons.close).last);
     await t.pumpAndSettle();
-    await t.tap(find.text('Add Time Off').first);
+    await t.tap(find.text('Manage This Day'));
+    await t.pumpAndSettle();
+    await t.tap(find.text('Add Time Off / Break'));
     await t.pumpAndSettle();
     final start = t
         .widgetList<DropdownButtonFormField<String>>(

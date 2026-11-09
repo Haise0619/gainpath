@@ -74,13 +74,13 @@ void main() {
         home: LiveCoachAvailabilityView(
             repository: repo, coachId: 'coach', isCurrent: () => true)));
     await tester.pumpAndSettle();
-    await tester.scrollUntilVisible(find.text('Change This Date'), 300,
+    await tester.scrollUntilVisible(find.text('Manage This Day'), 300,
         scrollable: find.byType(Scrollable).first);
-    await tester.ensureVisible(find.text('Change This Date'));
+    await tester.ensureVisible(find.text('Manage This Day'));
     await tester.pumpAndSettle();
-    await tester.ensureVisible(find.text('Change This Date'));
+    await tester.tap(find.text('Manage This Day'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Change This Date'));
+    await tester.tap(find.text('Edit Day Hours'));
     await tester.pumpAndSettle();
     expect(find.textContaining('Asia/Kuala_Lumpur'), findsWidgets);
     await tester.tap(find.text('Add window'));
@@ -127,11 +127,13 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Availability'));
     await tester.pumpAndSettle();
-    await tester.scrollUntilVisible(find.text('Change This Date'), 300,
+    await tester.scrollUntilVisible(find.text('Manage This Day'), 300,
         scrollable: find.byType(Scrollable).first);
-    await tester.ensureVisible(find.text('Change This Date'));
+    await tester.ensureVisible(find.text('Manage This Day'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Change This Date'));
+    await tester.tap(find.text('Manage This Day'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Edit Day Hours'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Add window'));
     await tester.pumpAndSettle();
@@ -195,11 +197,13 @@ void main() {
         home: LiveCoachAvailabilityView(
             repository: repo, coachId: 'coach', isCurrent: () => true)));
     await tester.pumpAndSettle();
-    await tester.scrollUntilVisible(find.text('Change This Date'), 300,
+    await tester.scrollUntilVisible(find.text('Manage This Day'), 300,
         scrollable: find.byType(Scrollable).first);
-    await tester.ensureVisible(find.text('Change This Date'));
+    await tester.ensureVisible(find.text('Manage This Day'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Change This Date'));
+    await tester.tap(find.text('Manage This Day'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Edit Day Hours'));
     await tester.pumpAndSettle();
     await tester.scrollUntilVisible(
         find.byKey(const ValueKey('edit-window-1')), 250,

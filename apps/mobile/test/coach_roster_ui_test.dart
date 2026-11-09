@@ -101,14 +101,18 @@ void main() {
     expect(repo.loads, 2);
     expect(repo.rosterRequests, hasLength(1));
     await tester.scrollUntilVisible(
-        find.byKey(const ValueKey('open-specific-date-btn')), -250,
+        find.byKey(const ValueKey('manage-this-day-btn')), -250,
         scrollable: find.byType(Scrollable).first);
     expect(
-        find.byKey(const ValueKey('open-specific-date-btn')), findsOneWidget);
+        find.byKey(const ValueKey('manage-this-day-btn')), findsOneWidget);
     // The expanded page can align ensureVisible behind the pinned app bar.
     // Scroll to a hittable position before exercising the date editor.
     await tester.drag(find.byType(Scrollable).first, const Offset(0, 100));
     await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('manage-this-day-btn')));
+    await tester.pumpAndSettle();
+    expect(
+        find.byKey(const ValueKey('open-specific-date-btn')), findsOneWidget);
     await tester.tap(find.byKey(const ValueKey('open-specific-date-btn')));
     await tester.pumpAndSettle();
     expect(repo.loads, 2);

@@ -76,8 +76,10 @@ void main() {
         await capture('sticky-save');
         await t.tap(find.byKey(const ValueKey('save-roster')));
         await t.pumpAndSettle();
-        await show(find.byKey(const ValueKey('open-specific-date-btn')),
+        await show(find.byKey(const ValueKey('manage-this-day-btn')),
             delta: -150);
+        await t.tap(find.byKey(const ValueKey('manage-this-day-btn')));
+        await t.pumpAndSettle();
         await t.tap(find.byKey(const ValueKey('open-specific-date-btn')));
         await t.pumpAndSettle();
         await capture('date-editor');

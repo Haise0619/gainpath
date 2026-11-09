@@ -1,3 +1,4 @@
+import 'monthly_availability_screen.dart';
 import 'weekly_hours_sheet.dart';
 import 'availability_navigation_scope.dart';
 import '../../../../navigation/google_integration.dart';
@@ -203,7 +204,7 @@ class _AvailabilityScreenState extends State<AvailabilityScreen> {
     roster!.copyDay(result.day.dayOfWeek, result.copyTo);
   }
 
-  Future<void> _addException() async {
+  Future<void> _addException({String? date}) async {
     if (!enabled || roster?.baseline == null) {
       if (roster?.message != null) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -218,11 +219,12 @@ class _AvailabilityScreenState extends State<AvailabilityScreen> {
       }
       return;
     }
+    final targetDate = date ?? availabilityCubit?.state.day?.localDate;
     final result = await showModalBottomSheet<CoachTimeException>(
       context: context,
       isScrollControlled: true,
       builder: (_) => CoachTimeExceptionSheet(
-        initialDate: availabilityCubit?.state.day?.localDate,
+        initialDate: targetDate,
         repository: _effectiveRepo!,
         roster: roster!.baseline!,
         isCurrent: _effectiveIsCurrent,
@@ -299,6 +301,197 @@ class _AvailabilityScreenState extends State<AvailabilityScreen> {
         onSaved: () {
           availabilityCubit?.discardAndReload();
         },
+      ),
+    );
+  }
+
+  Future<void> _openMonthlyCalendar() async {
+    if (_effectiveRepo == null) return;
+    final currentLocalDate = availabilityCubit?.state.day?.localDate;
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (_) => MonthlyAvailabilityScreen(
+          repository: _effectiveRepo!,
+          coachId: _effectiveCoachId,
+          isCurrent: _effectiveIsCurrent,
+          roster: roster,
+          branchNames: _branchNames,
+          initialDate: currentLocalDate,
+          onManageDay: _openManageDaySheet,
+          onDateSelected: (date) {
+            availabilityCubit?.openDay(date);
+          },
+        ),
+      ),
+    );
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
+  Future<void> _openManageDaySheet(String date) async {
+    final parsed = DateTime.tryParse(date) ?? DateTime.now();
+    final weekday = parsed.weekday;
+    final weekdayName = _weekdayNames[weekday - 1];
+    final dateFormatted = _readableDate(date);
+
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (sheetContext) => SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 36,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: AppColors.hairline,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 14),
+              Row(
+                children: [
+                  const Icon(Icons.event_note_rounded,
+                      color: AppColors.primary, size: 20),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Manage $dateFormatted',
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.ink,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Select an action to update schedule or time off for this date.',
+                style: TextStyle(
+                  fontSize: 12.5,
+                  color: AppColors.inkSoft.withValues(alpha: 0.8),
+                ),
+              ),
+              const SizedBox(height: 16),
+              _manageDayActionTile(
+                key: const ValueKey('open-specific-date-btn'),
+                icon: Icons.edit_calendar_outlined,
+                iconColor: AppColors.primary,
+                title: 'Edit Day Hours',
+                subtitle: 'Change working hours for $dateFormatted only',
+                onTap: () {
+                  Navigator.of(sheetContext).pop();
+                  _openSpecificDateSheet(date: date);
+                },
+              ),
+              const SizedBox(height: 10),
+              _manageDayActionTile(
+                key: const ValueKey('add-time-off-action'),
+                icon: Icons.event_busy_outlined,
+                iconColor: AppColors.warning,
+                title: 'Add Time Off / Break',
+                subtitle:
+                    'Block part or all of $dateFormatted for break or leave',
+                onTap: () {
+                  Navigator.of(sheetContext).pop();
+                  _addException(date: date);
+                },
+              ),
+              const SizedBox(height: 10),
+              _manageDayActionTile(
+                key: const ValueKey('edit-weekly-schedule-action'),
+                icon: Icons.repeat_rounded,
+                iconColor: AppColors.info,
+                title: 'Edit Weekly Schedule ($weekdayName)',
+                subtitle:
+                    'Modify recurring working hours for all ${weekdayName}s',
+                onTap: () {
+                  Navigator.of(sheetContext).pop();
+                  _editDayHours(weekday);
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _manageDayActionTile({
+    Key? key,
+    required IconData icon,
+    required Color iconColor,
+    required String title,
+    required String subtitle,
+    required VoidCallback onTap,
+  }) {
+    return Material(
+      key: key,
+      color: AppColors.surface,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: const BorderSide(color: AppColors.hairline),
+      ),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          child: Row(
+            children: [
+              Container(
+                width: 38,
+                height: 38,
+                decoration: BoxDecoration(
+                  color: iconColor.withValues(alpha: 0.12),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(icon, color: iconColor, size: 20),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.ink,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: AppColors.inkSoft,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(
+                Icons.chevron_right_rounded,
+                color: AppColors.inkSoft,
+                size: 20,
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -878,66 +1071,29 @@ class _AvailabilityScreenState extends State<AvailabilityScreen> {
               ],
             ),
             const SizedBox(height: 12),
-            LayoutBuilder(
-              builder: (context, constraints) {
-                final isNarrow = constraints.maxWidth < 280;
-                final actions = [
-                  OutlinedButton.icon(
-                    key: const ValueKey('open-specific-date-btn'),
-                    onPressed: enabled
-                        ? () => _openSpecificDateSheet(date: selected.localDate)
-                        : null,
-                    style: OutlinedButton.styleFrom(
-                      visualDensity: VisualDensity.compact,
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 10, vertical: 8),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                    ),
-                    icon: const Icon(Icons.edit_calendar_outlined, size: 16),
-                    label: const Text(
-                      'Change This Date',
-                      style: TextStyle(
-                          fontSize: 12.5, fontWeight: FontWeight.w600),
-                    ),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                key: const ValueKey('manage-this-day-btn'),
+                onPressed: enabled
+                    ? () => _openManageDaySheet(selected.localDate)
+                    : null,
+                style: FilledButton.styleFrom(
+                  backgroundColor: AppColors.primary,
+                  foregroundColor: Colors.white,
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
                   ),
-                  OutlinedButton.icon(
-                    onPressed: enabled ? _addException : null,
-                    style: OutlinedButton.styleFrom(
-                      visualDensity: VisualDensity.compact,
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 10, vertical: 8),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                    ),
-                    icon: const Icon(Icons.add_rounded, size: 16),
-                    label: const Text(
-                      'Add Time Off',
-                      style: TextStyle(
-                          fontSize: 12.5, fontWeight: FontWeight.w600),
-                    ),
-                  ),
-                ];
-                if (isNarrow) {
-                  return Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      actions[0],
-                      const SizedBox(height: 6),
-                      actions[1],
-                    ],
-                  );
-                }
-                return Row(
-                  children: [
-                    Expanded(child: actions[0]),
-                    const SizedBox(width: 8),
-                    Expanded(child: actions[1]),
-                  ],
-                );
-              },
+                ),
+                icon: const Icon(Icons.tune_rounded, size: 16),
+                label: const Text(
+                  'Manage This Day',
+                  style: TextStyle(
+                      fontSize: 13.5, fontWeight: FontWeight.w600),
+                ),
+              ),
             ),
           ],
         ),
@@ -1289,6 +1445,14 @@ class _AvailabilityScreenState extends State<AvailabilityScreen> {
               workingHoursTitle: 'Weekly Working Hours',
               saveBar: _saveBar(),
               onRefresh: _reload,
+              actions: [
+                IconButton(
+                  key: const ValueKey('open-monthly-calendar-btn'),
+                  tooltip: 'Monthly calendar',
+                  icon: const Icon(Icons.calendar_month_rounded),
+                  onPressed: enabled ? _openMonthlyCalendar : null,
+                ),
+              ],
               timeOffSummary: roster?.baseline == null
                   ? 'Not loaded'
                   : '${roster!.exceptions.length} ${roster!.exceptions.length == 1 ? "blocked period" : "blocked periods"}',
