@@ -4,7 +4,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gainpath_mobile/features/identity/presentation/coach/coach_account_screen.dart';
-import 'package:gainpath_mobile/features/identity/presentation/coach/coach_public_profile_preview.dart';
+import 'package:gainpath_mobile/features/coaching/presentation/shared/coach_profile_screen.dart';
 import 'support/coach_account_gateway_fake.dart';
 import 'coach_profile_state_test.dart' show ProfileFake;
 import 'coach_shared_account_test.dart' show draft, frame;
@@ -68,7 +68,7 @@ void main() {
     await t.tap(find.text('Preview public profile'));
     await t.pump();
     await t.pump(const Duration(milliseconds: 400));
-    expect(find.byType(CoachPublicProfilePreview), findsOneWidget);
+    expect(find.byType(CoachProfileScreen), findsOneWidget);
     expect(find.byKey(const Key('preview-photo-loading')), findsOneWidget);
     expect(account.reads, 1);
     account.photo.complete(null);
@@ -89,13 +89,13 @@ void main() {
     await t.tap(find.text('Preview public profile'));
     await t.pump();
     await t.pump(const Duration(milliseconds: 400));
-    expect(find.byType(CoachPublicProfilePreview), findsOneWidget);
+    expect(find.byType(CoachProfileScreen), findsOneWidget);
     await t.pageBack();
     await t.pump();
     await t.pump(const Duration(milliseconds: 400));
     account.photo.complete(null);
     await t.pumpAndSettle();
-    expect(find.byType(CoachPublicProfilePreview), findsNothing);
+    expect(find.byType(CoachProfileScreen), findsNothing);
     expect(t.takeException(), isNull);
     await t.pumpWidget(const SizedBox());
   });
@@ -113,7 +113,7 @@ void main() {
     await t.tap(find.text('Preview public profile'));
     await t.pump();
     await t.pump(const Duration(milliseconds: 400));
-    expect(find.byType(CoachPublicProfilePreview), findsOneWidget);
+    expect(find.byType(CoachProfileScreen), findsOneWidget);
     expect(find.byKey(const Key('preview-photo-loading')), findsOneWidget);
     expect(account.publicReads, 1);
     await t.tap(find.widgetWithText(ChoiceChip, 'Draft version'));
@@ -123,11 +123,10 @@ void main() {
     await t.pumpAndSettle();
     expect(
         t
-            .widget<CoachPublicProfilePreview>(
-                find.byType(CoachPublicProfilePreview))
-            .profile
-            .fields
-            .displayName,
+            .widget<CoachProfileScreen>(
+                find.byType(CoachProfileScreen))
+            .coach
+            .name,
         'Actual Coach');
     expect(t.takeException(), isNull);
     await t.pumpWidget(const SizedBox());

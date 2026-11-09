@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:gainpath_mobile/features/identity/application/coach_account_gateway.dart';
 import 'package:gainpath_mobile/features/identity/presentation/coach/coach_account_screen.dart';
 import 'package:gainpath_mobile/features/identity/presentation/coach/coach_public_profile_preview.dart';
+import 'package:gainpath_mobile/features/coaching/presentation/shared/coach_profile_screen.dart';
 import 'support/coach_account_gateway_fake.dart';
 import 'coach_profile_state_test.dart' show ProfileFake;
 import 'coach_shared_account_test.dart' show draft, frame;
@@ -102,11 +103,7 @@ void main() {
     expect(find.text('1 review'), findsOneWidget);
     await t.tap(find.text('Preview public profile'));
     await t.pumpAndSettle();
-    expect(find.byType(CoachPublicProfilePreview), findsOneWidget);
-    expect(find.byKey(const Key('coach-preview-hero')), findsOneWidget);
-    expect(find.text('Experience'), findsOneWidget);
-    expect(find.text('Sessions'), findsOneWidget);
-    expect(find.text('Reviews'), findsOneWidget);
+    expect(find.byType(CoachProfileScreen), findsOneWidget);
     expect(find.text('Owner draft biography'), findsOneWidget);
     await t.scrollUntilVisible(
         find.widgetWithText(FilledButton, 'Book a session'), 250);
@@ -155,15 +152,14 @@ void main() {
     await t.pumpAndSettle();
     expect(
         t
-            .widget<CoachPublicProfilePreview>(
-                find.byType(CoachPublicProfilePreview))
-            .profile
-            .fields
-            .displayName,
+            .widget<CoachProfileScreen>(
+                find.byType(CoachProfileScreen))
+            .coach
+            .name,
         'Published Coach');
     expect(
         MediaQuery.textScalerOf(
-                t.element(find.byType(CoachPublicProfilePreview)))
+                t.element(find.byType(CoachProfileScreen)))
             .scale(14),
         28);
     await t.scrollUntilVisible(
@@ -176,11 +172,10 @@ void main() {
     await t.pumpAndSettle();
     expect(
         t
-            .widget<CoachPublicProfilePreview>(
-                find.byType(CoachPublicProfilePreview))
-            .profile
-            .fields
-            .displayName,
+            .widget<CoachProfileScreen>(
+                find.byType(CoachProfileScreen))
+            .coach
+            .name,
         'Actual Coach');
     expect(t.takeException(), isNull);
     await t.pumpWidget(const SizedBox());

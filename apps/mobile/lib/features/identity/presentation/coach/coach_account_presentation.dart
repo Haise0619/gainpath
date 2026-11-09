@@ -1,5 +1,7 @@
 import 'dart:typed_data';
 import 'package:gainpath_domain/identity.dart';
+import '../../../coaching/presentation/shared/coach_profile_screen.dart';
+import '../../../coaching/presentation/shared/published_coach_presentation.dart';
 import 'coach_public_profile_preview.dart';
 import 'package:flutter/material.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
@@ -388,32 +390,60 @@ class _CoachAccountProfilePreviewState
   Widget build(BuildContext context) {
     final profile = showDraft ? widget.draftProfile : widget.profile;
     final data = showDraft ? widget.draft! : widget.data;
-    return CoachPublicProfilePreview(
-      profile: profile,
-      data: data,
-      avatar: (showDraft ? widget.draftPhoto : widget.photo) == null
-          ? null
-          : _PreviewPhoto(
-              key: ValueKey(showDraft),
-              future: (showDraft ? widget.draftPhoto : widget.photo)!),
-      header: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text(showDraft
-            ? 'Owner draft preview — pending Admin publication'
-            : widget.label),
-        if (widget.draft != null) ...[
-          const SizedBox(height: 12),
-          Wrap(spacing: 8, children: [
-            ChoiceChip(
-                label: const Text('Published version'),
-                selected: !showDraft,
-                onSelected: (_) => setState(() => showDraft = false)),
-            ChoiceChip(
-                label: const Text('Draft version'),
-                selected: showDraft,
-                onSelected: (_) => setState(() => showDraft = true)),
-          ])
-        ]
-      ]),
+    final photoFuture = showDraft ? widget.draftPhoto : widget.photo;
+    Widget? photoWidget;
+    if (photoFuture != null) {
+      photoWidget = _PreviewPhoto(
+        key: ValueKey(showDraft),
+        future: photoFuture,
+      );
+    } else if (data.photo != null) {
+      photoWidget = Image(
+        image: data.photo!,
+        fit: BoxFit.cover,
+        errorBuilder: (_, error, stack) => const Icon(
+          Icons.person,
+          key: Key('preview-photo-fallback'),
+          color: Colors.white70,
+          size: 42,
+        ),
+      );
+    } else {
+      photoWidget = const Icon(
+        Icons.person,
+        key: Key('preview-photo-fallback'),
+        color: Colors.white70,
+        size: 42,
+      );
+    }
+    return CoachProfileScreen(
+      coach: publishedCoachPresentation(profile),
+      published: profile,
+      branchNames: data.branchNames,
+      previewOnly: true,
+      previewRatingUnavailable: data.reviews == null,
+      photo: photoWidget,
+      previewHeader: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(showDraft
+              ? 'Owner draft preview — pending Admin publication'
+              : widget.label),
+          if (widget.draft != null) ...[
+            const SizedBox(height: 12),
+            Wrap(spacing: 8, children: [
+              ChoiceChip(
+                  label: const Text('Published version'),
+                  selected: !showDraft,
+                  onSelected: (_) => setState(() => showDraft = false)),
+              ChoiceChip(
+                  label: const Text('Draft version'),
+                  selected: showDraft,
+                  onSelected: (_) => setState(() => showDraft = true)),
+            ])
+          ]
+        ],
+      ),
     );
   }
 }
