@@ -212,12 +212,24 @@ class _MemberHomeScreenState extends State<MemberHomeScreen>
           foregroundColor: Colors.white,
           shape: const CircleBorder(),
           clipBehavior: Clip.antiAlias,
-          child: Image.asset(
-            'assets/images/ai_coach_mascot.png',
-            width: 72,
-            height: 72,
-            fit: BoxFit.cover,
-            excludeFromSemantics: true,
+          elevation: 4,
+          child: Container(
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              border: Border.all(
+                color: Colors.white,
+                width: 2,
+              ),
+            ),
+            child: ClipOval(
+              child: Image.asset(
+                'assets/images/ai_coach_mascot.png',
+                width: 72,
+                height: 72,
+                fit: BoxFit.cover,
+                excludeFromSemantics: true,
+              ),
+            ),
           ),
         ),
       ),
@@ -261,7 +273,7 @@ class _MemberHomeScreenState extends State<MemberHomeScreen>
               ),
             ),
             SliverPadding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 88),
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 108),
               sliver: SliverList.list(
                 children: [
                   if (widget.announcements != null) ...[
@@ -362,6 +374,17 @@ class _MemberHomeScreenState extends State<MemberHomeScreen>
                       ),
                     ),
                   ],
+                  if (nextBooking != null) ...[
+                    const SizedBox(height: 24),
+                    const _HomeSectionHeading('Next with a coach'),
+                    _NextSessionCard(
+                      booking: nextBooking,
+                      onTap: live
+                          ? widget.onOpenBookings ??
+                              () => showUnavailable(context)
+                          : () => _go(const BookingScheduleScreen()),
+                    ),
+                  ],
                   const SizedBox(height: 24),
                   _RecentActivitySection(
                     live: live,
@@ -385,17 +408,6 @@ class _MemberHomeScreenState extends State<MemberHomeScreen>
                       onOpenCoaches: widget.onOpenCoaches,
                       onOpenBookings: widget.onOpenBookings,
                       onOpenProgress: widget.onOpenProgress),
-                  if (nextBooking != null) ...[
-                    const SizedBox(height: 24),
-                    const _HomeSectionHeading('Next with a coach'),
-                    _NextSessionCard(
-                      booking: nextBooking,
-                      onTap: live
-                          ? widget.onOpenBookings ??
-                              () => showUnavailable(context)
-                          : () => _go(const BookingScheduleScreen()),
-                    ),
-                  ],
                   if (live &&
                       widget.liveProfile != null &&
                       widget.liveProfile!.goals.isNotEmpty) ...[
@@ -671,15 +683,15 @@ class _StreakCard extends StatelessWidget {
         return Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
           decoration: BoxDecoration(
-            color: AppColors.surface,
-            borderRadius: BorderRadius.circular(10),
+            color: AppColors.surfaceAlt,
+            borderRadius: BorderRadius.circular(8),
             border: Border.all(color: AppColors.hairline),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: const [
               Icon(Icons.check_circle_rounded,
-                  size: 15, color: AppColors.success),
+                  size: 14, color: AppColors.success),
               SizedBox(width: 4),
               Text('Checked in',
                   style: TextStyle(
@@ -714,25 +726,25 @@ class _StreakCard extends StatelessWidget {
       scale: scale,
       child: Panel(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-        background: AppColors.primaryTint,
+        background: AppColors.surface,
         child: Column(
           children: [
             Row(
               children: [
                 Container(
-                  width: 38,
-                  height: 38,
+                  width: 36,
+                  height: 36,
                   decoration: BoxDecoration(
                     color:
-                        claimed ? AppColors.successTint : AppColors.accentTint,
+                        claimed ? AppColors.successTint : const Color(0xFFFEF3F2),
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Icon(
                     claimed
                         ? Icons.check_rounded
                         : Icons.local_fire_department_rounded,
-                    color: claimed ? AppColors.success : AppColors.warning,
-                    size: 22,
+                    color: claimed ? AppColors.success : const Color(0xFFF04438),
+                    size: 20,
                   ),
                 ),
                 const SizedBox(width: 10),
@@ -774,7 +786,7 @@ class _StreakCard extends StatelessWidget {
                             ? 'Check-in is not connected yet.'
                             : (claimed
                                 ? 'Checked in today'
-                                : '+$reward pts available'),
+                                : '+$reward pts available today'),
                         style: TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w600,
@@ -798,7 +810,7 @@ class _StreakCard extends StatelessWidget {
                 child: claimButton(),
               ),
             ],
-            const SizedBox(height: 10),
+            const SizedBox(height: 12),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: List.generate(7, (i) {
@@ -820,7 +832,7 @@ class _StreakCard extends StatelessWidget {
                       ),
                       child: done
                           ? const Icon(Icons.check_rounded,
-                              size: 14, color: Colors.white)
+                              size: 13, color: Colors.white)
                           : null,
                     ),
                     const SizedBox(height: 3),
@@ -879,44 +891,55 @@ class _TodayWorkoutCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        gradient: AppColors.heroGradient,
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFF3B1578), Color(0xFF260D4D)],
+        ),
         borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
         boxShadow: const [
           BoxShadow(
-              color: Color(0x384C1D95), blurRadius: 18, offset: Offset(0, 6)),
+              color: Color(0x283B1578), blurRadius: 18, offset: Offset(0, 6)),
         ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
+          Wrap(
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 8,
+            runSpacing: 4,
             children: [
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3.5),
                 decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.18),
+                  color: Colors.white.withValues(alpha: 0.14),
                   borderRadius: BorderRadius.circular(6),
                   border:
-                      Border.all(color: Colors.white.withValues(alpha: 0.22)),
+                      Border.all(color: Colors.white.withValues(alpha: 0.20)),
                 ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: const [
-                    Icon(Icons.bolt_rounded, size: 12, color: AppColors.accent),
-                    SizedBox(width: 3),
-                    Text(
-                      "TODAY'S WORKOUT",
-                      style: TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 0.6,
-                        color: Colors.white,
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: const [
+                      Icon(Icons.bolt_rounded, size: 12, color: AppColors.accent),
+                      SizedBox(width: 3),
+                      Text(
+                        "TODAY'S WORKOUT",
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 0.6,
+                          color: Colors.white,
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
-              const Spacer(),
               if (live &&
                   publishedRoutine != null &&
                   publishedRoutine!.exercises.isNotEmpty)
@@ -929,13 +952,16 @@ class _TodayWorkoutCard extends StatelessWidget {
                     border:
                         Border.all(color: Colors.white.withValues(alpha: 0.25)),
                   ),
-                  child: Text(
-                    publishedRoutine!.exercises.first.category.toUpperCase(),
-                    style: const TextStyle(
-                      fontSize: 9.5,
-                      color: Colors.white,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 0.4,
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(
+                      publishedRoutine!.exercises.first.category.toUpperCase(),
+                      style: const TextStyle(
+                        fontSize: 9.5,
+                        color: Colors.white,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 0.4,
+                      ),
                     ),
                   ),
                 ),
@@ -1100,39 +1126,89 @@ class _WeeklySummaryCard extends StatelessWidget {
 
     return Panel(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-      child: isEnlarged
-          ? Column(
-              children: [
-                Row(
-                  children: [
-                    Expanded(child: tile1),
-                    const SizedBox(width: 8),
-                    Expanded(child: tile2),
+      background: AppColors.surface,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Wrap(
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 8,
+            runSpacing: 4,
+            children: [
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: const [
+                    Icon(Icons.calendar_today_rounded,
+                        size: 13, color: AppColors.inkSoft),
+                    SizedBox(width: 6),
+                    Text(
+                      'Weekly activity',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.inkSoft,
+                      ),
+                    ),
                   ],
                 ),
-                const SizedBox(height: 8),
-                tile3,
-              ],
-            )
-          : Row(
-              children: [
-                Expanded(child: tile1),
-                Container(
-                  width: 1,
-                  height: 34,
-                  color: AppColors.hairline,
-                  margin: const EdgeInsets.symmetric(horizontal: 4),
+              ),
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  live && progress == null ? '—' : '$sessions logged this week',
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.primary,
+                  ),
                 ),
-                Expanded(child: tile2),
-                Container(
-                  width: 1,
-                  height: 34,
-                  color: AppColors.hairline,
-                  margin: const EdgeInsets.symmetric(horizontal: 4),
+              ),
+            ],
+          ),
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 10),
+            child: Divider(height: 1, color: AppColors.hairline),
+          ),
+          isEnlarged
+              ? Column(
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(child: tile1),
+                        const SizedBox(width: 8),
+                        Expanded(child: tile2),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    tile3,
+                  ],
+                )
+              : Row(
+                  children: [
+                    Expanded(child: tile1),
+                    Container(
+                      width: 1,
+                      height: 34,
+                      color: AppColors.hairline,
+                      margin: const EdgeInsets.symmetric(horizontal: 4),
+                    ),
+                    Expanded(child: tile2),
+                    Container(
+                      width: 1,
+                      height: 34,
+                      color: AppColors.hairline,
+                      margin: const EdgeInsets.symmetric(horizontal: 4),
+                    ),
+                    Expanded(child: tile3),
+                  ],
                 ),
-                Expanded(child: tile3),
-              ],
-            ),
+        ],
+      ),
     );
   }
 }
@@ -1158,17 +1234,20 @@ class _CompactMetricTile extends StatelessWidget {
       children: [
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
           children: [
             Icon(icon, size: 13, color: color),
             const SizedBox(width: 4),
-            Text(
-              label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                fontSize: 11,
-                color: AppColors.inkSoft,
-                fontWeight: FontWeight.w700,
+            Flexible(
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 11,
+                  color: AppColors.inkSoft,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
             ),
           ],
@@ -1347,6 +1426,8 @@ class _CompactActivityTile extends StatelessWidget {
                     children: [
                       Text(
                         reportExerciseLabel(record.exerciseId),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
                           fontSize: 13.5,
                           fontWeight: FontWeight.w700,
@@ -1356,6 +1437,8 @@ class _CompactActivityTile extends StatelessWidget {
                       const SizedBox(height: 2),
                       Text(
                         '$date · ${record.repetitions} reps${record.partialRepetitions > 0 ? ' (${record.partialRepetitions} partial)' : ''}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
                           fontSize: 11.5,
                           color: AppColors.inkSoft,
@@ -1364,22 +1447,29 @@ class _CompactActivityTile extends StatelessWidget {
                     ],
                   ),
                 ),
-                const SizedBox(width: 8),
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                  decoration: BoxDecoration(
-                    color: statusColor.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(999),
-                    border:
-                        Border.all(color: statusColor.withValues(alpha: 0.25)),
-                  ),
-                  child: Text(
-                    statusText,
-                    style: TextStyle(
-                      fontSize: 10.5,
-                      fontWeight: FontWeight.w700,
-                      color: statusColor,
+                const SizedBox(width: 6),
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 86),
+                  child: Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: statusColor.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(999),
+                      border:
+                          Border.all(color: statusColor.withValues(alpha: 0.25)),
+                    ),
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        statusText,
+                        maxLines: 1,
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
+                          color: statusColor,
+                        ),
+                      ),
                     ),
                   ),
                 ),
@@ -1523,25 +1613,18 @@ class _QuickActionsGrid extends StatelessWidget {
       this.onOpenSavedAdvice,
       this.onOpenEquipment});
 
-  @override
-  Widget build(BuildContext context) {
-    final actions = <_QuickAction>[
-      _QuickAction(Icons.insights_rounded, 'Progress', AppColors.primary,
-          onOpenProgress ?? () => onSelect(const ProgressDashboardScreen())),
+  void _showMoreShortcuts(BuildContext context) {
+    final moreActions = <_QuickAction>[
       _QuickAction(
           Icons.emoji_events_rounded,
           'Rewards',
-          AppColors.accent,
+          AppColors.primary,
           onOpenRewards ??
               () => onSelect(GamificationDashboardScreen(live: !enabled))),
-      _QuickAction(Icons.people_alt_rounded, 'Coaches', AppColors.info,
-          onOpenCoaches ?? () => onSelect(const BrowseCoachesScreen())),
-      _QuickAction(Icons.event_note_rounded, 'Bookings', AppColors.success,
-          onOpenBookings ?? () => onSelect(const BookingScheduleScreen())),
       _QuickAction(
           Icons.leaderboard_rounded,
           'Ranking',
-          AppColors.warning,
+          AppColors.primary,
           () => onSelect(enabled
               ? const LeaderboardScreen()
               : RewardsFeatureHost(
@@ -1550,53 +1633,146 @@ class _QuickActionsGrid extends StatelessWidget {
       _QuickAction(
           Icons.sports_esports_rounded,
           'Mini-games',
-          AppColors.primarySoft,
+          AppColors.primary,
           () => onSelect(MiniGamesScreen(connected: !enabled))),
       _QuickAction(
           Icons.card_membership_rounded,
           'Membership',
           AppColors.primary,
           () => onSelect(MembershipDashboardScreen(connected: !enabled))),
-      _QuickAction(Icons.bookmark_rounded, 'Saved tips', AppColors.info,
+      _QuickAction(
+          Icons.bookmark_rounded,
+          'Saved tips',
+          AppColors.primary,
           onOpenSavedAdvice ?? () => onSelect(const SavedAdviceScreen())),
+    ];
+
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: AppColors.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    'More shortcuts',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w800,
+                      color: AppColors.ink,
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close_rounded, size: 20),
+                    onPressed: () => Navigator.pop(ctx),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              GridView.count(
+                padding: EdgeInsets.zero,
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                crossAxisCount: 3,
+                crossAxisSpacing: 10,
+                mainAxisSpacing: 10,
+                childAspectRatio: 1.05,
+                children: moreActions
+                    .map((a) => _QuickActionTile(
+                          action: a,
+                          enabled: enabled ||
+                              a.label == 'Rewards' ||
+                              a.label == 'Ranking' ||
+                              a.label == 'Membership' ||
+                              a.label == 'Mini-games' ||
+                              (a.label == 'Saved tips' &&
+                                  onOpenSavedAdvice != null),
+                        ))
+                    .toList(),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final actions = <_QuickAction>[
+      _QuickAction(Icons.insights_rounded, 'Progress', AppColors.primary,
+          onOpenProgress ?? () => onSelect(const ProgressDashboardScreen())),
+      _QuickAction(Icons.event_note_rounded, 'Bookings', AppColors.primary,
+          onOpenBookings ?? () => onSelect(const BookingScheduleScreen())),
+      _QuickAction(Icons.people_alt_rounded, 'Coaches', AppColors.primary,
+          onOpenCoaches ?? () => onSelect(const BrowseCoachesScreen())),
       _QuickAction(
           Icons.qr_code_scanner_rounded,
           onOpenEquipment != null ? 'Equipment' : 'Scan gear',
-          AppColors.primarySoft,
+          AppColors.primary,
           onOpenEquipment ?? () => onSelect(const EquipmentScannerScreen())),
     ];
 
-    return LayoutBuilder(builder: (context, constraints) {
-      final textScale = MediaQuery.textScalerOf(context).scale(11) / 11;
-      final columns =
-          (constraints.maxWidth / (72 * textScale)).floor().clamp(2, 4);
-      final tileWidth = (constraints.maxWidth - 10 * (columns - 1)) / columns;
-      return GridView.count(
-        padding: EdgeInsets.zero,
-        shrinkWrap: true,
-        physics: const NeverScrollableScrollPhysics(),
-        crossAxisCount: columns,
-        crossAxisSpacing: 10,
-        mainAxisSpacing: 10,
-        childAspectRatio:
-            tileWidth / math.max(tileWidth / 0.82, 72 + 28 * textScale),
-        children: actions
-            .map((a) => _QuickActionTile(
-                action: a,
-                enabled: enabled ||
-                    a.label == 'Rewards' ||
-                    a.label == 'Ranking' ||
-                    a.label == 'Membership' ||
-                    a.label == 'Mini-games' ||
-                    (a.label == 'Progress' && onOpenProgress != null) ||
-                    (a.label == 'Coaches' && onOpenCoaches != null) ||
-                    (a.label == 'Bookings' && onOpenBookings != null) ||
-                    (a.label == 'Saved tips' && onOpenSavedAdvice != null) ||
-                    (a.label == 'Equipment' && onOpenEquipment != null) ||
-                    (a.label == 'Scan gear' && onOpenEquipment != null)))
-            .toList(),
-      );
-    });
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        LayoutBuilder(builder: (context, constraints) {
+          final textScale = MediaQuery.textScalerOf(context).scale(11) / 11;
+          final columns = constraints.maxWidth < 280 ? 2 : 4;
+          final tileWidth = (constraints.maxWidth - 10 * (columns - 1)) / columns;
+          return GridView.count(
+            padding: EdgeInsets.zero,
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            crossAxisCount: columns,
+            crossAxisSpacing: 10,
+            mainAxisSpacing: 10,
+            childAspectRatio:
+                tileWidth / math.max(tileWidth * 1.05, 68 + 24 * textScale),
+            children: actions
+                .map((a) => _QuickActionTile(
+                    action: a,
+                    enabled: enabled ||
+                        (a.label == 'Progress' && onOpenProgress != null) ||
+                        (a.label == 'Coaches' && onOpenCoaches != null) ||
+                        (a.label == 'Bookings' && onOpenBookings != null) ||
+                        (a.label == 'Equipment' && onOpenEquipment != null) ||
+                        (a.label == 'Scan gear' && onOpenEquipment != null)))
+                .toList(),
+          );
+        }),
+        const SizedBox(height: 8),
+        Center(
+          child: TextButton.icon(
+            style: TextButton.styleFrom(
+              foregroundColor: AppColors.primary,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+              minimumSize: const Size(0, 32),
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+            onPressed: () => _showMoreShortcuts(context),
+            icon: const Icon(Icons.grid_view_rounded, size: 14),
+            label: const Text(
+              'More shortcuts',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
   }
 }
 
@@ -1617,14 +1793,14 @@ class _QuickActionTile extends StatelessWidget {
   Widget build(BuildContext context) {
     return Material(
       color: AppColors.surface,
-      borderRadius: BorderRadius.circular(16),
+      borderRadius: BorderRadius.circular(14),
       child: InkWell(
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(14),
         onTap: enabled ? action.onTap : () => showUnavailable(context),
         child: Container(
-          padding: const EdgeInsets.fromLTRB(4, 12, 4, 10),
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(14),
             border:
                 Border.all(color: AppColors.hairline.withValues(alpha: 0.8)),
             boxShadow: const [
@@ -1636,17 +1812,17 @@ class _QuickActionTile extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Container(
-                width: 38,
-                height: 38,
+                width: 36,
+                height: 36,
                 decoration: BoxDecoration(
                   color: action.color.withValues(alpha: 0.10),
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(10),
                   border:
-                      Border.all(color: action.color.withValues(alpha: 0.20)),
+                      Border.all(color: action.color.withValues(alpha: 0.18)),
                 ),
-                child: Icon(action.icon, size: 20, color: action.color),
+                child: Icon(action.icon, size: 18, color: action.color),
               ),
-              const SizedBox(height: 7),
+              const SizedBox(height: 6),
               Flexible(
                 child: Text(
                   action.label,
