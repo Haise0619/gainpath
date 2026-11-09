@@ -69,11 +69,16 @@ class _MonthlyAvailabilityScreenState extends State<MonthlyAvailabilityScreen> {
   @override
   void initState() {
     super.initState();
-    final now = DateTime.now();
-    _todayLocalDate =
-        '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+    final rosterToday = widget.roster?.baseline?.todayLocalDate;
+    if (rosterToday != null && rosterToday.isNotEmpty) {
+      _todayLocalDate = rosterToday;
+    } else {
+      final now = DateTime.now();
+      _todayLocalDate =
+          '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+    }
     _selectedDate = widget.initialDate ?? _todayLocalDate;
-    final initialDt = DateTime.tryParse(_selectedDate) ?? now;
+    final initialDt = DateTime.tryParse(_selectedDate) ?? DateTime.now();
     _displayedMonth = DateTime(initialDt.year, initialDt.month, 1);
     _loadMonthData();
   }
@@ -116,32 +121,80 @@ class _MonthlyAvailabilityScreenState extends State<MonthlyAvailabilityScreen> {
       _errorMessage = null;
     });
 
-    final firstOfMonth =
-        DateTime(_displayedMonth.year, _displayedMonth.month, 1);
-    final firstWeekday = firstOfMonth.weekday; // 1 = Monday
-    final gridStart = firstOfMonth.subtract(Duration(days: firstWeekday - 1));
-    final gridStartDateStr = _formatDate(gridStart);
+    try {
+      // 1. Ensure roster baseline is loaded
+      if (widget.roster != null && widget.roster!.baseline == null) {
+        await widget.roster!.reload();
+      }
 
+      // 2. Query within valid scheduling horizon (dayCount between 1 and 7)
+      final today = widget.roster?.baseline?.todayLocalDate ?? _todayLocalDate;
+      final through = widget.roster?.baseline?.throughLocalDate;
+      String? loadDate = _selectedDate;
+      if (loadDate.compareTo(today) < 0) {
+        loadDate = today;
+      } else if (through != null && loadDate.compareTo(through) > 0) {
+        loadDate = null;
+      }
+
+      if (loadDate != null) {
+        final result = await widget.repository.load(
+          coachId: widget.coachId,
+          firstLocalDate: loadDate,
+          dayCount: 7,
+        );
+        if (mounted && widget.isCurrent()) {
+          _context = result;
+          if (result.todayLocalDate.isNotEmpty) {
+            _todayLocalDate = result.todayLocalDate;
+          }
+        }
+      }
+    } catch (_) {
+      // If network load fails, we gracefully rely on widget.roster (weekly schedule & exceptions).
+      // Only set error message if even baseline roster is unavailable.
+      if (widget.roster?.baseline == null && _context == null) {
+        _errorMessage = 'Could not load month schedule. Refresh or retry.';
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _loading = false;
+        });
+      }
+    }
+  }
+
+  void _selectDate(String dateStr) {
+    setState(() => _selectedDate = dateStr);
+    widget.onDateSelected?.call(dateStr);
+
+    final today = widget.roster?.baseline?.todayLocalDate ?? _todayLocalDate;
+    final through = widget.roster?.baseline?.throughLocalDate;
+    if (dateStr.compareTo(today) >= 0 &&
+        (through == null || dateStr.compareTo(through) <= 0)) {
+      final alreadyLoaded =
+          _context?.days.any((d) => d.localDate == dateStr) ?? false;
+      if (!alreadyLoaded) {
+        _loadWeekForDate(dateStr);
+      }
+    }
+  }
+
+  Future<void> _loadWeekForDate(String dateStr) async {
     try {
       final result = await widget.repository.load(
         coachId: widget.coachId,
-        firstLocalDate: gridStartDateStr,
-        dayCount: 42,
+        firstLocalDate: dateStr,
+        dayCount: 7,
       );
-      if (!mounted || !widget.isCurrent()) return;
-      setState(() {
-        _context = result;
-        _loading = false;
-        if (result.todayLocalDate.isNotEmpty) {
-          _todayLocalDate = result.todayLocalDate;
-        }
-      });
+      if (mounted && widget.isCurrent()) {
+        setState(() {
+          _context = result;
+        });
+      }
     } catch (_) {
-      if (!mounted || !widget.isCurrent()) return;
-      setState(() {
-        _loading = false;
-        _errorMessage = 'Could not load month schedule. Refresh or retry.';
-      });
+      // Silently keep current weekly schedule
     }
   }
 
@@ -408,10 +461,7 @@ class _MonthlyAvailabilityScreenState extends State<MonthlyAvailabilityScreen> {
                             return Expanded(
                               child: InkWell(
                                 key: ValueKey('calendar-cell-$dateStr'),
-                                onTap: () {
-                                  setState(() => _selectedDate = dateStr);
-                                  widget.onDateSelected?.call(dateStr);
-                                },
+                                onTap: () => _selectDate(dateStr),
                                 borderRadius: BorderRadius.circular(10),
                                 child: Container(
                                   height: 48,
