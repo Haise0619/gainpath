@@ -32,11 +32,11 @@ class AvailabilityPage extends StatelessWidget {
     final content = PageBody(children: [
       ...header,
       weekAtGlance,
-      const SizedBox(height: 22),
+      const SizedBox(height: 18),
       Eyebrow(workingHoursTitle),
       const SizedBox(height: 8),
       ...workingHours,
-      const SizedBox(height: 20),
+      const SizedBox(height: 18),
       const Eyebrow('Quick Settings'),
       const SizedBox(height: 8),
       Card(

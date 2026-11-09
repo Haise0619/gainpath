@@ -435,7 +435,7 @@ class _AvailabilityScreenState extends State<AvailabilityScreen> {
     if (durationHours >= 23.5) {
       return 'Full day';
     }
-    return '${_formatKualaLumpurTime(start)} – ${_formatKualaLumpurTime(end)} GMT+8';
+    return '${_formatKualaLumpurTime(start)} – ${_formatKualaLumpurTime(end)}';
   }
 
   List<DatedCoachWindow> _effectiveWindowsForDate(
@@ -473,6 +473,32 @@ class _AvailabilityScreenState extends State<AvailabilityScreen> {
     return '${_weekdayNames[date.weekday - 1].substring(0, 3)}, ${date.day} ${months[date.month - 1]} ${date.year}';
   }
 
+  String _compactDateRange(String firstDate, String lastDate) {
+    final start = DateTime.parse(firstDate);
+    final end = DateTime.parse(lastDate);
+    const months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec'
+    ];
+    if (start.year == end.year && start.month == end.month) {
+      return '${start.day}–${end.day} ${months[end.month - 1]} ${end.year}';
+    } else if (start.year == end.year) {
+      return '${start.day} ${months[start.month - 1]} – ${end.day} ${months[end.month - 1]} ${end.year}';
+    } else {
+      return '${start.day} ${months[start.month - 1]} ${start.year} – ${end.day} ${months[end.month - 1]} ${end.year}';
+    }
+  }
+
   Widget _weekAtGlance(CoachAvailabilityState state) {
     final data = state.context, selected = state.day;
     if (data == null || selected == null) {
@@ -496,142 +522,359 @@ class _AvailabilityScreenState extends State<AvailabilityScreen> {
             DateTime.parse(data.todayLocalDate)
                 .add(Duration(days: roster!.advanceDays!)));
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Wrap(
-          spacing: 8,
-          runSpacing: 6,
-          crossAxisAlignment: WrapCrossAlignment.center,
+      Padding(
+        padding: const EdgeInsets.only(bottom: 10),
+        child: Row(
           children: [
-            Text(
-                '${_readableDate(data.days.first.localDate)} – ${_readableDate(data.days.last.localDate)}',
-                style: Theme.of(context).textTheme.titleMedium),
-            Text(data.timeZone,
-                style: const TextStyle(fontSize: 12, color: AppColors.inkSoft))
-          ]),
-      const SizedBox(height: 12),
+            const Icon(Icons.calendar_today_rounded,
+                size: 16, color: AppColors.primary),
+            const SizedBox(width: 7),
+            Expanded(
+              child: Text(
+                _compactDateRange(
+                    data.days.first.localDate, data.days.last.localDate),
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+              ),
+            ),
+          ],
+        ),
+      ),
       SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: Row(children: [
-            for (final day in data.days)
-              Padding(
-                  padding: const EdgeInsets.only(right: 8),
-                  child: Semantics(
-                      selected: selected.localDate == day.localDate,
-                      child: OutlinedButton(
-                          key: ValueKey('availability-date-${day.localDate}'),
-                          onPressed: state.loading
-                              ? null
-                              : () => availabilityCubit?.openDay(day.localDate),
-                          style: OutlinedButton.styleFrom(
-                              minimumSize: const Size(68, 78),
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 12, vertical: 10),
-                              backgroundColor:
-                                  selected.localDate == day.localDate
-                                      ? AppColors.primaryTint
-                                      : AppColors.surface,
-                              side: BorderSide(
-                                  color: selected.localDate == day.localDate
-                                      ? AppColors.primary
-                                      : AppColors.hairline)),
-                          child:
-                              Column(mainAxisSize: MainAxisSize.min, children: [
-                            Text(_weekdayNames[
+        scrollDirection: Axis.horizontal,
+        physics: const BouncingScrollPhysics(),
+        child: Row(
+          children: [
+            for (final day in data.days) ...[
+              Semantics(
+                selected: selected.localDate == day.localDate,
+                child: SizedBox(
+                  width: 62,
+                  height: 74,
+                  child: OutlinedButton(
+                    key: ValueKey('availability-date-${day.localDate}'),
+                    onPressed: state.loading
+                        ? null
+                        : () => availabilityCubit?.openDay(day.localDate),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 4, vertical: 6),
+                      backgroundColor: selected.localDate == day.localDate
+                          ? AppColors.primaryTint
+                          : AppColors.surface,
+                      side: BorderSide(
+                        color: selected.localDate == day.localDate
+                            ? AppColors.primary
+                            : AppColors.hairline,
+                        width: selected.localDate == day.localDate ? 1.5 : 1.0,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            _weekdayNames[
                                     DateTime.parse(day.localDate).weekday - 1]
-                                .substring(0, 3)),
-                            Text('${DateTime.parse(day.localDate).day}',
-                                style: const TextStyle(
-                                    fontSize: 20, fontWeight: FontWeight.w700)),
-                            if (day.localDate == data.todayLocalDate)
-                              const Text('Today',
-                                  style: TextStyle(fontSize: 12)),
-                            if (_blocksForDate(day).isNotEmpty)
-                              Tooltip(
-                                  message:
-                                      '${_blocksForDate(day).length} blocked period${_blocksForDate(day).length == 1 ? '' : 's'}',
-                                  child: const Icon(Icons.block, size: 14))
-                          ]))))
-          ])),
+                                .substring(0, 3),
+                            style: TextStyle(
+                              fontSize: 11.5,
+                              fontWeight: FontWeight.w600,
+                              color: selected.localDate == day.localDate
+                                  ? AppColors.primary
+                                  : AppColors.inkSoft,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            '${DateTime.parse(day.localDate).day}',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w700,
+                              color: selected.localDate == day.localDate
+                                  ? AppColors.primary
+                                  : AppColors.ink,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          if (day.localDate == data.todayLocalDate)
+                            Text(
+                              'Today',
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w700,
+                                color: selected.localDate == day.localDate
+                                    ? AppColors.primary
+                                    : AppColors.inkSoft,
+                              ),
+                            )
+                          else if (_blocksForDate(day).isNotEmpty)
+                            Tooltip(
+                              message:
+                                  '${_blocksForDate(day).length} ${_blocksForDate(day).length == 1 ? "blocked period" : "blocked periods"}',
+                              child: const Icon(Icons.block,
+                                  size: 12, color: AppColors.warning),
+                            )
+                          else
+                            const SizedBox(height: 12),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+            ],
+          ],
+        ),
+      ),
       const SizedBox(height: 12),
       Panel(
-          child:
-              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text(_readableDate(selected.localDate),
-            style: Theme.of(context).textTheme.titleLarge),
-        const SizedBox(height: 6),
-        Wrap(spacing: 8, runSpacing: 6, children: [
-          _sourceBadge(custom
-              ? 'Custom hours'
-              : loadingWeekly
-                  ? 'Loading schedule'
-                  : weeklyConfigured
-                      ? 'Weekly hours'
-                      : 'Not configured'),
-          if (roster?.dirty == true) _sourceBadge('Unsaved preview')
-        ]),
-        const SizedBox(height: 12),
-        Text(
-            windows.isEmpty
-                ? (loadingWeekly
-                    ? 'Loading weekly hours…'
-                    : !custom && !weeklyConfigured
-                        ? 'Set up weekly hours to begin.'
-                        : 'No working hours')
-                : windows
-                    .map((w) =>
-                        '${selected.labelFor(w.startAtMillis)} – ${selected.labelFor(w.endAtMillis)}')
-                    .join('\n'),
-            style: const TextStyle(fontWeight: FontWeight.w600, height: 1.5)),
-        for (final branch in windows.map((w) => w.branchId).toSet())
-          Text(_branchLabel(branch)),
-        if (roster?.dailyHours != null)
-          Padding(
-              padding: const EdgeInsets.only(top: 8),
-              child: Text(
-                  'Daily capacity · ${roster!.dailyHours} booked hours total')),
-        if (blocks.isNotEmpty) ...[
-          const SizedBox(height: 10),
-          Text('Breaks & time off',
-              style: Theme.of(context).textTheme.titleMedium),
-          for (final block in blocks)
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
             Text(
-                '${rosterExceptionType(block.type)} · ${_formatBlockInterval(selected, block)}')
-        ],
-        if (outside)
-          const Padding(
-              padding: EdgeInsets.only(top: 8),
-              child: Text('Outside the advance booking window.',
-                  style: TextStyle(color: AppColors.warning))),
-        const SizedBox(height: 10),
-        const Text('Working hours are not remaining bookable slots.',
-            style: TextStyle(fontSize: 12, color: AppColors.inkSoft)),
-        if (custom)
-          const Padding(
-              padding: EdgeInsets.only(top: 6),
-              child: Text(
-                  'Custom hours replace the weekly schedule for this date.',
-                  style: TextStyle(fontSize: 12, color: AppColors.inkSoft))),
-        const SizedBox(height: 12),
-        Wrap(spacing: 8, runSpacing: 8, children: [
-          OutlinedButton.icon(
-              onPressed: enabled
-                  ? () =>
-                      _editDayHours(DateTime.parse(selected.localDate).weekday)
-                  : null,
-              icon: const Icon(Icons.edit_outlined, size: 18),
-              label: const Text('Edit Weekly Hours')),
-          OutlinedButton.icon(
-              key: const ValueKey('open-specific-date-btn'),
-              onPressed: enabled
-                  ? () => _openSpecificDateSheet(date: selected.localDate)
-                  : null,
-              icon: const Icon(Icons.edit_calendar_outlined, size: 18),
-              label: const Text('Change This Date')),
-          TextButton.icon(
-              onPressed: enabled ? _addException : null,
-              icon: const Icon(Icons.add, size: 18),
-              label: const Text('Add Time Off')),
-        ])
-      ]))
+              _readableDate(selected.localDate),
+              style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
+            ),
+            const SizedBox(height: 6),
+            Wrap(
+              spacing: 8,
+              runSpacing: 6,
+              children: [
+                _sourceBadge(custom
+                    ? 'Custom hours'
+                    : loadingWeekly
+                        ? 'Loading schedule'
+                        : weeklyConfigured
+                            ? 'Weekly hours'
+                            : 'Not configured'),
+                if (roster?.dirty == true) _sourceBadge('Unsaved preview'),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Padding(
+                  padding: EdgeInsets.only(top: 2),
+                  child: Icon(Icons.schedule_rounded,
+                      size: 16, color: AppColors.primary),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        windows.isEmpty
+                            ? (loadingWeekly
+                                ? 'Loading weekly hours…'
+                                : !custom && !weeklyConfigured
+                                    ? 'Set up weekly hours to begin.'
+                                    : 'No working hours')
+                            : windows
+                                .map((w) =>
+                                    '${selected.labelFor(w.startAtMillis)} – ${selected.labelFor(w.endAtMillis)}')
+                                .join('\n'),
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 14.5,
+                          height: 1.35,
+                          color: AppColors.ink,
+                        ),
+                      ),
+                      for (final branch
+                          in windows.map((w) => w.branchId).toSet())
+                        Padding(
+                          padding: const EdgeInsets.only(top: 3),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.location_on_outlined,
+                                  size: 13, color: AppColors.inkSoft),
+                              const SizedBox(width: 4),
+                              Expanded(
+                                child: Text(
+                                  _branchLabel(branch),
+                                  style: const TextStyle(
+                                    fontSize: 12.5,
+                                    color: AppColors.inkSoft,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            if (roster?.dailyHours != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Row(
+                  children: [
+                    const Icon(Icons.speed_rounded,
+                        size: 14, color: AppColors.inkSoft),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        'Daily booking cap: ${roster!.dailyHours}h',
+                        style: const TextStyle(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.ink,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            if (blocks.isNotEmpty) ...[
+              const SizedBox(height: 10),
+              Text(
+                'Breaks & time off',
+                style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 13,
+                    ),
+              ),
+              const SizedBox(height: 4),
+              for (final block in blocks)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 3),
+                  child: Row(
+                    children: [
+                      Icon(_blockIcon(block.type),
+                          size: 13, color: _blockColor(block.type)),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          '${rosterExceptionType(block.type)} · ${_formatBlockInterval(selected, block)}',
+                          style: const TextStyle(
+                              fontSize: 12.5, color: AppColors.ink),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+            ],
+            if (outside)
+              const Padding(
+                padding: EdgeInsets.only(top: 8),
+                child: Row(
+                  children: [
+                    Icon(Icons.warning_amber_rounded,
+                        size: 14, color: AppColors.warning),
+                    SizedBox(width: 6),
+                    Text(
+                      'Outside the advance booking window.',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: AppColors.warning,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            const SizedBox(height: 8),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Padding(
+                  padding: EdgeInsets.only(top: 1.5),
+                  child: Icon(Icons.info_outline_rounded,
+                      size: 13, color: AppColors.inkSoft),
+                ),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    custom
+                        ? 'Custom hours replace the weekly schedule for this date. Working hours define duty schedule, not bookable slots.'
+                        : 'Working hours define duty schedule, not remaining bookable slots.',
+                    style: const TextStyle(
+                        fontSize: 11.5,
+                        color: AppColors.inkSoft,
+                        height: 1.3),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final isNarrow = constraints.maxWidth < 280;
+                final actions = [
+                  OutlinedButton.icon(
+                    key: const ValueKey('open-specific-date-btn'),
+                    onPressed: enabled
+                        ? () => _openSpecificDateSheet(date: selected.localDate)
+                        : null,
+                    style: OutlinedButton.styleFrom(
+                      visualDensity: VisualDensity.compact,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 8),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
+                    icon: const Icon(Icons.edit_calendar_outlined, size: 16),
+                    label: const Text(
+                      'Change This Date',
+                      style: TextStyle(
+                          fontSize: 12.5, fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: enabled ? _addException : null,
+                    style: OutlinedButton.styleFrom(
+                      visualDensity: VisualDensity.compact,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 8),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
+                    icon: const Icon(Icons.add_rounded, size: 16),
+                    label: const Text(
+                      'Add Time Off',
+                      style: TextStyle(
+                          fontSize: 12.5, fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                ];
+                if (isNarrow) {
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      actions[0],
+                      const SizedBox(height: 6),
+                      actions[1],
+                    ],
+                  );
+                }
+                return Row(
+                  children: [
+                    Expanded(child: actions[0]),
+                    const SizedBox(width: 8),
+                    Expanded(child: actions[1]),
+                  ],
+                );
+              },
+            ),
+          ],
+        ),
+      ),
     ]);
   }
 
@@ -692,7 +935,8 @@ class _AvailabilityScreenState extends State<AvailabilityScreen> {
                               : null,
                           icon: const Icon(Icons.edit_outlined)),
                     ];
-                    return Column(
+                    if (large) {
+                      return Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Row(children: [
@@ -701,7 +945,6 @@ class _AvailabilityScreenState extends State<AvailabilityScreen> {
                                     style: Theme.of(context)
                                         .textTheme
                                         .titleMedium)),
-                            if (!large) ...controls
                           ]),
                           Text(
                               day == null
@@ -710,11 +953,53 @@ class _AvailabilityScreenState extends State<AvailabilityScreen> {
                                       ? '${rosterMinute(day.startMinute)} – ${rosterMinute(day.endMinute)} · ${_branchLabel(day.branchId)}'
                                       : 'Off',
                               style: Theme.of(context).textTheme.bodyMedium),
-                          if (large)
-                            Row(
-                                mainAxisAlignment: MainAxisAlignment.end,
-                                children: controls),
-                        ]);
+                          Row(
+                              mainAxisAlignment: MainAxisAlignment.end,
+                              children: controls),
+                        ],
+                      );
+                    }
+                    return Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                _weekdayNames[number - 1],
+                                style: const TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppColors.ink,
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                day == null
+                                    ? 'Not configured'
+                                    : active
+                                        ? '${rosterMinute(day.startMinute)} – ${rosterMinute(day.endMinute)} · ${_branchLabel(day.branchId)}'
+                                        : 'Off',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: active
+                                      ? FontWeight.w500
+                                      : FontWeight.w400,
+                                  color: active
+                                      ? AppColors.inkSoft
+                                      : AppColors.inkSoft.withValues(alpha: 0.7),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: controls,
+                        ),
+                      ],
+                    );
                   })),
             ],
           );
@@ -945,7 +1230,7 @@ class _AvailabilityScreenState extends State<AvailabilityScreen> {
               ],
               timeOffSummary: roster?.baseline == null
                   ? 'Not loaded'
-                  : '${roster!.exceptions.length} blocked periods',
+                  : '${roster!.exceptions.length} ${roster!.exceptions.length == 1 ? "blocked period" : "blocked periods"}',
               limitsSummary:
                   '${roster?.dailyHours == null ? 'Set capacity' : '${roster!.dailyHours} hours / day'} · ${roster?.advanceDays == null ? 'Set advance window' : '${roster!.advanceDays} days ahead'}',
               header: [
