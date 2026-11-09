@@ -34,7 +34,8 @@ class FirebaseCoachDirectoryRepository implements CoachDirectoryRepository {
   }
 
   Future<List<PublishedCoachProfile>> _ratings(
-      List<PublishedCoachProfile> profiles) async {
+      List<PublishedCoachProfile> profiles,
+      {bool publicDetails = false}) async {
     if (profiles.isEmpty) return profiles;
     final transport = BookingTransport(
         scope: scope,
@@ -47,7 +48,8 @@ class FirebaseCoachDirectoryRepository implements CoachDirectoryRepository {
     final result = await transport.call('getCoachRatingsCommand', {
       'schemaVersion': 1,
       'organizationId': scope.organizationId,
-      'coachIds': profiles.map((p) => p.id).toList()
+      'coachIds': profiles.map((p) => p.id).toList(),
+      if (publicDetails) 'includePublicSummary': true
     });
     if (result['schemaVersion'] != 1 || result['records'] is! List) {
       throw const CoachRepositoryException('invalid-response');
@@ -59,6 +61,14 @@ class FirebaseCoachDirectoryRepository implements CoachDirectoryRepository {
       final r = records[p.id];
       if (r == null || r['reviewCount'] is! int) {
         throw const CoachRepositoryException('invalid-response');
+      }
+      if (publicDetails) {
+        try {
+          return p.withStatistics(CoachPublicStatistics.fromJson(
+              Map<String, dynamic>.from(r as Map)));
+        } on FormatException {
+          throw const CoachRepositoryException('invalid-response');
+        }
       }
       return p.withRatings(
           (r['averageRating'] as num?)?.toDouble(), r['reviewCount'] as int);
@@ -124,7 +134,7 @@ class FirebaseCoachDirectoryRepository implements CoachDirectoryRepository {
       if (result.docs.isEmpty || result.docs.single.id != coachId) return null;
       return (await _ratings([
         PublishedCoachProfile.fromDocument(coachId, result.docs.single.data())
-      ]))
+      ], publicDetails: true))
           .single;
     } on FirebaseException catch (e) {
       throw CoachRepositoryException(e.code);

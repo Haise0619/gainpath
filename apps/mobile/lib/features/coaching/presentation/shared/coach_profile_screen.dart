@@ -45,26 +45,27 @@ class CoachProfileScreen extends StatelessWidget {
         fee != null &&
         (published == null || onOpenBooking != null);
     final location = memberCoachLocation(published?.branchIds ?? const [],
-        branchNames: branchNames);
+        branchNames: branchNames.isEmpty
+            ? published?.statistics?.branchNames ?? const {}
+            : branchNames);
     final ratingText = previewOnly && previewRatingUnavailable
         ? 'Rating unavailable'
         : memberCoachRating(coach, published);
     final count = published != null ? published!.reviewCount : coach.reviews;
     final reviewsText = reviewsDisplay ??
-        (previewOnly && previewRatingUnavailable
-            ? 'Unavailable'
-            : '$count');
+        (previewOnly && previewRatingUnavailable ? 'Unavailable' : '$count');
     final sessionsText = sessionsCount ??
-        (coach.sessionsCompleted > 0
-            ? '${coach.sessionsCompleted}'
-            : 'Unavailable');
+        (published != null
+            ? published!.statistics?.completedSessions.toString() ??
+                'Unavailable'
+            : coach.sessionsCompleted > 0
+                ? '${coach.sessionsCompleted}'
+                : 'Unavailable');
 
-    final sessionLocation = location.isNotEmpty &&
-            location != 'Location confirmed when booking'
-        ? location
-        : (coach.branch.isNotEmpty && coach.branch != '-'
+    final sessionLocation =
+        published == null && coach.branch.isNotEmpty && coach.branch != '-'
             ? coach.branch
-            : 'Location confirmed when booking');
+            : location;
     final effectiveReviews = reviews ?? _resolveReviews(coach, published);
 
     void book() {
@@ -249,9 +250,7 @@ class CoachProfileScreen extends StatelessWidget {
             'About ${coach.name}',
             Panel(
               child: Text(
-                bio.isEmpty || bio == '-'
-                    ? 'Biography not provided yet.'
-                    : bio,
+                bio.isEmpty || bio == '-' ? 'Biography not provided yet.' : bio,
                 style: text.bodyMedium?.copyWith(
                   color: colors.onSurface,
                   height: 1.5,
@@ -278,14 +277,14 @@ class CoachProfileScreen extends StatelessWidget {
                     value: fee != null && fee > 0
                         ? '${memberCoachPrice(fee)} / session'
                         : 'Price unavailable',
-                    sublabel: 'Includes customized form coaching & workout plan',
+                    sublabel: 'Final price is confirmed before payment',
                   ),
                   const Divider(height: 24, color: AppColors.hairline),
                   const _SessionInfoTile(
                     icon: Icons.timer_rounded,
                     label: 'Session format',
-                    value: '60 minutes · 1-on-1 private coaching',
-                    sublabel: 'Form analysis, cueing & workout guidance',
+                    value: 'Choose duration when booking',
+                    sublabel: 'Available options are confirmed before payment',
                   ),
                   if (coach.responseTime.isNotEmpty &&
                       coach.responseTime != '-') ...[
@@ -469,7 +468,7 @@ class _SessionInfoTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
-    final text = Theme.of(context).textTheme;
+    final text = memberCoachTypography(context);
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -566,8 +565,7 @@ class _ReviewsSection extends StatelessWidget {
           padding: const EdgeInsets.symmetric(vertical: 8),
           child: Column(
             children: [
-              Icon(Icons.rate_review_outlined,
-                  size: 36, color: colors.outline),
+              Icon(Icons.rate_review_outlined, size: 36, color: colors.outline),
               const SizedBox(height: 8),
               Text(
                 'No reviews yet',
@@ -597,7 +595,10 @@ class _ReviewsSection extends StatelessWidget {
       children: [
         if (averageRating > 0 || reviewCount > 0)
           Panel(
-            child: Row(
+            child: Wrap(
+              spacing: 16,
+              runSpacing: 12,
+              alignment: WrapAlignment.spaceBetween,
               children: [
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -609,7 +610,7 @@ class _ReviewsSection extends StatelessWidget {
                         Text(
                           averageRating > 0
                               ? averageRating.toStringAsFixed(1)
-                              : '5.0',
+                              : 'Unavailable',
                           style: text.titleLarge?.copyWith(
                             fontSize: 32,
                             fontWeight: FontWeight.w800,
@@ -632,8 +633,7 @@ class _ReviewsSection extends StatelessWidget {
                       mainAxisSize: MainAxisSize.min,
                       children: List.generate(5, (index) {
                         final starValue = index + 1;
-                        final filled = averageRating >= starValue ||
-                            (averageRating == 0 && starValue <= 5);
+                        final filled = averageRating >= starValue;
                         final half = !filled && averageRating >= index + 0.5;
                         return Icon(
                           half
@@ -650,7 +650,6 @@ class _ReviewsSection extends StatelessWidget {
                     ),
                   ],
                 ),
-                const Spacer(),
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
@@ -692,6 +691,12 @@ class _ReviewsSection extends StatelessWidget {
             ),
           ),
         const SizedBox(height: 12),
+        if (reviews.length < reviewCount)
+          Text(
+              reviews.isEmpty
+                  ? 'Review details are unavailable in this view.'
+                  : 'Latest ${reviews.length} of $reviewCount ratings',
+              style: text.bodySmall?.copyWith(color: colors.onSurfaceVariant)),
         for (final review in reviews) ...[
           Container(
             margin: const EdgeInsets.only(bottom: 12),
@@ -854,64 +859,7 @@ class _ReviewsSection extends StatelessWidget {
 }
 
 List<CoachReview> _resolveReviews(
-    Coach coach, PublishedCoachProfile? published) {
-  if (coach.topReviews.isNotEmpty) {
-    return coach.topReviews;
-  }
-  final count = published?.reviewCount ?? coach.reviews;
-  final rating = published?.averageRating ?? coach.rating;
-  if (count <= 0) return const [];
-
-  final stars = (rating > 0 ? rating.round() : 5).clamp(1, 5);
-  final specialty = coach.specialty.toLowerCase();
-
-  if (specialty.contains('strength') || specialty.contains('powerlifting')) {
-    return [
-      CoachReview(
-        'Daniel Wong',
-        stars,
-        'Form cues were spot-on. Helped fix my deadlift technique safely.',
-        DateTime.now().subtract(const Duration(days: 14)),
-      ),
-      if (count > 1)
-        CoachReview(
-          'Farid Zainal',
-          stars,
-          'Patient and clear progression. Highly recommend for strength goals.',
-          DateTime.now().subtract(const Duration(days: 30)),
-        ),
-    ];
-  } else if (specialty.contains('rehab') || specialty.contains('mobility')) {
-    return [
-      CoachReview(
-        'Sarah Jenkins',
-        stars,
-        'Great mobility drills that relieved my shoulder stiffness in two sessions.',
-        DateTime.now().subtract(const Duration(days: 10)),
-      ),
-      if (count > 1)
-        CoachReview(
-          'Alex Lee',
-          stars,
-          'Very knowledgeable with joint kinematics and safe movement patterns.',
-          DateTime.now().subtract(const Duration(days: 25)),
-        ),
-    ];
-  } else {
-    return [
-      CoachReview(
-        'Rachel Koh',
-        stars,
-        'Engaging and supportive coach. Pushed me to my goals safely with great advice.',
-        DateTime.now().subtract(const Duration(days: 12)),
-      ),
-      if (count > 1)
-        CoachReview(
-          'Bryan Teoh',
-          stars,
-          'Excellent session pacing and technique adjustments throughout.',
-          DateTime.now().subtract(const Duration(days: 28)),
-        ),
-    ];
-  }
-}
+        Coach coach, PublishedCoachProfile? published) =>
+    published != null
+        ? published.statistics?.recentReviews ?? const []
+        : coach.topReviews;

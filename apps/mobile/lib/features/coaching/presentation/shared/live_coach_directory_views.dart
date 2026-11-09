@@ -82,6 +82,7 @@ class _LiveCoachDetailViewState extends State<LiveCoachDetailView> {
         return CoachProfileScreen(
           coach: publishedCoachPresentation(coach),
           published: coach,
+          branchNames: coach.statistics?.branchNames ?? const {},
           photo: PublishedCoachPhoto(
               coach: coach,
               repository: widget.repository,

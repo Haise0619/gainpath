@@ -14,7 +14,7 @@ Coach publishedCoachPresentation(PublishedCoachProfile value) => Coach(
       branch: value.branchIds.isEmpty ? '-' : value.branchIds.join(', '),
       fee: (value.fields.consultationFeeMinor ?? 0) / 100,
       yearsExperience: value.fields.yearsExperience ?? 0,
-      sessionsCompleted: 0,
+      sessionsCompleted: value.statistics?.completedSessions ?? 0,
       responseTime: '-',
-      topReviews: [],
+      topReviews: value.statistics?.recentReviews ?? [],
     );

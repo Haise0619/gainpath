@@ -1,3 +1,4 @@
+import 'entities/coach_review.dart';
 import 'dart:async';
 import 'dart:convert';
 import '../identity.dart' show SessionScope;
@@ -136,6 +137,85 @@ class CoachProfessionalProfile {
   }
 }
 
+class CoachPublicStatistics {
+  CoachPublicStatistics._(
+      this.coachId,
+      this.completedSessions,
+      this.reviewCount,
+      this.averageRating,
+      List<CoachReview> reviews,
+      Map<String, String> branches)
+      : recentReviews = List.unmodifiable(reviews),
+        branchNames = Map.unmodifiable(branches);
+  final String coachId;
+  final int completedSessions, reviewCount;
+  final double? averageRating;
+  final List<CoachReview> recentReviews;
+  final Map<String, String> branchNames;
+  factory CoachPublicStatistics.fromJson(Map<String, dynamic> data) {
+    final id = data['coachId'],
+        sessions = data['completedSessions'],
+        count = data['reviewCount'],
+        average = data['averageRating'],
+        rows = data['recentReviews'],
+        rawBranches = data['branchNames'];
+    if (id is! String ||
+        !_id(id) ||
+        sessions is! int ||
+        sessions < 0 ||
+        sessions > 9007199254740991 ||
+        count is! int ||
+        count < 0 ||
+        count > 9007199254740991 ||
+        (count == 0
+            ? average != null
+            : average is! num ||
+                !average.isFinite ||
+                average < 1 ||
+                average > 5) ||
+        rows is! List ||
+        rows.length > 10 ||
+        rows.length > count ||
+        rawBranches is! Map ||
+        rawBranches.length > 8) {
+      throw const FormatException('Invalid public Coach statistics.');
+    }
+    final branches = <String, String>{};
+    for (final entry in rawBranches.entries) {
+      if (entry.key is! String ||
+          !_id(entry.key) ||
+          entry.value is! String ||
+          (entry.value as String).trim().isEmpty) {
+        throw const FormatException('Invalid public branch.');
+      }
+      branches[entry.key as String] = (entry.value as String).trim();
+    }
+    final reviews = <CoachReview>[];
+    for (final row in rows) {
+      if (row is! Map ||
+          row['stars'] is! int ||
+          row['stars'] < 1 ||
+          row['stars'] > 5 ||
+          row['reviewText'] is! String ||
+          (row['reviewText'] as String).length > 500 ||
+          row['reviewedAtMillis'] is! int ||
+          row['reviewedAtMillis'] <= 0 ||
+          row['reviewedAtMillis'] > 8640000000000000 ||
+          row['authorLabel'] != 'Verified member') {
+        throw const FormatException('Invalid public review.');
+      }
+      reviews.add(CoachReview(
+          row['authorLabel'],
+          row['stars'],
+          row['reviewText'],
+          DateTime.fromMillisecondsSinceEpoch(row['reviewedAtMillis'],
+              isUtc: true)));
+    }
+    return CoachPublicStatistics._(
+        id, sessions, count, (average as num?)?.toDouble(), reviews, branches);
+  }
+}
+
 class PublishedCoachProfile {
   PublishedCoachProfile(
       {required this.id,
@@ -149,15 +229,50 @@ class PublishedCoachProfile {
       required this.publishedAtMillis,
       this.certificationVerified = false,
       this.approvedCertificationCount = 0,
-      this.averageRating, this.reviewCount = 0})
+      this.averageRating,
+      this.reviewCount = 0,
+      this.statistics})
       : branchIds = List.unmodifiable(branchIds);
+  final CoachPublicStatistics? statistics;
   final double? averageRating;
   final int reviewCount;
-  PublishedCoachProfile withRatings(double? average, int count) => PublishedCoachProfile(
-    id: id, fields: fields, revision: revision, sourceRevision: sourceRevision, status: status,
-    branchIds: branchIds, createdAtMillis: createdAtMillis, updatedAtMillis: updatedAtMillis,
-    publishedAtMillis: publishedAtMillis, certificationVerified: certificationVerified,
-    approvedCertificationCount: approvedCertificationCount, averageRating: average, reviewCount: count);
+  PublishedCoachProfile withRatings(double? average, int count) =>
+      PublishedCoachProfile(
+          id: id,
+          fields: fields,
+          revision: revision,
+          sourceRevision: sourceRevision,
+          status: status,
+          branchIds: branchIds,
+          createdAtMillis: createdAtMillis,
+          updatedAtMillis: updatedAtMillis,
+          publishedAtMillis: publishedAtMillis,
+          certificationVerified: certificationVerified,
+          approvedCertificationCount: approvedCertificationCount,
+          averageRating: average,
+          reviewCount: count,
+          statistics: statistics);
+  PublishedCoachProfile withStatistics(CoachPublicStatistics value) {
+    if (value.coachId != id) {
+      throw const FormatException('Coach statistics identity mismatch.');
+    }
+    return PublishedCoachProfile(
+        id: id,
+        fields: fields,
+        revision: revision,
+        sourceRevision: sourceRevision,
+        status: status,
+        branchIds: branchIds,
+        createdAtMillis: createdAtMillis,
+        updatedAtMillis: updatedAtMillis,
+        publishedAtMillis: publishedAtMillis,
+        certificationVerified: certificationVerified,
+        approvedCertificationCount: approvedCertificationCount,
+        averageRating: value.averageRating,
+        reviewCount: value.reviewCount,
+        statistics: value);
+  }
+
   final String id, status;
   final bool certificationVerified;
   final int approvedCertificationCount;
@@ -233,7 +348,9 @@ class CoachPublicationReview {
       required List<String> branchIds,
       required this.targetMembershipEligible,
       this.certificationVerified = false,
-      this.approvedCertificationCount = 0, this.readOnly=false,this.operationalSummary=const []})
+      this.approvedCertificationCount = 0,
+      this.readOnly = false,
+      this.operationalSummary = const []})
       : branchIds = List.unmodifiable(branchIds);
   final String coachId;
   final CoachProfessionalProfile? draft;
@@ -245,7 +362,8 @@ class CoachPublicationReview {
   final bool certificationVerified;
   final int approvedCertificationCount;
   bool get canPublish =>
-      !readOnly && draft != null &&
+      !readOnly &&
+      draft != null &&
       targetMembershipEligible &&
       branchIds.isNotEmpty &&
       certificationVerified &&
@@ -256,7 +374,9 @@ class CoachPublicationReview {
     if (pub == null || !pub.isPublished) return true;
     if (draft != null && draft!.revision > pub.sourceRevision) return true;
     if (certificationVerified != pub.certificationVerified) return true;
-    if (approvedCertificationCount != pub.approvedCertificationCount) return true;
+    if (approvedCertificationCount != pub.approvedCertificationCount) {
+      return true;
+    }
     if (branchIds.length != pub.branchIds.length ||
         !branchIds.toSet().containsAll(pub.branchIds)) {
       return true;
@@ -376,6 +496,7 @@ class CoachRepositoryException implements Exception {
       _ => 'Could not complete the Coach operation. Retry or refresh.'
     };
   }
+
   @override
   String toString() => message;
 }
