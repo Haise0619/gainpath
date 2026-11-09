@@ -1,3 +1,4 @@
+import 'package:flutter_svg/flutter_svg.dart';
 import 'dart:math' as math;
 import '../../features/gamification/application/rewards_feature_host.dart';
 import '../../features/analytics/domain/member_workout_report.dart';
@@ -595,7 +596,11 @@ class _PointsPill extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(Icons.stars_rounded, size: 15, color: AppColors.accent),
+          SvgPicture.asset(
+            'assets/icons/reward_point.svg',
+            width: 16,
+            height: 16,
+          ),
           const SizedBox(width: 5),
           if (points == null)
             const Text('—',

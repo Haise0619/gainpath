@@ -1,3 +1,4 @@
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:gainpath_identity/gainpath_identity.dart';
@@ -149,14 +150,24 @@ class _AppCheckInDashboardState extends State<AppCheckInDashboard> {
                                           color: Colors.white,
                                           fontSize: 12,
                                           letterSpacing: 1)),
-                                  const SizedBox(height: 4),
-                                  Text(s?.balance.toString() ?? '—',
-                                      style: Theme.of(context)
-                                          .textTheme
-                                          .displaySmall
-                                          ?.copyWith(
-                                              color: Colors.white,
-                                              fontWeight: FontWeight.w800)),
+                                  const SizedBox(height: 6),
+                                  Row(
+                                    children: [
+                                      SvgPicture.asset(
+                                        'assets/icons/reward_point.svg',
+                                        width: 32,
+                                        height: 32,
+                                      ),
+                                      const SizedBox(width: 10),
+                                      Text(s?.balance.toString() ?? '—',
+                                          style: Theme.of(context)
+                                              .textTheme
+                                              .displaySmall
+                                              ?.copyWith(
+                                                  color: Colors.white,
+                                                  fontWeight: FontWeight.w800)),
+                                    ],
+                                  ),
                                   if (s == null)
                                     const Text('Balance unavailable',
                                         style: TextStyle(color: Colors.white)),

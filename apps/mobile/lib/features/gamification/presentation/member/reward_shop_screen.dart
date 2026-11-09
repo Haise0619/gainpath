@@ -1,3 +1,4 @@
+import 'package:flutter_svg/flutter_svg.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../application/gamification_bloc.dart';
@@ -44,8 +45,11 @@ class RewardShopScreen extends StatelessWidget {
             ),
             child: Row(
               children: [
-                const Icon(Icons.account_balance_wallet_rounded,
-                    color: Colors.white),
+                SvgPicture.asset(
+                  'assets/icons/reward_point.svg',
+                  width: 32,
+                  height: 32,
+                ),
                 const SizedBox(width: 12),
                 TweenAnimationBuilder<int>(
                   tween: IntTween(

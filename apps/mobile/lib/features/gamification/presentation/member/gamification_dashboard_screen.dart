@@ -1,3 +1,4 @@
+import 'package:flutter_svg/flutter_svg.dart';
 import 'dart:math' as math;
 import '../../application/app_check_in_cubit.dart';
 import 'app_check_in_dashboard.dart';
@@ -98,31 +99,41 @@ class GamificationDashboardScreen extends StatelessWidget {
                                   letterSpacing: 1.4,
                                   fontWeight: FontWeight.w700,
                                   color: Colors.white70)),
-                          const SizedBox(height: 6),
-                          if (live)
-                            const Text('-',
-                                style: TextStyle(
-                                    fontSize: 40,
-                                    fontWeight: FontWeight.w800,
-                                    color: Colors.white))
-                          else
-                            TweenAnimationBuilder<int>(
-                              tween: IntTween(
-                                  begin: 0,
-                                  end: context
-                                      .watch<GamificationBloc>()
-                                      .state
-                                      .points),
-                              duration: const Duration(milliseconds: 900),
-                              curve: Curves.easeOutCubic,
-                              builder: (context, value, _) => Text('$value',
-                                  style: const TextStyle(
-                                      fontSize: 40,
-                                      fontWeight: FontWeight.w800,
-                                      color: Colors.white,
-                                      height: 1.1,
-                                      letterSpacing: -1.5)),
-                            ),
+                          const SizedBox(height: 8),
+                          Row(
+                            children: [
+                              SvgPicture.asset(
+                                'assets/icons/reward_point.svg',
+                                width: 34,
+                                height: 34,
+                              ),
+                              const SizedBox(width: 10),
+                              if (live)
+                                const Text('-',
+                                    style: TextStyle(
+                                        fontSize: 40,
+                                        fontWeight: FontWeight.w800,
+                                        color: Colors.white))
+                              else
+                                TweenAnimationBuilder<int>(
+                                  tween: IntTween(
+                                      begin: 0,
+                                      end: context
+                                          .watch<GamificationBloc>()
+                                          .state
+                                          .points),
+                                  duration: const Duration(milliseconds: 900),
+                                  curve: Curves.easeOutCubic,
+                                  builder: (context, value, _) => Text('$value',
+                                      style: const TextStyle(
+                                          fontSize: 40,
+                                          fontWeight: FontWeight.w800,
+                                          color: Colors.white,
+                                          height: 1.1,
+                                          letterSpacing: -1.5)),
+                                ),
+                            ],
+                          ),
                         ],
                       ),
                     ),

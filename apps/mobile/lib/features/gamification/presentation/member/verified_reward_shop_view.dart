@@ -1,3 +1,4 @@
+import 'package:flutter_svg/flutter_svg.dart';
 import 'dart:async';
 import 'points_history_screen.dart';
 import 'dart:math';
@@ -222,18 +223,29 @@ class _VerifiedRewardShopViewState extends State<VerifiedRewardShopView>
                                                     button: true,
                                                     label:
                                                         "View points history",
-                                                    child: Text(
-                                                        data.balance == null
-                                                            ? 'No verified balance yet.'
-                                                            : '${data.balance} verified points',
-                                                        style: Theme.of(context)
-                                                            .textTheme
-                                                            .headlineSmall
-                                                            ?.copyWith(
-                                                                color: Colors
-                                                                    .white,
-                                                                fontWeight:
-                                                                    FontWeight.w800)))),
+                                                    child: Row(
+                                                      mainAxisSize: MainAxisSize.min,
+                                                      children: [
+                                                        SvgPicture.asset(
+                                                          'assets/icons/reward_point.svg',
+                                                          width: 28,
+                                                          height: 28,
+                                                        ),
+                                                        const SizedBox(width: 8),
+                                                        Text(
+                                                            data.balance == null
+                                                                ? 'No verified balance yet.'
+                                                                : '${data.balance} verified points',
+                                                            style: Theme.of(context)
+                                                                .textTheme
+                                                                .headlineSmall
+                                                                ?.copyWith(
+                                                                    color: Colors
+                                                                        .white,
+                                                                    fontWeight:
+                                                                        FontWeight.w800)),
+                                                      ],
+                                                    ))),
                                             const SizedBox(height: 8),
                                             const Text(
                                                 'Turn your check-in points into something rewarding.',
@@ -280,12 +292,23 @@ class _VerifiedRewardShopViewState extends State<VerifiedRewardShopView>
                                                       .textTheme
                                                       .titleLarge),
                                               const SizedBox(height: 6),
-                                              Text(
+                                              Row(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  SvgPicture.asset(
+                                                    'assets/icons/reward_point.svg',
+                                                    width: 16,
+                                                    height: 16,
+                                                  ),
+                                                  const SizedBox(width: 5),
+                                                  Text(
                                                   '${item.pointCost} points · ${item.stock} available',
                                                   style: const TextStyle(
                                                       color: AppColors.primary,
                                                       fontWeight:
                                                           FontWeight.w700)),
+                                                ],
+                                              ),
                                               if (item.validityDays != null)
                                                 Padding(
                                                     padding:
