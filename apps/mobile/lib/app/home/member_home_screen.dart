@@ -1284,35 +1284,52 @@ class _QuickActionsGrid extends StatelessWidget {
 
   void _showMoreShortcuts(BuildContext context) {
     final moreActions = <_QuickAction>[
-      _QuickAction(Icons.people_alt_rounded, 'Coaches', AppColors.primary,
-          onOpenCoaches ?? () => onSelect(const BrowseCoachesScreen())),
       _QuickAction(
-          Icons.emoji_events_rounded,
-          'Rewards',
-          AppColors.primary,
-          onOpenRewards ??
-              () => onSelect(GamificationDashboardScreen(live: !enabled))),
+        Icons.people_alt_rounded,
+        'Coaches',
+        AppColors.primary,
+        onOpenCoaches ?? () => onSelect(const BrowseCoachesScreen()),
+        svgAsset: 'assets/icons/quick_coaches.svg',
+      ),
       _QuickAction(
-          Icons.leaderboard_rounded,
-          'Ranking',
-          AppColors.primary,
-          () => onSelect(enabled
-              ? const LeaderboardScreen()
-              : RewardsFeatureHost(
-                  builder: (repo) =>
-                      LeaderboardScreen(connected: true, repository: repo)))),
+        Icons.emoji_events_rounded,
+        'Rewards',
+        AppColors.primary,
+        onOpenRewards ??
+            () => onSelect(GamificationDashboardScreen(live: !enabled)),
+        svgAsset: 'assets/icons/quick_rewards.svg',
+      ),
       _QuickAction(
-          Icons.sports_esports_rounded,
-          'Mini-games',
-          AppColors.primary,
-          () => onSelect(MiniGamesScreen(connected: !enabled))),
+        Icons.leaderboard_rounded,
+        'Ranking',
+        AppColors.primary,
+        () => onSelect(enabled
+            ? const LeaderboardScreen()
+            : RewardsFeatureHost(
+                builder: (repo) =>
+                    LeaderboardScreen(connected: true, repository: repo))),
+        svgAsset: 'assets/icons/quick_ranking.svg',
+      ),
       _QuickAction(
-          Icons.card_membership_rounded,
-          'Membership',
-          AppColors.primary,
-          () => onSelect(MembershipDashboardScreen(connected: !enabled))),
-      _QuickAction(Icons.bookmark_rounded, 'Saved tips', AppColors.primary,
-          onOpenSavedAdvice ?? () => onSelect(const SavedAdviceScreen())),
+        Icons.sports_esports_rounded,
+        'Mini-games',
+        AppColors.primary,
+        () => onSelect(MiniGamesScreen(connected: !enabled)),
+        svgAsset: 'assets/icons/quick_minigames.svg',
+      ),
+      _QuickAction(
+        Icons.card_membership_rounded,
+        'Membership',
+        AppColors.primary,
+        () => onSelect(MembershipDashboardScreen(connected: !enabled)),
+        svgAsset: 'assets/icons/quick_membership.svg',
+      ),
+      _QuickAction(
+        Icons.bookmark_rounded,
+        'Saved tips',
+        AppColors.primary,
+        onOpenSavedAdvice ?? () => onSelect(const SavedAdviceScreen()),
+      ),
     ];
 
     showModalBottomSheet<void>(
@@ -1511,15 +1528,15 @@ class _QuickActionTile extends StatelessWidget {
                 )
               else
                 Container(
-                  width: 36,
-                  height: 36,
+                  width: 44,
+                  height: 44,
                   decoration: BoxDecoration(
                     color: action.color.withValues(alpha: 0.10),
-                    borderRadius: BorderRadius.circular(10),
+                    borderRadius: BorderRadius.circular(12),
                     border:
                         Border.all(color: action.color.withValues(alpha: 0.18)),
                   ),
-                  child: Icon(action.icon, size: 18, color: action.color),
+                  child: Icon(action.icon, size: 22, color: action.color),
                 ),
               const SizedBox(height: 2),
               Flexible(
