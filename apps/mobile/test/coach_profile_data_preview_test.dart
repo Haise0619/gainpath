@@ -103,7 +103,13 @@ void main() {
     expect(find.text('1 review'), findsOneWidget);
     await t.tap(find.text('Preview public profile'));
     await t.pumpAndSettle();
+    expect(find.byType(CoachPublicProfilePreview), findsOneWidget);
     expect(find.byType(CoachProfileScreen), findsOneWidget);
+    expect(find.byKey(const Key('coach-preview-hero')), findsOneWidget);
+    expect(find.text('Experience'), findsOneWidget);
+    expect(find.text('Sessions'), findsOneWidget);
+    expect(find.text('Reviews'), findsOneWidget);
+    await t.scrollUntilVisible(find.text('Owner draft biography'), 250);
     expect(find.text('Owner draft biography'), findsOneWidget);
     await t.scrollUntilVisible(
         find.widgetWithText(FilledButton, 'Book a session'), 250);
