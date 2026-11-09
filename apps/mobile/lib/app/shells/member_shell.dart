@@ -5,6 +5,7 @@ import '../di/member_recommendation_factory.dart';
 import '../../infrastructure/firebase/firebase_module9_repository.dart';
 import '../notifications/member_notifications_screen.dart';
 import '../routing/app_check_in_host.dart';
+import '../routing/workout_program_route.dart';
 import '../../features/gamification/application/app_check_in_cubit.dart';
 import 'package:flutter/material.dart';
 import 'dart:async';
@@ -290,6 +291,52 @@ class _MemberShellState extends State<MemberShell> {
               : () => openBookingList(context, session,
                   factory: widget.bookingListFactory),
           onOpenWorkout: openWorkout,
+          onLoadUpcomingCoaching: session == null
+              ? null
+              : () async {
+                  final source = createBookingList(
+                      session,
+                      () => _activeScope() == session.scope,
+                      widget.bookingListFactory);
+                  BookingCursor? cursor;
+                  do {
+                    final page =
+                        await source.load(dayCount: 30, cursor: cursor);
+                    if (_activeScope() != session.scope) return null;
+                    final records = page.records
+                        .where((b) =>
+                            b.memberId == session.userId &&
+                            b.status == BookingStatus.confirmed &&
+                            b.startAtMillis > page.serverNowMillis)
+                        .toList()
+                      ..sort(
+                          (a, b) => a.startAtMillis.compareTo(b.startAtMillis));
+                    if (records.isNotEmpty) return records.first;
+                    cursor = page.nextCursor;
+                  } while (cursor != null);
+                  return null;
+                },
+          onOpenPlan: session == null
+              ? null
+              : () async {
+                  final auth = context.read<AuthBloc>();
+                  await Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                          builder: (_) => BlocProvider.value(
+                              value: auth,
+                              child: WorkoutProgramRoute(
+                                  scope: session.scope,
+                                  storeFactory: widget.programStoreFactory ??
+                                      createProgramEnrollmentStore,
+                                  routineStoreFactory:
+                                      widget.routineJourneyStoreFactory ??
+                                          createRoutineJourneyStore))));
+                  if (mounted && _activeScope() == session.scope) {
+                    await refresh?.call();
+                    await _catalog?.refresh();
+                  }
+                },
           publishedRoutine: catalog?.selected,
           routineStatusMessage: catalog == null ? null : _catalogLabel(catalog),
           onStartWorkout: () => setState(() => _index = 1)),

@@ -1,0 +1,112 @@
+import 'package:flutter/material.dart';
+import 'package:gainpath_ui/gainpath_ui.dart';
+import '../../application/app_check_in_cubit.dart';
+
+class HomeDailyCheckInCard extends StatelessWidget {
+  const HomeDailyCheckInCard(
+      {super.key, required this.state, required this.onClaim, this.onRefresh});
+  final AppCheckInState state;
+  final Future<void> Function() onClaim;
+  final Future<void> Function()? onRefresh;
+  @override
+  Widget build(BuildContext context) {
+    final s = state.snapshot;
+    final ready = state.status == AppCheckInStatus.ready ||
+        state.status == AppCheckInStatus.error;
+    final info =
+        Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Text(s == null ? 'Check-in status' : '${s.currentStreak}-day streak',
+          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+      const SizedBox(height: 2),
+      Text(
+          s == null
+              ? state.message ?? 'Loading check-in…'
+              : s.claimedToday
+                  ? 'Checked in today'
+                  : '+${s.pointsPerClaim} points available today',
+          style: const TextStyle(fontSize: 12, color: AppColors.inkSoft)),
+    ]);
+    final canClaim = s != null && !s.claimedToday && ready;
+    final action = canClaim
+        ? FilledButton(
+            onPressed: state.claiming ? null : onClaim,
+            style: FilledButton.styleFrom(
+                minimumSize: const Size(48, 44),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8)),
+            child: Text(state.claiming
+                ? 'Claiming…'
+                : 'Claim ${s.pointsPerClaim} points'))
+        : null;
+    return Panel(
+        padding: const EdgeInsets.all(12),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          if (MediaQuery.textScalerOf(context).scale(1) > 1.3) ...[
+            info,
+            if (action != null)
+              Padding(padding: const EdgeInsets.only(top: 8), child: action)
+          ] else
+            Row(children: [
+              Expanded(child: info),
+              if (action != null) ...[const SizedBox(width: 8), action]
+            ]),
+          if (s != null && s.days.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            Row(children: [
+              for (final day in s.days.take(7))
+                Expanded(
+                    child: Semantics(
+                        label:
+                            '${day.date}, ${day.claimed ? 'checked in' : 'not checked in'}',
+                        child: ExcludeSemantics(
+                            child: Column(children: [
+                          Container(
+                              width: 18,
+                              height: 18,
+                              decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: day.claimed
+                                      ? AppColors.primary
+                                      : AppColors.surfaceAlt,
+                                  border: day.date == s.today
+                                      ? Border.all(
+                                          color: AppColors.primary, width: 2)
+                                      : null),
+                              child: day.claimed
+                                  ? const Icon(Icons.check,
+                                      size: 12, color: Colors.white)
+                                  : null),
+                          const SizedBox(height: 3),
+                          Text(
+                              const [
+                                'M',
+                                'T',
+                                'W',
+                                'T',
+                                'F',
+                                'S',
+                                'S'
+                              ][DateTime.parse(day.date).weekday - 1],
+                              style: const TextStyle(
+                                  fontSize: 11, color: AppColors.inkSoft)),
+                        ])))),
+            ])
+          ],
+          if (state.status == AppCheckInStatus.loading || state.claiming)
+            const Padding(
+                padding: EdgeInsets.only(top: 8),
+                child: LinearProgressIndicator()),
+          if (state.message != null && s != null)
+            Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: Text(state.message!,
+                    style: const TextStyle(
+                        fontSize: 12, color: AppColors.inkSoft))),
+          if (state.status == AppCheckInStatus.error && onRefresh != null)
+            TextButton.icon(
+                onPressed: state.claiming ? null : onRefresh,
+                icon: const Icon(Icons.refresh, size: 16),
+                label: const Text('Refresh check-in')),
+        ]));
+  }
+}

@@ -1,12 +1,14 @@
 import 'package:flutter_svg/flutter_svg.dart';
 import 'dart:math' as math;
+import 'member_home_data.dart';
 import '../../features/gamification/application/rewards_feature_host.dart';
 import '../../features/analytics/domain/member_workout_report.dart';
 import '../di/chatbot_factory.dart';
 import '../../features/gamification/application/app_check_in_cubit.dart';
 import '../../features/gamification/presentation/member/app_check_in_card.dart';
 import 'package:gainpath_domain/analytics.dart';
-import '../../features/analytics/presentation/member/widgets/local_progress_widgets.dart';
+import 'package:gainpath_domain/gainpath_domain.dart' as domain
+    show BookingStatus;
 import '../../features/workout/data/published_routine.dart';
 import '../../features/workout/domain/routine_attempt.dart';
 import 'package:flutter/material.dart';
@@ -30,7 +32,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:gainpath_domain/identity.dart';
 import 'package:gainpath_domain/workout.dart';
 import 'package:gainpath_domain/gainpath_domain.dart'
-    show AuthSession, FitnessProfile;
+    show AuthSession, FitnessProfile, SessionScope, PersistedBookingRecord;
 
 /// Member landing screen — the hub every other member flow is reachable
 /// from. It carries the daily check-in prompt (AD-M3.2), the broadcast
@@ -70,7 +72,9 @@ class MemberHomeScreen extends StatefulWidget {
       this.onOpenCoaches,
       this.onOpenBookings,
       this.onOpenNotifications,
-      this.onOpenWorkout});
+      this.onOpenWorkout,
+      this.onOpenPlan,
+      this.onLoadUpcomingCoaching});
 
   final AuthSession? liveSession;
   final AppCheckInState? appCheckIn;
@@ -91,6 +95,8 @@ class MemberHomeScreen extends StatefulWidget {
   final Widget? announcements;
   final Future<void> Function()? onRefreshAnnouncements;
   final VoidCallback? onOpenProgress, onOpenHistory, onOpenRewards;
+  final VoidCallback? onOpenPlan;
+  final Future<PersistedBookingRecord?> Function()? onLoadUpcomingCoaching;
   final VoidCallback? onOpenNotifications;
   final VoidCallback? onOpenEquipment;
   final VoidCallback? onOpenCoaches, onOpenBookings;
@@ -103,6 +109,38 @@ class MemberHomeScreen extends StatefulWidget {
 class _MemberHomeScreenState extends State<MemberHomeScreen>
     with SingleTickerProviderStateMixin {
   final _homeScroll = ScrollController();
+  PersistedBookingRecord? _upcoming;
+  int _coachingRequest = 0;
+
+  Future<void> _loadCoaching() async {
+    final request = ++_coachingRequest;
+    final scope = widget.liveSession?.scope;
+    try {
+      final value = await widget.onLoadUpcomingCoaching?.call();
+      if (!mounted ||
+          request != _coachingRequest ||
+          widget.liveSession?.scope != scope) {
+        return;
+      }
+      setState(() => _upcoming = value?.memberId == scope?.userId &&
+              value?.organizationId == scope?.organizationId
+          ? value
+          : null);
+    } catch (_) {
+      if (mounted && request == _coachingRequest) {
+        setState(() => _upcoming = null);
+      }
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant MemberHomeScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.liveSession?.scope != widget.liveSession?.scope) {
+      _upcoming = null;
+      _loadCoaching();
+    }
+  }
 
   late final AnimationController _claimController;
   late final Animation<double> _claimScale;
@@ -110,6 +148,7 @@ class _MemberHomeScreenState extends State<MemberHomeScreen>
   @override
   void initState() {
     super.initState();
+    _loadCoaching();
     _claimController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 520),
@@ -144,6 +183,7 @@ class _MemberHomeScreenState extends State<MemberHomeScreen>
 
   Future<void> _refreshLive() async {
     await Future.wait<void>([
+      _loadCoaching(),
       if (widget.onRefreshProgress != null) widget.onRefreshProgress!(),
       if (widget.onRefreshCheckIn != null) widget.onRefreshCheckIn!(),
       if (widget.onRefreshRoutines != null) widget.onRefreshRoutines!(),
@@ -154,7 +194,7 @@ class _MemberHomeScreenState extends State<MemberHomeScreen>
 
   Future<void> _openAnnouncements() async {
     if (_homeScroll.hasClients) {
-      await _homeScroll.animateTo(0,
+      await _homeScroll.animateTo(_homeScroll.position.maxScrollExtent,
           duration: const Duration(milliseconds: 250), curve: Curves.easeOut);
     }
     if (mounted) await widget.onRefreshAnnouncements?.call();
@@ -185,6 +225,7 @@ class _MemberHomeScreenState extends State<MemberHomeScreen>
     if (mounted && widget.liveSession != null) {
       await widget.onRefreshProgress?.call();
       await widget.onRefreshCheckIn?.call();
+      await _loadCoaching();
     }
   }
 
@@ -200,244 +241,285 @@ class _MemberHomeScreenState extends State<MemberHomeScreen>
     final nextBooking = live ? null : _nextBooking;
     return Scaffold(
       floatingActionButton: SizedBox(
-        width: 72,
-        height: 72,
-        child: FloatingActionButton(
-          heroTag: 'ai_coach_fab',
-          tooltip: 'AI Coach',
-          onPressed: live
-              ? () => _go(buildMemberChatbot(widget.liveSession!))
-              : () => _go(const ChatbotScreen()),
-          backgroundColor: AppColors.primary,
-          foregroundColor: Colors.white,
-          shape: const CircleBorder(),
-          clipBehavior: Clip.antiAlias,
-          elevation: 4,
-          child: Container(
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              border: Border.all(
-                color: Colors.white,
-                width: 2,
-              ),
-            ),
-            child: ClipOval(
-              child: Image.asset(
-                'assets/images/ai_coach_mascot.png',
-                width: 72,
-                height: 72,
-                fit: BoxFit.cover,
-                excludeFromSemantics: true,
-              ),
-            ),
-          ),
-        ),
-      ),
-      body: RefreshIndicator(
-        color: AppColors.primary,
-        onRefresh: live ? _refreshLive : _refresh,
-        child: CustomScrollView(
-          controller: _homeScroll,
-          physics: const AlwaysScrollableScrollPhysics(),
-          slivers: [
-            _HeroHeader(
-                greeting: _greeting,
-                firstName: firstName,
-                points: live
-                    ? widget.appCheckIn?.snapshot?.balance
-                    : gamification?.points,
-                live: live,
-                onOpenNotifications: widget.onOpenNotifications,
-                onOpenCoachingUpdates: widget.onOpenCoachingUpdates,
-                onOpenAnnouncements: live && widget.announcements != null
-                    ? _openAnnouncements
-                    : null,
-                avatarText: live
-                    ? (firstName.isEmpty
-                        ? '?'
-                        : firstName.substring(0, 1).toUpperCase())
-                    : 'ZY'),
-            SliverToBoxAdapter(
-              child: DecoratedBox(
-                decoration:
-                    const BoxDecoration(gradient: AppColors.heroGradient),
-                child: DecoratedBox(
-                  key: const ValueKey('home-content-top'),
-                  decoration: const BoxDecoration(
-                    color: AppColors.bg,
-                    borderRadius:
-                        BorderRadius.vertical(top: Radius.circular(24)),
-                  ),
-                  child: const SizedBox(height: 24),
-                ),
-              ),
-            ),
-            SliverPadding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 108),
-              sliver: SliverList.list(
-                children: [
-                  if (widget.announcements != null) ...[
-                    widget.announcements!,
-                    const SizedBox(height: 24),
-                  ],
-                  const _HomeSectionHeading('Daily check-in'),
-                  if (live && widget.appCheckIn != null)
-                    AppCheckInCard(
-                        state: widget.appCheckIn!,
-                        onClaim: widget.onAppClaim ?? () async {},
-                        onRefresh: widget.onRefreshCheckIn)
-                  else
-                    _StreakCard(
-                      live: live,
-                      claimed: gamification?.checkedInToday ?? false,
-                      scale: _claimScale,
-                      onClaim: live ? () => showUnavailable(context) : _claim,
-                      reward: RewardPolicy.dailyCheckIn,
-                    ),
-                  const SizedBox(height: 24),
-                  const _HomeSectionHeading("Today's session"),
-                  _TodayWorkoutCard(
-                      live: live,
-                      publishedRoutine: widget.publishedRoutine,
-                      routineStatusMessage: widget.routineStatusMessage,
-                      onStart: live
-                          ? widget.onStartWorkout ??
-                              () => _go(WorkoutPrepRoute(
-                                  publishedRoutine: widget.publishedRoutine))
-                          : () => _go(const WorkoutPrepRoute(live: false))),
-                  const SizedBox(height: 24),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      const Expanded(
-                          child:
-                              _HomeSectionHeading('This week', padded: false)),
-                      if (widget.onOpenProgress != null || !live)
-                        InkWell(
-                          onTap: widget.onOpenProgress ??
-                              () => _go(GoalProgressScreen(
-                                  live: live,
-                                  localProgress: widget.localProgress)),
-                          borderRadius: BorderRadius.circular(6),
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 4, vertical: 2),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: const [
-                                Text(
-                                  'Details',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w700,
-                                    color: AppColors.primary,
-                                  ),
-                                ),
-                                SizedBox(width: 2),
-                                Icon(Icons.chevron_right_rounded,
-                                    size: 14, color: AppColors.primary),
-                              ],
-                            ),
-                          ),
-                        ),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-                  _WeeklySummaryCard(
+          width: 56,
+          height: 56,
+          child: FloatingActionButton(
+              key: const ValueKey('home-ai-entry'),
+              heroTag: 'ai_coach_fab',
+              tooltip: 'AI Coach',
+              onPressed: live
+                  ? () => _go(buildMemberChatbot(widget.liveSession!))
+                  : () => _go(const ChatbotScreen()),
+              backgroundColor: AppColors.primary,
+              foregroundColor: Colors.white,
+              elevation: 2,
+              shape: const CircleBorder(),
+              clipBehavior: Clip.antiAlias,
+              child: Container(
+                  decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: Border.all(color: Colors.white, width: 2)),
+                  child: ClipOval(
+                      child: Image.asset('assets/images/ai_coach_mascot.png',
+                          width: 56,
+                          height: 56,
+                          fit: BoxFit.cover,
+                          excludeFromSemantics: true))))),
+      body: Padding(
+          padding: EdgeInsets.only(
+              bottom: 72 + MediaQuery.paddingOf(context).bottom),
+          child: RefreshIndicator(
+            color: AppColors.primary,
+            onRefresh: live ? _refreshLive : _refresh,
+            child: CustomScrollView(
+              key: const ValueKey('home-scroll'),
+              controller: _homeScroll,
+              physics: const AlwaysScrollableScrollPhysics(),
+              slivers: [
+                _HeroHeader(
+                    greeting: _greeting,
+                    firstName: firstName,
+                    points: live
+                        ? widget.appCheckIn?.snapshot?.balance
+                        : gamification?.points,
                     live: live,
-                    progress: widget.localProgress,
+                    onOpenNotifications: widget.onOpenNotifications,
+                    onOpenCoachingUpdates: widget.onOpenCoachingUpdates,
+                    onOpenAnnouncements: live && widget.announcements != null
+                        ? _openAnnouncements
+                        : null,
+                    avatarText: live
+                        ? (firstName.isEmpty
+                            ? '?'
+                            : firstName.substring(0, 1).toUpperCase())
+                        : 'ZY'),
+                SliverToBoxAdapter(
+                  child: DecoratedBox(
+                    decoration:
+                        const BoxDecoration(gradient: AppColors.heroGradient),
+                    child: DecoratedBox(
+                      key: const ValueKey('home-content-top'),
+                      decoration: const BoxDecoration(
+                        color: AppColors.bg,
+                        borderRadius:
+                            BorderRadius.vertical(top: Radius.circular(24)),
+                      ),
+                      child: const SizedBox(height: 20),
+                    ),
                   ),
-                  if (widget.progressError != null) ...[
-                    const SizedBox(height: 8),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 4),
-                      child: Row(
+                ),
+                SliverPadding(
+                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
+                  sliver: SliverList.list(
+                    children: [
+                      const _HomeSectionHeading('Daily check-in'),
+                      if (live)
+                        AppCheckInCard(
+                            state: widget.appCheckIn ??
+                                const AppCheckInState(
+                                    status: AppCheckInStatus.unavailable,
+                                    message:
+                                        'Check-in unavailable. Pull down to refresh.'),
+                            homeDense: true,
+                            onClaim: widget.onAppClaim ?? () async {},
+                            onRefresh: widget.onRefreshCheckIn)
+                      else
+                        _StreakCard(
+                          live: live,
+                          claimed: gamification?.checkedInToday ?? false,
+                          scale: _claimScale,
+                          onClaim:
+                              live ? () => showUnavailable(context) : _claim,
+                          reward: RewardPolicy.dailyCheckIn,
+                        ),
+                      const SizedBox(height: 20),
+                      const _HomeSectionHeading("Today's workout"),
+                      _TodayWorkoutCard(
+                          live: live,
+                          publishedRoutine: widget.publishedRoutine,
+                          routineStatusMessage: widget.routineStatusMessage,
+                          attempt: live
+                              ? homeWorkoutAttempt(
+                                  widget.liveSession!.scope,
+                                  widget.publishedRoutine,
+                                  widget.routineProgress,
+                                  DateTime.now())
+                              : null,
+                          onOpenAttempt: widget.onOpenRoutine,
+                          onStart: live
+                              ? widget.onStartWorkout ??
+                                  () => _go(WorkoutPrepRoute(
+                                      publishedRoutine:
+                                          widget.publishedRoutine))
+                              : () => _go(const WorkoutPrepRoute(live: false))),
+                      const SizedBox(height: 20),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        crossAxisAlignment: CrossAxisAlignment.end,
                         children: [
-                          const Icon(Icons.error_outline_rounded,
-                              size: 16, color: AppColors.danger),
-                          const SizedBox(width: 6),
-                          Expanded(
-                            child: Text(
-                              widget.progressError!,
-                              style: const TextStyle(
-                                  fontSize: 12, color: AppColors.danger),
-                            ),
-                          ),
-                          if (widget.onRefreshProgress != null)
-                            TextButton(
-                              onPressed: widget.onRefreshProgress,
-                              child: const Text('Retry',
-                                  style: TextStyle(fontSize: 12)),
+                          const Expanded(
+                              child: _HomeSectionHeading('Weekly progress',
+                                  padded: false)),
+                          if (widget.onOpenProgress != null || !live)
+                            InkWell(
+                              onTap: widget.onOpenProgress ??
+                                  () => _go(GoalProgressScreen(
+                                      live: live,
+                                      localProgress: widget.localProgress)),
+                              borderRadius: BorderRadius.circular(6),
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 4, vertical: 2),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: const [
+                                    Text(
+                                      'Details',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w700,
+                                        color: AppColors.primary,
+                                      ),
+                                    ),
+                                    SizedBox(width: 2),
+                                    Icon(Icons.chevron_right_rounded,
+                                        size: 14, color: AppColors.primary),
+                                  ],
+                                ),
+                              ),
                             ),
                         ],
                       ),
-                    ),
-                  ],
-                  if (nextBooking != null) ...[
-                    const SizedBox(height: 24),
-                    const _HomeSectionHeading('Next with a coach'),
-                    _NextSessionCard(
-                      booking: nextBooking,
-                      onTap: live
-                          ? widget.onOpenBookings ??
-                              () => showUnavailable(context)
-                          : () => _go(const BookingScheduleScreen()),
-                    ),
-                  ],
-                  const SizedBox(height: 24),
-                  _RecentActivitySection(
-                    live: live,
-                    localProgress: widget.localProgress,
-                    onOpenHistory: widget.onOpenHistory ??
-                        widget.onOpenRoutineHistory ??
-                        () => _go(const ProgressDashboardScreen()),
-                    onOpenWorkout: widget.onOpenWorkout,
+                      const SizedBox(height: 10),
+                      _WeeklySummaryCard(
+                        live: live,
+                        progress: widget.localProgress,
+                        routines: widget.routineProgress,
+                      ),
+                      if (widget.progressError != null) ...[
+                        const SizedBox(height: 8),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 4),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.error_outline_rounded,
+                                  size: 16, color: AppColors.danger),
+                              const SizedBox(width: 6),
+                              Expanded(
+                                child: Text(
+                                  widget.progressError!,
+                                  style: const TextStyle(
+                                      fontSize: 12, color: AppColors.danger),
+                                ),
+                              ),
+                              if (widget.onRefreshProgress != null)
+                                TextButton(
+                                  onPressed: widget.onRefreshProgress,
+                                  child: const Text('Retry',
+                                      style: TextStyle(fontSize: 12)),
+                                ),
+                            ],
+                          ),
+                        ),
+                      ],
+                      if (nextBooking != null) ...[
+                        const SizedBox(height: 20),
+                        const _HomeSectionHeading('Next with a coach'),
+                        _NextSessionCard(
+                          booking: nextBooking,
+                          onTap: live
+                              ? widget.onOpenBookings ??
+                                  () => showUnavailable(context)
+                              : () => _go(const BookingScheduleScreen()),
+                        ),
+                      ],
+                      if (_upcoming != null &&
+                          _upcoming!.status == domain.BookingStatus.confirmed &&
+                          _upcoming!.startAtMillis >
+                              DateTime.now().millisecondsSinceEpoch) ...[
+                        const SizedBox(height: 20),
+                        const _HomeSectionHeading('Upcoming coaching'),
+                        Panel(
+                            padding: const EdgeInsets.all(14),
+                            onTap: widget.onOpenBookings,
+                            child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text('Coaching session',
+                                      style: TextStyle(
+                                          fontWeight: FontWeight.w600,
+                                          fontSize: 15)),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                      '${_upcoming!.localDate} · ${_upcoming!.startLabel} · ${_upcoming!.durationMinutes} min',
+                                      style: const TextStyle(
+                                          color: AppColors.inkSoft,
+                                          fontSize: 13)),
+                                ])),
+                      ],
+                      const SizedBox(height: 20),
+                      _RecentActivitySection(
+                        live: live,
+                        localProgress: widget.localProgress,
+                        routines: widget.routineProgress,
+                        selected: widget.publishedRoutine,
+                        scope: widget.liveSession?.scope,
+                        onOpenRoutine: widget.onOpenRoutine,
+                        onOpenHistory: widget.onOpenHistory ??
+                            widget.onOpenRoutineHistory ??
+                            () => _go(const ProgressDashboardScreen()),
+                        onOpenWorkout: widget.onOpenWorkout,
+                      ),
+                      const SizedBox(height: 20),
+                      const _HomeSectionHeading('Quick access'),
+                      _QuickActionsGrid(
+                          onOpenRewards: widget.onOpenRewards,
+                          onOpenPlan: widget.onOpenPlan,
+                          onSelect: _go,
+                          enabled: !live,
+                          onOpenSavedAdvice: live
+                              ? () => _go(buildMemberChatbot(
+                                  widget.liveSession!,
+                                  openSavedAdvice: true))
+                              : null,
+                          onOpenEquipment: widget.onOpenEquipment,
+                          onOpenCoaches: widget.onOpenCoaches,
+                          onOpenBookings: widget.onOpenBookings,
+                          onOpenProgress: widget.onOpenProgress),
+                      if (live &&
+                          widget.liveProfile != null &&
+                          widget.liveProfile!.goals.isNotEmpty) ...[
+                        const SizedBox(height: 20),
+                        const _HomeSectionHeading('Your goals'),
+                        _GoalPreviewCard(
+                          live: true,
+                          liveProfile: widget.liveProfile,
+                          onTap: () => _go(GoalProgressScreen(
+                              live: true, localProgress: widget.localProgress)),
+                        ),
+                      ] else if (!live) ...[
+                        const SizedBox(height: 20),
+                        const _HomeSectionHeading('Your goals'),
+                        _GoalPreviewCard(
+                          live: false,
+                          onTap: () => _go(const GoalProgressScreen()),
+                        ),
+                        const SizedBox(height: 20),
+                        _MembershipStrip(
+                          live: false,
+                          onTap: () => _go(const MembershipDashboardScreen()),
+                        ),
+                      ],
+                      if (widget.announcements != null) ...[
+                        const SizedBox(height: 20),
+                        widget.announcements!
+                      ],
+                    ],
                   ),
-                  const SizedBox(height: 24),
-                  const _HomeSectionHeading('Quick access'),
-                  _QuickActionsGrid(
-                      onOpenRewards: widget.onOpenRewards,
-                      onSelect: _go,
-                      enabled: !live,
-                      onOpenSavedAdvice: live
-                          ? () => _go(buildMemberChatbot(widget.liveSession!,
-                              openSavedAdvice: true))
-                          : null,
-                      onOpenEquipment: widget.onOpenEquipment,
-                      onOpenCoaches: widget.onOpenCoaches,
-                      onOpenBookings: widget.onOpenBookings,
-                      onOpenProgress: widget.onOpenProgress),
-                  if (live &&
-                      widget.liveProfile != null &&
-                      widget.liveProfile!.goals.isNotEmpty) ...[
-                    const SizedBox(height: 24),
-                    const _HomeSectionHeading('Goal progress'),
-                    _GoalPreviewCard(
-                      live: true,
-                      liveProfile: widget.liveProfile,
-                      onTap: () => _go(GoalProgressScreen(
-                          live: true, localProgress: widget.localProgress)),
-                    ),
-                  ] else if (!live) ...[
-                    const SizedBox(height: 24),
-                    const _HomeSectionHeading('Goal progress'),
-                    _GoalPreviewCard(
-                      live: false,
-                      onTap: () => _go(const GoalProgressScreen()),
-                    ),
-                    const SizedBox(height: 24),
-                    _MembershipStrip(
-                      live: false,
-                      onTap: () => _go(const MembershipDashboardScreen()),
-                    ),
-                  ],
-                ],
-              ),
+                ),
+              ],
             ),
-          ],
-        ),
-      ),
+          )),
     );
   }
 }
@@ -452,12 +534,12 @@ class _HomeSectionHeading extends StatelessWidget {
   Widget build(BuildContext context) => Padding(
         padding: EdgeInsets.only(bottom: padded ? 10 : 0),
         child: Text(
-          text.toUpperCase(),
+          text,
           style: const TextStyle(
             fontFamily: 'BarlowCondensed',
             fontSize: 16,
             height: 1.25,
-            fontWeight: FontWeight.w800,
+            fontWeight: FontWeight.w700,
             color: AppColors.ink,
           ),
         ),
@@ -491,7 +573,8 @@ class _HeroHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     return SliverAppBar(
       pinned: true,
-      expandedHeight: 116,
+      expandedHeight: 116 +
+          48 * math.max(0.0, MediaQuery.textScalerOf(context).scale(1) - 1),
       backgroundColor: AppColors.primaryDark,
       foregroundColor: Colors.white,
       elevation: 0,
@@ -735,15 +818,17 @@ class _StreakCard extends StatelessWidget {
                   width: 36,
                   height: 36,
                   decoration: BoxDecoration(
-                    color:
-                        claimed ? AppColors.successTint : const Color(0xFFFEF3F2),
+                    color: claimed
+                        ? AppColors.successTint
+                        : const Color(0xFFFEF3F2),
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Icon(
                     claimed
                         ? Icons.check_rounded
                         : Icons.local_fire_department_rounded,
-                    color: claimed ? AppColors.success : const Color(0xFFF04438),
+                    color:
+                        claimed ? AppColors.success : const Color(0xFFF04438),
                     size: 20,
                   ),
                 ),
@@ -862,16 +947,19 @@ class _StreakCard extends StatelessWidget {
 /// The single most important action on this screen, so it gets the full
 /// gradient treatment rather than sitting in a plain card.
 class _TodayWorkoutCard extends StatelessWidget {
-  final VoidCallback? onStart;
-  final bool live;
-  final PublishedRoutine? publishedRoutine;
-  final String? routineStatusMessage;
   const _TodayWorkoutCard(
       {required this.onStart,
       this.live = false,
       this.publishedRoutine,
-      this.routineStatusMessage});
-
+      this.routineStatusMessage,
+      this.attempt,
+      this.onOpenAttempt});
+  final VoidCallback? onStart;
+  final bool live;
+  final PublishedRoutine? publishedRoutine;
+  final String? routineStatusMessage;
+  final RoutineAttempt? attempt;
+  final void Function(RoutineAttempt)? onOpenAttempt;
   @override
   Widget build(BuildContext context) {
     final exercises = live
@@ -882,606 +970,186 @@ class _TodayWorkoutCard extends StatelessWidget {
             routineStatusMessage ??
             'No published routine yet'
         : 'Lower Body Strength';
-    final durationText = live
-        ? publishedRoutine == null
-            ? 'Exercises and duration unavailable'
-            : '${exercises.length} exercises  ·  about ${publishedRoutine!.estimatedMinutes} min'
-        : '${exercises.length} exercises  ·  about 45 min';
-
+    final detail = live && publishedRoutine == null
+        ? 'Choose an available workout to get started.'
+        : '${exercises.length} exercises  ·  about ${live ? publishedRoutine!.estimatedMinutes : 45} min';
+    final hasAttempt = attempt != null && onOpenAttempt != null;
+    final label = hasAttempt
+        ? (attempt!.finished ? 'View summary' : 'Continue workout')
+        : 'Start workout';
     return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [Color(0xFF3B1578), Color(0xFF260D4D)],
-        ),
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
-        boxShadow: const [
-          BoxShadow(
-              color: Color(0x283B1578), blurRadius: 18, offset: Offset(0, 6)),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Wrap(
-            alignment: WrapAlignment.spaceBetween,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            spacing: 8,
-            runSpacing: 4,
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3.5),
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.14),
-                  borderRadius: BorderRadius.circular(6),
-                  border:
-                      Border.all(color: Colors.white.withValues(alpha: 0.20)),
-                ),
-                child: FittedBox(
-                  fit: BoxFit.scaleDown,
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: const [
-                      Icon(Icons.bolt_rounded, size: 12, color: AppColors.accent),
-                      SizedBox(width: 3),
-                      Text(
-                        "TODAY'S WORKOUT",
-                        style: TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: 0.6,
-                          color: Colors.white,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              if (live &&
-                  publishedRoutine != null &&
-                  publishedRoutine!.exercises.isNotEmpty)
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.18),
-                    borderRadius: BorderRadius.circular(999),
-                    border:
-                        Border.all(color: Colors.white.withValues(alpha: 0.25)),
-                  ),
-                  child: FittedBox(
-                    fit: BoxFit.scaleDown,
-                    child: Text(
-                      publishedRoutine!.exercises.first.category.toUpperCase(),
-                      style: const TextStyle(
-                        fontSize: 9.5,
-                        color: Colors.white,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 0.4,
-                      ),
-                    ),
-                  ),
-                ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          Text(
-            title,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 19,
-              fontWeight: FontWeight.w800,
-              letterSpacing: -0.4,
-            ),
-          ),
-          const SizedBox(height: 3),
-          Text(
-            durationText,
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              color: Colors.white.withValues(alpha: 0.88),
-            ),
-          ),
-          const SizedBox(height: 10),
-          if (exercises.isNotEmpty)
-            Wrap(
-              spacing: 6,
-              runSpacing: 4,
-              children: [
-                ...exercises.take(2).map(
-                      (e) => Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 9, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.15),
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(
-                              color: Colors.white.withValues(alpha: 0.2)),
-                        ),
-                        child: Text(
-                          e.name,
-                          style: const TextStyle(
-                            fontSize: 11,
-                            color: Colors.white,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ),
-                    ),
-                if (exercises.length > 2)
-                  Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.22),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(
-                          color: Colors.white.withValues(alpha: 0.25)),
-                    ),
-                    child: Text(
-                      '+${exercises.length - 2} more',
-                      style: const TextStyle(
-                        fontSize: 11,
-                        color: Colors.white,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
-              ],
-            )
-          else if (live && publishedRoutine == null)
-            Wrap(
-              spacing: 6,
-              children: List.generate(
-                2,
-                (_) => Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.16),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: const Text('-',
-                      style: TextStyle(color: Colors.white, fontSize: 11)),
-                ),
-              ),
-            ),
+        key: const ValueKey('home-today-workout'),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+            color: AppColors.primaryDark,
+            borderRadius: BorderRadius.circular(16),
+            image: const DecorationImage(
+                image: AssetImage('assets/images/home_workout_gym.webp'),
+                fit: BoxFit.cover,
+                colorFilter:
+                    ColorFilter.mode(Color(0x660B0615), BlendMode.darken))),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(title,
+              style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 20,
+                  fontWeight: FontWeight.w700)),
+          const SizedBox(height: 6),
+          Text(detail,
+              style: const TextStyle(color: Colors.white, fontSize: 13)),
           const SizedBox(height: 14),
           SizedBox(
-            width: double.infinity,
-            child: FilledButton.icon(
-              style: FilledButton.styleFrom(
-                backgroundColor: Colors.white,
-                foregroundColor: AppColors.primaryDark,
-                elevation: 2,
-                shadowColor: Colors.black.withValues(alpha: 0.25),
-                minimumSize: const Size(0, 44),
-                padding: const EdgeInsets.symmetric(vertical: 9),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
-              onPressed: onStart,
-              icon: const Icon(Icons.play_arrow_rounded, size: 20),
-              label: Text(
-                routineStatusMessage?.contains('progress') == true
-                    ? 'Resume workout'
-                    : 'Start workout',
-                style: const TextStyle(
-                  fontWeight: FontWeight.w800,
-                  fontSize: 14,
-                  letterSpacing: 0.2,
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
+              width: double.infinity,
+              child: FilledButton.icon(
+                  style: FilledButton.styleFrom(
+                      backgroundColor: Colors.white,
+                      foregroundColor: AppColors.primaryDark,
+                      elevation: 0,
+                      minimumSize: const Size(0, 48),
+                      padding: const EdgeInsets.symmetric(
+                          vertical: 10, horizontal: 12)),
+                  onPressed:
+                      hasAttempt ? () => onOpenAttempt!(attempt!) : onStart,
+                  icon: Icon(hasAttempt && attempt!.finished
+                      ? Icons.receipt_long_outlined
+                      : Icons.play_arrow_rounded),
+                  label: Text(label))),
+        ]));
   }
 }
 
 class _WeeklySummaryCard extends StatelessWidget {
+  const _WeeklySummaryCard({this.live = false, this.progress, this.routines});
   final bool live;
   final MemberLocalProgress? progress;
-
-  const _WeeklySummaryCard({
-    this.live = false,
-    this.progress,
-  });
-
+  final RoutineProgress? routines;
   @override
   Widget build(BuildContext context) {
-    final sessions = live ? (progress?.weeklySessions ?? 0) : 4;
-    final reps = live ? (progress?.weeklyRepetitions ?? 0) : 120;
-    final coverage = live ? progress?.weeklyCoverage : 0.84;
-    final isEnlarged = MediaQuery.textScalerOf(context).scale(1.0) > 1.15;
-
-    final tile1 = _CompactMetricTile(
-      icon: Icons.videocam_outlined,
-      color: AppColors.primary,
-      value: live ? (progress == null ? '—' : '$sessions') : '4/5',
-      label: 'Sessions',
-    );
-    final tile2 = _CompactMetricTile(
-      icon: Icons.fitness_center_rounded,
-      color: AppColors.accent,
-      value: live ? (progress == null ? '—' : '$reps') : '120',
-      label: 'Reps',
-    );
-    final tile3 = _CompactMetricTile(
-      icon: Icons.verified_outlined,
-      color: AppColors.success,
-      value: live
-          ? (coverage == null || coverage == 0
-              ? '—'
-              : '${(coverage * 100).round()}%')
-          : '84%',
-      label: 'Form scored',
-    );
-
+    final completed = routines?.weeklyCompleted;
+    final days = routines?.records
+        .where((a) =>
+            a.isComplete &&
+            a.finishedAtMicros != null &&
+            a.finishedAtMicros! >= routines!.weekStart.microsecondsSinceEpoch &&
+            a.finishedAtMicros! < routines!.weekEnd.microsecondsSinceEpoch &&
+            a.finishedAtMicros! <=
+                (progress?.asOf ?? DateTime.now()).microsecondsSinceEpoch)
+        .map((a) => reportDate(DateTime.fromMicrosecondsSinceEpoch(
+            a.finishedAtMicros!,
+            isUtc: true)))
+        .toSet()
+        .length;
     return Panel(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-      background: AppColors.surface,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Wrap(
-            alignment: WrapAlignment.spaceBetween,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            spacing: 8,
-            runSpacing: 4,
-            children: [
-              FittedBox(
-                fit: BoxFit.scaleDown,
-                alignment: Alignment.centerLeft,
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: const [
-                    Icon(Icons.calendar_today_rounded,
-                        size: 13, color: AppColors.inkSoft),
-                    SizedBox(width: 6),
-                    Text(
-                      'Weekly activity',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.inkSoft,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              FittedBox(
-                fit: BoxFit.scaleDown,
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  live && progress == null ? '—' : '$sessions logged this week',
-                  style: const TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.primary,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 10),
-            child: Divider(height: 1, color: AppColors.hairline),
-          ),
-          isEnlarged
-              ? Column(
-                  children: [
-                    Row(
-                      children: [
-                        Expanded(child: tile1),
-                        const SizedBox(width: 8),
-                        Expanded(child: tile2),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    tile3,
-                  ],
-                )
-              : Row(
-                  children: [
-                    Expanded(child: tile1),
-                    Container(
-                      width: 1,
-                      height: 34,
-                      color: AppColors.hairline,
-                      margin: const EdgeInsets.symmetric(horizontal: 4),
-                    ),
-                    Expanded(child: tile2),
-                    Container(
-                      width: 1,
-                      height: 34,
-                      color: AppColors.hairline,
-                      margin: const EdgeInsets.symmetric(horizontal: 4),
-                    ),
-                    Expanded(child: tile3),
-                  ],
-                ),
-        ],
-      ),
-    );
-  }
-}
-
-class _CompactMetricTile extends StatelessWidget {
-  final IconData icon;
-  final Color color;
-  final String value;
-  final String label;
-
-  const _CompactMetricTile({
-    required this.icon,
-    required this.color,
-    required this.value,
-    required this.label,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.center,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 13, color: color),
-            const SizedBox(width: 4),
-            Flexible(
-              child: Text(
-                label,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  fontSize: 11,
-                  color: AppColors.inkSoft,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ),
+        padding: const EdgeInsets.all(14),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(
+              completed == null
+                  ? 'Workout progress is loading.'
+                  : '$completed completed workout${completed == 1 ? '' : 's'}',
+              style:
+                  const TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+          const SizedBox(height: 6),
+          Text(
+              completed == null
+                  ? 'Your saved workouts will appear here.'
+                  : completed == 0
+                      ? 'No completed workouts this week. Every workout starts with one session.'
+                      : 'Across $days training day${days == 1 ? '' : 's'} this week.',
+              style: const TextStyle(color: AppColors.inkSoft, fontSize: 13)),
+          if (progress != null && progress!.weeklySessions > 0) ...[
+            const SizedBox(height: 6),
+            Text('${progress!.weeklySessions} exercise records saved this week',
+                style: const TextStyle(color: AppColors.inkSoft, fontSize: 12))
           ],
-        ),
-        const SizedBox(height: 4),
-        FittedBox(
-          fit: BoxFit.scaleDown,
-          child: Text(
-            value,
-            style: const TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.w800,
-              color: AppColors.ink,
-              letterSpacing: -0.4,
-            ),
-          ),
-        ),
-      ],
-    );
+        ]));
   }
 }
 
 class _RecentActivitySection extends StatelessWidget {
+  const _RecentActivitySection(
+      {required this.live,
+      this.localProgress,
+      this.routines,
+      this.selected,
+      this.scope,
+      this.onOpenHistory,
+      this.onOpenWorkout,
+      this.onOpenRoutine});
   final bool live;
   final MemberLocalProgress? localProgress;
+  final RoutineProgress? routines;
+  final PublishedRoutine? selected;
+  final SessionScope? scope;
   final VoidCallback? onOpenHistory;
   final void Function(LocalWorkoutProgressRecord)? onOpenWorkout;
-
-  const _RecentActivitySection({
-    required this.live,
-    this.localProgress,
-    this.onOpenHistory,
-    this.onOpenWorkout,
-  });
-
+  final void Function(RoutineAttempt)? onOpenRoutine;
   @override
   Widget build(BuildContext context) {
-    final records = live ? (localProgress?.records ?? []) : [];
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          crossAxisAlignment: CrossAxisAlignment.end,
-          children: [
-            const Expanded(
-                child: _HomeSectionHeading('Recent activity', padded: false)),
-            if (onOpenHistory != null)
-              InkWell(
-                onTap: onOpenHistory,
-                borderRadius: BorderRadius.circular(6),
-                child: Padding(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: const [
-                      Text(
-                        'View all',
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.primary,
-                        ),
-                      ),
-                      SizedBox(width: 2),
-                      Icon(Icons.chevron_right_rounded,
-                          size: 14, color: AppColors.primary),
-                    ],
-                  ),
-                ),
-              ),
-          ],
-        ),
-        const SizedBox(height: 10),
-        if (live && localProgress == null)
-          const Panel(
-            padding: EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-            child: Text('Loading saved camera sessions…',
-                style: TextStyle(fontSize: 13, color: AppColors.inkSoft)),
-          )
-        else if (records.isEmpty)
-          Panel(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-            child: Row(
-              children: const [
-                Icon(Icons.history_rounded, size: 18, color: AppColors.inkSoft),
-                SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    'No saved camera sessions yet.',
-                    style: TextStyle(fontSize: 13, color: AppColors.inkSoft),
-                  ),
-                ),
-              ],
-            ),
-          )
-        else ...[
-          for (final record in records.take(2))
-            _CompactActivityTile(
-              record: record,
-              utcOffset: localProgress!.utcOffset,
-              onTap:
-                  onOpenWorkout == null ? null : () => onOpenWorkout!(record),
-            ),
-        ],
-      ],
-    );
-  }
-}
-
-class _CompactActivityTile extends StatelessWidget {
-  final LocalWorkoutProgressRecord record;
-  final Duration utcOffset;
-  final VoidCallback? onTap;
-
-  const _CompactActivityTile({
-    required this.record,
-    required this.utcOffset,
-    this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final statusColor = switch (record.status) {
-      LocalWorkoutRecordStatus.accepted => AppColors.success,
-      LocalWorkoutRecordStatus.rejected => AppColors.danger,
-      LocalWorkoutRecordStatus.retryable => AppColors.warning,
-      LocalWorkoutRecordStatus.pending => AppColors.warning,
-      _ => AppColors.inkSoft,
-    };
-
-    final statusText = record.scope.datasetScope != null ? 'Fictional fixture' : switch (record.status) {
-      LocalWorkoutRecordStatus.accepted => 'Backed up',
-      LocalWorkoutRecordStatus.localOnly => 'Saved on device',
-      LocalWorkoutRecordStatus.pending => 'Pending upload',
-      LocalWorkoutRecordStatus.retryable => 'Retry upload',
-      LocalWorkoutRecordStatus.rejected => 'Rejected',
-      LocalWorkoutRecordStatus.unknown => 'Unknown',
-    };
-
-    final date = localProgressDate(record.endedAt, utcOffset);
-
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Material(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(14),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(14),
-          onTap: onTap,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: AppColors.hairline),
-            ),
-            child: Row(
-              children: [
-                Container(
-                  width: 36,
-                  height: 36,
-                  decoration: BoxDecoration(
-                    color: AppColors.primaryTint,
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: const Icon(Icons.fitness_center_rounded,
-                      size: 18, color: AppColors.primary),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
+    final items = scope == null
+        ? <HomeActivity>[]
+        : homeRecentActivities(scope!, localProgress, routines, selected);
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Row(children: [
+        const Expanded(
+            child: _HomeSectionHeading('Recent activity', padded: false)),
+        TextButton(onPressed: onOpenHistory, child: const Text('View all'))
+      ]),
+      const SizedBox(height: 8),
+      if (items.isEmpty)
+        Panel(
+            padding: const EdgeInsets.all(14),
+            child: Text(
+                live && localProgress == null && routines == null
+                    ? 'Loading saved activity…'
+                    : 'No saved workouts yet.',
+                style: const TextStyle(color: AppColors.inkSoft))),
+      for (final item in items)
+        Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Panel(
+                padding: const EdgeInsets.all(14),
+                onTap: item.attempt != null
+                    ? (onOpenRoutine == null
+                        ? null
+                        : () => onOpenRoutine!(item.attempt!))
+                    : (onOpenWorkout == null
+                        ? null
+                        : () => onOpenWorkout!(item.record!)),
+                child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
                     children: [
-                      Text(
-                        reportExerciseLabel(record.exerciseId),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontSize: 13.5,
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.ink,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        '$date · ${record.repetitions} reps${record.partialRepetitions > 0 ? ' (${record.partialRepetitions} partial)' : ''}',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontSize: 11.5,
-                          color: AppColors.inkSoft,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 6),
-                ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 86),
-                  child: Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-                    decoration: BoxDecoration(
-                      color: statusColor.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(999),
-                      border:
-                          Border.all(color: statusColor.withValues(alpha: 0.25)),
-                    ),
-                    child: FittedBox(
-                      fit: BoxFit.scaleDown,
-                      child: Text(
-                        statusText,
-                        maxLines: 1,
-                        style: TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w700,
-                          color: statusColor,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 4),
-                const Icon(Icons.chevron_right_rounded,
-                    size: 16, color: AppColors.inkSoft),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
+                      Text(item.title,
+                          style: const TextStyle(
+                              fontSize: 15, fontWeight: FontWeight.w600)),
+                      const SizedBox(height: 4),
+                      Text('${_date(item.at)} · ${item.result}',
+                          style: const TextStyle(
+                              color: AppColors.inkSoft, fontSize: 12)),
+                      const SizedBox(height: 4),
+                      Text(item.backupLabel,
+                          style: const TextStyle(
+                              color: AppColors.inkSoft, fontSize: 12)),
+                    ]))),
+    ]);
+  }
+
+  String _date(DateTime at) {
+    final d =
+        at.toUtc().add(localProgress?.utcOffset ?? const Duration(hours: 8));
+    return '${d.day} ${const [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec'
+    ][d.month - 1]}';
   }
 }
 
@@ -1599,7 +1267,7 @@ class _NextSessionCard extends StatelessWidget {
 class _QuickActionsGrid extends StatelessWidget {
   final void Function(Widget) onSelect;
   final bool enabled;
-  final VoidCallback? onOpenProgress, onOpenRewards;
+  final VoidCallback? onOpenProgress, onOpenRewards, onOpenPlan;
   final VoidCallback? onOpenEquipment;
   final VoidCallback? onOpenSavedAdvice;
   final VoidCallback? onOpenCoaches, onOpenBookings;
@@ -1607,6 +1275,7 @@ class _QuickActionsGrid extends StatelessWidget {
       {required this.onSelect,
       this.enabled = true,
       this.onOpenProgress,
+      this.onOpenPlan,
       this.onOpenRewards,
       this.onOpenCoaches,
       this.onOpenBookings,
@@ -1615,6 +1284,8 @@ class _QuickActionsGrid extends StatelessWidget {
 
   void _showMoreShortcuts(BuildContext context) {
     final moreActions = <_QuickAction>[
+      _QuickAction(Icons.people_alt_rounded, 'Coaches', AppColors.primary,
+          onOpenCoaches ?? () => onSelect(const BrowseCoachesScreen())),
       _QuickAction(
           Icons.emoji_events_rounded,
           'Rewards',
@@ -1640,10 +1311,7 @@ class _QuickActionsGrid extends StatelessWidget {
           'Membership',
           AppColors.primary,
           () => onSelect(MembershipDashboardScreen(connected: !enabled))),
-      _QuickAction(
-          Icons.bookmark_rounded,
-          'Saved tips',
-          AppColors.primary,
+      _QuickAction(Icons.bookmark_rounded, 'Saved tips', AppColors.primary,
           onOpenSavedAdvice ?? () => onSelect(const SavedAdviceScreen())),
     ];
 
@@ -1654,7 +1322,8 @@ class _QuickActionsGrid extends StatelessWidget {
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       builder: (ctx) => SafeArea(
-        child: Padding(
+        child: SingleChildScrollView(
+            child: Padding(
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 20),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -1682,15 +1351,18 @@ class _QuickActionsGrid extends StatelessWidget {
                 padding: EdgeInsets.zero,
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
-                crossAxisCount: 3,
+                crossAxisCount:
+                    MediaQuery.textScalerOf(ctx).scale(1) > 1.3 ? 2 : 3,
                 crossAxisSpacing: 10,
                 mainAxisSpacing: 10,
-                childAspectRatio: 1.05,
+                childAspectRatio:
+                    MediaQuery.textScalerOf(ctx).scale(1) > 1.3 ? .9 : 1.05,
                 children: moreActions
                     .map((a) => _QuickActionTile(
                           action: a,
                           enabled: enabled ||
                               a.label == 'Rewards' ||
+                              (a.label == 'Coaches' && onOpenCoaches != null) ||
                               a.label == 'Ranking' ||
                               a.label == 'Membership' ||
                               a.label == 'Mini-games' ||
@@ -1701,7 +1373,7 @@ class _QuickActionsGrid extends StatelessWidget {
               ),
             ],
           ),
-        ),
+        )),
       ),
     );
   }
@@ -1713,8 +1385,8 @@ class _QuickActionsGrid extends StatelessWidget {
           onOpenProgress ?? () => onSelect(const ProgressDashboardScreen())),
       _QuickAction(Icons.event_note_rounded, 'Bookings', AppColors.primary,
           onOpenBookings ?? () => onSelect(const BookingScheduleScreen())),
-      _QuickAction(Icons.people_alt_rounded, 'Coaches', AppColors.primary,
-          onOpenCoaches ?? () => onSelect(const BrowseCoachesScreen())),
+      _QuickAction(Icons.calendar_month_outlined, 'My Plan', AppColors.primary,
+          onOpenPlan ?? () => onSelect(const WorkoutPrepRoute(live: false))),
       _QuickAction(
           Icons.qr_code_scanner_rounded,
           onOpenEquipment != null ? 'Equipment' : 'Scan gear',
@@ -1728,8 +1400,9 @@ class _QuickActionsGrid extends StatelessWidget {
       children: [
         LayoutBuilder(builder: (context, constraints) {
           final textScale = MediaQuery.textScalerOf(context).scale(11) / 11;
-          final columns = constraints.maxWidth < 280 ? 2 : 4;
-          final tileWidth = (constraints.maxWidth - 10 * (columns - 1)) / columns;
+          final columns = constraints.maxWidth < 280 || textScale > 1.3 ? 2 : 4;
+          final tileWidth =
+              (constraints.maxWidth - 10 * (columns - 1)) / columns;
           return GridView.count(
             padding: EdgeInsets.zero,
             shrinkWrap: true,
@@ -1744,7 +1417,7 @@ class _QuickActionsGrid extends StatelessWidget {
                     action: a,
                     enabled: enabled ||
                         (a.label == 'Progress' && onOpenProgress != null) ||
-                        (a.label == 'Coaches' && onOpenCoaches != null) ||
+                        (a.label == 'My Plan' && onOpenPlan != null) ||
                         (a.label == 'Bookings' && onOpenBookings != null) ||
                         (a.label == 'Equipment' && onOpenEquipment != null) ||
                         (a.label == 'Scan gear' && onOpenEquipment != null)))
@@ -1860,9 +1533,7 @@ class _GoalPreviewCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           if (!live) ...[
-            const ProgressRow('Train 4x per week', 0.75, '3 of 4'),
-            const ProgressRow('Hit 85% average form', 0.99, '84 of 85',
-                color: AppColors.accent),
+            const Text('Choose your fitness goals in Profile.'),
           ] else if (liveProfile != null) ...[
             for (final goal in liveProfile!.goals.take(2))
               Padding(

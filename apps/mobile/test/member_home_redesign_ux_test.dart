@@ -99,6 +99,7 @@ void main() {
     VoidCallback? onStartWorkout,
     VoidCallback? onOpenBookings,
     VoidCallback? onOpenCoaches,
+    VoidCallback? onOpenPlan,
     VoidCallback? onOpenProgress,
     VoidCallback? onOpenEquipment,
     Size viewport = const Size(360, 800),
@@ -122,6 +123,7 @@ void main() {
           onStartWorkout: onStartWorkout,
           onOpenBookings: onOpenBookings,
           onOpenCoaches: onOpenCoaches,
+          onOpenPlan: onOpenPlan,
           onOpenProgress: onOpenProgress,
           onOpenEquipment: onOpenEquipment,
         ),
@@ -142,11 +144,11 @@ void main() {
     ));
     await tester.pumpAndSettle();
 
-    final checkInTitle = find.text('DAILY CHECK-IN');
-    final workoutTitle = find.text("TODAY'S SESSION");
-    final weeklyTitle = find.text('THIS WEEK');
-    final recentTitle = find.text('RECENT ACTIVITY');
-    final quickTitle = find.text('QUICK ACCESS');
+    final checkInTitle = find.text('Daily check-in');
+    final workoutTitle = find.text("Today's workout");
+    final weeklyTitle = find.text('Weekly progress');
+    final recentTitle = find.text('Recent activity');
+    final quickTitle = find.text('Quick access');
 
     expect(checkInTitle, findsOneWidget);
     expect(workoutTitle, findsOneWidget);
@@ -181,9 +183,9 @@ void main() {
 
     expect(find.text('Upper Body Hypertrophy'), findsOneWidget);
     expect(find.text('2 exercises  ·  about 40 min'), findsOneWidget);
-    expect(find.text("TODAY'S WORKOUT"), findsOneWidget);
-    expect(find.text('Overhead Press'), findsOneWidget);
-    expect(find.text('Floor Push-Up'), findsOneWidget);
+    expect(find.text("TODAY'S WORKOUT"), findsNothing);
+    expect(find.text('Overhead Press'), findsNothing);
+    expect(find.text('Floor Push-Up'), findsNothing);
 
     final startButton = find.text('Start workout');
     expect(startButton, findsOneWidget);
@@ -203,13 +205,9 @@ void main() {
     ));
     await tester.pumpAndSettle();
 
-    expect(find.text('Weekly activity'), findsOneWidget);
-    expect(find.text('2 logged this week'), findsOneWidget);
-    expect(find.text('Sessions'), findsOneWidget);
-    expect(find.text('2'), findsOneWidget);
-    expect(find.text('Reps'), findsOneWidget);
-    expect(find.text('42'), findsOneWidget);
-    expect(find.text('Form scored'), findsOneWidget);
+    expect(find.text('Workout progress is loading.'), findsOneWidget);
+    expect(find.text('Form scored'), findsNothing);
+    expect(find.text('Reps'), findsNothing);
   });
 
   testWidgets(
@@ -226,7 +224,7 @@ void main() {
 
     expect(find.text('Squat'), findsOneWidget);
     expect(find.text('Backed up'), findsOneWidget);
-    expect(find.text('Pending upload'), findsOneWidget);
+    expect(find.text('Saved on device · backup pending'), findsOneWidget);
     expect(find.text('View all'), findsOneWidget);
   });
 
@@ -240,19 +238,22 @@ void main() {
     var openedProgress = false;
     var openedBookings = false;
     var openedCoaches = false;
+    var openedPlan = false;
     var openedEquipment = false;
 
     await tester.pumpWidget(buildScreen(
       onOpenProgress: () => openedProgress = true,
       onOpenBookings: () => openedBookings = true,
       onOpenCoaches: () => openedCoaches = true,
+      onOpenPlan: () => openedPlan = true,
       onOpenEquipment: () => openedEquipment = true,
     ));
     await tester.pumpAndSettle();
 
     expect(find.text('Progress'), findsOneWidget);
     expect(find.text('Bookings'), findsOneWidget);
-    expect(find.text('Coaches'), findsOneWidget);
+    expect(find.text('My Plan'), findsOneWidget);
+    expect(find.text('Coaches'), findsNothing);
     expect(find.text('Equipment'), findsOneWidget);
 
     await tester.tap(find.text('Progress'));
@@ -261,8 +262,8 @@ void main() {
     await tester.tap(find.text('Bookings'));
     expect(openedBookings, isTrue);
 
-    await tester.tap(find.text('Coaches'));
-    expect(openedCoaches, isTrue);
+    await tester.tap(find.text('My Plan'));
+    expect(openedPlan, isTrue);
 
     await tester.tap(find.text('Equipment'));
     expect(openedEquipment, isTrue);
@@ -273,6 +274,8 @@ void main() {
     await tester.tap(moreButton);
     await tester.pumpAndSettle();
 
+    await tester.tap(find.text('Coaches'));
+    expect(openedCoaches, isTrue);
     expect(find.text('Rewards'), findsOneWidget);
     expect(find.text('Ranking'), findsOneWidget);
     expect(find.text('Mini-games'), findsOneWidget);

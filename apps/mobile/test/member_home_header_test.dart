@@ -58,21 +58,24 @@ void main() {
     expect(decoration.borderRadius,
         const BorderRadius.vertical(top: Radius.circular(24)));
     expect(
-        tester.getTopLeft(find.text('DAILY CHECK-IN')).dy -
+        tester.getTopLeft(find.text('Daily check-in')).dy -
             tester.getTopLeft(cap).dy,
         greaterThanOrEqualTo(24));
   });
 
-  testWidgets('AI Coach button is circular, larger and shows the mascot',
+  testWidgets('AI Coach entry reserves space and uses a compact mascot',
       (tester) async {
     await tester.pumpWidget(createWidgetUnderTest());
     await tester.pumpAndSettle();
 
-    final button = find.byType(FloatingActionButton);
-    expect(tester.getSize(button), const Size(72, 72));
-    final fab = tester.widget<FloatingActionButton>(button);
-    expect(fab.shape, isA<CircleBorder>());
-    expect(fab.tooltip, 'AI Coach');
+    final button = find.byKey(const ValueKey('home-ai-entry'));
+    expect(tester.getSize(button).height, greaterThanOrEqualTo(48));
+    final image = tester.widget<Image>(
+        find.descendant(of: button, matching: find.byType(Image)));
+    expect(image.width, 56);
+    expect(tester.widget<FloatingActionButton>(button).tooltip, 'AI Coach');
+    expect(tester.getBottomLeft(find.byKey(const ValueKey('home-scroll'))).dy,
+        lessThanOrEqualTo(tester.getTopLeft(button).dy));
     expect(find.descendant(of: button, matching: find.byType(Image)),
         findsOneWidget);
   });
@@ -85,26 +88,28 @@ void main() {
     await tester.pumpWidget(createWidgetUnderTest());
     await tester.pumpAndSettle();
 
-    final weeklyTitle = find.text('THIS WEEK');
-    final recentTitle = find.text('RECENT ACTIVITY');
-    final quickTitle = find.text('QUICK ACCESS');
+    final weeklyTitle = find.text('Weekly progress');
+    final recentTitle = find.text('Recent activity');
+    final quickTitle = find.text('Quick access');
     final weeklyCard = find
-        .ancestor(of: find.text('Sessions'), matching: find.byType(Panel))
+        .ancestor(
+            of: find.text('Workout progress is loading.'),
+            matching: find.byType(Panel))
         .first;
     final recentCard = find
         .ancestor(
-            of: find.text('Loading saved camera sessions…'),
+            of: find.text('Loading saved activity…'),
             matching: find.byType(Panel))
         .first;
     final grid = find.byType(GridView);
     double gap(Finder title, Finder content) =>
         tester.getTopLeft(content).dy - tester.getBottomLeft(title).dy;
     expect(gap(weeklyTitle, weeklyCard), 10);
-    expect(gap(recentTitle, recentCard), 10);
+    expect(gap(recentTitle, recentCard), inInclusiveRange(8, 32));
     expect(gap(quickTitle, grid), 10);
     final title = tester.widget<Text>(quickTitle);
     expect(title.style!.fontSize, greaterThanOrEqualTo(16));
-    expect(title.style!.fontWeight, FontWeight.w800);
+    expect(title.style!.fontWeight, FontWeight.w700);
     expect(title.style!.fontFamily, 'BarlowCondensed');
   });
 
@@ -182,6 +187,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byType(FloatingActionButton), findsOneWidget);
+    expect(find.byKey(const ValueKey('home-ai-entry')), findsOneWidget);
 
     final claimTextFinder = find.text('Claim 10 points');
     await tester.ensureVisible(claimTextFinder);

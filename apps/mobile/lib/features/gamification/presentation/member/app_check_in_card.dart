@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
 import '../../application/app_check_in_cubit.dart';
 import '../../domain/app_check_in.dart';
+import 'home_daily_check_in_card.dart';
 
 class AppCheckInCard extends StatelessWidget {
   const AppCheckInCard(
@@ -9,7 +10,9 @@ class AppCheckInCard extends StatelessWidget {
       required this.state,
       required this.onClaim,
       this.onRefresh,
-      this.compact = false});
+      this.compact = false,
+      this.homeDense = false});
+  final bool homeDense;
   final bool compact;
   final AppCheckInState state;
   final Future<void> Function() onClaim;
@@ -17,6 +20,10 @@ class AppCheckInCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (homeDense) {
+      return HomeDailyCheckInCard(
+          state: state, onClaim: onClaim, onRefresh: onRefresh);
+    }
     final s = state.snapshot,
         ready = state.status == AppCheckInStatus.ready ||
             state.status == AppCheckInStatus.error;
@@ -39,8 +46,9 @@ class AppCheckInCard extends StatelessWidget {
           SizedBox(
               width: double.infinity,
               child: FilledButton.icon(
-                  onPressed:
-                      !ready || state.claiming || s.claimedToday ? null : onClaim,
+                  onPressed: !ready || state.claiming || s.claimedToday
+                      ? null
+                      : onClaim,
                   icon: Icon(s.claimedToday
                       ? Icons.check_circle_rounded
                       : Icons.stars_rounded),
@@ -100,14 +108,11 @@ class AppCheckInCard extends StatelessWidget {
           ),
         ),
         onPressed: !ready || state.claiming ? null : onClaim,
-        icon: const Icon(Icons.stars_rounded,
-            size: 16, color: AppColors.accent),
+        icon:
+            const Icon(Icons.stars_rounded, size: 16, color: AppColors.accent),
         label: Text(
-          state.claiming
-              ? 'Claiming…'
-              : 'Claim ${snap.pointsPerClaim} points',
-          style: const TextStyle(
-              fontSize: 12.5, fontWeight: FontWeight.w700),
+          state.claiming ? 'Claiming…' : 'Claim ${snap.pointsPerClaim} points',
+          style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700),
         ),
       );
     }
@@ -242,8 +247,15 @@ class AppCheckInCard extends StatelessWidget {
                           ),
                           const SizedBox(height: 3),
                           Text(
-                            ['M', 'T', 'W', 'T', 'F', 'S', 'S'][
-                                DateTime.parse(day.date).weekday - 1],
+                            [
+                              'M',
+                              'T',
+                              'W',
+                              'T',
+                              'F',
+                              'S',
+                              'S'
+                            ][DateTime.parse(day.date).weekday - 1],
                             style: TextStyle(
                               fontSize: 10,
                               fontWeight: day.date == s.today
