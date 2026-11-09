@@ -1329,6 +1329,7 @@ class _QuickActionsGrid extends StatelessWidget {
         'Saved tips',
         AppColors.primary,
         onOpenSavedAdvice ?? () => onSelect(const SavedAdviceScreen()),
+        svgAsset: 'assets/icons/quick_saved_tips.svg',
       ),
     ];
 
