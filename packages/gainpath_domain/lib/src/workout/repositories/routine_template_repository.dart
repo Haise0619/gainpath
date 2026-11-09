@@ -1,4 +1,14 @@
 import '../entities/routine_blueprint.dart';
+import '../entities/equipment_image.dart';
+
+class RoutineCoverUploadFailed implements Exception {
+  const RoutineCoverUploadFailed();
+}
+
+abstract interface class RoutineCoverRepository {
+  Future<RoutineBlueprint> saveWithCover(
+      RoutineBlueprint blueprint, EquipmentImage cover);
+}
 
 class RoutineEditConflict implements Exception {
   const RoutineEditConflict();

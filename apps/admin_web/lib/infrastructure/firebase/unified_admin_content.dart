@@ -27,7 +27,7 @@ class UnifiedAdminPrograms implements AdminWorkoutProgramRepository {
   Future<AdminProgramDraft> publish(String id,{required int expectedRevision,required String requestId}){_write(id);return canonical.publish(id,expectedRevision:expectedRevision,requestId:requestId);}
 }
 
-class UnifiedAdminRoutines implements RoutineTemplateRepository,RoutineArchivingRepository {
+class UnifiedAdminRoutines implements RoutineTemplateRepository,RoutineArchivingRepository,RoutineCoverRepository {
   UnifiedAdminRoutines(this.transport,this.canonical,this.catalog);
   final UnifiedAdminTransport transport;
   final RoutineTemplateRepository canonical;
@@ -48,6 +48,11 @@ class UnifiedAdminRoutines implements RoutineTemplateRepository,RoutineArchiving
   }
   @override
   Future<RoutineBlueprint> save(RoutineBlueprint b){if(b.readOnly||b.id.startsWith('demo-m13-'))throw StateError('FYP Routines are read-only.');return canonical.save(b);}
+  @override
+  Future<RoutineBlueprint> saveWithCover(RoutineBlueprint b, EquipmentImage cover){
+    if(!transport.isCurrent||b.readOnly||b.id.startsWith('demo-m13-')||canonical is! RoutineCoverRepository)throw const RoutineEditAuthorizationChanged();
+    return (canonical as RoutineCoverRepository).saveWithCover(b,cover);
+  }
   @override
   Future<void> publish(String id){if(id.startsWith('demo-m13-'))throw StateError('FYP Routines are read-only.');return canonical.publish(id);}
   @override

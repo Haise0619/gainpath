@@ -1,4 +1,5 @@
 import 'confirm_content_removal.dart';
+import 'routine_cover_field.dart';
 import 'package:flutter/material.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
 import '../../../../navigation/admin_breadcrumb.dart';
@@ -487,6 +488,30 @@ class _TemplateFormPageState extends State<_TemplateFormPage> {
               .toList()))
           .toList();
   String? _error;
+  EquipmentImage? _cover;
+  String? _coverError;
+  bool _pickingCover = false;
+
+  Future<void> _chooseCover() async {
+    if (_saving || _reloadRequired || _pickingCover) return;
+    setState(() {
+      _pickingCover = true;
+      _coverError = null;
+    });
+    try {
+      final selected = await context.read<EquipmentImagePicker>().pick();
+      if (mounted && selected != null) setState(() => _cover = selected);
+    } on FormatException catch (error) {
+      if (mounted) setState(() => _coverError = error.message);
+    } catch (_) {
+      if (mounted)
+        setState(() => _coverError =
+            'Could not open the image. Choose another JPG, PNG or WebP.');
+    } finally {
+      if (mounted) setState(() => _pickingCover = false);
+    }
+  }
+
   List<TutorialVideo> _catalog = const [];
   bool _catalogLoading = false;
   bool _saving = false;
@@ -652,7 +677,7 @@ class _TemplateFormPageState extends State<_TemplateFormPage> {
   }
 
   Future<void> _save() async {
-    if (_saving || _reloadRequired || _catalogLoading) return;
+    if (_saving || _reloadRequired || _catalogLoading || _pickingCover) return;
     if (_name.text.trim().isEmpty) {
       setState(() => _error = 'Give the template a name.');
       return;
@@ -778,7 +803,22 @@ class _TemplateFormPageState extends State<_TemplateFormPage> {
       _error = null;
     });
     try {
-      await context.read<RoutineTemplateRepository>().save(blueprint);
+      final repository = context.read<RoutineTemplateRepository>();
+      if (_cover != null) {
+        if (repository is! RoutineCoverRepository) {
+          throw const RoutineCoverUploadFailed();
+        }
+        await (repository as RoutineCoverRepository)
+            .saveWithCover(blueprint, _cover!);
+      } else {
+        await repository.save(blueprint);
+      }
+    } on RoutineCoverUploadFailed {
+      if (mounted) {
+        setState(() => _error =
+            'Could not upload the cover. Your changes are kept. Try saving again.');
+      }
+      return;
     } on RoutineEditConflict {
       if (mounted) {
         setState(() {
@@ -956,11 +996,24 @@ class _TemplateFormPageState extends State<_TemplateFormPage> {
                   ],
                 ),
                 const SizedBox(height: 12),
-                TextField(
-                  controller: _imageUrl,
-                  decoration: const InputDecoration(
-                      labelText: 'Cover image URL', isDense: true),
-                ),
+                RoutineCoverField(
+                    cover: _cover,
+                    savedUrl: _imageUrl.text,
+                    busy: _pickingCover || (_saving && _cover != null),
+                    error: _coverError,
+                    onChoose: _reloadRequired ||
+                            context.read<RoutineTemplateRepository>()
+                                is! RoutineCoverRepository
+                        ? null
+                        : _chooseCover,
+                    onRemove: () {
+                      if (_saving || _reloadRequired) return;
+                      setState(() {
+                        _cover = null;
+                        _imageUrl.clear();
+                        _coverError = null;
+                      });
+                    }),
                 const SizedBox(height: 12),
                 TextField(
                   controller: _goal,
@@ -1060,7 +1113,10 @@ class _TemplateFormPageState extends State<_TemplateFormPage> {
                 child: const Text('Cancel')),
             const SizedBox(width: 10),
             FilledButton(
-                onPressed: _saving || _catalogLoading || _reloadRequired
+                onPressed: _saving ||
+                        _catalogLoading ||
+                        _reloadRequired ||
+                        _pickingCover
                     ? null
                     : _save,
                 child: Text(_saving
@@ -1275,7 +1331,15 @@ class _TemplateFormPageState extends State<_TemplateFormPage> {
                 borderRadius:
                     const BorderRadius.vertical(top: Radius.circular(16)),
                 child: AspectRatio(
-                    aspectRatio: 16 / 9, child: _networkHero(_imageUrl.text)),
+                    aspectRatio: 16 / 9,
+                    child: _cover == null
+                        ? _networkHero(_imageUrl.text)
+                        : Image.memory(_cover!.copyBytes(),
+                            fit: BoxFit.cover,
+                            gaplessPlayback: true,
+                            semanticLabel: 'Selected routine cover',
+                            errorBuilder: (_, __, ___) => const Center(
+                                child: Icon(Icons.broken_image_outlined)))),
               ),
               Padding(
                 padding: const EdgeInsets.all(14),

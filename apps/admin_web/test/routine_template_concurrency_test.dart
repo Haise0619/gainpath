@@ -3,6 +3,7 @@
 // ignore_for_file: subtype_of_sealed_class
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'dart:typed_data';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -198,6 +199,24 @@ class _User extends Fake implements User {
 
 class _Functions extends Fake implements FirebaseFunctions {}
 
+class _Media implements TutorialMediaStore {
+  int uploads = 0;
+  Object? failure;
+  void Function()? afterUpload;
+  @override
+  Future<String> uploadCover(EquipmentImage image) async {
+    uploads++;
+    if (failure != null) throw failure!;
+    afterUpload?.call();
+    return 'https://example.test/uploaded.png';
+  }
+
+  @override
+  Future<String> uploadVideo(EquipmentVideo video,
+          {void Function(double)? onProgress}) =>
+      throw UnimplementedError();
+}
+
 class _Catalog extends TutorialRepository {
   @override
   List<TutorialVideo> get tutorials => [
@@ -213,15 +232,70 @@ void main() {
   late _Firestore db;
   late _Auth auth;
   late FirebaseRoutineTemplateRepository repository;
+  late _Media media;
   setUp(() {
     db = _Firestore();
     auth = _Auth();
+    media = _Media();
     repository = FirebaseRoutineTemplateRepository(
         scope: SessionScope(userId: 'admin', organizationId: 'o'),
         exerciseCatalog: _Catalog(),
         firestore: db,
         auth: auth,
+        mediaStore: media,
         functions: _Functions());
+  });
+  final image =
+      EquipmentImage(Uint8List.fromList([137, 80, 78, 71, 13, 10, 26, 10, 0]));
+  test('routine cover upload retains guarded baseline and original draft',
+      () async {
+    final original = (await repository.load()).single;
+    final saved = await repository.saveWithCover(original, image);
+    expect(media.uploads, 1);
+    expect(saved.imageUrl, 'https://example.test/uploaded.png');
+    expect(original.imageUrl, isEmpty);
+    expect(db.patch, {
+      'imageUrl': 'https://example.test/uploaded.png',
+      'updatedAt': isA<FieldValue>(),
+      'updatedBy': 'admin'
+    });
+    expect(db.records['orgs/o/routineBlueprints/r']!['futureField'],
+        {'preserve': true});
+  });
+  test('stale routine rejects before uploading cover bytes', () async {
+    final original = (await repository.load()).single;
+    db.records['orgs/o/routineBlueprints/r']!['name'] = 'Other edit';
+    await expectLater(repository.saveWithCover(original, image),
+        throwsA(isA<RoutineEditConflict>()));
+    expect(media.uploads, 0);
+    expect(db.patch, isNull);
+  });
+  test('session loss during upload prevents routine write', () async {
+    final original = (await repository.load()).single;
+    media.afterUpload = () => auth.currentUser = null;
+    await expectLater(repository.saveWithCover(original, image),
+        throwsA(isA<RoutineEditAuthorizationChanged>()));
+    expect(db.patch, isNull);
+  });
+  test('upload failure preserves original cover and allows retry', () async {
+    final original = (await repository.load()).single;
+    media.failure = StateError('private-token');
+    await expectLater(repository.saveWithCover(original, image),
+        throwsA(isA<RoutineCoverUploadFailed>()));
+    expect(db.patch, isNull);
+    expect(original.imageUrl, isEmpty);
+    media.failure = null;
+    await repository.saveWithCover(original, image);
+    expect(media.uploads, 2);
+  });
+  test('concurrent edit after upload still rejects authoritative save',
+      () async {
+    final original = (await repository.load()).single;
+    media.afterUpload =
+        () => db.records['orgs/o/routineBlueprints/r']!['name'] = 'Concurrent';
+    await expectLater(repository.saveWithCover(original, image),
+        throwsA(isA<RoutineEditConflict>()));
+    expect(db.patch, isNull);
   });
   test('clean edit patches intended fields and preserves server metadata',
       () async {

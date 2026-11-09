@@ -8,6 +8,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:gainpath_domain/workout.dart';
 import 'package:gainpath_domain/gainpath_domain.dart' show SessionScope;
 import 'firebase_function_transport.dart';
+import 'firebase_exercise_media_store.dart';
 
 String buildPublishRoutineRequestId({
   required int timestampMicros,
@@ -18,7 +19,10 @@ String buildPublishRoutineRequestId({
 }
 
 class FirebaseRoutineTemplateRepository
-    implements RoutineTemplateRepository, RoutineArchivingRepository {
+    implements
+        RoutineTemplateRepository,
+        RoutineArchivingRepository,
+        RoutineCoverRepository {
   FirebaseRoutineTemplateRepository({
     required this.scope,
     required this.exerciseCatalog,
@@ -26,10 +30,12 @@ class FirebaseRoutineTemplateRepository
     FirebaseAuth? auth,
     FirebaseFunctions? functions,
     bool Function()? isSessionCurrent,
+    TutorialMediaStore? mediaStore,
   })  : _firestore = firestore ?? FirebaseFirestore.instance,
         _auth = auth ?? FirebaseAuth.instance,
         _functions = functions,
-        _sessionGuard = isSessionCurrent {
+        _sessionGuard = isSessionCurrent,
+        _injectedMediaStore = mediaStore {
     for (final id in [scope.userId, scope.organizationId]) {
       if (id.contains('/') || id == '.' || id == '..') {
         throw ArgumentError('Routine authoring scope requires document IDs.');
@@ -45,6 +51,15 @@ class FirebaseRoutineTemplateRepository
   final FirebaseAuth _auth;
   final FirebaseFunctions? _functions;
   final bool Function()? _sessionGuard;
+  final TutorialMediaStore? _injectedMediaStore;
+  // Workout covers share the existing immutable, author-scoped image policy.
+  late final TutorialMediaStore _mediaStore = _injectedMediaStore ??
+      FirebaseExerciseMediaStore(
+          scope: scope,
+          isCurrent: () =>
+              !_invalidated &&
+              (_sessionGuard?.call() ?? true) &&
+              _auth.currentUser?.uid == scope.userId);
   final Object _lifetime = Object();
   bool _invalidated = false;
   bool _saving = false;
@@ -134,6 +149,101 @@ class FirebaseRoutineTemplateRepository
     if (error.code == 'permission-denied' || error.code == 'unauthenticated') {
       _invalidated = true;
       throw const RoutineEditAuthorizationChanged();
+    }
+  }
+
+  @override
+  Future<RoutineBlueprint> saveWithCover(
+      RoutineBlueprint blueprint, EquipmentImage cover) async {
+    if (_saving) throw const RoutineSaveFailed();
+    _saving = true;
+    try {
+      _requireCurrentUser();
+      if (blueprint.readOnly) throw const RoutineEditConflict();
+      final draft = RoutineBlueprint(
+          id: blueprint.id,
+          readOnly: blueprint.readOnly,
+          editBaseline: blueprint.editBaseline,
+          schemaVersion: blueprint.schemaVersion,
+          name: blueprint.name,
+          level: blueprint.level,
+          assignedMembers: blueprint.assignedMembers,
+          days: blueprint.days
+              .map((d) => RoutineDay(d.dayNumber, List.of(d.exercises)))
+              .toList(),
+          goal: blueprint.goal,
+          tags: List.of(blueprint.tags),
+          sessionDurationMin: blueprint.sessionDurationMin,
+          equipmentNeeded: List.of(blueprint.equipmentNeeded),
+          imageUrl: blueprint.imageUrl);
+      final baseline = draft.editBaseline;
+      if (draft.id.isNotEmpty &&
+          (baseline is! _RoutineBaseline ||
+              !identical(baseline.lifetime, _lifetime) ||
+              baseline.id != draft.id)) {
+        throw const RoutineEditConflict();
+      }
+      final assignment =
+          (await _assignment.get(const GetOptions(source: Source.server)))
+              .data();
+      final membership =
+          (await _member.get(const GetOptions(source: Source.server))).data();
+      _requireAuthor(assignment, membership);
+      if (baseline is _RoutineBaseline) {
+        if (!_same(assignment, baseline.assignment) ||
+            !_same(membership, baseline.membership)) {
+          throw const RoutineEditAuthorizationChanged();
+        }
+        final collection = baseline.document['schemaVersion'] == 2
+            ? 'routineBlueprintsV2'
+            : 'routineBlueprints';
+        final current = await _firestore
+            .scopeRoot(scope)
+            .collection(collection)
+            .doc(draft.id)
+            .get(const GetOptions(source: Source.server));
+        if (!_same(current.data(), baseline.document) ||
+            current.data()?['archived'] == true) {
+          throw const RoutineEditConflict();
+        }
+      }
+      if (draft.schemaVersion == 1) _validate(_editableFields(draft));
+      encodeRoutineDays(draft, await exerciseCatalog.load());
+      _requireCurrentUser();
+      try {
+        draft.imageUrl = await _mediaStore.uploadCover(cover);
+      } catch (_) {
+        _requireCurrentUser();
+        throw const RoutineCoverUploadFailed();
+      }
+      _requireCurrentUser();
+      final currentAssignment =
+          (await _assignment.get(const GetOptions(source: Source.server)))
+              .data();
+      final currentMembership =
+          (await _member.get(const GetOptions(source: Source.server))).data();
+      _requireAuthor(currentAssignment, currentMembership);
+      if (!_same(assignment, currentAssignment) ||
+          !_same(membership, currentMembership)) {
+        throw const RoutineEditAuthorizationChanged();
+      }
+      return await _save(draft);
+    } on RoutineEditConflict {
+      rethrow;
+    } on RoutineEditAuthorizationChanged {
+      _invalidated = true;
+      rethrow;
+    } on RoutineCoverUploadFailed {
+      rethrow;
+    } on FormatException {
+      rethrow;
+    } on FirebaseException catch (error) {
+      _translateAuthorization(error);
+      throw const RoutineSaveFailed();
+    } catch (_) {
+      throw const RoutineSaveFailed();
+    } finally {
+      _saving = false;
     }
   }
 
