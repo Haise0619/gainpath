@@ -1,9 +1,11 @@
+import 'dart:convert';
 import '../../fakes/mock_data_session.dart';
 import 'workout_seed.dart';
 import 'package:gainpath_domain/workout.dart';
 
 /// Session-scoped in-memory [RoutineTemplateRepository] backed by [WorkoutSeed].
-class InMemoryRoutineTemplateRepository implements RoutineTemplateRepository {
+class InMemoryRoutineTemplateRepository
+    implements RoutineTemplateRepository, RoutineCoverRepository {
   InMemoryRoutineTemplateRepository({MockDataSession? session})
       : _seed = (session ?? MockDataSession()).workout;
 
@@ -25,6 +27,14 @@ class InMemoryRoutineTemplateRepository implements RoutineTemplateRepository {
       _seed.routineTemplates[index] = blueprint;
     }
     return blueprint;
+  }
+
+  @override
+  Future<RoutineBlueprint> saveWithCover(
+      RoutineBlueprint blueprint, EquipmentImage cover) async {
+    blueprint.imageUrl =
+        'data:image/${cover.extension};base64,${base64Encode(cover.bytes)}';
+    return save(blueprint);
   }
 
   @override

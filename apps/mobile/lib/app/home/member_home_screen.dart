@@ -1381,17 +1381,34 @@ class _QuickActionsGrid extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final actions = <_QuickAction>[
-      _QuickAction(Icons.insights_rounded, 'Progress', AppColors.primary,
-          onOpenProgress ?? () => onSelect(const ProgressDashboardScreen())),
-      _QuickAction(Icons.event_note_rounded, 'Bookings', AppColors.primary,
-          onOpenBookings ?? () => onSelect(const BookingScheduleScreen())),
-      _QuickAction(Icons.calendar_month_outlined, 'My Plan', AppColors.primary,
-          onOpenPlan ?? () => onSelect(const WorkoutPrepRoute(live: false))),
       _QuickAction(
-          Icons.qr_code_scanner_rounded,
-          onOpenEquipment != null ? 'Equipment' : 'Scan gear',
-          AppColors.primary,
-          onOpenEquipment ?? () => onSelect(const EquipmentScannerScreen())),
+        Icons.insights_rounded,
+        'Progress',
+        AppColors.primary,
+        onOpenProgress ?? () => onSelect(const ProgressDashboardScreen()),
+        svgAsset: 'assets/icons/quick_progress.svg',
+      ),
+      _QuickAction(
+        Icons.event_note_rounded,
+        'Bookings',
+        AppColors.primary,
+        onOpenBookings ?? () => onSelect(const BookingScheduleScreen()),
+        svgAsset: 'assets/icons/quick_bookings.svg',
+      ),
+      _QuickAction(
+        Icons.calendar_month_outlined,
+        'My Plan',
+        AppColors.primary,
+        onOpenPlan ?? () => onSelect(const WorkoutPrepRoute(live: false)),
+        svgAsset: 'assets/icons/quick_plan.svg',
+      ),
+      _QuickAction(
+        Icons.qr_code_scanner_rounded,
+        onOpenEquipment != null ? 'Equipment' : 'Scan gear',
+        AppColors.primary,
+        onOpenEquipment ?? () => onSelect(const EquipmentScannerScreen()),
+        svgAsset: 'assets/icons/quick_equipment.svg',
+      ),
     ];
 
     return Column(
@@ -1402,14 +1419,14 @@ class _QuickActionsGrid extends StatelessWidget {
           final textScale = MediaQuery.textScalerOf(context).scale(11) / 11;
           final columns = constraints.maxWidth < 280 || textScale > 1.3 ? 2 : 4;
           final tileWidth =
-              (constraints.maxWidth - 10 * (columns - 1)) / columns;
+              (constraints.maxWidth - 8 * (columns - 1)) / columns;
           return GridView.count(
             padding: EdgeInsets.zero,
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
             crossAxisCount: columns,
-            crossAxisSpacing: 10,
-            mainAxisSpacing: 10,
+            crossAxisSpacing: 8,
+            mainAxisSpacing: 8,
             childAspectRatio:
                 tileWidth / math.max(tileWidth * 1.05, 68 + 24 * textScale),
             children: actions
@@ -1450,11 +1467,13 @@ class _QuickActionsGrid extends StatelessWidget {
 }
 
 class _QuickAction {
-  final IconData icon;
+  final IconData? icon;
+  final String? svgAsset;
   final String label;
   final Color color;
   final VoidCallback onTap;
-  const _QuickAction(this.icon, this.label, this.color, this.onTap);
+  const _QuickAction(this.icon, this.label, this.color, this.onTap,
+      {this.svgAsset});
 }
 
 class _QuickActionTile extends StatelessWidget {
@@ -1471,7 +1490,7 @@ class _QuickActionTile extends StatelessWidget {
         borderRadius: BorderRadius.circular(14),
         onTap: enabled ? action.onTap : () => showUnavailable(context),
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(14),
             border:
@@ -1484,18 +1503,25 @@ class _QuickActionTile extends StatelessWidget {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Container(
-                width: 36,
-                height: 36,
-                decoration: BoxDecoration(
-                  color: action.color.withValues(alpha: 0.10),
-                  borderRadius: BorderRadius.circular(10),
-                  border:
-                      Border.all(color: action.color.withValues(alpha: 0.18)),
+              if (action.svgAsset != null)
+                SvgPicture.asset(
+                  action.svgAsset!,
+                  width: 44,
+                  height: 44,
+                )
+              else
+                Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    color: action.color.withValues(alpha: 0.10),
+                    borderRadius: BorderRadius.circular(10),
+                    border:
+                        Border.all(color: action.color.withValues(alpha: 0.18)),
+                  ),
+                  child: Icon(action.icon, size: 18, color: action.color),
                 ),
-                child: Icon(action.icon, size: 18, color: action.color),
-              ),
-              const SizedBox(height: 6),
+              const SizedBox(height: 4),
               Flexible(
                 child: Text(
                   action.label,
