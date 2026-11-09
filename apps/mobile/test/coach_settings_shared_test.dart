@@ -95,14 +95,7 @@ void main() {
         expect(find.byKey(Key(key)), findsOneWidget);
         expect(tester.takeException(), isNull);
       }
-      await tester.scrollUntilVisible(find.text('Save changes'), 200,
-          scrollable: find.byType(Scrollable).first);
-      expect(
-          tester
-              .widget<FilledButton>(
-                  find.widgetWithText(FilledButton, 'Save changes'))
-              .onPressed,
-          isNull);
+      expect(find.byKey(const Key('coach-settings-save-bar')), findsNothing);
       await tester.scrollUntilVisible(find.text('Change password'), -200,
           scrollable: find.byType(Scrollable).first);
       expect(
@@ -114,6 +107,15 @@ void main() {
       await tester.scrollUntilVisible(find.text('Account access'), 200,
           scrollable: find.byType(Scrollable).first);
       expect(tester.takeException(), isNull);
+      await tester.scrollUntilVisible(
+          find.byKey(const Key('coach-phone-national')), -200,
+          scrollable: find.byType(Scrollable).first);
+      await tester.enterText(
+          find.byKey(const Key('coach-phone-national')), '0123456789');
+      await tester.pump();
+      expect(find.byKey(const Key('coach-settings-save-bar')), findsOneWidget);
+      expect(find.text('Save changes'), findsOneWidget);
+      expect(find.text('Discard and reload'), findsOneWidget);
     });
   }
   testWidgets(
