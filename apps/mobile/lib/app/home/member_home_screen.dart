@@ -265,17 +265,14 @@ class _MemberHomeScreenState extends State<MemberHomeScreen>
                           height: 56,
                           fit: BoxFit.cover,
                           excludeFromSemantics: true))))),
-      body: Padding(
-          padding: EdgeInsets.only(
-              bottom: 72 + MediaQuery.paddingOf(context).bottom),
-          child: RefreshIndicator(
-            color: AppColors.primary,
-            onRefresh: live ? _refreshLive : _refresh,
-            child: CustomScrollView(
-              key: const ValueKey('home-scroll'),
-              controller: _homeScroll,
-              physics: const AlwaysScrollableScrollPhysics(),
-              slivers: [
+      body: RefreshIndicator(
+        color: AppColors.primary,
+        onRefresh: live ? _refreshLive : _refresh,
+        child: CustomScrollView(
+          key: const ValueKey('home-scroll'),
+          controller: _homeScroll,
+          physics: const AlwaysScrollableScrollPhysics(),
+          slivers: [
                 _HeroHeader(
                     greeting: _greeting,
                     firstName: firstName,
@@ -309,7 +306,7 @@ class _MemberHomeScreenState extends State<MemberHomeScreen>
                   ),
                 ),
                 SliverPadding(
-                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
+                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 88),
                   sliver: SliverList.list(
                     children: [
                       const _HomeSectionHeading('Daily check-in'),
@@ -519,7 +516,7 @@ class _MemberHomeScreenState extends State<MemberHomeScreen>
                 ),
               ],
             ),
-          )),
+          ),
     );
   }
 }

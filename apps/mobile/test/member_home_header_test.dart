@@ -74,8 +74,6 @@ void main() {
         find.descendant(of: button, matching: find.byType(Image)));
     expect(image.width, 56);
     expect(tester.widget<FloatingActionButton>(button).tooltip, 'AI Coach');
-    expect(tester.getBottomLeft(find.byKey(const ValueKey('home-scroll'))).dy,
-        lessThanOrEqualTo(tester.getTopLeft(button).dy));
     expect(find.descendant(of: button, matching: find.byType(Image)),
         findsOneWidget);
   });

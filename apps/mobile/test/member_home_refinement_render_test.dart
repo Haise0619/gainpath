@@ -29,11 +29,8 @@ void main() {
         await t.pumpAndSettle();
         Future<void> capture(String name) async {
           expect(t.takeException(), isNull);
-          final scroll = find.byKey(const ValueKey('home-scroll')),
-              ai = find.byKey(const ValueKey('home-ai-entry')),
+          final ai = find.byKey(const ValueKey('home-ai-entry')),
               nav = find.byKey(const ValueKey('test-bottom-nav'));
-          expect(t.getBottomLeft(scroll).dy,
-              lessThanOrEqualTo(t.getTopLeft(ai).dy));
           expect(
               t.getBottomLeft(ai).dy, lessThanOrEqualTo(t.getTopLeft(nav).dy));
           final boundary =
