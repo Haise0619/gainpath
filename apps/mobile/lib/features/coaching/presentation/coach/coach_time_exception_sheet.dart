@@ -32,15 +32,33 @@ class _CoachTimeExceptionSheetState extends State<CoachTimeExceptionSheet> {
   bool _loading = true, _dirty = false, _fullDay = false, _applying = false;
   int _generation = 0;
   late int _serverNowMillis = widget.roster.serverNowMillis;
+
   Iterable<CoachTimeBoundary> _starts(CoachAvailabilityDay day) =>
       day.boundaries
           .take(day.boundaries.length - 1)
           .where((boundary) => boundary.atMillis > _serverNowMillis);
+
   bool get _current => mounted && widget.isCurrent();
+
   String _shift(String date, int days) => DateTime.parse('${date}T00:00:00Z')
       .add(Duration(days: days))
       .toIso8601String()
       .substring(0, 10);
+
+  String _readableDate(String isoDate) {
+    try {
+      final dt = DateTime.parse('${isoDate}T00:00:00Z');
+      const months = [
+        'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+        'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+      ];
+      const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+      return '${days[dt.weekday - 1]}, ${dt.day} ${months[dt.month - 1]} ${dt.year}';
+    } catch (_) {
+      return isoDate;
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -143,6 +161,7 @@ class _CoachTimeExceptionSheetState extends State<CoachTimeExceptionSheet> {
       _days.firstWhere((d) => d.localDate == _startDate);
   CoachAvailabilityDay get _last =>
       _days.firstWhere((d) => d.localDate == _endDate);
+
   void _dates({String? startDate, String? endDate}) {
     setState(() {
       _dirty = true;
@@ -167,6 +186,59 @@ class _CoachTimeExceptionSheetState extends State<CoachTimeExceptionSheet> {
     }
   }
 
+  Widget _typeChip(String type, String label, IconData icon, bool editable) {
+    final selected = _type == type;
+    return Expanded(
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: editable
+              ? () => setState(() {
+                    _type = type;
+                    _dirty = true;
+                    if (type == 'offDay' &&
+                        _startDate != widget.roster.todayLocalDate) {
+                      _fullDay = true;
+                      _dates();
+                    }
+                  })
+              : null,
+          borderRadius: BorderRadius.circular(10),
+          child: Container(
+            padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
+            decoration: BoxDecoration(
+              color: selected ? AppColors.primaryTint : AppColors.surface,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(
+                color: selected ? AppColors.primary : AppColors.hairline,
+                width: selected ? 1.5 : 1,
+              ),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(icon,
+                    size: 20,
+                    color: selected ? AppColors.primary : AppColors.inkSoft),
+                const SizedBox(height: 5),
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight:
+                        selected ? FontWeight.w700 : FontWeight.w500,
+                    color:
+                        selected ? AppColors.primaryDark : AppColors.ink,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final editable =
@@ -179,149 +251,334 @@ class _CoachTimeExceptionSheetState extends State<CoachTimeExceptionSheet> {
         child: SafeArea(
             child: SingleChildScrollView(
                 padding: EdgeInsets.fromLTRB(
-                    20, 20, 20, 20 + MediaQuery.viewInsetsOf(context).bottom),
+                    20, 12, 20, 20 + MediaQuery.viewInsetsOf(context).bottom),
                 child: Column(
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      Text(
-                          widget.initial == null
-                              ? 'Add time off or break'
-                              : 'Edit time off or break',
-                          style: Theme.of(context).textTheme.titleLarge),
-                      Text('Organization time: ${widget.roster.timeZone}'),
+                      // Drag Handle
+                      Center(
+                        child: Container(
+                          width: 36,
+                          height: 4,
+                          margin: const EdgeInsets.only(bottom: 14),
+                          decoration: BoxDecoration(
+                            color: AppColors.hairline,
+                            borderRadius: BorderRadius.circular(2),
+                          ),
+                        ),
+                      ),
+                      // Header Row
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Expanded(
+                            child: Text(
+                              widget.initial == null
+                                  ? 'Add Time Off / Break'
+                                  : 'Edit Time Off / Break',
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .titleLarge
+                                  ?.copyWith(fontWeight: FontWeight.w700),
+                            ),
+                          ),
+                          IconButton(
+                            onPressed: _cancel,
+                            icon: const Icon(Icons.close_rounded),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 2),
                       const Text(
-                          'Done updates your draft. Save Changes to publish it.'),
+                        'Block periods on your calendar to prevent member bookings.',
+                        style: TextStyle(fontSize: 12.5, color: AppColors.inkSoft),
+                      ),
+                      const SizedBox(height: 12),
+
                       if (_loading) const LinearProgressIndicator(),
-                      if (_message != null) Text(_message!),
+                      if (_message != null) ...[
+                        const SizedBox(height: 8),
+                        Text(_message!,
+                            style: const TextStyle(color: AppColors.danger)),
+                      ],
                       if (!_current)
-                        const Text('Schedule unavailable for this session.'),
-                      DropdownButtonFormField<String>(
-                          initialValue: _type,
-                          decoration: const InputDecoration(labelText: 'Type'),
-                          items: const [
-                            DropdownMenuItem(
-                                value: 'breakTime', child: Text('Break')),
-                            DropdownMenuItem(
-                                value: 'offDay', child: Text('Off day')),
-                            DropdownMenuItem(
-                                value: 'leave', child: Text('Leave'))
-                          ],
-                          onChanged: editable
-                              ? (v) => setState(() {
-                                    _type = v!;
-                                    _dirty = true;
-                                  })
-                              : null),
+                        const Text('Schedule unavailable for this session.',
+                            style: TextStyle(color: AppColors.danger)),
+
+                      // Block Type Selection
+                      Row(
+                        children: [
+                          _typeChip('breakTime', 'Break', Icons.coffee_rounded,
+                              editable),
+                          const SizedBox(width: 8),
+                          _typeChip('offDay', 'Off Day',
+                              Icons.event_busy_rounded, editable),
+                          const SizedBox(width: 8),
+                          _typeChip('leave', 'Leave',
+                              Icons.flight_takeoff_rounded, editable),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+
+                      // Reason input
                       TextField(
                           controller: _reason,
                           enabled: editable,
                           maxLength: 200,
-                          decoration: const InputDecoration(
-                              labelText: 'Reason (optional)'),
+                          decoration: InputDecoration(
+                              labelText: 'Reason (optional)',
+                              hintText: 'e.g. Lunch break, Personal appointment',
+                              prefixIcon: const Icon(Icons.notes_rounded,
+                                  size: 18, color: AppColors.primary),
+                              filled: true,
+                              fillColor: AppColors.surface,
+                              border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(10)),
+                              contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 12, vertical: 10)),
                           onChanged: (_) => setState(() => _dirty = true)),
+                      const SizedBox(height: 10),
+
                       if (editable) ...[
-                        DropdownButtonFormField<String>(
-                            key: ValueKey(('start-date', _startDate)),
-                            initialValue: _startDate,
-                            decoration:
-                                const InputDecoration(labelText: 'Start date'),
-                            items: _days
-                                .map((d) => DropdownMenuItem(
-                                    value: d.localDate,
-                                    child: Text(d.localDate)))
-                                .toList(),
-                            onChanged: (v) => _dates(startDate: v)),
-                        DropdownButtonFormField<String>(
-                            key: ValueKey(('end-date', _startDate, _endDate)),
-                            initialValue: _endDate,
-                            decoration:
-                                const InputDecoration(labelText: 'End date'),
-                            items: _days
-                                .where((d) =>
-                                    d.localDate.compareTo(_startDate!) >= 0)
-                                .map((d) => DropdownMenuItem(
-                                    value: d.localDate,
-                                    child: Text(d.localDate)))
-                                .toList(),
-                            onChanged: (v) => _dates(endDate: v)),
-                        SwitchListTile(
-                            contentPadding: EdgeInsets.zero,
-                            title: const Text('Full day'),
-                            value: _fullDay,
-                            onChanged:
-                                _startDate == widget.roster.todayLocalDate
-                                    ? null
-                                    : (v) {
-                                        _fullDay = v;
-                                        _dates();
-                                      }),
+                        // Date Pickers
+                        Row(
+                          children: [
+                            Expanded(
+                              child: DropdownButtonFormField<String>(
+                                  key: ValueKey(('start-date', _startDate)),
+                                  initialValue: _startDate,
+                                  decoration: InputDecoration(
+                                      labelText: 'Start date',
+                                      prefixIcon: const Icon(
+                                          Icons.calendar_today_rounded,
+                                          size: 16,
+                                          color: AppColors.primary),
+                                      filled: true,
+                                      fillColor: AppColors.surface,
+                                      border: OutlineInputBorder(
+                                          borderRadius:
+                                              BorderRadius.circular(10)),
+                                      contentPadding:
+                                          const EdgeInsets.symmetric(
+                                              horizontal: 10, vertical: 8)),
+                                  items: _days
+                                      .map((d) => DropdownMenuItem(
+                                          value: d.localDate,
+                                          child: Text(
+                                            _readableDate(d.localDate),
+                                            style: const TextStyle(
+                                                fontSize: 12.5),
+                                            overflow: TextOverflow.ellipsis,
+                                          )))
+                                      .toList(),
+                                  onChanged: (v) => _dates(startDate: v)),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: DropdownButtonFormField<String>(
+                                  key: ValueKey(
+                                      ('end-date', _startDate, _endDate)),
+                                  initialValue: _endDate,
+                                  decoration: InputDecoration(
+                                      labelText: 'End date',
+                                      prefixIcon: const Icon(
+                                          Icons.calendar_today_rounded,
+                                          size: 16,
+                                          color: AppColors.primary),
+                                      filled: true,
+                                      fillColor: AppColors.surface,
+                                      border: OutlineInputBorder(
+                                          borderRadius:
+                                              BorderRadius.circular(10)),
+                                      contentPadding:
+                                          const EdgeInsets.symmetric(
+                                              horizontal: 10, vertical: 8)),
+                                  items: _days
+                                      .where((d) =>
+                                          d.localDate.compareTo(_startDate!) >= 0)
+                                      .map((d) => DropdownMenuItem(
+                                          value: d.localDate,
+                                          child: Text(
+                                            _readableDate(d.localDate),
+                                            style: const TextStyle(
+                                                fontSize: 12.5),
+                                            overflow: TextOverflow.ellipsis,
+                                          )))
+                                      .toList(),
+                                  onChanged: (v) => _dates(endDate: v)),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+
+                        // Full Day Switch
+                        Container(
+                          margin: const EdgeInsets.symmetric(vertical: 4),
+                          decoration: BoxDecoration(
+                            color: AppColors.surfaceAlt,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: AppColors.hairline),
+                          ),
+                          child: SwitchListTile(
+                              contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 14, vertical: 2),
+                              title: const Text('Full day',
+                                  style: TextStyle(
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 14)),
+                              subtitle: const Text(
+                                  'Block all working hours for the selected date(s)',
+                                  style: TextStyle(
+                                      fontSize: 12, color: AppColors.inkSoft)),
+                              value: _fullDay,
+                              onChanged:
+                                  _startDate == widget.roster.todayLocalDate
+                                      ? null
+                                      : (v) {
+                                          _fullDay = v;
+                                          _dates();
+                                        }),
+                        ),
+
+                        // Time Range Inputs (when not full day)
                         if (!_fullDay) ...[
-                          DropdownButtonFormField<int>(
-                              key: ValueKey(('start-time', _startDate, _start)),
-                              initialValue: _start,
-                              decoration: const InputDecoration(
-                                  labelText: 'Start time'),
-                              items: _starts(_first)
-                                  .map((b) => DropdownMenuItem(
-                                      value: b.atMillis, child: Text(b.label)))
-                                  .toList(),
-                              onChanged: (v) => setState(() {
-                                    _start = v;
-                                    _dirty = true;
-                                    if (_end! <= _start!) {
-                                      _end = _last.boundaries
-                                          .firstWhere(
-                                              (b) => b.atMillis > _start!)
-                                          .atMillis;
-                                    }
-                                  })),
-                          DropdownButtonFormField<int>(
-                              key: ValueKey(
-                                  ('end-time', _endDate, _start, _end)),
-                              initialValue: _end,
-                              decoration:
-                                  const InputDecoration(labelText: 'End time'),
-                              items: _last.boundaries
-                                  .where((b) => b.atMillis > _start!)
-                                  .map((b) => DropdownMenuItem(
-                                      value: b.atMillis, child: Text(b.label)))
-                                  .toList(),
-                              onChanged: (v) => setState(() {
-                                    _end = v;
-                                    _dirty = true;
-                                  })),
+                          const SizedBox(height: 8),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: DropdownButtonFormField<int>(
+                                    key: ValueKey(
+                                        ('start-time', _startDate, _start)),
+                                    initialValue: _start,
+                                    decoration: InputDecoration(
+                                        labelText: 'Start time',
+                                        prefixIcon: const Icon(
+                                            Icons.schedule_rounded,
+                                            size: 16,
+                                            color: AppColors.primary),
+                                        filled: true,
+                                        fillColor: AppColors.surface,
+                                        border: OutlineInputBorder(
+                                            borderRadius:
+                                                BorderRadius.circular(10)),
+                                        contentPadding:
+                                            const EdgeInsets.symmetric(
+                                                horizontal: 10, vertical: 8)),
+                                    items: _starts(_first)
+                                        .map((b) => DropdownMenuItem(
+                                            value: b.atMillis,
+                                            child: Text(b.label,
+                                                style: const TextStyle(
+                                                    fontSize: 12.5))))
+                                        .toList(),
+                                    onChanged: (v) => setState(() {
+                                          _start = v;
+                                          _dirty = true;
+                                          if (_end! <= _start!) {
+                                            _end = _last.boundaries
+                                                .firstWhere(
+                                                    (b) => b.atMillis > _start!)
+                                                .atMillis;
+                                          }
+                                        })),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: DropdownButtonFormField<int>(
+                                    key: ValueKey((
+                                      'end-time',
+                                      _endDate,
+                                      _start,
+                                      _end
+                                    )),
+                                    initialValue: _end,
+                                    decoration: InputDecoration(
+                                        labelText: 'End time',
+                                        prefixIcon: const Icon(
+                                            Icons.schedule_rounded,
+                                            size: 16,
+                                            color: AppColors.primary),
+                                        filled: true,
+                                        fillColor: AppColors.surface,
+                                        border: OutlineInputBorder(
+                                            borderRadius:
+                                                BorderRadius.circular(10)),
+                                        contentPadding:
+                                            const EdgeInsets.symmetric(
+                                                horizontal: 10, vertical: 8)),
+                                    items: _last.boundaries
+                                        .where((b) => b.atMillis > _start!)
+                                        .map((b) => DropdownMenuItem(
+                                            value: b.atMillis,
+                                            child: Text(b.label,
+                                                style: const TextStyle(
+                                                    fontSize: 12.5))))
+                                        .toList(),
+                                    onChanged: (v) => setState(() {
+                                          _end = v;
+                                          _dirty = true;
+                                        })),
+                              ),
+                            ],
+                          ),
                         ],
                       ],
-                      const SizedBox(height: 16),
-                      Row(mainAxisAlignment: MainAxisAlignment.end, children: [
-                        TextButton(
-                            onPressed: _cancel, child: const Text('Cancel')),
-                        FilledButton(
-                            onPressed: editable &&
-                                    !_applying &&
-                                    _start! > _serverNowMillis &&
-                                    _end! > _start!
-                                ? () {
-                                    if (!_current || _applying) return;
-                                    _applying = true;
-                                    Navigator.pop(
-                                        context,
-                                        CoachTimeException(
-                                            id: widget.initial?.id ??
-                                                CoachRosterEditor.newId(),
-                                            type: _type,
-                                            reason: _reason.text.trim(),
-                                            startLabel:
-                                                '$_startDate ${_first.boundaries.firstWhere((b) => b.atMillis == _start).label}',
-                                            endLabel:
-                                                '$_endDate ${_last.boundaries.firstWhere((b) => b.atMillis == _end).label}',
-                                            startAtMillis: _start!,
-                                            endAtMillis: _end!));
-                                  }
-                                : null,
-                            child: const Text('Done'))
-                      ]),
+                      const SizedBox(height: 18),
+
+                      // Footer Actions
+                      Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton(
+                              style: OutlinedButton.styleFrom(
+                                padding:
+                                    const EdgeInsets.symmetric(vertical: 12),
+                                shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(10)),
+                              ),
+                              onPressed: _cancel,
+                              child: const Text('Cancel'),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: FilledButton(
+                              key: const ValueKey('apply-time-exception-btn'),
+                              style: FilledButton.styleFrom(
+                                backgroundColor: AppColors.primary,
+                                padding:
+                                    const EdgeInsets.symmetric(vertical: 12),
+                                shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(10)),
+                              ),
+                              onPressed: editable &&
+                                      !_applying &&
+                                      _start! > _serverNowMillis &&
+                                      _end! > _start!
+                                  ? () {
+                                      if (!_current || _applying) return;
+                                      _applying = true;
+                                      Navigator.pop(
+                                          context,
+                                          CoachTimeException(
+                                              id: widget.initial?.id ??
+                                                  CoachRosterEditor.newId(),
+                                              type: _type,
+                                              reason: _reason.text.trim(),
+                                              startLabel:
+                                                  '$_startDate ${_first.boundaries.firstWhere((b) => b.atMillis == _start).label}',
+                                              endLabel:
+                                                  '$_endDate ${_last.boundaries.firstWhere((b) => b.atMillis == _end).label}',
+                                              startAtMillis: _start!,
+                                              endAtMillis: _end!));
+                                    }
+                                  : null,
+                              child: const Text('Apply blocked time'),
+                            ),
+                          ),
+                        ],
+                      ),
                     ]))));
   }
 }

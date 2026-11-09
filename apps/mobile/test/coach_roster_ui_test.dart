@@ -335,8 +335,8 @@ void main() {
     await tester.tap(find.text('Open'));
     await tester.pumpAndSettle();
     expect(find.text('10:00 GMT+8'), findsOneWidget);
-    await tester.ensureVisible(find.text('Done'));
-    await tester.tap(find.text('Done'));
+    await tester.ensureVisible(find.text('Apply blocked time'));
+    await tester.tap(find.text('Apply blocked time'));
     await tester.pumpAndSettle();
     expect(result!.startAtMillis, 1792116000000);
     expect(result!.endAtMillis, 1792117800000);
