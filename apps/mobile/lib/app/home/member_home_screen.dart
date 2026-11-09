@@ -766,21 +766,21 @@ class _StreakCard extends StatelessWidget {
         return Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
           decoration: BoxDecoration(
-            color: AppColors.surfaceAlt,
+            color: const Color(0xFFFFF7ED),
             borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: AppColors.hairline),
+            border: Border.all(color: const Color(0xFFFFEDD5)),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: const [
               Icon(Icons.check_circle_rounded,
-                  size: 14, color: AppColors.success),
+                  size: 14, color: Color(0xFFFF8A00)),
               SizedBox(width: 4),
               Text('Checked in',
                   style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w700,
-                      color: AppColors.inkSoft)),
+                      color: Color(0xFFC2410C))),
             ],
           ),
         );
@@ -819,7 +819,7 @@ class _StreakCard extends StatelessWidget {
                   height: 36,
                   decoration: BoxDecoration(
                     color: claimed
-                        ? AppColors.successTint
+                        ? const Color(0xFFFF8A00)
                         : const Color(0xFFFEF3F2),
                     borderRadius: BorderRadius.circular(10),
                   ),
@@ -828,7 +828,7 @@ class _StreakCard extends StatelessWidget {
                         ? Icons.check_rounded
                         : Icons.local_fire_department_rounded,
                     color:
-                        claimed ? AppColors.success : const Color(0xFFF04438),
+                        claimed ? Colors.white : const Color(0xFFF04438),
                     size: 20,
                   ),
                 ),
@@ -841,6 +841,12 @@ class _StreakCard extends StatelessWidget {
                       Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
+                          SvgPicture.asset(
+                            'assets/icons/streak_fire.svg',
+                            width: 17,
+                            height: 17,
+                          ),
+                          const SizedBox(width: 4),
                           Flexible(
                             child: Text(
                               live ? '- day streak' : '$streak-day streak',
@@ -876,7 +882,7 @@ class _StreakCard extends StatelessWidget {
                           fontSize: 12,
                           fontWeight: FontWeight.w600,
                           color:
-                              claimed ? AppColors.success : AppColors.inkSoft,
+                              claimed ? const Color(0xFFEA580C) : AppColors.inkSoft,
                         ),
                       ),
                     ],
@@ -909,10 +915,16 @@ class _StreakCard extends StatelessWidget {
                       width: 24,
                       height: 24,
                       decoration: BoxDecoration(
-                        color: done ? AppColors.primary : AppColors.surface,
+                        color: (isToday && claimed)
+                            ? const Color(0xFFFF8A00)
+                            : (done ? AppColors.primary : AppColors.surface),
                         shape: BoxShape.circle,
                         border: isToday
-                            ? Border.all(color: AppColors.primary, width: 2)
+                            ? Border.all(
+                                color: claimed
+                                    ? const Color(0xFFFF8A00)
+                                    : AppColors.primary,
+                                width: 2)
                             : Border.all(color: AppColors.hairline, width: 1),
                       ),
                       child: done
@@ -929,7 +941,7 @@ class _StreakCard extends StatelessWidget {
                             ? FontWeight.w800
                             : (done ? FontWeight.w700 : FontWeight.w600),
                         color: isToday
-                            ? AppColors.primary
+                            ? (claimed ? const Color(0xFFEA580C) : AppColors.primary)
                             : (done ? AppColors.ink : AppColors.inkSoft),
                       ),
                     ),

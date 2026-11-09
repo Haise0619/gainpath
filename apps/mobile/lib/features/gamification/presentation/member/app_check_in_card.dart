@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
 import '../../application/app_check_in_cubit.dart';
 import '../../domain/app_check_in.dart';
@@ -85,13 +86,13 @@ class AppCheckInCard extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: const [
               Icon(Icons.check_circle_rounded,
-                  size: 15, color: AppColors.success),
+                  size: 15, color: Color(0xFFFF8A00)),
               SizedBox(width: 4),
               Text('Claimed today',
                   style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w700,
-                      color: AppColors.inkSoft)),
+                      color: Color(0xFFC2410C))),
             ],
           ),
         );
@@ -132,7 +133,7 @@ class AppCheckInCard extends StatelessWidget {
                 height: 38,
                 decoration: BoxDecoration(
                   color: (s?.claimedToday ?? false)
-                      ? AppColors.successTint
+                      ? const Color(0xFFFF8A00)
                       : AppColors.accentTint,
                   borderRadius: BorderRadius.circular(10),
                 ),
@@ -141,7 +142,7 @@ class AppCheckInCard extends StatelessWidget {
                       ? Icons.check_rounded
                       : Icons.local_fire_department_rounded,
                   color: (s?.claimedToday ?? false)
-                      ? AppColors.success
+                      ? Colors.white
                       : AppColors.warning,
                   size: 22,
                 ),
@@ -155,6 +156,12 @@ class AppCheckInCard extends StatelessWidget {
                     Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
+                        SvgPicture.asset(
+                          'assets/icons/streak_fire.svg',
+                          width: 17,
+                          height: 17,
+                        ),
+                        const SizedBox(width: 4),
                         Flexible(
                           child: Text(
                             s == null
@@ -194,7 +201,7 @@ class AppCheckInCard extends StatelessWidget {
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
                         color: (s?.claimedToday ?? false)
-                            ? AppColors.success
+                            ? const Color(0xFFEA580C)
                             : AppColors.inkSoft,
                       ),
                     ),
@@ -231,12 +238,17 @@ class AppCheckInCard extends StatelessWidget {
                             height: 24,
                             decoration: BoxDecoration(
                               shape: BoxShape.circle,
-                              color: day.claimed
-                                  ? AppColors.primary
-                                  : AppColors.surface,
+                              color: (day.date == s.today && day.claimed)
+                                  ? const Color(0xFFFF8A00)
+                                  : (day.claimed
+                                      ? AppColors.primary
+                                      : AppColors.surface),
                               border: day.date == s.today
                                   ? Border.all(
-                                      color: AppColors.primary, width: 2)
+                                      color: day.claimed
+                                          ? const Color(0xFFFF8A00)
+                                          : AppColors.primary,
+                                      width: 2)
                                   : Border.all(
                                       color: AppColors.hairline, width: 1),
                             ),

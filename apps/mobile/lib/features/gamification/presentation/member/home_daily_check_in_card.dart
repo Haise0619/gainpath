@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
 import '../../application/app_check_in_cubit.dart';
 
@@ -15,8 +16,24 @@ class HomeDailyCheckInCard extends StatelessWidget {
         state.status == AppCheckInStatus.error;
     final info =
         Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Text(s == null ? 'Check-in status' : '${s.currentStreak}-day streak',
-          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+      Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          SvgPicture.asset(
+            'assets/icons/streak_fire.svg',
+            width: 17,
+            height: 17,
+          ),
+          const SizedBox(width: 4),
+          Flexible(
+            child: Text(
+                s == null ? 'Check-in status' : '${s.currentStreak}-day streak',
+                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis),
+          ),
+        ],
+      ),
       const SizedBox(height: 2),
       Text(
           s == null
@@ -24,7 +41,10 @@ class HomeDailyCheckInCard extends StatelessWidget {
               : s.claimedToday
                   ? 'Checked in today'
                   : '+${s.pointsPerClaim} points available today',
-          style: const TextStyle(fontSize: 12, color: AppColors.inkSoft)),
+          style: TextStyle(
+              fontSize: 12,
+              fontWeight: (s?.claimedToday ?? false) ? FontWeight.w600 : FontWeight.normal,
+              color: (s?.claimedToday ?? false) ? const Color(0xFFEA580C) : AppColors.inkSoft)),
     ]);
     final canClaim = s != null && !s.claimedToday && ready;
     final action = canClaim
@@ -65,12 +85,17 @@ class HomeDailyCheckInCard extends StatelessWidget {
                               height: 18,
                               decoration: BoxDecoration(
                                   shape: BoxShape.circle,
-                                  color: day.claimed
-                                      ? AppColors.primary
-                                      : AppColors.surfaceAlt,
+                                  color: (day.date == s.today && day.claimed)
+                                      ? const Color(0xFFFF8A00)
+                                      : (day.claimed
+                                          ? AppColors.primary
+                                          : AppColors.surfaceAlt),
                                   border: day.date == s.today
                                       ? Border.all(
-                                          color: AppColors.primary, width: 2)
+                                          color: day.claimed
+                                              ? const Color(0xFFFF8A00)
+                                              : AppColors.primary,
+                                          width: 2)
                                       : null),
                               child: day.claimed
                                   ? const Icon(Icons.check,
