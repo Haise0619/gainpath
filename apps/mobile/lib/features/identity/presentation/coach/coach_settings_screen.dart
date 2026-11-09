@@ -550,7 +550,10 @@ class _CoachSettingsScreenState extends State<CoachSettingsScreen> {
                 children: [
                   SwitchListTile(
                     value: bookings,
-                    activeThumbColor: AppColors.primary,
+                    activeTrackColor: AppColors.primary,
+                    activeThumbColor: Colors.white,
+                    inactiveTrackColor: AppColors.hairline,
+                    inactiveThumbColor: Colors.white,
                     onChanged: enabled
                         ? (v) => changed(() {
                               bookings = v;
@@ -567,7 +570,10 @@ class _CoachSettingsScreenState extends State<CoachSettingsScreen> {
                   const Divider(height: 1),
                   SwitchListTile(
                     value: cancellations,
-                    activeThumbColor: AppColors.primary,
+                    activeTrackColor: AppColors.primary,
+                    activeThumbColor: Colors.white,
+                    inactiveTrackColor: AppColors.hairline,
+                    inactiveThumbColor: Colors.white,
                     onChanged: enabled
                         ? (v) => changed(() {
                               cancellations = v;
