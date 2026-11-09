@@ -45,6 +45,13 @@ void main() {
     expect(find.text('Monday'), findsOneWidget);
     expect(find.textContaining('09:00 – 17:00 · GainPath Main'), findsWidgets);
     expect(find.byKey(const ValueKey('weekly-day-1')), findsOneWidget);
+
+    // 4. Header refresh button is removed (pull-to-refresh is used instead)
+    expect(find.byTooltip('Refresh availability'), findsNothing);
+
+    // 5. Date cards display Work and Off status indicators with distinct colors/labels
+    expect(find.text('Work'), findsWidgets);
+    expect(find.text('Off'), findsWidgets);
   });
 
   testWidgets('Time off summary formats singular 1 blocked period accurately',

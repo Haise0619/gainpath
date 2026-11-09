@@ -278,7 +278,7 @@ void main() {
             liveRepository: repo, coachId: 'coach', isCurrent: () => true)));
     await t.pumpAndSettle();
     repo.fail = true;
-    await t.tap(find.byTooltip('Refresh availability'));
+    await t.fling(find.byType(ListView), const Offset(0, 300), 1000);
     await t.pumpAndSettle();
     expect(
         find.text(

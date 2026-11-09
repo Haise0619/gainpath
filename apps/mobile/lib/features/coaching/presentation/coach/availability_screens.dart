@@ -547,87 +547,154 @@ class _AvailabilityScreenState extends State<AvailabilityScreen> {
         child: Row(
           children: [
             for (final day in data.days) ...[
-              Semantics(
-                selected: selected.localDate == day.localDate,
-                child: SizedBox(
-                  width: 62,
-                  height: 74,
-                  child: OutlinedButton(
-                    key: ValueKey('availability-date-${day.localDate}'),
-                    onPressed: state.loading
-                        ? null
-                        : () => availabilityCubit?.openDay(day.localDate),
-                    style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 4, vertical: 6),
-                      backgroundColor: selected.localDate == day.localDate
-                          ? AppColors.primaryTint
-                          : AppColors.surface,
-                      side: BorderSide(
-                        color: selected.localDate == day.localDate
-                            ? AppColors.primary
-                            : AppColors.hairline,
-                        width: selected.localDate == day.localDate ? 1.5 : 1.0,
+              Builder(builder: (context) {
+                final dayWindows = _effectiveWindowsForDate(day, state);
+                final dayHasWork = dayWindows.isNotEmpty;
+                final dayBlocks = _blocksForDate(day);
+                final isSelected = selected.localDate == day.localDate;
+                final isToday = day.localDate == data.todayLocalDate;
+
+                final statusColor = dayHasWork
+                    ? AppColors.success
+                    : AppColors.inkSoft.withValues(alpha: 0.5);
+                final pillBackground = isSelected
+                    ? Colors.white.withValues(alpha: 0.9)
+                    : (dayHasWork
+                        ? AppColors.successTint.withValues(alpha: 0.75)
+                        : AppColors.surfaceAlt.withValues(alpha: 0.65));
+                final pillBorderColor = isSelected
+                    ? (dayHasWork
+                        ? AppColors.success.withValues(alpha: 0.35)
+                        : AppColors.primary.withValues(alpha: 0.15))
+                    : (dayHasWork
+                        ? AppColors.success.withValues(alpha: 0.25)
+                        : Colors.transparent);
+                final labelText = isToday
+                    ? 'Today'
+                    : (dayHasWork ? 'Work' : 'Off');
+                final labelColor = isToday
+                    ? (isSelected ? AppColors.primary : AppColors.ink)
+                    : (dayHasWork
+                        ? AppColors.success
+                        : AppColors.inkSoft.withValues(alpha: 0.75));
+
+                return Semantics(
+                  selected: isSelected,
+                  child: SizedBox(
+                    width: 62,
+                    height: 74,
+                    child: OutlinedButton(
+                      key: ValueKey('availability-date-${day.localDate}'),
+                      onPressed: state.loading
+                          ? null
+                          : () => availabilityCubit?.openDay(day.localDate),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 4, vertical: 6),
+                        backgroundColor: isSelected
+                            ? AppColors.primaryTint
+                            : AppColors.surface,
+                        side: BorderSide(
+                          color: isSelected
+                              ? AppColors.primary
+                              : AppColors.hairline,
+                          width: isSelected ? 1.5 : 1.0,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
                       ),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                    child: FittedBox(
-                      fit: BoxFit.scaleDown,
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            _weekdayNames[
-                                    DateTime.parse(day.localDate).weekday - 1]
-                                .substring(0, 3),
-                            style: TextStyle(
-                              fontSize: 11.5,
-                              fontWeight: FontWeight.w600,
-                              color: selected.localDate == day.localDate
-                                  ? AppColors.primary
-                                  : AppColors.inkSoft,
-                            ),
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            '${DateTime.parse(day.localDate).day}',
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.w700,
-                              color: selected.localDate == day.localDate
-                                  ? AppColors.primary
-                                  : AppColors.ink,
-                            ),
-                          ),
-                          const SizedBox(height: 2),
-                          if (day.localDate == data.todayLocalDate)
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
                             Text(
-                              'Today',
+                              _weekdayNames[
+                                      DateTime.parse(day.localDate).weekday - 1]
+                                  .substring(0, 3),
                               style: TextStyle(
-                                fontSize: 10,
-                                fontWeight: FontWeight.w700,
-                                color: selected.localDate == day.localDate
+                                fontSize: 11.5,
+                                fontWeight: FontWeight.w600,
+                                color: isSelected
                                     ? AppColors.primary
-                                    : AppColors.inkSoft,
+                                    : (dayHasWork
+                                        ? AppColors.inkSoft
+                                        : AppColors.inkSoft
+                                            .withValues(alpha: 0.65)),
                               ),
-                            )
-                          else if (_blocksForDate(day).isNotEmpty)
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              '${DateTime.parse(day.localDate).day}',
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.w700,
+                                color: isSelected
+                                    ? AppColors.primary
+                                    : (dayHasWork
+                                        ? AppColors.ink
+                                        : AppColors.inkSoft),
+                              ),
+                            ),
+                            const SizedBox(height: 3),
                             Tooltip(
-                              message:
-                                  '${_blocksForDate(day).length} ${_blocksForDate(day).length == 1 ? "blocked period" : "blocked periods"}',
-                              child: const Icon(Icons.block,
-                                  size: 12, color: AppColors.warning),
-                            )
-                          else
-                            const SizedBox(height: 12),
-                        ],
+                              message: dayBlocks.isNotEmpty
+                                  ? '${dayBlocks.length} ${dayBlocks.length == 1 ? "blocked period" : "blocked periods"}'
+                                  : (dayHasWork
+                                      ? 'Working hours scheduled'
+                                      : 'Off / No scheduled hours'),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 4.5, vertical: 1.5),
+                                decoration: BoxDecoration(
+                                  color: pillBackground,
+                                  borderRadius: BorderRadius.circular(5),
+                                  border: Border.all(
+                                    color: pillBorderColor,
+                                    width: 0.8,
+                                  ),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    if (dayBlocks.isNotEmpty)
+                                      const Padding(
+                                        padding: EdgeInsets.only(right: 2.5),
+                                        child: Icon(Icons.block,
+                                            size: 8.5,
+                                            color: AppColors.warning),
+                                      )
+                                    else
+                                      Container(
+                                        width: 5,
+                                        height: 5,
+                                        margin:
+                                            const EdgeInsets.only(right: 3),
+                                        decoration: BoxDecoration(
+                                          color: statusColor,
+                                          shape: BoxShape.circle,
+                                        ),
+                                      ),
+                                    Text(
+                                      labelText,
+                                      style: TextStyle(
+                                        fontSize: 9,
+                                        fontWeight: FontWeight.w600,
+                                        color: labelColor,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ),
-                ),
-              ),
+                );
+              }),
               const SizedBox(width: 8),
             ],
           ],
@@ -1222,12 +1289,6 @@ class _AvailabilityScreenState extends State<AvailabilityScreen> {
               workingHoursTitle: 'Weekly Working Hours',
               saveBar: _saveBar(),
               onRefresh: _reload,
-              actions: [
-                IconButton(
-                    tooltip: 'Refresh availability',
-                    onPressed: busy ? null : _reload,
-                    icon: const Icon(Icons.refresh_rounded))
-              ],
               timeOffSummary: roster?.baseline == null
                   ? 'Not loaded'
                   : '${roster!.exceptions.length} ${roster!.exceptions.length == 1 ? "blocked period" : "blocked periods"}',
