@@ -1428,7 +1428,7 @@ class _QuickActionsGrid extends StatelessWidget {
             crossAxisSpacing: 8,
             mainAxisSpacing: 8,
             childAspectRatio:
-                tileWidth / math.max(tileWidth * 1.05, 68 + 24 * textScale),
+                tileWidth / math.max(tileWidth * 1.02, 60 + 20 * textScale),
             children: actions
                 .map((a) => _QuickActionTile(
                     action: a,
@@ -1441,7 +1441,7 @@ class _QuickActionsGrid extends StatelessWidget {
                 .toList(),
           );
         }),
-        const SizedBox(height: 8),
+        const SizedBox(height: 6),
         Center(
           child: TextButton.icon(
             style: TextButton.styleFrom(
@@ -1490,7 +1490,7 @@ class _QuickActionTile extends StatelessWidget {
         borderRadius: BorderRadius.circular(14),
         onTap: enabled ? action.onTap : () => showUnavailable(context),
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+          padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 4),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(14),
             border:
@@ -1506,8 +1506,8 @@ class _QuickActionTile extends StatelessWidget {
               if (action.svgAsset != null)
                 SvgPicture.asset(
                   action.svgAsset!,
-                  width: 44,
-                  height: 44,
+                  width: 54,
+                  height: 54,
                 )
               else
                 Container(
@@ -1521,15 +1521,15 @@ class _QuickActionTile extends StatelessWidget {
                   ),
                   child: Icon(action.icon, size: 18, color: action.color),
                 ),
-              const SizedBox(height: 4),
+              const SizedBox(height: 2),
               Flexible(
                 child: Text(
                   action.label,
                   textAlign: TextAlign.center,
-                  maxLines: 2,
+                  maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
-                    fontSize: 11.5,
+                    fontSize: 11,
                     fontWeight: FontWeight.w700,
                     color: AppColors.ink,
                     letterSpacing: -0.2,
