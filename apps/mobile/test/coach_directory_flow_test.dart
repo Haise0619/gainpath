@@ -98,6 +98,8 @@ void main() {
           coachProfileFactory: (_, current) => repo,
           coachAccountFactory: (_, current) => CoachAccountGatewayFake()));
       await tester.pumpAndSettle();
+      await tester.tap(find.text('Profile'));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('Bio & specialties'));
       await tester.pumpAndSettle();
       await tester.enterText(
@@ -140,6 +142,8 @@ void main() {
         coachAccountFactory: (_, current) => CoachAccountGatewayFake(),
         coachAvailabilityFactory: (_, current) => AvailabilityFake()));
     await tester.pumpAndSettle();
+    await tester.tap(find.text('Profile'));
+    await tester.pumpAndSettle();
     expect(find.text('Not published in directory'), findsOneWidget);
     await tester.tap(find.text('Bio & specialties'));
     await tester.pumpAndSettle();
@@ -166,7 +170,7 @@ void main() {
     expect(find.text('Not published in directory'), findsOneWidget);
     await tester.tap(find.text('Availability').last);
     await tester.pumpAndSettle();
-    expect(find.text('THIS WEEK AT A GLANCE'), findsOneWidget);
+    expect(find.text('WEEKLY WORKING HOURS'), findsOneWidget);
     await auth.signOut();
     await tester.pumpAndSettle();
     expect(find.text('Saved draft'), findsNothing);

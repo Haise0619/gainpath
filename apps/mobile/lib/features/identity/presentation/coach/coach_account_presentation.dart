@@ -61,26 +61,19 @@ class CoachAccountPresentation extends StatelessWidget {
       onEdit,
       onCertifications,
       onPhoto,
-      onSettings,
-      onRefresh;
+      onSettings;
+  final RefreshCallback? onRefresh;
   final bool loading;
   final String? message;
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('My account'), actions: [
-        if (onRefresh != null)
-          IconButton(
-              tooltip: 'Refresh profile',
-              onPressed: loading ? null : onRefresh,
-              icon: const Icon(Icons.refresh))
-      ]),
-      body: PageBody(
-        children: [
-          if (loading) const LinearProgressIndicator(),
-          if (message != null) Text(message!),
-          CoachProfessionalHeader(data: data),
-          const SizedBox(height: 16),
+    final content = PageBody(
+      physics: const AlwaysScrollableScrollPhysics(),
+      children: [
+        if (loading) const LinearProgressIndicator(),
+        if (message != null) Text(message!),
+        CoachProfessionalHeader(data: data),
+        const SizedBox(height: 16),
           Row(
             children: [
               Expanded(
@@ -165,7 +158,15 @@ class CoachAccountPresentation extends StatelessWidget {
             label: const Text('Sign out'),
           ),
         ],
-      ),
+      );
+    return Scaffold(
+      appBar: AppBar(title: const Text('My account')),
+      body: onRefresh == null
+          ? content
+          : RefreshIndicator(
+              onRefresh: onRefresh!,
+              child: content,
+            ),
     );
   }
 

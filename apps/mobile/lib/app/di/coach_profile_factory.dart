@@ -55,7 +55,7 @@ Widget buildFirebaseCoachShell(AuthSession session,
                   profile: factory?.call(session.scope, isCurrent) ??
                       FirebaseCoachProfileRepository(
                           scope: session.scope, isCurrent: isCurrent)),
-              initialIndex: 3,
+              initialIndex: 0,
               restrictUnsupportedWorkflows: true,
               liveRosterBuilder: (_) => LiveBookingListView(
                   notes: FirebaseConsultationNotesRepository(

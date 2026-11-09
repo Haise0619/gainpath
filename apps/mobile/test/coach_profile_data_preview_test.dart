@@ -124,8 +124,9 @@ void main() {
     await t.pumpAndSettle();
     expect(
         find.text('Statistics unavailable. Refresh to retry.'), findsOneWidget);
+    expect(find.byTooltip('Refresh profile'), findsNothing);
     account.fail = false;
-    await t.tap(find.byTooltip('Refresh profile'));
+    await t.fling(find.byType(ListView), const Offset(0, 300), 1000);
     await t.pumpAndSettle();
     expect(find.text('4.0'), findsOneWidget);
     expect(account.calls, 2);
