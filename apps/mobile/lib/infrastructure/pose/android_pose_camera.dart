@@ -5,10 +5,15 @@ import 'package:gainpath_pose/gainpath_pose.dart';
 import '../../features/workout/application/pose_preview_controller.dart';
 import 'blazepose_geometry.dart';
 import 'pose_quality_diagnostics.dart';
+import '../../features/workout/domain/workout_performance_diagnostics.dart';
 
 class AndroidPoseCamera implements PoseCameraSource, PoseDetectorDiagnostics {
   AndroidPoseCamera(
-      {required this.clockMicros, this.preferFront = true, this.quality});
+      {required this.clockMicros,
+      this.preferFront = true,
+      this.quality,
+      this.baseline});
+  final WorkoutPerformanceDiagnostics? baseline;
   final PoseQualityDiagnostics? quality;
   final int Function() clockMicros;
   final bool preferFront;
@@ -31,6 +36,7 @@ class AndroidPoseCamera implements PoseCameraSource, PoseDetectorDiagnostics {
       throw UnsupportedError('Android camera preview required.');
     }
     final revision = ++_revision;
+    final startup = baseline == null ? null : (Stopwatch()..start());
     final cameras = await availableCameras();
     if (revision != _revision) return;
     if (cameras.isEmpty) throw StateError('No camera available.');
@@ -52,8 +58,12 @@ class AndroidPoseCamera implements PoseCameraSource, PoseDetectorDiagnostics {
         if (identical(controller, next)) controller = null;
         return;
       }
+      baseline?.sample(
+          WorkoutMetric.cameraStartupMicros, startup!.elapsedMicroseconds);
+      baseline?.resourceOpened(WorkoutResource.camera);
       await next.startImageStream((image) {
         if (revision != _revision || !next.value.isInitialized) return;
+        baseline?.count(WorkoutSignal.cameraFrame);
         final callbackTime = quality?.enabled == true ? clockMicros() : 0;
         final orientation = next.value.deviceOrientation;
         final degrees = switch (orientation) {
@@ -119,14 +129,18 @@ class AndroidPoseCamera implements PoseCameraSource, PoseDetectorDiagnostics {
         }
       });
     } on CameraException catch (error) {
+      baseline?.count(WorkoutSignal.cameraFailure);
       await next.dispose();
+      baseline?.resourceClosed(WorkoutResource.camera);
       if (identical(controller, next)) controller = null;
       if (error.code.startsWith('CameraAccess')) {
         throw PoseCameraPermissionDenied();
       }
       rethrow;
     } catch (_) {
+      baseline?.count(WorkoutSignal.cameraFailure);
       await next.dispose();
+      baseline?.resourceClosed(WorkoutResource.camera);
       if (identical(controller, next)) controller = null;
       rethrow;
     }
@@ -137,6 +151,9 @@ class AndroidPoseCamera implements PoseCameraSource, PoseDetectorDiagnostics {
     invalidate();
     final previous = controller;
     controller = null;
-    if (previous != null) await previous.dispose();
+    if (previous != null) {
+      await previous.dispose();
+      baseline?.resourceClosed(WorkoutResource.camera);
+    }
   }
 }

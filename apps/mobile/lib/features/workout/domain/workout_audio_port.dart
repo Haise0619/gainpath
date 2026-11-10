@@ -36,3 +36,9 @@ abstract interface class TimedWorkoutAudioPort implements WorkoutAudioPort {
   Future<AudioPlaybackOutcome> playCurrent(CueRequest cue,
       {required String requestId, required Duration remainingStartTime});
 }
+
+/// Correlation only: ordinary playback keeps its existing unbounded-start policy.
+abstract interface class TracedWorkoutAudioPort implements WorkoutAudioPort {
+  Future<AudioPlaybackOutcome> playTraced(CueRequest cue,
+      {required String requestId});
+}

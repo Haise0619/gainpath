@@ -11,6 +11,7 @@ import 'package:gainpath_mobile/features/workout/presentation/member/workout_res
 import 'package:gainpath_mobile/features/workout/presentation/member/workout_prep_screen.dart';
 import 'real_squat_session_test.dart' show Camera, FailingStore;
 import 'squat_processing_controller_test.dart' show AudioSink;
+import 'support/workout_consent_harness.dart';
 
 class CalfDetector implements ManagedPoseDetector {
   CalfSide side = CalfSide.left;
@@ -138,23 +139,19 @@ void main() {
       repo.dispose();
     });
   }
-  testWidgets('calf consent describes foot visibility with no upload option',
-      (tester) async {
-    await tester.pumpWidget(MaterialApp(
-        home: Builder(
-            builder: (context) => Scaffold(
-                body: TextButton(
-                    onPressed: () => showWorkoutCaptureConsent(context,
-                        onUploadChanged: (_) {},
-                        allowUpload: false,
-                        exerciseInstruction: calfRaiseCaptureInstruction),
-                    child: const Text('Consent'))))));
-    await tester.tap(find.text('Consent'));
-    await tester.pumpAndSettle();
-    expect(find.text(calfRaiseCaptureInstruction), findsOneWidget);
-    expect(find.text('Also allow this measured summary to be uploaded.'),
-        findsNothing);
-  });
+  for (final accepted in [false, true]) {
+    testWidgets(
+        'calf consent describes foot visibility with no upload option (accepted: $accepted)',
+        (tester) async {
+      await openWorkoutConsent(tester,
+          previouslyAccepted: accepted,
+          instruction: calfRaiseCaptureInstruction);
+      expect(find.text(calfRaiseCaptureInstruction), findsOneWidget);
+      expect(find.text('Also allow this measured summary to be uploaded.'),
+          findsNothing);
+      await confirmWorkoutSetup(tester);
+    });
+  }
   testWidgets(
       'calf pause breaks an unfinished raise and account loss blocks saving',
       (tester) async {

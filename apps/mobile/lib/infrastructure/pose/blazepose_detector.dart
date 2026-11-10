@@ -17,12 +17,14 @@ import 'blazepose_decode.dart';
 import 'blazepose_geometry.dart';
 import 'pose_render_diagnostics.dart';
 import 'pose_quality_diagnostics.dart';
+import '../../features/workout/domain/workout_performance_diagnostics.dart';
 
 /// Persistent background ingestion/inference worker. Assets are verified before
 /// native execution; only bounded frame work is sent by the application scheduler.
 class BlazePoseDetector
     implements ManagedPoseDetector, PoseDetectorDiagnostics {
-  BlazePoseDetector._(this.quality);
+  BlazePoseDetector._(this.quality, this.baseline);
+  final WorkoutPerformanceDiagnostics? baseline;
   final PoseQualityDiagnostics? quality;
   final _messages = ReceivePort();
   final _errors = ReceivePort();
@@ -59,11 +61,13 @@ class BlazePoseDetector
       };
 
   static Future<BlazePoseDetector> create(
-      {PoseQualityDiagnostics? quality}) async {
+      {PoseQualityDiagnostics? quality,
+      WorkoutPerformanceDiagnostics? baseline}) async {
     if (!Platform.isAndroid) {
       throw UnsupportedError('Real pose preview currently requires Android.');
     }
-    final detector = BlazePoseDetector._(quality);
+    final startup = baseline == null ? null : (Stopwatch()..start());
+    final detector = BlazePoseDetector._(quality, baseline);
     detector._messages.listen(detector._onMessage);
     detector._errors
         .listen((_) => detector._fail(StateError('BlazePose worker failed.')));
@@ -103,8 +107,12 @@ class BlazePoseDetector
           onExit: detector._exit.sendPort);
       detector._commands =
           await detector._ready.future.timeout(const Duration(seconds: 30));
+      baseline?.sample(
+          WorkoutMetric.modelStartupMicros, startup!.elapsedMicroseconds);
+      baseline?.resourceOpened(WorkoutResource.detector);
       return detector;
     } catch (_) {
+      baseline?.count(WorkoutSignal.modelFailure);
       try {
         if (detector._gpuSessionId != null) {
           await BlazePoseGpuSession.closeId(detector._gpuSessionId!);
@@ -161,6 +169,8 @@ class BlazePoseDetector
       if (values.length > 3) {
         nativeInferenceMicros += values[3] as int;
         pipelineMicros += values[4] as int;
+        baseline?.sample(WorkoutMetric.inferenceMicros, values[3] as int);
+        baseline?.sample(WorkoutMetric.workerMicros, values[4] as int);
         measuredFrames++;
         if (values.length > 7 && values[7] != null) {
           _gpuDiagnostics['sameInputAgreement'] = values[7];
@@ -239,6 +249,7 @@ class BlazePoseDetector
         _errors.close();
         _exit.close();
         if (!_closed.isCompleted) _closed.complete();
+        baseline?.resourceClosed(WorkoutResource.detector);
       }
     }
   }

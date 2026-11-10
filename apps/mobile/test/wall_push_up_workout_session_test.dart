@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import 'support/workout_consent_harness.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:gainpath_domain/gainpath_domain.dart' show SessionScope;
@@ -139,31 +140,26 @@ void main() {
       repo.dispose();
     });
   }
-  testWidgets(
-      'wall contact setup needs acknowledgement and offers no upload option',
-      (tester) async {
-    await tester.pumpWidget(MaterialApp(
-        home: Builder(
-            builder: (context) => Scaffold(
-                body: TextButton(
-                    onPressed: () => showWorkoutCaptureConsent(context,
-                        onUploadChanged: (_) {},
-                        allowUpload: false,
-                        exerciseInstruction: wallPushUpCaptureInstruction,
-                        setupConfirmationLabel: wallPushUpSetupConfirmation),
-                    child: const Text('Consent'))))));
-    await tester.tap(find.text('Consent'));
-    await tester.pumpAndSettle();
-    expect(find.text(wallPushUpSetupConfirmation), findsOneWidget);
-    expect(
-        tester
-            .widget<FilledButton>(
-                find.widgetWithText(FilledButton, 'Accept and start'))
-            .onPressed,
-        isNull);
-    expect(find.text('Also allow this measured summary to be uploaded.'),
-        findsNothing);
-  });
+  for (final accepted in [false, true]) {
+    testWidgets(
+        'wall contact setup needs acknowledgement and offers no upload option (legacy, accepted: $accepted)',
+        (tester) async {
+      await openWorkoutConsent(tester,
+          previouslyAccepted: accepted,
+          instruction: wallPushUpCaptureInstruction,
+          setupLabel: wallPushUpSetupConfirmation);
+      expect(find.text(wallPushUpSetupConfirmation), findsOneWidget);
+      expect(
+          tester
+              .widget<FilledButton>(
+                  find.widgetWithText(FilledButton, 'Ready to continue'))
+              .onPressed,
+          isNull);
+      expect(find.text('Also allow this measured summary to be uploaded.'),
+          findsNothing);
+      await confirmWorkoutSetup(tester);
+    });
+  }
   testWidgets('wall session closes on account loss and cannot save',
       (tester) async {
     var now = 0;

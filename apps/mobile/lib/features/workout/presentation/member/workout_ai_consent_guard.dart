@@ -16,13 +16,18 @@ class WorkoutAiConsentGuard extends StatefulWidget {
       required this.scope,
       required this.child,
       this.preferencesFactory = createWorkoutPreferences,
-      this.isCurrent});
+      this.isCurrent,
+      this.launchCurrent});
   final SessionScope scope;
   final Widget child;
   final WorkoutPreferencesFactory preferencesFactory;
 
   /// Injection seam; production uses the authenticated Member scope policy.
   final bool Function()? isCurrent;
+
+  /// Sticky launch intent is checked until the capture child first mounts.
+  /// Normal lifecycle policy owns capture after that handoff.
+  final bool Function()? launchCurrent;
   @override
   State<WorkoutAiConsentGuard> createState() => _WorkoutAiConsentGuardState();
 }
@@ -87,6 +92,9 @@ class _WorkoutAiConsentGuardState extends State<WorkoutAiConsentGuard> {
   @override
   Widget build(BuildContext context) {
     final p = _preferences;
+    if (!_hadCapture && widget.launchCurrent?.call() == false) {
+      _revoked = true;
+    }
     if (!_revoked && _current && p?.validConsent == true) {
       _hadCapture = true;
       return widget.child;

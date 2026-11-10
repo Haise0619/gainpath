@@ -3,13 +3,18 @@ import 'package:gainpath_pose/gainpath_pose.dart';
 
 import '../../features/workout/domain/workout_audio_port.dart';
 import '../../features/workout/domain/workout_audio_trace.dart';
+import '../../features/workout/domain/workout_performance_diagnostics.dart';
 
 /// Offline Android TTS, lazily initialized only after voice coaching is enabled.
 /// Native futures complete on utterance done/stop/error. Each cancellation epoch
 /// invalidates playback still waiting for engine initialization.
 class AndroidWorkoutAudio
-    implements PreparedWorkoutAudioPort, TimedWorkoutAudioPort {
-  AndroidWorkoutAudio({MethodChannel? channel, String? sessionId, this.trace})
+    implements
+        PreparedWorkoutAudioPort,
+        TimedWorkoutAudioPort,
+        TracedWorkoutAudioPort {
+  AndroidWorkoutAudio(
+      {MethodChannel? channel, String? sessionId, this.trace, this.baseline})
       : _channel = channel ?? const MethodChannel('gainpath/workout_audio'),
         _sessionId = sessionId ??
             'audio-${DateTime.now().microsecondsSinceEpoch}-${_nextId++}';
@@ -18,6 +23,8 @@ class AndroidWorkoutAudio
   final MethodChannel _channel;
   final String _sessionId;
   final WorkoutAudioTrace? trace;
+  final WorkoutPerformanceDiagnostics? baseline;
+  bool _ttsOpened = false;
   MethodChannel? _traceChannel;
   String? _requestId, _cueId;
   Future<bool>? _ready;
@@ -70,6 +77,10 @@ class AndroidWorkoutAudio
           true;
       trace?.record('tts_prepare_completed',
           reason: ready ? 'ready' : 'unavailable');
+      if (ready && !_closed) {
+        _ttsOpened = true;
+        baseline?.resourceOpened(WorkoutResource.tts);
+      }
       return ready;
     } catch (error) {
       lastError = error;
@@ -83,6 +94,11 @@ class AndroidWorkoutAudio
 
   @override
   Future<AudioPlaybackOutcome> play(CueRequest cue) => _play(cue);
+
+  @override
+  Future<AudioPlaybackOutcome> playTraced(CueRequest cue,
+          {required String requestId}) =>
+      _play(cue, requestId: requestId);
 
   @override
   Future<AudioPlaybackOutcome> playCurrent(CueRequest cue,
@@ -184,6 +200,10 @@ class AndroidWorkoutAudio
     try {
       // Do not wait for a late onInit callback before requesting shutdown.
       await _channel.invokeMethod<void>('close', _identity);
+      if (_ttsOpened) {
+        _ttsOpened = false;
+        baseline?.resourceClosed(WorkoutResource.tts);
+      }
     } catch (error) {
       lastError = error;
     }

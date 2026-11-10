@@ -22,9 +22,10 @@ class WorkoutAudioController {
 
   final WorkoutAudioPort _port;
   final AudioCueArbiter _arbiter;
-  final WorkoutAudioTrace? trace;
+  WorkoutAudioTrace? trace;
   final bool boundedStarts;
   int _requestSequence = 0;
+  int _diagnosticSequence = 0;
   String? _activeRequestId;
   final Set<String> _seenEvents = {};
   WorkoutFeedbackEvent? _activeEvent;
@@ -135,6 +136,10 @@ class WorkoutAudioController {
       if (!_seenEvents.add(event.id)) continue;
       // Finite recent IDs plus monotonic input reject repeated snapshot events.
       if (_seenEvents.length > 64) _seenEvents.remove(_seenEvents.first);
+      trace?.record('exercise_event_generated',
+          requestId: event.id,
+          cueId: event.cue.id,
+          observedAtMicros: event.observedAtMicros);
       if (invalidateFeedback || !event.isFresh(nowMicros)) {
         trace?.record('dropped',
             requestId: event.id,
@@ -147,6 +152,28 @@ class WorkoutAudioController {
       trace?.record('feedback_queued',
           requestId: event.id, cueId: event.cue.id);
     }
+    final diagnosticRequests = <String, String>{
+      for (final event in eventByCue.values) event.cue.id: event.id,
+    };
+    final diagnosticDrops = <String>{};
+    if (trace != null) {
+      for (final cue in batch) {
+        if (eventByCue.containsKey(cue.id)) continue;
+        final id = 'observed-${++_diagnosticSequence}';
+        diagnosticRequests[cue.id] = id;
+        trace!.record('exercise_event_generated',
+            requestId: id,
+            cueId: cue.id,
+            observedAtMicros: observedAtMicros ?? nowMicros);
+      }
+    }
+    void observeDrop(CueRequest cue, String reason) {
+      final id = diagnosticRequests[cue.id];
+      if (id != null && diagnosticDrops.add(id)) {
+        trace?.record('dropped', requestId: id, cueId: cue.id, reason: reason);
+      }
+    }
+
     // Event cues may be emitted for just one frame. Do not interrupt speech
     // already underway, but a request that has not started must remain current
     // throughout asynchronous stop/engine preparation.
@@ -167,32 +194,39 @@ class WorkoutAudioController {
     }
     _arbiter.clearPending();
     if (!_canPlay) {
-      for (final event in eventByCue.values) {
-        trace?.record('dropped',
-            requestId: event.id, cueId: event.cue.id, reason: 'audio_disabled');
+      for (final cue in batch) {
+        observeDrop(cue, 'audio_disabled');
       }
       return;
     }
     for (final cue in batch) {
-      if (cue.id.isEmpty || cue.text.trim().isEmpty) continue;
+      if (cue.id.isEmpty || cue.text.trim().isEmpty) {
+        observeDrop(cue, 'invalid_cue');
+        continue;
+      }
       if (_voiceMode == WorkoutVoiceMode.alertsOnly &&
           cue.priority == CuePriority.encouragement) {
+        observeDrop(cue, 'voice_mode');
         continue;
       }
       if (!trackingAvailable &&
           cue.priority != CuePriority.warning &&
           !eventByCue.containsKey(cue.id)) {
+        observeDrop(cue, 'tracking_unavailable');
         continue;
       }
       final active = _activeCue;
       if (active != null &&
           (cue.id == active.id ||
               cue.priority.weight <= active.priority.weight)) {
+        observeDrop(cue, 'active_priority');
         continue;
       }
-      final requestId = eventByCue[cue.id]?.id ?? 'cue-${++_requestSequence}';
+      final requestId = eventByCue[cue.id]?.id ??
+          diagnosticRequests[cue.id] ??
+          'cue-${++_requestSequence}';
       requestByCue[cue.id] = requestId;
-      if (!eventByCue.containsKey(cue.id)) {
+      if (trace == null && !eventByCue.containsKey(cue.id)) {
         trace?.record('exercise_event_generated',
             requestId: requestId,
             cueId: cue.id,
@@ -204,20 +238,13 @@ class WorkoutAudioController {
     final selected = _arbiter.takeNext(nowMicros: nowMicros);
     _arbiter.clearPending();
     if (selected == null) {
-      for (final event in eventByCue.values) {
-        trace?.record('dropped',
-            requestId: event.id,
-            cueId: event.cue.id,
-            reason: _canPlay ? 'priority_or_cooldown' : 'audio_disabled');
+      for (final cue in batch) {
+        observeDrop(cue, 'priority_or_cooldown');
       }
       return;
     }
-    for (final event
-        in eventByCue.values.where((e) => e.cue.id != selected.id)) {
-      trace?.record('dropped',
-          requestId: event.id,
-          cueId: event.cue.id,
-          reason: 'arbitration_priority');
+    for (final cue in batch.where((c) => c.id != selected.id)) {
+      observeDrop(cue, 'arbitration_priority');
     }
     if (_activeCue != null) _cancel(reason: 'higher_priority');
     _activeCue = selected;
@@ -284,7 +311,9 @@ class WorkoutAudioController {
               ? await timed.playCurrent(cue,
                   requestId: _activeRequestId!,
                   remainingStartTime: Duration(microseconds: remaining))
-              : await _port.play(cue);
+              : trace != null && timed is TracedWorkoutAudioPort
+                  ? await timed.playTraced(cue, requestId: _activeRequestId!)
+                  : await _port.play(cue);
     } catch (error) {
       outcome = AudioPlaybackOutcome.unavailable;
       if (generation == _generation) lastError = error;

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'support/workout_consent_harness.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -115,8 +116,7 @@ void main() {
     session.dispose();
     repo.dispose();
   });
-  testWidgets(
-      'workout tools exclude the obsolete local floor testing shortcut',
+  testWidgets('workout tools exclude the obsolete local floor testing shortcut',
       (tester) async {
     late AuthBloc auth;
     await tester.runAsync(() async {
@@ -259,29 +259,24 @@ void main() {
       repo.dispose();
     });
   }
-  testWidgets(
-      'floor setup requires acknowledgement and has no accepted-upload control',
-      (tester) async {
-    await tester.pumpWidget(MaterialApp(
-        home: Builder(
-            builder: (context) => Scaffold(
-                body: TextButton(
-                    onPressed: () => showWorkoutCaptureConsent(context,
-                        onUploadChanged: (_) {},
-                        allowUpload: false,
-                        exerciseInstruction: floorPushUpCaptureInstruction,
-                        setupConfirmationLabel: floorPushUpSetupConfirmation),
-                    child: const Text('Start'))))));
-    await tester.tap(find.text('Start'));
-    await tester.pumpAndSettle();
-    expect(find.text(floorPushUpSetupConfirmation), findsOneWidget);
-    expect(
-        tester
-            .widget<FilledButton>(
-                find.widgetWithText(FilledButton, 'Accept and start'))
-            .onPressed,
-        isNull);
-    expect(find.text('Also allow this measured summary to be uploaded.'),
-        findsNothing);
-  });
+  for (final accepted in [false, true]) {
+    testWidgets(
+        'floor setup requires acknowledgement and has no accepted-upload control (accepted: $accepted)',
+        (tester) async {
+      await openWorkoutConsent(tester,
+          previouslyAccepted: accepted,
+          instruction: floorPushUpCaptureInstruction,
+          setupLabel: floorPushUpSetupConfirmation);
+      expect(find.text(floorPushUpSetupConfirmation), findsOneWidget);
+      expect(
+          tester
+              .widget<FilledButton>(
+                  find.widgetWithText(FilledButton, 'Ready to continue'))
+              .onPressed,
+          isNull);
+      expect(find.text('Also allow this measured summary to be uploaded.'),
+          findsNothing);
+      await confirmWorkoutSetup(tester);
+    });
+  }
 }

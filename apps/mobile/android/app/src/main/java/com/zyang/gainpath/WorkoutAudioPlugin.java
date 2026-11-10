@@ -113,7 +113,7 @@ public final class WorkoutAudioPlugin implements FlutterPlugin,
                     return;
                 }
                 session = new SpeechSession(id, result,
-                    BuildConfig.DEBUG && Boolean.TRUE.equals(call.argument("trace")));
+                    Boolean.TRUE.equals(call.argument("trace")));
                 sessions.put(id, session);
                 session.initialize();
                 return;

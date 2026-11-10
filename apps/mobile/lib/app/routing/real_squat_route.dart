@@ -1,4 +1,5 @@
 import 'dart:async';
+import '../../infrastructure/pose/workout_baseline.dart';
 import 'dart:math';
 import 'dart:convert';
 import 'package:flutter/material.dart';
@@ -60,6 +61,11 @@ class RealSquatRoute extends StatefulWidget {
 class _RealSquatRouteState extends State<RealSquatRoute>
     with WidgetsBindingObserver {
   final _clock = Stopwatch()..start();
+  late final _baseline = createWorkoutBaseline(
+      WorkoutBaselineExercise.squat, () => _clock.elapsedMicroseconds);
+  late final _baselineTrace =
+      baselineAudioTrace(_baseline, () => _clock.elapsedMicroseconds);
+  WorkoutBaselineBinding? _baselineBinding;
   RealSquatSessionController? _session;
   AndroidPoseCamera? _camera;
   WorkoutSessionRepository? _repository;
@@ -76,6 +82,7 @@ class _RealSquatRouteState extends State<RealSquatRoute>
   @override
   void initState() {
     super.initState();
+    _baseline?.report(force: true);
     if (realSquatPerformanceEnabled) {
       _performance =
           RealSquatPerformance(clockMicros: () => _clock.elapsedMicroseconds);
@@ -141,8 +148,8 @@ class _RealSquatRouteState extends State<RealSquatRoute>
           store: store,
           uploadGateway: UnavailableWorkoutUploadGateway(),
           activeScope: () => authorized() ? widget.scope : null);
-      _camera =
-          AndroidPoseCamera(clockMicros: () => _clock.elapsedMicroseconds);
+      _camera = AndroidPoseCamera(
+          clockMicros: () => _clock.elapsedMicroseconds, baseline: _baseline);
       final random = Random.secure();
       final id = widget.sessionId ??
           List.generate(16,
@@ -169,8 +176,9 @@ class _RealSquatRouteState extends State<RealSquatRoute>
           scope: widget.scope,
           activeScope: () => authorized() ? widget.scope : null,
           camera: _camera!,
-          detectorFactory: () => BlazePoseDetector.create(),
-          audioPort: AndroidWorkoutAudio(),
+          detectorFactory: () => BlazePoseDetector.create(baseline: _baseline),
+          audioPort:
+              AndroidWorkoutAudio(trace: _baselineTrace, baseline: _baseline),
           repository: _repository!,
           clockMicros: () => _clock.elapsedMicroseconds,
           sessionId: id,
@@ -196,6 +204,13 @@ class _RealSquatRouteState extends State<RealSquatRoute>
                   await _outbox!.enqueueFromIntent(summary);
                 });
       _session = c;
+      if (_baseline != null && _baselineTrace != null) {
+        _baselineBinding = WorkoutBaselineBinding(
+            session: c,
+            baseline: _baseline,
+            audio: c.processing.audio,
+            trace: _baselineTrace);
+      }
       if (_performance != null) {
         _metrics ??= Timer.periodic(const Duration(seconds: 5), (_) {
           final current = _session;
@@ -249,6 +264,7 @@ class _RealSquatRouteState extends State<RealSquatRoute>
     _metrics?.cancel();
     _performance?.pause();
     unawaited(_authSubscription?.cancel());
+    _baselineBinding?.dispose();
     _session?.dispose();
     _repository?.dispose();
     _outbox?.dispose();

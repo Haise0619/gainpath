@@ -5,6 +5,7 @@ import 'package:gainpath_pose/gainpath_pose.dart';
 import '../../../infrastructure/pose/pose_render_diagnostics.dart';
 import '../../../infrastructure/pose/pose_quality_diagnostics.dart';
 import '../../../infrastructure/pose/real_squat_performance.dart';
+import '../domain/workout_performance_diagnostics.dart';
 
 abstract interface class PoseCameraSource {
   Future<void> start(void Function(PoseInput) onFrame);
@@ -38,6 +39,8 @@ class PosePreviewController extends ChangeNotifier {
         quality = quality ?? PoseQualityDiagnostics(clockMicros: clockMicros);
   final PoseQualityDiagnostics quality;
   final RealSquatPerformance? performance;
+  /// Optional scalar observer, attached by retained exercise route composition.
+  WorkoutPerformanceDiagnostics? baseline;
   bool _responsivePreview;
   bool get responsivePreview => _directPreview;
   bool get _directPreview =>
@@ -201,13 +204,17 @@ class PosePreviewController extends ChangeNotifier {
                 final start = clockMicros();
                 quality.sample('queueAgeMicros', start - input.timestampMicros);
                 final result = await detector.detect(input);
+                baseline?.count(WorkoutSignal.processedFrame);
+                baseline?.sample(WorkoutMetric.hostProcessingMicros, clockMicros() - start);
                 quality.sample('hostProcessingMicros', clockMicros() - start);
                 return result;
               },
-              onDiscard: quality.enabled
-                  ? (input, reason) =>
-                      quality.discard(input.timestampMicros, reason)
-                  : null,
+              onDiscard: (input, reason) {
+                baseline?.discarded(reason);
+                if (quality.enabled) {
+                  quality.discard(input.timestampMicros, reason);
+                }
+              },
               onResult: (pose) {
                 if (!_active) {
                   unawaited(close());
@@ -235,6 +242,8 @@ class PosePreviewController extends ChangeNotifier {
                       diagnosticTimer.elapsedMicroseconds);
                 }
                 displayedFrames++;
+                baseline?.count(WorkoutSignal.deliveredFrame);
+                baseline?.sample(WorkoutMetric.deliveryAgeMicros, clockMicros() - pose.capturedAtMicros);
                 _lastDisplayDelivery = clockMicros();
                 onRefined?.call(pose);
                 performance?.delivered(pose.capturedAtMicros);

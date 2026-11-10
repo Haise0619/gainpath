@@ -2,6 +2,7 @@ import 'dart:async';
 import '../../../../app/di/workout_preferences_factory.dart';
 import '../../application/workout_preferences_controller.dart';
 import 'workout_privacy_settings_screen.dart';
+import 'workout_ai_consent_guard.dart';
 import '../../domain/exercise_tracker_dispatcher.dart';
 import '../../domain/published_routine_view.dart';
 import '../../application/workout_hub_program.dart';
@@ -12,6 +13,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:gainpath_identity/gainpath_identity.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
 import 'package:gainpath_domain/workout.dart';
+import 'package:gainpath_domain/gainpath_domain.dart' show AppRole;
 import 'equipment_scanner_screen.dart';
 import 'camera_setup_screen.dart';
 import 'exercise_tutorial_screen.dart';
@@ -495,22 +497,47 @@ class WorkoutPrepScreen extends StatelessWidget {
   }
 
   Future<void> _startPosePreview(BuildContext context) async {
-    final consented = await showModalBottomSheet<bool>(
-        context: context,
-        isScrollControlled: true,
-        builder: (_) => const _ConsentSheet(previewOnly: true));
-    if (consented == true && context.mounted) {
+    final auth = context.read<AuthBloc>();
+    final scope = auth.state.session?.scope;
+    if (scope == null || !AuthRolePolicy.canEnter(auth.state,
+        allowed: const {AppRole.member})) {
+      return;
+    }
+    final lease = _CaptureLaunchLease(context);
+    // A loss followed by reauthentication must not revive this launch intent.
+    var invalidated = false;
+    bool authorized() => auth.state.session?.scope == scope &&
+        AuthRolePolicy.canEnter(auth.state, allowed: const {AppRole.member});
+    final subscription = auth.stream.listen((_) {
+      if (!authorized()) invalidated = true;
+    });
+    try {
+      final preferences = await preferencesFactory(scope);
+      if (!lease.current || invalidated || !authorized()) return;
+      final consented = await showWorkoutCaptureConsent(context,
+          preferences: preferences, requireSetup: false,
+          allowUpload: false, onUploadChanged: (_) {});
+      if (consented != true || !lease.current || invalidated ||
+          !authorized() || !preferences.validConsent) {
+        return;
+      }
       final destination = routes.posePreviewBuilder;
       if (destination == null) {
         showUnavailable(context);
         return;
       }
-      final auth = context.read<AuthBloc>();
-      Navigator.push(
+      await Navigator.push(
           context,
           MaterialPageRoute<void>(
               builder: (_) => BlocProvider.value(
-                  value: auth, child: Builder(builder: destination))));
+                  value: auth, child: WorkoutAiConsentGuard(
+                      scope: scope, preferencesFactory: (_) async => preferences,
+                      launchCurrent: () => lease.uninterrupted && !invalidated &&
+                          authorized() && preferences.validConsent,
+                      child: Builder(builder: destination)))));
+    } finally {
+      lease.dispose();
+      await subscription.cancel();
     }
   }
 }
@@ -524,6 +551,7 @@ class _CaptureLaunchLease with WidgetsBindingObserver {
   }
   final BuildContext context;
   bool _interrupted = false;
+  bool get uninterrupted => !_interrupted && context.mounted;
   bool get current =>
       !_interrupted &&
       context.mounted &&
@@ -1048,8 +1076,7 @@ const floorPushUpSetupConfirmation =
 
 class _ConsentSheet extends StatefulWidget {
   const _ConsentSheet(
-      {this.previewOnly = false,
-      this.privacyAccepted = false,
+      {this.privacyAccepted = false,
       this.realWorkout = false,
       this.allowUpload = true,
       this.exerciseInstruction,
@@ -1059,7 +1086,7 @@ class _ConsentSheet extends StatefulWidget {
   final String? exerciseInstruction;
   final String? setupConfirmationLabel;
   final ValueChanged<bool>? onUploadChanged;
-  final bool previewOnly;
+  // Standalone preview now uses the same persistent privacy notice as workouts.
   final bool realWorkout;
   final bool privacyAccepted;
 
@@ -1100,9 +1127,7 @@ class _ConsentSheetState extends State<_ConsentSheet> {
           const SizedBox(height: 12),
           if (!widget.privacyAccepted)
             Text(
-              widget.previewOnly
-                  ? 'GainPath uses your camera to display your body landmarks on this device.'
-                  : 'GainPath reads your body position from the camera to check your form '
+              'GainPath reads your body position from the camera to check your form '
                       'and count your reps.',
               style: Theme.of(context).textTheme.bodyLarge,
             ),
@@ -1119,9 +1144,7 @@ class _ConsentSheetState extends State<_ConsentSheet> {
                 if (!widget.privacyAccepted)
                   _point(
                       context,
-                      widget.previewOnly
-                          ? 'This preview does not save activity or count reps.'
-                          : 'Only your movement scores are saved.'),
+                      'Only your movement scores are saved.'),
                 if (widget.realWorkout)
                   _point(
                       context,

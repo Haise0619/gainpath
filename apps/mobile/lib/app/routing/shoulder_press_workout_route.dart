@@ -1,4 +1,5 @@
 import 'dart:async';
+import '../../infrastructure/pose/workout_baseline.dart';
 import '../../features/workout/presentation/member/shoulder_press_setup_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -30,6 +31,11 @@ class ShoulderPressWorkoutRoute extends StatefulWidget {
 class _ShoulderPressWorkoutRouteState extends State<ShoulderPressWorkoutRoute>
     with WidgetsBindingObserver {
   final _clock = Stopwatch()..start();
+  late final _baseline = createWorkoutBaseline(
+      WorkoutBaselineExercise.shoulderPress, () => _clock.elapsedMicroseconds);
+  late final _baselineTrace =
+      baselineAudioTrace(_baseline, () => _clock.elapsedMicroseconds);
+  WorkoutBaselineBinding? _baselineBinding;
   ShoulderPressWorkoutSession? _session;
   WorkoutSessionRepository? _repository;
   WorkoutVoicePreferences? _voicePreferences;
@@ -45,6 +51,7 @@ class _ShoulderPressWorkoutRouteState extends State<ShoulderPressWorkoutRoute>
   @override
   void initState() {
     super.initState();
+    _baseline?.report(force: true);
     _foreground = WidgetsBinding.instance.lifecycleState == null ||
         WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed;
     WidgetsBinding.instance.addObserver(this);
@@ -77,14 +84,15 @@ class _ShoulderPressWorkoutRouteState extends State<ShoulderPressWorkoutRoute>
           store: store,
           uploadGateway: UnavailableWorkoutUploadGateway(),
           activeScope: () => _authorized(auth) ? launch.scope : null);
-      _camera =
-          AndroidPoseCamera(clockMicros: () => _clock.elapsedMicroseconds);
+      _camera = AndroidPoseCamera(
+          clockMicros: () => _clock.elapsedMicroseconds, baseline: _baseline);
       final session = ShoulderPressWorkoutSession(
           scope: launch.scope,
           activeScope: () => _authorized(auth) ? launch.scope : null,
           camera: _camera!,
-          detectorFactory: () => BlazePoseDetector.create(),
-          audioPort: AndroidWorkoutAudio(),
+          detectorFactory: () => BlazePoseDetector.create(baseline: _baseline),
+          audioPort:
+              AndroidWorkoutAudio(trace: _baselineTrace, baseline: _baseline),
           repository: _repository!,
           clockMicros: () => _clock.elapsedMicroseconds,
           sessionId: launch.sessionId ?? newWorkoutRequestId(),
@@ -99,6 +107,13 @@ class _ShoulderPressWorkoutRouteState extends State<ShoulderPressWorkoutRoute>
           });
       session.guidance.setRestSeconds(launch.exercise.restSeconds);
       _session = session;
+      if (_baseline != null && _baselineTrace != null) {
+        _baselineBinding = WorkoutBaselineBinding(
+            session: session,
+            baseline: _baseline,
+            audio: session.audio,
+            trace: _baselineTrace);
+      }
       _auth = auth.stream.listen((_) => session.accountChanged());
       setState(() {});
       await session.start(
@@ -107,6 +122,7 @@ class _ShoulderPressWorkoutRouteState extends State<ShoulderPressWorkoutRoute>
           foreground: _foreground);
       unawaited(_preferences(session));
     } catch (_) {
+      _baselineBinding?.dispose();
       _session?.dispose();
       _session = null;
       await _auth?.cancel();
@@ -145,6 +161,7 @@ class _ShoulderPressWorkoutRouteState extends State<ShoulderPressWorkoutRoute>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     unawaited(_auth?.cancel());
+    _baselineBinding?.dispose();
     _session?.dispose();
     _repository?.dispose();
     _clock.stop();

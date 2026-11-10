@@ -14,6 +14,7 @@ import 'package:gainpath_mobile/features/workout/domain/curl_arm_metrics.dart';
 import 'package:gainpath_mobile/features/workout/data/workout_session_repository.dart';
 import 'real_squat_session_test.dart' show Camera, FailingStore;
 import 'squat_processing_controller_test.dart' show AudioSink;
+import 'support/workout_consent_harness.dart';
 
 class _CurlDetector implements ManagedPoseDetector {
   double angle = 170;
@@ -47,34 +48,28 @@ class _CurlDetector implements ManagedPoseDetector {
 void main() {
   setUpAll(() => GoogleFonts.config.allowRuntimeFetching = false);
   final scope = SessionScope(userId: 'member', organizationId: 'gainpath');
-  testWidgets(
-      'curl consent names the single-arm session and offers no upload opt-in',
-      (tester) async {
-    await tester.pumpWidget(MaterialApp(
-        home: Builder(
-            builder: (context) => Scaffold(
-                body: TextButton(
-                    onPressed: () => showWorkoutCaptureConsent(context,
-                        onUploadChanged: (_) {},
-                        allowUpload: false,
-                        exerciseInstruction: curlCaptureInstruction),
-                    child: const Text('Open consent'))))));
-    await tester.tap(find.text('Open consent'));
-    await tester.pumpAndSettle();
-    expect(find.text(curlCaptureInstruction), findsOneWidget);
-    expect(
-        find.text(
-            'My full body is visible from the side and the camera is upright and stationary.'),
-        findsOneWidget);
-    expect(
-        tester
-            .widget<FilledButton>(
-                find.widgetWithText(FilledButton, 'Accept and start'))
-            .onPressed,
-        isNull);
-    expect(find.text('Also allow this measured summary to be uploaded.'),
-        findsNothing);
-  });
+  for (final accepted in [false, true]) {
+    testWidgets(
+        'curl consent names the single-arm session and offers no upload opt-in (accepted: $accepted)',
+        (tester) async {
+      await openWorkoutConsent(tester,
+          previouslyAccepted: accepted, instruction: curlCaptureInstruction);
+      expect(find.text(curlCaptureInstruction), findsOneWidget);
+      expect(
+          find.text(
+              'My full body is visible from the side and the camera is upright and stationary.'),
+          findsOneWidget);
+      expect(
+          tester
+              .widget<FilledButton>(
+                  find.widgetWithText(FilledButton, 'Ready to continue'))
+              .onPressed,
+          isNull);
+      expect(find.text('Also allow this measured summary to be uploaded.'),
+          findsNothing);
+      await confirmWorkoutSetup(tester);
+    });
+  }
   testWidgets(
       'account loss closes curl capture and cannot save measured activity',
       (tester) async {

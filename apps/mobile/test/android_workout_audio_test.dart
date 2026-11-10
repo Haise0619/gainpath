@@ -6,6 +6,7 @@ import 'package:gainpath_pose/gainpath_pose.dart';
 import 'package:gainpath_mobile/features/workout/domain/workout_audio_port.dart';
 import 'package:gainpath_mobile/infrastructure/audio/android_workout_audio.dart';
 import 'package:gainpath_mobile/features/workout/domain/workout_audio_trace.dart';
+import 'package:gainpath_mobile/features/workout/domain/workout_performance_diagnostics.dart';
 
 const cue = CueRequest(
     id: 'depth', text: 'Go deeper', priority: CuePriority.correction);
@@ -34,6 +35,36 @@ void main() {
   tearDown(() async {
     await port.close();
     messenger.setMockMethodCallHandler(channel, null);
+  });
+
+  test(
+      'diagnostic ordinary speech correlates without changing native start policy',
+      () async {
+    final traced = AndroidWorkoutAudio(channel: channel, sessionId: 'baseline');
+    expect(await traced.playTraced(cue, requestId: 'event'),
+        AudioPlaybackOutcome.completed);
+    final arguments = calls.last.arguments as Map;
+    expect(arguments['requestId'], 'event');
+    expect(arguments.containsKey('maxStartDelayMs'), isFalse);
+    expect(arguments.containsKey('startDeadlineMicros'), isFalse);
+    await traced.close();
+  });
+
+  test('closing while TTS initializes cannot leave a diagnostic live engine',
+      () async {
+    final baseline = WorkoutPerformanceDiagnostics(
+        exercise: WorkoutBaselineExercise.squat, clockMicros: () => 1);
+    final ready = Completer<bool>();
+    messenger.setMockMethodCallHandler(
+        channel, (call) async => call.method == 'create' ? ready.future : null);
+    final traced = AndroidWorkoutAudio(
+        channel: channel, sessionId: 'pending', baseline: baseline);
+    final preparing = traced.prepare();
+    await Future<void>.delayed(Duration.zero);
+    await traced.close();
+    ready.complete(true);
+    await preparing;
+    expect((baseline.snapshot()['resources'] as Map)['tts'], 0);
   });
 
   test('lazy initialization; native completion and shared session payload',
