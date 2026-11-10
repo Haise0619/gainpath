@@ -411,3 +411,8 @@ Home retains its existing structure with Daily Check-in first, a compact photo-b
 ## Module 2 Phase 0 — 10 November 2026
 
 Standalone Preview now uses persistent account-scoped AI consent and current Member/lifecycle authorization, including sticky navigation-handoff invalidation. Six-exercise scalar baseline instrumentation is opt-in; Reverse Lunge, Row and Wall Push-up remain intact pending safe-retirement assessment. Fresh314 Mobile tests pass (13 optional skips),750 pose tests pass, scoped26-file analysis is clean and Android Debug APK builds. One unrelated backup integration fixture still cannot compile because committed in-memory cover code references missing EquipmentImage.extension. No installation, device/profile result, backend/schema/catalog/history change or Phase 1/2 fix is included. See docs/ux/module-2-phase0-implementation.md for scope, review fixes, exact evidence and remaining physical profiling.
+
+
+## Module 2 Phase 1 — 11 November 2026
+
+Retained Curl/Calf/Lateral watchdogs now measure accepted delivery silence while preserving capture freshness and movement thresholds. Geometry/watchdog loss cancels stale speech. Failed detectors retire before retry; bounded UI cleanup retains shared physical capture ownership until native exit is confirmed. Frozen results persist before optional teardown. Neutral setup copy preserves exercise-specific views. Fresh325 Mobile tests pass (13 optional skips),759 pose tests pass,18-file analysis is clean and arm64 Debug APK builds. Independent review findings were reproduced and fixed. Physical profiling remains unmeasured; no device/backend/catalog changes. Scope and evidence: docs/ux/module-2-phases1-2-implementation.md; build/module2-phase1-20261110/.

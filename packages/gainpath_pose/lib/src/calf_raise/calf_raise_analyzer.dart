@@ -44,6 +44,8 @@ class CalfRaiseAnalyzer {
   static const version = 'standing-calf-raise-side-v1';
   static const implementationRevision = 'forefoot-corridor-noise-return-3';
   static const maximumFrameAgeMicros = 250000, lostAfterMicros = 500000;
+  // Liveness tracks accepted delivery; capture freshness/gap guards stay strict.
+  int? _lastAcceptedDelivery;
   CalfSide? _side;
   CalfRaiseGeometry? _base;
   (int, int, String, String, bool)? _identity;
@@ -148,6 +150,7 @@ class CalfRaiseAnalyzer {
   }
 
   void pause() {
+    _lastAcceptedDelivery = null;
     _invalidate();
     _lastCapture = _lastNow = _unavailableSince = null;
     _decision = 'paused';
@@ -156,8 +159,8 @@ class CalfRaiseAnalyzer {
   CalfRaiseUpdate tick({required int nowMicros}) {
     if (_lastNow == null || nowMicros <= _lastNow!) return snapshot;
     final elapsed = nowMicros - _lastNow!;
-    if (_lastCapture == null ||
-        nowMicros - _lastCapture! > maximumFrameAgeMicros) {
+    if (_lastAcceptedDelivery == null ||
+        nowMicros - _lastAcceptedDelivery! > maximumFrameAgeMicros) {
       _rejected += elapsed;
       _invalidate();
       _health = TrackingStatus.lost;
@@ -275,6 +278,7 @@ class CalfRaiseAnalyzer {
     _unavailableSince = null;
     if (!_calibrated) {
       _rejected += elapsed;
+      _lastAcceptedDelivery = nowMicros;
       _health = TrackingStatus.healthy;
       if (g.kneeAngleDegrees < 165) {
         _calibration.keepAcrossBadSample(t);
@@ -321,6 +325,7 @@ class CalfRaiseAnalyzer {
       _cue = '$_resetReason · keep the phone still and reset with heels down';
       return snapshot;
     }
+    _lastAcceptedDelivery = nowMicros;
     _health = TrackingStatus.healthy;
     if (previousAssessable) {
       _tracked += elapsed;

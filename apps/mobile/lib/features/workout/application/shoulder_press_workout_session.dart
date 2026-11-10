@@ -36,7 +36,10 @@ class ShoulderPressWorkoutSession extends ChangeNotifier
       this.provenance = WorkoutProvenance.realCamera})
       : _analyzer = ShoulderPressAnalyzer(),
         guidance = GuidedWorkoutProgress(sets: sets, repetitions: reps),
-        audio = WorkoutAudioController(port: audioPort, boundedStarts: true, arbiter: AudioCueArbiter(cooldownMicros: 6000000)) {
+        audio = WorkoutAudioController(
+            port: audioPort,
+            boundedStarts: true,
+            arbiter: AudioCueArbiter(cooldownMicros: 6000000)) {
     if (repository.scope != scope ||
         ExerciseTrackingRegistry.resolve(
                     organizationId: scope.organizationId,
@@ -55,7 +58,11 @@ class ShoulderPressWorkoutSession extends ChangeNotifier
         detectorFactory: detectorFactory,
         clockMicros: clockMicros,
         onRefined: _consume,
-        onGeometryInvalidated: () => _analyzer.pause());
+        onGeometryInvalidated: () {
+          _analyzer.pause();
+          audio.invalidateSource();
+          _watchdogLost = true;
+        });
     preview.addListener(_cameraChanged);
   }
   final SessionScope scope;
@@ -216,7 +223,7 @@ class ShoulderPressWorkoutSession extends ChangeNotifier
       if (guidance.stage == GuidedWorkoutStage.resting && !isPaused) {
         guidance.tick(clockMicros());
       }
-      if (_canAnalyse) _analyzer.tick(nowMicros: clockMicros());
+      if (_canAnalyse) _tickAnalysis();
       _notify();
     });
     if (!foreground) {
@@ -227,6 +234,14 @@ class ShoulderPressWorkoutSession extends ChangeNotifier
       return;
     }
     await preview.start(consented: true);
+  }
+
+  bool _watchdogLost = false;
+  void _tickAnalysis() {
+    final update = _analyzer.tick(nowMicros: clockMicros());
+    final lost = update.health == TrackingStatus.lost;
+    if (lost && !_watchdogLost) audio.invalidateSource();
+    _watchdogLost = lost;
   }
 
   void _consume(PoseFrame frame) {
@@ -240,18 +255,31 @@ class ShoulderPressWorkoutSession extends ChangeNotifier
     }
     _hasFrame = true;
     final update = _analyzer.update(frame, nowMicros: clockMicros());
+    _watchdogLost = update.health == TrackingStatus.lost;
     audio.consume([
-      if (update.needsCalibration || update.requiresBottomReset || update.health != TrackingStatus.healthy)
-        CueRequest(id: 'press_setup', text: update.calibrationCue, priority: CuePriority.warning),
+      if (update.needsCalibration ||
+          update.requiresBottomReset ||
+          update.health != TrackingStatus.healthy)
+        CueRequest(
+            id: 'press_setup',
+            text: update.calibrationCue,
+            priority: CuePriority.warning),
     ],
-        events: [for (final cue in update.cues)
-          WorkoutFeedbackEvent(id: 'press-${frame.capturedAtMicros}-${cue.id}',
-            cue: CueRequest(id: cue.id,
-              text: cue.id == 'shoulder_press_partial'
-                ? 'On the next repetition, press both arms fully overhead before lowering.'
-                : 'Good repetition.',
-              priority: cue.id == 'shoulder_press_partial' ? CuePriority.correction : cue.priority),
-            observedAtMicros: frame.capturedAtMicros, generatedAtMicros: clockMicros())],
+        events: [
+          for (final cue in update.cues)
+            WorkoutFeedbackEvent(
+                id: 'press-${frame.capturedAtMicros}-${cue.id}',
+                cue: CueRequest(
+                    id: cue.id,
+                    text: cue.id == 'shoulder_press_partial'
+                        ? 'On the next repetition, press both arms fully overhead before lowering.'
+                        : 'Good repetition.',
+                    priority: cue.id == 'shoulder_press_partial'
+                        ? CuePriority.correction
+                        : cue.priority),
+                observedAtMicros: frame.capturedAtMicros,
+                generatedAtMicros: clockMicros())
+        ],
         invalidateFeedback: update.health == TrackingStatus.lost,
         nowMicros: clockMicros(),
         trackingAvailable: update.health == TrackingStatus.healthy &&
@@ -454,14 +482,22 @@ class ShoulderPressWorkoutSession extends ChangeNotifier
       _timer?.cancel();
       _suspendAnalysis();
       _notify();
-      await audio.close();
-      await preview.close().catchError((Object _) {});
-      if (!_authorized) return null;
+      // Persist the frozen observation before optional hardware cleanup.
       await repository.saveLocal(summary!);
+      await audio
+          .close()
+          .timeout(const Duration(seconds: 5))
+          .catchError((Object _) {});
+      await preview.close().catchError((Object _) {});
       if (!_authorized) return null;
       viewPhase = MeasuredWorkoutPhase.saved;
       return summary;
     } catch (_) {
+      await audio
+          .close()
+          .timeout(const Duration(seconds: 5))
+          .catchError((Object _) {});
+      await preview.close().catchError((Object _) {});
       if (_authorized) {
         viewPhase = MeasuredWorkoutPhase.saveFailed;
         _error =

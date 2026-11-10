@@ -501,14 +501,22 @@ class FloorPushUpWorkoutSession extends ChangeNotifier
       _timer?.cancel();
       _suspendAnalysis();
       _notify();
-      await audio.close();
-      await preview.close().catchError((Object _) {});
-      if (!_authorized) return null;
+      // Persist the frozen observation before optional hardware cleanup.
       await repository.saveLocal(summary!);
+      await audio
+          .close()
+          .timeout(const Duration(seconds: 5))
+          .catchError((Object _) {});
+      await preview.close().catchError((Object _) {});
       if (!_authorized) return null;
       viewPhase = MeasuredWorkoutPhase.saved;
       return summary;
     } catch (_) {
+      await audio
+          .close()
+          .timeout(const Duration(seconds: 5))
+          .catchError((Object _) {});
+      await preview.close().catchError((Object _) {});
       if (_authorized) {
         viewPhase = MeasuredWorkoutPhase.saveFailed;
         _error =

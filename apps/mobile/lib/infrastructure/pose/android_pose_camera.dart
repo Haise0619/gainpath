@@ -7,7 +7,10 @@ import 'blazepose_geometry.dart';
 import 'pose_quality_diagnostics.dart';
 import '../../features/workout/domain/workout_performance_diagnostics.dart';
 
-class AndroidPoseCamera implements PoseCameraSource, PoseDetectorDiagnostics {
+class AndroidPoseCamera
+    implements ExclusivePoseCameraSource, PoseDetectorDiagnostics {
+  @override
+  Object get ownershipKey => 'gainpath-android-pose-camera';
   AndroidPoseCamera(
       {required this.clockMicros,
       this.preferFront = true,

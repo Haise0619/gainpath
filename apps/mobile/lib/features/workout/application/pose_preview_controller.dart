@@ -13,6 +13,11 @@ abstract interface class PoseCameraSource {
   Future<void> stop();
 }
 
+/// Physical capture ownership survives the route/controller that initiated it.
+abstract interface class ExclusivePoseCameraSource implements PoseCameraSource {
+  Object get ownershipKey;
+}
+
 enum PosePreviewPhase { idle, opening, tracking, paused, failure, closed }
 
 class PoseCameraPermissionDenied implements Exception {}
@@ -27,6 +32,7 @@ class PosePreviewController extends ChangeNotifier {
       this.onRefined,
       this.onGeometryInvalidated,
       this.performance,
+      this.cleanupTimeout = const Duration(seconds: 10),
       bool responsivePreview = const bool.fromEnvironment(
           'GAINPATH_RESPONSIVE_SKELETON',
           defaultValue: true),
@@ -39,6 +45,51 @@ class PosePreviewController extends ChangeNotifier {
         quality = quality ?? PoseQualityDiagnostics(clockMicros: clockMicros);
   final PoseQualityDiagnostics quality;
   final RealSquatPerformance? performance;
+  final Duration cleanupTimeout;
+  Future<void>? _retirement;
+  bool _cleanupFailed = false;
+  static final _captureOwners = <Object, PosePreviewController>{};
+  Object? _captureKey;
+  bool _acquireCapture() {
+    final source = camera;
+    if (source is! ExclusivePoseCameraSource) return true;
+    final key = source.ownershipKey;
+    final previous = _captureOwners[key];
+    if (previous != null && !identical(previous, this)) return false;
+    _captureKey = key;
+    _captureOwners[key] = this;
+    return true;
+  }
+
+  void _releaseCapture() {
+    final key = _captureKey;
+    if (key != null &&
+        !_cleanupFailed &&
+        identical(_captureOwners[key], this)) {
+      _captureOwners.remove(key);
+      _captureKey = null;
+    }
+  }
+
+  Future<void> _boundedCleanup(Future<void> cleanup) {
+    _retirement = cleanup;
+    cleanup.then((_) {
+      if (identical(_retirement, cleanup)) _retirement = null;
+    }, onError: (Object _) {
+      _cleanupFailed = true;
+      if (identical(_retirement, cleanup)) _retirement = null;
+    });
+    return cleanup.timeout(cleanupTimeout).catchError((Object error) {
+      // A timeout does not prove native disposal. The real cleanup retains its
+      // queue/lease; retries fail closed until it finishes, never overlap owners.
+      errorMessage = error is TimeoutException
+          ? 'Tracking resources are still closing. Save your result and reopen later.'
+          : 'Camera shutdown failed. Counting is paused; save or discard the session.';
+      if (phase != PosePreviewPhase.closed) phase = PosePreviewPhase.failure;
+      _notify();
+    });
+  }
+
   /// Optional scalar observer, attached by retained exercise route composition.
   WorkoutPerformanceDiagnostics? baseline;
   bool _responsivePreview;
@@ -174,11 +225,25 @@ class PosePreviewController extends ChangeNotifier {
         phase == PosePreviewPhase.tracking) {
       return;
     }
+    if (_retirement != null || _cleanupFailed) {
+      errorMessage =
+          'Tracking resources are still closing. Reopen after they are released.';
+      phase = PosePreviewPhase.failure;
+      _notify();
+      return;
+    }
     if (!_active) {
       await close();
       return;
     }
     _consented = true;
+    if (!_acquireCapture()) {
+      errorMessage =
+          'The previous camera session is still closing. Retry after it is released.';
+      phase = PosePreviewPhase.failure;
+      _notify();
+      return;
+    }
     _manualPause = false;
     errorMessage = null;
     final revision = ++_revision;
@@ -205,7 +270,8 @@ class PosePreviewController extends ChangeNotifier {
                 quality.sample('queueAgeMicros', start - input.timestampMicros);
                 final result = await detector.detect(input);
                 baseline?.count(WorkoutSignal.processedFrame);
-                baseline?.sample(WorkoutMetric.hostProcessingMicros, clockMicros() - start);
+                baseline?.sample(
+                    WorkoutMetric.hostProcessingMicros, clockMicros() - start);
                 quality.sample('hostProcessingMicros', clockMicros() - start);
                 return result;
               },
@@ -243,7 +309,8 @@ class PosePreviewController extends ChangeNotifier {
                 }
                 displayedFrames++;
                 baseline?.count(WorkoutSignal.deliveredFrame);
-                baseline?.sample(WorkoutMetric.deliveryAgeMicros, clockMicros() - pose.capturedAtMicros);
+                baseline?.sample(WorkoutMetric.deliveryAgeMicros,
+                    clockMicros() - pose.capturedAtMicros);
                 _lastDisplayDelivery = clockMicros();
                 onRefined?.call(pose);
                 performance?.delivered(pose.capturedAtMicros);
@@ -270,11 +337,19 @@ class PosePreviewController extends ChangeNotifier {
                 errorMessage =
                     'Pose tracking stopped. Retry the camera preview.';
                 _notify();
-                unawaited(_enqueue(() async {
-                  await camera.stop();
-                  await _scheduler?.drain();
-                  await _detector?.reset();
-                }));
+                unawaited(_boundedCleanup(_enqueue(() async {
+                  var cameraReleased = false;
+                  try {
+                    await camera.stop();
+                    cameraReleased = true;
+                  } finally {
+                    await _scheduler?.drain();
+                    await _detector?.close();
+                    _detector = null;
+                    _scheduler = null;
+                    if (cameraReleased) _releaseCapture();
+                  }
+                })));
               });
         }
         _filter.reset();
@@ -383,11 +458,11 @@ class PosePreviewController extends ChangeNotifier {
     phase = PosePreviewPhase.paused;
     performance?.pause();
     _notify();
-    await _enqueue(() async {
+    await _boundedCleanup(_enqueue(() async {
       await camera.stop();
       await _scheduler?.drain();
       await _detector?.reset();
-    });
+    }));
   }
 
   Future<void> resume() async {
@@ -435,15 +510,18 @@ class PosePreviewController extends ChangeNotifier {
     _activeTime.stop();
     camera.invalidate();
     _notify();
-    return _closing = _enqueue(() async {
+    return _closing = _boundedCleanup(_enqueue(() async {
+      var cameraReleased = false;
       try {
         await camera.stop();
+        cameraReleased = true;
       } finally {
         await _scheduler?.drain();
         await _detector?.close();
         _detector = null;
+        if (cameraReleased) _releaseCapture();
       }
-    });
+    }));
   }
 
   @override

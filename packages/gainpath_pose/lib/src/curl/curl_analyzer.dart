@@ -40,6 +40,8 @@ class CurlAnalyzer {
   CurlAnalyzer({CurlSide? side}) : _side = side;
   static const version = 'single-arm-curl-side-v1';
   static const maximumFrameAgeMicros = 250000;
+  // Liveness tracks accepted delivery; capture freshness/gap guards stay strict.
+  int? _lastAcceptedDelivery;
   CurlSide? _side;
   int? _lastCapture, _lastNow, _calibratingSince, _attemptSince;
   (int, int)? _dimensions;
@@ -58,6 +60,7 @@ class CurlAnalyzer {
   List<CueRequest> _cues = const [];
 
   void pause() {
+    _lastAcceptedDelivery = null;
     _calibrated = false;
     _calibratingSince = null;
     _attemptSince = null;
@@ -95,8 +98,8 @@ class CurlAnalyzer {
 
   CurlUpdate tick({required int nowMicros}) {
     if (_lastNow == null || nowMicros <= _lastNow!) return snapshot;
-    if (_lastCapture == null ||
-        nowMicros - _lastCapture! > maximumFrameAgeMicros) {
+    if (_lastAcceptedDelivery == null ||
+        nowMicros - _lastAcceptedDelivery! > maximumFrameAgeMicros) {
       _rejected += nowMicros - _lastNow!;
       _invalidate();
       _health = TrackingStatus.lost;
@@ -148,6 +151,7 @@ class CurlAnalyzer {
       _invalidate();
       return snapshot;
     }
+    _lastAcceptedDelivery = nowMicros;
     _health = TrackingStatus.healthy;
     if (!_calibrated) {
       _rejected += elapsed;

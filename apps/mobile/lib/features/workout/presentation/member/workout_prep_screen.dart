@@ -1152,7 +1152,7 @@ class _ConsentSheetState extends State<_ConsentSheet> {
                           'This session tracks only the supported squat. Results are saved on this device. Upload is optional and awards no rewards.'),
                 if (widget.realWorkout)
                   _point(context,
-                      'Form guidance is provisional. Use a side view with the camera upright and stationary, and keep your full body in view.'),
+                      'Form guidance is provisional. Follow this exercise’s required camera view and keep the phone stable with the required joints visible.'),
               ],
             ),
           ),

@@ -498,13 +498,17 @@ class RealSquatSessionController extends ChangeNotifier
     // Yield so the caller stores _saving before any completion or notification.
     await Future<void>.value();
     try {
-      await processing.close();
-      // Input is invalidated synchronously by close. A hardware disposal error
-      // must not discard the already frozen measured result.
-      await preview.close().catchError((Object _) {});
+      processing.pause();
       if (!_active) return null;
       final frozen = summary!;
       await repository.saveLocal(frozen);
+      await processing
+          .close()
+          .timeout(const Duration(seconds: 5))
+          .catchError((Object _) {});
+      // Input is invalidated synchronously by close. A hardware disposal error
+      // must not discard the already frozen measured result.
+      await preview.close().catchError((Object _) {});
       if (!_active) return null;
       try {
         await onSaved?.call(frozen);
@@ -516,6 +520,11 @@ class RealSquatSessionController extends ChangeNotifier
       phase = RealSquatSessionPhase.saved;
       return frozen;
     } catch (_) {
+      await processing
+          .close()
+          .timeout(const Duration(seconds: 5))
+          .catchError((Object _) {});
+      await preview.close().catchError((Object _) {});
       if (_active) {
         phase = RealSquatSessionPhase.saveFailed;
         _error =

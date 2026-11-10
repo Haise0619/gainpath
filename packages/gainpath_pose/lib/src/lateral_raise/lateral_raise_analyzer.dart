@@ -44,6 +44,8 @@ class LateralRaiseUpdate {
 class LateralRaiseAnalyzer {
   static const version = 'standing-lateral-raise-front-v1';
   static const maximumFrameAgeMicros = 250000;
+  // Liveness tracks accepted delivery; capture freshness/gap guards stay strict.
+  int? _lastAcceptedDelivery;
   static const lostAfterMicros = 500000;
   static const implementationRevision = 'abduction-1';
   LateralRaiseGeometry? _base, _anchor;
@@ -103,6 +105,7 @@ class LateralRaiseAnalyzer {
   }
 
   void pause() {
+    _lastAcceptedDelivery = null;
     _invalidate();
     _unavailableSince = null;
     _decision = 'paused';
@@ -112,8 +115,8 @@ class LateralRaiseAnalyzer {
   LateralRaiseUpdate tick({required int nowMicros}) {
     if (_lastNow == null || nowMicros <= _lastNow!) return snapshot;
     final elapsed = nowMicros - _lastNow!;
-    if (_lastCapture == null ||
-        nowMicros - _lastCapture! > maximumFrameAgeMicros) {
+    if (_lastAcceptedDelivery == null ||
+        nowMicros - _lastAcceptedDelivery! > maximumFrameAgeMicros) {
       _rejected += elapsed;
       _invalidate();
       _health = TrackingStatus.lost;
@@ -208,6 +211,7 @@ class LateralRaiseAnalyzer {
       _decision = 'prolonged_loss';
     }
     _unavailableSince = null;
+    _lastAcceptedDelivery = nowMicros;
     if (_base == null) {
       _rejected += elapsed;
       if (!g.neutral || !g.symmetric) {

@@ -17,6 +17,7 @@ import 'blazepose_decode.dart';
 import 'blazepose_geometry.dart';
 import 'pose_render_diagnostics.dart';
 import 'pose_quality_diagnostics.dart';
+import 'pose_worker_termination.dart';
 import '../../features/workout/domain/workout_performance_diagnostics.dart';
 
 /// Persistent background ingestion/inference worker. Assets are verified before
@@ -31,6 +32,7 @@ class BlazePoseDetector
   final _exit = ReceivePort();
   final _ready = Completer<SendPort>();
   final _closed = Completer<void>();
+  final _termination = PoseWorkerTermination();
   final _requests = <int, Completer<Object?>>{};
   Isolate? _worker;
   SendPort? _commands;
@@ -72,6 +74,7 @@ class BlazePoseDetector
     detector._errors
         .listen((_) => detector._fail(StateError('BlazePose worker failed.')));
     detector._exit.listen((_) {
+      detector._termination.exited();
       if (!detector._closing) {
         detector._fail(StateError('BlazePose worker exited.'));
       }
@@ -118,7 +121,10 @@ class BlazePoseDetector
           await BlazePoseGpuSession.closeId(detector._gpuSessionId!);
         }
       } finally {
-        detector._worker?.kill(priority: Isolate.immediate);
+        if (detector._worker != null) {
+          await detector._termination.stopAndConfirm(
+              () => detector._worker!.kill(priority: Isolate.immediate));
+        }
         detector._messages.close();
         detector._errors.close();
         detector._exit.close();
@@ -138,7 +144,9 @@ class BlazePoseDetector
       if (!pending.isCompleted) pending.completeError(error);
     }
     _requests.clear();
-    if (_closing && !_closed.isCompleted) _closed.complete();
+    if (_closing && _termination.confirmed && !_closed.isCompleted) {
+      _closed.complete();
+    }
   }
 
   void _onMessage(dynamic message) {
@@ -206,7 +214,12 @@ class BlazePoseDetector
     final pending = Completer<Object?>();
     _requests[id] = pending;
     _commands!.send([kind, id, input]);
-    return pending.future;
+    return pending.future.timeout(const Duration(seconds: 5), onTimeout: () {
+      final error =
+          StateError('Pose inference did not return. Reopen tracking.');
+      _fail(error);
+      throw error;
+    });
   }
 
   @override
@@ -235,7 +248,7 @@ class BlazePoseDetector
           .toList());
     }
     _commands?.send(['close']);
-    if (_failed && !_closed.isCompleted) _closed.complete();
+    if (_termination.confirmed && !_closed.isCompleted) _closed.complete();
     try {
       await _closed.future.timeout(const Duration(seconds: 10));
     } finally {
@@ -244,7 +257,10 @@ class BlazePoseDetector
           await BlazePoseGpuSession.closeId(_gpuSessionId!);
         }
       } finally {
-        _worker?.kill(priority: Isolate.immediate);
+        if (_worker != null) {
+          await _termination
+              .stopAndConfirm(() => _worker!.kill(priority: Isolate.immediate));
+        }
         _messages.close();
         _errors.close();
         _exit.close();

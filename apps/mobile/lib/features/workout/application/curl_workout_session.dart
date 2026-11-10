@@ -56,7 +56,11 @@ class CurlWorkoutSession extends ChangeNotifier
         detectorFactory: detectorFactory,
         clockMicros: clockMicros,
         onRefined: _consume,
-        onGeometryInvalidated: () => _analyzer.pause());
+        onGeometryInvalidated: () {
+          _analyzer.pause();
+          audio.invalidateSource();
+          _watchdogLost = true;
+        });
     preview.addListener(_cameraChanged);
     _firstSide = armMode == CurlArmMode.leftOnly
         ? CurlSide.left
@@ -268,7 +272,7 @@ class CurlWorkoutSession extends ChangeNotifier
       if (guidance.stage == GuidedWorkoutStage.resting && !isPaused) {
         guidance.tick(clockMicros());
       }
-      if (_canAnalyse) _analyzer.tick(nowMicros: clockMicros());
+      if (_canAnalyse) _tickAnalysis();
       _notify();
     });
     if (!foreground) {
@@ -279,6 +283,14 @@ class CurlWorkoutSession extends ChangeNotifier
       return;
     }
     await preview.start(consented: true);
+  }
+
+  bool _watchdogLost = false;
+  void _tickAnalysis() {
+    final update = _analyzer.tick(nowMicros: clockMicros());
+    final lost = update.health == TrackingStatus.lost;
+    if (lost && !_watchdogLost) audio.invalidateSource();
+    _watchdogLost = lost;
   }
 
   void _consume(PoseFrame frame) {
@@ -292,6 +304,7 @@ class CurlWorkoutSession extends ChangeNotifier
     }
     _hasFrame = true;
     final update = _analyzer.update(frame, nowMicros: clockMicros());
+    _watchdogLost = update.health == TrackingStatus.lost;
     audio.consume(update.cues,
         nowMicros: clockMicros(),
         trackingAvailable: update.health == TrackingStatus.healthy &&
@@ -506,14 +519,22 @@ class CurlWorkoutSession extends ChangeNotifier
       _timer?.cancel();
       _suspendAnalysis();
       _notify();
-      await audio.close();
-      await preview.close().catchError((Object _) {});
-      if (!_authorized) return null;
+      // Persist the frozen observation before optional hardware cleanup.
       await repository.saveLocal(summary!);
+      await audio
+          .close()
+          .timeout(const Duration(seconds: 5))
+          .catchError((Object _) {});
+      await preview.close().catchError((Object _) {});
       if (!_authorized) return null;
       viewPhase = MeasuredWorkoutPhase.saved;
       return summary;
     } catch (_) {
+      await audio
+          .close()
+          .timeout(const Duration(seconds: 5))
+          .catchError((Object _) {});
+      await preview.close().catchError((Object _) {});
       if (_authorized) {
         viewPhase = MeasuredWorkoutPhase.saveFailed;
         _error =
