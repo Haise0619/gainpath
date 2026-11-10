@@ -1,3 +1,5 @@
+import '../domain/retained_workout_feedback.dart';
+import 'workout_voice_session.dart';
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:gainpath_domain/gainpath_domain.dart'
@@ -15,7 +17,7 @@ import 'workout_audio_controller.dart';
 
 /// Local-only standing calf raise session. Never constructs an upload submission.
 class CalfRaiseWorkoutSession extends ChangeNotifier
-    implements MeasuredWorkoutSession {
+    implements WorkoutVoiceSession, MeasuredWorkoutSession {
   CalfRaiseWorkoutSession(
       {required this.scope,
       required this.activeScope,
@@ -34,7 +36,11 @@ class CalfRaiseWorkoutSession extends ChangeNotifier
       this.saveVoiceMode,
       this.provenance = WorkoutProvenance.realCamera})
       : guidance = GuidedWorkoutProgress(sets: sets, repetitions: reps),
-        audio = WorkoutAudioController(port: audioPort) {
+        audio = WorkoutAudioController(
+            port: audioPort,
+            boundedStarts: true,
+            quietPeriodMicros: 2000000,
+            arbiter: AudioCueArbiter(cooldownMicros: 6000000)) {
     if (repository.scope != scope ||
         ExerciseTrackingRegistry.resolve(
                     organizationId: scope.organizationId,
@@ -129,6 +135,8 @@ class CalfRaiseWorkoutSession extends ChangeNotifier
       _analyzer.snapshot.health == TrackingStatus.healthy;
   @override
   String? get errorMessage => _error ?? preview.errorMessage;
+  @override
+  WorkoutAudioController get voiceFeedback => audio;
   @override
   bool get voiceEnabled => audio.voiceEnabled;
   @override
@@ -237,6 +245,7 @@ class CalfRaiseWorkoutSession extends ChangeNotifier
     await preview.start(consented: true);
   }
 
+  final _feedback = RetainedWorkoutFeedback();
   bool _watchdogLost = false;
   void _tickAnalysis() {
     final update = _analyzer.tick(nowMicros: clockMicros());
@@ -258,13 +267,20 @@ class CalfRaiseWorkoutSession extends ChangeNotifier
     _hasFrame = true;
     final update = _analyzer.update(frame, nowMicros: clockMicros());
     _watchdogLost = update.health == TrackingStatus.lost;
-    audio.consume(update.cues,
+    audio.consume(update.cues.where((c) => !isRetainedOutcomeCue(c)),
+        events: _feedback.observe(update.cues,
+            outcome: update.repetitions + update.partialRepetitions,
+            capturedAtMicros: frame.capturedAtMicros,
+            nowMicros: clockMicros(),
+            accepted: update.health == TrackingStatus.healthy &&
+                !update.needsCalibration),
+        invalidateFeedback: update.health == TrackingStatus.lost,
         nowMicros: clockMicros(),
         trackingAvailable: update.health == TrackingStatus.healthy &&
             !update.needsCalibration);
     final previous = guidance.stage;
     guidance.observe(update.repetitions, nowMicros: clockMicros());
-    if (previous != guidance.stage) _suspendAnalysis();
+    if (previous != guidance.stage) _suspendAnalysis(preserveFeedback: true);
     _notify();
   }
 
@@ -277,9 +293,13 @@ class CalfRaiseWorkoutSession extends ChangeNotifier
     _notify();
   }
 
-  void _suspendAnalysis() {
+  void _suspendAnalysis({bool preserveFeedback = false}) {
     _analyzer.pause();
-    audio.pause();
+    if (preserveFeedback) {
+      audio.finishSet();
+    } else {
+      audio.pause();
+    }
   }
 
   @override
@@ -317,8 +337,12 @@ class CalfRaiseWorkoutSession extends ChangeNotifier
 
   Future<void> setForeground(bool foreground) async {
     _foreground = foreground;
-    if (!_authorized || viewPhase != MeasuredWorkoutPhase.active) return;
+    if (!_authorized) return;
     audio.setForeground(foreground);
+    if (viewPhase != MeasuredWorkoutPhase.active) {
+      if (!foreground) await preview.background();
+      return;
+    }
     if (!foreground) {
       guidance.suspend(clockMicros());
       _suspendAnalysis();
@@ -458,10 +482,12 @@ class CalfRaiseWorkoutSession extends ChangeNotifier
       viewPhase = MeasuredWorkoutPhase.saving;
       _error = null;
       _timer?.cancel();
-      _suspendAnalysis();
+      _suspendAnalysis(
+          preserveFeedback: guidance.stage == GuidedWorkoutStage.complete);
       _notify();
       // Persist the frozen observation before optional hardware cleanup.
       await repository.saveLocal(summary!);
+      await audio.settleFeedback();
       await audio
           .close()
           .timeout(const Duration(seconds: 5))

@@ -10,7 +10,7 @@ import '../../features/workout/domain/workout_performance_diagnostics.dart';
 /// invalidates playback still waiting for engine initialization.
 class AndroidWorkoutAudio
     implements
-        PreparedWorkoutAudioPort,
+        RetryableWorkoutAudioPort,
         TimedWorkoutAudioPort,
         TracedWorkoutAudioPort {
   AndroidWorkoutAudio(
@@ -21,13 +21,14 @@ class AndroidWorkoutAudio
 
   static int _nextId = 0;
   final MethodChannel _channel;
-  final String _sessionId;
+  String _sessionId;
   final WorkoutAudioTrace? trace;
   final WorkoutPerformanceDiagnostics? baseline;
   bool _ttsOpened = false;
   MethodChannel? _traceChannel;
   String? _requestId, _cueId;
   Future<bool>? _ready;
+  Future<bool>? _retrying;
   Future<void>? _closeFuture;
   bool _closed = false;
   int _generation = 0;
@@ -39,13 +40,17 @@ class AndroidWorkoutAudio
       };
 
   Future<bool> _create() async {
+    final creatingId = _sessionId;
     try {
       trace?.record('tts_prepare_requested');
       if (trace != null) {
         _traceChannel =
             MethodChannel('gainpath/workout_audio/events/$_sessionId');
         _traceChannel!.setMethodCallHandler((call) async {
-          if (_closed || call.method != 'trace' || call.arguments is! Map) {
+          if (_closed ||
+              creatingId != _sessionId ||
+              call.method != 'trace' ||
+              call.arguments is! Map) {
             return;
           }
           final row = call.arguments as Map;
@@ -77,11 +82,11 @@ class AndroidWorkoutAudio
           true;
       trace?.record('tts_prepare_completed',
           reason: ready ? 'ready' : 'unavailable');
-      if (ready && !_closed) {
+      if (ready && !_closed && creatingId == _sessionId) {
         _ttsOpened = true;
         baseline?.resourceOpened(WorkoutResource.tts);
       }
-      return ready;
+      return ready && !_closed && creatingId == _sessionId;
     } catch (error) {
       lastError = error;
       return false;
@@ -90,7 +95,25 @@ class AndroidWorkoutAudio
 
   @override
   Future<bool> prepare() =>
-      _closed ? Future.value(false) : (_ready ??= _create());
+      _closed ? Future.value(false) : (_retrying ?? (_ready ??= _create()));
+
+  @override
+  Future<bool> retryPrepare() => _closed
+      ? Future.value(false)
+      : (_retrying ??= _retryPrepare().whenComplete(() => _retrying = null));
+
+  Future<bool> _retryPrepare() async {
+    await stop();
+    await _channel.invokeMethod<void>('close', _identity);
+    _traceChannel?.setMethodCallHandler(null);
+    if (_ttsOpened) {
+      _ttsOpened = false;
+      baseline?.resourceClosed(WorkoutResource.tts);
+    }
+    if (_closed) return false;
+    _sessionId = 'audio-${DateTime.now().microsecondsSinceEpoch}-${_nextId++}';
+    return await (_ready = _create());
+  }
 
   @override
   Future<AudioPlaybackOutcome> play(CueRequest cue) => _play(cue);

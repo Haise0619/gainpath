@@ -166,10 +166,18 @@ class SquatProcessingController extends ChangeNotifier {
     if (!_disposed) notifyListeners();
   }
 
-  void pause() {
-    if (!_checkScope() || _manualPause) return;
+  void pause({bool preserveFeedback = false}) {
+    if (!_checkScope()) return;
+    if (_manualPause) {
+      if (!preserveFeedback) audio.pause();
+      return;
+    }
     _manualPause = true;
-    audio.pause();
+    if (preserveFeedback) {
+      audio.finishSet();
+    } else {
+      audio.pause();
+    }
     _suspendAnalysis();
   }
 

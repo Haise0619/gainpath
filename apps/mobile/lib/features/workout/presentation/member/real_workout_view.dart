@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:gainpath_pose/gainpath_pose.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
 import '../../application/pose_preview_controller.dart';
+import '../../application/workout_voice_session.dart';
+import '../../domain/retained_workout_feedback.dart';
 import '../../application/measured_workout_session.dart';
 import 'workout_result_screen.dart';
 import '../../domain/workout_contracts.dart';
@@ -196,6 +198,21 @@ class _RealWorkoutViewState extends State<RealWorkoutView> {
                             fontSize: 10,
                             fontWeight: FontWeight.w700,
                             letterSpacing: 1.3)),
+                    if (c is WorkoutVoiceSession && c.voiceEnabled)
+                      Text(
+                          switch ((c as WorkoutVoiceSession)
+                              .voiceFeedback
+                              .availability
+                              .value) {
+                            WorkoutVoiceAvailability.preparing =>
+                              'Voice preparing · visual feedback active',
+                            WorkoutVoiceAvailability.unavailable =>
+                              'Voice unavailable · visual feedback active',
+                            _ => 'Voice ready',
+                          },
+                          maxLines: 2,
+                          style: const TextStyle(
+                              color: Colors.white70, fontSize: 11)),
                     Text(widget.exerciseName,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
@@ -237,12 +254,31 @@ class _RealWorkoutViewState extends State<RealWorkoutView> {
                         }
                       : null,
                   icon: const Icon(Icons.center_focus_strong_rounded)),
+              if (c is WorkoutVoiceSession &&
+                  (c as WorkoutVoiceSession).voiceFeedback.availability.value ==
+                      WorkoutVoiceAvailability.unavailable)
+                IconButton(
+                    tooltip: 'Retry voice feedback',
+                    onPressed: active
+                        ? (c as WorkoutVoiceSession).voiceFeedback.retryVoice
+                        : null,
+                    icon: const Icon(Icons.refresh_rounded)),
               PopupMenuButton<WorkoutVoiceMode>(
                   tooltip: 'Voice feedback: ${c.voiceMode.label}',
                   enabled: active,
                   initialValue: c.voiceMode,
                   onSelected: c.setVoiceMode,
                   itemBuilder: (_) => [
+                        if (c is WorkoutVoiceSession &&
+                            (c as WorkoutVoiceSession)
+                                    .voiceFeedback
+                                    .availability
+                                    .value ==
+                                WorkoutVoiceAvailability.unavailable)
+                          const PopupMenuItem<WorkoutVoiceMode>(
+                              enabled: false,
+                              child: Text(
+                                  'Check Android text-to-speech settings and an offline English voice, then retry.')),
                         for (final mode in WorkoutVoiceMode.values)
                           CheckedPopupMenuItem(
                               value: mode,
@@ -287,13 +323,21 @@ class _RealWorkoutViewState extends State<RealWorkoutView> {
     if (u.health != TrackingStatus.healthy) {
       return 'Move fully into view · counting paused';
     }
-    if (u.cues.isNotEmpty) return u.cues.first.text;
+    if (u.cues.isNotEmpty) {
+      return c is WorkoutVoiceSession
+          ? primaryWorkoutCue(u.cues)!.text
+          : u.cues.first.text;
+    }
     return c.movementCue;
   }
 
   @override
   Widget build(BuildContext context) => ListenableBuilder(
-      listenable: widget.session,
+      listenable: Listenable.merge([
+        widget.session,
+        if (widget.session is WorkoutVoiceSession)
+          (widget.session as WorkoutVoiceSession).voiceFeedback.availability,
+      ]),
       builder: (context, _) {
         final c = widget.session;
         return PopScope(
@@ -326,47 +370,50 @@ class _RealWorkoutViewState extends State<RealWorkoutView> {
                         top: safeTop + 8,
                         left: 12,
                         right: 12,
-                        child: _cameraHeader(context)),
-                    if (!c.isRecalibrating)
-                      Positioned(
-                          top: safeTop + 80,
-                          left: 16,
-                          right: 16,
-                          child: Align(
-                              alignment: Alignment.topLeft,
-                              child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 12, vertical: 9),
-                                  decoration: BoxDecoration(
-                                      color:
-                                          Colors.black.withValues(alpha: .55),
-                                      borderRadius: BorderRadius.circular(14)),
-                                  child: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Icon(
-                                            c.isManuallyPaused
-                                                ? Icons
-                                                    .pause_circle_outline_rounded
-                                                : c.guidance?.stage ==
-                                                        GuidedWorkoutStage
-                                                            .resting
-                                                    ? Icons.timer_outlined
-                                                    : Icons
-                                                        .accessibility_new_rounded,
-                                            size: 16,
-                                            color: Colors.white),
-                                        const SizedBox(width: 8),
-                                        Flexible(
-                                            child: Text(_cue(c),
-                                                maxLines: 2,
-                                                overflow: TextOverflow.ellipsis,
-                                                style: const TextStyle(
-                                                    color: Colors.white,
-                                                    fontSize: 14,
-                                                    fontWeight:
-                                                        FontWeight.w500))),
-                                      ])))),
+                        child:
+                            Column(mainAxisSize: MainAxisSize.min, children: [
+                          _cameraHeader(context),
+                          if (!c.isRecalibrating)
+                            Padding(
+                                padding: const EdgeInsets.only(top: 8),
+                                child: Align(
+                                    alignment: Alignment.topLeft,
+                                    child: Container(
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 12, vertical: 9),
+                                        decoration: BoxDecoration(
+                                            color: Colors.black
+                                                .withValues(alpha: .55),
+                                            borderRadius:
+                                                BorderRadius.circular(14)),
+                                        child: Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Icon(
+                                                  c.isManuallyPaused
+                                                      ? Icons
+                                                          .pause_circle_outline_rounded
+                                                      : c.guidance?.stage ==
+                                                              GuidedWorkoutStage
+                                                                  .resting
+                                                          ? Icons.timer_outlined
+                                                          : Icons
+                                                              .accessibility_new_rounded,
+                                                  size: 16,
+                                                  color: Colors.white),
+                                              const SizedBox(width: 8),
+                                              Flexible(
+                                                  child: Text(_cue(c),
+                                                      maxLines: 2,
+                                                      overflow:
+                                                          TextOverflow.ellipsis,
+                                                      style: const TextStyle(
+                                                          color: Colors.white,
+                                                          fontSize: 14,
+                                                          fontWeight: FontWeight
+                                                              .w500))),
+                                            ])))),
+                        ])),
                     if (c.preview.phase == PosePreviewPhase.opening)
                       const Positioned(
                           top: 160,

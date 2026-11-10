@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 
 import 'package:gainpath_domain/gainpath_domain.dart';
 import 'package:gainpath_pose/gainpath_pose.dart';
@@ -16,19 +17,27 @@ class WorkoutAudioController {
     this.pendingStartTimeout = const Duration(milliseconds: 500),
     this.trace,
     this.boundedStarts = false,
+    this.quietPeriodMicros = 0,
   })  : assert(pendingStartTimeout > Duration.zero),
         _port = port,
         _arbiter = arbiter ?? AudioCueArbiter();
 
   final WorkoutAudioPort _port;
   final AudioCueArbiter _arbiter;
+  final _boundaryArbiter = AudioCueArbiter(cooldownMicros: 0);
   WorkoutAudioTrace? trace;
   final bool boundedStarts;
+
+  /// Opt-in cross-ID quiet period; higher-priority alerts may interrupt.
+  final int quietPeriodMicros;
+  int? _lastSelectedAt;
+  CuePriority? _lastSelectedPriority;
   int _requestSequence = 0;
   int _diagnosticSequence = 0;
   String? _activeRequestId;
   final Set<String> _seenEvents = {};
   WorkoutFeedbackEvent? _activeEvent;
+  WorkoutFeedbackEvent? _recentOutcome;
   final Stopwatch _eventWait = Stopwatch();
   int _eventBudgetMicros = 0;
 
@@ -47,6 +56,65 @@ class WorkoutAudioController {
   Future<void> _stopBarrier = Future.value();
   bool _stopPending = false;
   Future<void>? _closeFuture;
+  Future<bool>? _warming;
+  Future<void>? _playback;
+  final availability = ValueNotifier(WorkoutVoiceAvailability.muted);
+
+  void _availability(WorkoutVoiceAvailability value) {
+    availability.value =
+        voiceEnabled && !_closed ? value : WorkoutVoiceAvailability.muted;
+  }
+
+  /// Analysis stops at a set boundary; only the completed observation survives.
+  void finishSet() {
+    final outcome = _recentOutcome;
+    _recentOutcome = null;
+    if (_activeEvent != null &&
+        (outcome == null || _activeEvent!.id == outcome.id)) {
+      return;
+    }
+    _cancel(reason: 'set_boundary');
+    final now = _lastInputMicros;
+    if (outcome == null || now == null || !outcome.isFresh(now)) return;
+    // Ordinary rep cooldown may suppress this final repetition. A distinct,
+    // once-per-observation boundary cue still shares its original start budget.
+    _consume(const [],
+        nowMicros: now,
+        trackingAvailable: _trackingAvailable,
+        events: [
+          WorkoutFeedbackEvent(
+              id: 'boundary-${outcome.id}',
+              cue: const CueRequest(
+                  id: 'workout_set_complete',
+                  text: 'Set complete.',
+                  priority: CuePriority.encouragement),
+              observedAtMicros: outcome.observedAtMicros,
+              generatedAtMicros: now)
+        ],
+        arbiter: _boundaryArbiter);
+    _recentOutcome = null;
+  }
+
+  /// Called after durable save. No unbounded speech wait can block teardown.
+  Future<void> settleFeedback() async {
+    final pending = _activeEvent == null ? null : _playback;
+    if (pending == null) return;
+    await pending.timeout(const Duration(milliseconds: 1500), onTimeout: () {
+      _cancel(reason: 'completion_deadline');
+    });
+  }
+
+  Future<void> retryVoice() async {
+    if (!_canPlay ||
+        availability.value != WorkoutVoiceAvailability.unavailable) {
+      return;
+    }
+    _cancel(reason: 'voice_retry');
+    await _stopBarrier;
+    if (!_canPlay) return;
+    _warming = null;
+    await _warm(retry: true);
+  }
 
   CueRequest? get activeCue => _activeCue;
   bool get voiceEnabled => _voiceMode != WorkoutVoiceMode.muted;
@@ -65,6 +133,10 @@ class WorkoutAudioController {
   void setVoiceMode(WorkoutVoiceMode mode) {
     if (_closed || _voiceMode == mode) return;
     _voiceMode = mode;
+    if (!voiceEnabled) _availability(WorkoutVoiceAvailability.muted);
+    if (voiceEnabled && _port is! PreparedWorkoutAudioPort) {
+      _availability(WorkoutVoiceAvailability.ready);
+    }
     if (!voiceEnabled ||
         (mode == WorkoutVoiceMode.alertsOnly &&
             _activeCue?.priority == CuePriority.encouragement)) {
@@ -121,6 +193,25 @@ class WorkoutAudioController {
       return;
     }
     _lastInputMicros = nowMicros;
+    _consume(cues,
+        nowMicros: nowMicros,
+        trackingAvailable: trackingAvailable,
+        events: events,
+        invalidateFeedback: invalidateFeedback,
+        observedAtMicros: observedAtMicros);
+  }
+
+  void _consume(
+    Iterable<CueRequest> cues, {
+    required int nowMicros,
+    required bool trackingAvailable,
+    Iterable<WorkoutFeedbackEvent> events = const [],
+    bool invalidateFeedback = false,
+    int? observedAtMicros,
+    AudioCueArbiter? arbiter,
+  }) {
+    final policy = arbiter ?? _arbiter;
+    _recentOutcome = null;
     final batch = cues.toList();
     if (_waitingForPlayback &&
         _activeEvent != null &&
@@ -148,6 +239,7 @@ class WorkoutAudioController {
         continue;
       }
       eventByCue[event.cue.id] = event;
+      _recentOutcome = event;
       batch.add(event.cue);
       trace?.record('feedback_queued',
           requestId: event.id, cueId: event.cue.id);
@@ -192,7 +284,7 @@ class WorkoutAudioController {
       // recoverable dropout. Explicit source loss/warnings still invalidate it.
       if (_activeEvent == null) _cancel(reason: 'tracking_transition');
     }
-    _arbiter.clearPending();
+    policy.clearPending();
     if (!_canPlay) {
       for (final cue in batch) {
         observeDrop(cue, 'audio_disabled');
@@ -207,6 +299,13 @@ class WorkoutAudioController {
       if (_voiceMode == WorkoutVoiceMode.alertsOnly &&
           cue.priority == CuePriority.encouragement) {
         observeDrop(cue, 'voice_mode');
+        continue;
+      }
+      if (arbiter == null &&
+          _lastSelectedAt != null &&
+          nowMicros - _lastSelectedAt! < quietPeriodMicros &&
+          cue.priority.weight <= _lastSelectedPriority!.weight) {
+        observeDrop(cue, 'quiet_period');
         continue;
       }
       if (!trackingAvailable &&
@@ -226,17 +325,10 @@ class WorkoutAudioController {
           diagnosticRequests[cue.id] ??
           'cue-${++_requestSequence}';
       requestByCue[cue.id] = requestId;
-      if (trace == null && !eventByCue.containsKey(cue.id)) {
-        trace?.record('exercise_event_generated',
-            requestId: requestId,
-            cueId: cue.id,
-            observedAtMicros: observedAtMicros ?? nowMicros);
-        trace?.record('feedback_queued', requestId: requestId, cueId: cue.id);
-      }
-      _arbiter.submit(cue);
+      policy.submit(cue);
     }
-    final selected = _arbiter.takeNext(nowMicros: nowMicros);
-    _arbiter.clearPending();
+    final selected = policy.takeNext(nowMicros: nowMicros);
+    policy.clearPending();
     if (selected == null) {
       for (final cue in batch) {
         observeDrop(cue, 'priority_or_cooldown');
@@ -247,6 +339,8 @@ class WorkoutAudioController {
       observeDrop(cue, 'arbitration_priority');
     }
     if (_activeCue != null) _cancel(reason: 'higher_priority');
+    _lastSelectedAt = nowMicros;
+    _lastSelectedPriority = selected.priority;
     _activeCue = selected;
     _activeEvent = eventByCue[selected.id];
     _activeRequestId = requestByCue[selected.id];
@@ -268,7 +362,8 @@ class WorkoutAudioController {
         _cancel(reason: 'start_deadline');
       }
     });
-    unawaited(_play(selected, _generation));
+    _playback = _play(selected, _generation);
+    unawaited(_playback!);
   }
 
   Future<void> _play(CueRequest cue, int generation) async {
@@ -278,7 +373,7 @@ class WorkoutAudioController {
     try {
       final prepared = _port;
       if (prepared is PreparedWorkoutAudioPort) {
-        final available = await prepared.prepare();
+        final available = await _warm();
         if (!_canPlay || generation != _generation) return;
         if (!available) {
           trace?.record('dropped',
@@ -323,22 +418,48 @@ class WorkoutAudioController {
     _pendingTimeout = null;
     _waitingForPlayback = false;
     lastOutcome = outcome;
+    if (outcome == AudioPlaybackOutcome.unavailable) {
+      _availability(WorkoutVoiceAvailability.unavailable);
+    }
     trace?.record('playback_result',
         requestId: _activeRequestId, cueId: cue.id, reason: outcome.name);
     _activeCue = null;
     _activeEvent = null;
+    _recentOutcome = null;
     _activeRequestId = null;
   }
 
-  Future<void> _warm() async {
-    try {
-      await (_port as PreparedWorkoutAudioPort).prepare();
-    } catch (error) {
-      if (!_closed) lastError = error;
+  Future<bool> _warm({bool retry = false}) {
+    if (_closed || !voiceEnabled) return Future.value(false);
+    _availability(WorkoutVoiceAvailability.preparing);
+    if (_warming != null) {
+      return _warming!.then((ready) {
+        _availability(ready
+            ? WorkoutVoiceAvailability.ready
+            : WorkoutVoiceAvailability.unavailable);
+        return ready;
+      });
     }
+    return _warming = () async {
+      var ready = false;
+      try {
+        final port = _port as PreparedWorkoutAudioPort;
+        ready = await (retry && port is RetryableWorkoutAudioPort
+                ? port.retryPrepare()
+                : port.prepare())
+            .timeout(const Duration(seconds: 3));
+      } catch (error) {
+        if (!_closed) lastError = error;
+      }
+      _availability(ready
+          ? WorkoutVoiceAvailability.ready
+          : WorkoutVoiceAvailability.unavailable);
+      return ready;
+    }();
   }
 
   void _cancel({String reason = 'lifecycle_or_preference'}) {
+    _recentOutcome = null;
     if (_activeCue != null) {
       trace?.record('cancelled',
           requestId: _activeRequestId, cueId: _activeCue?.id, reason: reason);
@@ -352,6 +473,7 @@ class WorkoutAudioController {
     _pendingTimeout?.cancel();
     _pendingTimeout = null;
     _arbiter.clearPending();
+    _boundaryArbiter.clearPending();
     // All new plays await the same barrier. Repeated lifecycle/tracking events
     // invalidate generations without building a queue of platform stop calls.
     if (!_stopPending) {
@@ -374,6 +496,7 @@ class WorkoutAudioController {
   Future<void> close() {
     if (_closeFuture != null) return _closeFuture!;
     _closed = true;
+    _availability(WorkoutVoiceAvailability.muted);
     _cancel();
     return _closeFuture = _close();
   }

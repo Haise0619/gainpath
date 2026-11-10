@@ -37,6 +37,28 @@ void main() {
     messenger.setMockMethodCallHandler(channel, null);
   });
 
+  test('explicit retry retires failed engine and uses a fresh native identity',
+      () async {
+    var attempts = 0;
+    messenger.setMockMethodCallHandler(channel, (call) async {
+      calls.add(call);
+      return call.method == 'create' ? ++attempts > 1 : null;
+    });
+    expect(await port.prepare(), false);
+    expect(await port.prepare(), false);
+    expect(attempts, 1);
+    expect(await port.retryPrepare(), true);
+    final creates = calls.where((c) => c.method == 'create').toList();
+    expect(creates, hasLength(2));
+    expect((creates.last.arguments as Map)['sessionId'],
+        isNot((creates.first.arguments as Map)['sessionId']));
+    expect(calls.indexWhere((c) => c.method == 'close'),
+        lessThan(calls.lastIndexOf(creates.last)));
+    await port.close();
+    expect(await port.retryPrepare(), false);
+    expect(attempts, 2);
+  });
+
   test(
       'diagnostic ordinary speech correlates without changing native start policy',
       () async {

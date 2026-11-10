@@ -68,21 +68,25 @@ class PressHarness {
 }
 
 void main() {
-  testWidgets('press completion emits actionable independent speech', (tester) async {
+  testWidgets('press completion emits actionable independent speech',
+      (tester) async {
     final h = PressHarness(sets: 1, reps: 5);
     addTearDown(h.dispose);
     h.session.audio.setVoiceEnabled(true);
     await h.session.start(consented: true, setupConfirmed: true);
     await h.feed(tester, shoulderPressTrajectory());
-    expect(h.audio.played.any((c) => c.text == 'Good repetition.'), isTrue);
+    expect(h.audio.played.any((c) => c.text == 'Repetition counted.'), isTrue);
     expect(h.session.analysis!.repetitions, 1);
     await h.session.close();
   });
 
-  test('shoulder press uses the common accepted-delivery overlay freshness policy', () async {
-    final h=PressHarness();
-    expect(h.session.preview.overlayUsesDeliveryClock,true);
-    await h.session.close();h.dispose();
+  test(
+      'shoulder press uses the common accepted-delivery overlay freshness policy',
+      () async {
+    final h = PressHarness();
+    expect(h.session.preview.overlayUsesDeliveryClock, true);
+    await h.session.close();
+    h.dispose();
   });
   testWidgets(
       'fresh raw frames with latency watchdog ticks and moving projections complete authored sets',
@@ -252,4 +256,3 @@ void main() {
         throwsArgumentError);
   });
 }
-

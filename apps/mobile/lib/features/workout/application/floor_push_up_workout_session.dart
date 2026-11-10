@@ -1,3 +1,4 @@
+import 'workout_voice_session.dart';
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:gainpath_domain/gainpath_domain.dart'
@@ -17,7 +18,10 @@ import 'workout_audio_controller.dart';
 
 /// Local-only floor push-up session. Never constructs an upload submission.
 class FloorPushUpWorkoutSession extends ChangeNotifier
-    implements MeasuredWorkoutSession, WorkoutReadinessFeedback {
+    implements
+        WorkoutVoiceSession,
+        MeasuredWorkoutSession,
+        WorkoutReadinessFeedback {
   FloorPushUpWorkoutSession(
       {required this.scope,
       required this.activeScope,
@@ -42,6 +46,7 @@ class FloorPushUpWorkoutSession extends ChangeNotifier
             port: audioPort,
             trace: audioTrace,
             boundedStarts: true,
+            quietPeriodMicros: 2000000,
             arbiter: AudioCueArbiter(cooldownMicros: 6000000)) {
     if (repository.scope != scope ||
         ExerciseTrackingRegistry.resolve(
@@ -158,6 +163,8 @@ class FloorPushUpWorkoutSession extends ChangeNotifier
   bool get analysisAvailable => _canAnalyse && _hasFrame;
   @override
   String? get errorMessage => _error ?? preview.errorMessage;
+  @override
+  WorkoutAudioController get voiceFeedback => audio;
   @override
   bool get voiceEnabled => audio.voiceEnabled;
   @override
@@ -304,6 +311,7 @@ class FloorPushUpWorkoutSession extends ChangeNotifier
       // No further analysis/cues run during rest/completion. Permit this last
       // bounded attempt event to finish; explicit pause/finish still cancels.
       _analyzer.pause();
+      audio.finishSet();
     }
     _notify();
   }
@@ -317,9 +325,13 @@ class FloorPushUpWorkoutSession extends ChangeNotifier
     _notify();
   }
 
-  void _suspendAnalysis() {
+  void _suspendAnalysis({bool preserveFeedback = false}) {
     _analyzer.pause();
-    audio.pause();
+    if (preserveFeedback) {
+      audio.finishSet();
+    } else {
+      audio.pause();
+    }
   }
 
   @override
@@ -352,8 +364,12 @@ class FloorPushUpWorkoutSession extends ChangeNotifier
 
   Future<void> setForeground(bool foreground) async {
     _foreground = foreground;
-    if (!_authorized || viewPhase != MeasuredWorkoutPhase.active) return;
+    if (!_authorized) return;
     audio.setForeground(foreground);
+    if (viewPhase != MeasuredWorkoutPhase.active) {
+      if (!foreground) await preview.background();
+      return;
+    }
     if (!foreground) {
       guidance.suspend(clockMicros());
       _suspendAnalysis();
@@ -499,10 +515,12 @@ class FloorPushUpWorkoutSession extends ChangeNotifier
       viewPhase = MeasuredWorkoutPhase.saving;
       _error = null;
       _timer?.cancel();
-      _suspendAnalysis();
+      _suspendAnalysis(
+          preserveFeedback: guidance.stage == GuidedWorkoutStage.complete);
       _notify();
       // Persist the frozen observation before optional hardware cleanup.
       await repository.saveLocal(summary!);
+      await audio.settleFeedback();
       await audio
           .close()
           .timeout(const Duration(seconds: 5))

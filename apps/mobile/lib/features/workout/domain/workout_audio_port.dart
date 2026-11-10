@@ -2,6 +2,8 @@ import 'package:gainpath_pose/gainpath_pose.dart';
 
 enum AudioPlaybackOutcome { completed, cancelled, unavailable }
 
+enum WorkoutVoiceAvailability { muted, preparing, ready, unavailable }
+
 enum WorkoutVoiceMode {
   fullCoaching('Full Coaching'),
   alertsOnly('Alerts Only'),
@@ -28,6 +30,12 @@ abstract interface class WorkoutAudioPort {
 /// The controller revalidates a waiting cue before invoking playback.
 abstract interface class PreparedWorkoutAudioPort implements WorkoutAudioPort {
   Future<bool> prepare();
+}
+
+/// Explicit user retry; no background retry loop or unsolicited speech.
+abstract interface class RetryableWorkoutAudioPort
+    implements PreparedWorkoutAudioPort {
+  Future<bool> retryPrepare();
 }
 
 /// Opt-in bounded native start deadline for completed-attempt events. Existing

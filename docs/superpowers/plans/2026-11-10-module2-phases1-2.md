@@ -12,10 +12,12 @@ Owner authorized direct continuation after Phase 0. Execute inline; separate ver
 
 ## Phase 2 — Timely coach voice
 
-- [ ] RED→GREEN final-rep/set-boundary voice and event freshness regressions across six retained exercises.
-- [ ] Use bounded completed-outcome events/native deadlines consistently; separate analysis rest from explicit lifecycle cancellation.
-- [ ] Align evidence-based priority/copy and stable feedback selection; no unsupported movement claims, new provider or model.
-- [ ] Expose voice preparation/unavailability/retry with quiet visual fallback; prepare during authorized setup without overriding mute.
-- [ ] Focused Mobile/pose tests, analysis, Debug APK build, review and scoped commit. Record physical audio/accuracy/performance acceptance as unmeasured.
+- [x] RED→GREEN final-rep/set-boundary voice and event freshness regressions across six retained exercises.
+- [x] Use bounded completed-outcome events/native deadlines consistently; separate analysis rest from explicit lifecycle cancellation.
+- [x] Align evidence-based priority/copy and stable feedback selection; no unsupported movement claims, new provider or model.
+- [x] Expose voice preparation/unavailability/retry with quiet visual fallback; prepare during authorized setup without overriding mute.
+- [x] Focused Mobile/pose tests, analysis, Debug APK build, review and scoped commit. Record physical audio/accuracy/performance acceptance as unmeasured.
 
 No backend/schema/catalog/enrollment/history migration, resource pooling, live aggregate checkpoint schema or automatic next-set activation is included. Those are later roadmap phases.
+
+Verification completed11November: Phase1 commit0f6005b; Phase2 Mobile362 pass/13 optional skips, pose759 pass,20-file analysis clean, arm64 Debug APK pass. Independent review findings fixed. Physical acceptance remains unmeasured. Exact files, evidence and existing2× sheet limitation are recorded in docs/ux/module-2-phases1-2-implementation.md.

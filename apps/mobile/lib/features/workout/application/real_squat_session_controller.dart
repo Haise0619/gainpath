@@ -1,3 +1,4 @@
+import 'workout_voice_session.dart';
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:gainpath_domain/gainpath_domain.dart'
@@ -17,7 +18,7 @@ enum RealSquatSessionPhase { idle, active, saving, saveFailed, saved, closed }
 
 /// Owns one local camera session. It never constructs an upload submission.
 class RealSquatSessionController extends ChangeNotifier
-    implements MeasuredWorkoutSession {
+    implements WorkoutVoiceSession, MeasuredWorkoutSession {
   RealSquatSessionController(
       {required this.scope,
       required this.activeScope,
@@ -50,6 +51,7 @@ class RealSquatSessionController extends ChangeNotifier
         audio: WorkoutAudioController(
             port: audioPort,
             boundedStarts: true,
+            quietPeriodMicros: 2000000,
             arbiter: AudioCueArbiter(cooldownMicros: 6000000)),
         clockMicros: clockMicros,
         performance: performance,
@@ -95,6 +97,8 @@ class RealSquatSessionController extends ChangeNotifier
   String? get errorMessage => _error ?? preview.errorMessage;
   @override
   bool get isPaused => processing.isPaused;
+  @override
+  WorkoutAudioController get voiceFeedback => processing.audio;
   @override
   bool get voiceEnabled => processing.audio.voiceEnabled;
   @override
@@ -253,7 +257,9 @@ class RealSquatSessionController extends ChangeNotifier
   }
 
   void _geometryInvalidated() {
-    if (!_active || phase != RealSquatSessionPhase.active) return;
+    if (!_active) return;
+    processing.audio.invalidateSource();
+    if (phase != RealSquatSessionPhase.active) return;
     final wasPaused = isPaused;
     processing.pause();
     if (!wasPaused) processing.resume();
@@ -334,10 +340,11 @@ class RealSquatSessionController extends ChangeNotifier
   }
 
   void _syncProcessingState() {
-    if (_manualPaused ||
-        _recalibrating ||
-        (guidance != null && guidance!.stage != GuidedWorkoutStage.working)) {
+    if (_manualPaused || _recalibrating) {
       processing.pause();
+    } else if (guidance != null &&
+        guidance!.stage != GuidedWorkoutStage.working) {
+      processing.pause(preserveFeedback: true);
     } else {
       processing.resume();
     }
@@ -391,13 +398,17 @@ class RealSquatSessionController extends ChangeNotifier
 
   Future<void> setForeground(bool foreground) async {
     _foreground = foreground;
-    if (!_active || phase != RealSquatSessionPhase.active) return;
+    if (!_active) return;
+    processing.setForeground(foreground);
+    if (phase != RealSquatSessionPhase.active) {
+      if (!foreground) await preview.background();
+      return;
+    }
     if (!foreground) {
       guidance?.suspend(clockMicros());
     } else if (!_manualPaused && !_recalibrating) {
       guidance?.resumeClock(clockMicros());
     }
-    processing.setForeground(foreground);
     if (_startDeferred) {
       if (foreground) {
         _startDeferred = false;
@@ -498,10 +509,12 @@ class RealSquatSessionController extends ChangeNotifier
     // Yield so the caller stores _saving before any completion or notification.
     await Future<void>.value();
     try {
-      processing.pause();
+      processing.pause(
+          preserveFeedback: guidance?.stage == GuidedWorkoutStage.complete);
       if (!_active) return null;
       final frozen = summary!;
       await repository.saveLocal(frozen);
+      await processing.audio.settleFeedback();
       await processing
           .close()
           .timeout(const Duration(seconds: 5))

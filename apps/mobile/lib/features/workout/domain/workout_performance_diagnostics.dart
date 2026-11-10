@@ -214,7 +214,8 @@ class WorkoutPerformanceDiagnostics {
         'lateral_raise_rep',
         'lateral_raise_partial',
         'shoulder_press_rep',
-        'shoulder_press_partial'
+        'shoulder_press_partial',
+        'workout_set_complete'
       }.contains(row['cueId']);
       _audio[id] = _AudioObservation(observed, outcome);
       count(WorkoutSignal.audioEvent);
