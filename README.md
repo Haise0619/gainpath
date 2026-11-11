@@ -382,3 +382,7 @@ The live camera overlay repaints independently and projects each anatomical poin
 ## Module 2 Phase 4 ? 11 November 2026
 
 The six retained AI exercises now support opt-in Auto-Continue Between Sets. A fresh, calibrated starting pose gates the preparation countdown. Manual continuation remains available and two-arm Curl keeps its explicit arm switch. Full Coaching can announce set, rest and exercise transitions. The live camera layout improves counter, alignment, status and control readability. Physical Android acceptance remains pending. [Phase 4 workout continuity report](docs/ux/module-2-phase4-workout-continuity.md)
+
+## Module 2 Phase 5A ? 11 November 2026
+
+Routine checkpoints now advance their revision through equal or backward wall-clock readings, and competing updates are rejected under the existing lock. The routine cover preview builds from committed source. Clean-source Mobile, pose, checkpoint stress and arm64 Debug build verification passed. Physical device acceptance remains pending. [Phase 5A release readiness](docs/ux/module-2-phase5a-release-readiness.md)
