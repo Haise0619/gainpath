@@ -111,7 +111,7 @@ class _WorkoutHubOverviewState extends State<WorkoutHubOverview> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context), p = WorkoutHubPalette.of(context);
+    final theme = Theme.of(context);
     final done = widget.total > 0 && widget.completed >= widget.total;
     final value = widget.total <= 0
         ? 0.0
@@ -119,13 +119,12 @@ class _WorkoutHubOverviewState extends State<WorkoutHubOverview> {
     final progress = widget.started || widget.completed > 0;
     return Material(
         key: const ValueKey('current-workout-hero'),
-        color: theme.colorScheme.surface,
+        color: const Color(0xFF4C1D95),
         shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
-            side: BorderSide(color: p.primary.fill)),
+            borderRadius: BorderRadius.circular(20), side: BorderSide.none),
         clipBehavior: Clip.antiAlias,
         child: Padding(
-            padding: const EdgeInsets.all(18),
+            padding: const EdgeInsets.all(16),
             child:
                 Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Row(children: [
@@ -133,13 +132,13 @@ class _WorkoutHubOverviewState extends State<WorkoutHubOverview> {
                     width: 3,
                     height: 14,
                     decoration: BoxDecoration(
-                        color: p.primary.ink,
+                        color: const Color(0xFFEDE5FF),
                         borderRadius: BorderRadius.circular(2))),
                 const SizedBox(width: 8),
                 Expanded(
                     child: Text(widget.eyebrow,
                         style: theme.textTheme.labelSmall?.copyWith(
-                            color: p.primary.ink,
+                            color: const Color(0xFFEDE5FF),
                             fontWeight: FontWeight.w700,
                             letterSpacing: 1))),
               ]),
@@ -148,6 +147,7 @@ class _WorkoutHubOverviewState extends State<WorkoutHubOverview> {
                   style: theme.textTheme.titleLarge?.copyWith(
                       fontFamily: theme.textTheme.titleLarge?.fontFamily,
                       fontSize: 26,
+                      color: Colors.white,
                       height: 1.1,
                       fontWeight: FontWeight.w700)),
               const SizedBox(height: 8),
@@ -165,7 +165,7 @@ class _WorkoutHubOverviewState extends State<WorkoutHubOverview> {
                       icon: Icons.schedule_rounded,
                       label: '~${widget.minutes} min'),
               ]),
-              const SizedBox(height: 14),
+              const SizedBox(height: 10),
               AnimatedSwitcher(
                   duration: workoutHubMotion(context, 180),
                   child: Row(key: ValueKey(widget.status), children: [
@@ -177,20 +177,19 @@ class _WorkoutHubOverviewState extends State<WorkoutHubOverview> {
                                 : Icons.circle,
                         size: progress || done ? 16 : 6,
                         color: done
-                            ? p.caution.ink
+                            ? const Color(0xFFFFBE87)
                             : progress
-                                ? p.primary.ink
+                                ? Colors.white
                                 : const Color(0xFFFF9A3C)),
                     const SizedBox(width: 7),
                     Expanded(
                         child: Text(widget.status,
                             style: theme.textTheme.bodyMedium?.copyWith(
-                                fontSize: 12,
-                                color: theme.colorScheme.onSurfaceVariant))),
+                                fontSize: 12, color: const Color(0xFFE0D3F5)))),
                     if (progress)
                       Text('${widget.completed} / ${widget.total}',
                           style: theme.textTheme.labelLarge
-                              ?.copyWith(color: p.primary.ink)),
+                              ?.copyWith(color: const Color(0xFFEDE5FF))),
                   ])),
               if (progress) ...[
                 const SizedBox(height: 8),
@@ -206,11 +205,11 @@ class _WorkoutHubOverviewState extends State<WorkoutHubOverview> {
                             child: LinearProgressIndicator(
                                 key: const ValueKey('workout-progress'),
                                 value: v,
-                                minHeight: 4,
-                                color: p.primary.ink,
-                                backgroundColor: p.primary.fill)))),
+                                minHeight: 5,
+                                color: const Color(0xFFEDE5FF),
+                                backgroundColor: const Color(0xFF7956AD))))),
               ],
-              const SizedBox(height: 16),
+              const SizedBox(height: 12),
               Listener(
                   onPointerDown: (_) {
                     if (!_launching) setState(() => _pressed = true);
@@ -225,8 +224,8 @@ class _WorkoutHubOverviewState extends State<WorkoutHubOverview> {
                           child: FilledButton.icon(
                               onPressed: _launching ? null : _start,
                               style: FilledButton.styleFrom(
-                                  backgroundColor: AppColors.primary,
-                                  foregroundColor: Colors.white,
+                                  backgroundColor: const Color(0xFFFF963B),
+                                  foregroundColor: const Color(0xFF241332),
                                   minimumSize: const Size(0, 52),
                                   padding: const EdgeInsets.symmetric(
                                       horizontal: 16, vertical: 14),
@@ -246,7 +245,7 @@ class _WorkoutHubOverviewState extends State<WorkoutHubOverview> {
                           child: Text(widget.support!,
                               style: theme.textTheme.bodyMedium?.copyWith(
                                 fontSize: 12,
-                                color: theme.colorScheme.onSurfaceVariant,
+                                color: const Color(0xFFE0D3F5),
                               )));
                   if (c.maxWidth < 300 ||
                       MediaQuery.textScalerOf(context).scale(14) > 21) {
@@ -254,7 +253,13 @@ class _WorkoutHubOverviewState extends State<WorkoutHubOverview> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           if (support != null) support,
-                          if (widget.switcher != null) widget.switcher!
+                          if (widget.switcher != null)
+                            Theme(
+                                data: theme.copyWith(
+                                    textButtonTheme: TextButtonThemeData(
+                                        style: TextButton.styleFrom(
+                                            foregroundColor: Colors.white))),
+                                child: widget.switcher!)
                         ]);
                   }
                   return Row(children: [
@@ -262,14 +267,15 @@ class _WorkoutHubOverviewState extends State<WorkoutHubOverview> {
                       Expanded(child: support)
                     else
                       const Spacer(),
-                    if (widget.switcher != null) widget.switcher!
+                    if (widget.switcher != null)
+                      Theme(
+                          data: theme.copyWith(
+                              textButtonTheme: TextButtonThemeData(
+                                  style: TextButton.styleFrom(
+                                      foregroundColor: Colors.white))),
+                          child: widget.switcher!)
                   ]);
                 }),
-              ],
-              if (widget.scheduleStatus != null) ...[
-                const SizedBox(height: 6),
-                Text(widget.scheduleStatus!,
-                    style: theme.textTheme.bodyMedium?.copyWith(fontSize: 12)),
               ],
             ])));
   }
@@ -282,15 +288,14 @@ class _Fact extends StatelessWidget {
   @override
   Widget build(BuildContext context) =>
       Row(mainAxisSize: MainAxisSize.min, children: [
-        Icon(icon,
-            size: 14, color: Theme.of(context).colorScheme.onSurfaceVariant),
+        Icon(icon, size: 14, color: const Color(0xFFE0D3F5)),
         const SizedBox(width: 5),
         Flexible(
             child: Text(label,
                 style: Theme.of(context)
                     .textTheme
                     .bodyMedium
-                    ?.copyWith(fontSize: 12))),
+                    ?.copyWith(fontSize: 12, color: const Color(0xFFE0D3F5)))),
       ]);
 }
 
