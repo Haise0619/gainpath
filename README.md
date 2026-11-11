@@ -390,3 +390,8 @@ Routine checkpoints now advance their revision through equal or backward wall-cl
 ## Complete Workout optimization — 11 November 2026
 
 Workout now isolates scheduled and free attempt identities, prioritizes starting and compact plan/history/progress shortcuts, preserves required safety confirmations through continuous exercise handoffs, and combines Routine and Exercise session history. Workout Settings includes voice, privacy, continuation and backup controls. Clean-source test and build evidence, four phase commits and pending device acceptance are in the [complete implementation report](docs/ux/workout-module-complete-optimization.md).
+
+
+## Workout Hub visual and motion redesign — 11 November 2026
+
+Workout now separates its focused action hero, independent Training Plan, compact expandable exercise list, History/Progress and equipment/help. Existing workout engine and identity/persistence protections remain. Clean-source verification: 694 Workout tests plus the added scroll case, 34 diagnostic cases, 759 Pose tests, 25 render/behavior cases, clean 16-file analysis and arm64 Debug APK. Complete Mobile suite: 1,962 passed / 34 skipped / 31 failures reproduced on untouched HEAD. Xiaomi is locked/Dozing; no installation or physical FPS claim. [Report and evidence](docs/ux/workout-hub-visual-motion-redesign.md).
