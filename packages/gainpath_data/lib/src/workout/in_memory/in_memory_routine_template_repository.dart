@@ -33,7 +33,7 @@ class InMemoryRoutineTemplateRepository
   Future<RoutineBlueprint> saveWithCover(
       RoutineBlueprint blueprint, EquipmentImage cover) async {
     blueprint.imageUrl =
-        'data:image/${cover.extension};base64,${base64Encode(cover.bytes)}';
+        'data:${cover.contentType};base64,${base64Encode(cover.bytes)}';
     return save(blueprint);
   }
 
