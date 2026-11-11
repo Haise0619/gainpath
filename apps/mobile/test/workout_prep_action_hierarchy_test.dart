@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gainpath_data/gainpath_data.dart';
 import 'package:gainpath_identity/gainpath_identity.dart';
-import 'package:gainpath_ui/gainpath_ui.dart';
+
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:gainpath_mobile/features/workout/domain/published_routine_view.dart';
 import 'package:gainpath_mobile/features/workout/presentation/member/workout_prep_screen.dart';
