@@ -50,15 +50,13 @@ void main() {
       expect(find.text('View your schedule and saved progress'), findsNothing);
       expect(find.textContaining('rest between sets'), findsNothing);
       expect(routine.exercises.single.restSeconds, 60);
-      await tester.scrollUntilVisible(find.text('My training plan'), 200);
+      await tester.scrollUntilVisible(find.text('Training plan'), 200);
       await tester.pumpAndSettle();
-      final plan = tester.getTopLeft(find.text('My training plan'));
-      final camera = tester.getTopLeft(find.text('Review camera setup'));
-      expect(large ? (camera.dx - plan.dx).abs() < 1 : camera.dx > plan.dx,
-          isTrue);
-      await tester.ensureVisible(find.text('My training plan'));
+      expect(tester.getTopLeft(find.text('Training plan')).dy,
+          lessThan(tester.getTopLeft(find.text('Your exercises')).dy));
+      await tester.ensureVisible(find.text('Training plan'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('My training plan'));
+      await tester.tap(find.text('Training plan'));
       expect(plans, 1);
       expect(tester.takeException(), isNull);
     });

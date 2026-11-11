@@ -206,9 +206,9 @@ void main() {
     await tester.pumpAndSettle();
     expect(captures, 1);
     expect(c.selectedIndex, 1);
-    await tester.ensureVisible(find.text('Tutorial'));
+    await tester.scrollUntilVisible(find.text('Watch exercise tutorial'), 120);
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Tutorial'));
+    await tester.tap(find.text('Watch exercise tutorial'));
     await tester.pumpAndSettle();
     expect(tutorials, 1);
     expect(find.textContaining('Manual ·'), findsOneWidget);
@@ -226,9 +226,11 @@ void main() {
     // Finishing the last target now opens the summary without another gate.
     expect(find.text('Routine summary'), findsOneWidget);
     expect(find.text('2 full reps · 1 partial reps'), findsOneWidget);
-    expect(find.textContaining('Completed · Self-reported'), findsOneWidget);
     expect(find.text('2 self-reported sets · separate from AI measurements'),
         findsOneWidget);
+    await tester.scrollUntilVisible(
+        find.textContaining('Completed · Self-reported'), 120);
+    expect(find.textContaining('Completed · Self-reported'), findsOneWidget);
     expect(c.checkpoint!.finished, true);
     await tester.pumpWidget(const SizedBox());
     c.dispose();

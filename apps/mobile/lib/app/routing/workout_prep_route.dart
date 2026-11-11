@@ -24,6 +24,7 @@ import 'exercise_tracker_route.dart';
 import 'saved_squat_sessions_route.dart';
 import 'exercise_tutorial_route.dart';
 import 'routine_journey_route.dart';
+import 'member_progress_route.dart';
 import 'workout_program_route.dart';
 import 'squat_result_sync.dart' show newWorkoutRequestId;
 
@@ -235,6 +236,7 @@ class _WorkoutPrepRouteState extends State<WorkoutPrepRoute>
                       programEnrollmentId: launch.enrollmentId,
                       programDayKey: launch.dayKey,
                       initialDay: launch.routineDay,
+                      startFirstExercise: !shown.inProgress,
                       action: shown.attempt?.finished == true &&
                               shown.attempt?.isComplete != true
                           ? RoutineJourneyAction.resume
@@ -266,6 +268,18 @@ class _WorkoutPrepRouteState extends State<WorkoutPrepRoute>
   Widget build(BuildContext context) {
     final auth = _auth;
     final scope = _activeScope();
+    VoidCallback? openProgress(MemberProgressView view) => scope == null ||
+            auth == null
+        ? null
+        : () {
+            if (_activeScope() != scope) return;
+            Navigator.push(
+                context,
+                MaterialPageRoute<void>(
+                    builder: (_) => BlocProvider.value(
+                        value: auth,
+                        child: MemberProgressRoute(scope: scope, view: view))));
+          };
     final scheduled = !_showFree ? _scheduled : null;
     final routine = widget.publishedRoutine;
     final freeAttempt = scope == null || routine == null
@@ -324,6 +338,11 @@ class _WorkoutPrepRouteState extends State<WorkoutPrepRoute>
                 ? null
                 : () => _openPrograms(scope, auth),
             onOpenEquipment: widget.onOpenEquipment,
+            onOpenProgress: openProgress(MemberProgressView.dashboard),
+            onOpenRoutineHistory: openProgress(MemberProgressView.routines),
+            onReturnToPlanned: _showFree && _scheduled != null
+                ? () => setState(() => _showFree = false)
+                : null,
             publishedRoutine: widget.publishedRoutine,
             freeAttempt: freeAttempt,
             onStartFree: scope == null ||
@@ -331,7 +350,10 @@ class _WorkoutPrepRouteState extends State<WorkoutPrepRoute>
                     widget.publishedRoutine == null
                 ? null
                 : () async {
-                    await Navigator.push(
+                    if (_starting || _activeScope() != scope) return;
+                    setState(() => _starting = true);
+                    try {
+                      await Navigator.push(
                         context,
                         MaterialPageRoute<void>(
                             builder: (_) => BlocProvider.value(
@@ -343,13 +365,19 @@ class _WorkoutPrepRouteState extends State<WorkoutPrepRoute>
                                     programStoreFactory:
                                         widget.programStoreFactory,
                                     attemptId: freeAttempt!.checkpoint?.id,
+                                    startFirstExercise:
+                                        freeAttempt.checkpoint == null ||
+                                            freeAttempt.startsNewAttempt,
                                     action: freeAttempt.startsNewAttempt
                                         ? RoutineJourneyAction.repeat
                                         : freeAttempt.resumeUnfinished
                                             ? RoutineJourneyAction.resume
                                             : RoutineJourneyAction.view))));
-                    if (mounted && _activeScope() == scope) {
-                      await _reload(scope);
+                    } finally {
+                      if (mounted) {
+                        setState(() => _starting = false);
+                        if (_activeScope() == scope) await _reload(scope);
+                      }
                     }
                   },
             recoveryDayLabel: !_showFree ? _hub?.recoveryDayLabel : null,

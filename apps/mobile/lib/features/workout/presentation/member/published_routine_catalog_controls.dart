@@ -4,6 +4,7 @@ import 'package:gainpath_ui/gainpath_ui.dart';
 import '../../application/published_routine_catalog_cubit.dart';
 import '../../domain/published_routine_view.dart';
 import 'widgets/workout_exercise_image.dart';
+import 'widgets/workout_hub_visuals.dart';
 
 /// A temporary free-workout choice; selecting never changes a program schedule.
 class PublishedRoutineCatalogControls extends StatelessWidget {
@@ -70,7 +71,8 @@ class PublishedRoutineCatalogControls extends StatelessWidget {
         icon: const Icon(Icons.swap_horiz_rounded, size: 19),
         label: const Text('Change workout'),
         style: TextButton.styleFrom(
-            foregroundColor: AppColors.primary,
+            foregroundColor: WorkoutHubPalette.of(context).primary.ink,
+            minimumSize: const Size(48, 48),
             padding: const EdgeInsets.symmetric(horizontal: 8)),
       );
     }

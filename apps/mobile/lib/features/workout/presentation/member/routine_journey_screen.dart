@@ -698,13 +698,6 @@ class _RoutineJourneyScreenState extends State<RoutineJourneyScreen> {
                 icon: Icon(p.icon),
                 label: Text(label),
               ),
-              TextButton.icon(
-                onPressed: _working || c.busy
-                    ? null
-                    : () => _act(() => widget.onTutorial(index)),
-                icon: const Icon(Icons.play_circle_outline),
-                label: const Text('Tutorial'),
-              ),
             ],
           ),
         ),

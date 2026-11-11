@@ -1,10 +1,12 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:gainpath_domain/workout.dart';
+import 'package:gainpath_ui/gainpath_ui.dart';
 import '../../application/workout_program_controller.dart';
 import '../../domain/published_routine_view.dart';
 import '../workout_presentation.dart';
 import '../../domain/program_enrollment.dart';
+import 'widgets/program_enrollment_cards.dart';
 
 class WorkoutProgramScreen extends StatefulWidget {
   const WorkoutProgramScreen(
@@ -38,15 +40,9 @@ class _WorkoutProgramScreenState extends State<WorkoutProgramScreen>
   Timer? _dayTimer;
   final _scroll = ScrollController();
   WorkoutProgramController get c => widget.controller;
-  static const _weekdayNames = [
-    'Mon',
-    'Tue',
-    'Wed',
-    'Thu',
-    'Fri',
-    'Sat',
-    'Sun'
-  ];
+
+  static const _weekdayNames = kProgramWeekdayNames;
+
   @override
   void initState() {
     super.initState();
@@ -141,6 +137,7 @@ class _WorkoutProgramScreenState extends State<WorkoutProgramScreen>
 
   String _date(DateTime date) =>
       '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+
   Future<void> _pickStart() async {
     final chosen = await showDatePicker(
         context: context,
@@ -160,6 +157,7 @@ class _WorkoutProgramScreenState extends State<WorkoutProgramScreen>
         if (!mounted || !c.authorized) return;
         await c.open();
       });
+
   Future<void> _skip(ScheduledProgramDay day) async {
     final confirmed = await showDialog<bool>(
         context: context,
@@ -190,6 +188,32 @@ class _WorkoutProgramScreenState extends State<WorkoutProgramScreen>
     }
   }
 
+  Future<void> _enrollSelectedProgram() => _act(() async {
+        final choice = _choice!;
+        final start = _start!;
+        final weekdays = Set<int>.of(_weekdays);
+        final available = await widget.loadPrograms();
+        if (!mounted || !c.authorized) return;
+        final current = available
+            .where((p) => p.id == choice.id && p.version == choice.version)
+            .firstOrNull;
+        if (current == null ||
+            canonicalProgramJson(current.toJson()) !=
+                canonicalProgramJson(choice.toJson())) {
+          setState(() => _catalogError =
+              'This program is no longer available for new enrollment. Reload programs to choose another. Your saved history is retained.');
+          return;
+        }
+        await c.enroll(current, start, weekdays);
+        if (mounted) {
+          if (_scroll.hasClients) _scroll.jumpTo(0);
+          setState(() {
+            _choosing = false;
+            _selectedKey = null;
+          });
+        }
+      });
+
   @override
   Widget build(BuildContext context) => ListenableBuilder(
       listenable: c,
@@ -205,10 +229,35 @@ class _WorkoutProgramScreenState extends State<WorkoutProgramScreen>
             e?.schedule.where((d) => d.key == _selectedKey).firstOrNull ??
                 e?.schedule.where((d) => d.date == today).firstOrNull ??
                 c.nextWorkout();
+
+        final isEnrolling = e == null || _choosing;
+        final requiredCount = _choice == null
+            ? 0
+            : _choice!.days
+                .where((d) => d.week == 1 && d.kind == 'workout')
+                .length;
+        final validationError = _choice == null
+            ? null
+            : validateProgramSchedule(
+                program: _choice,
+                startDate: _start,
+                today: _today,
+                weekdays: _weekdays,
+              );
+        final canSubmit =
+            !c.busy && !_acting && validationError == null && _choice != null;
+
+        final showStickyFooter = isEnrolling &&
+            _choice != null &&
+            _catalogError == null &&
+            !_loading &&
+            _programs.isNotEmpty;
+
         return Scaffold(
             appBar: AppBar(
-                title: Text(
-                    selected == null ? 'Training plan' : _dayHeading(selected)),
+                title: Text((!isEnrolling && selected != null)
+                    ? _dayHeading(selected)
+                    : 'Training plan'),
                 actions: [
                   IconButton(
                       tooltip: 'Reload program and progress',
@@ -221,24 +270,76 @@ class _WorkoutProgramScreenState extends State<WorkoutProgramScreen>
                               }),
                       icon: const Icon(Icons.refresh))
                 ]),
+            bottomNavigationBar: showStickyFooter
+                ? SingleChildScrollView(
+                    physics: const NeverScrollableScrollPhysics(),
+                    child: ProgramEnrollmentStickyFooter(
+                      selectedCount: _weekdays.length,
+                      requiredCount: requiredCount,
+                      canSubmit: canSubmit,
+                      acting: _acting || c.busy,
+                      onStartProgram: _enrollSelectedProgram,
+                    ),
+                  )
+                : null,
             body: ListView(
                 controller: _scroll,
                 padding: EdgeInsets.fromLTRB(
-                    16, 16, 16, 16 + MediaQuery.paddingOf(context).bottom),
+                    16,
+                    12,
+                    16,
+                    showStickyFooter
+                        ? 140
+                        : 16 + MediaQuery.paddingOf(context).bottom),
                 children: [
                   if (c.busy || _loading) const LinearProgressIndicator(),
                   if (_catalogError != null) ...[
-                    Text(_catalogError!),
-                    TextButton(
-                        onPressed: _load, child: const Text('Retry programs'))
+                    Container(
+                      margin: const EdgeInsets.only(bottom: 12),
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: AppColors.surfaceAlt,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: AppColors.hairline),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            _catalogError!,
+                            style: const TextStyle(
+                              color: AppColors.ink,
+                              fontSize: 13.5,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          TextButton(
+                              onPressed: _load,
+                              child: const Text('Retry programs'))
+                        ],
+                      ),
+                    ),
                   ],
                   if (_actionError != null || c.error != null)
-                    Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 8),
-                        child: Text(_actionError ?? c.error!,
-                            style: TextStyle(
-                                color: Theme.of(context).colorScheme.error))),
-                  if (e != null) ...[
+                    Container(
+                      margin: const EdgeInsets.only(bottom: 12),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 14, vertical: 10),
+                      decoration: BoxDecoration(
+                        color: AppColors.dangerTint,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: const Color(0x4DDC2626)),
+                      ),
+                      child: Text(
+                        _actionError ?? c.error!,
+                        style: const TextStyle(
+                          color: AppColors.danger,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                  if (e != null && !_choosing) ...[
                     const Text('CURRENT PLAN',
                         style: TextStyle(fontWeight: FontWeight.w700)),
                     Text(e.program.title,
@@ -283,12 +384,17 @@ class _WorkoutProgramScreenState extends State<WorkoutProgramScreen>
                     Text('Weekly progress',
                         style: Theme.of(context).textTheme.titleLarge),
                     for (var week = 1; week <= 4; week++) _week(e, week),
+                    const SizedBox(height: 14),
                     OutlinedButton.icon(
                         onPressed: c.busy
                             ? null
-                            : () => setState(() => _choosing = !_choosing),
+                            : () {
+                                if (_scroll.hasClients) _scroll.jumpTo(0);
+                                setState(() => _choosing = true);
+                              },
                         icon: const Icon(Icons.calendar_month),
                         label: const Text('Choose another program')),
+                    const SizedBox(height: 8),
                     TextButton.icon(
                         onPressed: c.busy
                             ? null
@@ -332,118 +438,91 @@ class _WorkoutProgramScreenState extends State<WorkoutProgramScreen>
                         icon: const Icon(Icons.stop_circle_outlined),
                         label: const Text('End current plan')),
                   ],
-                  if (e == null || _choosing) _onboarding(),
+                  if (isEnrolling) _buildOnboardingSection(e),
                 ]));
       });
-  Widget _onboarding() {
+
+  Widget _buildOnboardingSection(ProgramEnrollment? activeEnrollment) {
     if (!_loading && _programs.isEmpty) {
-      return const Padding(
-          padding: EdgeInsets.all(16),
-          child: Text('No programs are available yet. Check back later.'));
+      return Container(
+        margin: const EdgeInsets.only(top: 8),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: AppColors.hairline),
+        ),
+        child: const Text(
+          'No programs are available yet. Check back later.',
+          style: TextStyle(color: AppColors.inkSoft, fontSize: 13.5),
+        ),
+      );
     }
     if (_choice == null) return const SizedBox.shrink();
-    final count =
-        _choice!.days.where((d) => d.week == 1 && d.kind == 'workout').length;
-    return Card(
-        child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Text('Choose your program',
-                      style: Theme.of(context).textTheme.titleLarge),
-                  DropdownButtonFormField<String>(
-                      initialValue: _choice!.id,
-                      isExpanded: true,
-                      decoration:
-                          const InputDecoration(labelText: 'Program and level'),
-                      items: _programs
-                          .map((p) => DropdownMenuItem(
-                              value: p.id,
-                              child: Text('${p.level} · ${p.title}',
-                                  overflow: TextOverflow.ellipsis)))
-                          .toList(),
-                      onChanged: c.busy
-                          ? null
-                          : (id) => setState(() => _selectProgram(
-                              _programs.singleWhere((p) => p.id == id)))),
-                  const SizedBox(height: 16),
-                  Text('$count workouts per week · ${_choice!.weeks} weeks',
-                      style: Theme.of(context).textTheme.titleMedium),
-                  const SizedBox(height: 8),
-                  for (final day in _choice!.days
-                      .where((d) => d.week == 1 && d.kind == 'workout'))
-                    ListTile(
-                        contentPadding: EdgeInsets.zero,
-                        leading: const Icon(Icons.fitness_center_outlined),
-                        title: Text(day.routineSnapshot?['title'] as String? ??
-                            day.category),
-                        subtitle: Text(
-                            '${day.category}${day.routineSnapshot?['estimatedMinutes'] == null ? '' : ' · Estimated ${day.routineSnapshot!['estimatedMinutes']} min'}')),
-                  const Text(
-                      'Recovery days separate training sessions. Your chosen weekdays must preserve the published recovery spacing.'),
-                  TextButton.icon(
-                      onPressed: c.busy ? null : _pickStart,
-                      icon: const Icon(Icons.event),
-                      label: Text('Start date: ${_date(_start!)}')),
-                  Text(
-                      'Choose $count training days each week (${_weekdays.length}/$count selected). We check recovery spacing before saving.'),
-                  Wrap(spacing: 6, children: [
-                    for (var i = 1; i <= 7; i++)
-                      FilterChip(
-                          label: Text(_weekdayNames[i - 1]),
-                          selected: _weekdays.contains(i),
-                          onSelected: c.busy
-                              ? null
-                              : (selected) => setState(() {
-                                    if (selected) {
-                                      _weekdays.add(i);
-                                    } else {
-                                      _weekdays.remove(i);
-                                    }
-                                  }))
-                  ]),
-                  if (_weekdays.length != count)
-                    Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 8),
-                        child: Text(
-                            'Select exactly $count training days to continue.',
-                            style: TextStyle(
-                                color: Theme.of(context).colorScheme.error))),
-                  FilledButton(
-                      onPressed: c.busy || _acting || _weekdays.length != count
-                          ? null
-                          : () => _act(() async {
-                                final choice = _choice!;
-                                final start = _start!;
-                                final weekdays = Set<int>.of(_weekdays);
-                                final available = await widget.loadPrograms();
-                                if (!mounted || !c.authorized) return;
-                                final current = available
-                                    .where((p) =>
-                                        p.id == choice.id &&
-                                        p.version == choice.version)
-                                    .firstOrNull;
-                                if (current == null ||
-                                    canonicalProgramJson(current.toJson()) !=
-                                        canonicalProgramJson(choice.toJson())) {
-                                  setState(() => _catalogError =
-                                      'This program is no longer available for new enrollment. Reload programs to choose another. Your saved history is retained.');
-                                  return;
-                                }
-                                await c.enroll(current, start, weekdays);
-                                if (mounted) {
-                                  if (_scroll.hasClients) _scroll.jumpTo(0);
-                                  setState(() {
-                                    _choosing = false;
-                                    _selectedKey = null;
-                                  });
-                                }
-                              }),
-                      child: const Text('Start program')),
-                  const Text(
-                      'Choosing another program keeps your previous enrollment and workout history.'),
-                ])));
+
+    final validationError = validateProgramSchedule(
+      program: _choice,
+      startDate: _start,
+      today: _today,
+      weekdays: _weekdays,
+    );
+    final previewData = computeSchedulePreview(
+      program: _choice,
+      startDate: _start,
+      weekdays: _weekdays,
+    );
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (activeEnrollment != null) ...[
+          Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: OutlinedButton.icon(
+              onPressed: () {
+                if (_scroll.hasClients) _scroll.jumpTo(0);
+                setState(() => _choosing = false);
+              },
+              icon: const Icon(Icons.arrow_back),
+              label: const Text('Return to active plan'),
+            ),
+          ),
+        ],
+        ChooseProgramCard(
+          selectedProgram: _choice!,
+          availablePrograms: _programs,
+          onSelectProgram: (p) => setState(() => _selectProgram(p)),
+          disabled: c.busy || _acting,
+        ),
+        const SizedBox(height: 14),
+        ProgramOverviewCard(
+          program: _choice!,
+        ),
+        const SizedBox(height: 14),
+        ScheduleSetupCard(
+          program: _choice!,
+          startDate: _start,
+          weekdays: _weekdays,
+          onPickStartDate: _pickStart,
+          onToggleWeekday: (weekday) {
+            setState(() {
+              if (_weekdays.contains(weekday)) {
+                _weekdays.remove(weekday);
+              } else {
+                _weekdays.add(weekday);
+              }
+            });
+          },
+          validationError: validationError,
+          disabled: c.busy || _acting,
+        ),
+        const SizedBox(height: 14),
+        SchedulePreviewCard(
+          previewData: previewData,
+          validationError: validationError,
+        ),
+      ],
+    );
   }
 
   Widget _week(ProgramEnrollment e, int week) {

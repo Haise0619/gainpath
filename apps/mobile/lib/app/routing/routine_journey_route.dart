@@ -63,6 +63,7 @@ class RoutineJourneyRoute extends StatefulWidget {
       this.programEnrollmentId,
       this.programDayKey,
       this.initialDay = 1,
+      this.startFirstExercise = false,
       this.storeFactory = createRoutineJourneyStore,
       this.workoutStoreFactory = createWorkoutStore,
       this.preferencesFactory = createWorkoutPreferences,
@@ -78,6 +79,7 @@ class RoutineJourneyRoute extends StatefulWidget {
   final String? programAttemptId;
   final String? programEnrollmentId, programDayKey;
   final int initialDay;
+  final bool startFirstExercise;
   final RoutineJourneyAction action;
   final Future<RoutineJourneyStore> Function(SessionScope) storeFactory;
   final Future<WorkoutSessionStore> Function(SessionScope) workoutStoreFactory;
@@ -126,6 +128,7 @@ class _RoutineJourneyRouteState extends State<RoutineJourneyRoute>
 
   Future<void> _open() async {
     _opening = true;
+    final launchEpoch = _interruptionEpoch;
     final auth = context.read<AuthBloc>();
     try {
       if (!_authorized(auth)) throw StateError('Routine account unavailable');
@@ -187,7 +190,28 @@ class _RoutineJourneyRouteState extends State<RoutineJourneyRoute>
           await c.startNextDay();
       }
       if (c.allTargetsCompleted && !c.checkpoint!.finished) await c.finish();
-      if (mounted) setState(() {});
+      if (mounted) {
+        setState(() {});
+        final index = c.selectedIndex;
+        if (widget.startFirstExercise &&
+            c.checkpoint?.finished == false &&
+            c.statusFor(index) == RoutineExerciseStatus.notStarted &&
+            (c.isTimed(index) || c.supportsTracking(index))) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted &&
+                launchEpoch == _interruptionEpoch &&
+                _authorized(auth) &&
+                c.selectedIndex == index) {
+              unawaited(_track(index, automatic: true).catchError((Object _) {
+                if (mounted && _authorized(auth)) {
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                      content: Text('Could not start this exercise. Try again.')));
+                }
+              }));
+            }
+          });
+        }
+      }
     } catch (_) {
       if (mounted) {
         setState(() => _error =
@@ -198,7 +222,7 @@ class _RoutineJourneyRouteState extends State<RoutineJourneyRoute>
     }
   }
 
-  Future<void> _track(int index) async {
+  Future<void> _track(int index, {bool automatic = false}) async {
     if (_launching ||
         !_foreground ||
         ModalRoute.of(context)?.isCurrent != true) {
@@ -206,7 +230,7 @@ class _RoutineJourneyRouteState extends State<RoutineJourneyRoute>
     }
     _launching = true;
     try {
-      await _trackOnce(index);
+      await _trackOnce(index, automatic: automatic);
     } finally {
       _launching = false;
     }

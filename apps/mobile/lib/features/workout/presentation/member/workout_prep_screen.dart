@@ -20,6 +20,8 @@ import 'exercise_tutorial_screen.dart';
 import '../../../../navigation/workout_navigation.dart';
 import 'routine_screen.dart';
 import 'widgets/workout_exercise_image.dart';
+import 'widgets/workout_hub_visuals.dart';
+import '../../domain/routine_attempt.dart';
 
 class WorkoutPrepScreen extends StatelessWidget {
   const WorkoutPrepScreen(
@@ -32,6 +34,9 @@ class WorkoutPrepScreen extends StatelessWidget {
       this.onOpenEquipment,
       this.onOpenPrograms,
       this.onOpenSettings,
+      this.onOpenProgress,
+      this.onOpenRoutineHistory,
+      this.onReturnToPlanned,
       this.scheduledWorkout,
       this.freeAttempt,
       this.onStartFree,
@@ -52,6 +57,8 @@ class WorkoutPrepScreen extends StatelessWidget {
   final VoidCallback? onOpenEquipment;
   final VoidCallback? onOpenPrograms;
   final VoidCallback? onOpenSettings;
+  final VoidCallback? onOpenProgress, onOpenRoutineHistory;
+  final VoidCallback? onReturnToPlanned;
   final ScheduledWorkoutPreview? scheduledWorkout;
   final WorkoutHubAttempt? freeAttempt;
   final VoidCallback? onStartFree;
@@ -68,7 +75,7 @@ class WorkoutPrepScreen extends StatelessWidget {
     final activeDay = scheduledWorkout?.day ??
         freeAttempt?.day ??
         selectedRoutine?.exercises.firstOrNull?.dayNumber;
-    String? savedStatus(Exercise row) {
+    RoutineExerciseStatus? savedStatus(Exercise row) {
       final attempt = scheduledWorkout == null
           ? freeAttempt?.attempt
           : scheduledWorkout!.attempt;
@@ -77,7 +84,7 @@ class WorkoutPrepScreen extends StatelessWidget {
           : -1;
       if (attempt == null || index < 0) return null;
       final result = attempt.entries.where((e) => e.index == index).firstOrNull;
-      return result == null ? null : exerciseStatusLabel(result.status);
+      return result?.status;
     }
 
     final routine = live
@@ -99,6 +106,30 @@ class WorkoutPrepScreen extends StatelessWidget {
             : selectedRoutine?.estimatedMinutes
         : 45;
     final multipleDays = live && scheduledWorkout == null && isMultiDay;
+    final shortcuts = Wrap(
+      spacing: 8,
+      children: [
+        if (onOpenPrograms != null)
+          TextButton.icon(
+              onPressed: onOpenPrograms,
+              icon: const Icon(Icons.calendar_month_outlined),
+              label: const Text('Training plan')),
+        if (onOpenRoutineHistory != null)
+          TextButton.icon(
+              onPressed: onOpenRoutineHistory,
+              icon: const Icon(Icons.history_rounded),
+              label: const Text('Routine history')),
+        if (onOpenProgress != null)
+          TextButton.icon(
+              onPressed: onOpenProgress,
+              icon: const Icon(Icons.insights_outlined),
+              label: const Text('Progress')),
+        if (onReturnToPlanned != null)
+          TextButton(
+              onPressed: onReturnToPlanned,
+              child: const Text('Back to planned workout')),
+      ],
+    );
 
     void openExercise(int index) {
       if (live) {
@@ -130,7 +161,9 @@ class WorkoutPrepScreen extends StatelessWidget {
               betweenExerciseRestSeconds:
                   selectedRoutine.betweenExerciseRestSeconds,
               estimatedMinutes: selectedRoutine.estimatedMinutes,
-              exercises: routine.cast<PublishedRoutineExercise>(),
+              exercises: scheduledWorkout == null
+                  ? selectedRoutine.exercises
+                  : routine.cast<PublishedRoutineExercise>(),
               difficulty: selectedRoutine.difficulty,
             );
       Navigator.push(
@@ -145,6 +178,7 @@ class WorkoutPrepScreen extends StatelessWidget {
     }
 
     return Scaffold(
+      backgroundColor: const Color(0xFFF8F7FC),
       body: CustomScrollView(slivers: [
         SliverAppBar(
           pinned: true,
@@ -160,6 +194,7 @@ class WorkoutPrepScreen extends StatelessWidget {
         SliverPadding(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
           sliver: SliverList.list(children: [
+            if (!hasWorkout) shortcuts,
             if (recoveryDayLabel != null) ...[
               Panel(
                   child: Column(
@@ -199,6 +234,7 @@ class WorkoutPrepScreen extends StatelessWidget {
                         : null,
                 freeAttempt: freeAttempt,
                 switcher: routineCatalogControls,
+                shortcuts: shortcuts,
                 onStart: recoveryDayLabel != null && onOpenPrograms != null
                     ? onOpenPrograms!
                     : scheduledWorkout != null
@@ -214,11 +250,12 @@ class WorkoutPrepScreen extends StatelessWidget {
                   crossAxisAlignment: WrapCrossAlignment.center,
                   spacing: 8,
                   children: [
-                    Text('Exercises in this workout',
+                    Text('Your exercises',
                         style: Theme.of(context).textTheme.titleLarge),
-                    TextButton(
-                        onPressed: openRoutine,
-                        child: const Text('View routine')),
+                    if (isMultiDay || scheduledWorkout != null || !live)
+                      TextButton(
+                          onPressed: openRoutine,
+                          child: const Text('Routine preview')),
                   ]),
               const SizedBox(height: 8),
               for (var i = 0; i < routine.length; i++)
@@ -227,7 +264,7 @@ class WorkoutPrepScreen extends StatelessWidget {
                   child: _WorkoutExerciseRow(
                     index: i + 1,
                     exercise: routine[i],
-                    statusLabel: savedStatus(routine[i]),
+                    status: savedStatus(routine[i]),
                     day: multipleDays
                         ? (routine[i] as PublishedRoutineExercise).dayNumber
                         : null,
@@ -266,7 +303,7 @@ class WorkoutPrepScreen extends StatelessWidget {
             if (programLoadError) ...[
               const SizedBox(height: 12),
               const Text(
-                  'Could not load your training plan. Open My training plan to retry.',
+                  'Could not load your training plan. Open Training plan to retry.',
                   style: TextStyle(color: AppColors.inkSoft)),
             ],
             const SizedBox(height: 24),
@@ -274,18 +311,12 @@ class WorkoutPrepScreen extends StatelessWidget {
                 style: Theme.of(context).textTheme.titleLarge),
             const SizedBox(height: 8),
             _WorkoutTools(children: [
-              if (onOpenPrograms != null)
-                _DetourCard(
-                    icon: Icons.calendar_month_outlined,
-                    iconColor: AppColors.primary,
-                    title: 'My training plan',
-                    subtitle: 'View your schedule and saved progress',
-                    onTap: onOpenPrograms),
               _DetourCard(
                 icon: Icons.videocam_outlined,
-                iconColor: AppColors.info,
-                title: 'Review camera setup',
-                subtitle: 'Check your distance and camera angle',
+                imageAsset: 'assets/icons/tool_camera_setup.webp',
+                tone: WorkoutHubPalette.of(context).neutral,
+                title: 'Camera setup',
+                subtitle: 'Distance & angle',
                 onTap: () => Navigator.push(
                     context,
                     MaterialPageRoute(
@@ -293,9 +324,10 @@ class WorkoutPrepScreen extends StatelessWidget {
               ),
               _DetourCard(
                 icon: Icons.qr_code_scanner_rounded,
-                iconColor: AppColors.info,
+                imageAsset: 'assets/icons/tool_scan_equipment.webp',
+                tone: WorkoutHubPalette.of(context).neutral,
                 title: 'Scan equipment',
-                subtitle: 'Find instructions and safety tips',
+                subtitle: 'Safety & guides',
                 onTap: live
                     ? onOpenEquipment ?? () => showUnavailable(context)
                     : () => Navigator.push(
@@ -306,9 +338,11 @@ class WorkoutPrepScreen extends StatelessWidget {
               if (live)
                 _DetourCard(
                     icon: Icons.history_rounded,
-                    iconColor: AppColors.primary,
-                    title: 'Saved workout sessions',
-                    subtitle: 'Review your saved workout results',
+                    imageAsset: 'assets/icons/tool_saved_sessions.webp',
+                    tone: WorkoutHubPalette.of(context).neutral,
+                    accentDotColor: const Color(0xFF10B981),
+                    title: 'Saved sessions',
+                    subtitle: 'History & results',
                     onTap: () {
                       final auth = context.read<AuthBloc>();
                       final scope = auth.state.session?.scope;
@@ -589,7 +623,8 @@ class _WorkoutOverview extends StatelessWidget {
       this.actionLabelOverride,
       required this.onStart,
       required this.journeyFirst,
-      this.switcher});
+      this.switcher,
+      required this.shortcuts});
   final String title;
   final int exerciseCount, totalSets;
   final int? minutes;
@@ -599,223 +634,78 @@ class _WorkoutOverview extends StatelessWidget {
   final VoidCallback onStart;
   final bool journeyFirst;
   final Widget? switcher;
+  final Widget shortcuts;
 
-  @override
-  Widget build(BuildContext context) => ClipRRect(
-        borderRadius: BorderRadius.circular(22),
-        child: Stack(children: [
-          const Positioned.fill(
-              child: ColoredBox(color: AppColors.primaryTint)),
-          Padding(
-              padding: const EdgeInsets.fromLTRB(18, 10, 18, 18),
-              child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    SizedBox(
-                      width: double.infinity,
-                      child: Wrap(
-                        alignment: WrapAlignment.spaceBetween,
-                        crossAxisAlignment: WrapCrossAlignment.center,
-                        children: [
-                          Text(
-                              scheduledWorkout == null
-                                  ? 'FREE WORKOUT'
-                                  : 'YOUR PROGRAM · ${scheduledWorkout!.date.day} ${const [
-                                      'JAN',
-                                      'FEB',
-                                      'MAR',
-                                      'APR',
-                                      'MAY',
-                                      'JUN',
-                                      'JUL',
-                                      'AUG',
-                                      'SEP',
-                                      'OCT',
-                                      'NOV',
-                                      'DEC'
-                                    ][scheduledWorkout!.date.month - 1]}',
-                              style: TextStyle(
-                                  color: AppColors.ink,
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w800,
-                                  letterSpacing: .7)),
-                          if (switcher != null) switcher!,
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    Text(title,
-                        style: Theme.of(context)
-                            .textTheme
-                            .headlineMedium
-                            ?.copyWith(
-                                color: AppColors.ink,
-                                fontWeight: FontWeight.w700)),
-                    const SizedBox(height: 16),
-                    Wrap(spacing: 8, runSpacing: 8, children: [
-                      _OverviewMetric(
-                          icon: Icons.fitness_center_rounded,
-                          value: '$exerciseCount',
-                          label: 'Exercises'),
-                      _OverviewMetric(
-                          icon: Icons.layers_outlined,
-                          value: '$totalSets',
-                          label: 'Sets'),
-                      if (minutes != null)
-                        _OverviewMetric(
-                            icon: Icons.schedule_rounded,
-                            value: '~$minutes',
-                            label: 'Minutes'),
-                    ]),
-                    const SizedBox(height: 16),
-                    if (scheduledWorkout != null)
-                      Text(_scheduledStatus(scheduledWorkout!),
-                          style: const TextStyle(color: AppColors.ink)),
-                    ...[
-                      _OverviewProgress(
-                        completed: scheduledWorkout == null
-                            ? freeAttempt?.completed ?? 0
-                            : scheduledWorkout!.attempt?.completedExercises ??
-                                0,
-                        total: exerciseCount,
-                        status: scheduledWorkout == null
-                            ? freeAttempt?.statusLabel ?? 'Not started'
-                            : scheduledWorkout!.attempt?.statusLabel ??
-                                (scheduledWorkout!.inProgress
-                                    ? 'In progress'
-                                    : 'Not started'),
-                      ),
-                    ],
-                    const SizedBox(height: 16),
-                    SizedBox(
-                        width: double.infinity,
-                        child: FilledButton.icon(
-                            style: FilledButton.styleFrom(
-                                backgroundColor: AppColors.primary,
-                                foregroundColor: Colors.white,
-                                minimumSize: const Size(0, 52)),
-                            onPressed: onStart,
-                            icon: Icon(actionLabelOverride != null
-                                ? Icons.calendar_month_outlined
-                                : ((scheduledWorkout == null
-                                                ? freeAttempt?.attempt
-                                                : scheduledWorkout!.attempt)
-                                            ?.isComplete ==
-                                        true)
-                                    ? Icons.summarize_outlined
-                                    : Icons.play_arrow_rounded),
-                            label: Text(actionLabelOverride ??
-                                (scheduledWorkout != null
-                                    ? scheduledWorkout!.attempt?.isComplete ==
-                                            true
-                                        ? 'View Workout Summary'
-                                        : scheduledWorkout!.attempt?.finished ==
-                                                true
-                                            ? 'Resume Unfinished Exercises'
-                                            : scheduledWorkout!.inProgress
-                                                ? 'Continue workout'
-                                                : 'Start workout'
-                                    : freeAttempt?.actionLabel ??
-                                        'Start workout')))),
-                    if (journeyFirst) ...[
-                      const SizedBox(height: 8),
-                      Semantics(
-                          label: actionLabelOverride != null
-                              ? 'Your saved workout remains available in your training schedule.'
-                              : ((scheduledWorkout == null
-                                              ? freeAttempt?.attempt
-                                              : scheduledWorkout!.attempt)
-                                          ?.isComplete ==
-                                      true)
-                                  ? 'Workout completed. Review your saved results.'
-                                  : 'Choose an exercise next. Progress saves on this device.',
-                          child: Row(children: [
-                            const Icon(Icons.save_outlined,
-                                size: 16, color: AppColors.inkSoft),
-                            const SizedBox(width: 6),
-                            Expanded(
-                                child: Text(
-                                    actionLabelOverride != null
-                                        ? 'Available in your schedule'
-                                        : (scheduledWorkout
-                                                        ?.attempt?.isComplete ==
-                                                    true ||
-                                                freeAttempt
-                                                        ?.attempt?.isComplete ==
-                                                    true)
-                                            ? 'Workout completed. Review your saved results.'
-                                            : 'Saves on this device',
-                                    style:
-                                        Theme.of(context).textTheme.bodySmall)),
-                          ])),
-                    ],
-                  ])),
-        ]),
-      );
-}
-
-class _OverviewMetric extends StatelessWidget {
-  const _OverviewMetric(
-      {required this.icon, required this.value, required this.label});
-  final IconData icon;
-  final String value, label;
-  @override
-  Widget build(BuildContext context) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        decoration: BoxDecoration(
-            color: AppColors.surface.withValues(alpha: .8),
-            borderRadius: BorderRadius.circular(14)),
-        child: Row(mainAxisSize: MainAxisSize.min, children: [
-          Icon(icon, size: 20, color: AppColors.primary),
-          const SizedBox(width: 8),
-          Flexible(
-              child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                Text(value, style: Theme.of(context).textTheme.titleLarge),
-                Text(label, style: Theme.of(context).textTheme.bodySmall),
-              ])),
-        ]),
-      );
-}
-
-class _OverviewProgress extends StatelessWidget {
-  const _OverviewProgress(
-      {required this.completed, required this.total, required this.status});
-  final int completed, total;
-  final String status;
   @override
   Widget build(BuildContext context) {
-    final done = total > 0 && completed >= total;
-    final color = done ? AppColors.success : AppColors.primary;
-    return Row(children: [
-      Semantics(
-          label: '$completed of $total exercises completed',
-          child: SizedBox(
-              width: 44,
-              height: 44,
-              child: Stack(alignment: Alignment.center, children: [
-                SizedBox.expand(
-                    child: CircularProgressIndicator(
-                        key: const ValueKey('workout-progress-ring'),
-                        value: total <= 0
-                            ? 0
-                            : (completed / total).clamp(0.0, 1.0),
-                        strokeWidth: 4,
-                        backgroundColor: AppColors.hairline,
-                        color: color)),
-                Icon(done ? Icons.check_rounded : Icons.fitness_center_rounded,
-                    size: 20, color: color),
-              ]))),
-      const SizedBox(width: 12),
-      Expanded(
-          child:
-              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text('$completed / $total',
-            style: Theme.of(context).textTheme.titleMedium),
-        Text(status, style: Theme.of(context).textTheme.bodySmall),
-      ])),
-    ]);
+    final attempt = scheduledWorkout == null
+        ? freeAttempt?.attempt
+        : scheduledWorkout!.attempt;
+    final complete = attempt?.isComplete == true;
+    final action = actionLabelOverride ??
+        (scheduledWorkout != null
+            ? complete
+                ? 'View Workout Summary'
+                : scheduledWorkout!.attempt?.finished == true
+                    ? 'Resume Unfinished Exercises'
+                    : scheduledWorkout!.inProgress
+                        ? 'Continue workout'
+                        : 'Start workout'
+            : freeAttempt?.actionLabel ?? 'Start workout');
+    final date = scheduledWorkout?.date;
+    final eyebrow = date == null
+        ? 'FREE WORKOUT'
+        : 'YOUR PROGRAM · ${date.day} ${const [
+            'JAN',
+            'FEB',
+            'MAR',
+            'APR',
+            'MAY',
+            'JUN',
+            'JUL',
+            'AUG',
+            'SEP',
+            'OCT',
+            'NOV',
+            'DEC'
+          ][date.month - 1]}';
+    final support = !journeyFirst
+        ? null
+        : actionLabelOverride != null
+            ? 'Available in your schedule'
+            : complete
+                ? 'Workout completed. Review your saved results.'
+                : 'Saves on this device';
+    return WorkoutHubOverview(
+      title: title,
+      eyebrow: eyebrow,
+      exerciseCount: exerciseCount,
+      totalSets: totalSets,
+      minutes: minutes,
+      completed: attempt?.completedExercises ?? 0,
+      total: exerciseCount,
+      status: scheduledWorkout == null
+          ? freeAttempt?.statusLabel ?? 'Not started'
+          : attempt?.statusLabel ??
+              (scheduledWorkout!.inProgress ? 'In progress' : 'Not started'),
+      action: action,
+      actionIcon: actionLabelOverride != null
+          ? Icons.calendar_month_outlined
+          : complete
+              ? Icons.summarize_outlined
+              : Icons.play_arrow_rounded,
+      onStart: onStart,
+      switcher: switcher,
+      shortcuts: shortcuts,
+      scheduleStatus:
+          scheduledWorkout == null ? null : _scheduledStatus(scheduledWorkout!),
+      support: support,
+      supportSemantics: actionLabelOverride != null
+          ? 'Your saved workout remains available in your training schedule.'
+          : complete
+              ? 'Workout completed. Review your saved results.'
+              : 'Choose an exercise next. Progress saves on this device.',
+    );
   }
 }
 
@@ -827,18 +717,21 @@ class _WorkoutExerciseRow extends StatelessWidget {
       this.day,
       this.tracker,
       this.organizationId,
-      this.statusLabel,
+      this.status,
       this.trackers = const ExerciseTrackerDispatcher()});
   final int index;
   final Exercise exercise;
   final int? day;
   final ExerciseTracker? tracker;
   final String? organizationId;
-  final String? statusLabel;
+  final RoutineExerciseStatus? status;
   final ExerciseTrackerDispatcher trackers;
   final VoidCallback onTap;
+
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final palette = WorkoutHubPalette.of(context);
     final equipment = exercise is PublishedRoutineExercise
         ? (exercise as PublishedRoutineExercise).tutorial.equipment.trim()
         : '';
@@ -846,12 +739,34 @@ class _WorkoutExerciseRow extends StatelessWidget {
         ? ExercisePresentation.forExercise(exercise as PublishedRoutineExercise,
             organizationId: organizationId ?? '', trackers: trackers)
         : null;
-    final modeColor = switch (presentation?.mode) {
-      WorkoutExerciseMode.videoTimed => AppColors.info,
-      WorkoutExerciseMode.unavailable => AppColors.danger,
-      WorkoutExerciseMode.manual => AppColors.inkSoft,
-      _ => AppColors.primary,
+    final modeTone = switch (presentation?.mode) {
+      WorkoutExerciseMode.videoTimed => palette.info,
+      WorkoutExerciseMode.unavailable => palette.caution,
+      WorkoutExerciseMode.manual => palette.neutral,
+      _ => palette.primary,
     };
+    final completed = status != null && isExerciseTargetComplete(status!);
+    final stateLabel = switch (status) {
+      RoutineExerciseStatus.completed ||
+      RoutineExerciseStatus.timerCompleted ||
+      RoutineExerciseStatus.selfReportedCompleted =>
+        'Done',
+      RoutineExerciseStatus.partial ||
+      RoutineExerciseStatus.timerPartial ||
+      RoutineExerciseStatus.selfReportedPartial =>
+        'In progress',
+      RoutineExerciseStatus.skipped => 'Skipped',
+      RoutineExerciseStatus.instructionsReviewed => 'Reviewed',
+      _ => null,
+    };
+    final stateIcon = completed
+        ? Icons.check_rounded
+        : status == RoutineExerciseStatus.skipped
+            ? Icons.skip_next_rounded
+            : status == RoutineExerciseStatus.instructionsReviewed
+                ? Icons.menu_book_outlined
+                : Icons.timelapse_rounded;
+    final stateTone = completed ? palette.success : palette.caution;
     final target =
         presentation?.targetLabel.replaceAll(' · Self-reported', '') ??
             '${exercise.sets} sets × ${exercise.reps} reps';
@@ -860,144 +775,320 @@ class _WorkoutExerciseRow extends StatelessWidget {
       if (equipment.isNotEmpty) equipment,
       if (day != null) 'Day $day',
     ].join(' · ');
+    final fullLabel = [
+      'Exercise $index',
+      exercise.name,
+      target,
+      if (presentation != null) presentation.description,
+      if (status != null) exerciseStatusLabel(status!),
+      details,
+      'Open exercise instructions'
+    ].where((s) => s.isNotEmpty).join('. ');
     return Tooltip(
-        message: details.isEmpty ? exercise.name : details,
-        child: Semantics(
-            label: details,
-            child: Material(
-              color: AppColors.surface,
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(14),
-                  side: const BorderSide(color: AppColors.hairline)),
-              child: InkWell(
-                borderRadius: BorderRadius.circular(14),
-                onTap: onTap,
-                child: Padding(
-                    padding: const EdgeInsets.all(10),
-                    child: Row(children: [
+      message: details.isEmpty ? exercise.name : details,
+      child: Semantics(
+        label: fullLabel,
+        button: true,
+        excludeSemantics: true,
+        onTap: onTap,
+        child: Material(
+          color: Colors.white,
+          shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+              side: BorderSide(color: const Color(0xFFE8E4EF))),
+          elevation: 1,
+          shadowColor: const Color(0x10190F2E),
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
+            onTap: onTap,
+            child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
                       SizedBox(
-                          width: 26,
-                          child: Text('$index',
-                              textAlign: TextAlign.center,
-                              style: const TextStyle(
-                                  color: AppColors.inkSoft,
-                                  fontWeight: FontWeight.w700))),
-                      const SizedBox(width: 8),
-                      ClipRRect(
-                          borderRadius: BorderRadius.circular(10),
-                          child: SizedBox(
-                              width: 60,
-                              height: 60,
-                              child: WorkoutExerciseImage(
-                                  url: exercise.imageUrl))),
+                          width: 72,
+                          height: 76,
+                          child: Stack(children: [
+                            Positioned.fill(
+                                top: 4,
+                                child: ClipRRect(
+                                    borderRadius: BorderRadius.circular(10),
+                                    child: WorkoutExerciseImage(
+                                        url: exercise.imageUrl))),
+                            Positioned(
+                                top: 0,
+                                left: 0,
+                                child: Container(
+                                  width: 24,
+                                  height: 24,
+                                  alignment: Alignment.center,
+                                  decoration: BoxDecoration(
+                                      color: completed
+                                          ? palette.success.ink
+                                          : AppColors.ink,
+                                      shape: BoxShape.circle,
+                                      border: Border.all(
+                                          color: Colors.white, width: 2)),
+                                  child: completed
+                                      ? Icon(Icons.check_rounded,
+                                          size: 15, color: palette.success.fill)
+                                      : Text('$index',
+                                          style: const TextStyle(
+                                              color: Colors.white,
+                                              fontSize: 12,
+                                              fontWeight: FontWeight.w700)),
+                                )),
+                          ])),
                       const SizedBox(width: 12),
                       Expanded(
                           child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                             Text(exercise.name,
-                                style: Theme.of(context).textTheme.titleMedium),
-                            const SizedBox(height: 3),
+                                style: theme.textTheme.titleMedium
+                                    ?.copyWith(fontWeight: FontWeight.w600)),
+                            const SizedBox(height: 4),
                             Text(target,
-                                style: Theme.of(context).textTheme.bodyMedium),
-                            if (presentation != null) ...[
-                              const SizedBox(height: 6),
-                              _ModeBadge(
-                                  icon: presentation.icon,
-                                  label: presentation.mode ==
-                                          WorkoutExerciseMode.manual
-                                      ? 'Self-reported'
-                                      : presentation.label,
-                                  color: modeColor),
+                                style: theme.textTheme.bodyMedium?.copyWith(
+                                    color: theme.colorScheme.onSurfaceVariant)),
+                            if (presentation != null || stateLabel != null) ...[
+                              const SizedBox(height: 8),
+                              Wrap(spacing: 6, runSpacing: 6, children: [
+                                if (presentation != null)
+                                  WorkoutHubBadge(
+                                      icon: presentation.icon,
+                                      label: presentation.mode ==
+                                              WorkoutExerciseMode.manual
+                                          ? 'Self-reported'
+                                          : presentation.label,
+                                      tone: modeTone),
+                                if (stateLabel != null)
+                                  WorkoutHubBadge(
+                                      icon: stateIcon,
+                                      label: stateLabel,
+                                      tone: stateTone),
+                              ]),
                             ],
-                            if (statusLabel != null)
-                              Text(statusLabel!,
-                                  style: Theme.of(context).textTheme.bodySmall),
                           ])),
-                      const Icon(Icons.chevron_right_rounded,
-                          color: AppColors.inkSoft),
+                      const SizedBox(width: 4),
+                      Icon(Icons.chevron_right_rounded,
+                          color: theme.colorScheme.onSurfaceVariant, size: 20),
                     ])),
-              ),
-            )));
+          ),
+        ),
+      ),
+    );
   }
-}
-
-class _ModeBadge extends StatelessWidget {
-  const _ModeBadge(
-      {required this.icon, required this.label, required this.color});
-  final IconData icon;
-  final String label;
-  final Color color;
-  @override
-  Widget build(BuildContext context) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
-        decoration: BoxDecoration(
-            color: color.withValues(alpha: .08),
-            borderRadius: BorderRadius.circular(7)),
-        child: Row(mainAxisSize: MainAxisSize.min, children: [
-          Icon(icon, size: 14, color: color),
-          const SizedBox(width: 4),
-          Flexible(
-              child: Text(label,
-                  style: Theme.of(context)
-                      .textTheme
-                      .bodySmall
-                      ?.copyWith(color: color))),
-        ]),
-      );
 }
 
 class _WorkoutTools extends StatelessWidget {
   const _WorkoutTools({required this.children});
   final List<Widget> children;
+
   @override
-  Widget build(BuildContext context) =>
-      LayoutBuilder(builder: (context, constraints) {
-        final single = constraints.maxWidth < 330 ||
-            MediaQuery.textScalerOf(context).scale(14) > 21;
-        final width =
-            single ? constraints.maxWidth : (constraints.maxWidth - 12) / 2;
-        return Wrap(spacing: 12, runSpacing: 12, children: [
-          for (final child in children) SizedBox(width: width, child: child)
-        ]);
-      });
+  Widget build(BuildContext context) {
+    if (children.isEmpty) return const SizedBox.shrink();
+
+    return LayoutBuilder(builder: (context, constraints) {
+      final single = constraints.maxWidth < 330 ||
+          MediaQuery.textScalerOf(context).scale(14) > 21;
+
+      return Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: const Color(0xFFEDE8F5), width: 1.0),
+          boxShadow: const [
+            BoxShadow(
+              color: Color(0x0A190F2E),
+              blurRadius: 14,
+              offset: Offset(0, 4),
+            ),
+          ],
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: single ? _buildSingleColumn() : _buildGrid(),
+      );
+    });
+  }
+
+  Widget _buildSingleColumn() {
+    const dividerColor = Color(0xFFF3EFF8);
+    final items = <Widget>[];
+    for (var i = 0; i < children.length; i++) {
+      if (i > 0) {
+        items.add(const Divider(height: 1, thickness: 1, color: dividerColor));
+      }
+      items.add(children[i]);
+    }
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: items,
+    );
+  }
+
+  Widget _buildGrid() {
+    const dividerColor = Color(0xFFF3EFF8);
+    final rows = <Widget>[];
+
+    for (var i = 0; i < children.length; i += 2) {
+      if (i > 0) {
+        rows.add(const Divider(height: 1, thickness: 1, color: dividerColor));
+      }
+      final left = children[i];
+      final hasRight = i + 1 < children.length;
+      final right = hasRight ? children[i + 1] : null;
+
+      rows.add(
+        IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Expanded(child: left),
+              if (hasRight) ...[
+                const VerticalDivider(
+                  width: 1,
+                  thickness: 1,
+                  color: dividerColor,
+                ),
+                Expanded(child: right!),
+              ],
+            ],
+          ),
+        ),
+      );
+    }
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: rows,
+    );
+  }
 }
 
 class _DetourCard extends StatelessWidget {
-  const _DetourCard(
-      {required this.icon,
-      required this.iconColor,
-      required this.title,
-      required this.subtitle,
-      required this.onTap});
+  const _DetourCard({
+    required this.icon,
+    this.imageAsset,
+    required this.tone,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+    this.accentDotColor,
+  });
+
   final IconData icon;
-  final Color iconColor;
+  final String? imageAsset;
+  final WorkoutHubTone tone;
   final String title, subtitle;
   final VoidCallback? onTap;
+  final Color? accentDotColor;
+
   @override
   Widget build(BuildContext context) => Tooltip(
-      message: subtitle,
-      child: Semantics(
-          label: subtitle,
-          child: Panel(
-            padding: const EdgeInsets.all(16),
-            onTap: onTap,
-            child: ConstrainedBox(
-                constraints: const BoxConstraints(minHeight: 88),
-                child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+        message: subtitle,
+        child: Semantics(
+          label: '$title. $subtitle',
+          button: true,
+          enabled: onTap != null,
+          excludeSemantics: true,
+          onTap: onTap,
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: onTap,
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(minHeight: 112),
+                child: Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 14),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
                       Container(
-                          padding: const EdgeInsets.all(10),
-                          decoration: BoxDecoration(
-                              color: iconColor.withValues(alpha: .1),
-                              borderRadius: BorderRadius.circular(12)),
-                          child: Icon(icon, color: iconColor, size: 24)),
-                      const SizedBox(height: 12),
-                      Text(title,
-                          style: Theme.of(context).textTheme.titleSmall),
-                    ])),
-          )));
+                        width: 52,
+                        height: 52,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF6F0FD),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(
+                            color: const Color(0xFFEFE5FB),
+                            width: 1,
+                          ),
+                        ),
+                        alignment: Alignment.center,
+                        child: imageAsset != null
+                            ? Image.asset(
+                                imageAsset!,
+                                width: 44,
+                                height: 44,
+                                fit: BoxFit.contain,
+                                errorBuilder: (_, __, ___) => Icon(
+                                  icon,
+                                  color: tone.ink,
+                                  size: 24,
+                                ),
+                              )
+                            : Icon(icon, color: tone.ink, size: 24),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        title,
+                        textAlign: TextAlign.center,
+                        style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                              color: Theme.of(context).colorScheme.onSurface,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 13,
+                              letterSpacing: -0.2,
+                            ),
+                      ),
+                      const SizedBox(height: 2),
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          if (accentDotColor != null) ...[
+                            Container(
+                              width: 5,
+                              height: 5,
+                              decoration: BoxDecoration(
+                                color: accentDotColor,
+                                shape: BoxShape.circle,
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                          ],
+                          Flexible(
+                            child: Text(
+                              subtitle,
+                              textAlign: TextAlign.center,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w500,
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .onSurfaceVariant
+                                    .withValues(alpha: 0.82),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
 }
 
 Future<bool?> showWorkoutCaptureConsent(BuildContext context,

@@ -58,7 +58,7 @@ void main() {
         await c.finish();
         final attempt = WorkoutHubAttempt.fromCheckpoints(
             scope: scope, routine: routine, checkpoints: await store.load());
-        var settings = 0;
+        var settings = 0, progressOpens = 0, historyOpens = 0;
         await tester.pumpWidget(MaterialApp(
             builder: (context, child) => MediaQuery(
                 data: MediaQuery.of(context).copyWith(
@@ -72,6 +72,8 @@ void main() {
                     journeyBuilder: (_, __) => const SizedBox()),
                 freeAttempt: attempt,
                 onStartFree: () {},
+                onOpenProgress: () => progressOpens++,
+                onOpenRoutineHistory: () => historyOpens++,
                 onOpenSettings: () => settings++)));
         await tester.pumpAndSettle();
         final progress = tester.widget<CircularProgressIndicator>(
@@ -79,11 +81,16 @@ void main() {
         expect(progress.value, 0);
         expect(find.text('0 / 1'), findsOneWidget);
         expect(
-            find.text(
-                completed ? 'Start workout' : 'Resume Unfinished Exercises'),
+            find.text(completed
+                ? 'Start workout'
+                : 'Resume Unfinished Exercises'),
             findsOneWidget);
         await tester.tap(find.byTooltip('Workout settings'));
         expect(settings, 1);
+        await tester.tap(find.text('Progress'));
+        await tester.tap(find.text('Routine history'));
+        expect(progressOpens, 1);
+        expect(historyOpens, 1);
         expect(tester.takeException(), isNull);
         await tester.pumpWidget(const SizedBox());
         c.dispose();
@@ -136,5 +143,29 @@ void main() {
             onStartScheduled: () {})));
     expect(find.text('0 / 1'), findsOneWidget);
     expect(find.text('0 / 9'), findsNothing);
+  });
+  testWidgets('start and Training plan precede the exercise list at 320dp',
+      (tester) async {
+    tester.view.physicalSize = const Size(320, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(MaterialApp(
+        builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(context)
+                .copyWith(textScaler: const TextScaler.linear(2)),
+            child: child!),
+        home: WorkoutPrepScreen(
+            live: true,
+            publishedRoutine: routine,
+            onStartFree: () {},
+            onOpenPrograms: () {},
+            onOpenProgress: () {},
+            onOpenRoutineHistory: () {})));
+    expect(find.text('Start workout').hitTestable(), findsOneWidget);
+    expect(find.text('Training plan').hitTestable(), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('Your exercises'), 100);
+    await tester.ensureVisible(find.text('Your exercises'));
+    await tester.pumpAndSettle();
+    expect(tester.getBottomLeft(find.text('Your exercises')).dy, lessThan(640));
   });
 }
