@@ -296,3 +296,7 @@ The six retained AI exercises now support opt-in Auto-Continue Between Sets. A f
 ## Module 2 Phase 5A ? 11 November 2026
 
 Routine checkpoints now advance their revision through equal or backward wall-clock readings, and competing updates are rejected under the existing lock. The routine cover preview builds from committed source. Clean-source Mobile, pose, checkpoint stress and arm64 Debug build verification passed. Physical device acceptance remains pending. [Phase 5A release readiness](docs/ux/module-2-phase5a-release-readiness.md)
+
+## Complete Workout optimization — 11 November 2026
+
+Workout now isolates scheduled and free attempt identities, prioritizes starting and compact plan/history/progress shortcuts, preserves required safety confirmations through continuous exercise handoffs, and combines Routine and Exercise session history. Workout Settings includes voice, privacy, continuation and backup controls. Clean-source test and build evidence, four phase commits and pending device acceptance are in the [complete implementation report](docs/ux/workout-module-complete-optimization.md).
