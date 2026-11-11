@@ -229,7 +229,11 @@ class _WorkoutPrepRouteState extends State<WorkoutPrepRoute>
                   child: RoutineJourneyRoute(
                       scope: scope,
                       routine: launch.routine,
+                      storeFactory: widget.routineStoreFactory,
+                      programStoreFactory: widget.programStoreFactory,
                       programAttemptId: launch.attemptId,
+                      programEnrollmentId: launch.enrollmentId,
+                      programDayKey: launch.dayKey,
                       initialDay: launch.routineDay,
                       action: shown.attempt?.finished == true &&
                               shown.attempt?.isComplete != true
@@ -263,6 +267,15 @@ class _WorkoutPrepRouteState extends State<WorkoutPrepRoute>
     final auth = _auth;
     final scope = _activeScope();
     final scheduled = !_showFree ? _scheduled : null;
+    final routine = widget.publishedRoutine;
+    final freeAttempt = scope == null || routine == null
+        ? null
+        : WorkoutHubAttempt.fromCheckpoints(
+            scope: scope,
+            routine: routine,
+            checkpoints: _checkpoints,
+            scheduledAttemptIds:
+                _controller?.journal?.scheduledAttemptIds ?? const {});
     final original = widget.routineCatalogControls;
     final Widget? controls;
     if (original is PublishedRoutineCatalogControls) {
@@ -312,12 +325,7 @@ class _WorkoutPrepRouteState extends State<WorkoutPrepRoute>
                 : () => _openPrograms(scope, auth),
             onOpenEquipment: widget.onOpenEquipment,
             publishedRoutine: widget.publishedRoutine,
-            freeAttempt: scope == null || widget.publishedRoutine == null
-                ? null
-                : WorkoutHubAttempt.fromCheckpoints(
-                    scope: scope,
-                    routine: widget.publishedRoutine!,
-                    checkpoints: _checkpoints),
+            freeAttempt: freeAttempt,
             onStartFree: scope == null ||
                     auth == null ||
                     widget.publishedRoutine == null
@@ -331,14 +339,15 @@ class _WorkoutPrepRouteState extends State<WorkoutPrepRoute>
                                 child: RoutineJourneyRoute(
                                     scope: scope,
                                     routine: widget.publishedRoutine!,
-                                    action: WorkoutHubAttempt.fromCheckpoints(
-                                                scope: scope,
-                                                routine:
-                                                    widget.publishedRoutine!,
-                                                checkpoints: _checkpoints)
-                                            .resumeUnfinished
-                                        ? RoutineJourneyAction.resume
-                                        : RoutineJourneyAction.view))));
+                                    storeFactory: widget.routineStoreFactory,
+                                    programStoreFactory:
+                                        widget.programStoreFactory,
+                                    attemptId: freeAttempt!.checkpoint?.id,
+                                    action: freeAttempt.startsNewAttempt
+                                        ? RoutineJourneyAction.repeat
+                                        : freeAttempt.resumeUnfinished
+                                            ? RoutineJourneyAction.resume
+                                            : RoutineJourneyAction.view))));
                     if (mounted && _activeScope() == scope) {
                       await _reload(scope);
                     }
@@ -357,8 +366,11 @@ class _WorkoutPrepRouteState extends State<WorkoutPrepRoute>
               posePreviewBuilder: _posePreview,
               journeyBuilder: scope == null
                   ? null
-                  : (_, routine) =>
-                      RoutineJourneyRoute(scope: scope, routine: routine),
+                  : (_, routine) => RoutineJourneyRoute(
+                      scope: scope,
+                      routine: routine,
+                      storeFactory: widget.routineStoreFactory,
+                      programStoreFactory: widget.programStoreFactory),
               tutorialBuilder: scope == null || auth == null
                   ? null
                   : (_, exercise) => BlocProvider.value(

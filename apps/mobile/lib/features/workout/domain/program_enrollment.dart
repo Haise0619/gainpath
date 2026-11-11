@@ -129,6 +129,24 @@ class ProgramJournal {
   ProgramEnrollment? get active => activeId == null
       ? null
       : enrollments.where((e) => e.id == activeId).firstOrNull;
+
+  Set<String> get scheduledAttemptIds => {
+        for (final enrollment in enrollments)
+          for (final day in enrollment.progress.values)
+            if (day.attemptId case final id?) id,
+      };
+
+  Iterable<({ProgramEnrollment enrollment, ScheduledProgramDay day})>
+      slotsForAttempt(String attemptId) sync* {
+    for (final enrollment in enrollments) {
+      for (final day in enrollment.schedule) {
+        if (enrollment.progress[day.key]?.attemptId == attemptId) {
+          yield (enrollment: enrollment, day: day);
+        }
+      }
+    }
+  }
+
   Map<String, dynamic> toJson() => {
         'schemaVersion': 1,
         'revision': revision,
@@ -174,8 +192,11 @@ class ProgramRoutineLaunch {
   const ProgramRoutineLaunch(
       {required this.routine,
       required this.routineDay,
+      required this.enrollmentId,
+      required this.dayKey,
       required this.attemptId});
   final PublishedRoutine routine;
   final int routineDay;
   final String attemptId;
+  final String enrollmentId, dayKey;
 }

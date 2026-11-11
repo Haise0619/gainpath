@@ -90,7 +90,11 @@ class _WorkoutProgramRouteState extends State<WorkoutProgramRoute> {
                 child: RoutineJourneyRoute(
                     scope: widget.scope,
                     routine: launch.routine,
+                    storeFactory: widget.routineStoreFactory,
+                    programStoreFactory: widget.storeFactory,
                     programAttemptId: launch.attemptId,
+                    programEnrollmentId: launch.enrollmentId,
+                    programDayKey: launch.dayKey,
                     initialDay: launch.routineDay))));
   }
 

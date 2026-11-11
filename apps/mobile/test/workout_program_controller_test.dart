@@ -5,6 +5,7 @@ import 'package:gainpath_mobile/features/workout/application/workout_program_con
 import 'package:gainpath_mobile/features/workout/domain/program_enrollment.dart';
 import 'package:gainpath_mobile/features/workout/domain/routine_journey.dart';
 import 'package:gainpath_mobile/features/workout/application/routine_journey_controller.dart';
+import 'package:gainpath_mobile/features/workout/application/workout_hub_attempt.dart';
 import 'package:gainpath_mobile/features/workout/data/workout_session_repository.dart';
 import 'routine_journey_controller_test.dart' show MemoryJourneyStore;
 
@@ -73,6 +74,47 @@ void main() {
         newId: () => 'id_${++id}');
   });
   tearDown(() => c.dispose());
+  test('same routine has isolated free and scheduled attempts', () async {
+    await c.open();
+    await c.enroll(programFixture(), DateTime.utc(2026, 11, 2), {1, 3, 5});
+    final day = c.nextWorkout()!;
+    final launch = await c.begin(day.key);
+    final workouts = WorkoutSessionRepository(
+        scope: scope,
+        store: InMemoryWorkoutSessionStore(scope: scope),
+        uploadGateway: UnavailableWorkoutUploadGateway(),
+        activeScope: () => active);
+    addTearDown(workouts.dispose);
+    RoutineJourneyController journey() => RoutineJourneyController(
+        scope: scope,
+        activeScope: () => active,
+        routine: launch.routine,
+        store: routines,
+        programStore: store,
+        workouts: workouts,
+        newId: () => 'free_attempt');
+    final scheduled = journey(), free = journey();
+    addTearDown(scheduled.dispose);
+    addTearDown(free.dispose);
+    await scheduled.openProgramAttempt(launch.attemptId, launch.routineDay);
+    await scheduled.markManualSet(0);
+    expect(
+        WorkoutHubAttempt.fromCheckpoints(
+                scope: scope,
+                routine: launch.routine,
+                checkpoints: await routines.load(),
+                scheduledAttemptIds: store.journal.scheduledAttemptIds)
+            .checkpoint,
+        isNull);
+    await expectLater(free.openAttempt(launch.attemptId), throwsStateError);
+    await free.openLatest();
+    expect(free.checkpoint!.id, 'free_attempt');
+    expect(free.manualSetsFor(0), 0);
+    await c.endCurrentPlan();
+    await free.openDay(launch.routineDay);
+    expect(free.checkpoint!.id, 'free_attempt');
+    expect(routines.records[launch.attemptId]!.manualSets[0], 1);
+  });
   test(
       'ending the current plan preserves all enrollments and allows later enrollment',
       () async {

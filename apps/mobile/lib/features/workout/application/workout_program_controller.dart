@@ -199,7 +199,11 @@ class WorkoutProgramController extends ChangeNotifier {
         await _replace(e.copyWith(
             progress: {...e.progress, key: ProgramDayProgress(attemptId: id)}));
         return ProgramRoutineLaunch(
-            routine: routine, routineDay: day.routineDay, attemptId: id);
+            routine: routine,
+            routineDay: day.routineDay,
+            attemptId: id,
+            enrollmentId: e.id,
+            dayKey: key);
       });
   Future<void> skip(String key) => _run(() async {
         final e = enrollment ?? (throw StateError('Program unavailable'));

@@ -9,6 +9,7 @@ import '../domain/routine_attempt.dart';
 import '../domain/workout_contracts.dart';
 import '../domain/guided_timed_progress.dart';
 import '../domain/routine_plan_signature.dart';
+import '../domain/program_enrollment.dart';
 import '../domain/exercise_execution_resolver.dart';
 import 'package:gainpath_domain/workout.dart'
     show ExerciseExecutionMode, TimedPrescription;
@@ -21,8 +22,11 @@ class RoutineJourneyController extends ChangeNotifier {
       required this.store,
       required this.workouts,
       this.trackers = const ExerciseTrackerDispatcher(),
+      this.programStore,
       required this.newId}) {
-    if (store.scope != scope || workouts.scope != scope) {
+    if (store.scope != scope ||
+        workouts.scope != scope ||
+        (programStore != null && programStore!.scope != scope)) {
       throw ArgumentError('Routine account mismatch');
     }
   }
@@ -31,6 +35,7 @@ class RoutineJourneyController extends ChangeNotifier {
   final PublishedRoutine routine;
   final RoutineJourneyStore store;
   final WorkoutRepository workouts;
+  final ProgramEnrollmentStore? programStore;
   final ExerciseTrackerDispatcher trackers;
   final String Function() newId;
   RoutineCheckpoint? _checkpoint;
@@ -112,31 +117,36 @@ class RoutineJourneyController extends ChangeNotifier {
   Future<void> openLatest() => isScheduled
       ? openProgramAttempt(_scheduledAttemptId!, _scheduledDay!)
       : _run(() async {
-          final checkpoints = (await store.load())
-              .where((e) =>
-                  e.scope == scope &&
-                  e.routineId == routine.id &&
-                  e.planSignature == _signature &&
-                  days.contains(e.day))
-              .toList()
-            ..sort((a, b) => b.updatedAtMicros.compareTo(a.updatedAtMicros));
-          _guard();
+          final checkpoints = await _freeCheckpoints();
           await _openDay(
-              checkpoints.isEmpty ? days.first : checkpoints.first.day);
+              checkpoints.isEmpty ? days.first : checkpoints.first.day,
+              checkpoints);
         });
-  Future<void> _openDay(int selectedDay) async {
+
+  Future<List<RoutineCheckpoint>> _freeCheckpoints() async {
+    final checkpoints = await store.load();
+    final scheduledIds =
+        (await programStore?.load())?.scheduledAttemptIds ?? const <String>{};
+    _guard();
+    return checkpoints
+        .where((checkpoint) =>
+            checkpoint.scope == scope &&
+            checkpoint.routineId == routine.id &&
+            checkpoint.planSignature == _signature &&
+            days.contains(checkpoint.day) &&
+            !scheduledIds.contains(checkpoint.id))
+        .toList()
+      ..sort((a, b) => b.updatedAtMicros.compareTo(a.updatedAtMicros));
+  }
+
+  Future<void> _openDay(int selectedDay,
+      [List<RoutineCheckpoint>? compatible]) async {
     if (!days.contains(selectedDay)) throw ArgumentError('Unknown routine day');
     day = selectedDay;
     _checkpoint = null;
     _history = [];
-    final existing = (await store.load())
-        .where((e) =>
-            e.scope == scope &&
-            e.routineId == routine.id &&
-            e.day == day &&
-            e.planSignature == _signature)
-        .toList()
-      ..sort((a, b) => b.updatedAtMicros.compareTo(a.updatedAtMicros));
+    final existing = (compatible ?? await _freeCheckpoints())
+        .where((checkpoint) => checkpoint.day == day);
     _guard();
     if (existing.isEmpty) {
       await _newAttempt();
@@ -508,7 +518,9 @@ class RoutineJourneyController extends ChangeNotifier {
         if (isScheduled && id != _scheduledAttemptId) {
           throw StateError('This program day is linked to a different attempt');
         }
-        final matches = (await store.load()).where((v) =>
+        final candidates =
+            isScheduled ? await store.load() : await _freeCheckpoints();
+        final matches = candidates.where((v) =>
             v.id == id &&
             v.scope == scope &&
             v.routineId == routine.id &&

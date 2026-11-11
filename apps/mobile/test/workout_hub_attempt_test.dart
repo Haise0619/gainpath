@@ -64,7 +64,7 @@ void main() {
     expect(view.total, 1);
     expect(view.completed, 0);
   });
-  test('completed compatible attempt offers summary and never resume', () {
+  test('completed compatible attempt offers a fresh start', () {
     final base = checkpoint(finished: true);
     final attempt = RoutineAttempt(
         id: base.id,
@@ -87,8 +87,10 @@ void main() {
         scope: scope,
         routine: routine,
         checkpoints: [base.copyWith(attempt: attempt)]);
-    expect(view.actionLabel, 'View Workout Summary');
-    expect(view.completed, 1);
+    expect(view.actionLabel, 'Start workout');
+    expect(view.startsNewAttempt, isTrue);
+    expect(view.completed, 0);
+    expect(view.checkpoint!.attempt, same(attempt));
     expect(view.resumeUnfinished, isFalse);
   });
 }

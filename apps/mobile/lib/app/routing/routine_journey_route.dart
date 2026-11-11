@@ -1,6 +1,7 @@
 import 'dart:async';
 import '../../features/workout/presentation/member/workout_privacy_settings_screen.dart';
 import '../di/workout_preferences_factory.dart';
+import '../../features/workout/domain/program_enrollment.dart';
 import '../../features/workout/application/workout_preferences_controller.dart';
 import '../../features/workout/presentation/member/workout_ai_consent_guard.dart';
 import 'between_exercise_rest_route.dart';
@@ -59,10 +60,13 @@ class RoutineJourneyRoute extends StatefulWidget {
       this.trackers = const ExerciseTrackerDispatcher(),
       this.attemptId,
       this.programAttemptId,
+      this.programEnrollmentId,
+      this.programDayKey,
       this.initialDay = 1,
       this.storeFactory = createRoutineJourneyStore,
       this.workoutStoreFactory = createWorkoutStore,
       this.preferencesFactory = createWorkoutPreferences,
+      this.programStoreFactory,
       this.voicePreferencesFactory = createWorkoutVoicePreferences,
       this.timedPlayerFactory = VideoTutorialPlayer.new,
       this.measuredBuilder,
@@ -72,10 +76,13 @@ class RoutineJourneyRoute extends StatefulWidget {
   final ExerciseTrackerDispatcher trackers;
   final String? attemptId;
   final String? programAttemptId;
+  final String? programEnrollmentId, programDayKey;
   final int initialDay;
   final RoutineJourneyAction action;
   final Future<RoutineJourneyStore> Function(SessionScope) storeFactory;
   final Future<WorkoutSessionStore> Function(SessionScope) workoutStoreFactory;
+  final Future<ProgramEnrollmentStore> Function(SessionScope)?
+      programStoreFactory;
   final Future<WorkoutPreferencesController> Function(SessionScope)
       preferencesFactory;
   final Future<WorkoutVoicePreferences> Function(SessionScope)
@@ -124,6 +131,22 @@ class _RoutineJourneyRouteState extends State<RoutineJourneyRoute>
       if (!_authorized(auth)) throw StateError('Routine account unavailable');
       final store = await widget.storeFactory(widget.scope);
       final workoutStore = await widget.workoutStoreFactory(widget.scope);
+      final programStore = await widget.programStoreFactory?.call(widget.scope);
+      if (widget.programAttemptId case final attemptId?) {
+        final journal = await programStore?.load();
+        final links = journal?.slotsForAttempt(attemptId).toList();
+        if (links == null ||
+            links.length != 1 ||
+            journal?.activeId != widget.programEnrollmentId ||
+            links.single.enrollment.id != widget.programEnrollmentId ||
+            links.single.day.key != widget.programDayKey ||
+            links.single.day.definition.routineDay != widget.initialDay ||
+            links.single.day.definition.routineId != widget.routine.id ||
+            links.single.enrollment.progress[links.single.day.key]?.skipped ==
+                true) {
+          throw StateError('The scheduled workout changed');
+        }
+      }
       try {
         _preferences = await widget.preferencesFactory(widget.scope);
       } catch (_) {
@@ -140,6 +163,7 @@ class _RoutineJourneyRouteState extends State<RoutineJourneyRoute>
           activeScope: () => _authorized(auth) ? widget.scope : null,
           routine: widget.routine,
           store: store,
+          programStore: programStore,
           workouts: _workouts!,
           trackers: widget.trackers,
           newId: newWorkoutRequestId);

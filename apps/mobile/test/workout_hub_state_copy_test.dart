@@ -76,21 +76,12 @@ void main() {
         await tester.pumpAndSettle();
         final progress = tester.widget<CircularProgressIndicator>(
             find.byKey(const ValueKey('workout-progress-ring')));
-        expect(progress.value, completed ? 1 : 0);
-        expect(find.text(completed ? '1 / 1' : '0 / 1'), findsOneWidget);
+        expect(progress.value, 0);
+        expect(find.text('0 / 1'), findsOneWidget);
         expect(
-            find.text(completed
-                ? 'View Workout Summary'
-                : 'Resume Unfinished Exercises'),
+            find.text(
+                completed ? 'Start workout' : 'Resume Unfinished Exercises'),
             findsOneWidget);
-        if (completed) {
-          expect(find.text('Workout completed. Review your saved results.'),
-              findsOneWidget);
-          expect(
-              find.text(
-                  'Choose an exercise next. Progress saves on this device.'),
-              findsNothing);
-        }
         await tester.tap(find.byTooltip('Workout settings'));
         expect(settings, 1);
         expect(tester.takeException(), isNull);
@@ -126,5 +117,24 @@ void main() {
     await tester.tap(find.text('View Training Schedule'));
     expect(schedules, 1);
     expect(tester.takeException(), isNull);
+  });
+  testWidgets('unstarted scheduled card never borrows free workout progress',
+      (tester) async {
+    await tester.pumpWidget(MaterialApp(
+        home: WorkoutPrepScreen(
+            live: true,
+            publishedRoutine: routine,
+            freeAttempt: const WorkoutHubAttempt(total: 9),
+            scheduledWorkout: ScheduledWorkoutPreview(
+                routine: routine,
+                day: 1,
+                dayKey: 'day',
+                enrollmentId: 'e',
+                date: DateTime.utc(2026, 11, 9),
+                snapshot: 's',
+                inProgress: false),
+            onStartScheduled: () {})));
+    expect(find.text('0 / 1'), findsOneWidget);
+    expect(find.text('0 / 9'), findsNothing);
   });
 }

@@ -65,8 +65,13 @@ class WorkoutPrepScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final selectedRoutine = scheduledWorkout?.routine ?? publishedRoutine;
+    final activeDay = scheduledWorkout?.day ??
+        freeAttempt?.day ??
+        selectedRoutine?.exercises.firstOrNull?.dayNumber;
     String? savedStatus(Exercise row) {
-      final attempt = scheduledWorkout?.attempt ?? freeAttempt?.attempt;
+      final attempt = scheduledWorkout == null
+          ? freeAttempt?.attempt
+          : scheduledWorkout!.attempt;
       final index = row is PublishedRoutineExercise
           ? selectedRoutine?.exercises.indexOf(row) ?? -1
           : -1;
@@ -77,9 +82,7 @@ class WorkoutPrepScreen extends StatelessWidget {
 
     final routine = live
         ? selectedRoutine?.exercises
-                .where((e) =>
-                    scheduledWorkout == null ||
-                    e.dayNumber == scheduledWorkout!.day)
+                .where((e) => e.dayNumber == activeDay)
                 .toList() ??
             <PublishedRoutineExercise>[]
         : context.read<WorkoutRepository>().routine;
@@ -91,7 +94,7 @@ class WorkoutPrepScreen extends StatelessWidget {
     final isMultiDay = selectedRoutine != null &&
         selectedRoutine.exercises.map((e) => e.dayNumber).toSet().length > 1;
     final int? duration = live
-        ? scheduledWorkout != null && isMultiDay
+        ? isMultiDay
             ? null
             : selectedRoutine?.estimatedMinutes
         : 45;
@@ -499,14 +502,15 @@ class WorkoutPrepScreen extends StatelessWidget {
   Future<void> _startPosePreview(BuildContext context) async {
     final auth = context.read<AuthBloc>();
     final scope = auth.state.session?.scope;
-    if (scope == null || !AuthRolePolicy.canEnter(auth.state,
-        allowed: const {AppRole.member})) {
+    if (scope == null ||
+        !AuthRolePolicy.canEnter(auth.state, allowed: const {AppRole.member})) {
       return;
     }
     final lease = _CaptureLaunchLease(context);
     // A loss followed by reauthentication must not revive this launch intent.
     var invalidated = false;
-    bool authorized() => auth.state.session?.scope == scope &&
+    bool authorized() =>
+        auth.state.session?.scope == scope &&
         AuthRolePolicy.canEnter(auth.state, allowed: const {AppRole.member});
     final subscription = auth.stream.listen((_) {
       if (!authorized()) invalidated = true;
@@ -515,10 +519,15 @@ class WorkoutPrepScreen extends StatelessWidget {
       final preferences = await preferencesFactory(scope);
       if (!lease.current || invalidated || !authorized()) return;
       final consented = await showWorkoutCaptureConsent(context,
-          preferences: preferences, requireSetup: false,
-          allowUpload: false, onUploadChanged: (_) {});
-      if (consented != true || !lease.current || invalidated ||
-          !authorized() || !preferences.validConsent) {
+          preferences: preferences,
+          requireSetup: false,
+          allowUpload: false,
+          onUploadChanged: (_) {});
+      if (consented != true ||
+          !lease.current ||
+          invalidated ||
+          !authorized() ||
+          !preferences.validConsent) {
         return;
       }
       final destination = routes.posePreviewBuilder;
@@ -530,10 +539,15 @@ class WorkoutPrepScreen extends StatelessWidget {
           context,
           MaterialPageRoute<void>(
               builder: (_) => BlocProvider.value(
-                  value: auth, child: WorkoutAiConsentGuard(
-                      scope: scope, preferencesFactory: (_) async => preferences,
-                      launchCurrent: () => lease.uninterrupted && !invalidated &&
-                          authorized() && preferences.validConsent,
+                  value: auth,
+                  child: WorkoutAiConsentGuard(
+                      scope: scope,
+                      preferencesFactory: (_) async => preferences,
+                      launchCurrent: () =>
+                          lease.uninterrupted &&
+                          !invalidated &&
+                          authorized() &&
+                          preferences.validConsent,
                       child: Builder(builder: destination)))));
     } finally {
       lease.dispose();
@@ -659,16 +673,17 @@ class _WorkoutOverview extends StatelessWidget {
                           style: const TextStyle(color: AppColors.ink)),
                     ...[
                       _OverviewProgress(
-                        completed:
-                            scheduledWorkout?.attempt?.completedExercises ??
-                                freeAttempt?.completed ??
+                        completed: scheduledWorkout == null
+                            ? freeAttempt?.completed ?? 0
+                            : scheduledWorkout!.attempt?.completedExercises ??
                                 0,
-                        total: scheduledWorkout?.attempt?.entries.length ??
-                            freeAttempt?.total ??
-                            exerciseCount,
-                        status: scheduledWorkout?.attempt?.statusLabel ??
-                            freeAttempt?.statusLabel ??
-                            'Not started',
+                        total: exerciseCount,
+                        status: scheduledWorkout == null
+                            ? freeAttempt?.statusLabel ?? 'Not started'
+                            : scheduledWorkout!.attempt?.statusLabel ??
+                                (scheduledWorkout!.inProgress
+                                    ? 'In progress'
+                                    : 'Not started'),
                       ),
                     ],
                     const SizedBox(height: 16),
@@ -682,10 +697,11 @@ class _WorkoutOverview extends StatelessWidget {
                             onPressed: onStart,
                             icon: Icon(actionLabelOverride != null
                                 ? Icons.calendar_month_outlined
-                                : (scheduledWorkout?.attempt?.isComplete ==
-                                            true ||
-                                        freeAttempt?.attempt?.isComplete ==
-                                            true)
+                                : ((scheduledWorkout == null
+                                                ? freeAttempt?.attempt
+                                                : scheduledWorkout!.attempt)
+                                            ?.isComplete ==
+                                        true)
                                     ? Icons.summarize_outlined
                                     : Icons.play_arrow_rounded),
                             label: Text(actionLabelOverride ??
@@ -706,9 +722,11 @@ class _WorkoutOverview extends StatelessWidget {
                       Semantics(
                           label: actionLabelOverride != null
                               ? 'Your saved workout remains available in your training schedule.'
-                              : (scheduledWorkout?.attempt?.isComplete ==
-                                          true ||
-                                      freeAttempt?.attempt?.isComplete == true)
+                              : ((scheduledWorkout == null
+                                              ? freeAttempt?.attempt
+                                              : scheduledWorkout!.attempt)
+                                          ?.isComplete ==
+                                      true)
                                   ? 'Workout completed. Review your saved results.'
                                   : 'Choose an exercise next. Progress saves on this device.',
                           child: Row(children: [
@@ -1128,7 +1146,7 @@ class _ConsentSheetState extends State<_ConsentSheet> {
           if (!widget.privacyAccepted)
             Text(
               'GainPath reads your body position from the camera to check your form '
-                      'and count your reps.',
+              'and count your reps.',
               style: Theme.of(context).textTheme.bodyLarge,
             ),
           const SizedBox(height: 14),
@@ -1142,9 +1160,7 @@ class _ConsentSheetState extends State<_ConsentSheet> {
                 if (!widget.privacyAccepted)
                   _point(context, 'No video is recorded, stored, or uploaded.'),
                 if (!widget.privacyAccepted)
-                  _point(
-                      context,
-                      'Only your movement scores are saved.'),
+                  _point(context, 'Only your movement scores are saved.'),
                 if (widget.realWorkout)
                   _point(
                       context,

@@ -541,8 +541,10 @@ class _WorkoutProgramScreenState extends State<WorkoutProgramScreen>
                   if (d.kind == 'workout' && !c.isComplete(day.key)) ...[
                     FilledButton(
                         onPressed: c.busy ? null : () => _startDay(day),
-                        child: Text(
-                            c.enrollment!.progress[day.key]?.attemptId == null
+                        child: Text(c.enrollment!.progress[day.key]?.skipped ==
+                                true
+                            ? 'Make up workout'
+                            : c.enrollment!.progress[day.key]?.attemptId == null
                                 ? 'Start scheduled routine'
                                 : 'Resume scheduled routine')),
                     Wrap(spacing: 8, children: [

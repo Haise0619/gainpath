@@ -22,6 +22,8 @@ import '../../features/analytics/presentation/member/posture_accuracy_screen.dar
 import '../../features/analytics/presentation/member/widgets/local_progress_widgets.dart';
 import '../../features/workout/presentation/member/workout_result_screen.dart';
 import '../di/local_member_progress_factory.dart';
+import '../di/program_store_factory.dart';
+import '../../features/workout/domain/program_enrollment.dart';
 import '../../features/workout/domain/routine_attempt.dart';
 import '../../features/workout/presentation/member/routine_history_screen.dart';
 import 'routine_journey_route.dart';
@@ -593,25 +595,25 @@ Widget _progressContent(
 Future<void> openRoutineAttempt(BuildContext context, RoutineAttempt attempt,
     Future<void> Function() refresh,
     {List<LocalWorkoutProgressRecord> sessionRecords = const [],
+    Future<ProgramEnrollmentStore> Function(SessionScope) programStoreFactory =
+        createProgramEnrollmentStore,
     ValueChanged<LocalWorkoutProgressRecord>? onOpenSession}) async {
   final auth = context.read<AuthBloc>();
   bool authorized() =>
       auth.state.session?.scope == attempt.scope &&
       AuthRolePolicy.canEnter(auth.state, allowed: const {AppRole.member});
   if (!authorized()) return;
-  Future<void> continueAttempt(
-      BuildContext detailContext, RoutineJourneyAction action) async {
-    if (!authorized()) return;
-    await Navigator.pushReplacement(
-        detailContext,
-        MaterialPageRoute<void>(
-            builder: (_) => RoutineJourneyRoute(
-                scope: attempt.scope,
-                routine: attempt.routine,
-                attemptId: attempt.id,
-                action: action)));
-  }
-
+  final origin = () async {
+    try {
+      final store = await programStoreFactory(attempt.scope);
+      if (store.scope == attempt.scope && authorized()) {
+        return (store: store, journal: await store.load());
+      }
+    } catch (_) {
+      // History remains readable when its schedule cannot be loaded.
+    }
+    return null;
+  }();
   await Navigator.push(
       context,
       MaterialPageRoute<void>(
@@ -624,46 +626,110 @@ Future<void> openRoutineAttempt(BuildContext context, RoutineAttempt attempt,
                           child:
                               Text('Sign in to view this account’s routine.')));
                 }
-                final hasNext = attempt.routine.exercises
-                    .any((e) => e.dayNumber > attempt.day);
-                return RoutineAttemptDetailScreen(
-                    attempt: attempt,
-                    availableSessionIds: {
-                      for (final entry in attempt.entries)
-                        for (final record in sessionRecords)
-                          if (record.scope == attempt.scope &&
-                              entry.sessionIds.contains(record.sessionId) &&
-                              record.exerciseId ==
-                                  attempt.routine.exercises[entry.index]
-                                      .exerciseId)
-                            record.sessionId
-                    },
-                    onOpenSession: onOpenSession == null
-                        ? null
-                        : (id) {
-                            if (!authorized()) return;
-                            final records = sessionRecords
-                                .where((r) =>
-                                    r.scope == attempt.scope &&
-                                    r.sessionId == id)
-                                .toList();
-                            if (records.length == 1) {
-                              onOpenSession(records.single);
-                            }
+                return FutureBuilder(
+                    future: origin,
+                    builder: (context, snapshot) {
+                      final programStore = snapshot.data?.store;
+                      final journal = snapshot.data?.journal;
+                      final links =
+                          journal?.slotsForAttempt(attempt.id).toList();
+                      final link = links?.length == 1 ? links!.single : null;
+                      final free = links?.isEmpty == true;
+                      final scheduledResumable = link != null &&
+                          journal?.activeId == link.enrollment.id &&
+                          link.day.definition.routineDay == attempt.day &&
+                          link.day.definition.routineId == attempt.routine.id &&
+                          link.enrollment.progress[link.day.key]?.skipped !=
+                              true;
+
+                      Future<void> continueAttempt(BuildContext detailContext,
+                          RoutineJourneyAction action) async {
+                        if (!authorized() || programStore == null) return;
+                        try {
+                          final latest = await programStore.load();
+                          if (!detailContext.mounted || !authorized()) return;
+                          final current =
+                              latest.slotsForAttempt(attempt.id).toList();
+                          if (free ? current.isNotEmpty : current.length != 1) {
+                            throw StateError('Workout context changed');
+                          }
+                          if (!free &&
+                              (link == null ||
+                                  latest.activeId != link.enrollment.id ||
+                                  current.single.enrollment.id !=
+                                      link.enrollment.id ||
+                                  current.single.day.key != link.day.key ||
+                                  current.single.enrollment
+                                          .progress[link.day.key]?.skipped ==
+                                      true)) {
+                            throw StateError('Program day changed');
+                          }
+                          await Navigator.pushReplacement(
+                              detailContext,
+                              MaterialPageRoute<void>(
+                                  builder: (_) => RoutineJourneyRoute(
+                                      scope: attempt.scope,
+                                      routine: attempt.routine,
+                                      attemptId: free ? attempt.id : null,
+                                      programAttemptId:
+                                          free ? null : attempt.id,
+                                      programEnrollmentId: link?.enrollment.id,
+                                      programDayKey: link?.day.key,
+                                      initialDay: attempt.day,
+                                      programStoreFactory: (_) async =>
+                                          programStore,
+                                      action: action)));
+                        } catch (_) {
+                          if (detailContext.mounted && authorized()) {
+                            ScaffoldMessenger.of(detailContext).showSnackBar(
+                                const SnackBar(
+                                    content: Text(
+                                        'Workout context changed. Reopen the result to continue.')));
+                          }
+                        }
+                      }
+
+                      final hasNext = attempt.routine.exercises
+                          .any((e) => e.dayNumber > attempt.day);
+                      return RoutineAttemptDetailScreen(
+                          attempt: attempt,
+                          availableSessionIds: {
+                            for (final entry in attempt.entries)
+                              for (final record in sessionRecords)
+                                if (record.scope == attempt.scope &&
+                                    entry.sessionIds
+                                        .contains(record.sessionId) &&
+                                    record.exerciseId ==
+                                        attempt.routine.exercises[entry.index]
+                                            .exerciseId)
+                                  record.sessionId
                           },
-                    onResume: () => continueAttempt(
-                        detailContext, RoutineJourneyAction.resume),
-                    onRepeat: () => continueAttempt(
-                        detailContext, RoutineJourneyAction.repeat),
-                    onNextDay: hasNext
-                        ? () => continueAttempt(
-                            detailContext, RoutineJourneyAction.nextDay)
-                        : null,
-                    onViewProgress: () => Navigator.push(
-                        detailContext,
-                        MaterialPageRoute<void>(
-                            builder: (_) =>
-                                MemberProgressRoute(scope: attempt.scope))));
+                          onOpenSession: onOpenSession == null
+                              ? null
+                              : (id) {
+                                  if (!authorized()) return;
+                                  final records = sessionRecords
+                                      .where((r) =>
+                                          r.scope == attempt.scope &&
+                                          r.sessionId == id)
+                                      .toList();
+                                  if (records.length == 1) {
+                                    onOpenSession(records.single);
+                                  }
+                                },
+                          onResume: free || scheduledResumable
+                              ? () => continueAttempt(
+                                  detailContext, RoutineJourneyAction.resume)
+                              : null,
+                          onRepeat: free
+                              ? () => continueAttempt(
+                                  detailContext, RoutineJourneyAction.repeat)
+                              : null,
+                          onNextDay: free && hasNext
+                              ? () => continueAttempt(
+                                  detailContext, RoutineJourneyAction.nextDay)
+                              : null);
+                    });
               })));
   if (context.mounted && authorized()) await refresh();
 }
