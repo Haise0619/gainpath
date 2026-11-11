@@ -205,9 +205,16 @@ void main() {
     final first = view();
     await first.openDay(1);
     final id = first.checkpoint!.id;
+    // Model a clock rollback by loading a checkpoint written ahead of this clock.
+    final persisted = first.checkpoint!.toJson();
+    final ahead = DateTime.utc(2100).microsecondsSinceEpoch;
+    persisted['updatedAtMicros'] = ahead;
+    await disk.save(RoutineCheckpoint.fromJson(persisted));
+    await first.openAttempt(id);
     final second = view();
     await second.openAttempt(id);
     await second.markManualSet(1);
+    expect(second.checkpoint!.updatedAtMicros, greaterThan(ahead));
     await expectLater(first.markManualSet(1), throwsStateError);
     expect((await disk.load()).single.manualSets[1], 1);
     await first.openAttempt(id);
@@ -215,5 +222,57 @@ void main() {
     expect((await disk.load()).single.manualSets[1], 2);
     first.dispose();
     second.dispose();
+  });
+
+  test('equal revision cannot commit or authorize a stale write', () async {
+    final dir = await Directory.systemTemp.createTemp('routine-revision-');
+    addTearDown(() => dir.delete(recursive: true));
+    final disk = FileRoutineJourneyStore(directory: dir, scope: scope);
+    final source = controller();
+    addTearDown(source.dispose);
+    await source.openDay(1);
+    final original = source.checkpoint!;
+    await disk.save(original);
+    final sameRevision = RoutineCheckpoint.fromJson({
+      ...original.toJson(),
+      'manualSets': {'1': 1},
+    });
+    await expectLater(
+        disk.saveRevision(sameRevision,
+            expectedUpdatedAtMicros: original.updatedAtMicros),
+        throwsStateError);
+    expect((await disk.load()).single.manualSets, isEmpty);
+  });
+
+  test('competing stores commit one update per revision across 32 races',
+      () async {
+    final dir = await Directory.systemTemp.createTemp('routine-race-');
+    addTearDown(() => dir.delete(recursive: true));
+    final first = FileRoutineJourneyStore(directory: dir, scope: scope);
+    final second = FileRoutineJourneyStore(directory: dir, scope: scope);
+    final source = controller();
+    addTearDown(source.dispose);
+    await source.openDay(1);
+    var previous = source.checkpoint!;
+    await first.save(previous);
+    for (var round = 0; round < 32; round++) {
+      final revision = previous.updatedAtMicros;
+      Future<bool> compete(FileRoutineJourneyStore store, int sets) async {
+        try {
+          await store.saveRevision(previous.copyWith(manualSets: {1: sets}),
+              expectedUpdatedAtMicros: revision);
+          return true;
+        } on StateError {
+          return false;
+        }
+      }
+
+      final winners =
+          await Future.wait([compete(first, 1), compete(second, 2)]);
+      expect(winners.where((won) => won), hasLength(1));
+      previous = (await second.load()).single;
+      expect(previous.updatedAtMicros, greaterThan(revision));
+      expect(previous.manualSets[1], winners.first ? 1 : 2);
+    }
   });
 }

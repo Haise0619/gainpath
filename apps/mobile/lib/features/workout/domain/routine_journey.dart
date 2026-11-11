@@ -2,6 +2,7 @@ import 'package:gainpath_domain/gainpath_domain.dart' show SessionScope;
 
 import 'routine_attempt.dart';
 import 'dart:convert';
+import 'dart:math' as math;
 import 'guided_timed_progress.dart';
 import 'routine_plan_signature.dart';
 export 'routine_attempt.dart' show RoutineExerciseStatus;
@@ -63,7 +64,10 @@ class RoutineCheckpoint {
           planSignature: planSignature,
           day: day,
           selectedIndex: selectedIndex ?? this.selectedIndex,
-          updatedAtMicros: DateTime.now().toUtc().microsecondsSinceEpoch,
+          // Also used as a per-checkpoint revision. Clock ties and rollback
+          // must still produce a revision newer than the checkpoint read.
+          updatedAtMicros: math.max(
+              DateTime.now().microsecondsSinceEpoch, updatedAtMicros + 1),
           finished: finished ?? this.finished,
           startedAtMicros: startedAtMicros,
           attempt: attempt ?? this.attempt,

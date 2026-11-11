@@ -114,7 +114,7 @@ class FileRoutineJourneyStore implements RevisionedRoutineJourneyStore {
               previous.updatedAtMicros != expectedUpdatedAtMicros) {
             throw StateError('Routine changed in another view. Reopen it.');
           }
-          if (previous.updatedAtMicros > value.updatedAtMicros) {
+          if (previous.updatedAtMicros >= value.updatedAtMicros) {
             throw StateError('Routine changed in another view. Reopen it.');
           }
         } else if (compareRevision && expectedUpdatedAtMicros != null) {
