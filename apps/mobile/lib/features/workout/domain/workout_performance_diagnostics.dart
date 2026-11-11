@@ -24,6 +24,14 @@ enum WorkoutMetric {
   nativeRequestToStartMicros,
   routeToCameraMicros,
   routeToReadyMicros,
+  cameraStreamStartMicros,
+  cameraSnapshotMicros,
+  skeletonPaintMicros,
+  skeletonPaintAgeMicros,
+  uiBuildMicros,
+  rasterMicros,
+  frameSpanMicros,
+  frameBudgetMicros,
   rssBytes
 }
 
@@ -32,6 +40,7 @@ enum WorkoutResource { camera, detector, tts }
 enum WorkoutSignal {
   cameraFrame,
   processedFrame,
+  processedDuringRest,
   deliveredFrame,
   replacedPending,
   staleBeforeProcessing,
@@ -47,7 +56,9 @@ enum WorkoutSignal {
   audioCancelled,
   audioUnavailable,
   cameraFailure,
-  modelFailure
+  modelFailure,
+  uiBuildOverBudget,
+  rasterOverBudget
 }
 
 class _Samples {
@@ -105,6 +116,8 @@ class WorkoutPerformanceDiagnostics {
   final _resources = <WorkoutResource, int>{};
   final _audio = <String, _AudioObservation>{};
   int? _workingSince, _lastAccepted, _prepareSince, _lastReport;
+  int? _restingSince;
+  int _restingMicros = 0;
   int _workingMicros = 0, _accepted = 0, _reports = 0;
   bool _finished = false, _ready = false;
   int get pendingAudioCount => _audio.length;
@@ -115,7 +128,23 @@ class WorkoutPerformanceDiagnostics {
   }
 
   void count(WorkoutSignal signal) {
-    if (!_finished) _signals.update(signal, (v) => v + 1, ifAbsent: () => 1);
+    if (_finished) return;
+    _signals.update(signal, (v) => v + 1, ifAbsent: () => 1);
+    if (signal == WorkoutSignal.processedFrame && _restingSince != null) {
+      _signals.update(WorkoutSignal.processedDuringRest, (v) => v + 1,
+          ifAbsent: () => 1);
+    }
+  }
+
+  void setResting(bool resting) {
+    if (_finished) return;
+    final now = clockMicros();
+    if (resting) {
+      _restingSince ??= now;
+    } else if (_restingSince != null) {
+      _restingMicros += (now - _restingSince!).clamp(0, 1 << 62);
+      _restingSince = null;
+    }
   }
 
   void setWorking(bool working) {
@@ -273,6 +302,10 @@ class WorkoutPerformanceDiagnostics {
       'exercise': exercise.name,
       'acceptedFrames': _accepted,
       'workingMicros': working,
+      'restingMicros': _restingMicros +
+          (_restingSince == null
+              ? 0
+              : (clockMicros() - _restingSince!).clamp(0, 1 << 62)),
       'acceptedFps': working == 0 ? 0.0 : _accepted * 1000000 / working,
       'metrics': {
         for (final e in _metrics.entries) e.key.name: e.value.snapshot()
@@ -299,6 +332,7 @@ class WorkoutPerformanceDiagnostics {
   void finish() {
     if (_finished) return;
     setWorking(false);
+    setResting(false);
     report(force: true);
     _audio.clear();
     _finished = true;

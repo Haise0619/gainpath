@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:ui' show FrameTiming;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gainpath_mobile/features/workout/domain/workout_audio_trace.dart';
 import 'package:gainpath_mobile/features/workout/application/workout_audio_controller.dart';
@@ -42,7 +43,9 @@ void main() {
   testWidgets(
       'binding observes real session readiness without crediting held/rest frames',
       (tester) async {
-    final h = PressHarness(sets: 1, reps: 1);
+    tester.view.display.refreshRate = 120;
+    addTearDown(tester.view.display.resetRefreshRate);
+    final h = PressHarness(sets: 2, reps: 1);
     final baseline = WorkoutPerformanceDiagnostics(
         exercise: WorkoutBaselineExercise.shoulderPress,
         clockMicros: () => h.now);
@@ -53,13 +56,57 @@ void main() {
         trace: WorkoutAudioTrace(
             clockMicros: () => h.now, onRecord: baseline.audio));
     await h.session.start(consented: true, setupConfirmed: true);
+    final timing = FrameTiming(
+        vsyncStart: 0,
+        buildStart: 100,
+        buildFinish: 2100,
+        rasterStart: 2200,
+        rasterFinish: 5200,
+        rasterFinishWallTime: 5200);
+    tester.binding.platformDispatcher.onReportTimings!([timing]);
+    final engineMetrics = baseline.snapshot()['metrics'] as Map;
+    expect((engineMetrics['uiBuildMicros'] as Map)['recentP95'], 2000);
+    expect((engineMetrics['rasterMicros'] as Map)['recentP95'], 3000);
+    expect((engineMetrics['frameSpanMicros'] as Map)['recentP95'], 5200);
+    expect((engineMetrics['frameBudgetMicros'] as Map)['recentP95'], 8333);
+    tester.binding.platformDispatcher.onReportTimings!([
+      FrameTiming(
+          vsyncStart: 0,
+          buildStart: 100,
+          buildFinish: 9100,
+          rasterStart: 9200,
+          rasterFinish: 19200,
+          rasterFinishWallTime: 19200)
+    ]);
+    final engineCounts = baseline.snapshot()['counters'] as Map;
+    expect(engineCounts['uiBuildOverBudget'], 1);
+    expect(engineCounts['rasterOverBudget'], 1);
     await h.feed(tester, shoulderPressTrajectory());
     final before = baseline.snapshot()['acceptedFrames'] as int;
     expect(before, greaterThan(0));
     expect(h.session.analysis!.repetitions, 1);
+    final beforeRestFrame = baseline.snapshot();
+    final previousRestMicros = beforeRestFrame['restingMicros'] as int;
+    final previousRestFrames =
+        (beforeRestFrame['counters'] as Map)['processedDuringRest'] as int;
+    final beforeTime = h.now;
+    final restFrame = shoulderPressTrajectory(startMicros: h.now + 50000).first;
+    await h.feed(tester, [restFrame]);
+    final duringRest = baseline.snapshot();
+    expect(
+        duringRest['restingMicros'], previousRestMicros + h.now - beforeTime);
+    expect((duringRest['counters'] as Map)['processedDuringRest'],
+        previousRestFrames + 1);
     await tester.pump(const Duration(seconds: 1));
     expect(baseline.snapshot()['acceptedFrames'], before);
     binding.dispose();
+    final timingCount = ((baseline.snapshot()['metrics']
+        as Map)['uiBuildMicros'] as Map)['count'];
+    tester.binding.platformDispatcher.onReportTimings!([timing]);
+    expect(
+        ((baseline.snapshot()['metrics'] as Map)['uiBuildMicros']
+            as Map)['count'],
+        timingCount);
     await h.session.close();
     h.dispose();
     expect((baseline.snapshot()['metrics'] as Map).keys,

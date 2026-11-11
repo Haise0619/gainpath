@@ -64,6 +64,7 @@ class AndroidPoseCamera
       baseline?.sample(
           WorkoutMetric.cameraStartupMicros, startup!.elapsedMicroseconds);
       baseline?.resourceOpened(WorkoutResource.camera);
+      final streamStartup = baseline == null ? null : (Stopwatch()..start());
       await next.startImageStream((image) {
         if (revision != _revision || !next.value.isInitialized) return;
         baseline?.count(WorkoutSignal.cameraFrame);
@@ -85,6 +86,8 @@ class AndroidPoseCamera
             ImageFormatGroup.bgra8888 => PosePixelFormat.bgra8888,
             _ => throw StateError('Unsupported camera pixel format.'),
           };
+          final snapshotTimer =
+              baseline == null ? null : (Stopwatch()..start());
           final snapshot = PoseCameraImage(
               width: image.width,
               height: image.height,
@@ -98,6 +101,8 @@ class AndroidPoseCamera
                       pixelStride: p.bytesPerPixel ??
                           (format == PosePixelFormat.bgra8888 ? 4 : 1))
               ]);
+          baseline?.sample(WorkoutMetric.cameraSnapshotMicros,
+              snapshotTimer!.elapsedMicroseconds);
           final preview = next.value.previewSize!;
           final landscape = degrees == 90 || degrees == 270;
           final previewWidth = landscape ? preview.width : preview.height;
@@ -131,6 +136,10 @@ class AndroidPoseCamera
           onFrame(PoseInput(timestampMicros: clockMicros()));
         }
       });
+      if (revision == _revision) {
+        baseline?.sample(WorkoutMetric.cameraStreamStartMicros,
+            streamStartup!.elapsedMicroseconds);
+      }
     } on CameraException catch (error) {
       baseline?.count(WorkoutSignal.cameraFailure);
       await next.dispose();

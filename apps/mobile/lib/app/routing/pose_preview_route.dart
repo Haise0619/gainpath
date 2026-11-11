@@ -9,6 +9,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:gainpath_domain/gainpath_domain.dart'
     show AppRole, SessionScope;
 import 'package:gainpath_identity/gainpath_identity.dart';
+import 'package:gainpath_pose/gainpath_pose.dart' show PoseFrame;
 import '../../features/workout/application/pose_preview_controller.dart';
 import '../../features/workout/presentation/member/live_workout_screen.dart';
 import '../../features/workout/presentation/member/widgets/pose_landmark_painter.dart';
@@ -243,7 +244,7 @@ class _PosePreviewRouteState extends State<PosePreviewRoute>
                               diagnostics: _render)));
 }
 
-class PoseCameraViewport extends StatelessWidget {
+class PoseCameraViewport extends StatefulWidget {
   const PoseCameraViewport(
       {super.key,
       required this.camera,
@@ -252,24 +253,99 @@ class PoseCameraViewport extends StatelessWidget {
   final PoseRenderDiagnostics? diagnostics;
   final AndroidPoseCamera camera;
   final PosePreviewController session;
-  @override
-  Widget build(BuildContext context) => ListenableBuilder(
-      listenable: session, builder: (context, _) => _buildCamera(context));
 
-  Widget _buildCamera(BuildContext context) {
-    final controller = camera.controller;
-    if (controller == null || !controller.value.isInitialized) {
+  @override
+  State<PoseCameraViewport> createState() => _PoseCameraViewportState();
+}
+
+class _PoseCameraViewportState extends State<PoseCameraViewport> {
+  final _pose = ValueNotifier<PoseFrame?>(null);
+  CameraController? _controller;
+
+  PosePreviewController get session => widget.session;
+  AndroidPoseCamera get camera => widget.camera;
+  PoseRenderDiagnostics? get diagnostics => widget.diagnostics;
+  bool get _diagnosticLayout =>
+      diagnostics?.enabled == true ||
+      session.quality.enabled ||
+      session.performance != null ||
+      poseRefinedSkeletonDebugEnabled;
+
+  CameraController? get _activeCamera => switch (session.phase) {
+        PosePreviewPhase.opening ||
+        PosePreviewPhase.tracking =>
+          camera.controller,
+        _ => null,
+      };
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = _activeCamera;
+    _pose.value = _controller == null ? null : session.frame;
+    session.addListener(_changed);
+  }
+
+  @override
+  void didUpdateWidget(covariant PoseCameraViewport oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.session != session) {
+      oldWidget.session.removeListener(_changed);
+      session.addListener(_changed);
+    }
+    _controller = _activeCamera;
+    _pose.value = _controller == null ? null : session.frame;
+  }
+
+  void _changed() {
+    final next = _activeCamera;
+    _pose.value = next == null ? null : session.frame;
+    if (!identical(next, _controller) || _diagnosticLayout) {
+      setState(() => _controller = next);
+    }
+  }
+
+  @override
+  void dispose() {
+    session.removeListener(_changed);
+    _pose.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final controller = _controller;
+    if (controller == null) {
       return const SizedBox.shrink();
     }
     return ValueListenableBuilder<CameraValue>(
         valueListenable: controller,
         builder: (context, value, _) {
+          final raw = value.previewSize;
+          if (!value.isInitialized || raw == null) {
+            return const SizedBox.shrink();
+          }
           final landscape =
               value.deviceOrientation == DeviceOrientation.landscapeLeft ||
                   value.deviceOrientation == DeviceOrientation.landscapeRight;
-          final raw = value.previewSize!;
           final width = landscape ? raw.width : raw.height,
               height = landscape ? raw.height : raw.width;
+          if (!_diagnosticLayout) {
+            return ClipRect(
+                child: FittedBox(
+                    fit: BoxFit.cover,
+                    child: SizedBox(
+                        width: width,
+                        height: height,
+                        child: CameraPreview(controller,
+                            child: RepaintBoundary(
+                                child: CustomPaint(
+                                    painter: PoseLandmarkPainter(
+                                        frame: null,
+                                        frames: _pose,
+                                        mirrored: camera.mirrored,
+                                        baseline: session.baseline)))))));
+          }
           final frame = session.frame;
           // Some devices negotiate different preview/analysis aspects. Do not
           // stretch landmarks onto a different field of view; verify on hardware.
@@ -325,6 +401,7 @@ class PoseCameraViewport extends StatelessWidget {
                                         ? null
                                         : 'preview_aspect_mismatch',
                                     mirrored: camera.mirrored,
+                                    baseline: session.baseline,
                                     performance: session.performance,
                                     performanceViewport: performanceViewport,
                                     quality: session.quality,

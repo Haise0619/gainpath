@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
 import 'package:gainpath_pose/gainpath_pose.dart';
 import '../../../../../infrastructure/pose/blazepose_geometry.dart';
@@ -5,6 +6,7 @@ import '../../../../../infrastructure/pose/pose_render_diagnostics.dart';
 import '../../../../../infrastructure/pose/pose_quality_diagnostics.dart';
 import '../../../../../infrastructure/pose/pose_joint_lag_diagnostics.dart';
 import '../../../../../infrastructure/pose/real_squat_performance.dart';
+import '../../../domain/workout_performance_diagnostics.dart';
 
 /// BlazePose anatomical topology; indices correspond to its published 33 points.
 const poseConnections = <(int, int)>[
@@ -49,6 +51,8 @@ class PoseLandmarkPainter extends CustomPainter {
   PoseLandmarkPainter(
       {required this.frame,
       required this.mirrored,
+      this.frames,
+      this.baseline,
       this.diagnostics,
       this.blankReason,
       this.sourceFrame,
@@ -58,7 +62,8 @@ class PoseLandmarkPainter extends CustomPainter {
       this.quality})
       : _refinedFrame = !poseRefinedSkeletonDebugEnabled || frame == null
             ? null
-            : (lag ?? quality?.lag)?.refinedForDisplay(frame.capturedAtMicros);
+            : (lag ?? quality?.lag)?.refinedForDisplay(frame.capturedAtMicros),
+        super(repaint: frames);
   final PoseFrame? _refinedFrame;
   final PoseJointLagDiagnostics? lag;
   final PoseQualityDiagnostics? quality;
@@ -66,6 +71,8 @@ class PoseLandmarkPainter extends CustomPainter {
   final Rect? performanceViewport;
   final PoseRenderDiagnostics? diagnostics;
   final PoseFrame? frame;
+  final ValueListenable<PoseFrame?>? frames;
+  final WorkoutPerformanceDiagnostics? baseline;
   final String? blankReason;
   final PoseFrame? sourceFrame;
   final bool mirrored;
@@ -100,8 +107,25 @@ class PoseLandmarkPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
+    final latest = frames?.value;
+    // Cover/crop happens outside the painter. Reject a different image aspect
+    // before painting, just as the diagnostic viewport does.
+    final frame = frames == null
+        ? this.frame
+        : latest != null &&
+                size.height > 0 &&
+                ((latest.imageWidth / latest.imageHeight) -
+                            (size.width / size.height))
+                        .abs() <
+                    .02
+            ? latest
+            : null;
+    final paintTimer = baseline != null && frame?.landmarks.isNotEmpty == true
+        ? (Stopwatch()..start())
+        : null;
     quality?.painted(frame, size.width, size.height, mirrored);
-    final debug = diagnostics?.enabled == true && diagnostics?.observationOnly != true;
+    final debug =
+        diagnostics?.enabled == true && diagnostics?.observationOnly != true;
     final connections = !debug ||
         const bool.fromEnvironment('GAINPATH_POSE_RENDER_LINKS',
             defaultValue: true);
@@ -192,7 +216,9 @@ class PoseLandmarkPainter extends CustomPainter {
       return true;
     }
 
-    final lagPoints = <PoseLandmark, Offset?>{}, lagDrawn = <(int, int)>{};
+    final lagPoints =
+        lagDiagnostic?.enabled == true ? <PoseLandmark, Offset?>{} : null;
+    final lagDrawn = lagPoints == null ? null : <(int, int)>{};
     if (quality?.enabled == true) {
       quality!.lastPaint['joints'] = {
         for (final joint in [
@@ -230,14 +256,14 @@ class PoseLandmarkPainter extends CustomPainter {
     Offset? point(int index) {
       final p = pose.landmarks[PoseLandmark.values[index]];
       if (p == null || p.visibility < .5 || (p.presence ?? 1) < .5) {
-        if (lagDiagnostic?.enabled == true) {
+        if (lagPoints != null) {
           lagPoints[PoseLandmark.values[index]] = null;
         }
         return null;
       }
       final xy = transform.project(p.x, p.y);
       final result = Offset(xy.$1, xy.$2);
-      if (lagDiagnostic?.enabled == true) {
+      if (lagPoints != null) {
         // These are the filtered marker coordinates, even when the primary
         // links draw refined coordinates. Never relabel R as filtered data.
         final f = frame!.landmarks[PoseLandmark.values[index]]!;
@@ -253,23 +279,24 @@ class PoseLandmarkPainter extends CustomPainter {
     final paint = Paint()
       ..color = const Color(0xFF67E8AB)
       ..strokeWidth = 2.5;
+    final points = List<Offset?>.generate(PoseLandmark.values.length, point,
+        growable: false);
     if (connections) {
       for (final edge in poseConnections) {
-        final a = point(edge.$1), b = point(edge.$2);
+        final a = points[edge.$1], b = points[edge.$2];
         if (a != null && b != null) {
           canvas.drawLine(a, b, paint);
           if (observePrimitives) {
             primitivesIssued++;
             if (intersectsLine(a, b)) viewportPrimitives++;
           }
-          if (lagDiagnostic?.enabled == true && lagConnections.contains(edge)) {
+          if (lagDrawn != null && lagConnections.contains(edge)) {
             lagDrawn.add(edge);
           }
         }
       }
     }
-    for (var i = 0; i < 33; i++) {
-      final p = point(i);
+    for (final p in points) {
       if (p != null) {
         canvas.drawCircle(p, 3, paint);
         if (observePrimitives) {
@@ -303,22 +330,22 @@ class PoseLandmarkPainter extends CustomPainter {
         canvas.drawCircle(Offset(xy.$1, xy.$2), 10, marker);
       }
     }
-    if (lagDiagnostic?.enabled == true) {
+    if (lagPoints != null) {
       final diagnosticTimer = Stopwatch()..start();
       lagDiagnostic!.painted(frame!, size,
           mirrored: mirrored,
           points: lagPoints,
-          drawn: lagDrawn,
+          drawn: lagDrawn!,
           connections: connections,
           primarySkeletonSource: skeletonSource,
           viewport: quality?.viewport ?? {});
       // Both marker sets use this exact frame and existing preview transform.
       final refined = refinedPrimary
           ? pose
-          : lagDiagnostic.refinedFor(frame!.capturedAtMicros);
+          : lagDiagnostic.refinedFor(frame.capturedAtMicros);
       if (refined != null) {
         for (final joint in lagJoints) {
-          final a = refined.landmarks[joint], b = frame!.landmarks[joint];
+          final a = refined.landmarks[joint], b = frame.landmarks[joint];
           if (a == null ||
               b == null ||
               ![a.x, a.y, b.x, b.y].every((v) => v.isFinite)) {
@@ -341,6 +368,12 @@ class PoseLandmarkPainter extends CustomPainter {
           'jointLagPaintMicros', diagnosticTimer.elapsedMicroseconds);
     }
     canvas.restore();
+    if (paintTimer != null) {
+      baseline!.sample(
+          WorkoutMetric.skeletonPaintMicros, paintTimer.elapsedMicroseconds);
+      baseline!.sample(WorkoutMetric.skeletonPaintAgeMicros,
+          baseline!.clockMicros() - pose.capturedAtMicros);
+    }
     if (primitivesIssued > 0 && viewportPrimitives > 0) {
       performance?.painted(pose.capturedAtMicros);
     }
@@ -354,6 +387,8 @@ class PoseLandmarkPainter extends CustomPainter {
   @override
   bool shouldRepaint(PoseLandmarkPainter old) {
     final changed = old.frame != frame ||
+        old.frames != frames ||
+        old.baseline != baseline ||
         (poseRefinedSkeletonDebugEnabled &&
             old._refinedFrame != _refinedFrame) ||
         old.mirrored != mirrored ||

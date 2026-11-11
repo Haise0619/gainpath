@@ -1,12 +1,14 @@
 # Module 2 — Performance, Voice and Workout UX Audit
 
 **Date:** 10 November 2026 (Asia/Kuala_Lumpur)
-**Status:** Original audit snapshot. Phases 0, 1 and 2 have subsequent scoped implementation reports; the findings below describe the original inspected source.
+**Status:** Original audit snapshot. Phases 0–3 have subsequent implementation reports. The findings below describe the original inspected source.
 **Source:** `C:/Users/Ngzhe/StudioProjects/gainpath`, HEAD `1082e12d2eb1c6b6326cfaf0c6e420f3e6c4b6e4`, including the existing working-tree changes. This is the Flutter repository; the chat's `Documents/ChatGPT/GainPath` directory is a separate documentation checkout.
 
 **Scope update (Phase 0, 10 November):** future optimization focuses on **Squat, Biceps Curl, Calf Raise, Floor Push-up, Lateral Raise and Shoulder Press**. Reverse Lunge, Dumbbell Row and Wall Push-up are discontinued as future optimization targets, but their implementations, catalog eligibility and existing routine/enrollment/history references are retained pending a separate safe-retirement assessment. Nine-tracker descriptions and audit measurements below remain the original inspection record. Current implementation/verification is tracked in [the Phase 0 report](module-2-phase0-implementation.md); later Phase 1/2 work is separately authorized and must not be conflated with Phase 0 evidence.
 
 ## 1. Executive summary
+
+**Phase 3 update (11 November 2026):** The shared camera viewport now repaints the skeleton independently and projects each landmark once per paint. Deterministic results, additional scalar diagnostics and the ML Kit comparison are recorded in the [Phase 3 rendering report](module-2-phase3-rendering.md).
 
 **Implementation update (11 November 2026):** Phase 0 privacy/testing work is committed separately. Phase 1 tracking/resource recovery and Phase 2 voice/event readiness fixes for the retained six are recorded in [the implementation and verification report](module-2-phases1-2-implementation.md). Physical performance and audible-latency acceptance remain unmeasured. Later roadmap items, legacy retirement and live catalog changes are not included.
 
