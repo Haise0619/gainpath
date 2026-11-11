@@ -162,16 +162,16 @@ class _WorkoutHubOverviewState extends State<WorkoutHubOverview> {
                     const SizedBox(height: 8),
                     Wrap(spacing: 14, runSpacing: 6, children: [
                       _Fact(
-                          icon: Icons.fitness_center_rounded,
+                          imageAsset: 'assets/icons/hub_stat_exercises.png',
                           label:
                               '${widget.exerciseCount} ${widget.exerciseCount == 1 ? 'exercise' : 'exercises'}'),
                       _Fact(
-                          icon: Icons.layers_outlined,
+                          imageAsset: 'assets/icons/hub_stat_sets.png',
                           label:
                               '${widget.totalSets} ${widget.totalSets == 1 ? 'set' : 'sets'}'),
                       if (widget.minutes != null)
                         _Fact(
-                            icon: Icons.schedule_rounded,
+                            imageAsset: 'assets/icons/hub_stat_minutes.png',
                             label: '~${widget.minutes} min'),
                     ]),
                     const SizedBox(height: 10),
@@ -315,13 +315,13 @@ class _WorkoutHubOverviewState extends State<WorkoutHubOverview> {
 }
 
 class _Fact extends StatelessWidget {
-  const _Fact({required this.icon, required this.label});
-  final IconData icon;
+  const _Fact({required this.imageAsset, required this.label});
+  final String imageAsset;
   final String label;
   @override
   Widget build(BuildContext context) =>
       Row(mainAxisSize: MainAxisSize.min, children: [
-        Icon(icon, size: 14, color: const Color(0xFFE8DDF5)),
+        Image.asset(imageAsset, width: 15, height: 15, fit: BoxFit.contain),
         const SizedBox(width: 5),
         Flexible(
             child: Text(label,
