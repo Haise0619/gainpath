@@ -49,6 +49,7 @@ class RoutineCheckpoint {
 
   RoutineCheckpoint copyWith(
           {int? selectedIndex,
+          int? updatedAtMicros,
           Map<int, GuidedTimedProgress>? guidedProgress,
           bool? finished,
           RoutineAttempt? attempt,
@@ -67,7 +68,8 @@ class RoutineCheckpoint {
           // Also used as a per-checkpoint revision. Clock ties and rollback
           // must still produce a revision newer than the checkpoint read.
           updatedAtMicros: math.max(
-              DateTime.now().microsecondsSinceEpoch, updatedAtMicros + 1),
+              updatedAtMicros ?? DateTime.now().microsecondsSinceEpoch,
+              this.updatedAtMicros + 1),
           finished: finished ?? this.finished,
           startedAtMicros: startedAtMicros,
           attempt: attempt ?? this.attempt,

@@ -145,8 +145,8 @@ class RoutineJourneyController extends ChangeNotifier {
     day = selectedDay;
     _checkpoint = null;
     _history = [];
-    final existing = (compatible ?? await _freeCheckpoints())
-        .where((checkpoint) => checkpoint.day == day);
+    final candidates = compatible ?? await _freeCheckpoints();
+    final existing = candidates.where((checkpoint) => checkpoint.day == day);
     _guard();
     if (existing.isEmpty) {
       await _newAttempt();
@@ -154,7 +154,10 @@ class RoutineJourneyController extends ChangeNotifier {
       _checkpoint = existing.first;
     }
     await _reload();
-    await _save(_checkpoint!.copyWith());
+    // Reopening a day must rank after the other days even during a clock tie
+    // or rollback. Completion dates and measured session times stay intact.
+    final latest = candidates.isEmpty ? 0 : candidates.first.updatedAtMicros;
+    await _save(_checkpoint!.copyWith(updatedAtMicros: latest + 1));
   }
 
   Future<void> _newAttempt({String? id}) => _save(RoutineCheckpoint(

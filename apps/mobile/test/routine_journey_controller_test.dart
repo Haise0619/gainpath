@@ -286,6 +286,11 @@ void main() {
     final c = controller();
     await c.openDay(1);
     await c.openDay(2);
+    final newerDay = c.checkpoint!;
+    store.records[newerDay.id] = RoutineCheckpoint.fromJson({
+      ...newerDay.toJson(),
+      'updatedAtMicros': DateTime.utc(2100).microsecondsSinceEpoch,
+    });
     await c.openDay(1);
     c.dispose();
     final resumed = controller();
