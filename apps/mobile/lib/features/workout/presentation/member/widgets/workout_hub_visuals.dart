@@ -119,7 +119,7 @@ class _WorkoutHubOverviewState extends State<WorkoutHubOverview> {
     final progress = widget.started || widget.completed > 0;
     return Material(
         key: const ValueKey('current-workout-hero'),
-        color: const Color(0xFF4C1D95),
+        color: const Color(0xFF52258F),
         shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(20), side: BorderSide.none),
         clipBehavior: Clip.antiAlias,
@@ -132,13 +132,13 @@ class _WorkoutHubOverviewState extends State<WorkoutHubOverview> {
                     width: 3,
                     height: 14,
                     decoration: BoxDecoration(
-                        color: const Color(0xFFEDE5FF),
+                        color: const Color(0xFFE8DDF5),
                         borderRadius: BorderRadius.circular(2))),
                 const SizedBox(width: 8),
                 Expanded(
                     child: Text(widget.eyebrow,
                         style: theme.textTheme.labelSmall?.copyWith(
-                            color: const Color(0xFFEDE5FF),
+                            color: const Color(0xFFE8DDF5),
                             fontWeight: FontWeight.w700,
                             letterSpacing: 1))),
               ]),
@@ -177,19 +177,19 @@ class _WorkoutHubOverviewState extends State<WorkoutHubOverview> {
                                 : Icons.circle,
                         size: progress || done ? 16 : 6,
                         color: done
-                            ? const Color(0xFFFFBE87)
+                            ? const Color(0xFFF4B474)
                             : progress
                                 ? Colors.white
-                                : const Color(0xFFFF9A3C)),
+                                : const Color(0xFFE8DDF5)),
                     const SizedBox(width: 7),
                     Expanded(
                         child: Text(widget.status,
                             style: theme.textTheme.bodyMedium?.copyWith(
-                                fontSize: 12, color: const Color(0xFFE0D3F5)))),
+                                fontSize: 12, color: const Color(0xFFE8DDF5)))),
                     if (progress)
                       Text('${widget.completed} / ${widget.total}',
                           style: theme.textTheme.labelLarge
-                              ?.copyWith(color: const Color(0xFFEDE5FF))),
+                              ?.copyWith(color: const Color(0xFFE8DDF5))),
                   ])),
               if (progress) ...[
                 const SizedBox(height: 8),
@@ -206,7 +206,7 @@ class _WorkoutHubOverviewState extends State<WorkoutHubOverview> {
                                 key: const ValueKey('workout-progress'),
                                 value: v,
                                 minHeight: 5,
-                                color: const Color(0xFFEDE5FF),
+                                color: const Color(0xFFE8DDF5),
                                 backgroundColor: const Color(0xFF7956AD))))),
               ],
               const SizedBox(height: 12),
@@ -224,8 +224,8 @@ class _WorkoutHubOverviewState extends State<WorkoutHubOverview> {
                           child: FilledButton.icon(
                               onPressed: _launching ? null : _start,
                               style: FilledButton.styleFrom(
-                                  backgroundColor: const Color(0xFFFF963B),
-                                  foregroundColor: const Color(0xFF241332),
+                                  backgroundColor: const Color(0xFFFFF2E5),
+                                  foregroundColor: const Color(0xFF321C49),
                                   minimumSize: const Size(0, 52),
                                   padding: const EdgeInsets.symmetric(
                                       horizontal: 16, vertical: 14),
@@ -245,7 +245,7 @@ class _WorkoutHubOverviewState extends State<WorkoutHubOverview> {
                           child: Text(widget.support!,
                               style: theme.textTheme.bodyMedium?.copyWith(
                                 fontSize: 12,
-                                color: const Color(0xFFE0D3F5),
+                                color: const Color(0xFFE8DDF5),
                               )));
                   if (c.maxWidth < 300 ||
                       MediaQuery.textScalerOf(context).scale(14) > 21) {
@@ -258,7 +258,7 @@ class _WorkoutHubOverviewState extends State<WorkoutHubOverview> {
                                 data: theme.copyWith(
                                     textButtonTheme: TextButtonThemeData(
                                         style: TextButton.styleFrom(
-                                            foregroundColor: Colors.white))),
+                                            foregroundColor: const Color(0xFFF5ECFF)))),
                                 child: widget.switcher!)
                         ]);
                   }
@@ -272,7 +272,7 @@ class _WorkoutHubOverviewState extends State<WorkoutHubOverview> {
                           data: theme.copyWith(
                               textButtonTheme: TextButtonThemeData(
                                   style: TextButton.styleFrom(
-                                      foregroundColor: Colors.white))),
+                                      foregroundColor: const Color(0xFFF5ECFF)))),
                           child: widget.switcher!)
                   ]);
                 }),
@@ -288,14 +288,14 @@ class _Fact extends StatelessWidget {
   @override
   Widget build(BuildContext context) =>
       Row(mainAxisSize: MainAxisSize.min, children: [
-        Icon(icon, size: 14, color: const Color(0xFFE0D3F5)),
+        Icon(icon, size: 14, color: const Color(0xFFE8DDF5)),
         const SizedBox(width: 5),
         Flexible(
             child: Text(label,
                 style: Theme.of(context)
                     .textTheme
                     .bodyMedium
-                    ?.copyWith(fontSize: 12, color: const Color(0xFFE0D3F5)))),
+                    ?.copyWith(fontSize: 12, color: const Color(0xFFE8DDF5)))),
       ]);
 }
 
