@@ -1,6 +1,7 @@
 import 'dart:ui' as ui;
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
 
 class WorkoutHubTone {
@@ -162,16 +163,16 @@ class _WorkoutHubOverviewState extends State<WorkoutHubOverview> {
                     const SizedBox(height: 8),
                     Wrap(spacing: 14, runSpacing: 6, children: [
                       _Fact(
-                          imageAsset: 'assets/icons/hub_stat_exercises.png',
+                          svgAsset: 'assets/icons/hub_stat_exercises.svg',
                           label:
                               '${widget.exerciseCount} ${widget.exerciseCount == 1 ? 'exercise' : 'exercises'}'),
                       _Fact(
-                          imageAsset: 'assets/icons/hub_stat_sets.png',
+                          svgAsset: 'assets/icons/hub_stat_sets.svg',
                           label:
                               '${widget.totalSets} ${widget.totalSets == 1 ? 'set' : 'sets'}'),
                       if (widget.minutes != null)
                         _Fact(
-                            imageAsset: 'assets/icons/hub_stat_minutes.png',
+                            svgAsset: 'assets/icons/hub_stat_minutes.svg',
                             label: '~${widget.minutes} min'),
                     ]),
                     const SizedBox(height: 10),
@@ -315,13 +316,13 @@ class _WorkoutHubOverviewState extends State<WorkoutHubOverview> {
 }
 
 class _Fact extends StatelessWidget {
-  const _Fact({required this.imageAsset, required this.label});
-  final String imageAsset;
+  const _Fact({required this.svgAsset, required this.label});
+  final String svgAsset;
   final String label;
   @override
   Widget build(BuildContext context) =>
       Row(mainAxisSize: MainAxisSize.min, children: [
-        Image.asset(imageAsset, width: 15, height: 15, fit: BoxFit.contain),
+        SvgPicture.asset(svgAsset, width: 15, height: 15, fit: BoxFit.contain),
         const SizedBox(width: 5),
         Flexible(
             child: Text(label,

@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" role="img" aria-label="Time">
+  <g stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="12" cy="12" r="9.15" stroke="#FFF7ED" stroke-width="2.15"/>
+    <path d="M12 6.8V12L15.9 14.3" stroke="#FFB24C" stroke-width="2.45"/>
+    <circle cx="12" cy="12" r="1" fill="#FFF7ED"/>
+  </g>
+</svg>
