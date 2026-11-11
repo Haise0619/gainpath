@@ -2,6 +2,8 @@
 
 Phase 4 covers Squat, Biceps Curl, Calf Raise, Floor Push-up, Lateral Raise and Shoulder Press. The implementation builds on the verified consent, tracking, audio and skeleton rendering work from Phases 0–3.
 
+Implementation commit `2c6e3db4d99c0fbb2213d0bcc8c4f91964d5ae03`.
+
 ## Between-set continuation
 
 **Auto-Continue Between Sets** is an account-scoped option in workout privacy settings. It defaults off, including for older local preference files. **Auto-Continue Between Exercises** remains a separate control for the routine's existing exercise handoff.
