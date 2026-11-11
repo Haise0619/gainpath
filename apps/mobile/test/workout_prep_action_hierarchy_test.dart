@@ -52,8 +52,8 @@ void main() {
     expect(start, findsOneWidget);
     final button = tester.widget<FilledButton>(find.ancestor(
         of: start, matching: find.byWidgetPredicate((w) => w is FilledButton)));
-    expect(button.style?.backgroundColor?.resolve({}), const Color(0xFFFFF2E5));
-    expect(button.style?.foregroundColor?.resolve({}), const Color(0xFF321C49));
+    expect(button.style?.backgroundColor?.resolve({}), Colors.white);
+    expect(button.style?.foregroundColor?.resolve({}), const Color(0xFFA74700));
     expect(tester.getBottomLeft(start).dy, lessThan(700));
     expect(find.text('Workout session'), findsNothing);
     expect(find.text('internal-id'), findsNothing);

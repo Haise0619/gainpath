@@ -83,6 +83,7 @@ flutter:
           weight: 800
   assets:
     - assets/images/ai_coach_mascot.png
+    - assets/images/workout_hero_gym.png
     - assets/images/home_workout_gym.webp
     - assets/images/workout_hub_fallback.png
     - assets/images/camera_setup/

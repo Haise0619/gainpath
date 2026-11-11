@@ -126,7 +126,7 @@ class _WorkoutHubExercisesState extends State<WorkoutHubExercises> {
             crossAxisAlignment: WrapCrossAlignment.center,
             spacing: 8,
             children: [
-              Text('Your exercises',
+              Text("Today's exercises",
                   style: Theme.of(context).textTheme.titleLarge),
               Text(
                   '${widget.rows.length} ${widget.rows.length == 1 ? 'exercise' : 'exercises'}',

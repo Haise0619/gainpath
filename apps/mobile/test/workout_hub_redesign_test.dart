@@ -77,7 +77,7 @@ void main() {
     await t.tap(find.text('Show fewer exercises'));
     await t.pumpAndSettle();
     expect(find.text('Movement 4'), findsNothing);
-    expect(find.text('Your exercises').hitTestable(), findsOneWidget);
+    expect(find.text("Today's exercises").hitTestable(), findsOneWidget);
     expect(t.takeException(), isNull);
   });
   testWidgets('rapid primary taps launch once', (t) async {

@@ -178,9 +178,10 @@ void main() {
     await tester.ensureVisible(find.text('Explore programs'));
     await tester.pumpAndSettle();
     expect(find.text('Explore programs').hitTestable(), findsOneWidget);
-    await tester.scrollUntilVisible(find.text('Your exercises'), 100);
-    await tester.ensureVisible(find.text('Your exercises'));
+    await tester.scrollUntilVisible(find.text("Today's exercises"), 100);
+    await tester.ensureVisible(find.text("Today's exercises"));
     await tester.pumpAndSettle();
-    expect(tester.getBottomLeft(find.text('Your exercises')).dy, lessThan(640));
+    expect(
+        tester.getBottomLeft(find.text("Today's exercises")).dy, lessThan(640));
   });
 }

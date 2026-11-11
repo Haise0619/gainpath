@@ -106,7 +106,7 @@ void main() {
           expect(find.text('Start workout').hitTestable(), findsOneWidget);
         }
         await captureHub(t, key, 'free-${width.toInt()}-$scale-top');
-        await t.ensureVisible(find.text('Your exercises'));
+        await t.ensureVisible(find.text("Today's exercises"));
         await t.pumpAndSettle();
         await captureHub(t, key, 'free-${width.toInt()}-$scale-middle');
         await t.ensureVisible(find.text('View all 6 exercises'));
