@@ -3,6 +3,7 @@ import '../workout_presentation.dart';
 import 'package:flutter/material.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
 import '../../application/routine_journey_controller.dart';
+import '../../domain/exercise_tracker_dispatcher.dart';
 import '../../domain/routine_journey.dart';
 import '../../domain/workout_rewards.dart';
 import 'widgets/routine_workout_reward_panel.dart';
@@ -105,7 +106,7 @@ class _RoutineJourneyScreenState extends State<RoutineJourneyScreen> {
                                 onPressed: () => _act(() => c.openDay(c.day)),
                                 child: const Text('Retry routine')))
                     : ListView(
-                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
+                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 140),
                         children: [
                             if (c.error != null)
                               Padding(
@@ -126,6 +127,161 @@ class _RoutineJourneyScreenState extends State<RoutineJourneyScreen> {
                           ])));
       });
 
+  Widget _buildHeaderCard(BuildContext context, bool disabled) {
+    final c = widget.controller;
+    final total = c.dayIndices.length;
+    final completed = c.completedExercises;
+    final progress = total == 0 ? 0.0 : (completed / total).clamp(0.0, 1.0);
+    final isFinished = c.checkpoint?.finished == true;
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFE9E5F0), width: 1.0),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  c.routine.title,
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFF190F2E),
+                  ),
+                ),
+              ),
+              if (c.days.length > 1)
+                DropdownButtonHideUnderline(
+                  child: DropdownButton<int>(
+                    value: c.day,
+                    isDense: true,
+                    items: [
+                      for (final day in c.days)
+                        DropdownMenuItem(
+                          value: day,
+                          child: Text(
+                            'Day $day',
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w600,
+                              fontSize: 13,
+                              color: AppColors.primary,
+                            ),
+                          ),
+                        )
+                    ],
+                    onChanged: disabled || c.isScheduled
+                        ? null
+                        : (day) => _act(() => c.openDay(day!)),
+                  ),
+                )
+              else
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF3E8FF),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(
+                    'Day ${c.day}',
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.primary,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  '$completed of $total completed',
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.inkSoft,
+                  ),
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                  color: isFinished
+                      ? const Color(0xFFDCFCE7)
+                      : const Color(0xFFF3E8FF),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(
+                  isFinished ? 'Finished' : 'In progress',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: isFinished
+                        ? const Color(0xFF15803D)
+                        : AppColors.primary,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(4),
+            child: LinearProgressIndicator(
+              value: progress,
+              semanticsLabel: 'Routine progress',
+            ),
+          ),
+          const SizedBox(height: 10),
+          const Row(
+            children: [
+              Icon(
+                Icons.phone_android_rounded,
+                size: 13,
+                color: AppColors.inkSoft,
+              ),
+              SizedBox(width: 4),
+              Expanded(
+                child: Text(
+                  'Saved on this device',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: AppColors.inkSoft,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  String? _cameraHint(ExerciseTracker? tracker) => switch (tracker) {
+        ExerciseTracker.frontViewLateralRaise ||
+        ExerciseTracker.frontViewShoulderPress =>
+          'Front camera view · Stand facing camera with full body visible',
+        ExerciseTracker.sideViewFloorPushUp =>
+          'Floor side view · Place device on floor 2-3m away facing your side',
+        ExerciseTracker.sideViewSquat ||
+        ExerciseTracker.sideViewCurl ||
+        ExerciseTracker.sideViewCalfRaise ||
+        ExerciseTracker.sideViewWallPushUp ||
+        ExerciseTracker.sideViewRow ||
+        ExerciseTracker.sideViewReverseLunge =>
+          'Side camera view · Place device 2m away facing your profile',
+        _ => null,
+      };
+
   List<Widget> _journey(BuildContext context) {
     final c = widget.controller,
         selected = c.routine.exercises[c.selectedIndex];
@@ -134,160 +290,329 @@ class _RoutineJourneyScreenState extends State<RoutineJourneyScreen> {
         organizationId: c.scope.organizationId);
     final status = c.statusFor(c.selectedIndex);
     final disabled = _working || c.busy;
+    final cameraHint =
+        supported ? _cameraHint(c.trackingFor(c.selectedIndex).tracker) : null;
     return [
-      Panel(
-          background: AppColors.primaryTint,
-          child:
-              Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-            Text(c.routine.title,
-                style: Theme.of(context).textTheme.titleLarge),
-            Row(children: [
-              Expanded(
-                  child: Text(
-                      '${c.completedExercises}/${c.dayIndices.length} complete',
-                      style: Theme.of(context).textTheme.titleLarge)),
-              DropdownButton<int>(
-                  value: c.day,
-                  items: [
-                    for (final day in c.days)
-                      DropdownMenuItem(value: day, child: Text('Day $day'))
-                  ],
-                  onChanged: disabled || c.isScheduled
-                      ? null
-                      : (day) => _act(() => c.openDay(day!))),
-            ]),
-            LinearProgressIndicator(
-                value: c.completedExercises / c.dayIndices.length,
-                semanticsLabel: 'Routine progress'),
-            const SizedBox(height: 8),
-            Text(c.checkpoint!.finished ? 'Finished' : 'In progress'),
-          ])),
-      const SizedBox(height: 8),
-      const Text(
-          'Progress saves on this device. Resume from your last saved exercise; unsaved camera attempts are not recovered.',
-          style: TextStyle(color: AppColors.inkSoft, fontSize: 12)),
+      _buildHeaderCard(context, disabled),
       const SizedBox(height: 16),
       for (final index in c.dayIndices)
         Padding(
-            padding: const EdgeInsets.only(bottom: 10),
+            padding: const EdgeInsets.only(bottom: 8),
             child: Material(
                 color: index == c.selectedIndex
-                    ? AppColors.primaryTint
-                    : AppColors.surface,
+                    ? const Color(0xFFFBF9FF)
+                    : Colors.white,
                 shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(18),
+                    borderRadius: BorderRadius.circular(14),
                     side: BorderSide(
                         color: index == c.selectedIndex
                             ? AppColors.primary
-                            : AppColors.hairline)),
+                            : (index == c.unfinishedIndices.firstWhere((i) => true, orElse: () => -1) && !isExerciseTargetComplete(c.statusFor(index))
+                                ? const Color(0x666D28D9)
+                                : const Color(0xFFE9E5F0)),
+                        width: index == c.selectedIndex ? 2.0 : 1.0)),
                 child: ListTile(
                     onTap: disabled ? null : () => _act(() => c.select(index)),
                     leading: CircleAvatar(
-                        backgroundColor: AppColors.surfaceAlt,
-                        child: Text('${c.dayIndices.indexOf(index) + 1}',
-                            style: const TextStyle(color: AppColors.primary))),
-                    title: Text(c.routine.exercises[index].name),
-                    subtitle: Text(
-                        '${ExercisePresentation.forExercise(c.routine.exercises[index], organizationId: c.scope.organizationId).targetsWithRest}\n${ExercisePresentation.forExercise(c.routine.exercises[index], organizationId: c.scope.organizationId).label} · ${_status(c.statusFor(index))}'),
-                    isThreeLine: true,
+                        radius: 13,
+                        backgroundColor: isExerciseTargetComplete(c.statusFor(index))
+                            ? const Color(0xFFDCFCE7)
+                            : (index == c.selectedIndex
+                                ? AppColors.primary
+                                : const Color(0xFFF1EEF8)),
+                        child: isExerciseTargetComplete(c.statusFor(index))
+                            ? const Icon(Icons.check_rounded, size: 15, color: Color(0xFF16A34A))
+                            : Text('${c.dayIndices.indexOf(index) + 1}',
+                                style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w700,
+                                    color: index == c.selectedIndex ? Colors.white : AppColors.primary))),
+                    title: Text(c.routine.exercises[index].name,
+                        style: TextStyle(
+                            fontSize: 14.5,
+                            fontWeight: FontWeight.w600,
+                            color: isExerciseTargetComplete(c.statusFor(index))
+                                ? AppColors.inkSoft
+                                : AppColors.ink)),
+                    subtitle: Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                          decoration: BoxDecoration(
+                            color: isExerciseTargetComplete(c.statusFor(index))
+                                ? const Color(0xFFF3F4F6)
+                                : const Color(0xFFF3E8FF),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            ExercisePresentation.forExercise(c.routine.exercises[index], organizationId: c.scope.organizationId).label,
+                            style: TextStyle(
+                              fontSize: 10.5,
+                              fontWeight: FontWeight.w600,
+                              color: isExerciseTargetComplete(c.statusFor(index))
+                                  ? const Color(0xFF6B7280)
+                                  : AppColors.primary,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            ExercisePresentation.forExercise(c.routine.exercises[index], organizationId: c.scope.organizationId).targetLabel,
+                            style: const TextStyle(fontSize: 11.5, color: AppColors.inkSoft),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
                     trailing: Icon(
                         isExerciseTargetComplete(c.statusFor(index))
                             ? Icons.check_circle_rounded
                             : index == c.selectedIndex
                                 ? Icons.radio_button_checked
                                 : Icons.radio_button_unchecked,
-                        color: AppColors.primary)))),
+                        color: isExerciseTargetComplete(c.statusFor(index))
+                            ? const Color(0xFF16A34A)
+                            : (index == c.selectedIndex
+                                ? AppColors.primary
+                                : const Color(0xFFCBC4D8)))))),
       const SizedBox(height: 14),
-      Text(
-          '${c.completedExercises} / ${c.dayIndices.length} exercises complete',
-          style: Theme.of(context).textTheme.titleMedium),
-      const SizedBox(height: 6),
-      LinearProgressIndicator(
-          value: c.completedExercises / c.dayIndices.length,
-          semanticsLabel: 'Routine progress'),
+      Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: const Color(0xFFE9E5F0), width: 1.0),
+        ),
+        child: isExerciseTargetComplete(status)
+            ? Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(
+                        Icons.check_circle_rounded,
+                        color: Color(0xFF16A34A),
+                        size: 22,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          '${selected.name} · Completed',
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                            color: Color(0xFF16A34A),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  if (c.sessionsFor(c.selectedIndex).isNotEmpty)
+                    Text(
+                      '${c.sessionsFor(c.selectedIndex).fold<int>(0, (n, s) => n + s.repetitions)} full reps · ${c.sessionsFor(c.selectedIndex).length} saved session${c.sessionsFor(c.selectedIndex).length == 1 ? '' : 's'}',
+                      style: const TextStyle(
+                        fontSize: 13,
+                        color: AppColors.inkSoft,
+                      ),
+                    )
+                  else if (c.isTimed(c.selectedIndex))
+                    Text(
+                      '${c.checkpoint!.guidedProgress[c.selectedIndex]?.completedSets ?? 0}/${selected.sets} timed sets completed',
+                      style: const TextStyle(
+                        fontSize: 13,
+                        color: AppColors.inkSoft,
+                      ),
+                    )
+                  else
+                    Text(
+                      '${c.manualSetsFor(c.selectedIndex)} / ${selected.sets} sets · self-reported',
+                      style: const TextStyle(
+                        fontSize: 13,
+                        color: AppColors.inkSoft,
+                      ),
+                    ),
+                  const SizedBox(height: 12),
+                  OutlinedButton.icon(
+                    onPressed: disabled
+                        ? null
+                        : () => _act(() => widget.onTutorial(c.selectedIndex)),
+                    icon: const Icon(Icons.play_circle_outline_rounded),
+                    label: const Text('Watch exercise tutorial'),
+                  ),
+                ],
+              )
+            : Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          selected.name,
+                          style: Theme.of(context).textTheme.titleLarge,
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 7, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF3E8FF),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          presentation.label,
+                          style: const TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.primary,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  if (c.trackingFor(c.selectedIndex).unavailable)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: Text(c.trackingFor(c.selectedIndex).description,
+                          style: const TextStyle(color: AppColors.inkSoft)),
+                    ),
+                  Text(presentation.targetsWithRest,
+                      style: const TextStyle(color: AppColors.inkSoft)),
+                  if (selected.cue.trim().isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFAF5FF),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                              color: const Color(0xFFE9D5FF), width: 1.0),
+                        ),
+                        child: Text(
+                          '💡 Form Cue: ${selected.cue}',
+                          style: const TextStyle(
+                            fontSize: 12.5,
+                            color: Color(0xFF581C87),
+                          ),
+                        ),
+                      ),
+                    ),
+                  if (cameraHint != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF3F0FF),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.videocam_outlined,
+                                size: 15, color: AppColors.primary),
+                            const SizedBox(width: 6),
+                            Expanded(
+                              child: Text(
+                                cameraHint,
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w500,
+                                  color: AppColors.primary,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  const SizedBox(height: 12),
+                  OutlinedButton.icon(
+                      onPressed: disabled
+                          ? null
+                          : () =>
+                              _act(() => widget.onTutorial(c.selectedIndex)),
+                      icon: const Icon(Icons.play_circle_outline_rounded),
+                      label: const Text('Watch exercise tutorial')),
+                  if (c.isTimed(c.selectedIndex)) ...[
+                    const SizedBox(height: 10),
+                    const Text(
+                        'Video guided · elapsed workout time. Repetitions and form are not measured.',
+                        style: TextStyle(color: AppColors.inkSoft, fontSize: 12)),
+                    const SizedBox(height: 4),
+                    Text(
+                        '${c.checkpoint!.guidedProgress[c.selectedIndex]?.completedSets ?? 0}/${selected.sets} timed sets',
+                        style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                  ] else if (supported) ...[
+                    const SizedBox(height: 8),
+                    if (status == RoutineExerciseStatus.partial)
+                      const Padding(
+                          padding: EdgeInsets.only(top: 8),
+                          child: Text(
+                              'The earlier partial result is retained. A retry starts the published targets again.',
+                              style: TextStyle(
+                                  color: AppColors.inkSoft, fontSize: 12))),
+                  ] else ...[
+                    const SizedBox(height: 10),
+                    const Text(
+                        'Manual · log each completed set yourself. Repetitions and form are not measured.',
+                        style: TextStyle(color: AppColors.inkSoft, fontSize: 12)),
+                    const SizedBox(height: 6),
+                    Text(
+                        '${c.manualSetsFor(c.selectedIndex)} / ${selected.sets} sets · self-reported',
+                        style: Theme.of(context).textTheme.titleMedium),
+                    const SizedBox(height: 6),
+                    Row(
+                      children: [
+                        if (c.manualSetsFor(c.selectedIndex) > 0) ...[
+                          TextButton(
+                              onPressed: disabled
+                                  ? null
+                                  : () =>
+                                      _act(() => c.undoManualSet(c.selectedIndex)),
+                              child: const Text('Undo last set')),
+                          const SizedBox(width: 8),
+                        ],
+                        Expanded(
+                          child: OutlinedButton.icon(
+                              onPressed: disabled
+                                  ? null
+                                  : () => _act(
+                                      () => c.reviewInstructions(c.selectedIndex)),
+                              icon: const Icon(Icons.menu_book_rounded),
+                              label: const Text('Mark instructions reviewed')),
+                        ),
+                      ],
+                    ),
+                  ],
+                  const SizedBox(height: 6),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton(
+                        onPressed: disabled
+                            ? null
+                            : () => _act(() => c.skip(c.selectedIndex)),
+                        child: const Text('Skip exercise')),
+                  ),
+                ],
+              ),
+      ),
       const SizedBox(height: 12),
-      Panel(
-          child:
-              Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        Text(selected.name, style: Theme.of(context).textTheme.titleLarge),
-        Align(
-            alignment: Alignment.centerLeft,
-            child: Chip(
-                avatar: Icon(
-                    supported
-                        ? Icons.auto_awesome_rounded
-                        : Icons.menu_book_outlined,
-                    size: 16),
-                label: Text(presentation.label),
-                backgroundColor: AppColors.primaryTint,
-                side: BorderSide.none)),
-        const SizedBox(height: 6),
-        if (c.trackingFor(c.selectedIndex).unavailable)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 8),
-            child: Text(c.trackingFor(c.selectedIndex).description,
-                style: const TextStyle(color: AppColors.inkSoft)),
-          ),
-        Text(presentation.targetsWithRest,
-            style: const TextStyle(color: AppColors.inkSoft)),
-        if (selected.cue.trim().isNotEmpty)
-          Padding(
-              padding: const EdgeInsets.only(top: 10),
-              child: Text(selected.cue)),
-        const SizedBox(height: 12),
-        OutlinedButton.icon(
-            onPressed: disabled
-                ? null
-                : () => _act(() => widget.onTutorial(c.selectedIndex)),
-            icon: const Icon(Icons.play_circle_outline_rounded),
-            label: const Text('Watch exercise tutorial')),
-        if (c.isTimed(c.selectedIndex)) ...[
-          const SizedBox(height: 10),
-          const Text(
-              'Video guided · elapsed workout time. Repetitions and form are not measured.'),
-          Text(
-              '${c.checkpoint!.guidedProgress[c.selectedIndex]?.completedSets ?? 0}/${selected.sets} timed sets'),
-        ] else if (supported) ...[
-          const SizedBox(height: 8),
-          if (status == RoutineExerciseStatus.partial)
-            const Padding(
-                padding: EdgeInsets.only(top: 8),
-                child: Text(
-                    'The earlier partial result is retained. A retry starts the published targets again.',
-                    style: TextStyle(color: AppColors.inkSoft, fontSize: 12))),
-        ] else ...[
-          const SizedBox(height: 10),
-          const Text(
-              'Manual · log each completed set yourself. Repetitions and form are not measured.',
-              style: TextStyle(color: AppColors.inkSoft)),
-          const SizedBox(height: 10),
-          Text(
-              '${c.manualSetsFor(c.selectedIndex)} / ${selected.sets} sets · self-reported',
-              style: Theme.of(context).textTheme.titleMedium),
-          const SizedBox(height: 10),
-          if (c.manualSetsFor(c.selectedIndex) > 0)
-            TextButton(
-                onPressed: disabled
-                    ? null
-                    : () => _act(() => c.undoManualSet(c.selectedIndex)),
-                child: const Text('Undo last set')),
-          OutlinedButton.icon(
-              onPressed: disabled
-                  ? null
-                  : () => _act(() => c.reviewInstructions(c.selectedIndex)),
-              icon: const Icon(Icons.menu_book_rounded),
-              label: const Text('Mark instructions reviewed')),
-        ],
-        TextButton(
-            onPressed:
-                disabled ? null : () => _act(() => c.skip(c.selectedIndex)),
-            child: const Text('Skip exercise')),
-      ])),
-      const SizedBox(height: 16),
-      FilledButton.tonalIcon(
+      Center(
+        child: TextButton.icon(
           onPressed: disabled ? null : _finish,
-          icon: const Icon(Icons.checklist_rounded),
-          label: const Text('Finish routine')),
+          icon: const Icon(Icons.flag_outlined, size: 18),
+          label: Text(
+            c.allTargetsCompleted ? 'Finish routine' : 'Finish early',
+            style: const TextStyle(color: AppColors.inkSoft),
+          ),
+        ),
+      ),
     ];
   }
 
