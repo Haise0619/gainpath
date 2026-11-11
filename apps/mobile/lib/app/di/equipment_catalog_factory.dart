@@ -24,7 +24,18 @@ Widget buildMemberEquipmentCatalog(AuthSession expected,
           FirebaseEquipmentReader(scope: expected.scope, activeScope: active);
       return BlocBuilder<AuthBloc, AuthState>(
           builder: (context, state) => active() == expected.scope
-              ? EquipmentBrowseScreen(reader: reader)
+              ? EquipmentBrowseScreen(
+                  reader: reader,
+                  onScan: () {
+                    if (active() != expected.scope) return;
+                    Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                            builder: (_) => BlocProvider.value(
+                                value: auth,
+                                child: buildMemberEquipmentScanner(expected,
+                                    factory: factory))));
+                  })
               : const Scaffold(
                   body: Center(
                       child:

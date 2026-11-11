@@ -417,6 +417,8 @@ class _WorkoutPrepRouteState extends State<WorkoutPrepRoute>
                     }
                   },
             recoveryDayLabel: !_showFree ? _hub?.recoveryDayLabel : null,
+            trainingPlanTitle: _controller?.enrollment?.program.title,
+            nextScheduledWorkout: _scheduled,
             scheduledWorkout: scheduled,
             onStartScheduled: scheduled == null ? null : _startScheduled,
             programLoading: _loading,

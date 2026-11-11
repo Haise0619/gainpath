@@ -70,6 +70,7 @@ void main() {
                     })))));
         await tester.scrollUntilVisible(
             find.text('Try live camera preview'), 200);
+        await tester.pumpAndSettle();
         await tester.tap(find.text('Try live camera preview'));
         await tester.pumpAndSettle();
         if (!accepted) {
@@ -94,6 +95,7 @@ void main() {
           await tester.tap(find.byType(CheckboxListTile));
           await tester.pump();
           await tester.ensureVisible(find.text('Accept AI Tracking'));
+          await tester.pumpAndSettle();
           await tester.tap(find.text('Accept AI Tracking'));
           await tester.pumpAndSettle();
           expect(

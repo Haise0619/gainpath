@@ -21,6 +21,7 @@ import '../../../../navigation/workout_navigation.dart';
 import 'routine_screen.dart';
 import 'widgets/workout_exercise_image.dart';
 import 'widgets/workout_hub_visuals.dart';
+import 'widgets/workout_hub_sections.dart';
 import '../../domain/routine_attempt.dart';
 
 class WorkoutPrepScreen extends StatelessWidget {
@@ -39,6 +40,8 @@ class WorkoutPrepScreen extends StatelessWidget {
       this.onOpenRoutineHistory,
       this.onReturnToPlanned,
       this.scheduledWorkout,
+      this.trainingPlanTitle,
+      this.nextScheduledWorkout,
       this.freeAttempt,
       this.onStartFree,
       this.recoveryDayLabel,
@@ -64,10 +67,12 @@ class WorkoutPrepScreen extends StatelessWidget {
   final VoidCallback? onOpenProgress, onOpenRoutineHistory;
   final VoidCallback? onReturnToPlanned;
   final ScheduledWorkoutPreview? scheduledWorkout;
+  final String? trainingPlanTitle;
+  final ScheduledWorkoutPreview? nextScheduledWorkout;
   final WorkoutHubAttempt? freeAttempt;
-  final VoidCallback? onStartFree;
+  final FutureOr<void> Function()? onStartFree;
   final String? recoveryDayLabel;
-  final VoidCallback? onStartScheduled;
+  final FutureOr<void> Function()? onStartScheduled;
   final bool programLoading, programLoadError;
   final bool workoutStateUnavailable;
   final VoidCallback? onRetryWorkout;
@@ -113,30 +118,6 @@ class WorkoutPrepScreen extends StatelessWidget {
             : selectedRoutine?.estimatedMinutes
         : 45;
     final multipleDays = live && scheduledWorkout == null && isMultiDay;
-    final shortcuts = Wrap(
-      spacing: 8,
-      children: [
-        if (onOpenPrograms != null)
-          TextButton.icon(
-              onPressed: onOpenPrograms,
-              icon: const Icon(Icons.calendar_month_outlined),
-              label: const Text('Training plan')),
-        if (onOpenRoutineHistory != null)
-          TextButton.icon(
-              onPressed: onOpenRoutineHistory,
-              icon: const Icon(Icons.history_rounded),
-              label: const Text('Routine history')),
-        if (onOpenProgress != null)
-          TextButton.icon(
-              onPressed: onOpenProgress,
-              icon: const Icon(Icons.insights_outlined),
-              label: const Text('Progress')),
-        if (onReturnToPlanned != null)
-          TextButton(
-              onPressed: onReturnToPlanned,
-              child: const Text('Back to planned workout')),
-      ],
-    );
 
     void openExercise(int index) {
       if (live) {
@@ -184,64 +165,46 @@ class WorkoutPrepScreen extends StatelessWidget {
                   : const RoutineScreen()));
     }
 
-    return Scaffold(
-      backgroundColor: const Color(0xFFF8F7FC),
-      body: CustomScrollView(slivers: [
-        SliverAppBar(
-          pinned: true,
-          title: const Text('Workout'),
-          actions: [
-            if (onOpenSettings != null)
-              IconButton(
-                  tooltip: 'Workout settings',
-                  onPressed: onOpenSettings,
-                  icon: const Icon(Icons.settings_outlined))
-          ],
-        ),
-        SliverPadding(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
-          sliver: SliverList.list(children: [
-            if (!hasWorkout) shortcuts,
-            if (recoveryDayLabel != null) ...[
-              Panel(
-                  child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                    Text(recoveryDayLabel!,
-                        style: Theme.of(context).textTheme.titleLarge),
-                    const Text(
-                        'Follow your planned recovery. Your next workout is shown below.'),
-                    if (!hasWorkout)
-                      FilledButton(
-                          onPressed: onOpenPrograms,
-                          child: const Text('View training schedule')),
-                  ])),
-              const SizedBox(height: 12),
-            ],
-            if (programLoading) ...[
-              const Panel(
-                  child: Row(children: [
-                SizedBox(
-                    width: 22,
-                    height: 22,
-                    child: CircularProgressIndicator(strokeWidth: 2)),
-                SizedBox(width: 12),
-                Expanded(child: Text('Loading your workout…')),
-              ])),
-            ] else if (hasWorkout) ...[
-              _WorkoutOverview(
+    final identity = scheduledWorkout == null
+        ? 'free:${selectedRoutine?.id}:$activeDay'
+        : 'scheduled:${scheduledWorkout!.enrollmentId}:${scheduledWorkout!.dayKey}';
+    final planned = nextScheduledWorkout ?? scheduledWorkout;
+    final planName = trainingPlanTitle;
+    final hasPlan =
+        planName != null || planned != null || recoveryDayLabel != null;
+    final planSubtitle = programLoading
+        ? 'Loading your training plan…'
+        : programLoadError
+            ? 'Your plan is unavailable. Open it to retry.'
+            : recoveryDayLabel ??
+                (planned == null
+                    ? hasPlan
+                        ? 'Open your schedule to review your training days.'
+                        : 'Build a consistent training rhythm.'
+                    : '${planned.routine.title} · ${_scheduledStatus(planned)}');
+    final hero = programLoading
+        ? const Panel(
+            child: Row(children: [
+            SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(strokeWidth: 2)),
+            SizedBox(width: 12),
+            Expanded(child: Text('Loading your workout…'))
+          ]))
+        : hasWorkout
+            ? _WorkoutOverview(
                 title: title!,
                 exerciseCount: routine.length,
                 totalSets: totalSets,
                 minutes: duration,
                 scheduledWorkout: scheduledWorkout,
+                freeAttempt: freeAttempt,
                 actionLabelOverride:
                     recoveryDayLabel != null && onOpenPrograms != null
                         ? 'View Training Schedule'
                         : null,
-                freeAttempt: freeAttempt,
                 switcher: routineCatalogControls,
-                shortcuts: shortcuts,
                 onStart: recoveryDayLabel != null && onOpenPrograms != null
                     ? onOpenPrograms!
                     : scheduledWorkout != null
@@ -249,124 +212,152 @@ class WorkoutPrepScreen extends StatelessWidget {
                         : live
                             ? onStartFree ?? () => _startRealSession(context)
                             : () => _startSession(context),
-                journeyFirst: live && routes.journeyBuilder != null,
-              ),
-              const SizedBox(height: 24),
-              Wrap(
-                  alignment: WrapAlignment.spaceBetween,
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  spacing: 8,
-                  children: [
-                    Text('Your exercises',
-                        style: Theme.of(context).textTheme.titleLarge),
-                    if (isMultiDay || scheduledWorkout != null || !live)
-                      TextButton(
-                          onPressed: openRoutine,
-                          child: const Text('Routine preview')),
-                  ]),
-              const SizedBox(height: 8),
+                journeyFirst: live && routes.journeyBuilder != null)
+            : !workoutStateUnavailable &&
+                    routineLoadFailed &&
+                    routineCatalogControls != null
+                ? routineCatalogControls!
+                : Panel(
+                    child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                        Text(
+                            workoutStateUnavailable
+                                ? 'Saved progress is unavailable'
+                                : routineStatusMessage ??
+                                    (selectedRoutine != null
+                                        ? 'No exercises in this workout'
+                                        : 'No workout selected'),
+                            style: Theme.of(context).textTheme.titleLarge),
+                        const SizedBox(height: 8),
+                        Text(workoutStateUnavailable
+                            ? 'Retry before starting so your saved attempt stays protected.'
+                            : routineLoadFailed
+                                ? 'Check your connection and try again.'
+                                : 'Choose a workout to see your exercises and get started.'),
+                        const SizedBox(height: 12),
+                        if (workoutStateUnavailable || routineLoadFailed)
+                          FilledButton(
+                              onPressed: onRetryWorkout,
+                              child: const Text('Retry workout'))
+                        else if (routineCatalogControls != null)
+                          routineCatalogControls!
+                        else if (onOpenPrograms != null)
+                          FilledButton(
+                              onPressed: onOpenPrograms,
+                              child: const Text('Browse workouts')),
+                      ]));
+    return WorkoutHubLayout(
+      identity: identity,
+      hero: hero,
+      onSettings: onOpenSettings,
+      plan: WorkoutHubSection(
+          title: 'Training Plan',
+          child:
+              Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            WorkoutHubDestination(
+                title: planName ??
+                    (hasPlan
+                        ? 'Your training schedule'
+                        : 'Make room for your next goal'),
+                subtitle: planSubtitle,
+                icon: Icons.calendar_month_outlined,
+                action: hasPlan ? 'View Plan' : 'Explore programs',
+                onTap: onOpenPrograms),
+            if (onReturnToPlanned != null)
+              Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton(
+                      onPressed: onReturnToPlanned,
+                      child: const Text('Back to planned workout'))),
+          ])),
+      exercises: !hasWorkout
+          ? const []
+          : [
               for (var i = 0; i < routine.length; i++)
                 Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: _WorkoutExerciseRow(
-                    index: i + 1,
-                    exercise: routine[i],
-                    status: savedStatus(routine[i]),
-                    day: multipleDays
-                        ? (routine[i] as PublishedRoutineExercise).dayNumber
-                        : null,
-                    tracker: routine[i] is PublishedRoutineExercise &&
-                            organizationId != null
-                        ? trackers
-                            .resolve(
-                                organizationId: organizationId!,
-                                exerciseId:
-                                    (routine[i] as PublishedRoutineExercise)
-                                        .exerciseId)
-                            .tracker
-                        : null,
-                    organizationId: organizationId,
-                    trackers: trackers,
-                    onTap: () => openExercise(i),
-                  ),
-                ),
-            ] else if (workoutStateUnavailable) ...[
-              Panel(
-                  child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                    const Text('Could not check saved workout progress.'),
-                    TextButton(
-                        onPressed: onRetryWorkout,
-                        child: const Text('Retry workout')),
-                  ])),
-            ] else if (routineCatalogControls != null) ...[
-              routineCatalogControls!,
-            ] else ...[
-              Panel(
-                  child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                    Text(routineStatusMessage ?? 'No workout selected',
-                        style: Theme.of(context).textTheme.titleLarge),
-                    const SizedBox(height: 8),
-                    Text(
-                        routineLoadFailed
-                            ? 'Check your connection and refresh to try again.'
-                            : 'When a workout is available, select it to see its exercises and start.',
-                        style: Theme.of(context).textTheme.bodyMedium),
-                  ])),
+                    key: ValueKey('$identity:$i:${routine[i].name}'),
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: _WorkoutExerciseRow(
+                        index: i + 1,
+                        exercise: routine[i],
+                        status: savedStatus(routine[i]),
+                        day: multipleDays
+                            ? (routine[i] as PublishedRoutineExercise).dayNumber
+                            : null,
+                        tracker: routine[i] is PublishedRoutineExercise &&
+                                organizationId != null
+                            ? trackers
+                                .resolve(
+                                    organizationId: organizationId!,
+                                    exerciseId:
+                                        (routine[i] as PublishedRoutineExercise)
+                                            .exerciseId)
+                                .tracker
+                            : null,
+                        organizationId: organizationId,
+                        trackers: trackers,
+                        onTap: () => openExercise(i)))
             ],
-            if (programLoadError && !workoutStateUnavailable) ...[
-              const SizedBox(height: 12),
-              const Text(
-                  'Could not load your training plan. Open Training plan to retry.',
-                  style: TextStyle(color: AppColors.inkSoft)),
-            ],
-            const SizedBox(height: 24),
-            Text('Workout tools',
-                style: Theme.of(context).textTheme.titleLarge),
+      exerciseAction: isMultiDay || scheduledWorkout != null || !live
+          ? TextButton(
+              onPressed: openRoutine, child: const Text('Routine preview'))
+          : null,
+      activity: WorkoutHubSection(
+          title: 'Your Activity',
+          child: LayoutBuilder(builder: (context, c) {
+            final cards = [
+              WorkoutHubDestination(
+                  title: 'History',
+                  subtitle: 'Past sessions',
+                  icon: Icons.history_rounded,
+                  onTap: onOpenRoutineHistory),
+              WorkoutHubDestination(
+                  title: 'Progress',
+                  subtitle: 'Trends & goals',
+                  icon: Icons.insights_outlined,
+                  onTap: onOpenProgress),
+            ];
+            return c.maxWidth < 330 ||
+                    MediaQuery.textScalerOf(context).scale(14) > 21
+                ? Column(
+                    children: [cards[0], const SizedBox(height: 8), cards[1]])
+                : Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Expanded(child: cards[0]),
+                    const SizedBox(width: 10),
+                    Expanded(child: cards[1])
+                  ]);
+          })),
+      help: WorkoutHubSection(
+          title: 'Help & Equipment',
+          child: Column(children: [
+            WorkoutHubDestination(
+                title: 'Equipment',
+                subtitle: 'Browse equipment & scan for guides',
+                icon: Icons.fitness_center_outlined,
+                onTap: onBrowseEquipment ??
+                    onOpenEquipment ??
+                    (live
+                        ? null
+                        : () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                                builder: (_) =>
+                                    const EquipmentScannerScreen())))),
             const SizedBox(height: 8),
-            _WorkoutTools(children: [
-              _DetourCard(
-                icon: Icons.videocam_outlined,
-                imageAsset: 'assets/icons/tool_camera_setup.webp',
-                tone: WorkoutHubPalette.of(context).neutral,
+            WorkoutHubDestination(
                 title: 'Camera setup',
-                subtitle: 'Distance & angle',
+                subtitle: 'Guide to distance & angle',
+                icon: Icons.videocam_outlined,
                 onTap: () => Navigator.push(
                     context,
                     MaterialPageRoute(
-                        builder: (_) => const CameraSetupScreen())),
-              ),
-              _DetourCard(
-                icon: Icons.qr_code_scanner_rounded,
-                imageAsset: 'assets/icons/tool_scan_equipment.webp',
-                tone: WorkoutHubPalette.of(context).neutral,
-                title: 'Scan equipment',
-                subtitle: 'Safety & guides',
-                onTap: live
-                    ? onOpenEquipment ?? () => showUnavailable(context)
-                    : () => Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                            builder: (_) => const EquipmentScannerScreen())),
-              ),
-              if (onBrowseEquipment != null)
-                _DetourCard(
-                    icon: Icons.fitness_center_outlined,
-                    tone: WorkoutHubPalette.of(context).neutral,
-                    title: 'Browse equipment',
-                    subtitle: 'Equipment guides',
-                    onTap: onBrowseEquipment),
-            ]),
+                        builder: (_) => const CameraSetupScreen()))),
             if (const bool.fromEnvironment('GAINPATH_POSE_PREVIEW'))
               TextButton(
                   onPressed: () => _startPosePreview(context),
                   child: const Text('Try live camera preview')),
-          ]),
-        ),
-      ]),
+          ])),
     );
   }
 
@@ -621,18 +612,16 @@ class _WorkoutOverview extends StatelessWidget {
       this.actionLabelOverride,
       required this.onStart,
       required this.journeyFirst,
-      this.switcher,
-      required this.shortcuts});
+      this.switcher});
   final String title;
   final int exerciseCount, totalSets;
   final int? minutes;
   final ScheduledWorkoutPreview? scheduledWorkout;
   final WorkoutHubAttempt? freeAttempt;
   final String? actionLabelOverride;
-  final VoidCallback onStart;
+  final FutureOr<void> Function() onStart;
   final bool journeyFirst;
   final Widget? switcher;
-  final Widget shortcuts;
 
   @override
   Widget build(BuildContext context) {
@@ -653,7 +642,7 @@ class _WorkoutOverview extends StatelessWidget {
     final date = scheduledWorkout?.date;
     final eyebrow = date == null
         ? 'FREE WORKOUT'
-        : 'YOUR PROGRAM · ${date.day} ${const [
+        : 'SCHEDULED PROGRAM · ${date.day} ${const [
             'JAN',
             'FEB',
             'MAR',
@@ -694,7 +683,7 @@ class _WorkoutOverview extends StatelessWidget {
               : Icons.play_arrow_rounded,
       onStart: onStart,
       switcher: switcher,
-      shortcuts: shortcuts,
+      started: attempt != null || scheduledWorkout?.inProgress == true,
       scheduleStatus:
           scheduledWorkout == null ? null : _scheduledStatus(scheduledWorkout!),
       support: support,
@@ -790,12 +779,9 @@ class _WorkoutExerciseRow extends StatelessWidget {
         excludeSemantics: true,
         onTap: onTap,
         child: Material(
-          color: Colors.white,
-          shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
-              side: BorderSide(color: const Color(0xFFE8E4EF))),
-          elevation: 1,
-          shadowColor: const Color(0x10190F2E),
+          color: theme.colorScheme.surface,
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           clipBehavior: Clip.antiAlias,
           child: InkWell(
             onTap: onTap,
@@ -805,8 +791,8 @@ class _WorkoutExerciseRow extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
                       SizedBox(
-                          width: 72,
-                          height: 76,
+                          width: 56,
+                          height: 60,
                           child: Stack(children: [
                             Positioned.fill(
                                 top: 4,
@@ -858,7 +844,7 @@ class _WorkoutExerciseRow extends StatelessWidget {
                                       icon: presentation.icon,
                                       label: presentation.mode ==
                                               WorkoutExerciseMode.manual
-                                          ? 'Self-reported'
+                                          ? 'Manual · Self-reported'
                                           : presentation.label,
                                       tone: modeTone),
                                 if (stateLabel != null)
@@ -878,202 +864,6 @@ class _WorkoutExerciseRow extends StatelessWidget {
       ),
     );
   }
-}
-
-class _WorkoutTools extends StatelessWidget {
-  const _WorkoutTools({required this.children});
-  final List<Widget> children;
-
-  @override
-  Widget build(BuildContext context) {
-    if (children.isEmpty) return const SizedBox.shrink();
-
-    return LayoutBuilder(builder: (context, constraints) {
-      final single = constraints.maxWidth < 330 ||
-          MediaQuery.textScalerOf(context).scale(14) > 21;
-
-      return Container(
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: const Color(0xFFEDE8F5), width: 1.0),
-          boxShadow: const [
-            BoxShadow(
-              color: Color(0x0A190F2E),
-              blurRadius: 14,
-              offset: Offset(0, 4),
-            ),
-          ],
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: single ? _buildSingleColumn() : _buildGrid(),
-      );
-    });
-  }
-
-  Widget _buildSingleColumn() {
-    const dividerColor = Color(0xFFF3EFF8);
-    final items = <Widget>[];
-    for (var i = 0; i < children.length; i++) {
-      if (i > 0) {
-        items.add(const Divider(height: 1, thickness: 1, color: dividerColor));
-      }
-      items.add(children[i]);
-    }
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: items,
-    );
-  }
-
-  Widget _buildGrid() {
-    const dividerColor = Color(0xFFF3EFF8);
-    final rows = <Widget>[];
-
-    for (var i = 0; i < children.length; i += 2) {
-      if (i > 0) {
-        rows.add(const Divider(height: 1, thickness: 1, color: dividerColor));
-      }
-      final left = children[i];
-      final hasRight = i + 1 < children.length;
-      final right = hasRight ? children[i + 1] : null;
-
-      rows.add(
-        IntrinsicHeight(
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Expanded(child: left),
-              if (hasRight) ...[
-                const VerticalDivider(
-                  width: 1,
-                  thickness: 1,
-                  color: dividerColor,
-                ),
-                Expanded(child: right!),
-              ],
-            ],
-          ),
-        ),
-      );
-    }
-
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: rows,
-    );
-  }
-}
-
-class _DetourCard extends StatelessWidget {
-  const _DetourCard({
-    required this.icon,
-    this.imageAsset,
-    required this.tone,
-    required this.title,
-    required this.subtitle,
-    required this.onTap,
-  });
-
-  final IconData icon;
-  final String? imageAsset;
-  final WorkoutHubTone tone;
-  final String title, subtitle;
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) => Tooltip(
-        message: subtitle,
-        child: Semantics(
-          label: '$title. $subtitle',
-          button: true,
-          enabled: onTap != null,
-          excludeSemantics: true,
-          onTap: onTap,
-          child: Material(
-            color: Colors.transparent,
-            child: InkWell(
-              onTap: onTap,
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(minHeight: 112),
-                child: Padding(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 14),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      Container(
-                        width: 52,
-                        height: 52,
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFF6F0FD),
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(
-                            color: const Color(0xFFEFE5FB),
-                            width: 1,
-                          ),
-                        ),
-                        alignment: Alignment.center,
-                        child: imageAsset != null
-                            ? Image.asset(
-                                imageAsset!,
-                                width: 44,
-                                height: 44,
-                                fit: BoxFit.contain,
-                                errorBuilder: (_, __, ___) => Icon(
-                                  icon,
-                                  color: tone.ink,
-                                  size: 24,
-                                ),
-                              )
-                            : Icon(icon, color: tone.ink, size: 24),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        title,
-                        textAlign: TextAlign.center,
-                        style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                              color: Theme.of(context).colorScheme.onSurface,
-                              fontWeight: FontWeight.w700,
-                              fontSize: 13,
-                              letterSpacing: -0.2,
-                            ),
-                      ),
-                      const SizedBox(height: 2),
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Flexible(
-                            child: Text(
-                              subtitle,
-                              textAlign: TextAlign.center,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w500,
-                                color: Theme.of(context)
-                                    .colorScheme
-                                    .onSurfaceVariant
-                                    .withValues(alpha: 0.82),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ),
-      );
 }
 
 Future<bool?> showWorkoutCaptureConsent(BuildContext context,

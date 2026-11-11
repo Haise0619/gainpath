@@ -41,22 +41,21 @@ void main() {
               publishedRoutine: routine,
               onOpenPrograms: () => plans++)));
       await tester.pumpAndSettle();
-      expect(
-          find.byKey(const ValueKey('workout-progress-ring')), findsOneWidget);
-      expect(find.text('0 / 1'), findsOneWidget);
-      expect(find.text('Exercises'), findsOneWidget);
-      expect(find.text('Sets'), findsOneWidget);
-      expect(find.text('~10'), findsOneWidget);
+      expect(find.byKey(const ValueKey('workout-progress')), findsNothing);
+      expect(find.text('0 / 1'), findsNothing);
+      expect(find.text('1 exercise'), findsNWidgets(2));
+      expect(find.text('1 set'), findsOneWidget);
+      expect(find.text('~10 min'), findsOneWidget);
       expect(find.text('View your schedule and saved progress'), findsNothing);
       expect(find.textContaining('rest between sets'), findsNothing);
       expect(routine.exercises.single.restSeconds, 60);
-      await tester.scrollUntilVisible(find.text('Training plan'), 200);
+      await tester.scrollUntilVisible(find.text('Explore programs'), 200);
       await tester.pumpAndSettle();
-      expect(tester.getTopLeft(find.text('Training plan')).dy,
+      expect(tester.getTopLeft(find.text('Explore programs')).dy,
           lessThan(tester.getTopLeft(find.text('Your exercises')).dy));
-      await tester.ensureVisible(find.text('Training plan'));
+      await tester.ensureVisible(find.text('Explore programs'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Training plan'));
+      await tester.tap(find.text('Explore programs'));
       expect(plans, 1);
       expect(tester.takeException(), isNull);
     });

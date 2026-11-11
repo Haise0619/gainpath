@@ -197,8 +197,10 @@ void main() {
         )));
     await tester.pumpAndSettle();
     expect(find.text('Full body'), findsOneWidget);
-    expect(find.textContaining('YOUR PROGRAM'), findsOneWidget);
+    expect(find.textContaining('SCHEDULED PROGRAM'), findsOneWidget);
     expect(store.journal.revision, revision);
+    await tester.ensureVisible(find.text('Routine preview'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Routine preview'));
     await tester.pumpAndSettle();
     expect(find.byType(RoutineScreen), findsOneWidget);
@@ -212,6 +214,8 @@ void main() {
     expect(find.text('Free strength'), findsOneWidget);
     expect(find.text('FREE WORKOUT'), findsOneWidget);
     expect(store.journal.revision, revision);
+    await tester.ensureVisible(find.text('Back to planned workout'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Back to planned workout'));
     await tester.pumpAndSettle();
     expect(find.text('Full body'), findsOneWidget);

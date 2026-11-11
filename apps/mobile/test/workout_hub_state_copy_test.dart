@@ -76,18 +76,27 @@ void main() {
                 onOpenRoutineHistory: () => historyOpens++,
                 onOpenSettings: () => settings++)));
         await tester.pumpAndSettle();
-        final progress = tester.widget<CircularProgressIndicator>(
-            find.byKey(const ValueKey('workout-progress-ring')));
-        expect(progress.value, 0);
-        expect(find.text('0 / 1'), findsOneWidget);
+        if (completed) {
+          expect(find.byKey(const ValueKey('workout-progress')), findsNothing);
+          expect(find.text('0 / 1'), findsNothing);
+        } else {
+          final progress = tester.widget<LinearProgressIndicator>(
+              find.byKey(const ValueKey('workout-progress')));
+          expect(progress.value, 0);
+          expect(find.text('0 / 1'), findsOneWidget);
+        }
         expect(
             find.text(
                 completed ? 'Start workout' : 'Resume Unfinished Exercises'),
             findsOneWidget);
         await tester.tap(find.byTooltip('Workout settings'));
         expect(settings, 1);
+        await tester.ensureVisible(find.text('Progress'));
+        await tester.pumpAndSettle();
         await tester.tap(find.text('Progress'));
-        await tester.tap(find.text('Routine history'));
+        await tester.ensureVisible(find.text('History'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('History'));
         expect(progressOpens, 1);
         expect(historyOpens, 1);
         expect(tester.takeException(), isNull);
@@ -140,10 +149,11 @@ void main() {
                 snapshot: 's',
                 inProgress: false),
             onStartScheduled: () {})));
-    expect(find.text('0 / 1'), findsOneWidget);
+    expect(find.byKey(const ValueKey('workout-progress')), findsNothing);
     expect(find.text('0 / 9'), findsNothing);
   });
-  testWidgets('start and Training plan precede the exercise list at 320dp',
+  testWidgets(
+      'start and Training Plan remain accessible at 320dp and double text',
       (tester) async {
     tester.view.physicalSize = const Size(320, 640);
     tester.view.devicePixelRatio = 1;
@@ -160,8 +170,14 @@ void main() {
             onOpenPrograms: () {},
             onOpenProgress: () {},
             onOpenRoutineHistory: () {})));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Start workout'));
+    await tester.pumpAndSettle();
     expect(find.text('Start workout').hitTestable(), findsOneWidget);
-    expect(find.text('Training plan').hitTestable(), findsOneWidget);
+    expect(find.text('Training Plan'), findsOneWidget);
+    await tester.ensureVisible(find.text('Explore programs'));
+    await tester.pumpAndSettle();
+    expect(find.text('Explore programs').hitTestable(), findsOneWidget);
     await tester.scrollUntilVisible(find.text('Your exercises'), 100);
     await tester.ensureVisible(find.text('Your exercises'));
     await tester.pumpAndSettle();

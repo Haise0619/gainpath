@@ -164,7 +164,7 @@ void main() {
     await tester.ensureVisible(find.text('Start workout'));
     await tester.pumpAndSettle();
     expect(find.text('Start workout'), findsOneWidget);
-    await tester.scrollUntilVisible(find.text('Scan equipment'), 200,
+    await tester.scrollUntilVisible(find.text('Equipment'), 200,
         scrollable: find.byType(Scrollable).first);
     await tester.pumpAndSettle();
     // Framework reports any layout overflow at the end of the test.

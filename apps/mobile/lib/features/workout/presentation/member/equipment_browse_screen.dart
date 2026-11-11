@@ -26,8 +26,9 @@ Widget _networkHero(String url, {BoxFit fit = BoxFit.cover}) {
 /// as a grid, filterable by category. Reachable both from the scanner's
 /// app-bar action and from its "couldn't recognise this" fallback.
 class EquipmentBrowseScreen extends StatefulWidget {
-  const EquipmentBrowseScreen({super.key, this.reader});
+  const EquipmentBrowseScreen({super.key, this.reader, this.onScan});
   final EquipmentReader? reader;
+  final VoidCallback? onScan;
 
   @override
   State<EquipmentBrowseScreen> createState() => _EquipmentBrowseScreenState();
@@ -105,6 +106,11 @@ class _EquipmentBrowseScreenState extends State<EquipmentBrowseScreen> {
 
     return Scaffold(
       appBar: AppBar(title: const Text('Equipment'), actions: [
+        if (widget.onScan != null)
+          IconButton(
+              tooltip: 'Scan equipment',
+              onPressed: widget.onScan,
+              icon: const Icon(Icons.qr_code_scanner_rounded)),
         if (live)
           IconButton(
               tooltip: 'Refresh equipment',

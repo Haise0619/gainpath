@@ -101,7 +101,13 @@ void main() {
     expect(find.text('In progress'), findsAtLeastNWidgets(1));
     expect(find.text('Skipped'), findsOneWidget);
     expect(find.text('Not started'), findsNothing);
-    expect(find.text('Self-reported'), findsNWidgets(4));
+    expect(find.text('Manual · Self-reported'), findsNWidgets(3));
+    expect(find.text('Movement 4'), findsNothing);
+    await tester.ensureVisible(find.text('View all 4 exercises'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('View all 4 exercises'));
+    await tester.pumpAndSettle();
+    expect(find.text('Manual · Self-reported'), findsNWidgets(4));
     expect(find.byIcon(Icons.check_rounded), findsAtLeastNWidgets(1));
     expect(
         find.bySemanticsLabel(RegExp(r'Exercise 1.*Completed · Self-reported')),
@@ -158,7 +164,7 @@ void main() {
       expect(find.text('Movement 1 instructions'), findsOneWidget);
       await tester.pageBack();
       await tester.pumpAndSettle();
-      await tester.scrollUntilVisible(find.text('Scan equipment'), 200);
+      await tester.scrollUntilVisible(find.text('Equipment'), 200);
       expect(tester.takeException(), isNull);
     });
   }

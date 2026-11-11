@@ -144,7 +144,7 @@ void main() {
       await tester.drag(find.byType(CustomScrollView), const Offset(0, -170));
       await tester.pumpAndSettle();
       await capture('middle');
-      await tester.scrollUntilVisible(find.text('Browse equipment'), 400,
+      await tester.scrollUntilVisible(find.text('Equipment'), 400,
           scrollable: find.byType(Scrollable).first);
       await tester.pumpAndSettle();
       await capture('bottom');
