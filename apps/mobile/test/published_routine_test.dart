@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gainpath_mobile/features/workout/data/published_routine.dart';
-import 'package:gainpath_mobile/features/workout/presentation/member/routine_screen.dart';
 import 'package:gainpath_mobile/features/workout/presentation/member/workout_prep_screen.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:gainpath_mobile/app/home/member_home_screen.dart';
@@ -159,13 +158,8 @@ void main() {
     await tester.tap(find.text('Squat'));
     await tester.pump();
     expect(find.text('This feature is currently unavailable.'), findsOneWidget);
-    await tester.tap(find.text('View routine'));
-    await tester.pumpAndSettle();
-    expect(find.byType(RoutineScreen), findsOneWidget);
+    expect(find.text('View routine'), findsNothing);
     expect(find.text('Squat'), findsOneWidget);
-    await tester.tap(find.text('Squat'));
-    await tester.pump();
-    expect(find.text('This feature is currently unavailable.'), findsOneWidget);
   });
 
   testWidgets('Firebase member Home displays its published routine',

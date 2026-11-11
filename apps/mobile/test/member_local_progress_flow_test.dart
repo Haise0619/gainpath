@@ -122,7 +122,7 @@ void main() {
       record(first.scope, 'first-camera'),
       record(first.scope, 'second-camera')
     ]);
-    await tester.tap(find.byTooltip('Refresh'));
+    await tester.tap(find.byTooltip('Refresh history'));
     await tester.pumpAndSettle();
     expect(
         tester

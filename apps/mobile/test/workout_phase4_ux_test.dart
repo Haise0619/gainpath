@@ -29,7 +29,7 @@ void main() {
     await tester.tap(find.text('View saved exercise session'));
     expect(opened, ['camera']);
     expect(
-        find.textContaining('not another completed workout'), findsOneWidget);
+        find.text('Saved on this device'), findsOneWidget);
   });
   testWidgets(
       'measured summary keeps primary action reachable at 320px and 200% text',

@@ -29,7 +29,8 @@ void main() {
     expect(workoutCount(2, 'set'), '2 sets');
     final ai = ExercisePresentation.forExercise(exercise(),
         organizationId: 'gainpath');
-    expect(ai.nextActionDescription, contains('Camera setup'));
+    expect(ai.nextActionDescription, contains('camera opens automatically'));
+    expect(ai.nextActionDescription, contains('tracking is ready'));
     expect(ai.restLabel, '30 sec rest between sets');
   });
   test('exact registered identity presents AI targets and available scope only',

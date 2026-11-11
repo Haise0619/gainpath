@@ -11,7 +11,6 @@ import 'package:gainpath_mobile/app/routing/real_squat_route.dart';
 import 'package:gainpath_mobile/features/workout/domain/published_routine_catalog_repository.dart';
 import 'package:gainpath_mobile/features/workout/domain/published_routine_view.dart';
 import 'package:gainpath_mobile/features/workout/presentation/member/workout_prep_screen.dart';
-import 'package:gainpath_mobile/features/workout/presentation/member/routine_screen.dart';
 import 'package:gainpath_mobile/app/routing/routine_journey_route.dart';
 import 'package:gainpath_mobile/features/analytics/data/local_member_progress_repository.dart';
 import 'package:gainpath_mobile/features/workout/data/workout_session_repository.dart';
@@ -149,17 +148,7 @@ void main() {
             .publishedRoutine!
             .title,
         'Updated B');
-    await tester.ensureVisible(find.text('View routine'));
-    await tester.tap(find.text('View routine'));
-    await tester.pumpAndSettle();
-    expect(
-        tester
-            .widget<RoutineScreen>(find.byType(RoutineScreen))
-            .publishedRoutine!
-            .id,
-        'b');
-    Navigator.of(tester.element(find.byType(RoutineScreen))).pop();
-    await tester.pumpAndSettle();
+    expect(find.text('View routine'), findsNothing);
     await tester.ensureVisible(find.text('Exercise b'));
     await tester.tap(find.text('Exercise b'));
     await tester.pumpAndSettle();

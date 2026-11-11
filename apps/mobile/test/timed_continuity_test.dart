@@ -137,7 +137,10 @@ void main() {
         await tester.pumpAndSettle();
         expect(outcome, GuidedTimedWorkoutOutcome.completed);
       }
-      if (failSave) expect(find.text('Paused'), findsOneWidget);
+      if (failSave) {
+        expect(find.text('Save failed'), findsOneWidget);
+        expect(find.text('Retry save'), findsOneWidget);
+      }
       await tester.pumpWidget(const SizedBox());
       await tester.runAsync(auth.close);
     });
