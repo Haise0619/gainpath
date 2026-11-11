@@ -113,6 +113,28 @@ void main() {
     await audio.close();
   });
 
+  test('first measured rep takes priority over the READY announcement',
+      () async {
+    controller.setVoiceMode(WorkoutVoiceMode.fullCoaching);
+    expect(
+        controller.announceTransition('tracking-ready-0', 'Ready.',
+            nowMicros: 10),
+        isTrue);
+    await flush();
+    expect(port.played.single.text, 'Ready.');
+    controller.consume(const [], nowMicros: 20, trackingAvailable: true,
+        events: const [
+          WorkoutFeedbackEvent(
+              id: 'first-rep',
+              cue: encouragement,
+              observedAtMicros: 20,
+              generatedAtMicros: 20),
+        ]);
+    await flush();
+    expect(port.played.last, encouragement);
+    expect(port.completions.first.isCompleted, isTrue);
+  });
+
   test('leaving rest cancels the coalesced rep boundary before TTS dispatch',
       () async {
     controller.setVoiceEnabled(true);

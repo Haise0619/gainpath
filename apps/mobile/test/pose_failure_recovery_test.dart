@@ -39,6 +39,41 @@ class FaultDetector implements ManagedPoseDetector {
 
 void main() {
   final scope = SessionScope(userId: 'fixture', organizationId: 'gainpath');
+  testWidgets('hung camera startup fails, then allows retry after cleanup',
+      (tester) async {
+    final opening = Completer<void>();
+    final camera = ExclusiveCamera()..opening = opening;
+    final controller = PosePreviewController(
+        scope: scope,
+        activeScope: () => scope,
+        camera: camera,
+        detectorFactory: () async => FaultDetector(),
+        clockMicros: () => 1,
+        startupTimeout: const Duration(milliseconds: 20));
+    final starting = controller.start(consented: true);
+    await tester.pump();
+    expect(camera.starts, 1);
+    final staleCallback = camera.receive!;
+    await tester.pump(const Duration(milliseconds: 21));
+    await starting;
+    expect(controller.phase, PosePreviewPhase.failure);
+    expect(controller.errorMessage, contains('startup timed out'));
+    await controller.resume();
+    expect(camera.starts, 1);
+    staleCallback(PoseInput(timestampMicros: 1));
+    expect(controller.receivedFrames, 0);
+    camera.opening = null;
+    opening.complete();
+    await tester.pump();
+    expect(camera.stops, 1);
+    expect(controller.phase, PosePreviewPhase.failure);
+    await controller.resume();
+    expect(camera.starts, 2);
+    expect(controller.phase, PosePreviewPhase.tracking);
+    await controller.close();
+    controller.dispose();
+  });
+
   testWidgets(
       'new route cannot acquire a physical camera until previous native retirement confirms',
       (tester) async {

@@ -13,12 +13,14 @@ class BetweenExerciseRestScreen extends StatelessWidget {
       required this.organizationId,
       required this.onViewRoutine,
       this.prescribed = false,
+      this.preparationOnly = false,
       this.canContinue = true});
   final BetweenExerciseRestController controller;
   final String previousExercise, organizationId;
   final PublishedRoutineExercise upcomingExercise;
   final VoidCallback onViewRoutine;
   final bool prescribed;
+  final bool preparationOnly;
   final bool canContinue;
   @override
   Widget build(BuildContext context) => ListenableBuilder(
@@ -73,7 +75,9 @@ class BetweenExerciseRestScreen extends StatelessWidget {
                                 ? 'Preparing next exercise'
                                 : controller.paused
                                     ? 'Workout paused'
-                                    : 'Take a breath',
+                                    : seconds <= 3
+                                        ? 'Next exercise starts in'
+                                        : 'Take a breath',
                         textAlign: TextAlign.center,
                         style: Theme.of(context).textTheme.titleLarge),
                     if (largeText) ...[
@@ -84,7 +88,7 @@ class BetweenExerciseRestScreen extends StatelessWidget {
                     ],
                     const SizedBox(height: 12),
                     Semantics(
-                        label: '$seconds seconds rest remaining',
+                        label: '$seconds seconds until the next exercise',
                         child: ExcludeSemantics(
                             child: FittedBox(
                                 fit: BoxFit.scaleDown,
@@ -95,7 +99,9 @@ class BetweenExerciseRestScreen extends StatelessWidget {
                                         fontWeight: FontWeight.w700,
                                         color: AppColors.primary))))),
                     Text(
-                        prescribed
+                        preparationOnly
+                            ? 'Get ready for the next exercise'
+                            : prescribed
                             ? 'Prescribed between-exercise rest'
                             : 'Suggested rest · Change in Workout Preferences',
                         textAlign: TextAlign.center),
@@ -104,11 +110,14 @@ class BetweenExerciseRestScreen extends StatelessWidget {
                         child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                          const Eyebrow('Up next'),
-                          const SizedBox(height: 8),
-                          Text(upcomingExercise.name,
-                              style: Theme.of(context).textTheme.headlineSmall),
-                          const SizedBox(height: 12),
+                          if (!largeText) ...[
+                            const Eyebrow('Up next'),
+                            const SizedBox(height: 8),
+                            Text(upcomingExercise.name,
+                                style:
+                                    Theme.of(context).textTheme.headlineSmall),
+                            const SizedBox(height: 12),
+                          ],
                           Wrap(
                               spacing: 8,
                               runSpacing: 8,
@@ -166,7 +175,9 @@ class BetweenExerciseRestScreen extends StatelessWidget {
                             onPressed: preparing || !canContinue
                                 ? null
                                 : () => controller.skip(),
-                            child: const Text('Skip Rest')),
+                            child: Text(preparationOnly
+                                ? 'Start next exercise now'
+                                : 'Skip Rest')),
                       ]))),
         );
       });

@@ -23,6 +23,45 @@ const _upcomingExercise = PublishedRoutineExercise(
 
 void main() {
   setUpAll(() => GoogleFonts.config.allowRuntimeFetching = false);
+  testWidgets('zero planned rest still counts down before automatic advance',
+      (tester) async {
+    var now = Duration.zero;
+    BetweenExerciseRestOutcome? outcome;
+    await tester.pumpWidget(MaterialApp(home: Builder(builder: (context) {
+      return Scaffold(
+          body: TextButton(
+              onPressed: () async {
+                outcome = await Navigator.push<BetweenExerciseRestOutcome>(
+                    context,
+                    MaterialPageRoute(
+                        builder: (_) => BetweenExerciseRestRoute(
+                            previousExercise: 'Squat',
+                            upcomingExercise: _upcomingExercise,
+                            organizationId: 'gainpath',
+                            restSeconds: 0,
+                            canAdvance: () => true,
+                            monotonicNow: () => now)));
+              },
+              child: const Text('Open transition')));
+    })));
+    await tester.tap(find.text('Open transition'));
+    await tester.pumpAndSettle();
+    expect(find.text('00:03'), findsOneWidget);
+    now = const Duration(seconds: 2);
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(find.text('00:01'), findsOneWidget);
+    expect(outcome, isNull);
+    await tester.tap(find.text('Pause Workout'));
+    now = const Duration(seconds: 10);
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(outcome, isNull);
+    await tester.tap(find.text('Resume Workout'));
+    now += const Duration(seconds: 1);
+    await tester.pump(const Duration(milliseconds: 100));
+    await tester.pumpAndSettle();
+    expect(outcome, BetweenExerciseRestOutcome.advance);
+  });
+
   for (final interruption in ['pause', 'background', 'authorization']) {
     testWidgets('next exercise voice stops immediately on $interruption',
         (tester) async {

@@ -12,6 +12,50 @@ import 'package:gainpath_domain/workout.dart';
 import 'guided_timed_workout_controller_test.dart' show Player;
 
 void main() {
+  testWidgets('Retry save preserves a partial timer without restarting video',
+      (tester) async {
+    final player = Player();
+    final epoch = DateTime.utc(2026, 11, 11);
+    var fail = true;
+    final c = GuidedTimedWorkoutController(
+        progress: GuidedTimedProgress(
+            runId: 'r',
+            entryId: 'e',
+            entryIndex: 0,
+            exerciseId: 'x',
+            prescription: const TimedPrescription(
+                sets: 1, durationSeconds: 45, restSeconds: 0),
+            mediaIdentity: 'v',
+            updatedAt: epoch),
+        player: player,
+        activeScope: () => true,
+        monotonicNow: () => Duration.zero,
+        utcNow: () => epoch,
+        persist: (_) async {
+          if (fail) throw StateError('disk unavailable');
+        });
+    await c.initialize();
+    await tester.pumpWidget(MaterialApp(
+        home: GuidedTimedWorkoutScreen(
+            controller: c,
+            exerciseName: 'Stretch',
+            onBack: () async {},
+            onSkip: () async {},
+            onCompleted: () {})));
+    await tester.tap(find.text('Start Timed Workout'));
+    await tester.pumpAndSettle();
+    expect(find.text('Retry save'), findsOneWidget);
+    expect(player.playing, isFalse);
+    fail = false;
+    await tester.tap(find.text('Retry save'));
+    await tester.pumpAndSettle();
+    expect(find.text('Resume'), findsOneWidget);
+    expect(player.playing, isFalse);
+    expect(c.progress.completedSets, 0);
+    await tester.pumpWidget(const SizedBox());
+    c.dispose();
+  });
+
   testWidgets('timed controls remain visible on a small screen with large text',
       (tester) async {
     tester.view.physicalSize = const Size(360, 640);

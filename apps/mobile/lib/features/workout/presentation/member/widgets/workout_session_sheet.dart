@@ -251,7 +251,9 @@ class _WorkoutSessionSheetState extends State<WorkoutSessionSheet> {
       (_, _, _, _, _, true) => 'Next set',
       _ => 'Pause',
     };
-    final primaryEnabled = (active || retry) && !saving && !c.isRecalibrating;
+    final primaryEnabled = (active || retry) &&
+        !saving &&
+        (!c.isRecalibrating || c.preview.phase == PosePreviewPhase.failure);
     final safe = MediaQuery.paddingOf(context);
     final stacked = WorkoutSessionSheet._stackControls(context, width);
     final metric = Column(

@@ -55,6 +55,10 @@ class _GuidedTimedWorkoutScreenState extends State<GuidedTimedWorkoutScreen> {
         final paused = phase == GuidedTimedPhase.paused ||
             phase == GuidedTimedPhase.interrupted;
         final resting = phase == GuidedTimedPhase.resting;
+        final retrySave = c.interruptionReason == 'save failed';
+        final retryVideo = !c.player.ready ||
+            c.player.error != null ||
+            c.interruptionReason == 'playback failed';
         final showRest =
             resting || paused && p.phaseBeforePause == GuidedTimedPhase.resting;
         final phaseLabel = switch (phase) {
@@ -62,6 +66,9 @@ class _GuidedTimedWorkoutScreenState extends State<GuidedTimedWorkoutScreen> {
           GuidedTimedPhase.ready => 'Ready when you are',
           GuidedTimedPhase.working => 'Working',
           GuidedTimedPhase.resting => 'Rest',
+          GuidedTimedPhase.interrupted when retrySave => 'Save failed',
+          GuidedTimedPhase.interrupted when retryVideo => 'Video unavailable',
+          GuidedTimedPhase.interrupted when c.player.buffering => 'Buffering',
           GuidedTimedPhase.paused || GuidedTimedPhase.interrupted => 'Paused',
           GuidedTimedPhase.saving => 'Saving progress',
           GuidedTimedPhase.completed => 'Timer completed',
@@ -86,13 +93,18 @@ class _GuidedTimedWorkoutScreenState extends State<GuidedTimedWorkoutScreen> {
                 () => c.startNextSet(skipRest: p.remainingRestMicroseconds > 0);
           }
         } else if (paused) {
-          final retryVideo = !c.player.ready || c.player.error != null;
-          primaryLabel = retryVideo
+          primaryLabel = retrySave
+              ? 'Retry save'
+              : retryVideo
               ? 'Retry video'
               : p.completed
                   ? 'Retry save'
                   : 'Resume';
-          primary = retryVideo ? c.initialize : c.resume;
+          primary = retrySave
+              ? c.retryProgressSave
+              : retryVideo
+                  ? c.initialize
+                  : c.resume;
         } else if (complete) {
           primaryLabel = 'Return to routine';
           primary = () async => widget.onCompleted();

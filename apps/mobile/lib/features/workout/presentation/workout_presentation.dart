@@ -6,6 +6,11 @@ import '../domain/routine_attempt.dart';
 
 enum WorkoutExerciseMode { aiTracked, videoTimed, manual, unavailable }
 
+String routineDayTitle(PublishedRoutine routine, int day) =>
+    routine.exercises.any((exercise) => exercise.dayNumber != day)
+        ? '${routine.title} · Day $day'
+        : routine.title;
+
 String workoutCount(int count, String noun) =>
     '$count $noun${count == 1 ? '' : 's'}';
 String workoutRepetitionTarget(int sets, int reps, {String qualifier = ''}) =>
@@ -112,7 +117,7 @@ class ExercisePresentation {
 
   String get nextActionDescription => switch (mode) {
         WorkoutExerciseMode.aiTracked =>
-          'Camera setup opens after rest. Counting begins only after permission, setup and readiness checks.',
+          'The camera opens automatically after rest. Reps count once tracking is ready.',
         WorkoutExerciseMode.videoTimed =>
           'The next video prepares after rest. Active time starts only when playback is ready.',
         WorkoutExerciseMode.manual =>

@@ -75,14 +75,16 @@ class RoutineNextExerciseSheet extends StatelessWidget {
               Text(exercise.durationSeconds != null
                   ? 'Start the video-guided timer when ready. No camera is required.'
                   : hasTracking
-                      ? 'Take a moment to get ready. Tracking starts after your camera setup confirmation.'
-                      : 'Follow the tutorial, then mark sets as done on the routine page. Completion is self-reported.'),
+                      ? 'Open the camera when you are ready. Reps count after calibration.'
+                      : 'Open the set logger and mark each completed set yourself.'),
               const SizedBox(height: 20),
               FilledButton.icon(
                   onPressed: () =>
                       Navigator.pop(context, RoutineNextAction.start),
                   icon: const Icon(Icons.arrow_forward_rounded),
-                  label: const Text('Start next exercise')),
+                  label: Text(exercise.durationSeconds != null || hasTracking
+                      ? 'Start next exercise'
+                      : 'Open set logger')),
               OutlinedButton.icon(
                   onPressed: () =>
                       Navigator.pop(context, RoutineNextAction.tutorial),

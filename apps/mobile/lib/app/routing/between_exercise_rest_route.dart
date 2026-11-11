@@ -24,6 +24,7 @@ class BetweenExerciseRestRoute extends StatefulWidget {
       required this.organizationId,
       required this.restSeconds,
       required this.canAdvance,
+      this.monotonicNow,
       this.voice,
       this.prescribed = false});
   final String previousExercise, organizationId;
@@ -31,6 +32,7 @@ class BetweenExerciseRestRoute extends StatefulWidget {
   final int restSeconds;
   final bool prescribed;
   final bool Function() canAdvance;
+  final Duration Function()? monotonicNow;
   final BetweenExerciseRestVoice? voice;
   @override
   State<BetweenExerciseRestRoute> createState() =>
@@ -62,8 +64,8 @@ class _BetweenExerciseRestRouteState extends State<BetweenExerciseRestRoute>
     _foreground = lifecycle == null || lifecycle == AppLifecycleState.resumed;
     WidgetsBinding.instance.addObserver(this);
     _controller = BetweenExerciseRestController(
-        duration: Duration(seconds: widget.restSeconds.clamp(0, 3600)),
-        monotonicNow: () => _clock.elapsed,
+        duration: Duration(seconds: widget.restSeconds.clamp(3, 3600)),
+        monotonicNow: widget.monotonicNow ?? () => _clock.elapsed,
         canAdvance: () => _allowed,
         onReady: () async {
           if (_allowed) _return(BetweenExerciseRestOutcome.advance);
@@ -183,6 +185,7 @@ class _BetweenExerciseRestRouteState extends State<BetweenExerciseRestRoute>
           upcomingExercise: widget.upcomingExercise,
           organizationId: widget.organizationId,
           prescribed: widget.prescribed,
+          preparationOnly: widget.restSeconds < 3,
           canContinue: _contextValid,
           onViewRoutine: () =>
               _return(BetweenExerciseRestOutcome.returnToRoutine)));

@@ -109,12 +109,12 @@ class WorkoutAudioController {
 
   /// One short, fresh transition. Busy playback and Alerts Only suppress it
   /// rather than queueing an announcement that could become obsolete.
-  void announceTransition(String id, String text, {required int nowMicros}) {
+  bool announceTransition(String id, String text, {required int nowMicros}) {
     if (!_canPlay ||
         _voiceMode != WorkoutVoiceMode.fullCoaching ||
         _activeCue != null ||
         nowMicros < (_lastInputMicros ?? 0)) {
-      return;
+      return false;
     }
     final previousOutcome = _recentOutcome;
     _consume(const [],
@@ -132,6 +132,7 @@ class WorkoutAudioController {
         ],
         arbiter: _boundaryArbiter);
     _recentOutcome = previousOutcome;
+    return _activeEvent?.id == 'transition-$id';
   }
 
   void cancelTransition() {
@@ -293,6 +294,10 @@ class WorkoutAudioController {
     final diagnosticRequests = <String, String>{
       for (final event in eventByCue.values) event.cue.id: event.id,
     };
+    if (_activeEvent?.id.startsWith('transition-tracking-ready-') == true &&
+        eventByCue.values.any((event) => !event.id.startsWith('transition-'))) {
+      _cancel(reason: 'measured_feedback_supersedes_ready');
+    }
     final diagnosticDrops = <String>{};
     if (trace != null) {
       for (final cue in batch) {

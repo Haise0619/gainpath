@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gainpath_domain/gainpath_domain.dart' show SessionScope;
@@ -6,6 +8,7 @@ import 'package:gainpath_mobile/features/workout/application/measured_workout_se
 import 'package:gainpath_mobile/features/workout/application/pose_preview_controller.dart';
 import 'package:gainpath_mobile/features/workout/application/real_squat_session_controller.dart';
 import 'package:gainpath_mobile/features/workout/data/workout_session_repository.dart';
+import 'package:gainpath_mobile/features/workout/domain/workout_audio_port.dart';
 import 'package:gainpath_mobile/features/workout/presentation/member/real_workout_view.dart';
 import 'package:gainpath_pose/gainpath_pose.dart';
 
@@ -15,6 +18,16 @@ import 'workout_voice_readiness_test.dart' show RetryAudio;
 final _scope = SessionScope(userId: 'member', organizationId: 'gainpath');
 const _cameraKey = ValueKey('live-camera');
 const _counterKey = ValueKey('workout-rep-counter');
+
+class _SlowClosingCamera extends Camera {
+  final released = Completer<void>();
+
+  @override
+  Future<void> stop() async {
+    await super.stop();
+    await released.future;
+  }
+}
 
 class _SquatFixture extends RealSquatSessionController {
   _SquatFixture(Camera camera, Detector detector, RetryAudio audio)
@@ -95,6 +108,66 @@ Future<void> _mount(WidgetTester tester, _SquatFixture session, Size size,
 }
 
 void main() {
+  testWidgets('calibrated live Squat announces Ready once in Full Coaching',
+      (tester) async {
+    final audio = RetryAudio()..ready.complete(true);
+    final session = _SquatFixture(Camera(), Detector(), audio);
+    await _mount(tester, session, const Size(360, 720), 1, EdgeInsets.zero);
+    session.setVoiceMode(WorkoutVoiceMode.fullCoaching, persist: false);
+    await tester.pump();
+    expect(audio.played, isEmpty);
+    session.update();
+    await tester.pump();
+    expect(audio.played.map((cue) => cue.text), ['Ready.']);
+    session.update();
+    await tester.pump();
+    expect(audio.played, hasLength(1));
+    await tester.pumpWidget(const SizedBox());
+    await session.close();
+    session.dispose();
+  });
+
+  for (final control in ['Back', 'Stop', 'System back']) {
+    testWidgets('$control can leave Squat while unavailable camera closes',
+        (tester) async {
+      final camera = _SlowClosingCamera();
+      final session = _SquatFixture(camera, Detector(), RetryAudio());
+      await session.start(consented: true, setupConfirmed: true);
+      session.cameraPhase(PosePreviewPhase.failure);
+      await tester.pumpWidget(MaterialApp(
+          home: Builder(builder: (context) {
+        return Scaffold(
+            body: TextButton(
+                onPressed: () => Navigator.of(context).push<void>(
+                    MaterialPageRoute(
+                        builder: (_) => RealWorkoutView(
+                            session: session,
+                            viewport: const SizedBox(),
+                            exerciseName: 'Squat',
+                            targetRepetitions: 8))),
+                child: const Text('Open Squat')));
+      })));
+      await tester.tap(find.text('Open Squat'));
+      await tester.pumpAndSettle();
+      expect(find.text('CAMERA UNAVAILABLE'), findsOneWidget);
+      if (control == 'System back') {
+        await tester.binding.handlePopRoute();
+      } else {
+        await tester.tap(
+            control == 'Back' ? find.byTooltip(control) : find.text(control));
+      }
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Leave exercise'));
+      await tester.pumpAndSettle();
+      expect(find.text('Open Squat'), findsOneWidget);
+      expect(camera.released.isCompleted, isFalse);
+      expect(session.viewPhase, MeasuredWorkoutPhase.closed);
+      camera.released.complete();
+      await tester.pump();
+      session.dispose();
+    });
+  }
+
   testWidgets('rest time and manual controls fit 320px at 200% text',
       (tester) async {
     final session = _SquatFixture(Camera(), Detector(), RetryAudio());

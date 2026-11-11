@@ -70,6 +70,7 @@ class RoutineJourneyRoute extends StatefulWidget {
       this.programStoreFactory,
       this.voicePreferencesFactory = createWorkoutVoicePreferences,
       this.timedPlayerFactory = VideoTutorialPlayer.new,
+      this.restClock,
       this.measuredBuilder,
       this.action = RoutineJourneyAction.view});
   final SessionScope scope;
@@ -90,6 +91,7 @@ class RoutineJourneyRoute extends StatefulWidget {
   final Future<WorkoutVoicePreferences> Function(SessionScope)
       voicePreferencesFactory;
   final TutorialPlayerFactory timedPlayerFactory;
+  final Duration Function()? restClock;
   final Widget Function(RealWorkoutLaunch)? measuredBuilder;
   @override
   State<RoutineJourneyRoute> createState() => _RoutineJourneyRouteState();
@@ -305,16 +307,20 @@ class _RoutineJourneyRouteState extends State<RoutineJourneyRoute>
     final tracker = c.trackingFor(index).tracker;
     final consented = await showWorkoutCaptureConsent(context,
         preferences: _preferences,
-        // These trackers provide their own positioning or limb setup before capture.
-        requireSetup: !(automatic &&
-            {
+        // Retained trackers guide positioning in the live camera view.
+        requireSetup: !const {
+              ExerciseTracker.sideViewSquat,
+              ExerciseTracker.sideViewFloorPushUp,
+              ExerciseTracker.sideViewCurl,
+              ExerciseTracker.sideViewCalfRaise,
               ExerciseTracker.frontViewLateralRaise,
               ExerciseTracker.frontViewShoulderPress,
-              ExerciseTracker.sideViewCurl,
-              ExerciseTracker.sideViewRow,
-              ExerciseTracker.sideViewReverseLunge,
-              ExerciseTracker.sideViewCalfRaise,
-            }.contains(tracker)),
+            }.contains(tracker) &&
+            !(automatic &&
+                const {
+                  ExerciseTracker.sideViewRow,
+                  ExerciseTracker.sideViewReverseLunge,
+                }.contains(tracker)),
         allowUpload: tracker == ExerciseTracker.sideViewSquat,
         exerciseInstruction: switch (tracker) {
           ExerciseTracker.frontViewLateralRaise =>
@@ -407,6 +413,7 @@ class _RoutineJourneyRouteState extends State<RoutineJourneyRoute>
 
   Future<void> _nextExercise(int previousIndex) async {
     final auth = context.read<AuthBloc>(), c = _controller!;
+    final launchEpoch = _interruptionEpoch;
     final previousExercise = widget.routine.exercises[previousIndex].name;
     if (!mounted ||
         !_foreground ||
@@ -462,6 +469,7 @@ class _RoutineJourneyRouteState extends State<RoutineJourneyRoute>
                   organizationId: widget.scope.organizationId,
                   restSeconds: widget.routine.betweenExerciseRestSeconds ??
                       preferences.suggestedRestSeconds,
+                  monotonicNow: widget.restClock,
                   prescribed: widget.routine.betweenExerciseRestSeconds != null,
                   voice: voice,
                   canAdvance: () =>
@@ -505,11 +513,19 @@ class _RoutineJourneyRouteState extends State<RoutineJourneyRoute>
                       child: Padding(
                           padding: EdgeInsets.all(24),
                           child: Text('Sign in to continue this routine.')))));
-      if (!mounted || !_authorized(auth) || action == null) return;
+      if (!mounted ||
+          !_foreground ||
+          launchEpoch != _interruptionEpoch ||
+          !_authorized(auth) ||
+          action == null) {
+        return;
+      }
       if (action == RoutineNextAction.tutorial) {
         await _tutorial(index);
       } else {
-        await _trackOnce(index);
+        if (c.isTimed(index) || c.supportsTracking(index)) {
+          await _trackOnce(index);
+        }
         return;
       }
     }

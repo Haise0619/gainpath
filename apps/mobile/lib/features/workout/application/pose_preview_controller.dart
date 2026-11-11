@@ -33,6 +33,7 @@ class PosePreviewController extends ChangeNotifier {
       this.onGeometryInvalidated,
       this.performance,
       this.cleanupTimeout = const Duration(seconds: 10),
+      this.startupTimeout = const Duration(seconds: 15),
       bool responsivePreview = const bool.fromEnvironment(
           'GAINPATH_RESPONSIVE_SKELETON',
           defaultValue: true),
@@ -46,6 +47,7 @@ class PosePreviewController extends ChangeNotifier {
   final PoseQualityDiagnostics quality;
   final RealSquatPerformance? performance;
   final Duration cleanupTimeout;
+  final Duration startupTimeout;
   Future<void>? _retirement;
   bool _cleanupFailed = false;
   static final _captureOwners = <Object, PosePreviewController>{};
@@ -251,6 +253,7 @@ class PosePreviewController extends ChangeNotifier {
     quality.transition('lifecycle_opening');
     _notify();
     await _enqueue(() async {
+      var openingCamera = false;
       try {
         if (!_active || revision != _revision) return;
         if (_detector == null) {
@@ -355,6 +358,7 @@ class PosePreviewController extends ChangeNotifier {
         _filter.reset();
         _geometry = null;
         _scheduler!.resume();
+        openingCamera = true;
         await camera.start((input) {
           if (!_active || revision != _revision || _background) return;
           final image = input.image;
@@ -432,10 +436,24 @@ class PosePreviewController extends ChangeNotifier {
           phase = PosePreviewPhase.failure;
           errorMessage = error is PoseCameraPermissionDenied
               ? 'Camera permission is denied. Enable it in Android settings to try again.'
-              : 'Camera or pose model unavailable. Retry the preview.';
+              : openingCamera
+                  ? 'Camera unavailable. Close other apps using the camera and retry.'
+                  : 'The pose model could not load. Retry or return to your routine.';
           _notify();
         }
       }
+    }).timeout(startupTimeout, onTimeout: () {
+      if (!_active || revision != _revision) return;
+      ++_revision;
+      _scheduler?.suspend();
+      camera.invalidate();
+      phase = PosePreviewPhase.failure;
+      errorMessage = 'Camera startup timed out. Retry when the camera is released.';
+      quality.transition('camera_startup_timeout');
+      // Keep the native operation and cleanup serialized. Late startup must
+      // finish before either this session or another route can use the camera.
+      unawaited(_boundedCleanup(_enqueue(camera.stop)));
+      _notify();
     });
   }
 

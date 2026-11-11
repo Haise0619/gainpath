@@ -44,6 +44,7 @@ class RealWorkoutView extends StatefulWidget {
 class _RealWorkoutViewState extends State<RealWorkoutView> {
   bool _ending = false, _leaving = false;
   bool _completionScheduled = false;
+  int? _announcedReadySet;
   final _sheetController = DraggableScrollableController();
   WorkoutPreferencesController? _preferences;
 
@@ -97,6 +98,7 @@ class _RealWorkoutViewState extends State<RealWorkoutView> {
   void didUpdateWidget(covariant RealWorkoutView oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.session != widget.session) {
+      _announcedReadySet = null;
       oldWidget.session.removeListener(_sessionChanged);
       _continuationFor(oldWidget.session)?.cancel();
       widget.session.addListener(_sessionChanged);
@@ -107,6 +109,31 @@ class _RealWorkoutViewState extends State<RealWorkoutView> {
   }
 
   void _sessionChanged() {
+    final session = widget.session;
+    final flow = session.guidance;
+    final analysis = session.analysis;
+    final set = flow?.completedSets ?? 0;
+    if (_announcedReadySet != set &&
+        !_ending &&
+        !_leaving &&
+        session is WorkoutVoiceSession &&
+        session.voiceMode == WorkoutVoiceMode.fullCoaching &&
+        session.viewPhase == MeasuredWorkoutPhase.active &&
+        session.preview.phase == PosePreviewPhase.tracking &&
+        !session.isPaused &&
+        !session.isRecalibrating &&
+        (flow == null || flow.stage == GuidedWorkoutStage.working) &&
+        session.analysisAvailable &&
+        analysis != null &&
+        !analysis.needsCalibration &&
+        analysis.health == TrackingStatus.healthy &&
+        (flow?.setRepetitions ?? analysis.repetitions) == 0) {
+      final announced = (session as WorkoutVoiceSession)
+          .voiceFeedback
+          .announceTransition('tracking-ready-$set', 'Ready.',
+              nowMicros: session.preview.clockMicros());
+      if (announced) _announcedReadySet = set;
+    }
     if (widget.routineContext == null ||
         _completionScheduled ||
         _ending ||
@@ -139,6 +166,14 @@ class _RealWorkoutViewState extends State<RealWorkoutView> {
 
   Future<void> _end({bool automatic = false}) async {
     if (_ending || _leaving) return;
+    final session = widget.session;
+    if (!automatic &&
+        session.viewPhase == MeasuredWorkoutPhase.active &&
+        session.analysis == null &&
+        session.preview.receivedFrames == 0) {
+      await _discard(noCapture: true);
+      return;
+    }
     _ending = true;
     try {
       final c = widget.session;
@@ -168,6 +203,15 @@ class _RealWorkoutViewState extends State<RealWorkoutView> {
         }
       }
       final result = await c.endAndSave();
+      if (!automatic &&
+          mounted &&
+          result == null &&
+          c.viewPhase == MeasuredWorkoutPhase.active &&
+          c.preview.phase == PosePreviewPhase.failure) {
+        _ending = false;
+        await _discard();
+        return;
+      }
       if (!mounted ||
           result == null ||
           c.viewPhase != MeasuredWorkoutPhase.saved) {
@@ -195,18 +239,21 @@ class _RealWorkoutViewState extends State<RealWorkoutView> {
     }
   }
 
-  Future<void> _discard() async {
+  Future<void> _discard({bool noCapture = false}) async {
     if (_ending || _leaving) return;
     _ending = true;
     try {
       final yes = await confirmSheet(context,
-          title: 'Discard this session?',
-          message: 'This unsaved result will be lost.',
-          confirmLabel: 'Discard');
+          title: noCapture ? 'Leave this exercise?' : 'Discard this session?',
+          message: noCapture
+              ? 'Leave without saving. You can try this exercise again.'
+              : 'This unsaved result will be lost.',
+          confirmLabel: noCapture ? 'Leave exercise' : 'Discard');
       if (!mounted || !yes) return;
-      await widget.session.close();
-      if (!mounted) return;
       setState(() => _leaving = true);
+      // Close invalidates capture immediately. Native cleanup keeps its own
+      // camera lease and can finish after the screen has been dismissed.
+      unawaited(widget.session.close().catchError((Object _) {}));
       Navigator.pop(context);
     } finally {
       _ending = false;

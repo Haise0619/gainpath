@@ -282,6 +282,7 @@ void main() {
           exercises: [base.exercises.first, next]);
       final launches = <RealWorkoutLaunch>[];
       final player = Player();
+      var restElapsed = Duration.zero;
       await tester.pumpWidget(BlocProvider.value(
           value: auth,
           child: MaterialApp(
@@ -296,6 +297,8 @@ void main() {
                     return _FullCoachingVoicePreferences();
                   },
                   timedPlayerFactory: (_) => player,
+                  startFirstExercise: nextFloor,
+                  restClock: () => restElapsed,
                   measuredBuilder: (launch) {
                     if (!launches
                         .any((item) => item.sessionId == launch.sessionId)) {
@@ -329,15 +332,12 @@ void main() {
                   }))));
       await tester.pumpAndSettle();
       final id = store.records.keys.single;
-      await tester.tap(find.text('Start AI Workout'));
-      // The active journey owns an intentional busy spinner behind the modal.
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 400));
+      if (!nextFloor) {
+        await tester.tap(find.text('Start AI Workout'));
+        await tester.pumpAndSettle();
+      }
       expect(find.text('AI Tracking privacy'), findsNothing);
-      await tester.tap(find.byType(Checkbox).first);
-      await tester.pump();
-      await tester.tap(find.text('Ready to continue'));
-      await tester.pumpAndSettle();
+      expect(find.text('Ready to continue'), findsNothing);
       expect(launches.length, 1);
       await tester.tap(find.text('Persist measured fixture'));
       await tester.pumpAndSettle();
@@ -355,17 +355,23 @@ void main() {
         expect(calls.where((call) => call.method == 'stop'), isNotEmpty);
         expect(find.text('Skip Rest'), findsOneWidget);
       }
-      await tester.tap(find.text('Skip Rest'));
       if (nextFloor) {
+        restElapsed = const Duration(seconds: 3);
+        await tester.pump(const Duration(milliseconds: 100));
+        expect(launches, hasLength(1));
+        restElapsed = const Duration(seconds: 4);
+        await tester.pump(const Duration(milliseconds: 100));
+      } else {
+        await tester.tap(find.text('Skip Rest'));
+      }
+      if (nextMode == 'lateral raise') {
+        // The real route opens immediately and renders a loading indicator
+        // while its platform storage is unavailable in the widget fixture.
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 400));
-        expect(launches.length, 1);
-        expect(find.text('Ready to continue'), findsOneWidget);
-        await tester.tap(find.byType(Checkbox).first);
-        await tester.pump();
-        await tester.tap(find.text('Ready to continue'));
+      } else {
+        await tester.pumpAndSettle();
       }
-      await tester.pumpAndSettle();
       expect(store.records.keys.single, id);
       expect(store.records.values.single.selectedIndex, 1);
       expect(find.text('AI Tracking privacy'), findsNothing);
@@ -384,7 +390,8 @@ void main() {
         expect(launches.last.routineContext!.day, 1);
         expect(launches.last.consentCurrent!(), isTrue);
         if (nextMode == 'lateral raise') {
-          expect(find.byType(LateralRaiseSetupScreen), findsOneWidget);
+          expect(find.byType(ExerciseTrackerRoute), findsOneWidget);
+          expect(find.byType(LateralRaiseSetupScreen), findsNothing);
           expect(find.text('Ready to continue'), findsNothing);
         }
       }
@@ -444,11 +451,12 @@ void main() {
     await openRoutine(tester, auth, store, preferences, workouts);
     await tester.tap(find.text('Mark set 1 done'));
     await tester.pumpAndSettle();
-    expect(find.text('Start next exercise'), findsOneWidget);
+    expect(find.text('Open set logger'), findsOneWidget);
     expect(find.text('Skip Rest'), findsNothing);
     expect(store.records.values.single.manualSets, {0: 1});
-    await tester.tap(find.text('Back to routine'));
+    await tester.tap(find.text('Open set logger'));
     await tester.pumpAndSettle();
+    expect(find.text('Mark set 1 done'), findsOneWidget);
     expect(store.records.values.single.manualSets, {0: 1});
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox());

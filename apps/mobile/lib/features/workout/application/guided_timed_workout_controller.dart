@@ -102,9 +102,12 @@ class GuidedTimedWorkoutController extends ChangeNotifier {
       _blocked = true;
       interruptionReason = 'save failed';
       _set(_progress.copyWith(
-          phaseBeforePause: _progress.phase == GuidedTimedPhase.saving
-              ? GuidedTimedPhase.completed
-              : _progress.phase,
+          phaseBeforePause: switch (_progress.phase) {
+            GuidedTimedPhase.saving => GuidedTimedPhase.completed,
+            GuidedTimedPhase.paused || GuidedTimedPhase.interrupted =>
+              _progress.phaseBeforePause,
+            final phase => phase,
+          },
           phase: GuidedTimedPhase.interrupted,
           updatedAt: _utc()));
       await player.pause();
@@ -195,6 +198,23 @@ class GuidedTimedWorkoutController extends ChangeNotifier {
         await _play(prior == GuidedTimedPhase.resting
             ? prior
             : GuidedTimedPhase.working);
+      });
+
+  Future<void> retryProgressSave() => _serial(() async {
+        if (interruptionReason != 'save failed') return;
+        final retry = _progress.copyWith(
+            phase: _progress.completed
+                ? GuidedTimedPhase.completed
+                : GuidedTimedPhase.paused,
+            updatedAt: _utc());
+        await persist(retry);
+        if (!_valid) {
+          _revoke();
+          return;
+        }
+        _lastSavedActive = retry.totalActiveMicroseconds;
+        interruptionReason = null;
+        _set(retry);
       });
   Future<void> tick() => _serial(_tick);
   Future<void> _tick() async {
