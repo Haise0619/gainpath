@@ -264,7 +264,9 @@ class _MemberShellState extends State<MemberShell> {
               open == null ? null : () => open(MemberProgressView.routines),
           onOpenRoutine: refresh == null
               ? null
-              : (a) => openRoutineAttempt(context, a, refresh),
+              : (a) => openRoutineAttempt(context, a, refresh,
+                  sessionRecords: progress?.progress?.records ?? const [],
+                  onOpenSession: openWorkout),
           progressError: progress?.error,
           progressWarnings: progress?.snapshot?.warnings ?? const [],
           onRefreshProgress: refresh,
@@ -342,6 +344,7 @@ class _MemberShellState extends State<MemberShell> {
           onStartWorkout: () => setState(() => _index = 1)),
       WorkoutPrepRoute(
         live: connected,
+        equipmentReaderFactory: widget.equipmentReaderFactory,
         programStoreFactory:
             widget.programStoreFactory ?? createProgramEnrollmentStore,
         routineStoreFactory:

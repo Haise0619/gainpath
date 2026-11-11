@@ -50,7 +50,6 @@ class _CalfRaiseWorkoutRouteState extends State<CalfRaiseWorkoutRoute>
   @override
   void initState() {
     super.initState();
-    _setupConfirmed = widget.launch.routineContext != null;
     _baseline?.report(force: true);
     _foreground = WidgetsBinding.instance.lifecycleState == null ||
         WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed;

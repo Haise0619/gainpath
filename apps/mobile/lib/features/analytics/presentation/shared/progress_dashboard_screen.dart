@@ -41,6 +41,7 @@ class ProgressDashboardScreen extends StatefulWidget {
       this.onOpenGoals,
       this.programProgress,
       this.onStartWorkout,
+      this.startWorkoutLabel = 'Start workout',
       this.goalSummary,
       this.programSummaryBuilder,
       this.programStatsBuilder});
@@ -59,6 +60,7 @@ class ProgressDashboardScreen extends StatefulWidget {
   final VoidCallback? onOpenPoints;
   final Widget? programProgress;
   final VoidCallback? onStartWorkout;
+  final String startWorkoutLabel;
   final Widget? goalSummary;
   final Widget Function(Widget Function(BuildContext, int?))?
       programSummaryBuilder;
@@ -130,6 +132,7 @@ class _ProgressDashboardScreenState extends State<ProgressDashboardScreen>
                 programStatsBuilder: widget.programStatsBuilder,
                 goals: widget.goalSummary,
                 onStart: widget.onStartWorkout,
+                startLabel: widget.startWorkoutLabel,
                 onHistory: widget.onOpenHistory,
                 onReports: widget.onOpenReport,
                 onPerformance: widget.onOpenPerformance,
@@ -333,9 +336,10 @@ class _ProgressDashboardScreenState extends State<ProgressDashboardScreen>
                 onOpenAttempt: widget.onOpenRoutine),
             const SizedBox(height: 16),
           ],
-          const Eyebrow('Deep dives'),
+          const Eyebrow('Workout trends'),
           _reveal(
             Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 ReportPreviewTile(
                   icon: Icons.bar_chart_rounded,
@@ -374,8 +378,11 @@ class _ProgressDashboardScreenState extends State<ProgressDashboardScreen>
                 const SizedBox(height: 10),
                 ReportPreviewTile(
                   icon: Icons.history_rounded,
-                  title: 'Activity timeline',
-                  subtitle: 'Everything you have logged',
+                  title:
+                      local == null ? 'Activity timeline' : 'Exercise history',
+                  subtitle: local == null
+                      ? 'Everything you have logged'
+                      : 'Find individual saved exercise results',
                   sparkData: local == null
                       ? context
                           .read<AnalyticsRepository>()
@@ -386,7 +393,8 @@ class _ProgressDashboardScreenState extends State<ProgressDashboardScreen>
                   sparkColor: AppColors.primarySoft,
                   onTap: openHistory,
                 ),
-                const SizedBox(height: 10),
+                const SizedBox(height: 20),
+                const Eyebrow('Goals & wellbeing'),
                 ReportPreviewTile(
                   icon: Icons.flag_rounded,
                   title: 'Goal progress',
@@ -449,6 +457,8 @@ class _ProgressDashboardScreenState extends State<ProgressDashboardScreen>
           ),
           if (local != null) ...[
             const SizedBox(height: 16),
+            if (widget.onOpenReport != null || widget.onOpenBackup != null)
+              const Eyebrow('Reports & backup'),
             if (widget.onOpenReport != null)
               FilledButton.icon(
                   onPressed: widget.onOpenReport,

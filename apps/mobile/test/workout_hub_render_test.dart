@@ -14,6 +14,7 @@ void main() {
   for (final variant in [
     (name: '', size: const Size(390, 844), scale: 1.0, dark: false),
     (name: 'large-', size: const Size(320, 640), scale: 2.0, dark: false),
+    (name: 'large390-', size: const Size(390, 844), scale: 2.0, dark: false),
     (name: 'dark-', size: const Size(390, 844), scale: 1.0, dark: true),
   ]) {
     testWidgets('render workout hub preview ${variant.name}', (tester) async {
@@ -94,6 +95,10 @@ void main() {
                   publishedRoutine: routine,
                   onOpenPrograms: () {},
                   onOpenEquipment: () {},
+                  onBrowseEquipment: () {},
+                  onOpenProgress: () {},
+                  onOpenRoutineHistory: () {},
+                  onOpenSettings: () {},
                   routineCatalogControls: PublishedRoutineCatalogControls(
                       state: PublishedRoutineCatalogState(
                           status: CatalogStatus.ready,
@@ -139,7 +144,7 @@ void main() {
       await tester.drag(find.byType(CustomScrollView), const Offset(0, -170));
       await tester.pumpAndSettle();
       await capture('middle');
-      await tester.scrollUntilVisible(find.text('Saved sessions'), 400,
+      await tester.scrollUntilVisible(find.text('Browse equipment'), 400,
           scrollable: find.byType(Scrollable).first);
       await tester.pumpAndSettle();
       await capture('bottom');

@@ -42,6 +42,41 @@ RoutineAttempt attempt({bool complete = true}) {
 
 void main() {
   setUpAll(() => GoogleFonts.config.allowRuntimeFetching = false);
+  testWidgets('history filters attempts and omits Day 1 for single-day plans',
+      (tester) async {
+    final complete = attempt();
+    final partial = attempt(complete: false);
+    final plan = routinePlanSnapshot(partial.routine);
+    plan['exercises'] = (plan['exercises'] as List)
+        .where((exercise) => exercise['dayNumber'] == partial.day)
+        .toList();
+    plan['title'] = 'Testing';
+    final singleDay = RoutineAttempt.fromJson({
+      ...partial.toJson(),
+      'id': 'single-day',
+      'routine': plan,
+      'finishedAtMicros': partial.finishedAtMicros! + 1,
+      'updatedAtMicros': partial.updatedAtMicros + 1,
+    });
+    RoutineAttempt? selected;
+    await tester.pumpWidget(MaterialApp(
+        home: RoutineHistoryScreen(
+            attempts: [complete, singleDay],
+            onOpenAttempt: (attempt) => selected = attempt)));
+    expect(find.text('Testing'), findsOneWidget);
+    expect(find.text('Testing · Day 1'), findsNothing);
+    expect(find.text('Strength days · Day 1'), findsOneWidget);
+    await tester.tap(find.text('Unfinished'));
+    await tester.pumpAndSettle();
+    expect(find.text('Strength days · Day 1'), findsNothing);
+    await tester.tap(find.text('Testing'));
+    expect(selected, singleDay);
+    await tester.tap(find.text('Completed'));
+    await tester.pumpAndSettle();
+    expect(find.text('Testing'), findsNothing);
+    expect(find.text('Strength days · Day 1'), findsOneWidget);
+  });
+
   testWidgets('manual and skipped results omit unsupported measured totals',
       (tester) async {
     await tester.pumpWidget(MaterialApp(

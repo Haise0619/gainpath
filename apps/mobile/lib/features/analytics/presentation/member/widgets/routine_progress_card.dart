@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
 import '../../../../workout/domain/routine_attempt.dart';
+import '../../../../workout/presentation/workout_presentation.dart';
 
 class RoutineProgressCard extends StatelessWidget {
   const RoutineProgressCard(
@@ -27,7 +28,7 @@ class RoutineProgressCard extends StatelessWidget {
           for (final a in progress!.records.take(3))
             ListTile(
                 contentPadding: EdgeInsets.zero,
-                title: Text('${a.routine.title} · Day ${a.day}'),
+                title: Text(routineDayTitle(a.routine, a.day)),
                 subtitle: Text(
                     '${a.statusLabel} · ${a.completedExercises}/${a.entries.length} exercises'),
                 trailing: const Icon(Icons.chevron_right_rounded),

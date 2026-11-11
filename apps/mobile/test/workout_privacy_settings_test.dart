@@ -4,6 +4,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:gainpath_data/gainpath_data.dart';
 import 'package:gainpath_identity/gainpath_identity.dart';
 import 'package:gainpath_mobile/features/workout/application/workout_preferences_controller.dart';
+import 'package:gainpath_mobile/features/workout/domain/workout_audio_port.dart';
 import 'package:gainpath_mobile/features/workout/presentation/member/workout_ai_consent_guard.dart';
 import 'package:gainpath_mobile/features/workout/presentation/member/workout_privacy_settings_screen.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
@@ -16,6 +17,14 @@ class _CaptureChild extends StatefulWidget {
   final VoidCallback onDispose;
   @override
   State<_CaptureChild> createState() => _CaptureChildState();
+}
+
+class _VoicePreferences implements WorkoutVoicePreferences {
+  WorkoutVoiceMode? mode;
+  @override
+  Future<WorkoutVoiceMode?> read() async => mode;
+  @override
+  Future<void> write(WorkoutVoiceMode mode) async => this.mode = mode;
 }
 
 class _CaptureChildState extends State<_CaptureChild> {
@@ -32,6 +41,32 @@ class _CaptureChildState extends State<_CaptureChild> {
 
 void main() {
   setUpAll(() => GoogleFonts.config.allowRuntimeFetching = false);
+  testWidgets('Voice Coach persists the chosen mode for the current account',
+      (tester) async {
+    final prefs = WorkoutPreferencesController(
+        scope: scope, store: MemoryWorkoutPreferencesStore());
+    final voice = _VoicePreferences();
+    await tester.pumpWidget(MaterialApp(
+        home: WorkoutPrivacySettingsScreen(
+            scope: scope,
+            isCurrent: () => true,
+            preferencesFactory: (_) async => prefs,
+            voicePreferencesFactory: (requested) async {
+              expect(requested, scope);
+              return voice;
+            })));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(find.text('Use account default'), 140);
+    final mode = find.byType(DropdownButton<WorkoutVoiceMode>);
+    await tester.ensureVisible(mode);
+    await tester.pumpAndSettle();
+    await tester.tap(mode);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Alerts Only').last);
+    await tester.pumpAndSettle();
+    expect(voice.mode, WorkoutVoiceMode.alertsOnly);
+    expect(prefs.validConsent, isFalse);
+  });
   testWidgets(
       'privacy consent and preferences are usable on a small phone with large text',
       (tester) async {

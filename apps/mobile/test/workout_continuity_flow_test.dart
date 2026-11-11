@@ -361,6 +361,12 @@ void main() {
         expect(launches, hasLength(1));
         restElapsed = const Duration(seconds: 4);
         await tester.pump(const Duration(milliseconds: 100));
+        await tester.pump(const Duration(milliseconds: 400));
+        expect(launches, hasLength(1));
+        expect(find.text('Ready to continue'), findsOneWidget);
+        await tester.tap(find.byType(Checkbox).first);
+        await tester.pump();
+        await tester.tap(find.text('Ready to continue'));
       } else {
         await tester.tap(find.text('Skip Rest'));
       }

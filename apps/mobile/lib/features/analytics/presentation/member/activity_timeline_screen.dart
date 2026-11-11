@@ -21,9 +21,11 @@ class ActivityTimelineScreen extends StatelessWidget {
       this.onRefresh,
       this.onOpenWorkout,
       this.onOpenReport,
+      this.historyOnly = false,
       this.onOpenFilteredReport});
 
   final MemberLocalProgress? localProgress;
+  final bool historyOnly;
   final RoutineProgress? routineProgress;
   final VoidCallback? onOpenReport;
   final void Function(WorkoutReportFilter)? onOpenFilteredReport;
@@ -35,13 +37,15 @@ class ActivityTimelineScreen extends StatelessWidget {
     final local = localProgress;
     if (local != null) {
       return Scaffold(
-        appBar: AppBar(title: const Text('Activity timeline'), actions: [
-          if (onRefresh != null)
-            IconButton(
-                tooltip: 'Refresh',
-                onPressed: onRefresh,
-                icon: const Icon(Icons.refresh_rounded)),
-        ]),
+        appBar: historyOnly
+            ? null
+            : AppBar(title: const Text('Activity timeline'), actions: [
+                if (onRefresh != null)
+                  IconButton(
+                      tooltip: 'Refresh',
+                      onPressed: onRefresh,
+                      icon: const Icon(Icons.refresh_rounded)),
+              ]),
         body: localProgressRefresh(
             onRefresh: onRefresh,
             child: PageBody(children: [
@@ -53,12 +57,15 @@ class ActivityTimelineScreen extends StatelessWidget {
                   builder: (filtered) => Column(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
-                            const Eyebrow('Sessions per week'),
+                            if (!historyOnly)
+                              const Eyebrow('Sessions per week'),
                             const WorkoutMeasurementScope(),
-                            LocalProgressPeriod(progress: filtered),
-                            LocalWeeklyChart(progress: filtered),
+                            if (!historyOnly) ...[
+                              LocalProgressPeriod(progress: filtered),
+                              LocalWeeklyChart(progress: filtered),
+                            ],
                             const SizedBox(height: 20),
-                            const Eyebrow('Log'),
+                            const Eyebrow('Saved exercise results'),
                             Text(
                                 '${filtered.allTimeSessions} saved sessions · ${filtered.allTimeRepetitions} full reps · ${filtered.allTimePartialRepetitions} partial attempts'),
                             if (local.records.isEmpty)

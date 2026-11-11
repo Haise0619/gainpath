@@ -15,11 +15,10 @@ class RoutineJourneyScreen extends StatefulWidget {
       required this.onTrack,
       required this.onTutorial,
       this.onManualSet,
-      this.onViewProgress,
       this.onOpenSettings,
       this.onViewHistory});
   final RoutineJourneyController controller;
-  final VoidCallback? onViewProgress, onViewHistory;
+  final VoidCallback? onViewHistory;
   final VoidCallback? onOpenSettings;
   final Future<void> Function(int index) onTrack, onTutorial;
   final Future<void> Function(int index)? onManualSet;
@@ -305,7 +304,9 @@ class _RoutineJourneyScreenState extends State<RoutineJourneyScreen> {
                     side: BorderSide(
                         color: index == c.selectedIndex
                             ? AppColors.primary
-                            : (index == c.unfinishedIndices.firstWhere((i) => true, orElse: () => -1) && !isExerciseTargetComplete(c.statusFor(index))
+                            : (index == c.unfinishedIndices.firstWhere((i) => true, orElse: () => -1) &&
+                                    !isExerciseTargetComplete(
+                                        c.statusFor(index))
                                 ? const Color(0x666D28D9)
                                 : const Color(0xFFE9E5F0)),
                         width: index == c.selectedIndex ? 2.0 : 1.0)),
@@ -319,23 +320,19 @@ class _RoutineJourneyScreenState extends State<RoutineJourneyScreen> {
                                 ? AppColors.primary
                                 : const Color(0xFFF1EEF8)),
                         child: isExerciseTargetComplete(c.statusFor(index))
-                            ? const Icon(Icons.check_rounded, size: 15, color: Color(0xFF16A34A))
+                            ? const Icon(Icons.check_rounded,
+                                size: 15, color: Color(0xFF16A34A))
                             : Text('${c.dayIndices.indexOf(index) + 1}',
                                 style: TextStyle(
                                     fontSize: 11,
                                     fontWeight: FontWeight.w700,
                                     color: index == c.selectedIndex ? Colors.white : AppColors.primary))),
-                    title: Text(c.routine.exercises[index].name,
-                        style: TextStyle(
-                            fontSize: 14.5,
-                            fontWeight: FontWeight.w600,
-                            color: isExerciseTargetComplete(c.statusFor(index))
-                                ? AppColors.inkSoft
-                                : AppColors.ink)),
+                    title: Text(c.routine.exercises[index].name, style: TextStyle(fontSize: 14.5, fontWeight: FontWeight.w600, color: isExerciseTargetComplete(c.statusFor(index)) ? AppColors.inkSoft : AppColors.ink)),
                     subtitle: Row(
                       children: [
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 5, vertical: 1.5),
                           decoration: BoxDecoration(
                             color: isExerciseTargetComplete(c.statusFor(index))
                                 ? const Color(0xFFF3F4F6)
@@ -343,21 +340,29 @@ class _RoutineJourneyScreenState extends State<RoutineJourneyScreen> {
                             borderRadius: BorderRadius.circular(4),
                           ),
                           child: Text(
-                            ExercisePresentation.forExercise(c.routine.exercises[index], organizationId: c.scope.organizationId).label,
+                            ExercisePresentation.forExercise(
+                                    c.routine.exercises[index],
+                                    organizationId: c.scope.organizationId)
+                                .label,
                             style: TextStyle(
                               fontSize: 10.5,
                               fontWeight: FontWeight.w600,
-                              color: isExerciseTargetComplete(c.statusFor(index))
-                                  ? const Color(0xFF6B7280)
-                                  : AppColors.primary,
+                              color:
+                                  isExerciseTargetComplete(c.statusFor(index))
+                                      ? const Color(0xFF6B7280)
+                                      : AppColors.primary,
                             ),
                           ),
                         ),
                         const SizedBox(width: 6),
                         Expanded(
                           child: Text(
-                            ExercisePresentation.forExercise(c.routine.exercises[index], organizationId: c.scope.organizationId).targetLabel,
-                            style: const TextStyle(fontSize: 11.5, color: AppColors.inkSoft),
+                            ExercisePresentation.forExercise(
+                                    c.routine.exercises[index],
+                                    organizationId: c.scope.organizationId)
+                                .targetLabel,
+                            style: const TextStyle(
+                                fontSize: 11.5, color: AppColors.inkSoft),
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
@@ -369,11 +374,7 @@ class _RoutineJourneyScreenState extends State<RoutineJourneyScreen> {
                             : index == c.selectedIndex
                                 ? Icons.radio_button_checked
                                 : Icons.radio_button_unchecked,
-                        color: isExerciseTargetComplete(c.statusFor(index))
-                            ? const Color(0xFF16A34A)
-                            : (index == c.selectedIndex
-                                ? AppColors.primary
-                                : const Color(0xFFCBC4D8)))))),
+                        color: isExerciseTargetComplete(c.statusFor(index)) ? const Color(0xFF16A34A) : (index == c.selectedIndex ? AppColors.primary : const Color(0xFFCBC4D8)))))),
       const SizedBox(height: 14),
       Container(
         padding: const EdgeInsets.all(16),
@@ -545,7 +546,8 @@ class _RoutineJourneyScreenState extends State<RoutineJourneyScreen> {
                     const SizedBox(height: 10),
                     const Text(
                         'Video guided · elapsed workout time. Repetitions and form are not measured.',
-                        style: TextStyle(color: AppColors.inkSoft, fontSize: 12)),
+                        style:
+                            TextStyle(color: AppColors.inkSoft, fontSize: 12)),
                     const SizedBox(height: 4),
                     Text(
                         '${c.checkpoint!.guidedProgress[c.selectedIndex]?.completedSets ?? 0}/${selected.sets} timed sets',
@@ -566,7 +568,8 @@ class _RoutineJourneyScreenState extends State<RoutineJourneyScreen> {
                     const SizedBox(height: 10),
                     const Text(
                         'Manual · log each completed set yourself. Repetitions and form are not measured.',
-                        style: TextStyle(color: AppColors.inkSoft, fontSize: 12)),
+                        style:
+                            TextStyle(color: AppColors.inkSoft, fontSize: 12)),
                     const SizedBox(height: 6),
                     Text(
                         '${c.manualSetsFor(c.selectedIndex)} / ${selected.sets} sets · self-reported',
@@ -581,8 +584,8 @@ class _RoutineJourneyScreenState extends State<RoutineJourneyScreen> {
                           TextButton(
                               onPressed: disabled
                                   ? null
-                                  : () =>
-                                      _act(() => c.undoManualSet(c.selectedIndex)),
+                                  : () => _act(
+                                      () => c.undoManualSet(c.selectedIndex)),
                               child: const Text('Undo last set')),
                           const SizedBox(width: 8),
                         ],
@@ -590,8 +593,8 @@ class _RoutineJourneyScreenState extends State<RoutineJourneyScreen> {
                           child: OutlinedButton.icon(
                               onPressed: disabled
                                   ? null
-                                  : () => _act(
-                                      () => c.reviewInstructions(c.selectedIndex)),
+                                  : () => _act(() =>
+                                      c.reviewInstructions(c.selectedIndex)),
                               icon: const Icon(Icons.menu_book_rounded),
                               label: const Text('Mark instructions reviewed')),
                         ),
@@ -733,8 +736,8 @@ class _RoutineJourneyScreenState extends State<RoutineJourneyScreen> {
         child: Padding(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
           child: FilledButton(
-            style: FilledButton.styleFrom(
-                minimumSize: const Size.fromHeight(48)),
+            style:
+                FilledButton.styleFrom(minimumSize: const Size.fromHeight(48)),
             onPressed: _working || c.busy
                 ? null
                 : () {
@@ -743,8 +746,7 @@ class _RoutineJourneyScreenState extends State<RoutineJourneyScreen> {
                         await c.resume();
                         if (mounted) setState(() => _showSummary = false);
                       });
-                    } else if (c.checkpoint!.finished &&
-                        c.nextDay != null) {
+                    } else if (c.checkpoint!.finished && c.nextDay != null) {
                       _act(() async {
                         await c.startNextDay();
                         if (mounted) setState(() => _showSummary = false);
@@ -768,22 +770,16 @@ class _RoutineJourneyScreenState extends State<RoutineJourneyScreen> {
     return [
       Text('Routine completion',
           style: const TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w600,
-              color: AppColors.ink)),
+              fontSize: 16, fontWeight: FontWeight.w600, color: AppColors.ink)),
       Text(
           c.checkpoint?.attempt == null
               ? 'In Progress'
               : workoutAttemptLabel(c.checkpoint!.attempt!),
           style: const TextStyle(
-              fontSize: 24,
-              fontWeight: FontWeight.w700,
-              color: AppColors.ink)),
-      Text('${c.routine.title} · Day ${c.day}',
+              fontSize: 24, fontWeight: FontWeight.w700, color: AppColors.ink)),
+      Text(routineDayTitle(c.routine, c.day),
           style: const TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.w700,
-              color: AppColors.ink)),
+              fontSize: 18, fontWeight: FontWeight.w700, color: AppColors.ink)),
       Text(
           '${c.completedExercises}/${c.dayIndices.length} exercise targets completed',
           style: const TextStyle(color: AppColors.inkSoft)),
@@ -793,6 +789,13 @@ class _RoutineJourneyScreenState extends State<RoutineJourneyScreen> {
       if (c.checkpoint?.finished == true && c.error == null)
         const Text('Saved on this device',
             style: TextStyle(color: AppColors.inkSoft)),
+      if (widget.onViewHistory != null)
+        Align(
+            alignment: AlignmentDirectional.centerStart,
+            child: TextButton.icon(
+                onPressed: widget.onViewHistory,
+                icon: const Icon(Icons.history_rounded),
+                label: const Text('Routine history'))),
       const SizedBox(height: 12),
       Panel(
           background: AppColors.primaryTint,
@@ -848,14 +851,6 @@ class _RoutineJourneyScreenState extends State<RoutineJourneyScreen> {
                 subtitle: Text(
                     '${_status(c.statusFor(index))}${c.isTimed(index) ? '\n${c.checkpoint!.guidedProgress[index]?.completedSets ?? 0} timed sets · not AI verified' : c.supportsTracking(index) ? '' : '\n${c.manualSetsFor(index)} / ${c.routine.exercises[index].sets} sets self-reported'}${c.sessionsFor(index).isEmpty ? '' : '\n${c.sessionsFor(index).fold<int>(0, (n, s) => n + s.repetitions)} measured full reps'}${c.sessionsFor(index).where((s) => s.poseMetrics?.curlArms != null).map((s) => '\n${s.poseMetrics!.curlArms!.mode.label} · ${s.poseMetrics!.curlArms!.countLabel}').join()}'))),
       const SizedBox(height: 12),
-      if (widget.onViewProgress != null)
-        OutlinedButton(
-            onPressed: widget.onViewProgress,
-            child: const Text('View progress')),
-      if (widget.onViewHistory != null)
-        TextButton(
-            onPressed: widget.onViewHistory,
-            child: const Text('Routine history')),
       if (!c.isScheduled)
         OutlinedButton(
             onPressed: _working || c.busy

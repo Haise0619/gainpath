@@ -32,6 +32,7 @@ class WorkoutPrepScreen extends StatelessWidget {
       this.routineStatusMessage,
       this.routineCatalogControls,
       this.onOpenEquipment,
+      this.onBrowseEquipment,
       this.onOpenPrograms,
       this.onOpenSettings,
       this.onOpenProgress,
@@ -44,6 +45,8 @@ class WorkoutPrepScreen extends StatelessWidget {
       this.onStartScheduled,
       this.programLoading = false,
       this.programLoadError = false,
+      this.workoutStateUnavailable = false,
+      this.onRetryWorkout,
       this.organizationId,
       this.trackers = const ExerciseTrackerDispatcher(),
       this.preferencesFactory = createWorkoutPreferences,
@@ -55,6 +58,7 @@ class WorkoutPrepScreen extends StatelessWidget {
   final String? routineStatusMessage;
   final Widget? routineCatalogControls;
   final VoidCallback? onOpenEquipment;
+  final VoidCallback? onBrowseEquipment;
   final VoidCallback? onOpenPrograms;
   final VoidCallback? onOpenSettings;
   final VoidCallback? onOpenProgress, onOpenRoutineHistory;
@@ -65,6 +69,8 @@ class WorkoutPrepScreen extends StatelessWidget {
   final String? recoveryDayLabel;
   final VoidCallback? onStartScheduled;
   final bool programLoading, programLoadError;
+  final bool workoutStateUnavailable;
+  final VoidCallback? onRetryWorkout;
   final String? organizationId;
   final WorkoutPrepRoutes routes;
   final ExerciseTrackerDispatcher trackers;
@@ -95,6 +101,7 @@ class WorkoutPrepScreen extends StatelessWidget {
         : context.read<WorkoutRepository>().routine;
     final totalSets = routine.fold<int>(0, (sum, e) => sum + e.sets);
     final hasWorkout = !programLoading &&
+        !workoutStateUnavailable &&
         routine.isNotEmpty &&
         (!live || selectedRoutine != null);
     final title = live ? selectedRoutine?.title : 'Lower Body Strength';
@@ -283,6 +290,16 @@ class WorkoutPrepScreen extends StatelessWidget {
                     onTap: () => openExercise(i),
                   ),
                 ),
+            ] else if (workoutStateUnavailable) ...[
+              Panel(
+                  child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                    const Text('Could not check saved workout progress.'),
+                    TextButton(
+                        onPressed: onRetryWorkout,
+                        child: const Text('Retry workout')),
+                  ])),
             ] else if (routineCatalogControls != null) ...[
               routineCatalogControls!,
             ] else ...[
@@ -300,7 +317,7 @@ class WorkoutPrepScreen extends StatelessWidget {
                         style: Theme.of(context).textTheme.bodyMedium),
                   ])),
             ],
-            if (programLoadError) ...[
+            if (programLoadError && !workoutStateUnavailable) ...[
               const SizedBox(height: 12),
               const Text(
                   'Could not load your training plan. Open Training plan to retry.',
@@ -335,32 +352,13 @@ class WorkoutPrepScreen extends StatelessWidget {
                         MaterialPageRoute(
                             builder: (_) => const EquipmentScannerScreen())),
               ),
-              if (live)
+              if (onBrowseEquipment != null)
                 _DetourCard(
-                    icon: Icons.history_rounded,
-                    imageAsset: 'assets/icons/tool_saved_sessions.webp',
+                    icon: Icons.fitness_center_outlined,
                     tone: WorkoutHubPalette.of(context).neutral,
-                    accentDotColor: const Color(0xFF10B981),
-                    title: 'Saved sessions',
-                    subtitle: 'History & results',
-                    onTap: () {
-                      final auth = context.read<AuthBloc>();
-                      final scope = auth.state.session?.scope;
-                      if (scope == null) return;
-                      final destination = routes.savedSessionsBuilder;
-                      if (destination == null) {
-                        showUnavailable(context);
-                        return;
-                      }
-                      Navigator.push(
-                          context,
-                          MaterialPageRoute<void>(
-                              builder: (_) => BlocProvider.value(
-                                  value: auth,
-                                  child: Builder(
-                                      builder: (context) =>
-                                          destination(context, scope)))));
-                    }),
+                    title: 'Browse equipment',
+                    subtitle: 'Equipment guides',
+                    onTap: onBrowseEquipment),
             ]),
             if (const bool.fromEnvironment('GAINPATH_POSE_PREVIEW'))
               TextButton(
@@ -977,7 +975,6 @@ class _DetourCard extends StatelessWidget {
     required this.title,
     required this.subtitle,
     required this.onTap,
-    this.accentDotColor,
   });
 
   final IconData icon;
@@ -985,7 +982,6 @@ class _DetourCard extends StatelessWidget {
   final WorkoutHubTone tone;
   final String title, subtitle;
   final VoidCallback? onTap;
-  final Color? accentDotColor;
 
   @override
   Widget build(BuildContext context) => Tooltip(
@@ -1052,17 +1048,6 @@ class _DetourCard extends StatelessWidget {
                         mainAxisSize: MainAxisSize.min,
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          if (accentDotColor != null) ...[
-                            Container(
-                              width: 5,
-                              height: 5,
-                              decoration: BoxDecoration(
-                                color: accentDotColor,
-                                shape: BoxShape.circle,
-                              ),
-                            ),
-                            const SizedBox(width: 4),
-                          ],
                           Flexible(
                             child: Text(
                               subtitle,

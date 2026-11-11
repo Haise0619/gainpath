@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:gainpath_domain/gainpath_domain.dart' show SessionScope;
 import 'package:gainpath_ui/gainpath_ui.dart';
 import '../../../../app/di/workout_preferences_factory.dart';
+import '../../../../app/di/workout_store_factory.dart';
 import '../../application/workout_preferences_controller.dart';
+import '../../domain/workout_audio_port.dart';
 
 typedef WorkoutPreferencesFactory = Future<WorkoutPreferencesController>
     Function(SessionScope);
@@ -82,10 +84,15 @@ class WorkoutPrivacySettingsScreen extends StatefulWidget {
       {super.key,
       required this.scope,
       required this.isCurrent,
-      this.preferencesFactory = createWorkoutPreferences});
+      this.preferencesFactory = createWorkoutPreferences,
+      this.voicePreferencesFactory = createWorkoutVoicePreferences,
+      this.onOpenBackup});
   final SessionScope scope;
   final bool Function() isCurrent;
   final WorkoutPreferencesFactory preferencesFactory;
+  final Future<WorkoutVoicePreferences> Function(SessionScope)
+      voicePreferencesFactory;
+  final VoidCallback? onOpenBackup;
   @override
   State<WorkoutPrivacySettingsScreen> createState() =>
       _WorkoutPrivacySettingsScreenState();
@@ -94,12 +101,17 @@ class WorkoutPrivacySettingsScreen extends StatefulWidget {
 class _WorkoutPrivacySettingsScreenState
     extends State<WorkoutPrivacySettingsScreen> {
   WorkoutPreferencesController? _preferences;
+  WorkoutVoicePreferences? _voicePreferences;
+  WorkoutVoiceMode? _voiceMode;
+  bool _voiceBusy = false;
+  String? _voiceError;
   String? _error;
   bool get _current => mounted && widget.isCurrent();
   @override
   void initState() {
     super.initState();
     _load();
+    _loadVoice();
   }
 
   Future<void> _load() async {
@@ -124,6 +136,72 @@ class _WorkoutPrivacySettingsScreenState
   void _changed() {
     if (_current) setState(() {});
   }
+
+  Future<void> _loadVoice() async {
+    try {
+      final preferences = await widget.voicePreferencesFactory(widget.scope);
+      final mode = await preferences.read();
+      if (!_current) return;
+      setState(() {
+        _voicePreferences = preferences;
+        _voiceMode = mode;
+        _voiceError = null;
+      });
+    } catch (_) {
+      if (_current) {
+        setState(() => _voiceError = 'Voice preference could not be loaded.');
+      }
+    }
+  }
+
+  Future<void> _setVoice(WorkoutVoiceMode? mode) async {
+    final preferences = _voicePreferences;
+    if (!_current || preferences == null || mode == null || _voiceBusy) return;
+    setState(() => _voiceBusy = true);
+    try {
+      await preferences.write(mode);
+      if (_current) {
+        setState(() {
+          _voiceMode = mode;
+          _voiceError = null;
+        });
+      }
+    } catch (_) {
+      if (_current) {
+        setState(
+            () => _voiceError = 'Could not save the voice mode. Try again.');
+      }
+    } finally {
+      if (_current) setState(() => _voiceBusy = false);
+    }
+  }
+
+  Widget _voicePanel() => Panel(
+          child:
+              Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        const Text('Voice mode'),
+        DropdownButton<WorkoutVoiceMode>(
+            isExpanded: true,
+            value: _voiceMode,
+            hint: Text(_voicePreferences == null
+                ? 'Voice preference unavailable'
+                : 'Use account default'),
+            items: [
+              for (final mode in WorkoutVoiceMode.values)
+                DropdownMenuItem(value: mode, child: Text(mode.label)),
+            ],
+            onChanged:
+                _voicePreferences != null && !_voiceBusy ? _setVoice : null),
+        const Text(
+            'Full Coaching includes reps and transitions. Alerts Only keeps actionable cues. Muted turns speech off.'),
+        if (_voiceError != null) ...[
+          Text(_voiceError!),
+          if (_voicePreferences == null)
+            TextButton(
+                onPressed: _loadVoice,
+                child: const Text('Retry voice settings')),
+        ],
+      ]));
 
   Future<void> _save(Future<void> Function() action) async {
     if (!_current || _preferences!.busy) return;
@@ -193,7 +271,7 @@ class _WorkoutPrivacySettingsScreenState
               Center(child: Text('Sign in to manage your workout settings.')));
     }
     return Scaffold(
-        appBar: AppBar(title: const Text('Privacy & AI Tracking')),
+        appBar: AppBar(title: const Text('Workout settings')),
         body: p == null
             ? Center(
                 child: _error == null
@@ -203,7 +281,7 @@ class _WorkoutPrivacySettingsScreenState
                         TextButton(onPressed: _load, child: const Text('Retry'))
                       ]))
             : ListView(padding: const EdgeInsets.all(20), children: [
-                const Eyebrow('AI Tracking'),
+                const Eyebrow('AI Tracking & privacy'),
                 const SizedBox(height: 8),
                 Panel(
                     child: Column(
@@ -234,6 +312,9 @@ class _WorkoutPrivacySettingsScreenState
                       const SizedBox(height: 8),
                       const Text(
                           'Camera permission, optional backup and Coach sharing are separate controls. Withdrawing consent does not delete your workout history.'),
+                      const SizedBox(height: 8),
+                      const Text(
+                          'On Android, manage camera access in Settings › Apps › GainPath › Permissions.'),
                       const SizedBox(height: 16),
                       if (p.validConsent) ...[
                         OutlinedButton(
@@ -291,6 +372,25 @@ class _WorkoutPrivacySettingsScreenState
                 const SizedBox(height: 12),
                 const Text(
                     'These preferences are saved for this account on this device. They are not included in workout backup.'),
+                const SizedBox(height: 24),
+                const Eyebrow('Voice Coach'),
+                const SizedBox(height: 8),
+                _voicePanel(),
+                const SizedBox(height: 24),
+                const Eyebrow('Data & backup'),
+                const SizedBox(height: 8),
+                Panel(
+                    child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                      const Text(
+                          'Results save on this device first. Optional backup covers eligible results and routine progress.'),
+                      if (widget.onOpenBackup != null)
+                        TextButton.icon(
+                            onPressed: widget.onOpenBackup,
+                            icon: const Icon(Icons.cloud_upload_outlined),
+                            label: const Text('Workout backup')),
+                    ])),
                 if (p.busy)
                   const Padding(
                       padding: EdgeInsets.symmetric(vertical: 12),

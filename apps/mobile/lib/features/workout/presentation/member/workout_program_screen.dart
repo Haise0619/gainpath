@@ -6,6 +6,7 @@ import '../../application/workout_program_controller.dart';
 import '../../domain/published_routine_view.dart';
 import '../workout_presentation.dart';
 import '../../domain/program_enrollment.dart';
+import '../../domain/routine_attempt.dart';
 import 'widgets/program_enrollment_cards.dart';
 
 class WorkoutProgramScreen extends StatefulWidget {
@@ -15,10 +16,12 @@ class WorkoutProgramScreen extends StatefulWidget {
       required this.loadPrograms,
       required this.onOpenRoutine,
       required this.today,
+      this.onOpenSummary,
       this.clock});
   final WorkoutProgramController controller;
   final Future<List<WorkoutProgram>> Function() loadPrograms;
   final Future<void> Function(ProgramRoutineLaunch) onOpenRoutine;
+  final ValueChanged<RoutineAttempt>? onOpenSummary;
   final DateTime today;
 
   /// Optional current instant. Calendar dates are always Malaysia civil dates.
@@ -617,6 +620,11 @@ class _WorkoutProgramScreenState extends State<WorkoutProgramScreen>
                                 '${exerciseResultSummary(result)}'),
                       ),
                   ],
+                  if (a?.isComplete == true && widget.onOpenSummary != null)
+                    FilledButton(
+                        onPressed:
+                            c.busy ? null : () => widget.onOpenSummary!(a!),
+                        child: const Text('View workout summary')),
                   if (d.kind == 'workout' && !c.isComplete(day.key)) ...[
                     FilledButton(
                         onPressed: c.busy ? null : () => _startDay(day),

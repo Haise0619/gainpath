@@ -9,94 +9,138 @@ String _date(int micros) {
   return '${d.day}/${d.month}/${d.year} ${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')} MYT';
 }
 
-class RoutineHistoryScreen extends StatelessWidget {
+enum _HistoryFilter { all, completed, unfinished }
+
+class RoutineHistoryScreen extends StatefulWidget {
   const RoutineHistoryScreen(
       {super.key,
       required this.attempts,
       required this.onOpenAttempt,
       this.onRefresh,
       this.onOpenBackup,
+      this.embedded = false,
       this.available = true});
   final List<RoutineAttempt> attempts;
   final void Function(RoutineAttempt) onOpenAttempt;
   final Future<void> Function()? onRefresh;
   final bool available;
+  final bool embedded;
   final VoidCallback? onOpenBackup;
+
   @override
-  Widget build(BuildContext context) => Scaffold(
-      appBar: AppBar(title: const Text('Routine history'), actions: [
-        if (onOpenBackup != null)
-          IconButton(
-              tooltip: 'Workout backup',
-              onPressed: onOpenBackup,
-              icon: const Icon(Icons.cloud_upload_outlined)),
-        if (onRefresh != null)
-          IconButton(
-              tooltip: 'Refresh',
-              onPressed: onRefresh,
-              icon: const Icon(Icons.refresh_rounded))
-      ]),
-      body: RefreshIndicator(
-          onRefresh: onRefresh ?? () async {},
-          child: ListView(
-              padding: EdgeInsets.fromLTRB(
-                  16, 16, 16, 16 + MediaQuery.paddingOf(context).bottom),
-              physics: const AlwaysScrollableScrollPhysics(),
-              children: [
-                const Text(
-                    'Saved on this device · each entry is one routine-day attempt.'),
-                const SizedBox(height: 12),
-                if (!available)
-                  const Panel(
-                      child: Text(
-                          'Routine history is unavailable. Refresh to retry.'))
-                else if (attempts.isEmpty)
-                  const Panel(
-                      child: Text(
-                          'No routine attempts yet. Start a routine to record your progress.')),
-                for (final a in attempts)
-                  Card(
-                      child: ListTile(
-                          leading: Icon(
-                              a.isComplete
-                                  ? Icons.check_circle_rounded
-                                  : Icons.timelapse_rounded,
-                              color: AppColors.primary),
-                          title: Text('${a.routine.title} · Day ${a.day}'),
-                          subtitle: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(workoutAttemptLabel(a)),
-                                Text(
-                                    '${a.completedExercises}/${a.entries.length} exercises'),
-                                Text(_date(
-                                    a.finishedAtMicros ?? a.updatedAtMicros)),
-                              ]),
-                          onTap: () => onOpenAttempt(a))),
-              ])));
+  State<RoutineHistoryScreen> createState() => _RoutineHistoryScreenState();
+}
+
+class _RoutineHistoryScreenState extends State<RoutineHistoryScreen> {
+  _HistoryFilter _filter = _HistoryFilter.all;
+
+  @override
+  Widget build(BuildContext context) {
+    final attempts = widget.attempts
+        .where((attempt) => switch (_filter) {
+              _HistoryFilter.all => true,
+              _HistoryFilter.completed => attempt.isComplete,
+              _HistoryFilter.unfinished => !attempt.isComplete,
+            })
+        .toList()
+      ..sort((a, b) => (b.finishedAtMicros ?? b.updatedAtMicros)
+          .compareTo(a.finishedAtMicros ?? a.updatedAtMicros));
+    return Scaffold(
+        appBar: widget.embedded
+            ? null
+            : AppBar(title: const Text('Routine history'), actions: [
+                if (widget.onOpenBackup != null)
+                  IconButton(
+                      tooltip: 'Workout backup',
+                      onPressed: widget.onOpenBackup,
+                      icon: const Icon(Icons.cloud_upload_outlined)),
+                if (widget.onRefresh != null)
+                  IconButton(
+                      tooltip: 'Refresh',
+                      onPressed: widget.onRefresh,
+                      icon: const Icon(Icons.refresh_rounded))
+              ]),
+        body: RefreshIndicator(
+            onRefresh: widget.onRefresh ?? () async {},
+            child: ListView(
+                padding: EdgeInsets.fromLTRB(
+                    16, 16, 16, 16 + MediaQuery.paddingOf(context).bottom),
+                physics: const AlwaysScrollableScrollPhysics(),
+                children: [
+                  if (!widget.available)
+                    const Panel(
+                        child: Text(
+                            'Routine history is unavailable. Refresh to retry.'))
+                  else if (widget.attempts.isEmpty)
+                    const Panel(
+                        child: Text(
+                            'No routine attempts yet. Start a routine to record your progress.'))
+                  else ...[
+                    Wrap(spacing: 8, runSpacing: 4, children: [
+                      for (final filter in _HistoryFilter.values)
+                        ChoiceChip(
+                            label: Text(switch (filter) {
+                              _HistoryFilter.all => 'All',
+                              _HistoryFilter.completed => 'Completed',
+                              _HistoryFilter.unfinished => 'Unfinished',
+                            }),
+                            selected: _filter == filter,
+                            onSelected: (_) =>
+                                setState(() => _filter = filter)),
+                    ]),
+                    const SizedBox(height: 8),
+                    if (attempts.isEmpty)
+                      const Panel(
+                          child: Text('No attempts match this filter.')),
+                  ],
+                  for (final a
+                      in widget.available ? attempts : <RoutineAttempt>[])
+                    Card(
+                        child: ListTile(
+                            leading: Icon(
+                                a.isComplete
+                                    ? Icons.check_circle_rounded
+                                    : Icons.timelapse_rounded,
+                                color: AppColors.primary),
+                            title: Text(routineDayTitle(a.routine, a.day)),
+                            subtitle: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(workoutAttemptLabel(a)),
+                                  Text(
+                                      '${a.completedExercises}/${a.entries.length} exercises'),
+                                  Text(_date(
+                                      a.finishedAtMicros ?? a.updatedAtMicros)),
+                                ]),
+                            trailing: const Icon(Icons.chevron_right_rounded),
+                            onTap: () => widget.onOpenAttempt(a))),
+                ])));
+  }
 }
 
 class RoutineAttemptDetailScreen extends StatelessWidget {
   const RoutineAttemptDetailScreen(
       {super.key,
       required this.attempt,
+      this.trainingSource,
       this.onResume,
       this.onRepeat,
       this.onNextDay,
-      this.onViewProgress,
       this.availableSessionIds = const {},
       this.onOpenSession});
   final RoutineAttempt attempt;
-  final VoidCallback? onResume, onRepeat, onNextDay, onViewProgress;
+  final String? trainingSource;
+  final VoidCallback? onResume, onRepeat, onNextDay;
   final Set<String> availableSessionIds;
   final ValueChanged<String>? onOpenSession;
   @override
   Widget build(BuildContext context) {
     final a = attempt;
+    final repeatIsPrimary = a.isComplete && onNextDay == null;
     return Scaffold(
         appBar: AppBar(title: const Text('Routine result')),
         bottomNavigationBar: (!a.isComplete && onResume != null ||
-                a.isComplete && onNextDay != null)
+                a.isComplete && (onNextDay != null || onRepeat != null))
             ? SafeArea(
                 top: false,
                 child: Padding(
@@ -116,14 +160,20 @@ class RoutineAttemptDetailScreen extends StatelessWidget {
                                 onPressed: onNextDay,
                                 icon: const Icon(Icons.arrow_forward_rounded),
                                 label: const Text('Next routine day')),
+                          if (repeatIsPrimary && onRepeat != null)
+                            FilledButton.icon(
+                                onPressed: onRepeat,
+                                icon: const Icon(Icons.replay_rounded),
+                                label: const Text('Repeat this workout')),
                         ])))
             : null,
         body: ListView(
             padding: EdgeInsets.fromLTRB(
                 16, 12, 16, 32 + MediaQuery.paddingOf(context).bottom),
             children: [
-              Text('${a.routine.title} · Day ${a.day}',
+              Text(routineDayTitle(a.routine, a.day),
                   style: Theme.of(context).textTheme.headlineSmall),
+              if (trainingSource != null) Text(trainingSource!),
               const SizedBox(height: 8),
               Text(workoutAttemptLabel(a),
                   style: Theme.of(context)
@@ -133,8 +183,7 @@ class RoutineAttemptDetailScreen extends StatelessWidget {
               Text(
                   '${a.completedExercises}/${a.entries.length} exercises completed'),
               const SizedBox(height: 6),
-              const Text(
-                  'Saved on this device · This entry is a routine attempt. Each camera session below is one exercise, not another completed workout.'),
+              const Text('Saved on this device'),
               const SizedBox(height: 12),
               Panel(
                   background: AppColors.primaryTint,
@@ -171,11 +220,7 @@ class RoutineAttemptDetailScreen extends StatelessWidget {
                     availableSessionIds: availableSessionIds,
                     onOpenSession: onOpenSession),
               const SizedBox(height: 12),
-              if (onViewProgress != null)
-                OutlinedButton(
-                    onPressed: onViewProgress,
-                    child: const Text('View progress')),
-              if (onRepeat != null)
+              if (!repeatIsPrimary && onRepeat != null)
                 OutlinedButton(
                     onPressed: onRepeat,
                     child: const Text('Repeat this workout')),

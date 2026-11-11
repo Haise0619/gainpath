@@ -32,7 +32,7 @@ void main() {
             muscleGroup: '')
       ]);
   for (final completed in [false, true]) {
-    for (final width in [320.0, 360.0]) {
+    for (final width in [320.0, 360.0, 390.0]) {
       testWidgets(
           'hub uses durable completed=$completed copy at $width and double text',
           (tester) async {
@@ -81,9 +81,8 @@ void main() {
         expect(progress.value, 0);
         expect(find.text('0 / 1'), findsOneWidget);
         expect(
-            find.text(completed
-                ? 'Start workout'
-                : 'Resume Unfinished Exercises'),
+            find.text(
+                completed ? 'Start workout' : 'Resume Unfinished Exercises'),
             findsOneWidget);
         await tester.tap(find.byTooltip('Workout settings'));
         expect(settings, 1);

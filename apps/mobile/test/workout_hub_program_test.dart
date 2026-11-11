@@ -17,6 +17,53 @@ import 'workout_program_controller_test.dart'
     show MemoryProgramStore, programFixture;
 
 void main() {
+  testWidgets('unknown schedule state offers retry before starting free',
+      (tester) async {
+    late AuthBloc auth;
+    await tester.runAsync(() async {
+      auth = AuthBloc(repository: InMemoryAuthRepository());
+      auth.add(const LoginSubmitted(
+          email: 'member@example.com', password: 'password123'));
+      await auth.stream.firstWhere((s) => s.status == AuthStatus.signedIn);
+    });
+    final scope = auth.state.session!.scope;
+    final store = MemoryProgramStore(scope);
+    var reads = 0;
+    await tester.pumpWidget(BlocProvider.value(
+        value: auth,
+        child: MaterialApp(
+            home: WorkoutPrepRoute(
+                publishedRoutine: PublishedRoutine.fromDocument('free', {
+                  'schemaVersion': 1,
+                  'kind': 'routine',
+                  'status': 'published',
+                  'sourceBlueprintId': 'source',
+                  'title': 'Free workout fixture',
+                  'estimatedMinutes': 5,
+                  'exercises': [
+                    {
+                      'exerciseId': 'manual',
+                      'name': 'Step',
+                      'sets': 1,
+                      'reps': 8
+                    }
+                  ],
+                }),
+                programStoreFactory: (_) async {
+                  if (reads++ == 0) throw StateError('unavailable');
+                  return store;
+                },
+                routineStoreFactory: (_) async => MemoryJourneyStore(scope)))));
+    await tester.pumpAndSettle();
+    expect(find.text('Start workout'), findsNothing);
+    await tester.tap(find.text('Retry workout'));
+    await tester.pumpAndSettle();
+    expect(find.text('Start workout').hitTestable(), findsOneWidget);
+    expect(store.journal.enrollments, isEmpty);
+    await tester.pumpWidget(const SizedBox());
+    await tester.runAsync(auth.close);
+  });
+
   test('program preview reads the scheduled workout without changing progress',
       () async {
     final scope = SessionScope(userId: 'member', organizationId: 'gym');

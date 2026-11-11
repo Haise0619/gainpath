@@ -110,6 +110,8 @@ class _RoutineJourneyRouteState extends State<RoutineJourneyRoute>
   @override
   void initState() {
     super.initState();
+    final lifecycle = WidgetsBinding.instance.lifecycleState;
+    _foreground = lifecycle == null || lifecycle == AppLifecycleState.resumed;
     WidgetsBinding.instance.addObserver(this);
   }
 
@@ -207,7 +209,8 @@ class _RoutineJourneyRouteState extends State<RoutineJourneyRoute>
               unawaited(_track(index, automatic: true).catchError((Object _) {
                 if (mounted && _authorized(auth)) {
                   ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                      content: Text('Could not start this exercise. Try again.')));
+                      content:
+                          Text('Could not start this exercise. Try again.')));
                 }
               }));
             }
@@ -303,14 +306,14 @@ class _RoutineJourneyRouteState extends State<RoutineJourneyRoute>
     }
     var upload = false;
     _preferences ??= await widget.preferencesFactory(widget.scope);
-    if (!mounted || !_authorized(auth) || !_foreground) return;
+    if (!currentLaunch()) return;
     final tracker = c.trackingFor(index).tracker;
     final consented = await showWorkoutCaptureConsent(context,
         preferences: _preferences,
-        // Retained trackers guide positioning in the live camera view.
+        // Calf Raise confirms floor contact in its own setup. Floor Push-up
+        // confirms a stable phone and clear floor space here.
         requireSetup: !const {
               ExerciseTracker.sideViewSquat,
-              ExerciseTracker.sideViewFloorPushUp,
               ExerciseTracker.sideViewCurl,
               ExerciseTracker.sideViewCalfRaise,
               ExerciseTracker.frontViewLateralRaise,
@@ -656,10 +659,11 @@ class _RoutineJourneyRouteState extends State<RoutineJourneyRoute>
                   MaterialPageRoute(
                       builder: (_) => WorkoutPrivacySettingsScreen(
                           scope: widget.scope,
+                          onOpenBackup: () =>
+                              _openProgress(MemberProgressView.backup),
                           isCurrent: () => mounted && _authorized(auth))));
             },
             onTutorial: _tutorial,
-            onViewProgress: () => _openProgress(MemberProgressView.dashboard),
             onViewHistory: () => _openProgress(MemberProgressView.routines));
       });
 }

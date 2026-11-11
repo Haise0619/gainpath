@@ -19,7 +19,7 @@ String workoutRepetitionTarget(int sets, int reps, {String qualifier = ''}) =>
 /// Display-only projection. Existing routes/resolvers still authorize execution.
 class ExercisePresentation {
   const ExercisePresentation._(this.mode, this.targetLabel, this.restLabel,
-      {this.detail = ''});
+      {this.detail = '', this.setupReminder});
   factory ExercisePresentation.forExercise(PublishedRoutineExercise exercise,
       {required String organizationId,
       ExerciseTrackerDispatcher trackers = const ExerciseTrackerDispatcher()}) {
@@ -71,13 +71,23 @@ class ExercisePresentation {
         _ => '',
       };
       return ExercisePresentation._(
-          WorkoutExerciseMode.aiTracked, '$base$qualifier', rest);
+          WorkoutExerciseMode.aiTracked, '$base$qualifier', rest,
+          setupReminder: switch (tracking.tracker) {
+            ExerciseTracker.sideViewCurl =>
+              'Choose your arm before the camera opens.',
+            ExerciseTracker.sideViewCalfRaise =>
+              'Confirm level ground and heel contact before the camera opens.',
+            ExerciseTracker.sideViewFloorPushUp =>
+              'Confirm your phone is stable and the floor space is clear.',
+            _ => null,
+          });
     }
     return ExercisePresentation._(
         WorkoutExerciseMode.manual, '$base · Self-reported', rest);
   }
   final WorkoutExerciseMode mode;
   final String targetLabel, restLabel, detail;
+  final String? setupReminder;
   String get targetsWithRest => '$targetLabel · $restLabel';
   String get label => switch (mode) {
         WorkoutExerciseMode.aiTracked => 'AI Tracked',
@@ -116,8 +126,8 @@ class ExercisePresentation {
       };
 
   String get nextActionDescription => switch (mode) {
-        WorkoutExerciseMode.aiTracked =>
-          'The camera opens automatically after rest. Reps count once tracking is ready.',
+        WorkoutExerciseMode.aiTracked => setupReminder ??
+            'The camera opens automatically after rest. Reps count once tracking is ready.',
         WorkoutExerciseMode.videoTimed =>
           'The next video prepares after rest. Active time starts only when playback is ready.',
         WorkoutExerciseMode.manual =>

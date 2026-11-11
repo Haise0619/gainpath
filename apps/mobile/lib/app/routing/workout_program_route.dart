@@ -12,6 +12,7 @@ import '../../infrastructure/firebase/firebase_workout_program_catalog.dart';
 import '../di/program_store_factory.dart';
 import '../di/workout_store_factory.dart';
 import 'routine_journey_route.dart';
+import 'member_progress_route.dart' show openRoutineAttempt;
 import 'squat_result_sync.dart' show newWorkoutRequestId;
 
 class WorkoutProgramRoute extends StatefulWidget {
@@ -138,6 +139,9 @@ class _WorkoutProgramRouteState extends State<WorkoutProgramRoute> {
             controller: _controller!,
             loadPrograms: _catalog!.load,
             onOpenRoutine: _routine,
+            onOpenSummary: (attempt) => unawaited(openRoutineAttempt(
+                context, attempt, _controller!.open,
+                programStoreFactory: widget.storeFactory)),
             clock: widget.clock,
             today: DateTime.utc(malaysia.year, malaysia.month, malaysia.day));
       });

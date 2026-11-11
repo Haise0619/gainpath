@@ -58,7 +58,8 @@ void main() {
     open(MemberProgressView.history);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
-    expect(find.text('Activity timeline'), findsOneWidget);
+    expect(find.text('Workout history'), findsOneWidget);
+    expect(find.text('Exercise sessions'), findsOneWidget);
     waiting.completeError(StateError('read failed'));
     await tester.pumpAndSettle();
     expect(find.textContaining('Showing previously loaded local results.'),

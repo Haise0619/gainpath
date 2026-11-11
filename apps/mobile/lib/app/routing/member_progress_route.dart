@@ -17,6 +17,7 @@ import '../../features/analytics/application/member_progress_cubit.dart';
 import '../../features/analytics/domain/local_member_progress_repository.dart';
 import '../../features/analytics/presentation/shared/progress_dashboard_screen.dart';
 import '../../features/analytics/presentation/member/activity_timeline_screen.dart';
+import '../../features/analytics/presentation/member/workout_history_tabs.dart';
 import '../../features/analytics/presentation/member/workout_performance_screen.dart';
 import '../../features/analytics/presentation/member/posture_accuracy_screen.dart';
 import '../../features/analytics/presentation/member/widgets/local_progress_widgets.dart';
@@ -282,6 +283,8 @@ class _MemberProgressHostState extends State<MemberProgressHost>
                         }
                         return WorkoutResultScreen.measured(
                             summary: summary,
+                            onContinue: () => Navigator.pop(context),
+                            continueLabel: 'Done',
                             fictionalObservation:
                                 widget.scope.datasetScope != null,
                             syncPanel: LocalProgressRecordTile(
@@ -435,6 +438,10 @@ Widget _progressContent(
                 FilledButton(onPressed: refresh, child: const Text('Retry'))
               ])));
   }
+  void openSavedRoutine(RoutineAttempt attempt) =>
+      unawaited(openRoutineAttempt(context, attempt, refresh,
+          sessionRecords: progress.records, onOpenSession: openWorkout));
+
   void openReport([WorkoutReportFilter? filter]) {
     Navigator.push(
         context,
@@ -447,7 +454,7 @@ Widget _progressContent(
                   final matches =
                       state.routines?.records.where((a) => a.id == id);
                   if (matches != null && matches.isNotEmpty) {
-                    openRoutineAttempt(context, matches.first, refresh);
+                    openSavedRoutine(matches.first);
                   }
                 })));
   }
@@ -470,6 +477,7 @@ Widget _progressContent(
   final screen = switch (view) {
     MemberProgressView.dashboard => ProgressDashboardScreen(
         onStartWorkout: openProgram,
+        startWorkoutLabel: 'Open training plan',
         goalSummary: goalSummaryBuilder?.call(progress.scope, progress,
                 state.routines, () => open(MemberProgressView.goals)) ??
             GoalComparisonHost(
@@ -496,19 +504,32 @@ Widget _progressContent(
         routineProgress: state.routines,
         onOpenRoutineHistory: () => open(MemberProgressView.routines),
         onOpenBackup: () => open(MemberProgressView.backup),
-        onOpenRoutine: (a) => openRoutineAttempt(context, a, refresh),
+        onOpenRoutine: openSavedRoutine,
         onRefresh: refresh,
         onOpenWorkout: openWorkout,
         onOpenHistory: () => open(MemberProgressView.history),
         onOpenPerformance: () => open(MemberProgressView.performance),
         onOpenForm: () => open(MemberProgressView.form)),
-    MemberProgressView.history => ActivityTimelineScreen(
-        routineProgress: state.routines,
-        onOpenReport: openReport,
-        onOpenFilteredReport: (filter) => openReport(filter),
-        localProgress: progress,
-        onRefresh: refresh,
-        onOpenWorkout: openWorkout),
+    MemberProgressView.history ||
+    MemberProgressView.routines =>
+      WorkoutHistoryTabs(
+          openSessions: view == MemberProgressView.history,
+          onRefresh: refresh,
+          onBackup: () => open(MemberProgressView.backup),
+          routines: RoutineHistoryScreen(
+              embedded: true,
+              attempts: state.routines?.records ?? const [],
+              available: state.routines != null,
+              onRefresh: refresh,
+              onOpenAttempt: openSavedRoutine),
+          sessions: ActivityTimelineScreen(
+              historyOnly: true,
+              routineProgress: state.routines,
+              onOpenReport: openReport,
+              onOpenFilteredReport: (filter) => openReport(filter),
+              localProgress: progress,
+              onRefresh: refresh,
+              onOpenWorkout: openWorkout)),
     MemberProgressView.performance => WorkoutPerformanceScreen(
         localProgress: progress,
         routineProgress: state.routines,
@@ -550,13 +571,6 @@ Widget _progressContent(
                               session: session,
                               isSessionCurrent: current)))));
         }),
-    MemberProgressView.routines => RoutineHistoryScreen(
-        attempts: state.routines?.records ?? const [],
-        available: state.routines != null,
-        onOpenBackup: () => open(MemberProgressView.backup),
-        onRefresh: refresh,
-        onOpenAttempt: (a) => openRoutineAttempt(context, a, refresh,
-            sessionRecords: progress.records, onOpenSession: openWorkout)),
     MemberProgressView.backup => WorkoutBackupScreen(
         coordinator: backup,
         error: backupError,
@@ -614,6 +628,7 @@ Future<void> openRoutineAttempt(BuildContext context, RoutineAttempt attempt,
     }
     return null;
   }();
+  var continuing = false;
   await Navigator.push(
       context,
       MaterialPageRoute<void>(
@@ -644,10 +659,19 @@ Future<void> openRoutineAttempt(BuildContext context, RoutineAttempt attempt,
 
                       Future<void> continueAttempt(BuildContext detailContext,
                           RoutineJourneyAction action) async {
-                        if (!authorized() || programStore == null) return;
+                        if (continuing ||
+                            !authorized() ||
+                            programStore == null) {
+                          return;
+                        }
+                        continuing = true;
                         try {
                           final latest = await programStore.load();
-                          if (!detailContext.mounted || !authorized()) return;
+                          if (!detailContext.mounted ||
+                              !authorized() ||
+                              ModalRoute.of(detailContext)?.isCurrent != true) {
+                            return;
+                          }
                           final current =
                               latest.slotsForAttempt(attempt.id).toList();
                           if (free ? current.isNotEmpty : current.length != 1) {
@@ -686,6 +710,8 @@ Future<void> openRoutineAttempt(BuildContext context, RoutineAttempt attempt,
                                     content: Text(
                                         'Workout context changed. Reopen the result to continue.')));
                           }
+                        } finally {
+                          continuing = false;
                         }
                       }
 
@@ -693,6 +719,13 @@ Future<void> openRoutineAttempt(BuildContext context, RoutineAttempt attempt,
                           .any((e) => e.dayNumber > attempt.day);
                       return RoutineAttemptDetailScreen(
                           attempt: attempt,
+                          trainingSource: link?.enrollment.program.title ??
+                              (free
+                                  ? 'Free workout'
+                                  : snapshot.connectionState ==
+                                          ConnectionState.done
+                                      ? 'Workout source unavailable'
+                                      : null),
                           availableSessionIds: {
                             for (final entry in attempt.entries)
                               for (final record in sessionRecords)

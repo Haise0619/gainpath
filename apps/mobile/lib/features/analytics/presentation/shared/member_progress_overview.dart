@@ -17,6 +17,7 @@ class MemberProgressOverview extends StatelessWidget {
       this.programStatsBuilder,
       this.goals,
       this.onStart,
+      this.startLabel = 'Start workout',
       this.onHistory,
       this.onReports,
       this.onPerformance,
@@ -26,6 +27,7 @@ class MemberProgressOverview extends StatelessWidget {
       this.onWorkout,
       this.onRoutine});
   final MemberLocalProgress progress;
+  final String startLabel;
   final RoutineProgress? routines;
   final Widget? program, goals;
   final Widget Function(Widget Function(BuildContext, int?))? programBuilder;
@@ -166,7 +168,7 @@ class MemberProgressOverview extends StatelessWidget {
       FilledButton.icon(
           onPressed: onStart,
           icon: const Icon(Icons.play_arrow_rounded),
-          label: const Text('Start workout')),
+          label: Text(startLabel)),
       if (goals != null) ...[const SizedBox(height: 16), goals!],
       const SizedBox(height: 20),
       const Text('Recent workouts',

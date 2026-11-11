@@ -18,6 +18,7 @@ import '../../features/workout/presentation/member/published_routine_catalog_con
 import '../../features/workout/presentation/member/workout_prep_screen.dart';
 import '../../navigation/workout_navigation.dart';
 import '../di/program_store_factory.dart';
+import '../di/equipment_catalog_factory.dart';
 import '../di/workout_store_factory.dart';
 import 'pose_preview_route.dart';
 import 'exercise_tracker_route.dart';
@@ -38,6 +39,7 @@ class WorkoutPrepRoute extends StatefulWidget {
     this.routineStatusMessage,
     this.routineCatalogControls,
     this.onOpenEquipment,
+    this.equipmentReaderFactory,
     this.programStoreFactory = createProgramEnrollmentStore,
     this.routineStoreFactory = createRoutineJourneyStore,
   });
@@ -47,6 +49,7 @@ class WorkoutPrepRoute extends StatefulWidget {
   final String? routineStatusMessage;
   final Widget? routineCatalogControls;
   final VoidCallback? onOpenEquipment;
+  final EquipmentReaderFactory? equipmentReaderFactory;
   final Future<ProgramEnrollmentStore> Function(SessionScope)
       programStoreFactory;
   final Future<RoutineJourneyStore> Function(SessionScope) routineStoreFactory;
@@ -68,6 +71,11 @@ class _WorkoutPrepRouteState extends State<WorkoutPrepRoute>
       _showFree = false,
       _starting = false;
   int _generation = 0;
+  int _launchEpoch = 0;
+  bool get _foreground {
+    final state = WidgetsBinding.instance.lifecycleState;
+    return state == null || state == AppLifecycleState.resumed;
+  }
 
   SessionScope? _activeScope() {
     final auth = _auth;
@@ -145,7 +153,6 @@ class _WorkoutPrepRouteState extends State<WorkoutPrepRoute>
       if (!mounted || generation != _generation || _activeScope() != scope) {
         return;
       }
-      setState(() => _checkpoints = checkpoints);
       final store = await widget.programStoreFactory(scope);
       if (!mounted || generation != _generation || _activeScope() != scope) {
         return;
@@ -176,7 +183,6 @@ class _WorkoutPrepRouteState extends State<WorkoutPrepRoute>
         setState(() {
           _loading = false;
           _loadError = true;
-          _scheduled = null;
         });
       }
     } finally {
@@ -186,6 +192,7 @@ class _WorkoutPrepRouteState extends State<WorkoutPrepRoute>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed) _launchEpoch++;
     if (state == AppLifecycleState.resumed && _scope != null && !_starting) {
       unawaited(_reload(_scope!));
     }
@@ -209,19 +216,28 @@ class _WorkoutPrepRouteState extends State<WorkoutPrepRoute>
 
   Future<void> _startScheduled() async {
     final shown = _scheduled, hub = _hub, auth = _auth, scope = _scope;
+    final epoch = _launchEpoch;
     if (_starting ||
         shown == null ||
         hub == null ||
         auth == null ||
         scope == null ||
         _activeScope() != scope ||
+        !_foreground ||
+        ModalRoute.of(context)?.isCurrent != true ||
         _showFree) {
       return;
     }
     setState(() => _starting = true);
     try {
       final launch = await hub.start(shown);
-      if (!mounted || _activeScope() != scope) return;
+      if (!mounted ||
+          _activeScope() != scope ||
+          !_foreground ||
+          epoch != _launchEpoch ||
+          ModalRoute.of(context)?.isCurrent != true) {
+        return;
+      }
       await Navigator.push(
           context,
           MaterialPageRoute<void>(
@@ -268,6 +284,7 @@ class _WorkoutPrepRouteState extends State<WorkoutPrepRoute>
   Widget build(BuildContext context) {
     final auth = _auth;
     final scope = _activeScope();
+    final session = auth?.state.session;
     VoidCallback? openProgress(MemberProgressView view) => scope == null ||
             auth == null
         ? null
@@ -282,14 +299,14 @@ class _WorkoutPrepRouteState extends State<WorkoutPrepRoute>
           };
     final scheduled = !_showFree ? _scheduled : null;
     final routine = widget.publishedRoutine;
-    final freeAttempt = scope == null || routine == null
+    final journal = _controller?.journal;
+    final freeAttempt = scope == null || routine == null || journal == null
         ? null
         : WorkoutHubAttempt.fromCheckpoints(
             scope: scope,
             routine: routine,
             checkpoints: _checkpoints,
-            scheduledAttemptIds:
-                _controller?.journal?.scheduledAttemptIds ?? const {});
+            scheduledAttemptIds: journal.scheduledAttemptIds);
     final original = widget.routineCatalogControls;
     final Widget? controls;
     if (original is PublishedRoutineCatalogControls) {
@@ -329,6 +346,8 @@ class _WorkoutPrepRouteState extends State<WorkoutPrepRoute>
                         MaterialPageRoute(
                             builder: (_) => WorkoutPrivacySettingsScreen(
                                 scope: scope,
+                                onOpenBackup:
+                                    openProgress(MemberProgressView.backup),
                                 isCurrent: () => _activeScope() == scope)));
                     if (mounted && _activeScope() == scope) {
                       await _reload(scope);
@@ -338,6 +357,18 @@ class _WorkoutPrepRouteState extends State<WorkoutPrepRoute>
                 ? null
                 : () => _openPrograms(scope, auth),
             onOpenEquipment: widget.onOpenEquipment,
+            onBrowseEquipment: scope == null || auth == null || session == null
+                ? null
+                : () {
+                    if (_activeScope() != scope) return;
+                    Navigator.push(
+                        context,
+                        MaterialPageRoute<void>(
+                            builder: (_) => BlocProvider.value(
+                                value: auth,
+                                child: buildMemberEquipmentCatalog(session,
+                                    factory: widget.equipmentReaderFactory))));
+                  },
             onOpenProgress: openProgress(MemberProgressView.dashboard),
             onOpenRoutineHistory: openProgress(MemberProgressView.routines),
             onReturnToPlanned: _showFree && _scheduled != null
@@ -350,29 +381,34 @@ class _WorkoutPrepRouteState extends State<WorkoutPrepRoute>
                     widget.publishedRoutine == null
                 ? null
                 : () async {
-                    if (_starting || _activeScope() != scope) return;
+                    if (_starting ||
+                        _activeScope() != scope ||
+                        !_foreground ||
+                        ModalRoute.of(context)?.isCurrent != true) {
+                      return;
+                    }
                     setState(() => _starting = true);
                     try {
                       await Navigator.push(
-                        context,
-                        MaterialPageRoute<void>(
-                            builder: (_) => BlocProvider.value(
-                                value: auth,
-                                child: RoutineJourneyRoute(
-                                    scope: scope,
-                                    routine: widget.publishedRoutine!,
-                                    storeFactory: widget.routineStoreFactory,
-                                    programStoreFactory:
-                                        widget.programStoreFactory,
-                                    attemptId: freeAttempt!.checkpoint?.id,
-                                    startFirstExercise:
-                                        freeAttempt.checkpoint == null ||
-                                            freeAttempt.startsNewAttempt,
-                                    action: freeAttempt.startsNewAttempt
-                                        ? RoutineJourneyAction.repeat
-                                        : freeAttempt.resumeUnfinished
-                                            ? RoutineJourneyAction.resume
-                                            : RoutineJourneyAction.view))));
+                          context,
+                          MaterialPageRoute<void>(
+                              builder: (_) => BlocProvider.value(
+                                  value: auth,
+                                  child: RoutineJourneyRoute(
+                                      scope: scope,
+                                      routine: widget.publishedRoutine!,
+                                      storeFactory: widget.routineStoreFactory,
+                                      programStoreFactory:
+                                          widget.programStoreFactory,
+                                      attemptId: freeAttempt!.checkpoint?.id,
+                                      startFirstExercise:
+                                          freeAttempt.checkpoint == null ||
+                                              freeAttempt.startsNewAttempt,
+                                      action: freeAttempt.startsNewAttempt
+                                          ? RoutineJourneyAction.repeat
+                                          : freeAttempt.resumeUnfinished
+                                              ? RoutineJourneyAction.resume
+                                              : RoutineJourneyAction.view))));
                     } finally {
                       if (mounted) {
                         setState(() => _starting = false);
@@ -385,6 +421,8 @@ class _WorkoutPrepRouteState extends State<WorkoutPrepRoute>
             onStartScheduled: scheduled == null ? null : _startScheduled,
             programLoading: _loading,
             programLoadError: _loadError,
+            workoutStateUnavailable: _loadError && journal == null,
+            onRetryWorkout: scope == null ? null : () => _reload(scope),
             routineLoadFailed: widget.routineLoadFailed,
             routineStatusMessage: widget.routineStatusMessage,
             routineCatalogControls: controls,

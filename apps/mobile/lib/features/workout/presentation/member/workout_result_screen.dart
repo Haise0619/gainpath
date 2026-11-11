@@ -243,7 +243,7 @@ class _WorkoutResultScreenState extends State<WorkoutResultScreen>
     final score = summary.formScorePercent;
     return Scaffold(
         appBar: AppBar(
-            title: const Text('Session summary'),
+            title: const Text('Exercise result'),
             automaticallyImplyLeading: false),
         bottomNavigationBar: SafeArea(
             top: false,

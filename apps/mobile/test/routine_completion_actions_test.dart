@@ -17,7 +17,7 @@ import 'routine_journey_controller_test.dart' as support;
 void main() {
   setUpAll(() => GoogleFonts.config.allowRuntimeFetching = false);
   testWidgets(
-      'completion actions open progress and create next day without replacing saved attempt',
+      'completion opens history and creates next day without replacing saved attempt',
       (tester) async {
     final a = ui.attempt(),
         store = support.MemoryJourneyStore(ui.attempt().scope);
@@ -47,7 +47,7 @@ void main() {
             controller: c,
             onTrack: (_) async {},
             onTutorial: (_) async {},
-            onViewProgress: () => opened = true)));
+            onViewHistory: () => opened = true)));
     expect(find.text('Routine completion'), findsOneWidget);
     await tester.scrollUntilVisible(
         find.text('Workout rewards · Not active'), 200);
@@ -56,9 +56,10 @@ void main() {
     expect(find.textContaining('Your workout progress is still saved'),
         findsOneWidget);
     expect(find.text('Claim reward'), findsNothing);
-    await tester.scrollUntilVisible(find.text('View progress'), 250);
+    expect(find.text('View progress'), findsNothing);
+    await tester.scrollUntilVisible(find.text('Routine history'), -250);
     await tester.pumpAndSettle();
-    await tester.tap(find.text('View progress'));
+    await tester.tap(find.text('Routine history'));
     expect(opened, true);
     await tester.ensureVisible(find.text('Next routine day'));
     await tester.pumpAndSettle();
@@ -95,6 +96,12 @@ void main() {
                 scope: scope,
                 view: MemberProgressView.routines,
                 repositoryFactory: (_, __) async => repo))));
+    await tester.pumpAndSettle();
+    expect(find.text('Routines'), findsOneWidget);
+    await tester.tap(find.text('Exercise sessions'));
+    await tester.pumpAndSettle();
+    expect(find.text('No saved camera sessions yet.'), findsOneWidget);
+    await tester.tap(find.text('Routines'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Strength days · Day 1'));
     await tester.pumpAndSettle();
