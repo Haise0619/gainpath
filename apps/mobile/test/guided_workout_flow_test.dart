@@ -124,7 +124,7 @@ void main() {
     await tester.ensureVisible(end);
     await tester.tap(end);
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Save result'));
+    await tester.tap(find.text('Save result').hitTestable());
     await tester.pumpAndSettle();
     expect(find.text('Saved on this device'), findsOneWidget);
     expect((await store.read()).single.summary.repetitions, 2);

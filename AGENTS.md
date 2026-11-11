@@ -288,3 +288,7 @@ The six retained trackers now use bounded fresh outcome speech and preserve fina
 ## Module 2 Phase 3 — 11 November 2026
 
 The live camera overlay repaints independently and projects each anatomical point once. The deterministic 120-delivery fixture reduced camera preview rebuilds from 120 to zero while retaining 120 overlay paints. Sixteen synthetic painter comparisons produced equal pixels and reduced landmark lookups from 103 to 33. Phase 0 diagnostics now include snapshot, stream-start, paint, Flutter frame-budget and rest inference observations. Verified with 363 affected Mobile tests, 759 pose tests, 28 diagnostic-mode tests, clean scoped analysis and an arm64 Android Debug build. ADB listed no connected devices. Physical performance and the ML Kit prototype remain pending measured evidence. [Phase 3 rendering report](docs/ux/module-2-phase3-rendering.md)
+
+## Module 2 Phase 4 ? 11 November 2026
+
+The six retained AI exercises now support opt-in Auto-Continue Between Sets. A fresh, calibrated starting pose gates the preparation countdown. Manual continuation remains available and two-arm Curl keeps its explicit arm switch. Full Coaching can announce set, rest and exercise transitions. The live camera layout improves counter, alignment, status and control readability. Physical Android acceptance remains pending. [Phase 4 workout continuity report](docs/ux/module-2-phase4-workout-continuity.md)

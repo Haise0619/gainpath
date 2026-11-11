@@ -1,15 +1,19 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gainpath_data/gainpath_data.dart';
 import 'package:gainpath_identity/gainpath_identity.dart';
+import 'package:gainpath_mobile/app/routing/exercise_tracker_route.dart';
 import 'package:gainpath_mobile/app/routing/routine_journey_route.dart';
 import 'package:gainpath_mobile/app/routing/guided_timed_workout_route.dart';
 import 'package:gainpath_mobile/features/workout/application/workout_preferences_controller.dart';
 import 'package:gainpath_mobile/features/workout/data/workout_session_repository.dart';
 import 'package:gainpath_mobile/features/workout/domain/published_routine_view.dart';
 import 'package:gainpath_mobile/features/workout/domain/routine_journey.dart';
+import 'package:gainpath_mobile/features/workout/domain/workout_audio_port.dart';
+import 'package:gainpath_mobile/features/workout/presentation/member/lateral_raise_setup_screen.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'routine_journey_controller_test.dart' show MemoryJourneyStore;
 import 'routine_journey_controller_test.dart' as support;
@@ -17,6 +21,15 @@ import 'hybrid_routine_journey_test.dart' show hybridFixture;
 import 'guided_timed_workout_controller_test.dart' show Player;
 import 'package:gainpath_mobile/navigation/workout_navigation.dart';
 import 'workout_preferences_test.dart' show MemoryWorkoutPreferencesStore;
+
+class _FullCoachingVoicePreferences implements WorkoutVoicePreferences {
+  @override
+  Future<WorkoutVoiceMode> read() async => WorkoutVoiceMode.fullCoaching;
+
+  @override
+  Future<void> write(WorkoutVoiceMode mode) async =>
+      throw StateError('Routine rest only reads voice preferences');
+}
 
 class FailingJourneyStore extends MemoryJourneyStore {
   FailingJourneyStore(super.scope);
@@ -214,10 +227,12 @@ void main() {
     });
   }
 
-  for (final nextTimed in [false, true]) {
+  for (final nextMode in ['floor push-up', 'lateral raise', 'timed']) {
     testWidgets(
-        'durably saved AI exercise proceeds to ${nextTimed ? 'timed' : 'AI'} after rest in the same attempt',
+        'durably saved AI exercise proceeds to $nextMode after rest in the same attempt',
         (tester) async {
+      final nextTimed = nextMode == 'timed';
+      final nextFloor = nextMode == 'floor push-up';
       tester.view.physicalSize = const Size(1000, 1600);
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
@@ -227,14 +242,30 @@ void main() {
       final preferences = WorkoutPreferencesController(
           scope: scope, store: MemoryWorkoutPreferencesStore());
       await preferences.grantConsent();
+      const audioChannel = MethodChannel('gainpath/workout_audio');
+      final playing = Completer<String>();
+      final calls = <MethodCall>[];
+      tester.binding.defaultBinaryMessenger
+          .setMockMethodCallHandler(audioChannel, (call) async {
+        calls.add(call);
+        if (call.method == 'create') return true;
+        if (call.method == 'clock') return 1000000;
+        if (call.method == 'play') return playing.future;
+        return null;
+      });
+      addTearDown(() {
+        if (!playing.isCompleted) playing.complete('cancelled');
+      });
       final base = hybridFixture();
       final next = nextTimed
           ? base.exercises[1]
-          : const PublishedRoutineExercise(
-              exerciseId: 'standing-lateral-raise-front-v1',
-              entryId: 'raise',
+          : PublishedRoutineExercise(
+              exerciseId: nextFloor
+                  ? 'standard-floor-push-up-side-v1'
+                  : 'standing-lateral-raise-front-v1',
+              entryId: 'next-ai',
               dayNumber: 1,
-              name: 'Standing lateral raise',
+              name: nextFloor ? 'Floor push-up' : 'Standing lateral raise',
               category: '',
               sets: 1,
               reps: 2,
@@ -247,6 +278,7 @@ void main() {
           title: 'Continuous routine',
           estimatedMinutes: 5,
           schemaVersion: 2,
+          betweenExerciseRestSeconds: 4,
           exercises: [base.exercises.first, next]);
       final launches = <RealWorkoutLaunch>[];
       final player = Player();
@@ -259,11 +291,19 @@ void main() {
                   storeFactory: (_) async => store,
                   workoutStoreFactory: (_) async => workouts,
                   preferencesFactory: (_) async => preferences,
+                  voicePreferencesFactory: (voiceScope) async {
+                    expect(voiceScope, scope);
+                    return _FullCoachingVoicePreferences();
+                  },
                   timedPlayerFactory: (_) => player,
                   measuredBuilder: (launch) {
                     if (!launches
                         .any((item) => item.sessionId == launch.sessionId)) {
                       launches.add(launch);
+                    }
+                    if (nextMode == 'lateral raise' &&
+                        launch.exercise.exerciseId == next.exerciseId) {
+                      return ExerciseTrackerRoute(launch: launch);
                     }
                     return Builder(
                         builder: (context) => Scaffold(
@@ -305,11 +345,33 @@ void main() {
       expect((await workouts.read()).length, 1);
       expect(
           store.records.values.single.sessions[0], [launches.first.sessionId]);
+      expect(calls.where((call) => call.method == 'play'), hasLength(1));
+      final play = calls.singleWhere((call) => call.method == 'play');
+      expect((play.arguments as Map)['text'], contains(next.name));
+      expect(playing.isCompleted, isFalse);
+      if (nextTimed) {
+        await preferences.withdrawConsent();
+        await tester.pump();
+        expect(calls.where((call) => call.method == 'stop'), isNotEmpty);
+        expect(find.text('Skip Rest'), findsOneWidget);
+      }
       await tester.tap(find.text('Skip Rest'));
+      if (nextFloor) {
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 400));
+        expect(launches.length, 1);
+        expect(find.text('Ready to continue'), findsOneWidget);
+        await tester.tap(find.byType(Checkbox).first);
+        await tester.pump();
+        await tester.tap(find.text('Ready to continue'));
+      }
       await tester.pumpAndSettle();
       expect(store.records.keys.single, id);
       expect(store.records.values.single.selectedIndex, 1);
       expect(find.text('AI Tracking privacy'), findsNothing);
+      expect(calls.where((call) => call.method == 'stop'), isNotEmpty);
+      expect(playing.isCompleted, isFalse);
+      playing.complete('cancelled');
       if (nextTimed) {
         expect(find.byType(GuidedTimedWorkoutRoute), findsOneWidget);
         expect(player.playing, isTrue);
@@ -321,6 +383,10 @@ void main() {
         expect(launches.last.routineId, 'routine');
         expect(launches.last.routineContext!.day, 1);
         expect(launches.last.consentCurrent!(), isTrue);
+        if (nextMode == 'lateral raise') {
+          expect(find.byType(LateralRaiseSetupScreen), findsOneWidget);
+          expect(find.text('Ready to continue'), findsNothing);
+        }
       }
       expect((await workouts.read()).length, 1);
       expect(tester.takeException(), isNull);

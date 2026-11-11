@@ -35,12 +35,12 @@ void main() {
   testWidgets(
       'privacy consent and preferences are usable on a small phone with large text',
       (tester) async {
-    tester.view.physicalSize = const Size(360, 640);
+    tester.view.physicalSize = const Size(320, 640);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
-    final c = WorkoutPreferencesController(
-        scope: scope, store: MemoryWorkoutPreferencesStore());
+    final store = MemoryWorkoutPreferencesStore();
+    final c = WorkoutPreferencesController(scope: scope, store: store);
     await c.load();
     await tester.pumpWidget(MaterialApp(
         theme: AppTheme.build(),
@@ -76,10 +76,24 @@ void main() {
     await tester.tap(find.text('Withdraw AI Tracking consent'));
     await tester.pumpAndSettle();
     expect(c.validConsent, isFalse);
-    await tester.scrollUntilVisible(find.text('Auto-Continue Workout'), 150);
+    final betweenExercises =
+        find.widgetWithText(SwitchListTile, 'Auto-Continue Between Exercises');
+    await tester.scrollUntilVisible(betweenExercises, 150);
     await tester.pumpAndSettle();
-    await tester.tap(find.byType(SwitchListTile));
+    expect(tester.widget<SwitchListTile>(betweenExercises).value, isTrue);
+    await tester.tap(betweenExercises);
     await tester.pumpAndSettle();
+    expect(c.autoContinue, isFalse);
+
+    final betweenSets =
+        find.widgetWithText(SwitchListTile, 'Auto-Continue Between Sets');
+    await tester.scrollUntilVisible(betweenSets, 150);
+    await tester.pumpAndSettle();
+    expect(tester.widget<SwitchListTile>(betweenSets).value, isFalse);
+    await tester.tap(betweenSets);
+    await tester.pumpAndSettle();
+    expect(tester.widget<SwitchListTile>(betweenSets).value, isTrue);
+    expect(store.value!['autoContinueBetweenSets'], isTrue);
     expect(c.autoContinue, isFalse);
     expect(tester.takeException(), isNull);
   });
@@ -92,15 +106,30 @@ void main() {
     await c.load();
     await c.grantConsent();
     var disposed = false;
+    WorkoutPreferencesController? capturePreferences;
     await tester.pumpWidget(MaterialApp(
         home: WorkoutAiConsentGuard(
             scope: scope,
             isCurrent: () => true,
             preferencesFactory: (_) async => c,
-            child: _CaptureChild(() => disposed = true))));
+            child: Builder(builder: (context) {
+              capturePreferences = WorkoutAiConsentGuard.preferencesOf(context);
+              return _CaptureChild(() => disposed = true);
+            }))));
     await tester.pumpAndSettle();
     expect(find.text('camera capture mounted'), findsOneWidget);
-    await c.withdrawConsent();
+    expect(capturePreferences, same(c));
+    var withdrew = false;
+    capturePreferences!.addListener(() {
+      if (!capturePreferences!.validConsent) withdrew = true;
+    });
+    await c.updatePreferences(autoContinueBetweenSets: true);
+    await tester.pumpAndSettle();
+    expect(disposed, isFalse);
+    expect(capturePreferences!.autoContinueBetweenSets, isTrue);
+    final withdrawal = c.withdrawConsent();
+    expect(withdrew, isTrue);
+    await withdrawal;
     await tester.pumpAndSettle();
     expect(disposed, isTrue);
     expect(find.text('camera capture mounted'), findsNothing);

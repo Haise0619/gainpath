@@ -28,8 +28,26 @@ class WorkoutAiConsentGuard extends StatefulWidget {
   /// Sticky launch intent is checked until the capture child first mounts.
   /// Normal lifecycle policy owns capture after that handoff.
   final bool Function()? launchCurrent;
+
+  /// Returns the account preferences available to an authorized capture child.
+  static WorkoutPreferencesController? preferencesOf(BuildContext context) =>
+      context
+          .dependOnInheritedWidgetOfExactType<_AuthorizedWorkoutPreferences>()
+          ?.preferences;
+
   @override
   State<WorkoutAiConsentGuard> createState() => _WorkoutAiConsentGuardState();
+}
+
+class _AuthorizedWorkoutPreferences extends InheritedWidget {
+  const _AuthorizedWorkoutPreferences(
+      {required this.preferences, required super.child});
+
+  final WorkoutPreferencesController preferences;
+
+  @override
+  bool updateShouldNotify(_AuthorizedWorkoutPreferences oldWidget) =>
+      oldWidget.preferences != preferences;
 }
 
 class _WorkoutAiConsentGuardState extends State<WorkoutAiConsentGuard> {
@@ -95,9 +113,9 @@ class _WorkoutAiConsentGuardState extends State<WorkoutAiConsentGuard> {
     if (!_hadCapture && widget.launchCurrent?.call() == false) {
       _revoked = true;
     }
-    if (!_revoked && _current && p?.validConsent == true) {
+    if (!_revoked && _current && p != null && p.validConsent) {
       _hadCapture = true;
-      return widget.child;
+      return _AuthorizedWorkoutPreferences(preferences: p, child: widget.child);
     }
     return Scaffold(
         appBar: AppBar(title: const Text('AI Tracking paused')),

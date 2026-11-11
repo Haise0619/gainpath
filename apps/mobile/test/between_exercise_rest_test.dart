@@ -1,20 +1,171 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:gainpath_mobile/features/workout/application/between_exercise_rest_controller.dart';
+import 'package:gainpath_mobile/features/workout/domain/published_routine_view.dart';
+import 'package:gainpath_mobile/features/workout/domain/workout_audio_port.dart';
 import 'package:gainpath_mobile/features/workout/presentation/member/between_exercise_rest_screen.dart';
 import 'package:gainpath_mobile/app/routing/between_exercise_rest_route.dart';
-import 'published_tutorial_test.dart' show row;
+
+const _upcomingExercise = PublishedRoutineExercise(
+    exerciseId: 'manual-step',
+    dayNumber: 1,
+    name: 'Step-up',
+    category: 'Lower body',
+    sets: 2,
+    reps: 7,
+    cue: '',
+    imageUrl: '',
+    muscleGroup: '');
 
 void main() {
   setUpAll(() => GoogleFonts.config.allowRuntimeFetching = false);
+  for (final interruption in ['pause', 'background', 'authorization']) {
+    testWidgets('next exercise voice stops immediately on $interruption',
+        (tester) async {
+      const channel = MethodChannel('gainpath/workout_audio');
+      final calls = <MethodCall>[];
+      final playing = Completer<String>();
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(channel,
+          (call) async {
+        calls.add(call);
+        if (call.method == 'create') return true;
+        if (call.method == 'clock') return 1000000;
+        if (call.method == 'play') return playing.future;
+        if (call.method == 'stop' && !playing.isCompleted) {
+          playing.complete('cancelled');
+        }
+        return null;
+      });
+      final authorized = ValueNotifier(true);
+      addTearDown(authorized.dispose);
+      await tester.pumpWidget(MaterialApp(
+          home: BetweenExerciseRestRoute(
+              previousExercise: 'Squat',
+              upcomingExercise: _upcomingExercise,
+              organizationId: 'gainpath',
+              restSeconds: 4,
+              canAdvance: () => true,
+              voice: (
+            loadMode: () async => WorkoutVoiceMode.fullCoaching,
+            canAnnounce: () => authorized.value,
+            authorization: authorized,
+          ))));
+      await tester.pump(const Duration(milliseconds: 100));
+      final play = calls.singleWhere((call) => call.method == 'play');
+      final payload = play.arguments as Map;
+      expect(payload['text'], contains(_upcomingExercise.name));
+      expect(payload['startDeadlineMicros'], greaterThan(1000000));
+      expect(calls.where((call) => call.method == 'stop'), isEmpty);
+
+      switch (interruption) {
+        case 'pause':
+          await tester.tap(find.text('Pause Workout'));
+        case 'background':
+          tester.binding
+              .handleAppLifecycleStateChanged(AppLifecycleState.paused);
+        case 'authorization':
+          authorized.value = false;
+      }
+      // No rest timer tick is needed for cancellation.
+      await tester.pump();
+      expect(playing.isCompleted, isTrue);
+      expect(calls.where((call) => call.method == 'stop'), hasLength(1));
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      authorized.value = true;
+      if (find.text('Resume Workout').evaluate().isNotEmpty) {
+        await tester.tap(find.text('Resume Workout'));
+      }
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(calls.where((call) => call.method == 'play'), hasLength(1));
+      await tester.pumpWidget(const SizedBox());
+    });
+  }
+
+  for (final mode in [
+    null,
+    WorkoutVoiceMode.alertsOnly,
+    WorkoutVoiceMode.muted
+  ]) {
+    testWidgets(
+        'next exercise does not open TTS for ${mode?.label ?? 'no saved mode'}',
+        (tester) async {
+      const channel = MethodChannel('gainpath/workout_audio');
+      final calls = <MethodCall>[];
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(channel,
+          (call) async {
+        calls.add(call);
+        return true;
+      });
+      final authorized = ValueNotifier(true);
+      addTearDown(authorized.dispose);
+      await tester.pumpWidget(MaterialApp(
+          home: BetweenExerciseRestRoute(
+              previousExercise: 'Squat',
+              upcomingExercise: _upcomingExercise,
+              organizationId: 'gainpath',
+              restSeconds: 4,
+              canAdvance: () => true,
+              voice: (
+            loadMode: () async => mode,
+            canAnnounce: () => authorized.value,
+            authorization: authorized,
+          ))));
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(calls, isEmpty);
+      expect(find.text('Skip Rest'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox());
+    });
+  }
+
+  testWidgets('rest voice ignores a preference read after authorization loss',
+      (tester) async {
+    const channel = MethodChannel('gainpath/workout_audio');
+    final calls = <MethodCall>[];
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(channel,
+        (call) async {
+      calls.add(call);
+      return true;
+    });
+    final authorized = ValueNotifier(true);
+    final pendingMode = Completer<WorkoutVoiceMode?>();
+    var reads = 0;
+    addTearDown(authorized.dispose);
+    await tester.pumpWidget(MaterialApp(
+        home: BetweenExerciseRestRoute(
+            previousExercise: 'Squat',
+            upcomingExercise: _upcomingExercise,
+            organizationId: 'gainpath',
+            restSeconds: 4,
+            canAdvance: () => true,
+            voice: (
+          loadMode: () {
+            reads++;
+            return pendingMode.future;
+          },
+          canAnnounce: () => authorized.value,
+          authorization: authorized,
+        ))));
+    expect(reads, 1);
+    authorized.value = false;
+    authorized.value = true;
+    pendingMode.complete(WorkoutVoiceMode.fullCoaching);
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(calls, isEmpty);
+    expect(find.text('Skip Rest'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox());
+  });
+
   testWidgets('invalidated workout context disables continuation permanently',
       (tester) async {
     var allowed = true;
     await tester.pumpWidget(MaterialApp(
         home: BetweenExerciseRestRoute(
             previousExercise: 'Squat',
-            upcomingExercise: row(),
+            upcomingExercise: _upcomingExercise,
             organizationId: 'gainpath',
             restSeconds: 30,
             canAdvance: () => allowed)));
@@ -50,7 +201,7 @@ void main() {
                               MaterialPageRoute(
                                   builder: (_) => BetweenExerciseRestRoute(
                                       previousExercise: 'Squat',
-                                      upcomingExercise: row(),
+                                      upcomingExercise: _upcomingExercise,
                                       organizationId: 'gainpath',
                                       restSeconds: 30,
                                       canAdvance: () => true)));
@@ -90,7 +241,7 @@ void main() {
         home: BetweenExerciseRestScreen(
             controller: c,
             previousExercise: 'Standing Lateral Raise',
-            upcomingExercise: row(),
+            upcomingExercise: _upcomingExercise,
             organizationId: 'gainpath',
             onViewRoutine: () {})));
     expect(find.text('Pause Workout'), findsOneWidget);

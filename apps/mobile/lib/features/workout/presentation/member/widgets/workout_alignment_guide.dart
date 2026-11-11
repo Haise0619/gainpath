@@ -26,8 +26,8 @@ class _WorkoutAlignmentGuideState extends State<WorkoutAlignmentGuide> {
           child: LayoutBuilder(builder: (context, bounds) {
             final compact = bounds.maxHeight < 460 ||
                 MediaQuery.textScalerOf(context).scale(16) > 22;
-            final content = Column(children: [
-              const Text('Reposition camera · counting paused',
+            final instructions = Column(children: [
+              const Text('Reposition camera',
                   style: TextStyle(
                       color: Colors.white, fontWeight: FontWeight.bold),
                   textAlign: TextAlign.center),
@@ -36,25 +36,43 @@ class _WorkoutAlignmentGuideState extends State<WorkoutAlignmentGuide> {
                       'Stand side-on with your whole body visible. Drag the outline or adjust its width.',
                   style: const TextStyle(color: Colors.white),
                   textAlign: TextAlign.center),
-              if (compact)
-                SizedBox(height: 160, child: _outline())
-              else
-                Expanded(child: _outline()),
-              Slider(
-                  value: _width,
-                  min: .4,
-                  max: .9,
-                  label: 'Outline width',
-                  semanticFormatterCallback: (value) =>
-                      '${(value * 100).round()} percent of preview',
-                  onChanged: (value) => setState(() => _width = value)),
-              FilledButton(
-                  onPressed: widget.canConfirm ? widget.onConfirm : null,
-                  child: Text(widget.canConfirm
-                      ? 'Use this position'
-                      : 'Move fully into view')),
             ]);
-            return compact ? SingleChildScrollView(child: content) : content;
+            final slider = Slider(
+                value: _width,
+                min: .4,
+                max: .9,
+                label: 'Outline width',
+                semanticFormatterCallback: (value) =>
+                    '${(value * 100).round()} percent of preview',
+                onChanged: (value) => setState(() => _width = value));
+            final confirm = FilledButton(
+                onPressed: widget.canConfirm ? widget.onConfirm : null,
+                child: Text(
+                    widget.canConfirm
+                        ? 'Use this position'
+                        : 'Move fully into view',
+                    textAlign: TextAlign.center));
+            if (!compact) {
+              return Column(children: [
+                instructions,
+                Expanded(child: _outline()),
+                slider,
+                confirm,
+              ]);
+            }
+            final positioning = Column(children: [
+              instructions,
+              SizedBox(height: 116, child: _outline()),
+              slider,
+            ]);
+            if (bounds.maxHeight < 100) {
+              return SingleChildScrollView(
+                  child: Column(children: [confirm, positioning]));
+            }
+            return Column(children: [
+              Expanded(child: SingleChildScrollView(child: positioning)),
+              confirm,
+            ]);
           })));
 
   Widget _outline() => LayoutBuilder(

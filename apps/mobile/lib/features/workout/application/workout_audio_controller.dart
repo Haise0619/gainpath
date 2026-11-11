@@ -38,6 +38,7 @@ class WorkoutAudioController {
   final Set<String> _seenEvents = {};
   WorkoutFeedbackEvent? _activeEvent;
   WorkoutFeedbackEvent? _recentOutcome;
+  bool _activeRestBoundary = false;
   final Stopwatch _eventWait = Stopwatch();
   int _eventBudgetMicros = 0;
 
@@ -66,11 +67,20 @@ class WorkoutAudioController {
   }
 
   /// Analysis stops at a set boundary; only the completed observation survives.
-  void finishSet() {
+  void finishSet({String? transition, bool restScoped = false}) {
     final outcome = _recentOutcome;
     _recentOutcome = null;
     if (_activeEvent != null &&
         (outcome == null || _activeEvent!.id == outcome.id)) {
+      final cue = _activeCue;
+      if (transition != null &&
+          outcome != null &&
+          _waitingForPlayback &&
+          cue?.priority == CuePriority.encouragement) {
+        _activeCue =
+            CueRequest(id: cue!.id, text: transition, priority: cue.priority);
+        _activeRestBoundary = restScoped;
+      }
       return;
     }
     _cancel(reason: 'set_boundary');
@@ -84,15 +94,51 @@ class WorkoutAudioController {
         events: [
           WorkoutFeedbackEvent(
               id: 'boundary-${outcome.id}',
-              cue: const CueRequest(
+              cue: CueRequest(
                   id: 'workout_set_complete',
-                  text: 'Set complete.',
+                  text: transition ?? 'Set complete.',
                   priority: CuePriority.encouragement),
               observedAtMicros: outcome.observedAtMicros,
               generatedAtMicros: now)
         ],
         arbiter: _boundaryArbiter);
+    _activeRestBoundary =
+        restScoped && _activeCue?.id == 'workout_set_complete';
     _recentOutcome = null;
+  }
+
+  /// One short, fresh transition. Busy playback and Alerts Only suppress it
+  /// rather than queueing an announcement that could become obsolete.
+  void announceTransition(String id, String text, {required int nowMicros}) {
+    if (!_canPlay ||
+        _voiceMode != WorkoutVoiceMode.fullCoaching ||
+        _activeCue != null ||
+        nowMicros < (_lastInputMicros ?? 0)) {
+      return;
+    }
+    final previousOutcome = _recentOutcome;
+    _consume(const [],
+        nowMicros: nowMicros,
+        trackingAvailable: _trackingAvailable,
+        events: [
+          WorkoutFeedbackEvent(
+              id: 'transition-$id',
+              cue: CueRequest(
+                  id: 'workout_transition',
+                  text: text,
+                  priority: CuePriority.encouragement),
+              observedAtMicros: nowMicros,
+              generatedAtMicros: nowMicros)
+        ],
+        arbiter: _boundaryArbiter);
+    _recentOutcome = previousOutcome;
+  }
+
+  void cancelTransition() {
+    if ((_activeRestBoundary && _activeCue != null) ||
+        _activeEvent?.id.startsWith('transition-') == true) {
+      _cancel(reason: 'transition_ended');
+    }
   }
 
   /// Called after durable save. No unbounded speech wait can block teardown.
@@ -342,6 +388,7 @@ class WorkoutAudioController {
     _lastSelectedAt = nowMicros;
     _lastSelectedPriority = selected.priority;
     _activeCue = selected;
+    _activeRestBoundary = false;
     _activeEvent = eventByCue[selected.id];
     _activeRequestId = requestByCue[selected.id];
     _eventBudgetMicros = _activeEvent == null
@@ -399,6 +446,9 @@ class WorkoutAudioController {
         _cancel(reason: 'start_deadline');
         return;
       }
+      // The same accepted boundary event can coalesce its text with the rest
+      // announcement before dispatch. Keep its identity, timing and priority.
+      cue = _activeCue ?? cue;
       trace?.record('tts_dispatch', requestId: _activeRequestId, cueId: cue.id);
       final timed = _port;
       outcome =
@@ -465,6 +515,7 @@ class WorkoutAudioController {
           requestId: _activeRequestId, cueId: _activeCue?.id, reason: reason);
     }
     _generation++;
+    _activeRestBoundary = false;
     _activeCue = null;
     _activeEvent = null;
     _activeRequestId = null;

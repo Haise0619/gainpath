@@ -1,3 +1,5 @@
+import 'workout_set_continuation.dart';
+import 'workout_set_readiness.dart';
 import '../domain/retained_workout_feedback.dart';
 import 'workout_voice_session.dart';
 import 'dart:async';
@@ -17,7 +19,10 @@ import 'workout_audio_controller.dart';
 
 /// Local-only bilateral front-view standing lateral raise session. Never constructs an upload submission.
 class LateralRaiseWorkoutSession extends ChangeNotifier
-    implements WorkoutVoiceSession, MeasuredWorkoutSession {
+    implements
+        WorkoutSetContinuationSession,
+        WorkoutVoiceSession,
+        MeasuredWorkoutSession {
   LateralRaiseWorkoutSession(
       {required this.scope,
       required this.activeScope,
@@ -61,6 +66,7 @@ class LateralRaiseWorkoutSession extends ChangeNotifier
         clockMicros: clockMicros,
         onRefined: _consume,
         onGeometryInvalidated: () {
+          setContinuation.cancel();
           _analyzer.pause();
           audio.invalidateSource();
           _watchdogLost = true;
@@ -79,6 +85,21 @@ class LateralRaiseWorkoutSession extends ChangeNotifier
   final WorkoutProvenance provenance;
   final Future<void> Function(WorkoutVoiceMode)? saveVoiceMode;
   final WorkoutAudioController audio;
+
+  @override
+  late final setContinuation = WorkoutSetContinuation(
+      guidance: () => guidance,
+      clockMicros: clockMicros,
+      canContinue: () =>
+          _authorized &&
+          !isPaused &&
+          viewPhase == MeasuredWorkoutPhase.active &&
+          preview.phase == PosePreviewPhase.tracking,
+      detectorId: detectorId,
+      detectorVersion: detectorVersion,
+      createProbe: () => WorkoutSetReadiness.lateral(),
+      startNextSet: startNextSet,
+      audio: audio);
   final LateralRaiseAnalyzer _analyzer;
 
   @override
@@ -225,6 +246,7 @@ class LateralRaiseWorkoutSession extends ChangeNotifier
       if (viewPhase != MeasuredWorkoutPhase.active) return;
       if (guidance.stage == GuidedWorkoutStage.resting && !isPaused) {
         guidance.tick(clockMicros());
+        setContinuation.update();
       }
       if (_canAnalyse) _tickAnalysis();
       _notify();
@@ -249,7 +271,12 @@ class LateralRaiseWorkoutSession extends ChangeNotifier
   }
 
   void _consume(PoseFrame frame) {
-    if (!_canAnalyse) return;
+    if (!_canAnalyse) {
+      if (guidance.stage == GuidedWorkoutStage.resting) {
+        setContinuation.update(frame: frame);
+      }
+      return;
+    }
     if (frame.detectorId != detectorId ||
         frame.modelVersion != detectorVersion) {
       _modelChanged = true;
@@ -289,8 +316,9 @@ class LateralRaiseWorkoutSession extends ChangeNotifier
   void _suspendAnalysis({bool preserveFeedback = false}) {
     _analyzer.pause();
     if (preserveFeedback) {
-      audio.finishSet();
+      setContinuation.finishBoundary();
     } else {
+      setContinuation.cancel();
       audio.pause();
     }
   }
@@ -396,6 +424,7 @@ class LateralRaiseWorkoutSession extends ChangeNotifier
       return;
     }
     if (guidance.startNextSet(nowMicros: clockMicros(), skipRest: skipRest)) {
+      setContinuation.leaveRest();
       _analyzer.pause();
       audio.resume();
       _notify();
@@ -511,6 +540,7 @@ class LateralRaiseWorkoutSession extends ChangeNotifier
   Future<void> close() {
     if (_closing != null) return _closing!;
     viewPhase = MeasuredWorkoutPhase.closed;
+    setContinuation.cancel();
     _timer?.cancel();
     _analyzer.pause();
     preview.removeListener(_cameraChanged);
@@ -527,6 +557,7 @@ class LateralRaiseWorkoutSession extends ChangeNotifier
     _disposed = true;
     unawaited(close());
     preview.dispose();
+    setContinuation.dispose();
     super.dispose();
   }
 }

@@ -17,6 +17,8 @@ void main() {
     tester.view.physicalSize = const Size(360, 640);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
+    final epoch = DateTime.utc(2026, 11, 11);
+    var elapsed = Duration.zero;
     final c = GuidedTimedWorkoutController(
         progress: GuidedTimedProgress(
             runId: 'r',
@@ -26,9 +28,11 @@ void main() {
             prescription: const TimedPrescription(
                 sets: 3, durationSeconds: 45, restSeconds: 30),
             mediaIdentity: 'v',
-            updatedAt: DateTime.now().toUtc()),
+            updatedAt: epoch),
         player: Player(),
         activeScope: () => true,
+        monotonicNow: () => elapsed,
+        utcNow: () => epoch.add(elapsed),
         persist: (_) async {});
     await c.initialize();
     await tester.pumpWidget(MaterialApp(
@@ -51,9 +55,12 @@ void main() {
     expect(find.text('Pause'), findsOneWidget);
     expect(find.text('Working'), findsOneWidget);
     expect(tester.takeException(), isNull);
+    elapsed += const Duration(seconds: 1);
     await tester.tap(find.text('Pause'));
     await tester.pumpAndSettle();
     expect(find.text('Paused'), findsOneWidget);
+    expect(c.progress.currentSetActiveMicroseconds,
+        Duration.microsecondsPerSecond);
     expect(tester.getRect(find.text('Resume')).bottom, lessThanOrEqualTo(616));
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox());

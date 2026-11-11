@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:gainpath_pose/gainpath_pose.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
 import '../../application/pose_preview_controller.dart';
+import '../../application/workout_preferences_controller.dart';
+import '../../application/workout_set_continuation.dart';
 import '../../application/workout_voice_session.dart';
 import '../../domain/retained_workout_feedback.dart';
 import '../../application/measured_workout_session.dart';
@@ -13,6 +15,8 @@ import '../../application/guided_workout_progress.dart';
 import '../../domain/routine_workout_context.dart';
 import 'widgets/workout_session_sheet.dart';
 import 'widgets/workout_alignment_guide.dart';
+import 'widgets/workout_camera_feedback.dart';
+import 'workout_ai_consent_guard.dart';
 
 class RealWorkoutView extends StatefulWidget {
   const RealWorkoutView(
@@ -41,12 +45,52 @@ class _RealWorkoutViewState extends State<RealWorkoutView> {
   bool _ending = false, _leaving = false;
   bool _completionScheduled = false;
   final _sheetController = DraggableScrollableController();
+  WorkoutPreferencesController? _preferences;
+
+  WorkoutSetContinuation? _continuationFor(MeasuredWorkoutSession session) =>
+      session is WorkoutSetContinuationSession
+          ? (session as WorkoutSetContinuationSession).setContinuation
+          : null;
+
+  WorkoutSetContinuation? get _continuation => _continuationFor(widget.session);
+
+  void _applySetPreference() {
+    final preferences = _preferences;
+    if (preferences == null) return;
+    final continuation = _continuation;
+    if (!preferences.validConsent) continuation?.cancel();
+    continuation?.setEnabled(
+        preferences.validConsent && preferences.autoContinueBetweenSets);
+  }
+
+  void _applyCompletionCopy() {
+    final continuation = _continuation;
+    if (continuation != null) {
+      continuation.completionAnnouncement =
+          widget.routineContext?.nextExerciseName == null
+              ? 'Workout complete.'
+              : 'Exercise complete.';
+    }
+  }
 
   @override
   void initState() {
     super.initState();
     widget.session.addListener(_sessionChanged);
+    _applyCompletionCopy();
     _sessionChanged();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final preferences = WorkoutAiConsentGuard.preferencesOf(context);
+    if (!identical(preferences, _preferences)) {
+      _preferences?.removeListener(_applySetPreference);
+      _preferences = preferences;
+      _preferences?.addListener(_applySetPreference);
+      _applySetPreference();
+    }
   }
 
   @override
@@ -54,8 +98,11 @@ class _RealWorkoutViewState extends State<RealWorkoutView> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.session != widget.session) {
       oldWidget.session.removeListener(_sessionChanged);
+      _continuationFor(oldWidget.session)?.cancel();
       widget.session.addListener(_sessionChanged);
+      _applySetPreference();
     }
+    _applyCompletionCopy();
     _sessionChanged();
   }
 
@@ -84,6 +131,7 @@ class _RealWorkoutViewState extends State<RealWorkoutView> {
 
   @override
   void dispose() {
+    _preferences?.removeListener(_applySetPreference);
     widget.session.removeListener(_sessionChanged);
     _sheetController.dispose();
     super.dispose();
@@ -168,129 +216,147 @@ class _RealWorkoutViewState extends State<RealWorkoutView> {
   Widget _cameraHeader(BuildContext context) {
     final c = widget.session;
     final active = c.viewPhase == MeasuredWorkoutPhase.active;
-    return Container(
-        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
-        decoration: BoxDecoration(
-            color: Colors.black.withValues(alpha: .45),
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: Colors.white.withValues(alpha: .14))),
+    final voice = c is WorkoutVoiceSession
+        ? (c as WorkoutVoiceSession).voiceFeedback
+        : null;
+    return LayoutBuilder(builder: (context, bounds) {
+      final compact = bounds.maxWidth < 350 ||
+          MediaQuery.textScalerOf(context).scale(14) > 19;
+      final routine = widget.routineContext;
+      return Material(
+        color: AppColors.ink,
+        borderRadius: BorderRadius.circular(16),
         child: IconTheme(
-            data: const IconThemeData(color: Colors.white),
-            child: Row(children: [
-              IconButton(
-                  tooltip: 'Back',
-                  color: Colors.white,
-                  onPressed: c.viewPhase == MeasuredWorkoutPhase.closed
-                      ? () => Navigator.pop(context)
-                      : _end,
-                  icon: const Icon(Icons.arrow_back_rounded)),
-              Expanded(
-                  child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
+          data: const IconThemeData(color: Colors.white),
+          child: Row(children: [
+            IconButton(
+              tooltip: 'Back',
+              color: Colors.white,
+              onPressed: c.viewPhase == MeasuredWorkoutPhase.closed
+                  ? () => Navigator.pop(context)
+                  : _end,
+              icon: const Icon(Icons.arrow_back_rounded),
+            ),
+            Expanded(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (routine != null && !compact)
                     Text(
-                        widget.routineContext == null
-                            ? 'AI WORKOUT'
-                            : 'AI WORKOUT · ${widget.routineContext!.exerciseNumber} / ${widget.routineContext!.totalExercises}',
+                        'Exercise ${routine.exerciseNumber} of ${routine.totalExercises}',
                         style: const TextStyle(
-                            color: Colors.white70,
-                            fontSize: 10,
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: 1.3)),
-                    if (c is WorkoutVoiceSession && c.voiceEnabled)
-                      Text(
-                          switch ((c as WorkoutVoiceSession)
-                              .voiceFeedback
-                              .availability
-                              .value) {
-                            WorkoutVoiceAvailability.preparing =>
-                              'Voice preparing · visual feedback active',
-                            WorkoutVoiceAvailability.unavailable =>
-                              'Voice unavailable · visual feedback active',
-                            _ => 'Voice ready',
-                          },
-                          maxLines: 2,
-                          style: const TextStyle(
-                              color: Colors.white70, fontSize: 11)),
-                    Text(widget.exerciseName,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 16,
-                            fontWeight: FontWeight.w700)),
-                  ])),
+                            color: Colors.white70, fontSize: 12)),
+                  Text(widget.exerciseName,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
+                          height: 1.1,
+                          fontWeight: FontWeight.w700)),
+                ],
+              ),
+            ),
+            if (!compact)
               PopupMenuButton<bool>(
-                  tooltip: 'Skeleton display',
-                  enabled: active,
-                  initialValue: c.preview.responsivePreview,
-                  onSelected: c.preview.setResponsivePreview,
-                  itemBuilder: (_) => [
-                        CheckedPopupMenuItem(
-                            value: true,
-                            checked: c.preview.responsivePreview,
-                            child: const Text('Responsive · follows movement')),
-                        CheckedPopupMenuItem(
-                            value: false,
-                            checked: !c.preview.responsivePreview,
-                            child: const Text('Smooth · less shaking')),
-                      ],
-                  icon: const Icon(Icons.speed_rounded, color: Colors.white)),
+                tooltip: 'Skeleton display',
+                enabled: active,
+                initialValue: c.preview.responsivePreview,
+                onSelected: c.preview.setResponsivePreview,
+                itemBuilder: (_) => [
+                  CheckedPopupMenuItem(
+                      value: true,
+                      checked: c.preview.responsivePreview,
+                      child: const Text('Responsive · follows movement')),
+                  CheckedPopupMenuItem(
+                      value: false,
+                      checked: !c.preview.responsivePreview,
+                      child: const Text('Smooth · less shaking')),
+                ],
+                icon: const Icon(Icons.speed_rounded, color: Colors.white),
+              ),
+            IconButton(
+              tooltip: 'Recalibrate camera',
+              color: Colors.white,
+              disabledColor: Colors.white38,
+              onPressed: active &&
+                      !c.isManuallyPaused &&
+                      !c.isRecalibrating &&
+                      !(c is UnilateralWorkoutSession &&
+                          (c as UnilateralWorkoutSession).awaitingArmSwitch)
+                  ? () {
+                      if (_sheetController.isAttached) _sheetController.reset();
+                      c.beginRecalibration();
+                    }
+                  : null,
+              icon: const Icon(Icons.center_focus_strong_rounded),
+            ),
+            if (voice?.availability.value ==
+                WorkoutVoiceAvailability.unavailable)
               IconButton(
-                  tooltip: 'Recalibrate camera',
-                  color: Colors.white,
-                  disabledColor: Colors.white38,
-                  onPressed: active &&
-                          !c.isManuallyPaused &&
-                          !c.isRecalibrating &&
-                          !(c is UnilateralWorkoutSession &&
-                              (c as UnilateralWorkoutSession).awaitingArmSwitch)
-                      ? () {
-                          if (_sheetController.isAttached) {
-                            _sheetController.reset();
-                          }
-                          c.beginRecalibration();
-                        }
-                      : null,
-                  icon: const Icon(Icons.center_focus_strong_rounded)),
-              if (c is WorkoutVoiceSession &&
-                  (c as WorkoutVoiceSession).voiceFeedback.availability.value ==
-                      WorkoutVoiceAvailability.unavailable)
-                IconButton(
-                    tooltip: 'Retry voice feedback',
-                    onPressed: active
-                        ? (c as WorkoutVoiceSession).voiceFeedback.retryVoice
-                        : null,
-                    icon: const Icon(Icons.refresh_rounded)),
-              PopupMenuButton<WorkoutVoiceMode>(
-                  tooltip: 'Voice feedback: ${c.voiceMode.label}',
-                  enabled: active,
-                  initialValue: c.voiceMode,
-                  onSelected: c.setVoiceMode,
-                  itemBuilder: (_) => [
-                        if (c is WorkoutVoiceSession &&
-                            (c as WorkoutVoiceSession)
-                                    .voiceFeedback
-                                    .availability
-                                    .value ==
-                                WorkoutVoiceAvailability.unavailable)
-                          const PopupMenuItem<WorkoutVoiceMode>(
-                              enabled: false,
-                              child: Text(
-                                  'Check Android text-to-speech settings and an offline English voice, then retry.')),
-                        for (final mode in WorkoutVoiceMode.values)
-                          CheckedPopupMenuItem(
-                              value: mode,
-                              checked: mode == c.voiceMode,
-                              child: Text(mode.label))
-                      ],
-                  icon: Icon(
-                      c.voiceEnabled
-                          ? Icons.volume_up_rounded
-                          : Icons.volume_off_rounded,
-                      color: Colors.white)),
-            ])));
+                tooltip: 'Retry voice feedback',
+                color: Colors.white,
+                onPressed: active ? voice!.retryVoice : null,
+                icon: const Icon(Icons.refresh_rounded),
+              ),
+            PopupMenuButton<WorkoutVoiceMode>(
+              tooltip: 'Voice feedback: ${c.voiceMode.label}',
+              enabled: active,
+              initialValue: c.voiceMode,
+              onSelected: c.setVoiceMode,
+              itemBuilder: (_) => [
+                for (final mode in WorkoutVoiceMode.values)
+                  CheckedPopupMenuItem(
+                      value: mode,
+                      checked: mode == c.voiceMode,
+                      child: Text(mode.label)),
+                if (compact) ...[
+                  const PopupMenuDivider(),
+                  for (final responsive in [true, false])
+                    CheckedPopupMenuItem<WorkoutVoiceMode>(
+                      checked: c.preview.responsivePreview == responsive,
+                      onTap: () => c.preview.setResponsivePreview(responsive),
+                      child: Text(responsive
+                          ? 'Responsive skeleton'
+                          : 'Smooth skeleton'),
+                    ),
+                ],
+              ],
+              icon: Icon(
+                  c.voiceEnabled
+                      ? Icons.volume_up_rounded
+                      : Icons.volume_off_rounded,
+                  color: Colors.white),
+            ),
+          ]),
+        ),
+      );
+    });
+  }
+
+  Widget? _voiceStatus(MeasuredWorkoutSession c) {
+    if (c is! WorkoutVoiceSession || !c.voiceEnabled) return null;
+    final feedback = (c as WorkoutVoiceSession).voiceFeedback;
+    final availability = feedback.availability.value;
+    final text = switch (availability) {
+      WorkoutVoiceAvailability.preparing =>
+        'Voice preparing · visual feedback active',
+      WorkoutVoiceAvailability.unavailable =>
+        'Voice unavailable · visual feedback active',
+      WorkoutVoiceAvailability.ready => 'Voice ready',
+      WorkoutVoiceAvailability.muted => null,
+    };
+    if (text == null) return null;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+          color: AppColors.ink, borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+        child: Text(text,
+            style: const TextStyle(color: Colors.white, fontSize: 12)),
+      ),
+    );
   }
 
   String _cue(MeasuredWorkoutSession c) {
@@ -331,120 +397,157 @@ class _RealWorkoutViewState extends State<RealWorkoutView> {
     return c.movementCue;
   }
 
+  Widget _cameraPane(BuildContext context, MeasuredWorkoutSession c) {
+    final position = WorkoutCameraPosition.forSession(c);
+    final voiceStatus = _voiceStatus(c);
+    final continuation = _continuation;
+    final canPauseRest = continuation != null &&
+        c.guidance?.stage == GuidedWorkoutStage.resting &&
+        c.viewPhase == MeasuredWorkoutPhase.active &&
+        c.preview.phase == PosePreviewPhase.tracking &&
+        !c.isManuallyPaused;
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      _cameraHeader(context),
+      const SizedBox(height: 8),
+      Expanded(
+        child: c.isRecalibrating
+            ? WorkoutAlignmentGuide(
+                instruction:
+                    widget.alignmentInstruction ?? position?.instruction,
+                canConfirm: c.canConfirmRecalibration,
+                onConfirm: c.finishRecalibration)
+            : SingleChildScrollView(
+                primary: false,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (position != null)
+                      WorkoutCameraFeedback(
+                          session: c,
+                          position: position,
+                          continuation: continuation,
+                          inRoutine: widget.routineContext != null)
+                    else
+                      DecoratedBox(
+                        decoration: BoxDecoration(
+                            color: AppColors.ink,
+                            borderRadius: BorderRadius.circular(12)),
+                        child: Padding(
+                          padding: const EdgeInsets.all(10),
+                          child: Text(_cue(c),
+                              style: const TextStyle(
+                                  color: Colors.white, fontSize: 14)),
+                        ),
+                      ),
+                    if (canPauseRest) ...[
+                      const SizedBox(height: 6),
+                      FilledButton.tonal(
+                          onPressed: () => unawaited(c.pause()),
+                          child: const Text('Pause')),
+                    ],
+                    if (voiceStatus != null) ...[
+                      const SizedBox(height: 6),
+                      voiceStatus,
+                    ],
+                  ],
+                ),
+              ),
+      ),
+    ]);
+  }
+
+  WorkoutSessionSheet _controls(MeasuredWorkoutSession session,
+          {bool sidePanel = false}) =>
+      WorkoutSessionSheet(
+          session: session,
+          controller: _sheetController,
+          exerciseName: widget.exerciseName,
+          targetRepetitions: widget.targetRepetitions,
+          routineContext: widget.routineContext,
+          uploadNotice: widget.uploadNotice,
+          sidePanel: sidePanel,
+          onEnd: _end,
+          onDiscard: _discard);
+
   @override
   Widget build(BuildContext context) => ListenableBuilder(
       listenable: Listenable.merge([
         widget.session,
         if (widget.session is WorkoutVoiceSession)
           (widget.session as WorkoutVoiceSession).voiceFeedback.availability,
+        if (_continuation case final continuation?) continuation,
       ]),
       builder: (context, _) {
         final c = widget.session;
         return PopScope(
-            canPop: _leaving || c.viewPhase == MeasuredWorkoutPhase.closed,
-            onPopInvokedWithResult: (didPop, result) {
-              if (!didPop) unawaited(_end());
-            },
-            child: Scaffold(
-                backgroundColor: AppColors.ink,
-                body: LayoutBuilder(builder: (context, bounds) {
-                  final safeTop = MediaQuery.paddingOf(context).top;
-                  final collapsedHeight = WorkoutSessionSheet.collapsedHeight(
-                      context, bounds.maxHeight);
-                  return Stack(fit: StackFit.expand, children: [
-                    // Stable, full-screen constraints throughout every sheet gesture.
-                    Positioned.fill(
-                        child: RepaintBoundary(child: widget.viewport)),
-                    const Positioned.fill(
-                        child: IgnorePointer(
-                            child: DecoratedBox(
-                                decoration: BoxDecoration(
-                                    gradient: LinearGradient(
-                                        begin: Alignment.topCenter,
-                                        end: Alignment.center,
-                                        colors: [
-                          Colors.black38,
-                          Colors.transparent
-                        ]))))),
-                    Positioned(
-                        top: safeTop + 8,
-                        left: 12,
-                        right: 12,
-                        child:
-                            Column(mainAxisSize: MainAxisSize.min, children: [
-                          _cameraHeader(context),
-                          if (!c.isRecalibrating)
-                            Padding(
-                                padding: const EdgeInsets.only(top: 8),
-                                child: Align(
-                                    alignment: Alignment.topLeft,
-                                    child: Container(
-                                        padding: const EdgeInsets.symmetric(
-                                            horizontal: 12, vertical: 9),
-                                        decoration: BoxDecoration(
-                                            color: Colors.black
-                                                .withValues(alpha: .55),
-                                            borderRadius:
-                                                BorderRadius.circular(14)),
-                                        child: Row(
-                                            mainAxisSize: MainAxisSize.min,
-                                            children: [
-                                              Icon(
-                                                  c.isManuallyPaused
-                                                      ? Icons
-                                                          .pause_circle_outline_rounded
-                                                      : c.guidance?.stage ==
-                                                              GuidedWorkoutStage
-                                                                  .resting
-                                                          ? Icons.timer_outlined
-                                                          : Icons
-                                                              .accessibility_new_rounded,
-                                                  size: 16,
-                                                  color: Colors.white),
-                                              const SizedBox(width: 8),
-                                              Flexible(
-                                                  child: Text(_cue(c),
-                                                      maxLines: 2,
-                                                      overflow:
-                                                          TextOverflow.ellipsis,
-                                                      style: const TextStyle(
-                                                          color: Colors.white,
-                                                          fontSize: 14,
-                                                          fontWeight: FontWeight
-                                                              .w500))),
-                                            ])))),
-                        ])),
-                    if (c.preview.phase == PosePreviewPhase.opening)
-                      const Positioned(
-                          top: 160,
-                          left: 24,
-                          child: SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: CircularProgressIndicator(
-                                  strokeWidth: 2, color: Colors.white))),
-                    if (c.isRecalibrating)
-                      Positioned(
-                          top: safeTop + 76,
-                          left: 12,
-                          right: 12,
-                          bottom: collapsedHeight + 8,
-                          child: WorkoutAlignmentGuide(
-                              instruction: widget.alignmentInstruction,
-                              canConfirm: c.canConfirmRecalibration,
-                              onConfirm: c.finishRecalibration)),
-                    Positioned.fill(
-                        key: const ValueKey('workout-session-sheet-layer'),
-                        child: WorkoutSessionSheet(
-                            session: c,
-                            controller: _sheetController,
-                            exerciseName: widget.exerciseName,
-                            targetRepetitions: widget.targetRepetitions,
-                            routineContext: widget.routineContext,
-                            uploadNotice: widget.uploadNotice,
-                            onEnd: _end,
-                            onDiscard: _discard)),
-                  ]);
-                })));
+          canPop: _leaving || c.viewPhase == MeasuredWorkoutPhase.closed,
+          onPopInvokedWithResult: (didPop, result) {
+            if (!didPop) unawaited(_end());
+          },
+          child: Scaffold(
+            backgroundColor: AppColors.ink,
+            body: LayoutBuilder(builder: (context, bounds) {
+              final safe = MediaQuery.paddingOf(context);
+              final landscape =
+                  bounds.maxWidth > bounds.maxHeight && bounds.maxWidth >= 520;
+              final sidePanelWidth = ((bounds.maxWidth - safe.horizontal) * .43)
+                  .clamp(236.0, 360.0);
+              final collapsedHeight = WorkoutSessionSheet.collapsedHeight(
+                  context, bounds.biggest, c);
+              return Stack(fit: StackFit.expand, children: [
+                // Coaching and sheet updates keep the same preview element
+                // and constraints. Landscape reserves space for the controls.
+                Positioned(
+                    left: 0,
+                    top: 0,
+                    bottom: 0,
+                    right: landscape
+                        ? sidePanelWidth + 8 + (safe.right < 8 ? 8 : safe.right)
+                        : 0,
+                    child: RepaintBoundary(child: widget.viewport)),
+                if (landscape)
+                  Positioned.fill(
+                    key: const ValueKey('workout-landscape-layer'),
+                    child: SafeArea(
+                      minimum: const EdgeInsets.all(8),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Expanded(child: _cameraPane(context, c)),
+                          const SizedBox(width: 8),
+                          SizedBox(
+                            width: sidePanelWidth,
+                            child: _controls(c, sidePanel: true),
+                          ),
+                        ],
+                      ),
+                    ),
+                  )
+                else ...[
+                  ListenableBuilder(
+                    listenable: _sheetController,
+                    child: _cameraPane(context, c),
+                    builder: (context, child) {
+                      final sheetHeight = _sheetController.isAttached
+                          ? _sheetController.pixels
+                          : collapsedHeight;
+                      return Positioned(
+                        top: safe.top + 8,
+                        left: safe.left + 12,
+                        right: safe.right + 12,
+                        bottom: sheetHeight + 6,
+                        child: child!,
+                      );
+                    },
+                  ),
+                  Positioned.fill(
+                    key: const ValueKey('workout-session-sheet-layer'),
+                    child: _controls(c),
+                  ),
+                ],
+              ]);
+            }),
+          ),
+        );
       });
 }

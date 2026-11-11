@@ -18,6 +18,7 @@ import '../../features/workout/data/workout_session_repository.dart';
 import '../../features/workout/domain/published_routine_view.dart';
 import '../../features/workout/domain/routine_workout_context.dart';
 import '../../features/workout/domain/routine_journey.dart';
+import '../../features/workout/domain/workout_audio_port.dart';
 import '../../features/workout/presentation/member/routine_next_exercise_sheet.dart';
 import '../../features/workout/domain/exercise_tracker_dispatcher.dart';
 import '../../navigation/workout_navigation.dart';
@@ -62,6 +63,7 @@ class RoutineJourneyRoute extends StatefulWidget {
       this.storeFactory = createRoutineJourneyStore,
       this.workoutStoreFactory = createWorkoutStore,
       this.preferencesFactory = createWorkoutPreferences,
+      this.voicePreferencesFactory = createWorkoutVoicePreferences,
       this.timedPlayerFactory = VideoTutorialPlayer.new,
       this.measuredBuilder,
       this.action = RoutineJourneyAction.view});
@@ -76,6 +78,8 @@ class RoutineJourneyRoute extends StatefulWidget {
   final Future<WorkoutSessionStore> Function(SessionScope) workoutStoreFactory;
   final Future<WorkoutPreferencesController> Function(SessionScope)
       preferencesFactory;
+  final Future<WorkoutVoicePreferences> Function(SessionScope)
+      voicePreferencesFactory;
   final TutorialPlayerFactory timedPlayerFactory;
   final Widget Function(RealWorkoutLaunch)? measuredBuilder;
   @override
@@ -238,7 +242,7 @@ class _RoutineJourneyRouteState extends State<RoutineJourneyRoute>
           !c.checkpoint!.finished &&
           c.unfinishedIndices.isNotEmpty) {
         if (launchEpoch == _interruptionEpoch) {
-          await _nextExercise(widget.routine.exercises[index].name);
+          await _nextExercise(index);
         }
       }
       return;
@@ -253,6 +257,7 @@ class _RoutineJourneyRouteState extends State<RoutineJourneyRoute>
     final tracker = c.trackingFor(index).tracker;
     final consented = await showWorkoutCaptureConsent(context,
         preferences: _preferences,
+        // These trackers provide their own positioning or limb setup before capture.
         requireSetup: !(automatic &&
             {
               ExerciseTracker.frontViewLateralRaise,
@@ -348,19 +353,22 @@ class _RoutineJourneyRouteState extends State<RoutineJourneyRoute>
       return;
     }
     if (!c.checkpoint!.finished && c.unfinishedIndices.isNotEmpty) {
-      if (launchEpoch == _interruptionEpoch) await _nextExercise(exercise.name);
+      if (launchEpoch == _interruptionEpoch) await _nextExercise(index);
     }
   }
 
-  Future<void> _nextExercise(String previousExercise) async {
+  Future<void> _nextExercise(int previousIndex) async {
     final auth = context.read<AuthBloc>(), c = _controller!;
+    final previousExercise = widget.routine.exercises[previousIndex].name;
     if (!mounted ||
         !_foreground ||
         !_authorized(auth) ||
         ModalRoute.of(context)?.isCurrent != true) {
       return;
     }
-    if (_preferences?.autoContinue == true &&
+    final preferences = _preferences;
+    if (preferences != null &&
+        preferences.autoContinue &&
         !c.busy &&
         c.error == null &&
         c.checkpoint?.finished == false &&
@@ -378,6 +386,25 @@ class _RoutineJourneyRouteState extends State<RoutineJourneyRoute>
           c.error == null &&
           !c.busy &&
           c.unfinishedIndices.contains(index);
+      bool hasRetainedTracker(int candidate) => const {
+            ExerciseTracker.sideViewSquat,
+            ExerciseTracker.sideViewCurl,
+            ExerciseTracker.sideViewCalfRaise,
+            ExerciseTracker.sideViewFloorPushUp,
+            ExerciseTracker.frontViewLateralRaise,
+            ExerciseTracker.frontViewShoulderPress,
+          }.contains(c.executionFor(candidate).tracker);
+      final BetweenExerciseRestVoice? voice = hasRetainedTracker(
+                  previousIndex) ||
+              hasRetainedTracker(index)
+          ? (
+              loadMode: () async =>
+                  (await widget.voicePreferencesFactory(widget.scope)).read(),
+              canAnnounce: () =>
+                  preferences.scope == widget.scope && preferences.validConsent,
+              authorization: Listenable.merge([c, preferences]),
+            )
+          : null;
       final outcome = await Navigator.push<BetweenExerciseRestOutcome>(
           context,
           MaterialPageRoute(
@@ -386,8 +413,9 @@ class _RoutineJourneyRouteState extends State<RoutineJourneyRoute>
                   upcomingExercise: widget.routine.exercises[index],
                   organizationId: widget.scope.organizationId,
                   restSeconds: widget.routine.betweenExerciseRestSeconds ??
-                      _preferences!.suggestedRestSeconds,
+                      preferences.suggestedRestSeconds,
                   prescribed: widget.routine.betweenExerciseRestSeconds != null,
+                  voice: voice,
                   canAdvance: () =>
                       valid() && _preferences?.autoContinue == true)));
       if (outcome != BetweenExerciseRestOutcome.advance ||
@@ -488,7 +516,7 @@ class _RoutineJourneyRouteState extends State<RoutineJourneyRoute>
       if (mounted &&
           epoch == _interruptionEpoch &&
           c.statusFor(index) == RoutineExerciseStatus.selfReportedCompleted) {
-        await _nextExercise(widget.routine.exercises[index].name);
+        await _nextExercise(index);
       }
     } finally {
       _launching = false;

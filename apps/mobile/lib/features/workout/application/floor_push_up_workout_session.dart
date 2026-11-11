@@ -1,3 +1,5 @@
+import 'workout_set_continuation.dart';
+import 'workout_set_readiness.dart';
 import 'workout_voice_session.dart';
 import 'dart:async';
 import 'package:flutter/foundation.dart';
@@ -19,6 +21,7 @@ import 'workout_audio_controller.dart';
 /// Local-only floor push-up session. Never constructs an upload submission.
 class FloorPushUpWorkoutSession extends ChangeNotifier
     implements
+        WorkoutSetContinuationSession,
         WorkoutVoiceSession,
         MeasuredWorkoutSession,
         WorkoutReadinessFeedback {
@@ -68,6 +71,7 @@ class FloorPushUpWorkoutSession extends ChangeNotifier
         responsivePreview: false,
         onRefined: _consume,
         onGeometryInvalidated: () {
+          setContinuation.cancel();
           _analyzer.pause();
           audio.invalidateSource();
         });
@@ -98,6 +102,8 @@ class FloorPushUpWorkoutSession extends ChangeNotifier
         'pipeline': preview.diagnostics,
       };
   String _stableReadiness = 'Hold a high plank with arms extended to begin.';
+  bool get hasBriefTrackingDropout => _analyzer.snapshot.temporaryDropout;
+
   @override
   String get readinessMessage {
     final u = _analyzer.snapshot;
@@ -117,6 +123,22 @@ class FloorPushUpWorkoutSession extends ChangeNotifier
   }
 
   final WorkoutAudioController audio;
+
+  @override
+  late final setContinuation = WorkoutSetContinuation(
+      guidance: () => guidance,
+      clockMicros: clockMicros,
+      canContinue: () =>
+          _authorized &&
+          !isPaused &&
+          viewPhase == MeasuredWorkoutPhase.active &&
+          preview.phase == PosePreviewPhase.tracking,
+      detectorId: detectorId,
+      detectorVersion: detectorVersion,
+      createProbe: () => WorkoutSetReadiness.floor(
+          _analyzer.snapshot.selectedSide, _analyzer.rules),
+      startNextSet: startNextSet,
+      audio: audio);
   final FloorPushUpAnalyzer _analyzer = FloorPushUpAnalyzer();
   @override
   final GuidedWorkoutProgress guidance;
@@ -243,6 +265,7 @@ class FloorPushUpWorkoutSession extends ChangeNotifier
       if (viewPhase != MeasuredWorkoutPhase.active) return;
       if (guidance.stage == GuidedWorkoutStage.resting && !isPaused) {
         guidance.tick(clockMicros());
+        setContinuation.update();
       }
       if (_canAnalyse) {
         final u = _analyzer.tick(nowMicros: clockMicros());
@@ -265,7 +288,12 @@ class FloorPushUpWorkoutSession extends ChangeNotifier
   }
 
   void _consume(PoseFrame frame) {
-    if (!_canAnalyse) return;
+    if (!_canAnalyse) {
+      if (guidance.stage == GuidedWorkoutStage.resting) {
+        setContinuation.update(frame: frame);
+      }
+      return;
+    }
     if (frame.detectorId != detectorId ||
         frame.modelVersion != detectorVersion) {
       _modelChanged = true;
@@ -311,7 +339,7 @@ class FloorPushUpWorkoutSession extends ChangeNotifier
       // No further analysis/cues run during rest/completion. Permit this last
       // bounded attempt event to finish; explicit pause/finish still cancels.
       _analyzer.pause();
-      audio.finishSet();
+      setContinuation.finishBoundary();
     }
     _notify();
   }
@@ -328,8 +356,9 @@ class FloorPushUpWorkoutSession extends ChangeNotifier
   void _suspendAnalysis({bool preserveFeedback = false}) {
     _analyzer.pause();
     if (preserveFeedback) {
-      audio.finishSet();
+      setContinuation.finishBoundary();
     } else {
+      setContinuation.cancel();
       audio.pause();
     }
   }
@@ -430,6 +459,7 @@ class FloorPushUpWorkoutSession extends ChangeNotifier
       return;
     }
     if (guidance.startNextSet(nowMicros: clockMicros(), skipRest: skipRest)) {
+      setContinuation.leaveRest();
       _analyzer.pause();
       audio.resume();
       _notify();
@@ -551,6 +581,7 @@ class FloorPushUpWorkoutSession extends ChangeNotifier
   Future<void> close() {
     if (_closing != null) return _closing!;
     viewPhase = MeasuredWorkoutPhase.closed;
+    setContinuation.cancel();
     _timer?.cancel();
     _analyzer.pause();
     preview.removeListener(_cameraChanged);
@@ -567,6 +598,7 @@ class FloorPushUpWorkoutSession extends ChangeNotifier
     _disposed = true;
     unawaited(close());
     preview.dispose();
+    setContinuation.dispose();
     super.dispose();
   }
 }

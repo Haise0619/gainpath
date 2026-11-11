@@ -32,6 +32,7 @@ void main() {
     await c.load();
     expect(c.validConsent, isFalse);
     expect(c.autoContinue, isTrue);
+    expect(c.autoContinueBetweenSets, isFalse);
     expect(c.suggestedRestSeconds, 30);
     await c.grantConsent();
     expect(c.validConsent, isTrue);
@@ -54,15 +55,19 @@ void main() {
     await first.load();
     await first.grantConsent();
     await first.updatePreferences(
-        autoContinue: false, suggestedRestSeconds: 45);
+        autoContinue: false,
+        autoContinueBetweenSets: true,
+        suggestedRestSeconds: 45);
     final reopened = create(scope);
     await reopened.load();
     expect(reopened.validConsent, isTrue);
     expect(reopened.autoContinue, isFalse);
+    expect(reopened.autoContinueBetweenSets, isTrue);
     expect(reopened.suggestedRestSeconds, 45);
     final other = create(SessionScope(userId: 'two', organizationId: 'gym'));
     await other.load();
     expect(other.validConsent, isFalse);
+    expect(other.autoContinueBetweenSets, isFalse);
     final changedVersion = create(scope, version: 'material-update');
     await changedVersion.load();
     expect(changedVersion.validConsent, isFalse);
@@ -71,6 +76,45 @@ void main() {
     await withdrawn.load();
     expect(withdrawn.validConsent, isFalse);
     expect(withdrawn.autoContinue, isFalse);
+    expect(withdrawn.autoContinueBetweenSets, isTrue);
+  });
+
+  test('legacy preferences keep between-set continuation off', () async {
+    final store = MemoryWorkoutPreferencesStore()
+      ..value = {
+        'schemaVersion': 1,
+        'organizationId': scope.organizationId,
+        'userId': scope.userId,
+        'consentVersion': '1',
+        'acceptedAt': '2026-11-10T12:00:00.000Z',
+        'autoContinue': false,
+        'suggestedRestSeconds': 45,
+      };
+    final c = WorkoutPreferencesController(scope: scope, store: store);
+    await c.load();
+    expect(c.validConsent, isTrue);
+    expect(c.autoContinue, isFalse);
+    expect(c.autoContinueBetweenSets, isFalse);
+    expect(c.suggestedRestSeconds, 45);
+  });
+
+  test('concurrent set and exercise preference writes preserve both values',
+      () async {
+    final store = MemoryWorkoutPreferencesStore();
+    final c = WorkoutPreferencesController(scope: scope, store: store);
+    await c.load();
+    final writeGate = store.writeGate = Completer<void>();
+    final sets = c.updatePreferences(autoContinueBetweenSets: true);
+    final exercises = c.updatePreferences(autoContinue: false);
+    await Future<void>.delayed(Duration.zero);
+    expect(c.autoContinueBetweenSets, isFalse);
+    expect(c.autoContinue, isTrue);
+    writeGate.complete();
+    await Future.wait([sets, exercises]);
+    expect(c.autoContinueBetweenSets, isTrue);
+    expect(c.autoContinue, isFalse);
+    expect(store.value!['autoContinueBetweenSets'], isTrue);
+    expect(store.value!['autoContinue'], isFalse);
   });
 
   test(
@@ -98,11 +142,13 @@ void main() {
     final first = WorkoutPreferencesController(scope: scope, store: store);
     await first.load();
     await first.grantConsent();
+    await first.updatePreferences(autoContinueBetweenSets: true);
     final foreign = WorkoutPreferencesController(
         scope: SessionScope(userId: 'other', organizationId: 'gym'),
         store: store);
     await foreign.load();
     expect(foreign.validConsent, isFalse);
+    expect(foreign.autoContinueBetweenSets, isFalse);
     store.value = {'schemaVersion': 999, 'consentVersion': '1'};
     final malformed = WorkoutPreferencesController(scope: scope, store: store);
     await malformed.load();

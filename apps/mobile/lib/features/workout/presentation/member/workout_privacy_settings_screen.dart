@@ -267,9 +267,19 @@ class _WorkoutPrivacySettingsScreenState
                               ? null
                               : (value) => _save(() =>
                                   p.updatePreferences(autoContinue: value)),
-                          title: const Text('Auto-Continue Workout'),
+                          title: const Text('Auto-Continue Between Exercises'),
                           subtitle: const Text(
                               'Automatically start the next exercise after your rest countdown when the workout is ready.')),
+                      const Divider(height: 1),
+                      SwitchListTile.adaptive(
+                          value: p.autoContinueBetweenSets,
+                          onChanged: p.busy
+                              ? null
+                              : (value) => _save(() => p.updatePreferences(
+                                  autoContinueBetweenSets: value)),
+                          title: const Text('Auto-Continue Between Sets'),
+                          subtitle: const Text(
+                              'Resume AI tracking after rest when the preparation countdown ends and the camera confirms you’re ready.')),
                       const Divider(height: 1),
                       ListTile(
                           title: const Text('Suggested between-exercise rest'),

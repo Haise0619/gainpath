@@ -166,7 +166,10 @@ class SquatProcessingController extends ChangeNotifier {
     if (!_disposed) notifyListeners();
   }
 
-  void pause({bool preserveFeedback = false}) {
+  void pause(
+      {bool preserveFeedback = false,
+      String? transition,
+      bool restScoped = false}) {
     if (!_checkScope()) return;
     if (_manualPause) {
       if (!preserveFeedback) audio.pause();
@@ -174,7 +177,7 @@ class SquatProcessingController extends ChangeNotifier {
     }
     _manualPause = true;
     if (preserveFeedback) {
-      audio.finishSet();
+      audio.finishSet(transition: transition, restScoped: restScoped);
     } else {
       audio.pause();
     }

@@ -23,6 +23,7 @@ class WorkoutPreferencesController extends ChangeNotifier {
   DateTime? acceptedAt;
   bool loaded = false;
   bool autoContinue = true;
+  bool _autoContinueBetweenSets = false;
   int suggestedRestSeconds = 30;
   String? error;
   int _consentEpoch = 0, _writes = 0;
@@ -31,6 +32,7 @@ class WorkoutPreferencesController extends ChangeNotifier {
   Future<void>? _loading;
   Future<void> _pending = Future.value();
   bool get busy => _writes > 0;
+  bool get autoContinueBetweenSets => _autoContinueBetweenSets;
   bool get validConsent =>
       loaded &&
       _acceptedVersion == requiredConsentVersion &&
@@ -52,6 +54,7 @@ class WorkoutPreferencesController extends ChangeNotifier {
         if (value['autoContinue'] is bool) {
           autoContinue = value['autoContinue'] as bool;
         }
+        _autoContinueBetweenSets = value['autoContinueBetweenSets'] == true;
         if (rest is int && rest >= 0 && rest <= 300) {
           suggestedRestSeconds = rest;
         }
@@ -79,6 +82,7 @@ class WorkoutPreferencesController extends ChangeNotifier {
         'consentVersion': _acceptedVersion,
         'acceptedAt': acceptedAt?.toIso8601String(),
         'autoContinue': autoContinue,
+        'autoContinueBetweenSets': autoContinueBetweenSets,
         'suggestedRestSeconds': suggestedRestSeconds,
       };
 
@@ -134,7 +138,9 @@ class WorkoutPreferencesController extends ChangeNotifier {
   }
 
   Future<void> updatePreferences(
-      {bool? autoContinue, int? suggestedRestSeconds}) async {
+      {bool? autoContinue,
+      bool? autoContinueBetweenSets,
+      int? suggestedRestSeconds}) async {
     if (suggestedRestSeconds != null &&
         (suggestedRestSeconds < 0 || suggestedRestSeconds > 300)) {
       throw ArgumentError.value(suggestedRestSeconds, 'suggestedRestSeconds');
@@ -144,10 +150,14 @@ class WorkoutPreferencesController extends ChangeNotifier {
       await store.write({
         ..._json(),
         'autoContinue': autoContinue ?? this.autoContinue,
+        'autoContinueBetweenSets':
+            autoContinueBetweenSets ?? _autoContinueBetweenSets,
         'suggestedRestSeconds':
             suggestedRestSeconds ?? this.suggestedRestSeconds
       });
       this.autoContinue = autoContinue ?? this.autoContinue;
+      _autoContinueBetweenSets =
+          autoContinueBetweenSets ?? _autoContinueBetweenSets;
       this.suggestedRestSeconds =
           suggestedRestSeconds ?? this.suggestedRestSeconds;
     });

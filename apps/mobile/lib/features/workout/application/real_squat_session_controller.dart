@@ -1,3 +1,5 @@
+import 'workout_set_continuation.dart';
+import 'workout_set_readiness.dart';
 import 'workout_voice_session.dart';
 import 'dart:async';
 import 'package:flutter/foundation.dart';
@@ -18,7 +20,10 @@ enum RealSquatSessionPhase { idle, active, saving, saveFailed, saved, closed }
 
 /// Owns one local camera session. It never constructs an upload submission.
 class RealSquatSessionController extends ChangeNotifier
-    implements WorkoutVoiceSession, MeasuredWorkoutSession {
+    implements
+        WorkoutSetContinuationSession,
+        WorkoutVoiceSession,
+        MeasuredWorkoutSession {
   RealSquatSessionController(
       {required this.scope,
       required this.activeScope,
@@ -89,6 +94,24 @@ class RealSquatSessionController extends ChangeNotifier
   @override
   late final PosePreviewController preview;
   late final SquatProcessingController processing;
+
+  @override
+  late final setContinuation = WorkoutSetContinuation(
+      guidance: () => guidance,
+      clockMicros: clockMicros,
+      canContinue: () =>
+          _active &&
+          _foreground &&
+          !_manualPaused &&
+          !_recalibrating &&
+          !_modelChanged &&
+          phase == RealSquatSessionPhase.active &&
+          preview.phase == PosePreviewPhase.tracking,
+      detectorId: detectorId,
+      detectorVersion: detectorVersion,
+      createProbe: () => WorkoutSetReadiness.squat(latest?.selectedSide),
+      startNextSet: startNextSet,
+      audio: processing.audio);
   RealSquatSessionPhase phase = RealSquatSessionPhase.idle;
   SquatUpdate? latest;
   WorkoutSessionSummary? summary;
@@ -203,6 +226,7 @@ class RealSquatSessionController extends ChangeNotifier
         if (!_active || phase != RealSquatSessionPhase.active) return;
         if (guidance!.stage == GuidedWorkoutStage.resting) {
           guidance!.tick(clockMicros());
+          setContinuation.update();
           _notify();
         }
       });
@@ -225,6 +249,10 @@ class RealSquatSessionController extends ChangeNotifier
       _modelChanged = true;
       _error = 'Pose model changed. End this session and start again.';
       unawaited(pause());
+      return;
+    }
+    if (guidance?.stage == GuidedWorkoutStage.resting) {
+      setContinuation.update(frame: frame);
       return;
     }
     _hasFrame = true;
@@ -258,6 +286,7 @@ class RealSquatSessionController extends ChangeNotifier
 
   void _geometryInvalidated() {
     if (!_active) return;
+    setContinuation.cancel();
     processing.audio.invalidateSource();
     if (phase != RealSquatSessionPhase.active) return;
     final wasPaused = isPaused;
@@ -270,7 +299,10 @@ class RealSquatSessionController extends ChangeNotifier
       unawaited(close());
       return;
     }
-    if (preview.phase == PosePreviewPhase.failure) processing.pause();
+    if (preview.phase == PosePreviewPhase.failure) {
+      setContinuation.cancel();
+      processing.pause();
+    }
     _notify();
   }
 
@@ -314,6 +346,7 @@ class RealSquatSessionController extends ChangeNotifier
   Future<void> pause() async {
     if (!_active || phase != RealSquatSessionPhase.active) return;
     _manualPaused = true;
+    setContinuation.cancel();
     guidance?.suspend(clockMicros());
     processing.pause();
     try {
@@ -344,7 +377,10 @@ class RealSquatSessionController extends ChangeNotifier
       processing.pause();
     } else if (guidance != null &&
         guidance!.stage != GuidedWorkoutStage.working) {
-      processing.pause(preserveFeedback: true);
+      processing.pause(
+          preserveFeedback: true,
+          transition: setContinuation.boundaryAnnouncement,
+          restScoped: setContinuation.isResting);
     } else {
       processing.resume();
     }
@@ -368,6 +404,7 @@ class RealSquatSessionController extends ChangeNotifier
     }
     if (guidance?.startNextSet(nowMicros: clockMicros(), skipRest: skipRest) ==
         true) {
+      setContinuation.leaveRest();
       _syncProcessingState();
       _notify();
     }
@@ -382,6 +419,7 @@ class RealSquatSessionController extends ChangeNotifier
       return;
     }
     _recalibrating = true;
+    setContinuation.cancel();
     guidance?.suspend(clockMicros());
     _syncProcessingState();
     _notify();
@@ -399,6 +437,7 @@ class RealSquatSessionController extends ChangeNotifier
   Future<void> setForeground(bool foreground) async {
     _foreground = foreground;
     if (!_active) return;
+    if (!foreground) setContinuation.cancel();
     processing.setForeground(foreground);
     if (phase != RealSquatSessionPhase.active) {
       if (!foreground) await preview.background();
@@ -554,6 +593,7 @@ class RealSquatSessionController extends ChangeNotifier
   Future<void> close() {
     if (_closing != null) return _closing!;
     phase = RealSquatSessionPhase.closed;
+    setContinuation.cancel();
     _guidedTimer?.cancel();
     latest = null;
     summary = null;
@@ -574,6 +614,7 @@ class RealSquatSessionController extends ChangeNotifier
     unawaited(close());
     processing.dispose();
     preview.dispose();
+    setContinuation.dispose();
     super.dispose();
   }
 }

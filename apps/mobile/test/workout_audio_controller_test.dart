@@ -5,6 +5,7 @@ import 'package:gainpath_domain/gainpath_domain.dart';
 import 'package:gainpath_pose/gainpath_pose.dart';
 import 'package:gainpath_mobile/features/workout/application/workout_audio_controller.dart';
 import 'package:gainpath_mobile/features/workout/domain/workout_audio_port.dart';
+import 'package:gainpath_mobile/features/workout/domain/workout_feedback_event.dart';
 
 class FakeAudio implements WorkoutAudioPort {
   final played = <CueRequest>[];
@@ -73,6 +74,64 @@ void main() {
   void consume(List<CueRequest> cues, int timestamp, {bool tracking = true}) =>
       controller.consume(cues,
           nowMicros: timestamp, trackingAvailable: tracking);
+
+  test(
+      'transition speech is Full Coaching only and never queues behind a warning',
+      () async {
+    for (final mode in [WorkoutVoiceMode.muted, WorkoutVoiceMode.alertsOnly]) {
+      controller.setVoiceMode(mode);
+      controller.announceTransition('prepare', 'Get ready.', nowMicros: 0);
+      await flush();
+      expect(port.played, isEmpty);
+    }
+    controller.setVoiceMode(WorkoutVoiceMode.fullCoaching);
+    consume([warning], 10);
+    await flush();
+    controller.announceTransition('busy', 'Get ready.', nowMicros: 20);
+    port.completions.single.complete(AudioPlaybackOutcome.completed);
+    await flush();
+    expect(port.played, [warning]);
+    controller.announceTransition('prepare', 'Get ready.', nowMicros: 30);
+    await flush();
+    expect(port.played.last.text, 'Get ready.');
+    controller.cancelTransition();
+    await flush();
+    expect(controller.activeCue, isNull);
+  });
+
+  test('a transition cancelled while TTS prepares cannot start late', () async {
+    final pending = PreparingAudio();
+    final audio = WorkoutAudioController(port: pending)
+      ..setVoiceMode(WorkoutVoiceMode.fullCoaching);
+    audio.announceTransition('rest-ending', 'Rest ending.', nowMicros: 10);
+    await flush();
+    expect(audio.activeCue, isNotNull);
+    audio.cancelTransition();
+    pending.ready.complete(true);
+    await flush();
+    expect(pending.played, isEmpty);
+    await audio.close();
+  });
+
+  test('leaving rest cancels the coalesced rep boundary before TTS dispatch',
+      () async {
+    controller.setVoiceEnabled(true);
+    controller.consume(const [],
+        nowMicros: 10,
+        trackingAvailable: true,
+        events: const [
+          WorkoutFeedbackEvent(
+              id: 'final-rep',
+              cue: encouragement,
+              observedAtMicros: 10,
+              generatedAtMicros: 10)
+        ]);
+    controller.finishSet(transition: 'Set complete. Rest.', restScoped: true);
+    expect(controller.activeCue?.text, 'Set complete. Rest.');
+    controller.cancelTransition();
+    await flush();
+    expect(port.played, isEmpty);
+  });
 
   test('alerts only suppresses encouragement and retains corrective warnings',
       () async {

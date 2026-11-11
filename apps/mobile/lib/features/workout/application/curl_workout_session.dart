@@ -1,3 +1,5 @@
+import 'workout_set_continuation.dart';
+import 'workout_set_readiness.dart';
 import '../domain/retained_workout_feedback.dart';
 import 'workout_voice_session.dart';
 import 'dart:async';
@@ -19,6 +21,7 @@ import 'workout_audio_controller.dart';
 /// Local-only single-arm curl session. Never constructs an upload submission.
 class CurlWorkoutSession extends ChangeNotifier
     implements
+        WorkoutSetContinuationSession,
         WorkoutVoiceSession,
         MeasuredWorkoutSession,
         UnilateralWorkoutSession {
@@ -66,6 +69,7 @@ class CurlWorkoutSession extends ChangeNotifier
         clockMicros: clockMicros,
         onRefined: _consume,
         onGeometryInvalidated: () {
+          setContinuation.cancel();
           _analyzer.pause();
           audio.invalidateSource();
           _watchdogLost = true;
@@ -90,6 +94,23 @@ class CurlWorkoutSession extends ChangeNotifier
   final WorkoutProvenance provenance;
   final Future<void> Function(WorkoutVoiceMode)? saveVoiceMode;
   final WorkoutAudioController audio;
+
+  @override
+  late final setContinuation = WorkoutSetContinuation(
+      guidance: () => guidance,
+      clockMicros: clockMicros,
+      canContinue: () =>
+          _authorized &&
+          !isPaused &&
+          viewPhase == MeasuredWorkoutPhase.active &&
+          preview.phase == PosePreviewPhase.tracking,
+      detectorId: detectorId,
+      detectorVersion: detectorVersion,
+      createProbe: () => armMode == CurlArmMode.both
+          ? null
+          : WorkoutSetReadiness.curl(_firstSide),
+      startNextSet: startNextSet,
+      audio: audio);
   final CurlArmMode armMode;
   final _analyzers = {
     CurlSide.left: CurlAnalyzer(side: CurlSide.left),
@@ -282,6 +303,7 @@ class CurlWorkoutSession extends ChangeNotifier
       if (viewPhase != MeasuredWorkoutPhase.active) return;
       if (guidance.stage == GuidedWorkoutStage.resting && !isPaused) {
         guidance.tick(clockMicros());
+        setContinuation.update();
       }
       if (_canAnalyse) _tickAnalysis();
       _notify();
@@ -306,7 +328,12 @@ class CurlWorkoutSession extends ChangeNotifier
   }
 
   void _consume(PoseFrame frame) {
-    if (!_canAnalyse) return;
+    if (!_canAnalyse) {
+      if (guidance.stage == GuidedWorkoutStage.resting) {
+        setContinuation.update(frame: frame);
+      }
+      return;
+    }
     if (frame.detectorId != detectorId ||
         frame.modelVersion != detectorVersion) {
       _modelChanged = true;
@@ -355,8 +382,9 @@ class CurlWorkoutSession extends ChangeNotifier
   void _suspendAnalysis({bool preserveFeedback = false}) {
     _analyzer.pause();
     if (preserveFeedback) {
-      audio.finishSet();
+      setContinuation.finishBoundary();
     } else {
+      setContinuation.cancel();
       audio.pause();
     }
   }
@@ -457,6 +485,7 @@ class CurlWorkoutSession extends ChangeNotifier
       return;
     }
     if (guidance.startNextSet(nowMicros: clockMicros(), skipRest: skipRest)) {
+      setContinuation.leaveRest();
       for (final side in CurlSide.values) {
         _setBaselines[side] = _analyzers[side]!.snapshot.repetitions;
       }
@@ -580,6 +609,7 @@ class CurlWorkoutSession extends ChangeNotifier
   Future<void> close() {
     if (_closing != null) return _closing!;
     viewPhase = MeasuredWorkoutPhase.closed;
+    setContinuation.cancel();
     _timer?.cancel();
     _analyzer.pause();
     preview.removeListener(_cameraChanged);
@@ -596,6 +626,7 @@ class CurlWorkoutSession extends ChangeNotifier
     _disposed = true;
     unawaited(close());
     preview.dispose();
+    setContinuation.dispose();
     super.dispose();
   }
 }
