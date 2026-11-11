@@ -106,7 +106,7 @@ class _RoutineJourneyScreenState extends State<RoutineJourneyScreen> {
                                 onPressed: () => _act(() => c.openDay(c.day)),
                                 child: const Text('Retry routine')))
                     : ListView(
-                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 140),
+                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
                         children: [
                             if (c.error != null)
                               Padding(
@@ -122,8 +122,6 @@ class _RoutineJourneyScreenState extends State<RoutineJourneyScreen> {
                               const Padding(
                                   padding: EdgeInsets.all(12),
                                   child: LinearProgressIndicator()),
-                            SizedBox(
-                                height: MediaQuery.paddingOf(context).bottom),
                           ])));
       });
 
@@ -451,7 +449,11 @@ class _RoutineJourneyScreenState extends State<RoutineJourneyScreen> {
                       Expanded(
                         child: Text(
                           selected.name,
-                          style: Theme.of(context).textTheme.titleLarge,
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.ink,
+                          ),
                         ),
                       ),
                       Container(
@@ -547,7 +549,10 @@ class _RoutineJourneyScreenState extends State<RoutineJourneyScreen> {
                     const SizedBox(height: 4),
                     Text(
                         '${c.checkpoint!.guidedProgress[c.selectedIndex]?.completedSets ?? 0}/${selected.sets} timed sets',
-                        style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                        style: const TextStyle(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 13,
+                            color: AppColors.ink)),
                   ] else if (supported) ...[
                     const SizedBox(height: 8),
                     if (status == RoutineExerciseStatus.partial)
@@ -565,7 +570,10 @@ class _RoutineJourneyScreenState extends State<RoutineJourneyScreen> {
                     const SizedBox(height: 6),
                     Text(
                         '${c.manualSetsFor(c.selectedIndex)} / ${selected.sets} sets · self-reported',
-                        style: Theme.of(context).textTheme.titleMedium),
+                        style: const TextStyle(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 15,
+                            color: AppColors.ink)),
                     const SizedBox(height: 6),
                     Row(
                       children: [
@@ -633,40 +641,75 @@ class _RoutineJourneyScreenState extends State<RoutineJourneyScreen> {
                 : status == RoutineExerciseStatus.partial
                     ? 'Retry AI Workout'
                     : p.startLabel;
-    return SafeArea(
+    return Container(
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        border: Border(
+          top: BorderSide(color: Color(0xFFE9E5F0), width: 1.0),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Color(0x0A000000),
+            offset: Offset(0, -2),
+            blurRadius: 8,
+          ),
+        ],
+      ),
+      child: SafeArea(
         top: false,
         child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
-            child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Text(e.name,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.titleSmall),
-                  const SizedBox(height: 6),
-                  Text(p.targetLabel,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.bodySmall),
-                  const SizedBox(height: 6),
-                  FilledButton.icon(
-                      onPressed: _working || c.busy || complete
-                          ? null
-                          : () => _act(() => manual
-                              ? (widget.onManualSet?.call(index) ??
-                                  c.markManualSet(index))
-                              : widget.onTrack(index)),
-                      icon: Icon(p.icon),
-                      label: Text(label)),
-                  TextButton.icon(
-                      onPressed: _working || c.busy
-                          ? null
-                          : () => _act(() => widget.onTutorial(index)),
-                      icon: const Icon(Icons.play_circle_outline),
-                      label: const Text('Tutorial')),
-                ])));
+          padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                e.name,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.ink,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                p.targetLabel,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w500,
+                  color: AppColors.inkSoft,
+                ),
+              ),
+              const SizedBox(height: 8),
+              FilledButton.icon(
+                style: FilledButton.styleFrom(
+                  minimumSize: const Size.fromHeight(48),
+                ),
+                onPressed: _working || c.busy || complete
+                    ? null
+                    : () => _act(() => manual
+                        ? (widget.onManualSet?.call(index) ??
+                            c.markManualSet(index))
+                        : widget.onTrack(index)),
+                icon: Icon(p.icon),
+                label: Text(label),
+              ),
+              TextButton.icon(
+                onPressed: _working || c.busy
+                    ? null
+                    : () => _act(() => widget.onTutorial(index)),
+                icon: const Icon(Icons.play_circle_outline),
+                label: const Text('Tutorial'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   Widget _summaryAction(BuildContext context) {
@@ -678,32 +721,50 @@ class _RoutineJourneyScreenState extends State<RoutineJourneyScreen> {
             : c.isScheduled
                 ? 'Back to weekly schedule'
                 : 'Back to workouts';
-    return SafeArea(
+    return Container(
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        border: Border(
+          top: BorderSide(color: Color(0xFFE9E5F0), width: 1.0),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Color(0x0A000000),
+            offset: Offset(0, -2),
+            blurRadius: 8,
+          ),
+        ],
+      ),
+      child: SafeArea(
         top: false,
         child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
-            child: FilledButton(
-                style: FilledButton.styleFrom(
-                    minimumSize: const Size.fromHeight(56)),
-                onPressed: _working || c.busy
-                    ? null
-                    : () {
-                        if (!c.allTargetsCompleted) {
-                          _act(() async {
-                            await c.resume();
-                            if (mounted) setState(() => _showSummary = false);
-                          });
-                        } else if (c.checkpoint!.finished &&
-                            c.nextDay != null) {
-                          _act(() async {
-                            await c.startNextDay();
-                            if (mounted) setState(() => _showSummary = false);
-                          });
-                        } else {
-                          Navigator.pop(context);
-                        }
-                      },
-                child: Text(label, textAlign: TextAlign.center))));
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+          child: FilledButton(
+            style: FilledButton.styleFrom(
+                minimumSize: const Size.fromHeight(48)),
+            onPressed: _working || c.busy
+                ? null
+                : () {
+                    if (!c.allTargetsCompleted) {
+                      _act(() async {
+                        await c.resume();
+                        if (mounted) setState(() => _showSummary = false);
+                      });
+                    } else if (c.checkpoint!.finished &&
+                        c.nextDay != null) {
+                      _act(() async {
+                        await c.startNextDay();
+                        if (mounted) setState(() => _showSummary = false);
+                      });
+                    } else {
+                      Navigator.pop(context);
+                    }
+                  },
+            child: Text(label, textAlign: TextAlign.center),
+          ),
+        ),
+      ),
+    );
   }
 
   List<Widget> _summary(BuildContext context) {
@@ -713,20 +774,32 @@ class _RoutineJourneyScreenState extends State<RoutineJourneyScreen> {
         .length;
     return [
       Text('Routine completion',
-          style: Theme.of(context).textTheme.titleMedium),
+          style: const TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+              color: AppColors.ink)),
       Text(
           c.checkpoint?.attempt == null
               ? 'In Progress'
               : workoutAttemptLabel(c.checkpoint!.attempt!),
-          style: Theme.of(context).textTheme.headlineSmall),
+          style: const TextStyle(
+              fontSize: 24,
+              fontWeight: FontWeight.w700,
+              color: AppColors.ink)),
       Text('${c.routine.title} · Day ${c.day}',
-          style: Theme.of(context).textTheme.titleLarge),
+          style: const TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w700,
+              color: AppColors.ink)),
       Text(
-          '${c.completedExercises}/${c.dayIndices.length} exercise targets completed'),
+          '${c.completedExercises}/${c.dayIndices.length} exercise targets completed',
+          style: const TextStyle(color: AppColors.inkSoft)),
       Text(
-          '${c.dayIndices.where((i) => c.statusFor(i) == RoutineExerciseStatus.skipped).length} skipped · ${c.dayIndices.where((i) => !isExerciseTargetComplete(c.statusFor(i)) && c.statusFor(i) != RoutineExerciseStatus.skipped).length} unfinished'),
+          '${c.dayIndices.where((i) => c.statusFor(i) == RoutineExerciseStatus.skipped).length} skipped · ${c.dayIndices.where((i) => !isExerciseTargetComplete(c.statusFor(i)) && c.statusFor(i) != RoutineExerciseStatus.skipped).length} unfinished',
+          style: const TextStyle(color: AppColors.inkSoft)),
       if (c.checkpoint?.finished == true && c.error == null)
-        const Text('Saved on this device'),
+        const Text('Saved on this device',
+            style: TextStyle(color: AppColors.inkSoft)),
       const SizedBox(height: 12),
       Panel(
           background: AppColors.primaryTint,
@@ -735,19 +808,26 @@ class _RoutineJourneyScreenState extends State<RoutineJourneyScreen> {
             if (c.measuredSessions.isNotEmpty) ...[
               Text(
                   '$complete measured exercise${complete == 1 ? '' : 's'} complete',
-                  style: Theme.of(context).textTheme.titleMedium),
+                  style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.ink)),
               const SizedBox(height: 8),
               Text(
-                  '${c.fullRepetitions} full reps · ${c.partialRepetitions} partial reps'),
+                  '${c.fullRepetitions} full reps · ${c.partialRepetitions} partial reps',
+                  style: const TextStyle(color: AppColors.ink)),
               Text(
-                  '${c.trackedDurationMicros ~/ 1000000}s tracked across ${c.measuredSessions.length} saved sessions'),
+                  '${c.trackedDurationMicros ~/ 1000000}s tracked across ${c.measuredSessions.length} saved sessions',
+                  style: const TextStyle(color: AppColors.inkSoft)),
             ],
             if (c.selfReportedSets > 0)
               Text(
-                  '${c.selfReportedSets} self-reported sets · separate from AI measurements'),
+                  '${c.selfReportedSets} self-reported sets · separate from AI measurements',
+                  style: const TextStyle(color: AppColors.ink)),
             if (c.guidedDurationMicros > 0)
               Text(
-                  '${c.guidedDurationMicros ~/ 1000000}s video-guided time · Not AI verified'),
+                  '${c.guidedDurationMicros ~/ 1000000}s video-guided time · Not AI verified',
+                  style: const TextStyle(color: AppColors.ink)),
             const SizedBox(height: 8),
             const Text(
                 'Camera measurements and self-reported completion stay separate. Manual sets add no AI reps, form score or rewards.',

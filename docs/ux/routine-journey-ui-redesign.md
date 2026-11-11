@@ -98,8 +98,9 @@ Next Exercise"    Summary"   │     "Start AI      "Start guided  "Mark set
   - Added camera setup hints (`_cameraHint`) mapping `ExerciseTracker` to front/side/floor camera positioning guidelines.
   - Redesigned exercise rows into compact modern cards with clear active/next/done states.
   - Implemented state-aware completed vs. unfinished views in the Current Exercise Section.
-  - Styled sticky bottom navigation bar with responsive layout and state-aware primary action.
-  - Added 140px scroll padding to `ListView` to prevent sticky bottom bar occlusion.
+  - Styled sticky bottom navigation bar with responsive layout, opaque white container (`#FFFFFF`), subtle top border (`#E9E5F0`), and state-aware primary action.
+  - Fixed white-on-white text defect above the "Start workout" button by explicitly applying `AppColors.ink` (`#190F2E`) for exercise title and `AppColors.inkSoft` (`#6B6488`) for targets, eliminating reliance on undefined `titleSmall` / `bodySmall` theme tokens.
+  - Eliminated large bottom blank space by replacing 140px bottom padding and redundant safe-area `SizedBox` with balanced `EdgeInsets.fromLTRB(16, 8, 16, 24)`.
 
 ---
 
