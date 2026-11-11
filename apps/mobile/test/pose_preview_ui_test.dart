@@ -1,4 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:gainpath_data/gainpath_data.dart';
+import 'package:gainpath_identity/gainpath_identity.dart';
+import 'package:gainpath_mobile/features/workout/application/workout_preferences_controller.dart';
+import 'workout_preferences_test.dart' show MemoryWorkoutPreferencesStore;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gainpath_domain/gainpath_domain.dart' show SessionScope;
 import 'package:gainpath_pose/gainpath_pose.dart';
@@ -72,19 +77,35 @@ void main() {
   testWidgets(
       'development preview requests local consent before opening a camera route',
       (tester) async {
-    await tester
-        .pumpWidget(const MaterialApp(home: WorkoutPrepScreen(live: true)));
+    late AuthBloc auth;
+    await tester.runAsync(() async {
+      auth = AuthBloc(repository: InMemoryAuthRepository());
+      auth.add(const LoginSubmitted(
+          email: 'member@example.com', password: 'password123'));
+      await auth.stream.firstWhere((s) => s.status == AuthStatus.signedIn);
+    });
+    final preferences = WorkoutPreferencesController(
+        scope: auth.state.session!.scope,
+        store: MemoryWorkoutPreferencesStore());
+    await tester.pumpWidget(BlocProvider.value(
+        value: auth,
+        child: MaterialApp(
+            home: WorkoutPrepScreen(
+                live: true, preferencesFactory: (_) async => preferences))));
     await tester.scrollUntilVisible(find.text('Try live camera preview'), 250);
     await tester.tap(find.text('Try live camera preview'));
     await tester.pumpAndSettle();
-    expect(find.text('This preview does not save activity or count reps.'),
-        findsOneWidget);
+    expect(find.text('AI Tracking privacy'), findsOneWidget);
     final button = tester.widget<FilledButton>(
-        find.widgetWithText(FilledButton, 'Accept and start'));
+        find.widgetWithText(FilledButton, 'Accept AI Tracking'));
     expect(button.onPressed, isNull);
     await tester.tap(find.text('Not now'));
     await tester.pumpAndSettle();
     expect(find.text('Try live camera preview'), findsOneWidget);
+    expect(preferences.validConsent, isFalse);
+    await tester.pumpWidget(const SizedBox());
+    preferences.dispose();
+    await tester.runAsync(auth.close);
   }, skip: !const bool.fromEnvironment('GAINPATH_POSE_PREVIEW'));
   testWidgets(
       'camera foundation uses Workout viewport without simulated metrics; End closes locally',
