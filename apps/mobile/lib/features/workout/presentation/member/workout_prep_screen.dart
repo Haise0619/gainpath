@@ -680,7 +680,7 @@ class _WorkoutOverview extends StatelessWidget {
           ? Icons.calendar_month_outlined
           : complete
               ? Icons.summarize_outlined
-              : Icons.play_arrow_rounded,
+              : null,
       onStart: onStart,
       switcher: switcher,
       started: attempt != null || scheduledWorkout?.inProgress == true,

@@ -78,16 +78,16 @@ class _WorkoutHubLayoutState extends State<WorkoutHubLayout>
                                   child: KeyedSubtree(
                                       key: ValueKey(widget.identity),
                                       child: widget.hero)))),
-                      section(1, widget.plan),
                       if (widget.exercises.isNotEmpty)
                         section(
-                            2,
+                            1,
                             WorkoutHubExercises(
                                 key: ValueKey(widget.identity),
                                 rows: widget.exercises,
                                 action: widget.exerciseAction)),
-                      section(3, widget.activity),
-                      section(4, widget.help),
+                      section(widget.exercises.isNotEmpty ? 2 : 1, widget.plan),
+                      section(widget.exercises.isNotEmpty ? 3 : 2, widget.activity),
+                      section(widget.exercises.isNotEmpty ? 4 : 3, widget.help),
                     ]))),
           ]));
 }

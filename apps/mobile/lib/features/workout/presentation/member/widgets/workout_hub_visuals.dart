@@ -72,7 +72,7 @@ class WorkoutHubOverview extends StatefulWidget {
       required this.total,
       required this.status,
       required this.action,
-      required this.actionIcon,
+      this.actionIcon,
       required this.onStart,
       this.switcher,
       this.scheduleStatus,
@@ -85,7 +85,7 @@ class WorkoutHubOverview extends StatefulWidget {
   final int? minutes;
   final Widget? switcher;
   final bool started;
-  final IconData actionIcon;
+  final IconData? actionIcon;
   final FutureOr<void> Function() onStart;
   @override
   State<WorkoutHubOverview> createState() => _WorkoutHubOverviewState();
@@ -233,21 +233,36 @@ class _WorkoutHubOverviewState extends State<WorkoutHubOverview> {
                             duration: workoutHubMotion(context, 100),
                             child: SizedBox(
                                 width: double.infinity,
-                                child: FilledButton.icon(
-                                    onPressed: _launching ? null : _start,
-                                    style: FilledButton.styleFrom(
-                                        backgroundColor: Colors.white,
-                                        foregroundColor:
-                                            const Color(0xFFA74700),
-                                        minimumSize: const Size(0, 52),
-                                        padding: const EdgeInsets.symmetric(
-                                            horizontal: 16, vertical: 14),
-                                        shape: RoundedRectangleBorder(
-                                            borderRadius:
-                                                BorderRadius.circular(14))),
-                                    icon: Icon(widget.actionIcon, size: 20),
-                                    label: Text(widget.action,
-                                        textAlign: TextAlign.center))))),
+                                child: widget.actionIcon != null
+                                    ? FilledButton.icon(
+                                        onPressed: _launching ? null : _start,
+                                        style: FilledButton.styleFrom(
+                                            backgroundColor: Colors.white,
+                                            foregroundColor:
+                                                const Color(0xFFA74700),
+                                            minimumSize: const Size(0, 52),
+                                            padding: const EdgeInsets.symmetric(
+                                                horizontal: 16, vertical: 14),
+                                            shape: RoundedRectangleBorder(
+                                                borderRadius:
+                                                    BorderRadius.circular(14))),
+                                        icon: Icon(widget.actionIcon, size: 20),
+                                        label: Text(widget.action,
+                                            textAlign: TextAlign.center))
+                                    : FilledButton(
+                                        onPressed: _launching ? null : _start,
+                                        style: FilledButton.styleFrom(
+                                            backgroundColor: Colors.white,
+                                            foregroundColor:
+                                                const Color(0xFFA74700),
+                                            minimumSize: const Size(0, 52),
+                                            padding: const EdgeInsets.symmetric(
+                                                horizontal: 16, vertical: 14),
+                                            shape: RoundedRectangleBorder(
+                                                borderRadius:
+                                                    BorderRadius.circular(14))),
+                                        child: Text(widget.action,
+                                            textAlign: TextAlign.center))))),
                     if (widget.switcher != null || widget.support != null) ...[
                       const SizedBox(height: 6),
                       LayoutBuilder(builder: (context, c) {
