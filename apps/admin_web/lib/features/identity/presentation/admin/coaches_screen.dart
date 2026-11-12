@@ -31,12 +31,15 @@ class CoachesScreen extends StatefulWidget {
       this.onOpenSchedule,
       this.onOpenBookings,
       this.initialCoachId,
-      this.discardGuard});
+      this.discardGuard,
+      this.onReviewChanged});
   final String? initialCoachId;
   final CoachReviewDiscardGuard? discardGuard;
   final bool live;
   final void Function(String coachId)? onOpenSchedule;
   final void Function(String coachId)? onOpenBookings;
+  /// Keeps shell breadcrumbs and return navigation aligned with loaded reviews.
+  final ValueChanged<String?>? onReviewChanged;
 
   @override
   State<CoachesScreen> createState() => _CoachesScreenState();
@@ -45,6 +48,7 @@ class CoachesScreen extends StatefulWidget {
 class _CoachesScreenState extends State<CoachesScreen> {
   late final CoachReviewDiscardGuard _discardGuard;
   CoachDirectoryAdminCubit? _cubit;
+  String? _reportedReviewId;
 
   @override
   void initState() {
@@ -168,8 +172,16 @@ class _CoachesScreenState extends State<CoachesScreen> {
   Widget build(BuildContext context) {
     final cubit = _cubit;
     if (cubit != null) {
-      return BlocBuilder<CoachDirectoryAdminCubit, CoachDirectoryAdminState>(
+      return BlocConsumer<CoachDirectoryAdminCubit, CoachDirectoryAdminState>(
         bloc: cubit,
+        listenWhen: (previous, current) => !current.busy,
+        listener: (context, state) {
+          final id = state.review?.coachId;
+          if (id != _reportedReviewId) {
+            _reportedReviewId = id;
+            widget.onReviewChanged?.call(id);
+          }
+        },
         builder: (context, state) =>
             _page(context, _liveEntries(state), state: state),
       );

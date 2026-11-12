@@ -52,8 +52,10 @@ class _TestCoachAdminRepo implements CoachProfileAdminRepository {
   _TestCoachAdminRepo(
       {this.allowed = true,
       this.includePublic = false,
-      this.reviewPublication = false});
+      this.reviewPublication = false,
+      this.failReviewId});
   final bool allowed, includePublic, reviewPublication;
+  final String? failReviewId;
   int draftReads = 0;
   final reviewedIds = <String>[];
   final mutations = <CoachDirectoryAction>[];
@@ -106,6 +108,7 @@ class _TestCoachAdminRepo implements CoachProfileAdminRepository {
   @override
   Future<CoachPublicationReview> loadReview(String coachId) async {
     reviewedIds.add(coachId);
+    if (coachId == failReviewId) throw StateError('Review read failed');
     return CoachPublicationReview(
       coachId: coachId,
       draft: CoachProfessionalProfile(
@@ -189,6 +192,8 @@ void main() {
         {required bool live,
         _TestCoachAdminRepo? repository,
         CoachReviewDiscardGuard? guard,
+        String? initialCoachId,
+        void Function(String?)? onReviewChanged,
         void Function(String)? onOpenBookings,
         void Function(String)? onOpenSchedule}) async {
       tester.view.physicalSize = const Size(1600, 1000);
@@ -206,11 +211,69 @@ void main() {
           child: MaterialApp(
               home: CoachesScreen(
                   live: live,
+                  initialCoachId: initialCoachId,
+                  onReviewChanged: onReviewChanged,
                   discardGuard: guard,
                   onOpenBookings: onOpenBookings,
                   onOpenSchedule: onOpenSchedule))));
       await tester.pumpAndSettle();
     }
+
+    testWidgets('reports initial and selected reviews to the shell',
+        (tester) async {
+      final selected = <String?>[];
+      final repository = _TestCoachAdminRepo(includePublic: true);
+      await pumpCoaches(tester,
+          live: true,
+          repository: repository,
+          initialCoachId: 'coach-1',
+          onReviewChanged: selected.add);
+      expect(selected, ['coach-1']);
+      await tester
+          .ensureVisible(find.byKey(const ValueKey('coach-card-b2-coach-2')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.descendant(
+          of: find.byKey(const ValueKey('coach-card-b2-coach-2')),
+          matching: find.text('Review')));
+      await tester.pumpAndSettle();
+      expect(selected, ['coach-1', 'coach-2']);
+      await tester.ensureVisible(find.byTooltip('Refresh Coaches'));
+      await tester.tap(find.byTooltip('Refresh Coaches'));
+      await tester.pumpAndSettle();
+      expect(selected, ['coach-1', 'coach-2', null]);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('failed review switch clears the previous shell scope',
+        (tester) async {
+      final selected = <String?>[];
+      await pumpCoaches(tester,
+          live: true,
+          repository:
+              _TestCoachAdminRepo(includePublic: true, failReviewId: 'coach-2'),
+          initialCoachId: 'coach-1',
+          onReviewChanged: selected.add);
+      expect(selected, ['coach-1']);
+      final card = find.byKey(const ValueKey('coach-card-b2-coach-2'));
+      await tester.ensureVisible(card);
+      await tester.pumpAndSettle();
+      await tester
+          .tap(find.descendant(of: card, matching: find.text('Review')));
+      await tester.pumpAndSettle();
+      expect(selected, ['coach-1', null]);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('denied access never reports an initial review',
+        (tester) async {
+      final selected = <String?>[];
+      await pumpCoaches(tester,
+          live: true,
+          repository: _TestCoachAdminRepo(allowed: false),
+          initialCoachId: 'coach-1',
+          onReviewChanged: selected.add);
+      expect(selected, isEmpty);
+    });
 
     test('coach source contains one canonical page body', () {
       final source =
