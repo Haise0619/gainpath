@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:gainpath_domain/membership.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
 import '../../application/membership_feature_host.dart';
+import '../../domain/membership_renewal_preview.dart';
 import '../shared/membership_data_view.dart';
 import 'purchase_plan_screen.dart';
 import 'widgets/plan_card.dart';
@@ -107,6 +108,7 @@ class BrowsePlansScreen extends StatelessWidget {
                                     builder: (_) => PurchasePlanScreen(
                                         plan: plan,
                                         repository: repo,
+                                        renewalPreview: MembershipRenewalPreview.fromOverview(e, tier),
                                         renewal: e.paidPlanId == tier)));
                             if (context.mounted) refresh();
                           }));

@@ -43,14 +43,14 @@ class MembershipDashboardScreen extends StatelessWidget {
             ? 'Verification required'
             : e.historicalOnly
                 ? 'Last verified tier · $tier'
-                : tier!;
+                : expired ? 'Membership Expired' : '$tier Membership';
         final action = !verified
             ? 'Verify Membership'
             : expired
                 ? 'Renew Membership'
                 : paid
                     ? 'Renew ${e.paidTier!.label}'
-                    : 'Explore Plans';
+                    : 'Explore Membership Plans';
         return [
           const SizedBox(height: 8),
           Panel(
@@ -106,6 +106,10 @@ class MembershipDashboardScreen extends StatelessWidget {
                       const Padding(
                           padding: EdgeInsets.only(top: 10),
                           child: Text('No expiry · No membership charge')),
+                    if (paid && !e.historicalOnly)
+                      const Padding(
+                          padding: EdgeInsets.only(top: 10),
+                          child: Text('Renew anytime. Your remaining membership time will be preserved.')),
                     const SizedBox(height: 18),
                     SizedBox(
                         width: double.infinity,

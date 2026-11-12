@@ -29,11 +29,13 @@ class CommercialMembershipFake extends fixture.MembershipFake {
   @override
   Future<Map<String, dynamic>> quote(String id, String code) async {
     quotes++;
+    if (code == 'INVALID') throw const BookingException('failed-precondition');
+    final price = id == 'premium' ? 12900 : 8900;
     return {
       'quoteId': 'quote-$quotes',
       'planId': id,
-      'baseAmountMinor': 8900,
-      'amountMinor': code.isEmpty ? 8900 : 8000,
+      'baseAmountMinor': price,
+      'amountMinor': code.isEmpty ? price : price - 900,
       'durationDays': 30
     };
   }
@@ -64,6 +66,28 @@ class _ClearedCheckout extends CommercialMembershipFake {
 }
 
 void main() {
+  for (final tier in ['Basic', 'Premium']) {
+    testWidgets('$tier can renew with thirteen days left and sees estimated expiry', (t) async {
+      final id = tier.toLowerCase();
+      final repo = CommercialMembershipFake();
+      repo.overview['entitlement'] = {
+        ...fixture.entitlement(tier: id, paidStatus: 'active'),
+        'resolvedAtMillis': DateTime.utc(2026, 11, 12, 10).millisecondsSinceEpoch,
+        'paidExpiresAtMillis': DateTime.utc(2026, 11, 25, 10).millisecondsSinceEpoch,
+      };
+      await t.pumpWidget(MaterialApp(home: MembershipDashboardScreen(repository: repo)));
+      await t.pumpAndSettle();
+      expect(find.text('$tier Membership'), findsOneWidget);
+      await t.tap(find.text('Renew $tier'));
+      await t.pumpAndSettle();
+      await t.tap(find.text('Review renewal'));
+      await t.pumpAndSettle();
+      expect(find.text('Current expiry: 25 Nov 2026, 18:00 MYT'), findsOneWidget);
+      final estimate = find.text('Estimated new expiry: 25 Dec 2026, 18:00 MYT');
+      await t.scrollUntilVisible(estimate, 120, scrollable: find.byType(Scrollable).first);
+      expect(estimate, findsOneWidget);
+    });
+  }
   test('payment copy separates confirmation, activation and review', () {
     expect(membershipPaymentLabel({'fulfilmentStatus': 'awaiting_payment'}), 'Awaiting payment');
     expect(membershipPaymentLabel({'paymentStatus': 'cleared', 'fulfilmentStatus': 'confirmed'}), 'Payment confirmed · Membership activated');
@@ -96,7 +120,7 @@ void main() {
         home:
             MembershipDashboardScreen(repository: CommercialMembershipFake())));
     await t.pumpAndSettle();
-    expect(find.text('Explore Plans'), findsOneWidget);
+    expect(find.text('Explore Membership Plans'), findsOneWidget);
     expect(find.textContaining('AI workouts'), findsOneWidget);
   });
   testWidgets(

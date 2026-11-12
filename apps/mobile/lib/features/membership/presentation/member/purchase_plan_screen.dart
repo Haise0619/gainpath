@@ -5,6 +5,7 @@ import 'package:gainpath_domain/gainpath_domain.dart' show BookingException;
 import 'package:gainpath_ui/gainpath_ui.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../domain/membership_payment_preview.dart';
+import '../../domain/membership_renewal_preview.dart';
 import '../shared/membership_data_view.dart';
 import '../../application/membership_feature_host.dart';
 import '../shared/membership_dashboard_screen.dart';
@@ -17,25 +18,30 @@ class PurchasePlanScreen extends StatelessWidget {
       required this.plan,
       this.connected = false,
       this.repository,
+      this.renewalPreview,
       this.renewal = false});
   final MembershipPlan plan;
   final bool connected, renewal;
   final MembershipCommerceRepository? repository;
+  final MembershipRenewalPreview? renewalPreview;
   @override
   Widget build(BuildContext context) => repository != null
       ? MembershipRepositoryGuard(
           repository: repository!, child: _body(repository!))
       : MembershipFeatureHost(connected: connected, builder: _body);
   Widget _body(MembershipCommerceRepository repo) =>
-      _PurchaseForm(repository: repo, plan: plan, renewal: renewal);
+      _PurchaseForm(repository: repo, plan: plan, renewal: renewal,
+          renewalPreview: renewalPreview);
 }
 
 class _PurchaseForm extends StatefulWidget {
   const _PurchaseForm(
-      {required this.repository, required this.plan, required this.renewal});
+      {required this.repository, required this.plan, required this.renewal,
+      required this.renewalPreview});
   final MembershipCommerceRepository repository;
   final MembershipPlan plan;
   final bool renewal;
+  final MembershipRenewalPreview? renewalPreview;
   @override
   State<_PurchaseForm> createState() => _PurchaseFormState();
 }
@@ -142,10 +148,13 @@ class _PurchaseFormState extends State<_PurchaseForm> {
   }
 
   @override
-  Widget build(BuildContext context) => Scaffold(
+  Widget build(BuildContext context) {
+    final preview = widget.renewal ? widget.renewalPreview : null;
+    final estimate = preview?.estimatedExpiry(_quote?['durationDays']);
+    return Scaffold(
       appBar: AppBar(
           title:
-              Text(widget.renewal ? 'Confirm renewal' : 'Review order')),
+              Text(widget.renewal ? 'Extend your membership' : 'Review order')),
       body: PageBody(children: [
         Panel(
             background: AppColors.primaryTint,
@@ -157,8 +166,13 @@ class _PurchaseFormState extends State<_PurchaseForm> {
               Text(widget.plan.tagline),
               const SizedBox(height: 8),
               Text(widget.renewal
-                  ? 'Manual renewal · Remaining paid time is preserved.'
+                  ? 'Renew anytime. Your remaining membership time will be preserved.'
                   : 'One-time membership purchase'),
+              if (preview != null) ...[
+                const SizedBox(height: 12),
+                Text('${preview.active ? 'Current membership' : 'Previous membership'}: ${preview.tier.label}'),
+                Text('${preview.active ? 'Current expiry' : 'Expired'}: ${membershipDate(preview.expiryMillis)}'),
+              ],
             ])),
         const SizedBox(height: 18),
         TextField(
@@ -178,7 +192,7 @@ class _PurchaseFormState extends State<_PurchaseForm> {
         if (_quote != null)
           Panel(
               child: Column(children: [
-            DetailRow('Duration', '${_quote!['durationDays']} days'),
+            DetailRow(widget.renewal ? 'Additional time' : 'Duration', '${_quote!['durationDays']} days'),
             if (_quote!['baseAmountMinor'] != null)
               DetailRow('Original price',
                   membershipMoney(_quote!['baseAmountMinor'])),
@@ -193,12 +207,16 @@ class _PurchaseFormState extends State<_PurchaseForm> {
             DetailRow('Total', membershipMoney(_quote!['amountMinor'])),
           ])),
         const SizedBox(height: 16),
+        if (estimate != null)
+          Padding(padding: const EdgeInsets.only(bottom: 12),
+              child: Text('Estimated new expiry: ${membershipDate(estimate)}',
+                  style: Theme.of(context).textTheme.titleMedium)),
         if (widget.renewal)
           const Padding(
               padding: EdgeInsets.only(bottom: 12),
               child: Text(
                   'Your final expiry is calculated when payment clears: any remaining paid time plus this term.')),
-        const Text('One-time payment. Membership activates after payment verification.'),
+        const Text('One-time payment. No automatic recurring charges.'),
         PaymentEnvironmentDetails(sandbox: widget.repository.sandbox),
         const SizedBox(height: 16),
         FilledButton(
@@ -206,6 +224,7 @@ class _PurchaseFormState extends State<_PurchaseForm> {
             child:
                 Text(_submitted ? 'Recover checkout' : 'Continue to Payment')),
       ]));
+  }
 }
 
 class MembershipPaymentScreen extends StatefulWidget {

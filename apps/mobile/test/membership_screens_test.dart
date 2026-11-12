@@ -86,9 +86,9 @@ void main() {
     expect(find.byType(CircularProgressIndicator), findsOneWidget);
     pending.complete(repo.overview);
     await tester.pumpAndSettle();
-    expect(find.text('Free'), findsOneWidget);
+    expect(find.text('Free Membership'), findsOneWidget);
     expect(find.text('No expiry · No membership charge'), findsOneWidget);
-    expect(find.text('Explore Plans'), findsOneWidget);
+    expect(find.text('Explore Membership Plans'), findsOneWidget);
     expect(find.textContaining('No automatic renewal'), findsOneWidget);
     await tester.scrollUntilVisible(
         find.text('No membership payments yet.'), 150);
@@ -112,7 +112,7 @@ void main() {
     await tester.pumpWidget(
         MaterialApp(home: MembershipDashboardScreen(repository: repo)));
     await tester.pumpAndSettle();
-    expect(find.text('Free'), findsOneWidget);
+    expect(find.text('Membership Expired'), findsOneWidget);
     await tester.scrollUntilVisible(find.text('Previous paid membership'), 150);
     expect(find.text('Previous paid membership'), findsOneWidget);
     expect(find.textContaining('Premium · Expired'), findsOneWidget);
@@ -199,7 +199,7 @@ void main() {
       await tester.pumpWidget(
           MaterialApp(home: MembershipDashboardScreen(repository: repo)));
       await tester.pumpAndSettle();
-      expect(find.text(tier == 'basic' ? 'Basic' : 'Premium'), findsOneWidget);
+      expect(find.text(tier == 'basic' ? 'Basic Membership' : 'Premium Membership'), findsOneWidget);
       expect(find.textContaining('Paid membership active'), findsOneWidget);
       expect(find.textContaining('Gym entry, coach booking'), findsOneWidget);
       expect(find.textContaining('1.5'), findsNothing);

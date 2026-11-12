@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:gainpath_domain/membership.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
 import '../../application/membership_feature_host.dart';
+import '../../domain/membership_renewal_preview.dart';
 import '../shared/membership_data_view.dart';
 import 'purchase_plan_screen.dart';
 
@@ -40,6 +41,7 @@ class RenewScreen extends StatelessWidget {
           ];
         }
         final p = plans.first;
+        final preview = MembershipRenewalPreview.fromOverview(entitlement, p['planId'] as String);
         return [
           Panel(
               background: AppColors.primaryTint,
@@ -72,6 +74,7 @@ class RenewScreen extends StatelessWidget {
                                 '${p['durationDays']} days',
                                 List<String>.from(p['benefits'] as List)),
                             repository: repo,
+                            renewalPreview: preview,
                             renewal: true)));
                 if (context.mounted) refresh();
               },
