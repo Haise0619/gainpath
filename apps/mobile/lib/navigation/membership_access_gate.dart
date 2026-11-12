@@ -4,6 +4,7 @@ import 'package:gainpath_domain/membership.dart';
 import 'package:gainpath_identity/gainpath_identity.dart';
 import 'session_host.dart';
 import '../infrastructure/firebase/firebase_membership_access_repository.dart';
+import '../features/membership/presentation/member/browse_plans_screen.dart';
 
 /// Enable only with deployed access commands and an approved trusted policy.
 const membershipAccessEnforcementEnabled =
@@ -25,6 +26,10 @@ class MembershipAccessGate extends StatelessWidget {
   final Widget child;
   @override
   Widget build(BuildContext context) {
+    // Core digital fitness is included for every tier, even when paid evidence
+    // is unknown. Account, consent and data ownership remain outer boundaries.
+    if (feature == MembershipAccessFeature.exercise ||
+        feature == MembershipAccessFeature.advancedReport) return child;
     if (!enabled) return child;
     if (repository != null) {
       return _AccessCheck(
@@ -142,6 +147,11 @@ class _AccessCheckState extends State<_AccessCheck>
                           : 'Connect and try again to check current access.',
                       textAlign: TextAlign.center),
                   const SizedBox(height: 12),
+                  if (denied)
+                    FilledButton(
+                        onPressed: () => Navigator.push(context,
+                            MaterialPageRoute<void>(builder: (_) => const BrowsePlansScreen(connected: true))),
+                        child: const Text('View membership plans')),
                   TextButton(
                       onPressed: () => setState(_load),
                       child: const Text('Check access again')),

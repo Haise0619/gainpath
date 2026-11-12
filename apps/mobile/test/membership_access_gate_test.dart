@@ -65,11 +65,8 @@ void main() {
               resourceId: 'performance_trends',
               child: const Text('Measured report'))));
       await tester.pumpAndSettle();
-      expect(find.text('Measured report'),
-          outcome == 'legacy' ? findsOneWidget : findsNothing);
-      if (outcome != 'legacy') {
-        expect(find.text('Check access again'), findsOneWidget);
-      }
+      expect(find.text('Measured report'), findsOneWidget);
+      expect(repo.reads, 0);
     }
   });
   testWidgets(
@@ -89,6 +86,6 @@ void main() {
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
     await tester.pumpAndSettle();
     expect(find.text('Running safety guidance'), findsOneWidget);
-    expect(repo.reads, 1);
+    expect(repo.reads, 0);
   });
 }

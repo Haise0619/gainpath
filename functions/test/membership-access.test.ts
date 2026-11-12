@@ -24,27 +24,27 @@ beforeEach(() => {
 });
 it('uses the explicit Free list without denying supported paid exercises to paid members', async () => {
   expect(await access()).toMatchObject({ decision: 'allowed', effectiveTier: 'free' });
-  expect(await access({ ...request, resourceId: 'paid' })).toMatchObject({ decision: 'denied', requiredTier: 'basic' });
+  expect(await access({ ...request, resourceId: 'paid' })).toMatchObject({ decision: 'allowed', requiredTier: 'free' });
   paid('basic');
   expect(await access({ ...request, resourceId: 'paid' })).toMatchObject({ decision: 'allowed', effectiveTier: 'basic' });
-  expect(await access({ ...request, resourceId: 'invented' })).toMatchObject({ decision: 'denied', reason: 'resource_not_configured' });
+  expect(await access({ ...request, resourceId: 'invented' })).toMatchObject({ decision: 'allowed', reason: 'digital_fitness_included' });
 });
 it('requires Premium for configured reports and expires exactly at the paid boundary', async () => {
   const r = { ...request, feature: 'advancedReport', resourceId: 'performance_trends' };
-  paid('basic'); expect(await access(r)).toMatchObject({ decision: 'denied', requiredTier: 'premium' });
+  paid('basic'); expect(await access(r)).toMatchObject({ decision: 'allowed', requiredTier: 'free' });
   paid(); expect(await access(r)).toMatchObject({ decision: 'allowed' });
-  paid('premium', now); expect(await access(r)).toMatchObject({ decision: 'denied', effectiveTier: 'free' });
+  paid('premium', now); expect(await access(r)).toMatchObject({ decision: 'allowed', effectiveTier: 'free' });
 });
 it.each(['absent', 'disabled', 'malformed'])('preserves existing access for %s policy', async mode => {
   const path = `orgs/${org}/membershipPolicies/access`;
   if (mode === 'absent') store.documents.delete(path);
   if (mode === 'disabled') store.documents.get(path)!.enabled = false;
   if (mode === 'malformed') store.documents.get(path)!.exercises = { supportedIds: ['supported'], freeIds: ['invented'] };
-  expect(await access({ ...request, resourceId: 'legacy' })).toMatchObject({ decision: 'legacy' });
+  expect(await access({ ...request, resourceId: 'legacy' })).toMatchObject({ decision: 'allowed' });
 });
 it('never grants configured paid access using unknown payment evidence', async () => {
   paid(); store.documents.delete(`orgs/${org}/transactions/payment`);
-  expect(await access()).toMatchObject({ decision: 'unknown', effectiveTier: null });
+  expect(await access()).toMatchObject({ decision: 'legacy', effectiveTier: null, reason: 'digital_fitness_included' });
 });
 it('ignores target session age while verifying current target Auth and lifecycle without impersonation', async () => {
   store.documents.get('users/member')!.accountLifecycle = { schemaVersion: 1, state: 'active', revocationPending: false, sessionNotBeforeSeconds: now / 1000 + 1 };

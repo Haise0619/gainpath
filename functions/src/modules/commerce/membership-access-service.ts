@@ -5,6 +5,7 @@ import { requiredIdentifier } from '../../platform/validation';
 import { allowed, object } from '../coaching/coach-availability-contracts';
 import type { CoachIdentityReader } from '../coaching/coach-profile-service';
 import { readVerifiedTargetMembershipEntitlement, resolveMembershipEntitlement } from './membership-entitlement';
+import {membershipCapabilities} from './membership-capabilities';
 
 type Auth = { uid: string; token: Record<string, unknown> } | undefined;
 export const MEMBERSHIP_ACCESS_POLICY = 'gainpath-membership-access-v1';
@@ -41,23 +42,26 @@ export function membershipAccessPolicy(raw: DocumentData | undefined) {
 }
 export async function membershipAccess(store: DocumentStore, auth: Auth, raw: unknown, readIdentity: CoachIdentityReader, clock = Date.now) {
   const { d, org, uid } = context(auth, raw, ['feature', 'resourceId']);
-  if (!['exercise', 'advancedReport'].includes(String(d.feature))) throw new DomainError('invalid-argument', 'Unsupported access feature.');
+  if (!['exercise', 'advancedReport','gym','coach','miniGame'].includes(String(d.feature))) throw new DomainError('invalid-argument', 'Unsupported access feature.');
   const resourceId = requiredIdentifier(d.resourceId, 'resourceId');
   if (!eligible(await readIdentity(uid))) throw new DomainError('permission-denied', 'Current verified Member access is required.');
   const now = clock();
   return store.transact(async tx => {
     const entitlement = await resolveMembershipEntitlement(tx, auth, org, now);
-    const policy = membershipAccessPolicy(await tx.get(`orgs/${org}/membershipPolicies/access`));
     const common = { schemaVersion: 1, policyVersion: MEMBERSHIP_ACCESS_POLICY, organizationId: org, memberId: uid, resolvedAtMillis: now,
       feature: d.feature as string, resourceId, effectiveTier: entitlement.effectiveTier, requiredTier: null as string | null };
-    const enabled = d.feature === 'exercise' ? policy?.exercises : policy?.advancedReports;
-    if (!enabled) return { ...common, decision: 'legacy', reason: 'policy_not_enforced' };
-    if (entitlement.status !== 'resolved') return { ...common, decision: 'unknown', reason: 'entitlement_unavailable' };
-    const known = d.feature === 'exercise' ? policy!.exercises!.supportedIds.includes(resourceId) : policy!.advancedReports!.reportIds.includes(resourceId);
-    if (!known) return { ...common, decision: 'denied', reason: 'resource_not_configured' };
-    const requiredTier = d.feature === 'advancedReport' ? 'premium' : policy!.exercises!.freeIds.includes(resourceId) ? 'free' : 'basic';
-    const permit = requiredTier === 'free' || entitlement.effectiveTier === 'premium' || (requiredTier === 'basic' && entitlement.effectiveTier === 'basic');
-    return { ...common, requiredTier, decision: permit ? 'allowed' : 'denied', reason: permit ? 'tier_access' : 'paid_tier_required' };
+    if (['gym','coach','miniGame'].includes(String(d.feature))) {
+      if(entitlement.status!=='resolved') return {...common,decision:'unknown',reason:'entitlement_unavailable'};
+      const c=membershipCapabilities(entitlement);
+      const allowed=d.feature==='gym'?c.canAccessGym:d.feature==='coach'?c.canBrowseCoaches:c.canAccessMiniGames;
+      return {...common,requiredTier:'basic',decision:allowed?'allowed':'denied',reason:allowed?'tier_access':'paid_tier_required'};
+    }
+    // Approved commercial matrix supersedes legacy digital paywall policies.
+    // Identity/session checks above remain mandatory; unknown paid evidence does
+    // not remove independently authorized digital fitness or historical reports.
+    return entitlement.status === 'resolved'
+      ? {...common, requiredTier:'free', decision:'allowed', reason:'digital_fitness_included'}
+      : {...common, decision:'legacy', reason:'digital_fitness_included'};
   });
 }
 export async function verifyMemberMembership(store: DocumentStore, auth: Auth, raw: unknown, readIdentity: CoachIdentityReader, clock = Date.now) {

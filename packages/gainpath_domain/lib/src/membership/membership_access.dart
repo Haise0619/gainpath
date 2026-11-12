@@ -1,6 +1,6 @@
 import 'membership_entitlement.dart';
 
-enum MembershipAccessFeature { exercise, advancedReport }
+enum MembershipAccessFeature { exercise, advancedReport, gym, coach, miniGame }
 
 enum MembershipAccessOutcome { allowed, denied, unknown, legacy }
 
