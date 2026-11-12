@@ -206,3 +206,7 @@ Paths relative to the repository root. Unrelated working-tree files are excluded
 - `tools/workout-analytics-analysis-files.txt`
 
 </details>
+
+### Initial clean-checkout finding and correction
+
+The first clean run at `01fcf33` completed 773 Mobile tests with 30 gated skips and two failures in unchanged guided/save-retry assertions. `recordedFixture` can describe a deterministic replay that was actually committed to the local store; it does not by itself mean a remote read-only observation. The result screen now uses the explicit `fictionalObservation` context supplied by the scoped remote-data route. Read-only observations still suppress save claims; all recorded replays remain ineligible for cloud-backup construction. The original durability/retry assertions were retained, and all 23 focused replay/real-result/FYP/status/summary tests passed after correction; two-file analysis is clean. The failed clean log is retained. Final committed-source verification reruns the entire gate after this correction.

@@ -37,8 +37,9 @@ void main() {
     expect(find.text('Enable automatic sync'), findsNothing);
     expect(tester.takeException(), isNull);
     expect(locallySavedWorkoutRecord(summary), isNull);
-    await tester.pumpWidget(
-        MaterialApp(home: WorkoutResultScreen.measured(summary: summary)));
+    await tester.pumpWidget(MaterialApp(
+        home: WorkoutResultScreen.measured(
+            summary: summary, fictionalObservation: true)));
     await tester.pumpAndSettle();
     expect(find.text('Saved on this device'), findsNothing);
     expect(find.textContaining('no physical camera capture'), findsOneWidget);

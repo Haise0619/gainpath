@@ -242,7 +242,9 @@ class _WorkoutResultScreenState extends State<WorkoutResultScreen>
   }
 
   Widget _measured(BuildContext context, WorkoutSessionSummary summary) {
-    final fictional = widget.fictionalObservation ||
+    // Recorded test replays may be durably saved locally. Read-only remote
+    // observations are identified explicitly by the account-scoped route.
+    final fictional = widget.fictionalObservation &&
         summary.provenance == WorkoutProvenance.recordedFixture;
     final metrics = summary.poseMetrics!;
     final score = summary.formScorePercent;
