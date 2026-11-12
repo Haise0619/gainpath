@@ -41,6 +41,19 @@ class ReviewFake implements PaymentReviewRepository {
 }
 
 void main() {
+  testWidgets('initial booking cross-link opens its payment detail',
+      (tester) async {
+    final repo = ReviewFake();
+    await tester.pumpWidget(MaterialApp(
+        home: PaymentsScreen(
+      live: true,
+      repository: repo,
+      isCurrent: () => true,
+      initialBookingId: 'booking-1',
+    )));
+    await tester.pumpAndSettle();
+    expect(find.text('Investigate in Reconciliation'), findsOneWidget);
+  });
   testWidgets(
       'existing payment details show the saved voucher finance breakdown',
       (tester) async {

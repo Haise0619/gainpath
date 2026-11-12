@@ -90,7 +90,10 @@ class PaymentsScreenState extends State<PaymentsScreen> {
     try {
       final page = await _repository.load(afterId: _cursors[_pageIndex]);
       if (_valid(generation)) {
-        setState(() => _page = page);
+        setState(() {
+          _page = page;
+          _loading = false;
+        });
         if (widget.initialBookingId != null && _selected == null) {
           final match = page.records
               .where((r) => r.id == widget.initialBookingId)
