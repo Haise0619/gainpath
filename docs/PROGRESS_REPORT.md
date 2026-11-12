@@ -630,3 +630,8 @@ Workout now separates its focused action hero, independent Training Plan, compac
 Five implementation phases refine workout summaries, routine-centered History, comparable Progress and mixed-mode Report/PDF. Automatic cloud sync remains local-first and explicitly authorized; existing disabled preferences remain off and Synced requires acknowledgment of current content. Camera consent, workout acceptance and rewards remain separate. Program enrollment/schedule journals are not included in recovery.
 
 Clean application source `6573957`: 775 affected Mobile tests (30 existing gated skips), 192 full Domain and 759 full Pose tests pass; 65-file/domain analysis, three 31-test stress passes and Android Debug build pass. No live deployment, real-data write or APK install; Firebase/device/PDF acceptance remains pending. [Implementation, screenshots, hashes and reproduction](ux/workout-analytics-cloud-sync-product-optimization.md).
+
+
+## Training Report and Rewards & Check-in — 12 November 2026
+
+Training Report now has a compact mixed-mode summary, one expandable workout activity list, separate compatible AI assessments and optional technical evidence. Rewards owns the live Rewards & Check-in route with explicit guarded claims, independent balance fallback and scoped refresh/retry. Progress retains a secondary link. Clean source: 839 Mobile tests passed (33 default skips), Domain192/Pose759 passed, 20-file analysis clean and arm64 Debug APK built. Actual baseline/final Flutter renders reviewed. No installation, Firebase deployment or live reward mutation; physical Android PDF/Firebase/check-in acceptance is pending. [Report and evidence](ux/workout-report-rewards-checkin-consumer-redesign.md).

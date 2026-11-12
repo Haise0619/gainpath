@@ -37,7 +37,7 @@ void main() {
                 repositoryFactory: (scope, active) async => repo,
                 exporter: exporter))));
     await tester.pumpAndSettle();
-    expect(find.text('Workout report'), findsOneWidget);
+    expect(find.text('Training Report'), findsOneWidget);
     expect(repo.reads, 1);
     expect(find.text('No activity matches these filters.'), findsOneWidget);
     await tester.pumpWidget(const SizedBox());
