@@ -6,9 +6,15 @@ import 'package:gainpath_identity/gainpath_identity.dart';
 
 class CoachSessionHost extends StatefulWidget {
   const CoachSessionHost(
-      {super.key, required this.session, required this.builder});
+      {super.key,
+      required this.session,
+      required this.builder,
+      this.cacheChild = true});
   final AuthSession session;
   final Widget Function(BuildContext, bool Function()) builder;
+
+  /// Keep SDK graphs stable by default; disable for parent-owned live content.
+  final bool cacheChild;
   @override
   State<CoachSessionHost> createState() => _CoachSessionHostState();
 }
@@ -38,7 +44,7 @@ class _CoachSessionHostState extends State<CoachSessionHost> {
         PaintingBinding.instance.imageCache.clearLiveImages();
       }
     });
-    _child = widget.builder(context, _current);
+    if (widget.cacheChild) _child = widget.builder(context, _current);
   }
 
   @override
@@ -51,7 +57,9 @@ class _CoachSessionHostState extends State<CoachSessionHost> {
   @override
   Widget build(BuildContext context) => BlocBuilder<AuthBloc, AuthState>(
       builder: (context, state) => _current()
-          ? _child!
+          ? widget.cacheChild
+              ? (_child ??= widget.builder(context, _current))
+              : widget.builder(context, _current)
           : const Scaffold(
               body: Center(
                   child:

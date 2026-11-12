@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:gainpath_domain/membership.dart';
+import 'package:gainpath_domain/gainpath_domain.dart' show SessionScope;
 import 'package:gainpath_identity/gainpath_identity.dart';
 import 'session_host.dart';
 import '../infrastructure/firebase/firebase_membership_access_repository.dart';
@@ -16,12 +17,15 @@ class MembershipAccessGate extends StatelessWidget {
       {super.key,
       this.enabled = false,
       this.repository,
+      this.repositoryFactory,
       this.freePreviewBuilder,
       required this.feature,
       required this.resourceId,
       required this.child});
   final bool enabled;
   final MembershipAccessRepository? repository;
+  final MembershipAccessRepository Function(SessionScope, bool Function())?
+      repositoryFactory;
   final Widget Function(BuildContext, Future<void> Function())?
       freePreviewBuilder;
   final MembershipAccessFeature feature;
@@ -50,11 +54,14 @@ class MembershipAccessGate extends StatelessWidget {
         return const Center(child: Text('Sign in to check membership access.'));
       }
       return CoachSessionHost(
+          key: ObjectKey(session),
           session: session,
+          cacheChild: false,
           builder: (_, current) => _AccessCheck(
               key: ValueKey(session.scope),
-              repository: FirebaseMembershipAccessRepository(
-                  scope: session.scope, isCurrent: current),
+              repository: repositoryFactory?.call(session.scope, current) ??
+                  FirebaseMembershipAccessRepository(
+                      scope: session.scope, isCurrent: current),
               freePreviewBuilder: freePreviewBuilder,
               feature: feature,
               resourceId: resourceId,
