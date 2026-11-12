@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart' show FirebaseFunctionsException;
 import 'package:gainpath_domain/coaching.dart' show BookingChangeSource;
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:gainpath_data/gainpath_data.dart'
@@ -39,6 +40,22 @@ class BookingTransport {
       return result;
     } on FirebaseException catch (error) {
       check();
+      // Only an explicit server rejection before reservation permits a fresh
+      // membership quote. Generic failures must retain the immutable request.
+      if (name == 'createMembershipPaymentCommand' &&
+          error is FirebaseFunctionsException &&
+          error.details is Map &&
+          (error.details as Map)['checkoutCreated'] == false) {
+        final reason = (error.details as Map)['reason'];
+        final code = switch (reason) {
+          'quote_changed' => 'membership-quote-changed',
+          'quote_expired' => 'membership-quote-expired',
+          'promo_invalid' => 'membership-promo-invalid',
+          'unsupported_plan' => 'membership-unsupported-plan',
+          _ => null,
+        };
+        if (code != null) throw BookingException(code);
+      }
       throw BookingException(error.code);
     } on BookingException {
       check();

@@ -44,17 +44,17 @@ class _FitnessArcadeHostState extends State<FitnessArcadeHost> {
               feature: MembershipAccessFeature.miniGame,
               resourceId: 'fitness-arcade',
               child: MiniGameContentFeatureHost(
-              key: ObjectKey(auth.state.session),
-              builder: (reader, best, _, participation) => Builder(
-                  builder: (context) => FitnessArcadeGames(
-                      reader: reader,
-                      bestScoreStore: best,
-                      reachTapHistory: context.read<ReachTapHistoryStore>(),
-                      participation: participation,
-                      reachParticipation: context
-                          .read<ReachTapParticipationRepository?>()
-                          ?.repository,
-                      onReturn: () => widget.onReturn()))));
+                  key: ObjectKey(auth.state.session),
+                  builder: (reader, best, _, participation) => Builder(
+                      builder: (context) => FitnessArcadeGames(
+                          reader: reader,
+                          bestScoreStore: best,
+                          reachTapHistory: context.read<ReachTapHistoryStore>(),
+                          participation: participation,
+                          reachParticipation: context
+                              .read<ReachTapParticipationRepository?>()
+                              ?.repository,
+                          onReturn: () => widget.onReturn()))));
         });
   }
 }

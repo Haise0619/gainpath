@@ -44,9 +44,8 @@ class BillingHistoryScreen extends StatelessWidget {
                         '${p['planName']} · ${membershipMoney(p['amountMinor'])}',
                         style: Theme.of(context).textTheme.titleMedium),
                     Text(
-                        '${p['kind']} · ${membershipDate(p['createdAtMillis'])}'),
+                        '${p['kind'] == 'MembershipRenewal' ? 'Renewal' : 'Purchase'} · ${membershipDate(p['clearedAtMillis'] ?? p['createdAtMillis'])}'),
                     Text(membershipPaymentLabel(p)),
-                    Text('${p['transactionId']}'),
                     if (p['reviewReason'] != null)
                       Text('Admin: ${p['reviewReason']}'),
                     if (p['refundStatus'] != null)
@@ -56,7 +55,7 @@ class BillingHistoryScreen extends StatelessWidget {
                       TextButton(
                           onPressed: () => open(MembershipPaymentScreen(
                               repository: repo, initial: p)),
-                          child: const Text('Payment details / recover')),
+                          child: const Text('Payment details')),
                       if (p['paymentStatus'] == 'cleared' && repo.sandbox)
                         TextButton(
                             onPressed: () async {

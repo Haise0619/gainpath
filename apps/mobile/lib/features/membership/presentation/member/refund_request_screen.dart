@@ -54,6 +54,17 @@ class _RefundFormState extends State<_RefundForm> {
         final selected =
             payments.where((p) => p['transactionId'] == _selected).firstOrNull;
         final requested = selected?['refundStatus'] != null;
+        final now = data['serverNowMillis'];
+        final cleared = selected?['clearedAtMillis'];
+        final deadline = cleared is num
+            ? cleared.toInt() + const Duration(days: 7).inMilliseconds
+            : null;
+        final verified = data['cached'] != true &&
+            now is int &&
+            deadline != null &&
+            cleared is num &&
+            now >= cleared;
+        final eligible = verified && now <= deadline;
         return [
           const Panel(
               child: Text(
@@ -85,23 +96,37 @@ class _RefundFormState extends State<_RefundForm> {
             Text(membershipPaymentLabel(selected)),
             if (selected['reviewReason'] != null)
               Text('Admin decision: ${selected['reviewReason']}'),
-            if (!requested) ...[
+            if (!requested && deadline != null)
+              Padding(
+                  padding: const EdgeInsets.only(top: 12),
+                  child: Text('Request deadline: ${membershipDate(deadline)}')),
+            if (!requested && !eligible)
+              Padding(
+                  padding: const EdgeInsets.only(top: 12),
+                  child: Text(verified
+                      ? 'The seven-day request window has ended. Your payment and membership history remain available.'
+                      : 'Refresh online to verify the payment date and refund eligibility.')),
+            if (!requested && eligible) ...[
               const SizedBox(height: 16),
               DropdownButtonFormField<String>(
                   initialValue: _reason,
+                  isExpanded: true,
                   decoration: const InputDecoration(labelText: 'Reason'),
                   items: const [
                     'Charged twice for the same item',
                     'Incorrect membership charge',
                     'Something else'
                   ]
-                      .map((v) => DropdownMenuItem(value: v, child: Text(v)))
+                      .map((v) => DropdownMenuItem(
+                          value: v,
+                          child: Text(v, overflow: TextOverflow.ellipsis)))
                       .toList(),
                   onChanged:
                       _busy ? null : (v) => setState(() => _reason = v!)),
               const SizedBox(height: 16),
               TextField(
                   controller: _notes,
+                  enabled: !_busy,
                   maxLength: 2000,
                   maxLines: 4,
                   decoration: const InputDecoration(labelText: 'Notes')),

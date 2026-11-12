@@ -7,19 +7,20 @@ import 'package:gainpath_domain/membership.dart';
 /// the member's current plan. Kept as a single shared widget so the plan
 /// comparison always reads consistently no matter where it's shown.
 class PlanCard extends StatelessWidget {
-  final bool connected;
   final MembershipPlan plan;
   final bool isCurrent;
   final VoidCallback? onSelect;
   final String periodLabel;
+  final String? actionLabel, note;
 
   const PlanCard({
     super.key,
     required this.plan,
-    this.connected = false,
     required this.isCurrent,
     required this.onSelect,
     this.periodLabel = '/ month',
+    this.actionLabel,
+    this.note,
   });
 
   @override
@@ -29,10 +30,10 @@ class PlanCard extends StatelessWidget {
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(20),
         border: Border.all(
-          color: plan.popular ? AppColors.primary : AppColors.hairline,
-          width: plan.popular ? 1.8 : 1,
+          color: isCurrent ? AppColors.primary : AppColors.hairline,
+          width: isCurrent ? 1.8 : 1,
         ),
-        boxShadow: plan.popular
+        boxShadow: isCurrent
             ? [
                 BoxShadow(
                     color: AppColors.primary.withValues(alpha: 0.16),
@@ -44,22 +45,6 @@ class PlanCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (plan.popular)
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(vertical: 7),
-              decoration: const BoxDecoration(
-                gradient: AppColors.heroGradient,
-                borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
-              ),
-              child: Text(connected ? '-' : 'MOST POPULAR',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 1)),
-            ),
           Padding(
             padding: const EdgeInsets.all(18),
             child: Column(
@@ -75,7 +60,7 @@ class PlanCard extends StatelessWidget {
                                 ?.copyWith(fontSize: 22))),
                     if (isCurrent) ...[
                       const SizedBox(width: 8),
-                      statusPill('Current'),
+                      Flexible(child: statusPill('Current plan')),
                     ],
                   ],
                 ),
@@ -87,9 +72,9 @@ class PlanCard extends StatelessWidget {
                   crossAxisAlignment: WrapCrossAlignment.center,
                   spacing: 4,
                   children: [
-                    Text(
-                        connected ? '-' : 'RM ${plan.price.toStringAsFixed(2)}',
+                    Text('RM ${plan.price.toStringAsFixed(2)}',
                         style: const TextStyle(
+                            color: AppColors.ink,
                             fontSize: 30,
                             fontWeight: FontWeight.w800,
                             letterSpacing: -1)),
@@ -114,16 +99,21 @@ class PlanCard extends StatelessWidget {
                       ),
                     )),
                 const SizedBox(height: 6),
+                if (note != null)
+                  Padding(
+                      padding: const EdgeInsets.only(bottom: 14),
+                      child: Text(note!,
+                          style: const TextStyle(
+                              color: AppColors.inkSoft,
+                              fontSize: 12,
+                              height: 1.5))),
                 SizedBox(
                   width: double.infinity,
-                  child: isCurrent
-                      ? OutlinedButton(
-                          onPressed: null,
-                          child: const Text('Your current plan'))
-                      : FilledButton(
-                          onPressed: onSelect,
-                          child: Text('Choose ${plan.name}'),
-                        ),
+                  child: FilledButton(
+                    onPressed: onSelect,
+                    child: Text(actionLabel ?? 'Choose ${plan.name}',
+                        textAlign: TextAlign.center),
+                  ),
                 ),
               ],
             ),

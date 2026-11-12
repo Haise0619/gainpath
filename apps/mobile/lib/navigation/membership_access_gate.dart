@@ -152,8 +152,11 @@ class _AccessCheckState extends State<_AccessCheck>
                   if (denied)
                     FilledButton(
                         onPressed: () async {
-                          await Navigator.push(context, MaterialPageRoute<void>(
-                              builder: (_) => const BrowsePlansScreen(connected: true)));
+                          await Navigator.push(
+                              context,
+                              MaterialPageRoute<void>(
+                                  builder: (_) => const BrowsePlansScreen(
+                                      connected: true)));
                           if (mounted) setState(_load);
                         },
                         child: const Text('View membership plans')),

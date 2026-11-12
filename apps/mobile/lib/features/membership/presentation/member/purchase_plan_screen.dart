@@ -1,11 +1,14 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:gainpath_domain/membership.dart';
+import 'package:gainpath_domain/gainpath_domain.dart' show BookingException;
 import 'package:gainpath_ui/gainpath_ui.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../domain/membership_payment_preview.dart';
 import '../shared/membership_data_view.dart';
 import '../../application/membership_feature_host.dart';
+import '../shared/membership_dashboard_screen.dart';
+import 'membership_support_screen.dart';
 
 class PurchasePlanScreen extends StatelessWidget {
   const PurchasePlanScreen(
@@ -38,7 +41,7 @@ class _PurchaseForm extends StatefulWidget {
 
 class _PurchaseFormState extends State<_PurchaseForm> {
   final _promo = TextEditingController();
-  late final String _requestId =
+  late String _requestId =
       'membership-${DateTime.now().microsecondsSinceEpoch}';
   Map<String, dynamic>? _quote;
   String? _message;
@@ -101,10 +104,36 @@ class _PurchaseFormState extends State<_PurchaseForm> {
               builder: (_) => MembershipPaymentScreen(
                   repository: widget.repository, initial: p)));
       if (mounted) Navigator.pop(context);
-    } catch (_) {
+    } catch (error) {
       if (mounted) {
-        setState(() => _message =
-            'Checkout outcome is not confirmed. Retry this same request or check billing history before starting another payment.');
+        final code = error is BookingException ? error.code : 'unknown';
+        final rejected = const [
+          'membership-quote-changed',
+          'membership-quote-expired',
+          'membership-promo-invalid',
+          'membership-unsupported-plan'
+        ].contains(code);
+        setState(() {
+          if (rejected) {
+            _submitted = false;
+            _quote = null;
+            _requestId = 'membership-${DateTime.now().microsecondsSinceEpoch}';
+          }
+          _message = switch (code) {
+            'membership-quote-expired' =>
+              'The quoted offer has expired. Edit the promo code and verify the current price before paying.',
+            'membership-promo-invalid' =>
+              'This promo code is unavailable. Edit or remove it, then verify the price.',
+            'membership-unsupported-plan' =>
+              'This plan is unavailable. Return to the plan comparison to choose an available plan.',
+            'membership-quote-changed' =>
+              'Review updated price. Verify the price again before continuing.',
+            'unauthenticated' =>
+              'Your session has expired. Sign in again and check billing history for your checkout.',
+            _ =>
+              'Checkout outcome is not confirmed. Recover this same request or check billing history before starting another payment.',
+          };
+        });
       }
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -122,13 +151,13 @@ class _PurchaseFormState extends State<_PurchaseForm> {
             child:
                 Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text(widget.plan.name,
-                  style: Theme.of(context).textTheme.headlineSmall),
+                  style: Theme.of(context).textTheme.headlineMedium),
               const SizedBox(height: 8),
               Text(widget.plan.tagline),
-              ...widget.plan.perks.map((b) => ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  leading: const Icon(Icons.check_circle_outline),
-                  title: Text(b))),
+              const SizedBox(height: 8),
+              Text(widget.renewal
+                  ? 'Manual renewal · Remaining paid time is preserved.'
+                  : 'One-time membership purchase'),
             ])),
         const SizedBox(height: 18),
         TextField(
@@ -148,19 +177,41 @@ class _PurchaseFormState extends State<_PurchaseForm> {
         if (_quote != null)
           Panel(
               child: Column(children: [
-            DetailRow('Period', '${_quote!['durationDays']} days'),
-            DetailRow('Total', membershipMoney(_quote!['amountMinor']))
+            DetailRow('Duration', '${_quote!['durationDays']} days'),
+            if (_quote!['baseAmountMinor'] != null)
+              DetailRow('Original price',
+                  membershipMoney(_quote!['baseAmountMinor'])),
+            if (_quotedCode.isNotEmpty) DetailRow('Promo code', _quotedCode),
+            if (_quote!['baseAmountMinor'] is num &&
+                _quote!['amountMinor'] is num)
+              DetailRow(
+                  'Discount',
+                  membershipMoney((_quote!['baseAmountMinor'] as num) -
+                      (_quote!['amountMinor'] as num))),
+            const Divider(),
+            DetailRow('Total', membershipMoney(_quote!['amountMinor'])),
           ])),
         const SizedBox(height: 16),
-        Text(widget.repository.sandbox
-            ? 'Billplz Sandbox test checkout. No recurring billing. Membership activates only after server verification.'
-            : 'Mock preview. Payment is simulated.'),
+        if (widget.renewal)
+          const Padding(
+              padding: EdgeInsets.only(bottom: 12),
+              child: Text(
+                  'Your final expiry is calculated when payment clears: any remaining paid time plus this term.')),
+        Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+                color: AppColors.accentTint,
+                borderRadius: BorderRadius.circular(12)),
+            child: Text(
+                widget.repository.sandbox
+                    ? 'Billplz Sandbox test checkout. No recurring billing. Membership activates only after server verification.'
+                    : 'Mock preview. Payment is simulated.',
+                style: const TextStyle(color: AppColors.accentDark))),
         const SizedBox(height: 16),
         FilledButton(
             onPressed: _busy || _quote == null ? null : _pay,
-            child: Text(_submitted
-                ? 'Recover checkout'
-                : 'Continue to secure checkout')),
+            child:
+                Text(_submitted ? 'Recover checkout' : 'Continue to Payment')),
       ]));
 }
 
@@ -287,7 +338,7 @@ class _MembershipPaymentScreenState extends State<MembershipPaymentScreen>
                   background: AppColors.primaryTint,
                   child: Column(children: [
                     Text('${_payment['planName']}',
-                        style: Theme.of(context).textTheme.headlineSmall),
+                        style: Theme.of(context).textTheme.headlineMedium),
                     Text(membershipMoney(_payment['amountMinor'])),
                     const SizedBox(height: 12),
                     Text(membershipPaymentLabel(_payment)),
@@ -296,15 +347,27 @@ class _MembershipPaymentScreenState extends State<MembershipPaymentScreen>
                           'Paid expiry: ${membershipDate(_payment['expiresAtMillis'])}'),
                   ])),
               const SizedBox(height: 16),
-              Text('Reference: ${_payment['transactionId']}'),
+              ExpansionTile(
+                  tilePadding: EdgeInsets.zero,
+                  title: const Text('Payment details'),
+                  children: [
+                    SelectableText('Reference: ${_payment['transactionId']}'),
+                    if (_payment['createdAtMillis'] != null)
+                      Text(
+                          'Created ${membershipDate(_payment['createdAtMillis'])}'),
+                    if (_payment['clearedAtMillis'] != null)
+                      Text(
+                          'Payment cleared ${membershipDate(_payment['clearedAtMillis'])}'),
+                  ]),
               const SizedBox(height: 12),
               if (status == 'expired' || status == 'failed')
                 const Text(
                     'Checkout closed. You may start a fresh checkout from plans. A late cleared payment will require Admin review.'),
               if (status == 'reconciliation_required')
                 const Text(
-                    'Admin review required. Do not make another payment for this checkout.'),
-              if (_payment['paymentStatus'] != 'cleared')
+                    'Admin review required. Your payment needs a check before activation. Do not make another payment for this checkout.'),
+              if (_payment['paymentStatus'] != 'cleared' &&
+                  !['failed', 'expired'].contains(status))
                 const Text(
                     'Pending verification. Closing checkout does not confirm or cancel a bank payment. You can recover this record from billing history.'),
               if (_message != null) Text(_message!),
@@ -313,7 +376,25 @@ class _MembershipPaymentScreenState extends State<MembershipPaymentScreen>
                   _payment['checkoutUrl'] != null)
                 FilledButton(
                     onPressed: _busy ? null : _open,
-                    child: const Text('Open Billplz Sandbox')),
+                    child: const Text('Continue payment')),
+              if (_payment['paymentStatus'] == 'cleared' &&
+                  status == 'confirmed')
+                FilledButton(
+                    onPressed: () => Navigator.pushReplacement(
+                        context,
+                        MaterialPageRoute<void>(
+                            builder: (_) => MembershipDashboardScreen(
+                                repository: widget.repository))),
+                    child: const Text('View membership')),
+              if (status == 'reconciliation_required')
+                FilledButton.tonal(
+                    onPressed: () => Navigator.push(
+                        context,
+                        MaterialPageRoute<void>(
+                            builder: (_) => MembershipSupportScreen(
+                                repository: widget.repository,
+                                payment: _payment))),
+                    child: const Text('Payment assistance')),
               if (widget.repository is MembershipPaymentPreview &&
                   _payment['paymentStatus'] != 'cleared')
                 FilledButton(
@@ -331,7 +412,7 @@ class _MembershipPaymentScreenState extends State<MembershipPaymentScreen>
                           _checks = 0;
                           _check();
                         },
-                  child: const Text('Check trusted payment status')),
+                  child: const Text('Check payment status')),
             ])));
   }
 }

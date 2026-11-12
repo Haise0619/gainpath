@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:gainpath_domain/membership.dart';
+import 'package:gainpath_ui/gainpath_ui.dart';
 import '../../application/membership_feature_host.dart';
 import '../shared/membership_data_view.dart';
 import 'purchase_plan_screen.dart';
@@ -40,26 +41,44 @@ class RenewScreen extends StatelessWidget {
         }
         final p = plans.first;
         return [
-          Text(
-              '${entitlement.paidPlanName} · Paid expiry: ${membershipDate(entitlement.paidExpiresAtMillis)}'),
+          Panel(
+              background: AppColors.primaryTint,
+              child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Renew ${entitlement.paidTier!.label}',
+                        style: Theme.of(context)
+                            .textTheme
+                            .headlineMedium
+                            ?.copyWith(color: AppColors.ink)),
+                    const SizedBox(height: 8),
+                    Text(
+                        'Current paid expiry: ${membershipDate(entitlement.paidExpiresAtMillis)}'),
+                  ])),
           const SizedBox(height: 16),
           Text(
               'Add ${p['durationDays']} days for ${membershipMoney(p['amountMinor'])}. Any paid remaining time is preserved. Final expiry is calculated by the server when payment clears.'),
           const SizedBox(height: 20),
           FilledButton(
-              onPressed: () => Navigator.push(
-                  context,
-                  MaterialPageRoute<void>(
-                      builder: (_) => PurchasePlanScreen(
-                          plan: MembershipPlan(
-                              p['planId'] as String,
-                              p['name'] as String,
-                              (p['amountMinor'] as num) / 100,
-                              '${p['durationDays']} days',
-                              List<String>.from(p['benefits'] as List)),
-                          repository: repo,
-                          renewal: true))),
+              onPressed: () async {
+                await Navigator.push(
+                    context,
+                    MaterialPageRoute<void>(
+                        builder: (_) => PurchasePlanScreen(
+                            plan: MembershipPlan(
+                                p['planId'] as String,
+                                p['name'] as String,
+                                (p['amountMinor'] as num) / 100,
+                                '${p['durationDays']} days',
+                                List<String>.from(p['benefits'] as List)),
+                            repository: repo,
+                            renewal: true)));
+                if (context.mounted) refresh();
+              },
               child: const Text('Review renewal')),
+          const SizedBox(height: 12),
+          const Text(
+              'One-time payment · No automatic renewal or recurring charge.'),
         ];
       });
 }

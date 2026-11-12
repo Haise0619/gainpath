@@ -236,20 +236,21 @@ class _VerifiedRewardShopViewState extends State<VerifiedRewardShopView>
                                                         ),
                                                         const SizedBox(
                                                             width: 8),
-                                                        Flexible(child: Text(
-                                                            data.balance == null
-                                                                ? 'No verified balance yet.'
-                                                                : '${data.balance} verified points',
-                                                            style: Theme.of(
-                                                                    context)
-                                                                .textTheme
-                                                                .headlineSmall
-                                                                ?.copyWith(
-                                                                    color: Colors
-                                                                        .white,
-                                                                    fontWeight:
-                                                                        FontWeight
-                                                                            .w800))),
+                                                        Flexible(
+                                                            child: Text(
+                                                                data.balance ==
+                                                                        null
+                                                                    ? 'No verified balance yet.'
+                                                                    : '${data.balance} verified points',
+                                                                style: Theme.of(
+                                                                        context)
+                                                                    .textTheme
+                                                                    .headlineMedium
+                                                                    ?.copyWith(
+                                                                        color: Colors
+                                                                            .white,
+                                                                        fontWeight:
+                                                                            FontWeight.w800))),
                                                       ],
                                                     ))),
                                             const SizedBox(height: 8),
@@ -328,13 +329,15 @@ class _VerifiedRewardShopViewState extends State<VerifiedRewardShopView>
                                                     height: 16,
                                                   ),
                                                   const SizedBox(width: 5),
-                                                  Flexible(child: Text(
-                                                      '${item.pointCost} points · ${item.stock} available',
-                                                      style: const TextStyle(
-                                                          color:
-                                                              AppColors.primary,
-                                                          fontWeight:
-                                                              FontWeight.w700))),
+                                                  Flexible(
+                                                      child: Text(
+                                                          '${item.pointCost} points · ${item.stock} available',
+                                                          style: const TextStyle(
+                                                              color: AppColors
+                                                                  .primary,
+                                                              fontWeight:
+                                                                  FontWeight
+                                                                      .w700))),
                                                 ],
                                               ),
                                               if (item.validityDays != null)

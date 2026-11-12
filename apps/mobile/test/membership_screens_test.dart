@@ -88,8 +88,10 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Free'), findsOneWidget);
     expect(find.text('No expiry · No membership charge'), findsOneWidget);
-    expect(find.text('Upgrade'), findsOneWidget);
-    expect(find.textContaining('Auto-renew unavailable'), findsOneWidget);
+    expect(find.text('Explore Plans'), findsOneWidget);
+    expect(find.textContaining('No automatic renewal'), findsOneWidget);
+    await tester.scrollUntilVisible(
+        find.text('No membership payments yet.'), 150);
     expect(find.text('No membership payments yet.'), findsOneWidget);
   });
   testWidgets('empty trusted catalogue has no fabricated plan cards',
@@ -111,9 +113,10 @@ void main() {
         MaterialApp(home: MembershipDashboardScreen(repository: repo)));
     await tester.pumpAndSettle();
     expect(find.text('Free'), findsOneWidget);
-    expect(find.text('PREVIOUS PAID MEMBERSHIP'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('Previous paid membership'), 150);
+    expect(find.text('Previous paid membership'), findsOneWidget);
     expect(find.textContaining('Premium · Expired'), findsOneWidget);
-    expect(find.text('Renew Premium'), findsOneWidget);
+    expect(find.text('Renew Membership'), findsOneWidget);
   });
   testWidgets('legacy unavailable projection never silently becomes Free',
       (tester) async {
@@ -121,7 +124,7 @@ void main() {
     await tester.pumpWidget(
         MaterialApp(home: MembershipDashboardScreen(repository: repo)));
     await tester.pumpAndSettle();
-    expect(find.text('Membership status unavailable'), findsOneWidget);
+    expect(find.text('Verification required'), findsOneWidget);
     expect(find.text('Free'), findsNothing);
     expect(find.text('Renew now'), findsNothing);
   });
@@ -136,16 +139,15 @@ void main() {
         MaterialApp(home: MembershipDashboardScreen(repository: repo)));
     await tester.pumpAndSettle();
     expect(find.text('Last verified tier · Premium'), findsOneWidget);
-    expect(find.textContaining('Last recorded paid status'), findsOneWidget);
+    expect(find.textContaining('Historical record'), findsOneWidget);
     expect(find.textContaining('Paid membership active'), findsNothing);
-    final button = tester.widget<OutlinedButton>(
-        find.widgetWithText(OutlinedButton, 'Renew now'));
-    expect(button.onPressed, isNull);
+    expect(find.text('Renew Premium'), findsNothing);
+    expect(find.text('Verify Membership'), findsOneWidget);
   });
   testWidgets(
       'comparison uses configured sen prices and blocks active tier switching',
       (tester) async {
-    tester.view.physicalSize = const Size(320, 1000);
+    tester.view.physicalSize = const Size(320, 3000);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
@@ -177,13 +179,13 @@ void main() {
     expect(
         tester
             .widget<FilledButton>(
-                find.widgetWithText(FilledButton, 'Choose Basic'))
+                find.widgetWithText(FilledButton, 'Renew Basic'))
             .onPressed,
         isNotNull);
     expect(
         tester
-            .widget<FilledButton>(
-                find.widgetWithText(FilledButton, 'Choose Premium'))
+            .widget<FilledButton>(find.widgetWithText(
+                FilledButton, 'Available after current plan expires'))
             .onPressed,
         isNull);
     expect(tester.takeException(), isNull);
@@ -199,7 +201,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text(tier == 'basic' ? 'Basic' : 'Premium'), findsOneWidget);
       expect(find.textContaining('Paid membership active'), findsOneWidget);
-      expect(find.text('Configured paid benefit'), findsOneWidget);
+      expect(find.textContaining('Gym entry, coach booking'), findsOneWidget);
       expect(find.textContaining('1.5'), findsNothing);
     });
   }

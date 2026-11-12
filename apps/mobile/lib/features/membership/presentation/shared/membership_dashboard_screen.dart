@@ -23,126 +23,164 @@ class MembershipDashboardScreen extends StatelessWidget {
       ? MembershipRepositoryGuard(
           repository: repository!, child: _body(repository!))
       : MembershipFeatureHost(connected: connected, builder: _body);
+
   Widget _body(MembershipCommerceRepository repo) => MembershipDataView(
       repository: repo,
       title: 'Membership',
       builder: (context, data, refresh) {
-        final entitlement = MembershipEntitlement.fromOverview(data);
-        final tierName = entitlement.effectiveTier?.label;
-        final canAct = entitlement.canStartCheckout;
-        final isFree = entitlement.effectiveTier == MembershipTier.free;
-        final transactions = membershipRows(data['transactions']);
+        final e = MembershipEntitlement.fromOverview(data);
+        final paid = e.paidStatus == PaidMembershipStatus.active;
+        final expired = e.paidStatus == PaidMembershipStatus.expired;
+        final verified = e.canStartCheckout;
         Future<void> open(Widget page) async {
           await Navigator.push(
               context, MaterialPageRoute<void>(builder: (_) => page));
           if (context.mounted) refresh();
         }
 
+        final tier = e.effectiveTier?.label;
+        final title = !e.isResolved
+            ? 'Verification required'
+            : e.historicalOnly
+                ? 'Last verified tier · $tier'
+                : tier!;
+        final action = !verified
+            ? 'Verify Membership'
+            : expired
+                ? 'Renew Membership'
+                : paid
+                    ? 'Renew ${e.paidTier!.label}'
+                    : 'Explore Plans';
         return [
-          Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                  gradient: AppColors.heroGradient,
-                  borderRadius: BorderRadius.circular(20)),
+          const SizedBox(height: 8),
+          Panel(
+              background: AppColors.primaryTint,
               child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('CURRENT PLAN · ALL BRANCHES',
-                        style: TextStyle(
-                            color: Colors.white70,
-                            letterSpacing: 1.2,
-                            fontSize: 11)),
+                    Row(children: [
+                      const Icon(Icons.card_membership_rounded,
+                          color: AppColors.primary, size: 26),
+                      const SizedBox(width: 10),
+                      Expanded(
+                          child: Text(
+                              paid
+                                  ? 'GYM MEMBERSHIP · ALL BRANCHES'
+                                  : 'YOUR MEMBERSHIP',
+                              style: const TextStyle(
+                                  color: AppColors.primaryDark,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
+                                  letterSpacing: 0.8))),
+                    ]),
+                    const SizedBox(height: 16),
+                    Text(title,
+                        style: Theme.of(context)
+                            .textTheme
+                            .headlineMedium
+                            ?.copyWith(
+                                color: AppColors.ink,
+                                fontWeight: FontWeight.w700)),
                     const SizedBox(height: 8),
                     Text(
-                        tierName == null
-                            ? 'Membership status unavailable'
-                            : entitlement.historicalOnly
-                                ? 'Last verified tier · $tierName'
-                                : tierName,
+                        !e.isResolved
+                            ? 'Connect to verify your paid membership. Your saved fitness records remain available.'
+                            : expired
+                                ? 'Your paid membership has expired. Digital fitness and saved points remain yours.'
+                                : e.historicalOnly
+                                    ? 'Historical record · Refresh online before using paid benefits.'
+                                    : paid
+                                        ? 'Paid membership active'
+                                        : 'Full digital fitness, always available.',
                         style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 28,
-                            fontWeight: FontWeight.w800)),
-                    const SizedBox(height: 8),
-                    Text(
-                        !entitlement.isResolved
-                            ? 'Refresh online to verify your membership.'
-                            : isFree
-                                ? 'No expiry · No membership charge'
-                                : '${entitlement.historicalOnly ? 'Last recorded paid status' : 'Paid membership active'} · Expires ${membershipDate(entitlement.paidExpiresAtMillis)}',
-                        style: const TextStyle(color: Colors.white)),
-                    const SizedBox(height: 16),
-                    const Text(
-                        'Auto-renew unavailable. Renew manually; no recurring charge is scheduled.',
-                        style: TextStyle(color: Colors.white70)),
-                    const SizedBox(height: 16),
-                    Wrap(spacing: 12, runSpacing: 8, children: [
-                      FilledButton(
-                          onPressed: canAct
-                              ? () => open(BrowsePlansScreen(repository: repo))
-                              : null,
-                          child: Text(isFree ? 'Upgrade' : 'Browse plans')),
-                      if (entitlement.isResolved && entitlement.hasPaidPlan)
-                        OutlinedButton(
-                            style: OutlinedButton.styleFrom(
-                                foregroundColor: Colors.white),
-                            onPressed: canAct
-                                ? () => open(RenewScreen(repository: repo))
-                                : null,
-                            child: Text(entitlement.paidStatus ==
-                                    PaidMembershipStatus.expired
-                                ? 'Renew ${entitlement.paidTier!.label}'
-                                : 'Renew now')),
-                    ])
+                            color: AppColors.inkSoft, height: 1.5)),
+                    if (e.paidExpiresAtMillis != null) ...[
+                      const SizedBox(height: 12),
+                      Text(
+                          '${expired ? 'Expired' : e.historicalOnly ? 'Last recorded expiry' : 'Expires'} ${membershipDate(e.paidExpiresAtMillis)}',
+                          style: const TextStyle(
+                              color: AppColors.ink,
+                              fontWeight: FontWeight.w600)),
+                    ],
+                    if (!paid && !expired && e.isResolved)
+                      const Padding(
+                          padding: EdgeInsets.only(top: 10),
+                          child: Text('No expiry · No membership charge')),
+                    const SizedBox(height: 18),
+                    SizedBox(
+                        width: double.infinity,
+                        child: FilledButton(
+                            onPressed: !verified
+                                ? refresh
+                                : () => open(expired || paid
+                                    ? RenewScreen(repository: repo)
+                                    : BrowsePlansScreen(repository: repo)),
+                            child: Text(action))),
+                    const SizedBox(height: 10),
+                    const Text('No automatic renewal or recurring charge.',
+                        style:
+                            TextStyle(color: AppColors.inkSoft, fontSize: 12)),
                   ])),
-          const SizedBox(height: 16),
-          if (entitlement.paidStatus == PaidMembershipStatus.expired)
-            Panel(
-                child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                  const Eyebrow('Previous paid membership'),
-                  Text(
-                      '${entitlement.paidTier!.label} · Expired ${membershipDate(entitlement.paidExpiresAtMillis)}'),
-                  const Text(
-                      'Your previous paid period and billing history are retained.'),
-                ])),
-          if (isFree)
-            const Panel(
+          const SizedBox(height: 22),
+          Text(
+              paid && !e.historicalOnly
+                  ? 'Included with ${e.effectiveTier!.label}'
+                  : 'Your digital fitness',
+              style: Theme.of(context).textTheme.titleLarge),
+          const SizedBox(height: 10),
+          Text(paid && !e.historicalOnly
+              ? 'Gym entry, coach booking, Mini Games and eligible regular physical rewards.'
+              : 'AI workouts, tutorials, training programs, history, reports and PDF export remain available under your account permissions.'),
+          const SizedBox(height: 10),
+          const Text(
+              'Daily check-in points stay in your wallet. Physical reward redemption requires active Basic or Premium membership.'),
+          if (paid && e.effectiveTier == MembershipTier.premium)
+            const Padding(
+                padding: EdgeInsets.only(top: 10),
                 child: Text(
-                    'Digital fitness access follows your existing account permissions.')),
-          if (entitlement.benefits.isNotEmpty)
-            Panel(
-                child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                  Eyebrow(entitlement.historicalOnly
-                      ? 'Last recorded benefits'
-                      : 'Your benefits'),
-                  ...((entitlement.benefits).map((p) => ListTile(
-                      leading: const Icon(Icons.check_circle_outline),
-                      title: Text(p))))
-                ])),
-          const SizedBox(height: 16),
-          const Eyebrow('Recent membership billing'),
+                    'Premium-exclusive rewards are available only where configured in the rewards catalogue. Additional check-in bonuses and coach offers are shown only when enabled.')),
+          if (expired) ...[
+            const SizedBox(height: 18),
+            Text('Previous paid membership',
+                style: Theme.of(context).textTheme.titleMedium),
+            Text(
+                '${e.paidTier!.label} · Expired ${membershipDate(e.paidExpiresAtMillis)}'),
+            const Text(
+                'Your previous paid period, bookings and billing history are retained.'),
+          ],
+          const SizedBox(height: 14),
+          TextButton.icon(
+              onPressed: () => open(BrowsePlansScreen(repository: repo)),
+              icon: const Icon(Icons.compare_arrows_rounded),
+              label: const Text('Compare membership plans')),
+          const SizedBox(height: 18),
+          Text('Billing & support',
+              style: Theme.of(context).textTheme.titleLarge),
+          const SizedBox(height: 8),
+          if (membershipRows(data['transactions']).isEmpty)
+            const Padding(
+                padding: EdgeInsets.only(bottom: 12),
+                child: Text('No membership payments yet.')),
           Panel(
               padding: EdgeInsets.zero,
               child: Column(children: [
-                if (transactions.isEmpty)
-                  const ListTile(title: Text('No membership payments yet.')),
-                ...transactions.take(2).map((p) => ListTile(
-                    title: Text('${p['planName']}'),
-                    subtitle: Text(membershipPaymentLabel(p)),
-                    trailing: Text(membershipMoney(p['amountMinor'])))),
                 ListTile(
-                    title: const Text('View all billing history'),
+                    leading: const Icon(Icons.receipt_long_outlined),
+                    title: const Text('Billing history'),
+                    subtitle:
+                        const Text('Payments, invoices and payment recovery'),
                     trailing: const Icon(Icons.chevron_right),
                     onTap: () => open(BillingHistoryScreen(repository: repo))),
+                const Divider(height: 1),
+                ListTile(
+                    leading: const Icon(Icons.help_outline_rounded),
+                    title: const Text('Refund requests and status'),
+                    subtitle:
+                        const Text('Review a payment or request assistance'),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => open(RefundRequestScreen(repository: repo))),
               ])),
-          TextButton.icon(
-              onPressed: () => open(RefundRequestScreen(repository: repo)),
-              icon: const Icon(Icons.receipt_long),
-              label: const Text('Refund requests and status')),
+          const SizedBox(height: 12),
         ];
       });
 }

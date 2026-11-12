@@ -38,6 +38,23 @@ class _Access implements MembershipAccessRepository {
 }
 
 void main() {
+  testWidgets('paid entry admits only a verified allowance', (tester) async {
+    for (final outcome in ['allowed', 'denied', 'unknown', 'legacy']) {
+      final repo = _Access()..outcome = outcome;
+      await tester.pumpWidget(MaterialApp(
+          home: MembershipAccessGate(
+              key: ValueKey(outcome),
+              enabled: true,
+              repository: repo,
+              feature: MembershipAccessFeature.miniGame,
+              resourceId: 'move-catch-v1',
+              child: const Text('Start game'))));
+      await tester.pumpAndSettle();
+      expect(find.text('Start game'),
+          outcome == 'allowed' ? findsOneWidget : findsNothing);
+      expect(repo.reads, 1);
+    }
+  });
   testWidgets(
       'disabled gate preserves existing child without reading membership',
       (tester) async {
