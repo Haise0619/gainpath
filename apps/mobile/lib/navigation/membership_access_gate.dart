@@ -16,11 +16,14 @@ class MembershipAccessGate extends StatelessWidget {
       {super.key,
       this.enabled = false,
       this.repository,
+      this.freePreviewBuilder,
       required this.feature,
       required this.resourceId,
       required this.child});
   final bool enabled;
   final MembershipAccessRepository? repository;
+  final Widget Function(BuildContext, Future<void> Function())?
+      freePreviewBuilder;
   final MembershipAccessFeature feature;
   final String resourceId;
   final Widget child;
@@ -29,11 +32,14 @@ class MembershipAccessGate extends StatelessWidget {
     // Core digital fitness is included for every tier, even when paid evidence
     // is unknown. Account, consent and data ownership remain outer boundaries.
     if (feature == MembershipAccessFeature.exercise ||
-        feature == MembershipAccessFeature.advancedReport) return child;
+        feature == MembershipAccessFeature.advancedReport) {
+      return child;
+    }
     if (!enabled) return child;
     if (repository != null) {
       return _AccessCheck(
           repository: repository!,
+          freePreviewBuilder: freePreviewBuilder,
           feature: feature,
           resourceId: resourceId,
           child: child);
@@ -49,6 +55,7 @@ class MembershipAccessGate extends StatelessWidget {
               key: ValueKey(session.scope),
               repository: FirebaseMembershipAccessRepository(
                   scope: session.scope, isCurrent: current),
+              freePreviewBuilder: freePreviewBuilder,
               feature: feature,
               resourceId: resourceId,
               child: child));
@@ -60,10 +67,13 @@ class _AccessCheck extends StatefulWidget {
   const _AccessCheck(
       {super.key,
       required this.repository,
+      this.freePreviewBuilder,
       required this.feature,
       required this.resourceId,
       required this.child});
   final MembershipAccessRepository repository;
+  final Widget Function(BuildContext, Future<void> Function())?
+      freePreviewBuilder;
   final MembershipAccessFeature feature;
   final String resourceId;
   final Widget child;
@@ -108,6 +118,15 @@ class _AccessCheckState extends State<_AccessCheck>
     _decision = widget.repository.check(widget.feature, widget.resourceId);
   }
 
+  Future<void> _viewPlans() async {
+    if (!mounted || !widget.repository.current) return;
+    await Navigator.push(
+        context,
+        MaterialPageRoute<void>(
+            builder: (_) => const BrowsePlansScreen(connected: true)));
+    if (mounted && widget.repository.current) setState(_load);
+  }
+
   @override
   Widget build(BuildContext context) => FutureBuilder<MembershipAccessDecision>(
       future: _decision,
@@ -128,6 +147,11 @@ class _AccessCheckState extends State<_AccessCheck>
           return widget.child;
         }
         final denied = decision?.outcome == MembershipAccessOutcome.denied;
+        if (denied &&
+            decision?.effectiveTier == MembershipTier.free &&
+            widget.freePreviewBuilder != null) {
+          return widget.freePreviewBuilder!(context, _viewPlans);
+        }
         return Center(
             child: Padding(
                 padding: const EdgeInsets.all(24),
@@ -151,14 +175,7 @@ class _AccessCheckState extends State<_AccessCheck>
                   const SizedBox(height: 12),
                   if (denied)
                     FilledButton(
-                        onPressed: () async {
-                          await Navigator.push(
-                              context,
-                              MaterialPageRoute<void>(
-                                  builder: (_) => const BrowsePlansScreen(
-                                      connected: true)));
-                          if (mounted) setState(_load);
-                        },
+                        onPressed: _viewPlans,
                         child: const Text('View membership plans')),
                   TextButton(
                       onPressed: () => setState(_load),

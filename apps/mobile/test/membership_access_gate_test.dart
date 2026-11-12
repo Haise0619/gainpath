@@ -38,6 +38,27 @@ class _Access implements MembershipAccessRepository {
 }
 
 void main() {
+  testWidgets('locked preview is only used for verified Free denial',
+      (tester) async {
+    for (final outcome in ['allowed', 'denied', 'unknown', 'legacy']) {
+      final repo = _Access()..outcome = outcome;
+      await tester.pumpWidget(MaterialApp(
+          home: MembershipAccessGate(
+        key: ValueKey(outcome),
+        enabled: true,
+        repository: repo,
+        feature: MembershipAccessFeature.miniGame,
+        resourceId: 'fitness-arcade',
+        freePreviewBuilder: (_, viewPlans) => const Text('Free locked preview'),
+        child: const Text('Paid game content'),
+      )));
+      await tester.pumpAndSettle();
+      expect(find.text('Free locked preview'),
+          outcome == 'denied' ? findsOneWidget : findsNothing);
+      expect(find.text('Paid game content'),
+          outcome == 'allowed' ? findsOneWidget : findsNothing);
+    }
+  });
   testWidgets('paid entry admits only a verified allowance', (tester) async {
     for (final outcome in ['allowed', 'denied', 'unknown', 'legacy']) {
       final repo = _Access()..outcome = outcome;

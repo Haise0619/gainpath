@@ -31,7 +31,9 @@ class GoalRewards extends JourneyRewards {
 void main() {
   final scope = SessionScope(userId: 'a', organizationId: 'gainpath');
   Future<void> show(WidgetTester t, GoalRewards r, Goals g,
-      {double scale = 1}) async {
+      {double scale = 1,
+      Future<void> Function()? onViewPlans,
+      VoidCallback? onShop}) async {
     await t.pumpWidget(MaterialApp(
         builder: (c, child) => MediaQuery(
             data:
@@ -40,10 +42,100 @@ void main() {
         home: Scaffold(
             body: SingleChildScrollView(
                 child: RewardGoalCard(
-                    repository: r, scope: scope, store: g, onShop: () {})))));
+                    repository: r,
+                    scope: scope,
+                    store: g,
+                    onViewPlans: onViewPlans,
+                    onShop: onShop ?? () {})))));
     await t.pumpAndSettle();
   }
 
+  testWidgets('Free sees a published product preview with locked redemption',
+      (t) async {
+    var plans = 0, shops = 0;
+    final r = GoalRewards()
+      ..data = const VerifiedRewardsSnapshot(
+          available: true,
+          balance: 0,
+          effectiveTier: 'free',
+          canRedeem: false,
+          items: [
+            VerifiedRewardItem(
+                itemId: 'bottle',
+                title: 'Training bottle',
+                pointCost: 250,
+                stock: 3,
+                premiumOnly: false)
+          ],
+          redemptions: []);
+    final g = Goals();
+    await show(t, r, g, onViewPlans: () async {
+      plans++;
+    }, onShop: () {
+      shops++;
+    });
+    expect(find.text('My Reward Goal'), findsOneWidget);
+    expect(find.text('Training bottle'), findsOneWidget);
+    expect(find.text('250 points'), findsOneWidget);
+    expect(find.text('Choose goal'), findsNothing);
+    expect(find.byType(LinearProgressIndicator), findsNothing);
+    await t.ensureVisible(find.text('View membership plans'));
+    await t.tap(find.text('View membership plans'));
+    expect(plans, 1);
+    await t.ensureVisible(find.text('Browse rewards'));
+    await t.tap(find.text('Browse rewards'));
+    expect(shops, 1);
+    expect(r.redemptions, 0);
+    expect(g.selected, isNull);
+  });
+
+  testWidgets(
+      'Free empty catalog stays honest and unknown tier is not treated as Free',
+      (t) async {
+    for (final tier in ['free', null]) {
+      final r = GoalRewards()
+        ..data = VerifiedRewardsSnapshot(
+            available: true,
+            balance: null,
+            effectiveTier: tier,
+            canRedeem: false,
+            items: const [],
+            redemptions: const []);
+      await show(t, r, Goals());
+      expect(find.text('View membership plans'),
+          tier == 'free' ? findsOneWidget : findsNothing);
+      expect(find.text('Find your next reward'),
+          tier == 'free' ? findsOneWidget : findsNothing);
+      expect(find.byType(LinearProgressIndicator), findsNothing);
+      expect(r.redemptions, 0);
+    }
+  });
+  testWidgets(
+      'Free Premium-only product preview does not promise Basic redemption',
+      (t) async {
+    final r = GoalRewards()
+      ..data = const VerifiedRewardsSnapshot(
+          available: true,
+          balance: 100,
+          effectiveTier: 'free',
+          canRedeem: false,
+          items: [
+            VerifiedRewardItem(
+                itemId: 'premium',
+                title: 'Premium bottle',
+                pointCost: 400,
+                stock: 1,
+                premiumOnly: true)
+          ],
+          redemptions: []);
+    await show(t, r, Goals());
+    expect(find.text('Premium Exclusive'), findsOneWidget);
+    expect(
+        find.text(
+            'Keep saving your points. This reward is exclusive to Premium members.'),
+        findsOneWidget);
+    expect(find.textContaining('redemption with Basic'), findsNothing);
+  });
   testWidgets(
       'choose published reward and show confirmed balance without reserving stock',
       (t) async {

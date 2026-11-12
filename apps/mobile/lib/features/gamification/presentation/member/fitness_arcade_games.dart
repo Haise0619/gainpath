@@ -14,6 +14,7 @@ import '../../domain/mini_game_launch.dart';
 import 'mini_game_details_screen.dart';
 import '../../application/game_leaderboard_host.dart';
 import 'mini_games_screen.dart';
+import 'locked_rewards_preview.dart';
 import 'mini_game_participation_panel.dart';
 import '../../../../navigation/membership_access_gate.dart';
 
@@ -43,6 +44,8 @@ class _FitnessArcadeHostState extends State<FitnessArcadeHost> {
               enabled: true,
               feature: MembershipAccessFeature.miniGame,
               resourceId: 'fitness-arcade',
+              freePreviewBuilder: (_, viewPlans) =>
+                  FreeMiniGamesPreview(onViewPlans: viewPlans),
               child: MiniGameContentFeatureHost(
                   key: ObjectKey(auth.state.session),
                   builder: (reader, best, _, participation) => Builder(

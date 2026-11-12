@@ -26,10 +26,11 @@ class AppCheckInDashboard extends StatefulWidget {
       required this.onClaim,
       required this.onRefresh,
       this.gamesSection,
-      this.weeklyRankSection});
+      this.weeklyRankSection,
+      this.rewardGoalSection});
   final AppCheckInState state;
   final Future<void> Function() onClaim, onRefresh;
-  final Widget? gamesSection, weeklyRankSection;
+  final Widget? gamesSection, weeklyRankSection, rewardGoalSection;
   @override
   State<AppCheckInDashboard> createState() => _AppCheckInDashboardState();
 }
@@ -251,29 +252,32 @@ class _AppCheckInDashboardState extends State<AppCheckInDashboard> {
                               key: ValueKey('rank-$_rankRevision'),
                               onTap: () => _rankings(context)),
                       const SizedBox(height: 12),
-                      RewardGoalHost(
-                          key: ValueKey('goal-$_rankRevision'),
-                          onShop: () => Navigator.push(
-                              context,
-                              MaterialPageRoute<void>(
-                                  builder: (_) => RewardShopScreen(
-                                      connected: true,
-                                      onBalanceChanged: onRefresh))),
-                          fallback: Panel(
-                              padding: EdgeInsets.zero,
-                              child: ListTile(
-                                  leading: const Icon(
-                                      Icons.card_giftcard_rounded,
-                                      color: AppColors.primary),
-                                  title: const Text('Redeem points'),
-                                  subtitle: const Text('Find your next reward'),
-                                  trailing: const Icon(Icons.chevron_right),
-                                  onTap: () => Navigator.push(
-                                      context,
-                                      MaterialPageRoute<void>(
-                                          builder: (_) => RewardShopScreen(
-                                              connected: true,
-                                              onBalanceChanged: onRefresh)))))),
+                      widget.rewardGoalSection ??
+                          RewardGoalHost(
+                              key: ValueKey('goal-$_rankRevision'),
+                              onShop: () => Navigator.push(
+                                  context,
+                                  MaterialPageRoute<void>(
+                                      builder: (_) => RewardShopScreen(
+                                          connected: true,
+                                          onBalanceChanged: onRefresh))),
+                              fallback: Panel(
+                                  padding: EdgeInsets.zero,
+                                  child: ListTile(
+                                      leading: const Icon(
+                                          Icons.card_giftcard_rounded,
+                                          color: AppColors.primary),
+                                      title: const Text('Redeem points'),
+                                      subtitle:
+                                          const Text('Find your next reward'),
+                                      trailing: const Icon(Icons.chevron_right),
+                                      onTap: () => Navigator.push(
+                                          context,
+                                          MaterialPageRoute<void>(
+                                              builder: (_) => RewardShopScreen(
+                                                  connected: true,
+                                                  onBalanceChanged:
+                                                      onRefresh)))))),
                       const SizedBox(height: 12),
                       Panel(
                           padding: EdgeInsets.zero,

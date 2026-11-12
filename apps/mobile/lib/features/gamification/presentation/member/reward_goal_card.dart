@@ -4,6 +4,8 @@ import 'package:gainpath_domain/gainpath_domain.dart' show SessionScope;
 import 'package:gainpath_domain/gamification.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
 import '../../domain/reward_goal.dart';
+import 'locked_rewards_preview.dart';
+import '../../../membership/presentation/member/browse_plans_screen.dart';
 
 class RewardGoalCard extends StatefulWidget {
   const RewardGoalCard(
@@ -11,11 +13,13 @@ class RewardGoalCard extends StatefulWidget {
       required this.repository,
       required this.scope,
       required this.store,
-      required this.onShop});
+      required this.onShop,
+      this.onViewPlans});
   final VerifiedRewardsRepository repository;
   final SessionScope scope;
   final RewardGoalStore store;
   final FutureOr<void> Function() onShop;
+  final Future<void> Function()? onViewPlans;
   @override
   State<RewardGoalCard> createState() => _RewardGoalCardState();
 }
@@ -132,6 +136,28 @@ class _RewardGoalCardState extends State<RewardGoalCard> {
     }
   }
 
+  Future<void> _shop() async {
+    if (!widget.repository.current) return;
+    final generation = _generation;
+    await widget.onShop();
+    if (mounted && generation == _generation && widget.repository.current) {
+      await _load();
+    }
+  }
+
+  Future<void> _plans() async {
+    if (!widget.repository.current) return;
+    if (widget.onViewPlans != null) {
+      await widget.onViewPlans!();
+    } else {
+      await Navigator.push(
+          context,
+          MaterialPageRoute<void>(
+              builder: (_) => const BrowsePlansScreen(connected: true)));
+    }
+    if (mounted && widget.repository.current) await _load();
+  }
+
   @override
   void dispose() {
     _generation++;
@@ -145,6 +171,16 @@ class _RewardGoalCardState extends State<RewardGoalCard> {
         <VerifiedRewardItem>[];
     final item = matches.isEmpty ? null : matches.single,
         balance = _data?.balance;
+    if (!_loading && _data?.effectiveTier == 'free') {
+      final items = _data!.available ? _data!.items : <VerifiedRewardItem>[];
+      final preview = _data!.available
+          ? item ??
+              items.where((i) => !i.premiumOnly).firstOrNull ??
+              items.firstOrNull
+          : null;
+      return FreeRewardGoalPreview(
+          item: preview, onViewPlans: _plans, onBrowse: _shop);
+    }
     return Panel(
         child:
             Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
@@ -158,17 +194,7 @@ class _RewardGoalCardState extends State<RewardGoalCard> {
                     color: AppColors.ink,
                     fontSize: 15,
                     fontWeight: FontWeight.w700)),
-            TextButton(
-                onPressed: () async {
-                  final generation = _generation;
-                  await widget.onShop();
-                  if (mounted &&
-                      generation == _generation &&
-                      widget.repository.current) {
-                    await _load();
-                  }
-                },
-                child: const Text('Shop'))
+            TextButton(onPressed: _shop, child: const Text('Shop'))
           ]),
       if (_loading)
         const Text('Loading goal…')
