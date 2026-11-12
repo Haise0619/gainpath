@@ -108,7 +108,8 @@ class FirebaseRewardCatalogRepository
       required int stockToAdd,
       required int validityDays,
       required String conditions,
-      required String collectionInstructions}) async {
+      required String collectionInstructions,
+      bool? premiumOnly}) async {
     _check();
     _id(itemId);
     RewardCatalogDraft(
@@ -130,7 +131,8 @@ class FirebaseRewardCatalogRepository
       'stockToAdd': stockToAdd,
       'validityDays': validityDays,
       'conditions': conditions.trim(),
-      'collectionInstructions': collectionInstructions.trim()
+      'collectionInstructions': collectionInstructions.trim(),
+      if (premiumOnly != null) 'premiumOnly': premiumOnly,
     });
   }
 
@@ -195,6 +197,7 @@ class FirebaseRewardCatalogRepository
           stock: number(raw, 'stock'),
           revision: number(raw, 'revision', 1),
           active: boolean(raw, 'active'),
+          premiumOnly: raw.containsKey('premiumOnly') && boolean(raw, 'premiumOnly'),
           validityDays: number(raw, 'validityDays', 1),
           conditions: string(raw, 'conditions'),
           collectionInstructions: string(raw, 'collectionInstructions'),

@@ -20,10 +20,10 @@ export function parsePointsRewardShop(raw: DocumentData | undefined, org: string
 export function pointsRewardItem(raw: DocumentData | undefined, itemId: string, org: string) {
   if (!raw || raw.schemaVersion !== 1 || raw.organizationId !== org || raw.itemId !== itemId ||
       typeof raw.title !== 'string' || !raw.title.trim() || raw.title.length > 120 || !integer(raw.pointCost,1) || !integer(raw.stock) ||
-      typeof raw.active !== 'boolean' || typeof raw.premiumOnly !== 'boolean' ||
+      typeof raw.active !== 'boolean' || (Object.hasOwn(raw, 'premiumOnly') && typeof raw.premiumOnly !== 'boolean') ||
       (raw.pricingMode !== undefined && raw.pricingMode !== 'points_only')) throw fail();
   const details=rewardItemDetails(raw);
   if (details && !integer(raw.revision,1)) throw fail();
-  return {itemId,title:raw.title,pointCost:raw.pointCost,stock:raw.stock,premiumOnly:raw.premiumOnly,
+  return {itemId,title:raw.title,pointCost:raw.pointCost,stock:raw.stock,premiumOnly:raw.premiumOnly === true,
     ...(details ? {...details,revision:raw.revision} : {})};
 }

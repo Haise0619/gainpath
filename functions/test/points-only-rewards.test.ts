@@ -7,6 +7,15 @@ const admin = (action: string, fields = {}) => rewardCatalogCommand(store, admin
 const member = (action: string, fields = {}) => rewardsCommand(store, auth, {schemaVersion:1, organizationId:org, action, ...fields}, identity, () => now);
 const input = {requestId:'create',itemId:'bottle',baseItemRevision:0,title:'Training bottle',description:'Reusable bottle',category:'Merchandise',imageUrl:'',pointCost:137,stockToAdd:5,validityDays:10,conditions:'Collect in person',collectionInstructions:'Reception'};
 beforeEach(() => {store=seed();});
+it('reads a legacy missing eligibility as regular while rejecting malformed eligibility', async () => {
+  await admin('savePoints', input);
+  const item = store.documents.get(path('rewardItems', 'bottle'))!;
+  delete item.premiumOnly;
+  expect((await admin('pointsOverview')).items).toEqual([expect.objectContaining({premiumOnly: false})]);
+  expect(await member('overview')).toMatchObject({items: [{premiumOnly: false}]});
+  store.documents.get(path('rewardItems', 'bottle'))!.premiumOnly = 'false';
+  await expect(admin('pointsOverview')).rejects.toMatchObject({code: 'failed-precondition'});
+});
 it('explicit Premium reward eligibility survives compatible edits and denies Basic',async()=>{
  await admin('savePoints',{...input,premiumOnly:true});
  expect(store.documents.get(path('rewardItems','bottle'))?.premiumOnly).toBe(true);

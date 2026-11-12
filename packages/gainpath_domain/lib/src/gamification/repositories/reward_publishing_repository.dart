@@ -20,6 +20,7 @@ class PublishedReward {
       required this.stock,
       required this.revision,
       required this.active,
+      this.premiumOnly = false,
       required this.validityDays,
       required this.conditions,
       required this.collectionInstructions,
@@ -34,7 +35,7 @@ class PublishedReward {
       imageUrl;
   final String category;
   final int pointCost, valueMinor, stock, revision, validityDays;
-  final bool active;
+  final bool active, premiumOnly;
 }
 
 class RewardShopAdministration {
@@ -74,5 +75,5 @@ abstract interface class RewardManagementRepository implements RewardPublishingR
   Future<void> saveReward({required String requestId, required String itemId, required int baseItemRevision,
     required String title, required String description, required String category, required String imageUrl,
     required int pointCost, required int stockToAdd, required int validityDays,
-    required String conditions, required String collectionInstructions});
+    required String conditions, required String collectionInstructions, bool? premiumOnly});
 }

@@ -295,6 +295,11 @@ void main() {
     expect(shop.items.single.pointCost, 50);
     expect(shop.items.single.valueMinor, 0);
     expect(shop.items.single.category, 'Merchandise');
+    expect(shop.items.single.premiumOnly, false);
+    (response['items'] as List).first['premiumOnly'] = true;
+    expect((await repo.shopOverview()).items.single.premiumOnly, true);
+    (response['items'] as List).first['premiumOnly'] = 'premium';
+    await expectLater(repo.shopOverview(), throwsFormatException);
     response['organizationId'] = 'foreign';
     await expectLater(repo.shopOverview(), throwsFormatException);
   });
@@ -386,6 +391,7 @@ void main() {
         pointCost: 50,
         stockToAdd: 2,
         validityDays: 30,
+        premiumOnly: true,
         conditions: ' In person ',
         collectionInstructions: ' Reception ');
     expect(calls.single, {
@@ -402,6 +408,7 @@ void main() {
       'pointCost': 50,
       'stockToAdd': 2,
       'validityDays': 30,
+      'premiumOnly': true,
       'conditions': 'In person',
       'collectionInstructions': 'Reception'
     });

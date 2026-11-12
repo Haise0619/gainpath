@@ -25,11 +25,30 @@ class RewardManagementScreen extends StatefulWidget {
   State<RewardManagementScreen> createState() => _RewardManagementScreenState();
 }
 
+enum _EligibilityFilter {
+  all('All Rewards'),
+  regular('Regular Rewards'),
+  premium('Premium Exclusive');
+
+  const _EligibilityFilter(this.label);
+  final String label;
+
+  bool includes(PublishedReward item) => switch (this) {
+        all => true,
+        regular => !item.premiumOnly,
+        premium => item.premiumOnly,
+      };
+}
+
+const _regularEligibility = 'Basic & Premium';
+const _premiumEligibility = 'Premium Exclusive';
+
 class _RewardManagementScreenState extends State<RewardManagementScreen> {
   RewardShopAdministration? _shop;
   PublishedReward? _editing;
   String? _newId, _error;
   bool _busy = false, _loading = false;
+  _EligibilityFilter _eligibility = _EligibilityFilter.all;
   int _generation = 0;
   final _retireIds = <String, String>{};
   @override
@@ -76,6 +95,7 @@ class _RewardManagementScreenState extends State<RewardManagementScreen> {
       _shop = null;
       _editing = null;
       _newId = null;
+      _eligibility = _EligibilityFilter.all;
       _busy = false;
       _error = null;
       _retireIds.clear();
@@ -141,7 +161,7 @@ class _RewardManagementScreenState extends State<RewardManagementScreen> {
             borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
             child: _cover(item.imageUrl)),
         Padding(
-            padding: const EdgeInsets.all(20),
+            padding: const EdgeInsets.all(16),
             child:
                 Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Wrap(
@@ -151,7 +171,19 @@ class _RewardManagementScreenState extends State<RewardManagementScreen> {
                   children: [
                     Text(item.category,
                         style: Theme.of(context).textTheme.labelMedium),
-                    statusPill(item.active ? 'In shop' : 'Removed')
+                    statusPill(item.active ? 'In shop' : 'Removed'),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                      decoration: BoxDecoration(
+                        color: item.premiumOnly ? AppColors.primaryTint : AppColors.surfaceAlt,
+                        borderRadius: BorderRadius.circular(12),
+                        border: item.premiumOnly ? Border.all(color: AppColors.accentDark) : null,
+                      ),
+                      child: Text(item.premiumOnly ? _premiumEligibility : _regularEligibility,
+                        style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                          color: item.premiumOnly ? AppColors.primaryDark : AppColors.ink,
+                        )),
+                    ),
                   ]),
               const SizedBox(height: 10),
               Text(item.title,
@@ -203,6 +235,7 @@ class _RewardManagementScreenState extends State<RewardManagementScreen> {
           existing: _editing,
           onDone: _close);
     }
+    final visibleRewards = _shop?.items.where(_eligibility.includes).toList();
     return Scaffold(
         backgroundColor: Colors.transparent,
         body: SingleChildScrollView(
@@ -287,6 +320,21 @@ class _RewardManagementScreenState extends State<RewardManagementScreen> {
                         ]),
                   ]),
               const SizedBox(height: 16),
+              if (_shop?.items.isNotEmpty == true) ...[
+                ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 280),
+                    child: DropdownButtonFormField<_EligibilityFilter>(
+                        key: const ValueKey('reward-eligibility-filter'),
+                        initialValue: _eligibility,
+                        isExpanded: true,
+                        decoration: const InputDecoration(labelText: 'Filter by member eligibility'),
+                        items: _EligibilityFilter.values.map((filter) => DropdownMenuItem(
+                            value: filter, child: Text(filter.label))).toList(),
+                        onChanged: _busy ? null : (filter) {
+                          if (filter != null) setState(() => _eligibility = filter);
+                        })),
+                const SizedBox(height: 16),
+              ],
               if (_error != null)
                 Panel(
                     child: Column(
@@ -317,7 +365,9 @@ class _RewardManagementScreenState extends State<RewardManagementScreen> {
                                   'Select Add reward to create your first Member reward.',
                                   textAlign: TextAlign.center),
                             ])))),
-              if (_shop != null && _shop!.items.isNotEmpty)
+              if (_shop?.items.isNotEmpty == true && visibleRewards!.isEmpty)
+                const Panel(child: Text('No rewards match this eligibility filter.')),
+              if (visibleRewards?.isNotEmpty == true)
                 LayoutBuilder(builder: (context, c) {
                   final columns = c.maxWidth >= 1100
                       ? 3
@@ -326,7 +376,7 @@ class _RewardManagementScreenState extends State<RewardManagementScreen> {
                           : 1;
                   final width = (c.maxWidth - (columns - 1) * 20) / columns;
                   return Wrap(spacing: 20, runSpacing: 20, children: [
-                    for (final item in _shop!.items)
+                    for (final item in visibleRewards!)
                       SizedBox(width: width, child: _rewardCard(context, item))
                   ]);
                 }),
@@ -334,7 +384,7 @@ class _RewardManagementScreenState extends State<RewardManagementScreen> {
   }
 }
 
-Widget _cover(String url, {double height = 190}) => Container(
+Widget _cover(String url, {double height = 150}) => Container(
     height: height,
     width: double.infinity,
     color: AppColors.primaryTint,
@@ -379,6 +429,7 @@ class _RewardEditorPageState extends State<RewardEditorPage> {
   late final _instructions = TextEditingController(
       text: widget.existing?.collectionInstructions ?? '');
   late String _category = widget.existing?.category ?? 'Merchandise';
+  late bool _premiumOnly = widget.existing?.premiumOnly ?? false;
   String? _signature, _request, _error;
   EquipmentImage? _selectedCover;
   Uint8List? _coverBytes;
@@ -441,7 +492,8 @@ class _RewardEditorPageState extends State<RewardEditorPage> {
       _conditions.text.trim(),
       _instructions.text.trim()
     ];
-    final signature = jsonEncode([...values, _coverGeneration]);
+    final premiumOnly = _premiumOnly;
+    final signature = jsonEncode([...values, _coverGeneration, premiumOnly]);
     if (_signature != signature) {
       _signature = signature;
       _request = _requestId();
@@ -474,7 +526,8 @@ class _RewardEditorPageState extends State<RewardEditorPage> {
           stockToAdd: int.parse(values[5]),
           validityDays: int.parse(values[6]),
           conditions: values[7],
-          collectionInstructions: values[8]);
+          collectionInstructions: values[8],
+          premiumOnly: premiumOnly);
       if (mounted && widget.repository.current) widget.onDone();
     } on RewardMediaUploadFailed catch (error) {
       if (mounted) setState(() => _error = error.message);
@@ -574,6 +627,27 @@ class _RewardEditorPageState extends State<RewardEditorPage> {
                                         : (v) =>
                                             setState(() => _category = v!)),
                                 const SizedBox(height: 12),
+                                DropdownButtonFormField<bool>(
+                                    key: const ValueKey('reward-member-eligibility'),
+                                    initialValue: _premiumOnly,
+                                    isExpanded: true,
+                                    decoration: const InputDecoration(labelText: 'Member Eligibility'),
+                                    items: const [
+                                      DropdownMenuItem(value: false, child: Text(_regularEligibility)),
+                                      DropdownMenuItem(value: true, child: Text(_premiumEligibility)),
+                                    ],
+                                    onChanged: _busy ? null : (value) {
+                                      if (value != null) setState(() => _premiumOnly = value);
+                                    }),
+                                const SizedBox(height: 8),
+                                const Align(
+                                    alignment: Alignment.centerLeft,
+                                    child: Text('Premium-exclusive rewards require an active Premium membership.')),
+                                if (widget.existing?.active == true && widget.existing!.premiumOnly != _premiumOnly)
+                                  const Align(
+                                      alignment: Alignment.centerLeft,
+                                      child: Text('This change applies to future redemptions. Existing vouchers retain their terms.')),
+                                const SizedBox(height: 16),
                                 Align(
                                     alignment: Alignment.centerLeft,
                                     child: Column(
