@@ -17,8 +17,9 @@ class _StateFake extends ReviewFake {
   @override
   Future<PaymentReviewPage> load({String? afterId}) {
     if (state == 'loading') return pagePending.future;
-    if (state == 'error')
+    if (state == 'error') {
       return Future.error(const PaymentReviewException('permission-denied'));
+    }
     if (state == 'empty') return Future.value(PaymentReviewPage([]));
     return super.load(afterId: afterId);
   }
