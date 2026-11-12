@@ -180,10 +180,13 @@ void main() {
             child: MaterialApp(
               debugShowCheckedModeBanner: false,
               theme: AppTheme.build().copyWith(
-                  textTheme: AppTheme.build().textTheme.apply(
-                      fontFamily: 'CReview',
-                      bodyColor: AppColors.ink,
-                      displayColor: AppColors.ink)),
+                  textTheme: ThemeData(fontFamily: 'CReview')
+                      .textTheme
+                      .merge(AppTheme.build().textTheme)
+                      .apply(
+                          fontFamily: 'CReview',
+                          bodyColor: AppColors.ink,
+                          displayColor: AppColors.ink)),
               builder: (context, child) => MediaQuery(
                   data:
                       MediaQuery.of(context).copyWith(disableAnimations: true),
