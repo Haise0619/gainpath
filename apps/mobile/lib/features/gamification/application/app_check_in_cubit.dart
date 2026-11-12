@@ -24,7 +24,16 @@ class AppCheckInCubit extends Cubit<AppCheckInState> {
   int _generation = 0;
   bool _claiming = false;
   bool get current => activeScope() == repository.scope;
-  Future<void> refresh() => _run(false);
+  Future<void>? _refreshing;
+  Future<void> refresh() => _refreshing ??= _refresh();
+  Future<void> _refresh() async {
+    try {
+      await _run(false);
+    } finally {
+      _refreshing = null;
+    }
+  }
+
   Future<void> claim() => _run(true);
   Future<void> _run(bool claim) async {
     if (isClosed || _claiming) return;
@@ -36,8 +45,7 @@ class AppCheckInCubit extends Cubit<AppCheckInState> {
     final generation = ++_generation;
     _claiming = claim;
     emit(AppCheckInState(
-        status:
-            state.snapshot == null ? AppCheckInStatus.loading : state.status,
+        status: claim ? state.status : AppCheckInStatus.loading,
         snapshot: state.snapshot,
         claiming: claim));
     try {

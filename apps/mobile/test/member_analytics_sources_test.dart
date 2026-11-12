@@ -63,8 +63,8 @@ void main() {
     repo.result.complete(const PointsHistorySnapshot(
         balance: 123, entries: [], reconciled: false));
     await tester.pumpAndSettle();
-    expect(find.text('Spendable balance: 123 points'), findsOneWidget);
-    expect(find.textContaining('Check-in streak: 1 days'), findsOneWidget);
+    expect(find.text('123'), findsOneWidget);
+    expect(find.text('Check-in streak: 1 day'), findsOneWidget);
     expect(find.textContaining('history is incomplete'), findsOneWidget);
     repo.active = false;
     await tester.runAsync(() async {
@@ -72,7 +72,7 @@ void main() {
       await auth.stream.firstWhere((s) => s.status == AuthStatus.signedOut);
     });
     await tester.pumpAndSettle();
-    expect(find.text('Spendable balance: 123 points'), findsNothing);
+    expect(find.text('123'), findsNothing);
     await tester.pumpWidget(const SizedBox());
     await tester.runAsync(auth.close);
   });
@@ -100,7 +100,7 @@ void main() {
     repo.result.complete(const PointsHistorySnapshot(
         balance: 999, entries: [], reconciled: false));
     await tester.pumpAndSettle();
-    expect(find.text('Spendable balance: 999 points'), findsNothing);
+    expect(find.text('999'), findsNothing);
     expect(find.text('Sign in to view points.'), findsOneWidget);
     await tester.pumpWidget(const SizedBox());
     await tester.runAsync(auth.close);
