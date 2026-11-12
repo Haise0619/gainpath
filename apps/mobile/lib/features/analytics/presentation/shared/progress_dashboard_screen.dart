@@ -93,6 +93,7 @@ class _ProgressDashboardScreenState extends State<ProgressDashboardScreen>
   }
 
   Widget _reveal(Widget child, double start, double end) {
+    if (MediaQuery.disableAnimationsOf(context)) return child;
     final animation = CurvedAnimation(
       parent: _controller,
       curve: Interval(start, end, curve: Curves.easeOut),
@@ -101,7 +102,7 @@ class _ProgressDashboardScreenState extends State<ProgressDashboardScreen>
       opacity: animation,
       child: SlideTransition(
         position: animation
-            .drive(Tween(begin: const Offset(0, 0.06), end: Offset.zero)),
+            .drive(Tween(begin: const Offset(0, 0.04), end: Offset.zero)),
         child: child,
       ),
     );
@@ -124,23 +125,27 @@ class _ProgressDashboardScreenState extends State<ProgressDashboardScreen>
                   icon: const Icon(Icons.refresh_rounded))
           ]),
           body: PageBody(children: [
-            MemberProgressOverview(
-                progress: local,
-                routines: widget.routineProgress,
-                program: widget.programProgress,
-                programBuilder: widget.programSummaryBuilder,
-                programStatsBuilder: widget.programStatsBuilder,
-                goals: widget.goalSummary,
-                onStart: widget.onStartWorkout,
-                startLabel: widget.startWorkoutLabel,
-                onHistory: widget.onOpenHistory,
-                onReports: widget.onOpenReport,
-                onPerformance: widget.onOpenPerformance,
-                onForm: widget.onOpenForm,
-                onPoints: widget.onOpenPoints,
-                onBackup: widget.onOpenBackup,
-                onWorkout: widget.onOpenWorkout,
-                onRoutine: widget.onOpenRoutine)
+            _reveal(
+              MemberProgressOverview(
+                  progress: local,
+                  routines: widget.routineProgress,
+                  program: widget.programProgress,
+                  programBuilder: widget.programSummaryBuilder,
+                  programStatsBuilder: widget.programStatsBuilder,
+                  goals: widget.goalSummary,
+                  onStart: widget.onStartWorkout,
+                  startLabel: widget.startWorkoutLabel,
+                  onHistory: widget.onOpenHistory,
+                  onReports: widget.onOpenReport,
+                  onPerformance: widget.onOpenPerformance,
+                  onForm: widget.onOpenForm,
+                  onPoints: widget.onOpenPoints,
+                  onBackup: widget.onOpenBackup,
+                  onWorkout: widget.onOpenWorkout,
+                  onRoutine: widget.onOpenRoutine),
+              0.0,
+              1.0,
+            ),
           ]));
     }
     // The volume record check is computed, not asserted, so this stays
