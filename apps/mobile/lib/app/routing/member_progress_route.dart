@@ -27,6 +27,8 @@ import '../di/local_member_progress_factory.dart';
 import '../di/program_store_factory.dart';
 import '../../features/workout/domain/program_enrollment.dart';
 import '../../features/workout/domain/routine_attempt.dart';
+import '../../features/workout/domain/workout_contracts.dart'
+    show WorkoutSessionSummary;
 import '../../features/workout/presentation/member/routine_history_screen.dart';
 import 'routine_journey_route.dart';
 import 'member_workout_report_route.dart';
@@ -440,9 +442,11 @@ Widget _progressContent(
                 FilledButton(onPressed: refresh, child: const Text('Retry'))
               ])));
   }
-  void openSavedRoutine(RoutineAttempt attempt) =>
-      unawaited(openRoutineAttempt(context, attempt, refresh,
-          sessionRecords: progress.records, onOpenSession: openWorkout));
+  void openSavedRoutine(RoutineAttempt attempt) => unawaited(openRoutineAttempt(
+      context, attempt, refresh,
+      sessionSummaries: state.snapshot?.summaries.values.toList() ?? const [],
+      sessionRecords: progress.records,
+      onOpenSession: openWorkout));
 
   void openReport([WorkoutReportFilter? filter]) {
     Navigator.push(
@@ -611,6 +615,7 @@ Widget _progressContent(
 Future<void> openRoutineAttempt(BuildContext context, RoutineAttempt attempt,
     Future<void> Function() refresh,
     {List<LocalWorkoutProgressRecord> sessionRecords = const [],
+    List<WorkoutSessionSummary> sessionSummaries = const [],
     Future<ProgramEnrollmentStore> Function(SessionScope) programStoreFactory =
         createProgramEnrollmentStore,
     ValueChanged<LocalWorkoutProgressRecord>? onOpenSession}) async {
@@ -721,6 +726,7 @@ Future<void> openRoutineAttempt(BuildContext context, RoutineAttempt attempt,
                           .any((e) => e.dayNumber > attempt.day);
                       return RoutineAttemptDetailScreen(
                           attempt: attempt,
+                          summaries: sessionSummaries,
                           saveStatus: WorkoutCloudSaveStatus.routine(attempt),
                           trainingSource: link?.enrollment.program.title ??
                               (free

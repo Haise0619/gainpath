@@ -47,6 +47,7 @@ import 'exercise_tutorial_route.dart';
 import 'member_progress_route.dart';
 import 'exercise_tracker_route.dart';
 import 'workout_cloud_save_status.dart';
+import 'real_squat_route.dart' show ScopedSquatResult;
 import 'guided_timed_workout_route.dart';
 import '../../features/workout/domain/exercise_execution_resolver.dart';
 import 'squat_result_sync.dart' show newWorkoutRequestId;
@@ -650,6 +651,19 @@ class _RoutineJourneyRouteState extends State<RoutineJourneyRoute>
               body: Center(child: CircularProgressIndicator()));
         }
         return RoutineJourneyScreen(
+            onOpenSavedSession: (id) {
+              final saved = c.measuredSessions
+                  .where((s) => s.sessionId == id)
+                  .firstOrNull;
+              if (saved == null || !_authorized(context.read<AuthBloc>())) {
+                return;
+              }
+              Navigator.push(
+                  context,
+                  MaterialPageRoute<void>(
+                      builder: (_) => ScopedSquatResult(
+                          summary: saved, auth: context.read<AuthBloc>())));
+            },
             saveStatusBuilder: (checkpoint) => checkpoint.attempt == null
                 ? const SizedBox.shrink()
                 : WorkoutCloudSaveStatus.routine(checkpoint.attempt!),

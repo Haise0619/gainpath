@@ -144,7 +144,7 @@ void main() {
         home: RoutineAttemptDetailScreen(
             attempt: attempt(complete: false),
             onResume: () => resumed = true)));
-    expect(find.text('Partially Completed'), findsOneWidget);
+    expect(find.text('Workout partially completed'), findsOneWidget);
     await tester.scrollUntilVisible(
         find.text('Resume unfinished exercises'), 180);
     await tester.tap(find.text('Resume unfinished exercises'));

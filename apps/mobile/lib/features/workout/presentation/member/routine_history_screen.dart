@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
 import '../../domain/routine_attempt.dart';
 import '../workout_presentation.dart';
+import '../../domain/workout_contracts.dart';
+import 'widgets/workout_result_content.dart';
 
 String _date(int micros) {
   final d = DateTime.fromMicrosecondsSinceEpoch(micros, isUtc: true)
@@ -128,152 +130,60 @@ class RoutineAttemptDetailScreen extends StatelessWidget {
       this.onRepeat,
       this.onNextDay,
       this.availableSessionIds = const {},
-      this.onOpenSession});
+      this.onOpenSession,
+      this.summaries = const []});
   final RoutineAttempt attempt;
   final String? trainingSource;
   final Widget? saveStatus;
   final VoidCallback? onResume, onRepeat, onNextDay;
   final Set<String> availableSessionIds;
   final ValueChanged<String>? onOpenSession;
+  final List<WorkoutSessionSummary> summaries;
   @override
   Widget build(BuildContext context) {
     final a = attempt;
-    final repeatIsPrimary = a.isComplete && onNextDay == null;
+    final action = !a.isComplete ? onResume : onNextDay ?? onRepeat;
     return Scaffold(
-        appBar: AppBar(title: const Text('Routine result')),
-        bottomNavigationBar: (!a.isComplete && onResume != null ||
-                a.isComplete && (onNextDay != null || onRepeat != null))
-            ? SafeArea(
+        appBar: AppBar(title: const Text('Workout summary')),
+        bottomNavigationBar: action == null
+            ? null
+            : SafeArea(
                 top: false,
                 child: Padding(
                     padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
-                    child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          if (!a.isComplete && onResume != null)
-                            FilledButton.icon(
-                                onPressed: onResume,
-                                icon: const Icon(Icons.play_arrow_rounded),
-                                label:
-                                    const Text('Resume unfinished exercises')),
-                          if (a.isComplete && onNextDay != null)
-                            FilledButton.icon(
-                                onPressed: onNextDay,
-                                icon: const Icon(Icons.arrow_forward_rounded),
-                                label: const Text('Next routine day')),
-                          if (repeatIsPrimary && onRepeat != null)
-                            FilledButton.icon(
-                                onPressed: onRepeat,
-                                icon: const Icon(Icons.replay_rounded),
-                                label: const Text('Repeat this workout')),
-                        ])))
-            : null,
+                    child: FilledButton.icon(
+                        onPressed: action,
+                        icon: const Icon(Icons.arrow_forward_rounded),
+                        label: Text(!a.isComplete
+                            ? 'Resume unfinished exercises'
+                            : onNextDay != null
+                                ? 'Next routine day'
+                                : 'Repeat this workout')))),
         body: ListView(
             padding: EdgeInsets.fromLTRB(
-                16, 12, 16, 32 + MediaQuery.paddingOf(context).bottom),
+                16, 12, 16, 24 + MediaQuery.paddingOf(context).bottom),
             children: [
-              Text(routineDayTitle(a.routine, a.day),
-                  style: Theme.of(context).textTheme.headlineSmall),
-              if (trainingSource != null) Text(trainingSource!),
-              const SizedBox(height: 8),
-              Text(workoutAttemptLabel(a),
-                  style: Theme.of(context)
-                      .textTheme
-                      .titleLarge
-                      ?.copyWith(color: AppColors.primary)),
-              Text(
-                  '${a.completedExercises}/${a.entries.length} exercises completed'),
-              const SizedBox(height: 6),
-              saveStatus ?? const Text('Saved on this device'),
-              const SizedBox(height: 12),
-              Panel(
-                  background: AppColors.primaryTint,
-                  child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        if (a.entries.any((r) => r.sessionIds.isNotEmpty)) ...[
-                          Text(
-                              '${a.fullRepetitions} measured full reps · ${a.partialRepetitions} partial reps'),
-                          Text(
-                              '${workoutDurationLabel(a.trackedDurationMicros)} camera-tracked'),
-                        ],
-                        if (a.selfReportedSets > 0)
-                          Text('${a.selfReportedSets} self-reported sets'),
-                        if (a.entries.any((r) => r.isTimed && r.guided != null))
-                          Text(
-                              '${workoutDurationLabel(a.entries.where((r) => r.isTimed).fold<int>(0, (total, r) => total + (r.guided?.totalActiveMicroseconds ?? 0)))} active · Timer recorded'),
-                        if (a.startedAtMicros != null)
-                          Text('Started ${_date(a.startedAtMicros!)}'),
-                        if (a.finishedAtMicros != null)
-                          Text('Ended ${_date(a.finishedAtMicros!)}'),
-                        if (a.elapsedDurationMicros != null)
-                          Text(
-                              '${workoutDurationLabel(a.elapsedDurationMicros!)} elapsed · includes breaks and time away'),
-                        if (a.finished && a.finishedAtMicros == null)
-                          const Text(
-                              'Completion time unavailable for this older attempt.'),
-                      ])),
-              const SizedBox(height: 16),
-              for (final result in a.entries)
-                _ExerciseResult(
-                    attempt: a,
-                    result: result,
-                    availableSessionIds: availableSessionIds,
-                    onOpenSession: onOpenSession),
-              const SizedBox(height: 12),
-              if (!repeatIsPrimary && onRepeat != null)
+              if (trainingSource != null)
+                Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: Text(trainingSource!,
+                        style: const TextStyle(color: AppColors.inkSoft))),
+              RoutineCompletionContent(
+                  attempt: a,
+                  summaries: summaries,
+                  saveStatus: saveStatus,
+                  availableSessionIds: availableSessionIds,
+                  onOpenSession: onOpenSession == null
+                      ? null
+                      : (id) {
+                          if (availableSessionIds.contains(id)) {
+                            onOpenSession!(id);
+                          }
+                        }),
+              if (onRepeat != null && (!a.isComplete || onNextDay != null))
                 OutlinedButton(
                     onPressed: onRepeat,
                     child: const Text('Repeat this workout')),
             ]));
-  }
-}
-
-class _ExerciseResult extends StatelessWidget {
-  const _ExerciseResult(
-      {required this.attempt,
-      required this.result,
-      required this.availableSessionIds,
-      this.onOpenSession});
-  final RoutineAttempt attempt;
-  final RoutineExerciseResult result;
-  final Set<String> availableSessionIds;
-  final ValueChanged<String>? onOpenSession;
-  @override
-  Widget build(BuildContext context) {
-    final e = attempt.routine.exercises[result.index];
-    return Card(
-        child: Padding(
-            padding: const EdgeInsets.all(14),
-            child:
-                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(e.name, style: Theme.of(context).textTheme.titleMedium),
-              Text(ExercisePresentation.forExercise(e,
-                      organizationId: attempt.scope.organizationId)
-                  .targetsWithRest),
-              Text(ExercisePresentation.forExercise(e,
-                      organizationId: attempt.scope.organizationId)
-                  .label),
-              Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Icon(
-                    isExerciseTargetComplete(result.status)
-                        ? Icons.check_circle_rounded
-                        : result.status == RoutineExerciseStatus.skipped
-                            ? Icons.skip_next_rounded
-                            : Icons.timelapse_rounded,
-                    color: Theme.of(context).colorScheme.primary),
-                const SizedBox(width: 8),
-                Expanded(child: Text(exerciseStatusLabel(result.status))),
-              ]),
-              Text(exerciseResultSummary(result)),
-              if (onOpenSession != null)
-                for (final id
-                    in result.sessionIds.where(availableSessionIds.contains))
-                  TextButton.icon(
-                      onPressed: () => onOpenSession!(id),
-                      icon: const Icon(Icons.receipt_long_outlined),
-                      label: const Text('View saved exercise session')),
-            ])));
   }
 }

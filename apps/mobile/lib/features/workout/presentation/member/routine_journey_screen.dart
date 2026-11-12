@@ -7,6 +7,7 @@ import '../../domain/exercise_tracker_dispatcher.dart';
 import '../../domain/routine_journey.dart';
 import '../../domain/workout_rewards.dart';
 import 'widgets/routine_workout_reward_panel.dart';
+import 'widgets/workout_result_content.dart';
 
 class RoutineJourneyScreen extends StatefulWidget {
   const RoutineJourneyScreen(
@@ -17,9 +18,11 @@ class RoutineJourneyScreen extends StatefulWidget {
       this.onManualSet,
       this.onOpenSettings,
       this.saveStatusBuilder,
+      this.onOpenSavedSession,
       this.onViewHistory});
   final RoutineJourneyController controller;
   final Widget Function(RoutineCheckpoint)? saveStatusBuilder;
+  final ValueChanged<String>? onOpenSavedSession;
   final VoidCallback? onViewHistory;
   final VoidCallback? onOpenSettings;
   final Future<void> Function(int index) onTrack, onTutorial;
@@ -50,7 +53,6 @@ class _RoutineJourneyScreenState extends State<RoutineJourneyScreen> {
     }
   }
 
-  String _status(RoutineExerciseStatus status) => exerciseStatusLabel(status);
   Future<void> _finish() => _act(() async {
         final c = widget.controller;
         if (!c.allTargetsCompleted) {
@@ -766,95 +768,29 @@ class _RoutineJourneyScreenState extends State<RoutineJourneyScreen> {
 
   List<Widget> _summary(BuildContext context) {
     final c = widget.controller;
-    final complete = c.dayIndices
-        .where((i) => c.statusFor(i) == RoutineExerciseStatus.completed)
-        .length;
     return [
-      Text('Routine completion',
-          style: const TextStyle(
-              fontSize: 16, fontWeight: FontWeight.w600, color: AppColors.ink)),
-      Text(
-          c.checkpoint?.attempt == null
-              ? 'In Progress'
-              : workoutAttemptLabel(c.checkpoint!.attempt!),
-          style: const TextStyle(
-              fontSize: 24, fontWeight: FontWeight.w700, color: AppColors.ink)),
-      Text(routineDayTitle(c.routine, c.day),
-          style: const TextStyle(
-              fontSize: 18, fontWeight: FontWeight.w700, color: AppColors.ink)),
-      Text(
-          '${c.completedExercises}/${c.dayIndices.length} exercise targets completed',
-          style: const TextStyle(color: AppColors.inkSoft)),
-      Text(
-          '${c.dayIndices.where((i) => c.statusFor(i) == RoutineExerciseStatus.skipped).length} skipped · ${c.dayIndices.where((i) => !isExerciseTargetComplete(c.statusFor(i)) && c.statusFor(i) != RoutineExerciseStatus.skipped).length} unfinished',
-          style: const TextStyle(color: AppColors.inkSoft)),
-      if (c.checkpoint?.finished == true && c.error == null)
-        const Text('Saved on this device',
-            style: TextStyle(color: AppColors.inkSoft)),
+      if (c.checkpoint?.attempt != null)
+        RoutineCompletionContent(
+            attempt: c.checkpoint!.attempt!,
+            summaries: c.measuredSessions,
+            saveStatus: widget.saveStatusBuilder?.call(c.checkpoint!),
+            onOpenSession: widget.onOpenSavedSession),
       if (widget.onViewHistory != null)
-        Align(
-            alignment: AlignmentDirectional.centerStart,
-            child: TextButton.icon(
-                onPressed: widget.onViewHistory,
-                icon: const Icon(Icons.history_rounded),
-                label: const Text('Routine history'))),
-      if (widget.saveStatusBuilder != null && c.checkpoint != null)
-        widget.saveStatusBuilder!(c.checkpoint!),
-      const SizedBox(height: 12),
-      Panel(
-          background: AppColors.primaryTint,
-          child:
-              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            if (c.measuredSessions.isNotEmpty) ...[
-              Text(
-                  '$complete measured exercise${complete == 1 ? '' : 's'} complete',
-                  style: const TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.ink)),
-              const SizedBox(height: 8),
-              Text(
-                  '${c.fullRepetitions} full reps · ${c.partialRepetitions} partial reps',
-                  style: const TextStyle(color: AppColors.ink)),
-              Text(
-                  '${c.trackedDurationMicros ~/ 1000000}s tracked across ${c.measuredSessions.length} saved sessions',
-                  style: const TextStyle(color: AppColors.inkSoft)),
-            ],
-            if (c.selfReportedSets > 0)
-              Text(
-                  '${c.selfReportedSets} self-reported sets · separate from AI measurements',
-                  style: const TextStyle(color: AppColors.ink)),
-            if (c.guidedDurationMicros > 0)
-              Text(
-                  '${c.guidedDurationMicros ~/ 1000000}s video-guided time · Not AI verified',
-                  style: const TextStyle(color: AppColors.ink)),
-            const SizedBox(height: 8),
-            const Text(
-                'Camera measurements and self-reported completion stay separate. Manual sets add no AI reps, form score or rewards.',
-                style: TextStyle(fontSize: 12, color: AppColors.inkSoft)),
-          ])),
-      const SizedBox(height: 16),
-      RoutineWorkoutRewardPanel(
-          reference: WorkoutRewardAttemptReference(
-              scope: c.scope,
-              attemptId: c.checkpoint!.id,
-              routineId: c.routine.id,
-              day: c.day),
-          isCurrent: () => c.authorized,
-          difficulty: (c.checkpoint?.attempt?.routine ?? c.routine).difficulty),
-      const SizedBox(height: 16),
-      for (final index in c.dayIndices)
-        Card(
-            child: ListTile(
-                leading: Icon(
-                    isExerciseTargetComplete(c.statusFor(index))
-                        ? Icons.check_circle_rounded
-                        : Icons.radio_button_unchecked_rounded,
-                    color: AppColors.primary),
-                title: Text(c.routine.exercises[index].name),
-                subtitle: Text(
-                    '${_status(c.statusFor(index))}${c.isTimed(index) ? '\n${c.checkpoint!.guidedProgress[index]?.completedSets ?? 0} timed sets · not AI verified' : c.supportsTracking(index) ? '' : '\n${c.manualSetsFor(index)} / ${c.routine.exercises[index].sets} sets self-reported'}${c.sessionsFor(index).isEmpty ? '' : '\n${c.sessionsFor(index).fold<int>(0, (n, s) => n + s.repetitions)} measured full reps'}${c.sessionsFor(index).where((s) => s.poseMetrics?.curlArms != null).map((s) => '\n${s.poseMetrics!.curlArms!.mode.label} · ${s.poseMetrics!.curlArms!.countLabel}').join()}'))),
-      const SizedBox(height: 12),
+        TextButton.icon(
+            onPressed: widget.onViewHistory,
+            icon: const Icon(Icons.history_rounded),
+            label: const Text('Workout history')),
+      ExpansionTile(title: const Text('Points and rewards'), children: [
+        RoutineWorkoutRewardPanel(
+            reference: WorkoutRewardAttemptReference(
+                scope: c.scope,
+                attemptId: c.checkpoint!.id,
+                routineId: c.routine.id,
+                day: c.day),
+            isCurrent: () => c.authorized,
+            difficulty:
+                (c.checkpoint?.attempt?.routine ?? c.routine).difficulty),
+      ]),
       if (!c.isScheduled)
         OutlinedButton(
             onPressed: _working || c.busy

@@ -16,3 +16,11 @@ Verification: 39 focused sync/store/scheduler/integration tests passed, includin
 ## Phases 2–5
 
 Implementation and integrated verification in progress; this section will be replaced with completed outcomes and exact commit evidence.
+
+## Phase 2 — consumer workout summary
+
+Added a shared purple/ivory completion header, responsive activity facts and expandable exercise cards used by both the live journey summary and saved routine results. AI reps, timer-recorded sets/time and self-reported sets remain separate. Cards expose only linked, matching-account exercise assessments; individual result routes retain original movement evidence and put model/identity/upload verification behind Technical details. No unrelated scores are averaged. Lateral Raise/Shoulder Press show assessment unavailable, never legacy 0%; historic assessed Wall Push-up data remains inspectable.
+
+The primary summary no longer leads with reward/acceptance internals. Completion motion is finite and respects reduced motion. Elapsed time is disclosed separately because it includes breaks/time away. The existing workout continuation, partial/skipped statuses and safe resume/repeat actions are preserved.
+
+Verification: 26 summary/history/mixed/continuity tests passed (including 5 new product tests); six-file analysis clean. Actual 390dp Flutter summary render inspected against the before image. The first run exposed stale copy assertions and an offscreen test finder, corrected without dropping evidence assertions.

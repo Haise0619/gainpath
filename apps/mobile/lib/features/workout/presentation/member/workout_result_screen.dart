@@ -4,6 +4,8 @@ import 'package:gainpath_ui/gainpath_ui.dart';
 import 'package:gainpath_domain/workout.dart';
 import 'widgets/workout_media.dart';
 import 'widgets/curl_arm_stats.dart';
+import 'widgets/workout_result_content.dart';
+import 'widgets/workout_save_indicator.dart';
 import '../../domain/workout_contracts.dart'
     show WorkoutSessionSummary, WorkoutProvenance;
 
@@ -260,31 +262,16 @@ class _WorkoutResultScreenState extends State<WorkoutResultScreen>
                             context, (route) => route.isFirst),
                     child: Text(widget.continueLabel)))),
         body: PageBody(children: [
-          if (widget.saveStatus != null) widget.saveStatus!,
-          Panel(
-              background: AppColors.primaryTint,
-              child: Column(children: [
-                const Icon(Icons.check_circle_outline,
-                    size: 48, color: AppColors.primary),
-                const SizedBox(height: 12),
-                Text(
-                    fictional
-                        ? 'Fictional recorded observation'
-                        : 'Saved on this device',
-                    style: Theme.of(context).textTheme.titleLarge),
-                const SizedBox(height: 8),
-                Text(
-                    fictional
-                        ? 'Read-only recorded fixture · no physical camera capture, local save, accepted workout or reward.'
-                        : widget.syncPanel == null
-                            ? 'Local result · not server-accepted. No rewards have been awarded.'
-                            : 'Your measured result is saved locally. No rewards have been awarded.',
-                    textAlign: TextAlign.center),
-              ])),
-          if (widget.syncPanel != null) ...[
-            const SizedBox(height: 16),
-            widget.syncPanel!
-          ],
+          WorkoutCompletionHeader(
+              title: measuredExerciseTitle(summary),
+              status: fictional
+                  ? 'Fictional recorded observation'
+                  : 'Exercise saved',
+              complete: true,
+              detail: fictional
+                  ? 'Read-only recorded fixture · not a physical camera capture.'
+                  : workoutSavedDate(summary.endedAt.microsecondsSinceEpoch)),
+          widget.saveStatus ?? const WorkoutSaveIndicator(),
           const SizedBox(height: 16),
           Row(children: [
             Expanded(child: StatTile('${summary.repetitions}', 'Full reps')),
@@ -302,42 +289,12 @@ class _WorkoutResultScreenState extends State<WorkoutResultScreen>
                   CurlArmStats(metrics: metrics.curlArms!),
                   const SizedBox(height: 12),
                 ],
-                Eyebrow(fictional
-                    ? 'Fictional exercise example'
-                    : switch (metrics.scoringVersion) {
-                        'single-arm-curl-side-v1' => 'Measured curl result',
-                        'single-arm-row-side-v1' => 'Measured row result',
-                        'reverse-lunge-side-v1' =>
-                          'Measured reverse lunge result',
-                        'standing-lateral-raise-front-v1' =>
-                          'Measured lateral raise result',
-                        'dumbbell-shoulder-press-front-v1' =>
-                          'Measured shoulder press result',
-                        'standing-calf-raise-side-v1' =>
-                          'Measured calf raise result',
-                        'wall-push-up-side-v1' =>
-                          'Measured wall push-up result',
-                        'standard-floor-push-up-side-v1' =>
-                          'Measured floor push-up result',
-                        _ => 'Measured squat result',
-                      }),
+                const Eyebrow('AI Form Assessment'),
                 const SizedBox(height: 8),
-                Text(
-                    score == null
-                        ? metrics.scoringVersion == 'reverse-lunge-side-v1'
-                            ? 'Form score is not assessed for reverse lunges'
-                            : metrics.scoringVersion ==
-                                    'dumbbell-shoulder-press-front-v1'
-                                ? 'Form score is not assessed for shoulder presses'
-                                : metrics.scoringVersion ==
-                                        'standing-lateral-raise-front-v1'
-                                    ? 'Form score is not assessed for lateral raises'
-                                    : metrics.scoringVersion ==
-                                            'single-arm-row-side-v1'
-                                        ? 'Form score is not assessed for rows'
-                                        : 'Not enough evidence'
-                        : '${score.toStringAsFixed(0)}% estimated form',
+                Text(savedFormLabel(summary),
                     style: Theme.of(context).textTheme.titleLarge),
+                const Text(
+                    'Rule-based movement feedback, not pose detection accuracy.'),
                 Text(
                     'Tracked: ${(summary.trackedDurationMicros / 1000000).toStringAsFixed(1)} seconds'),
                 Text(
@@ -370,7 +327,7 @@ class _WorkoutResultScreenState extends State<WorkoutResultScreen>
           const SizedBox(height: 16),
           ExpansionTile(
               tilePadding: EdgeInsets.zero,
-              title: const Text('Measurement details and limits'),
+              title: const Text('Technical details'),
               subtitle: const Text(
                   'Observed deviations · What the camera can assess'),
               children: [
@@ -378,6 +335,11 @@ class _WorkoutResultScreenState extends State<WorkoutResultScreen>
                     child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
+                      Text('Session: ${summary.sessionId}'),
+                      Text('Rule: ${metrics.scoringVersion}'),
+                      Text(
+                          'Detector: ${metrics.detectorId}/${metrics.detectorVersion} · ${metrics.cameraView}'),
+                      if (widget.syncPanel != null) widget.syncPanel!,
                       if (metrics.floorPushUp case final floor?)
                         Text(floor.issueCounts.isEmpty
                             ? 'No supported deviation was recorded in assessed attempts.'

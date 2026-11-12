@@ -226,8 +226,7 @@ void main() {
     // Finishing the last target now opens the summary without another gate.
     expect(find.text('Routine summary'), findsOneWidget);
     expect(find.text('2 full reps · 1 partial reps'), findsOneWidget);
-    expect(find.text('2 self-reported sets · separate from AI measurements'),
-        findsOneWidget);
+    expect(find.text('self-reported sets'), findsOneWidget);
     await tester.scrollUntilVisible(
         find.textContaining('Completed · Self-reported'), 120);
     expect(find.textContaining('Completed · Self-reported'), findsOneWidget);
