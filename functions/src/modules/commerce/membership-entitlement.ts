@@ -2,11 +2,13 @@ import { requireActiveMembership, requireVerifiedEmail } from '../../platform/au
 import { DomainError } from '../../platform/errors';
 import { readAll, type DocumentData, type TransactionPort } from '../../platform/firestore/store';
 
+import { isSupportedPaidPlan } from './membership-plan-registry';
+
 type Auth = { uid: string; token: Record<string, unknown> } | undefined;
 export const MEMBERSHIP_ENTITLEMENT_POLICY = 'gainpath-effective-membership-v1';
 const timestamp = (v: unknown): v is number => Number.isSafeInteger(v) && Number(v) > 0 && Number(v) <= 8640000000000000;
 const text = (v: unknown): v is string => typeof v === 'string' && v.trim().length > 0 && v.length <= 500;
-const tier = (v: unknown): v is 'basic' | 'premium' => v === 'basic' || v === 'premium';
+const tier = isSupportedPaidPlan;
 const denied = () => new DomainError('permission-denied', 'Current verified Member access is required.');
 
 /** Read-only effective membership. Organization authority is never a paid tier. */
@@ -30,12 +32,7 @@ async function readMemberFacts(tx: TransactionPort, uid: string, org: string, no
   const authority = requireActiveMembership(member);
   if (authority.role !== 'member' || user?.organizationId !== org || member?.organizationId !== org
       || (member.userId !== undefined && member.userId !== uid) || organization?.status !== 'active') throw denied();
-  const lifecycle = user.accountLifecycle as DocumentData | undefined;
-  if (lifecycle !== undefined && (!lifecycle || lifecycle.schemaVersion !== 1 || lifecycle.state !== 'active'
-      || lifecycle.revocationPending !== false || !Number.isSafeInteger(lifecycle.sessionNotBeforeSeconds)
-      || Number(lifecycle.sessionNotBeforeSeconds) < 0
-      || (sessionRequired && Number(lifecycle.sessionNotBeforeSeconds) > 0 && (!Number.isSafeInteger(authTime)
-        || Number(authTime) < Number(lifecycle.sessionNotBeforeSeconds))))) throw denied();
+  assertMembershipLifecycle(user, authTime, sessionRequired);
 
   const common = { schemaVersion: 1, policyVersion: MEMBERSHIP_ENTITLEMENT_POLICY, organizationId: org, memberId: uid, resolvedAtMillis: now };
   const empty = { paidTier: null, paidPlanId: null, paidPlanName: null, paidExpiresAtMillis: null, benefits: [] as string[] };
@@ -71,4 +68,15 @@ async function readMemberFacts(tx: TransactionPort, uid: string, org: string, no
 
 export async function resolveMembershipEntitlement(tx: TransactionPort, auth: Auth, org: string, now: number) {
   return (await readMembershipEntitlement(tx, auth, org, now)).entitlement;
+}
+
+/** Shared account lifecycle guard for all membership commands and settlement. */
+export function assertMembershipLifecycle(user: DocumentData, authTime: unknown, sessionRequired = true) {
+  const lifecycle = user.accountLifecycle as DocumentData | undefined;
+  if (lifecycle !== undefined && (!lifecycle || lifecycle.schemaVersion !== 1 || lifecycle.state !== 'active'
+      || lifecycle.revocationPending !== false || !Number.isSafeInteger(lifecycle.sessionNotBeforeSeconds)
+      || Number(lifecycle.sessionNotBeforeSeconds) < 0
+      || (sessionRequired && Number(lifecycle.sessionNotBeforeSeconds) > 0 && (!Number.isSafeInteger(authTime)
+        || Number(authTime) < Number(lifecycle.sessionNotBeforeSeconds))))) throw denied();
+
 }

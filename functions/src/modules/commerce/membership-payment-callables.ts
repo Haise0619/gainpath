@@ -1,5 +1,5 @@
 import { getFirestore } from 'firebase-admin/firestore';
-import { onCall } from 'firebase-functions/v2/https';
+import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import { defineSecret, defineString } from 'firebase-functions/params';
 import { FirestoreStore } from '../../platform/firestore/firestore-store';
 import { DomainError } from '../../platform/errors';
@@ -8,6 +8,11 @@ import { readCoachIdentity } from '../coaching/coach-identity-reader';
 import { BillplzSandboxGateway } from './billplz-sandbox';
 import { membershipOverview, membershipQuote, createMembershipPayment, readMembershipPayment, membershipRefund } from './membership-payment-service';
 
+import { MembershipCheckoutError } from './membership-plan-registry';
+export function membershipCommandError(error: unknown) {
+  if (error instanceof MembershipCheckoutError) return new HttpsError(error.code, error.message, {reason: error.reason, checkoutCreated: false});
+  return coachCommandError(error);
+}
 const apiKey = defineSecret('BILLPLZ_SANDBOX_API_KEY');
 const collection = defineString('BILLPLZ_SANDBOX_COLLECTION_ID', { default: '' });
 const organization = defineString('BILLPLZ_SANDBOX_ORGANIZATION_ID', { default: 'gainpath' });
@@ -31,17 +36,18 @@ export const getMembershipOverviewCommand = onCall({ enforceAppCheck: true, pres
       plans: async org => (await db.collection(`orgs/${org}/membershipPlans`).limit(100).get()).docs.map(d => ({ id: d.id, data: d.data() })),
       payments: async (org, uid) => (await db.collection(`orgs/${org}/transactions`).where('memberId', '==', uid).get()).docs.map(d => ({ id: d.id, data: d.data() })),
     }, Date.now, readCoachIdentity);
-  } catch (e) { throw coachCommandError(e); }
+  } catch (e) { throw membershipCommandError(e); }
 });
 export const getMembershipQuoteCommand = onCall({ enforceAppCheck: true }, async r => {
-  try { check(r.data); return await membershipQuote(store(), r.auth, r.data); } catch (e) { throw coachCommandError(e); }
+  try { check(r.data); return await membershipQuote(store(), r.auth, r.data); } catch (e) { throw membershipCommandError(e); }
 });
 export const createMembershipPaymentCommand = onCall({ enforceAppCheck: true, secrets: [apiKey] }, async r => {
-  try { check(r.data); return await createMembershipPayment(store(), r.auth, r.data, gateway()); } catch (e) { throw coachCommandError(e); }
+  try { check(r.data); return await createMembershipPayment(store(), r.auth, r.data, gateway()); } catch (e) { throw membershipCommandError(e); }
 });
 export const getMembershipPaymentCommand = onCall({ enforceAppCheck: true, secrets: [apiKey] }, async r => {
-  try { check(r.data); return await readMembershipPayment(store(), r.auth, r.data, gateway(), Date.now, readCoachIdentity); } catch (e) { throw coachCommandError(e); }
+  try { check(r.data); return await readMembershipPayment(store(), r.auth, r.data, gateway(), Date.now, readCoachIdentity); } catch (e) { throw membershipCommandError(e); }
 });
 export const requestMembershipRefundCommand = onCall({ enforceAppCheck: true }, async r => {
-  try { check(r.data); return await membershipRefund(store(), r.auth, r.data); } catch (e) { throw coachCommandError(e); }
+  try { check(r.data); return await membershipRefund(store(), r.auth, r.data); } catch (e) { throw membershipCommandError(e); }
 });
+

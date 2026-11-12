@@ -7,7 +7,8 @@ import { allowed, object } from '../coaching/coach-availability-contracts';
 import { currentBookingMembership, requireBookingOrganization } from '../coaching/booking-validation';
 import type { BillplzGateway, SandboxBill } from './billplz-sandbox';
 import type { CoachIdentityReader } from '../coaching/coach-profile-service';
-import { readMembershipEntitlement } from './membership-entitlement';
+import { isSupportedPaidPlan, MembershipCheckoutError } from './membership-plan-registry';
+import { assertMembershipLifecycle, readMembershipEntitlement } from './membership-entitlement';
 import { preparePremiumCoachVoucherTerm } from './premium-coach-voucher';
 
 type Auth = { uid: string; token: Record<string, unknown> } | undefined;
@@ -22,14 +23,18 @@ function context(auth: Auth, raw: unknown, keys: string[]) {
   if (d.schemaVersion !== 1) throw unavailable();
   return { d, org: requiredIdentifier(d.organizationId, 'organizationId'), uid: auth!.uid };
 }
-async function member(tx: TransactionPort, org: string, uid: string) {
+async function member(tx: TransactionPort, org: string, uid: string, auth?: Auth, sessionRequired = true) {
   const m = await currentBookingMembership(tx, org, uid);
   if (m.role !== 'member') throw new DomainError('permission-denied', 'Current Member access required.');
+  const user = await tx.get(`users/${uid}`);
+  if (user === undefined) throw new DomainError('permission-denied', 'Current Member access required.');
+  assertMembershipLifecycle(user, auth?.token.auth_time, sessionRequired);
   await requireBookingOrganization(tx, org); // No branch restrictions on membership.
 }
 export function membershipPlan(id: string, d: DocumentData | undefined) {
+  if (!isSupportedPaidPlan(id)) throw new MembershipCheckoutError('unsupported_plan', 'This membership plan is not supported.');
   if (!d || d.active !== true || d.currency !== 'MYR' || !Number.isSafeInteger(d.amountMinor) || Number(d.amountMinor) < 1
-      || !Number.isSafeInteger(d.durationDays) || Number(d.durationDays) < 1 || Number(d.durationDays) > 3660
+      || !Number.isSafeInteger(d.durationDays) || Number(d.durationDays) !== 30
       || typeof d.name !== 'string' || !d.name.trim() || typeof d.version !== 'string' || !d.version
       || !Array.isArray(d.benefits) || !d.benefits.every(x => typeof x === 'string' && x.length <= 500)) throw unavailable();
   return { planId: id, name: d.name, amountMinor: Number(d.amountMinor), currency: 'MYR', durationDays: Number(d.durationDays), benefits: d.benefits, version: d.version };
@@ -47,7 +52,7 @@ async function quote(tx: TransactionPort, org: string, d: DocumentData, now: num
         || !Number.isSafeInteger(promo.maxRedemptions) || !Number.isSafeInteger(promo.currentRedemptions)
         || Number(promo.currentRedemptions) < 0 || Number(promo.currentRedemptions) >= Number(promo.maxRedemptions)
         || typeof promo.discountPercent !== 'number' || !Number.isFinite(promo.discountPercent) || promo.discountPercent <= 0 || promo.discountPercent >= 100
-        || !Array.isArray(promo.planIds) || !promo.planIds.includes(id)) throw new DomainError('failed-precondition', 'Invalid, expired, exhausted or inapplicable promo code.');
+        || !Array.isArray(promo.planIds) || !promo.planIds.includes(id)) throw new MembershipCheckoutError('promo_invalid', 'Invalid, expired, exhausted or inapplicable promo code.');
   }
   const amountMinor = Math.round(plan.amountMinor * (1 - Number(promo?.discountPercent ?? 0) / 100));
   if (amountMinor < 1) throw unavailable();
@@ -55,7 +60,7 @@ async function quote(tx: TransactionPort, org: string, d: DocumentData, now: num
 }
 export async function membershipQuote(store: DocumentStore, auth: Auth, raw: unknown, clock = Date.now) {
   const { d, org, uid } = context(auth, raw, ['planId', 'promoCode']);
-  return store.transact(async tx => { await member(tx, org, uid); return (await quote(tx, org, d, clock())).value; });
+  return store.transact(async tx => { await member(tx, org, uid, auth); return (await quote(tx, org, d, clock())).value; });
 }
 export function membershipPayment(d: DocumentData | undefined, org: string, id: string): DocumentData {
   if (!d || d.organizationId !== org || d.transactionId !== id || !['MembershipPurchase', 'MembershipRenewal'].includes(String(d.kind))
@@ -75,7 +80,7 @@ export async function createMembershipPayment(store: DocumentStore, auth: Auth, 
   if (!['purchase', 'renewal'].includes(String(d.intent))) throw unavailable();
   const id = `membership_${keyOf(uid, requestId)}`, fingerprint = keyOf(d.planId, d.promoCode ?? '', d.intent, d.quoteId ?? '');
   const reserved = await store.transact(async tx => {
-    await member(tx, org, uid);
+    await member(tx, org, uid, auth);
     const old = await tx.get(paymentPath(org, id));
     if (old) { if (old.fingerprint !== fingerprint) throw new DomainError('already-exists', 'Checkout request already used.'); return { p: old, create: false }; }
     const a = await tx.get(accountPath(org, uid));
@@ -85,7 +90,7 @@ export async function createMembershipPayment(store: DocumentStore, auth: Auth, 
       if (pending.paymentStatus !== 'cleared' && !['expired', 'failed'].includes(String(pending.fulfilmentStatus))) return { p: pending, create: false };
     }
     const now = clock(), q = await quote(tx, org, d, now), user = await tx.get(`users/${uid}`);
-    if (d.quoteId !== undefined && d.quoteId !== q.value.quoteId) throw new DomainError('failed-precondition', 'Plan or promo pricing changed. Review a fresh quote.');
+    if (d.quoteId !== undefined && d.quoteId !== q.value.quoteId) throw new MembershipCheckoutError('quote_changed', 'Plan or promo pricing changed. Review a fresh quote.');
     if (typeof user?.email !== 'string' || !user.email.includes('@')) throw unavailable();
     if (d.intent === 'renewal' && a?.planId !== d.planId) throw new DomainError('failed-precondition', 'Renew your current plan.');
     if (Number(a?.expiresAtMillis ?? 0) > now && a?.planId !== d.planId) throw new DomainError('failed-precondition', 'Active plan changes require an Admin policy.');
@@ -143,8 +148,9 @@ export async function settleMembershipPayment(store: DocumentStore, org: string,
     const a = await tx.get(accountPath(org, String(p.memberId)));
     // Re-check current organization authority. Paid but ineligible/late => review, never discard money.
     let reason = now >= Number(p.checkoutExpiresAtMillis) ? 'checkout_expired' : '';
+    if (!isSupportedPaidPlan(p.planId) || p.durationDays !== 30) reason = 'unsupported_plan';
     if (identityIneligible) reason = 'account_ineligible';
-    try { await member(tx, org, String(p.memberId)); } catch { reason = 'account_ineligible'; }
+    try { await member(tx, org, String(p.memberId), undefined, false); } catch { reason = 'account_ineligible'; }
     if (Number(a?.expiresAtMillis ?? 0) > now && a?.planId !== p.planId) reason = 'plan_changed';
     const expiresAtMillis = Math.max(now, Number(a?.expiresAtMillis ?? 0)) + Number(p.durationDays) * DAY;
     if (!Number.isSafeInteger(expiresAtMillis) || expiresAtMillis > 8640000000000000) throw unavailable();
@@ -161,7 +167,7 @@ export async function readMembershipPayment(store: DocumentStore, auth: Auth, ra
   const { d, org, uid } = context(auth, raw, ['transactionId']);
   const id = requiredIdentifier(d.transactionId, 'transactionId');
   const captured = await store.transact(async tx => {
-    await member(tx, org, uid); const p = membershipPayment(await tx.get(paymentPath(org, id)), org, id);
+    await member(tx, org, uid, auth); const p = membershipPayment(await tx.get(paymentPath(org, id)), org, id);
     if (p.memberId !== uid) throw new DomainError('permission-denied', 'Own membership payment required.');
     const now = clock(), check = p.paymentStatus !== 'cleared' && typeof p.billId === 'string' && now - Number(p.lastProviderCheckAtMillis ?? 0) >= 10000;
     let next = p;
@@ -171,7 +177,7 @@ export async function readMembershipPayment(store: DocumentStore, auth: Auth, ra
     return { p: next, check };
   });
   if (captured.check) await settleMembershipPayment(store, org, id, await gateway.get(String(captured.p.billId)), clock, readIdentity);
-  return store.transact(async tx => { await member(tx, org, uid); return membershipPaymentView(membershipPayment(await tx.get(paymentPath(org, id)), org, id)); });
+  return store.transact(async tx => { await member(tx, org, uid, auth); return membershipPaymentView(membershipPayment(await tx.get(paymentPath(org, id)), org, id)); });
 }
 export async function membershipRefund(store: DocumentStore, auth: Auth, raw: unknown, clock = Date.now) {
   const { d, org, uid } = context(auth, raw, ['transactionId', 'reason', 'notes']);
@@ -179,7 +185,7 @@ export async function membershipRefund(store: DocumentStore, auth: Auth, raw: un
   if (typeof d.reason !== 'string' || d.reason.trim().length < 5 || d.reason.length > 200 || typeof d.notes !== 'string' || d.notes.length > 2000) throw new DomainError('invalid-argument', 'Enter a refund reason and notes.');
   const reason = d.reason.trim(), notes = d.notes.trim();
   return store.transact(async tx => {
-    await member(tx, org, uid); const p = membershipPayment(await tx.get(paymentPath(org, id)), org, id), now = clock();
+    await member(tx, org, uid, auth); const p = membershipPayment(await tx.get(paymentPath(org, id)), org, id), now = clock();
     if (p.memberId !== uid) throw new DomainError('permission-denied', 'Own membership payment required.');
     if (p.paymentStatus !== 'cleared' || !Number.isSafeInteger(p.clearedAtMillis) || now < Number(p.clearedAtMillis) || now - Number(p.clearedAtMillis) > 7 * DAY) throw new DomainError('failed-precondition', 'Refund requests require a cleared payment within seven days.');
     if (p.refundStatus) return membershipPaymentView(p);
@@ -197,7 +203,7 @@ export async function membershipOverview(store: DocumentStore, auth: Auth, raw: 
   // Independent authorization sources may overlap; neither catalogue nor
   // history is queried until both have succeeded. No cross-request cache.
   const [, identity] = await Promise.all([
-    store.transact(tx => member(tx, org, uid)),
+    store.transact(tx => member(tx, org, uid, auth)),
     readIdentity?.(uid),
   ]);
   if (readIdentity && (!identity || !identity.exists || identity.disabled || !identity.emailVerified)) {
@@ -209,7 +215,7 @@ export async function membershipOverview(store: DocumentStore, auth: Auth, raw: 
     return { schemaVersion: 1, organizationId: org, memberId: uid, serverNowMillis: now, autoRenewSupported: false,
       entitlement,
       account: a ? { planId: a.planId ?? '', planName: a.planName ?? '', benefits: a.benefits ?? [], expiresAtMillis: a.expiresAtMillis ?? 0, status: Number(a.expiresAtMillis ?? 0) > now ? 'active' : 'expired' } : { status: 'none' },
-      plans: plans.filter(r => r.data.active === true).map(r => membershipPlan(r.id, r.data)),
+      plans: plans.filter(r => r.data.active === true && isSupportedPaidPlan(r.id)).map(r => membershipPlan(r.id, r.data)),
       transactions: payments.filter(r => ['MembershipPurchase', 'MembershipRenewal'].includes(String(r.data.kind)) && r.data.memberId === uid).map(r => membershipPaymentView(membershipPayment(r.data, org, r.id))).sort((a, b) => Number(b.createdAtMillis) - Number(a.createdAtMillis)) };
   });
 }
