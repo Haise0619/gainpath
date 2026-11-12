@@ -5,6 +5,20 @@ const now = 1800000000000, base = { schemaVersion: 1, organizationId: 'gainpath'
 function fixture() { const s = new MemoryStore(); s.documents.set('orgs/gainpath', { status: 'active' }); s.documents.set('users/member', { organizationId: 'gainpath', email: 'fixture@example.invalid', accountLifecycle: { schemaVersion: 1, state: 'active', revocationPending: false, sessionNotBeforeSeconds: 101 } }); s.documents.set('orgs/gainpath/members/member', { organizationId: 'gainpath', role: 'member', status: 'active', branchIds: [] }); for (const id of ['basic', 'elite'])
     s.documents.set(`orgs/gainpath/membershipPlans/${id}`, { active: true, name: id, currency: 'MYR', amountMinor: 8900, durationDays: 30, benefits: [], version: 'v1' }); return s; }
 const gateway = { create: async () => { throw Error('Must not create'); }, get: async () => { throw Error('Must not fetch'); } };
+it('expires a reviewed promo quote at the server boundary before creating a bill', async () => {
+  const store = fixture();
+  const fresh = {...auth, token: {email_verified: true, auth_time: 101}};
+  store.documents.set('orgs/gainpath/promoCodes/FIXTURE', {active: true, discountPercent: 10, validFromMillis: now - 1000, validToMillis: now + 1000, maxRedemptions: 1, currentRedemptions: 0, planIds: ['basic']});
+  const quote = await membershipQuote(store, fresh, {...base, planId: 'basic', promoCode: 'FIXTURE'}, () => now);
+  await expect(createMembershipPayment(store, fresh, {...base, planId: 'basic', promoCode: 'FIXTURE', quoteId: quote.quoteId, intent: 'purchase', requestId: 'r'}, gateway, () => now + 1000)).rejects.toMatchObject({reason: 'quote_expired', checkoutCreated: false});
+});
+it('rejects a pending checkout pointer to another Member without exposing their bill', async () => {
+  const store = fixture();
+  store.documents.set('orgs/gainpath/membershipAccounts/member', {organizationId: 'gainpath', memberId: 'member', pendingTransactionId: 'foreign'});
+  store.documents.set('orgs/gainpath/transactions/foreign', {organizationId: 'gainpath', memberId: 'other', transactionId: 'foreign', kind: 'MembershipPurchase', environment: 'sandbox', provider: 'billplz', currency: 'MYR', amountMinor: 8900, durationDays: 30, paymentStatus: 'pending', fulfilmentStatus: 'awaiting_payment'});
+  const fresh = {...auth, token: {email_verified: true, auth_time: 101}};
+  await expect(createMembershipPayment(store, fresh, {...base, planId: 'basic', intent: 'purchase', requestId: 'r'}, gateway, () => now)).rejects.toMatchObject({code: 'permission-denied'});
+});
 it.each(['quote', 'create', 'read', 'refund'])('rejects stale session before %s', async (action) => { const s = fixture(); const work = action === 'quote' ? membershipQuote(s, auth, { ...base, planId: 'basic' }, () => now) : action === 'create' ? createMembershipPayment(s, auth, { ...base, planId: 'basic', intent: 'purchase', requestId: 'r' }, gateway, () => now) : action === 'read' ? readMembershipPayment(s, auth, { ...base, transactionId: 't' }, gateway, () => now) : membershipRefund(s, auth, { ...base, transactionId: 't', reason: 'Fixture reason', notes: '' }, () => now); await expect(work).rejects.toMatchObject({ code: 'permission-denied' }); });
 it('rejects unsupported configured plan before provider reservation', async () => { const s = fixture(); const fresh = { ...auth, token: { ...auth.token, auth_time: 101 } }; await expect(membershipQuote(s, fresh, { ...base, planId: 'elite' }, () => now)).rejects.toMatchObject({ code: 'failed-precondition' }); });
 it.each([undefined, 100, 100.5])('denies absent/stale/noninteger auth_time %s at a lifecycle boundary', async (auth_time) => { const s = fixture(); await expect(membershipQuote(s, { ...auth, token: { email_verified: true, auth_time } }, { ...base, planId: 'basic' }, () => now)).rejects.toMatchObject({ code: 'permission-denied' }); });

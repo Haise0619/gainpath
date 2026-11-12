@@ -47,6 +47,9 @@ async function quote(tx: TransactionPort, org: string, d: DocumentData, now: num
     if (typeof d.promoCode !== 'string' || !/^[A-Z0-9_-]{1,64}$/.test(d.promoCode)) throw new DomainError('invalid-argument', 'Invalid promo code.');
     code = d.promoCode;
     promo = await tx.get(`${root(org)}/promoCodes/${code}`);
+    if (d.quoteId !== undefined && promo?.active === true && Number.isSafeInteger(promo.validToMillis) && now >= Number(promo.validToMillis)) {
+      throw new MembershipCheckoutError('quote_expired', 'The quoted promo has expired. Review a fresh quote.');
+    }
     if (!promo || promo.active !== true || !Number.isSafeInteger(promo.validFromMillis) || !Number.isSafeInteger(promo.validToMillis)
         || now < Number(promo.validFromMillis) || now >= Number(promo.validToMillis)
         || !Number.isSafeInteger(promo.maxRedemptions) || !Number.isSafeInteger(promo.currentRedemptions)
@@ -82,11 +85,17 @@ export async function createMembershipPayment(store: DocumentStore, auth: Auth, 
   const reserved = await store.transact(async tx => {
     await member(tx, org, uid, auth);
     const old = await tx.get(paymentPath(org, id));
-    if (old) { if (old.fingerprint !== fingerprint) throw new DomainError('already-exists', 'Checkout request already used.'); return { p: old, create: false }; }
+    if (old) {
+      const prior = membershipPayment(old, org, id);
+      if (prior.memberId !== uid) throw new DomainError('permission-denied', 'Own membership payment required.');
+      if (prior.fingerprint !== fingerprint) throw new DomainError('already-exists', 'Checkout request already used.');
+      return { p: prior, create: false };
+    }
     const a = await tx.get(accountPath(org, uid));
     // A new client request ID cannot bypass an unresolved checkout.
     if (typeof a?.pendingTransactionId === 'string' && a.pendingTransactionId) {
       const pending = membershipPayment(await tx.get(paymentPath(org, a.pendingTransactionId)), org, a.pendingTransactionId);
+      if (pending.memberId !== uid) throw new DomainError('permission-denied', 'Own membership payment required.');
       if (pending.paymentStatus !== 'cleared' && !['expired', 'failed'].includes(String(pending.fulfilmentStatus))) return { p: pending, create: false };
     }
     const now = clock(), q = await quote(tx, org, d, now), user = await tx.get(`users/${uid}`);

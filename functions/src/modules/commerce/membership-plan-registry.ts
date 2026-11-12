@@ -6,7 +6,7 @@ export function isSupportedPaidPlan(value: unknown): value is 'basic' | 'premium
 /** Only emitted before any new checkout reservation or external bill creation. */
 export class MembershipCheckoutError extends DomainError {
   readonly checkoutCreated = false;
-  constructor(readonly reason: 'quote_changed' | 'promo_invalid' | 'unsupported_plan', message: string) {
+  constructor(readonly reason: 'quote_changed' | 'quote_expired' | 'promo_invalid' | 'unsupported_plan', message: string) {
     super('failed-precondition', message);
   }
 }

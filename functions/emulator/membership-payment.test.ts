@@ -12,7 +12,7 @@ import { localFirestoreEmulator } from './loopback-emulator';
 const emulator = localFirestoreEmulator();
 let app: App, db: Firestore;
 const projectId = 'demo-gainpath-membership', now = 1800000000000;
-const base = { schemaVersion: 1, organizationId: 'gainpath', planId: 'fixture', intent: 'renewal' };
+const base = { schemaVersion: 1, organizationId: 'gainpath', planId: 'basic', intent: 'renewal' };
 const auth = (uid = 'member') => ({ uid, token: { email_verified: true } });
 let creates = 0;
 const bills = new Map<string, SandboxBill>();
@@ -35,9 +35,9 @@ beforeEach(async () => {
   for (const uid of ['member', 'other']) {
     batch.set(db.doc(`users/${uid}`), { organizationId: 'gainpath', email: `${uid}@example.invalid` });
     batch.set(db.doc(`orgs/gainpath/members/${uid}`), { organizationId: 'gainpath', role: 'member', status: 'active', branchIds: [] });
-    batch.set(db.doc(`orgs/gainpath/membershipAccounts/${uid}`), { planId: 'fixture', expiresAtMillis: now + 50000 });
+    batch.set(db.doc(`orgs/gainpath/membershipAccounts/${uid}`), { planId: 'basic', expiresAtMillis: now + 50000 });
   }
-  batch.set(db.doc('orgs/gainpath/membershipPlans/fixture'), { active: true, name: 'Synthetic test fixture', amountMinor: 10000, currency: 'MYR', durationDays: 30, benefits: [], version: 'test' });
+  batch.set(db.doc('orgs/gainpath/membershipPlans/basic'), { active: true, name: 'Synthetic test fixture', amountMinor: 10000, currency: 'MYR', durationDays: 30, benefits: [], version: 'test' });
   await batch.commit();
 });
 afterAll(async () => { await db?.terminate(); if (app) await deleteApp(app); });
@@ -47,7 +47,7 @@ it('reads Free then verified paid then expired entitlement without mutating paid
   const resolve = (at: number) => store.transact(tx => resolveMembershipEntitlement(tx, auth(), 'gainpath', at));
   expect(await resolve(now)).toMatchObject({ effectiveTier: 'free', paidExpiresAtMillis: null });
   expect((await account.get()).exists).toBe(false);
-  const plan = (await db.doc('orgs/gainpath/membershipPlans/fixture').get()).data()!;
+  const plan = (await db.doc('orgs/gainpath/membershipPlans/basic').get()).data()!;
   await db.doc('orgs/gainpath/membershipPlans/basic').set(plan);
   const payment = await createMembershipPayment(store, auth(), { ...base, intent: 'purchase', planId: 'basic', requestId: 'basic' }, gateway, () => now);
   const id = String(payment.transactionId);
@@ -69,7 +69,7 @@ it('reserves one provider bill during real Firestore transaction contention', as
   expect((await db.doc('orgs/gainpath/membershipAccounts/member').get()).data()?.expiresAtMillis).toBe(now + 50000 + 30 * 86400000);
 });
 it('allocates the final promo capacity to at most one concurrent Member', async () => {
-  await db.doc('orgs/gainpath/promoCodes/LAST').set({ active: true, discountPercent: 10, validFromMillis: now - 1, validToMillis: now + 10000, planIds: ['fixture'], currentRedemptions: 0, maxRedemptions: 1 });
+  await db.doc('orgs/gainpath/promoCodes/LAST').set({ active: true, discountPercent: 10, validFromMillis: now - 1, validToMillis: now + 10000, planIds: ['basic'], currentRedemptions: 0, maxRedemptions: 1 });
   const results = await Promise.allSettled(['member', 'other'].map(uid => createMembershipPayment(new FirestoreStore(db), auth(uid), { ...base, requestId: uid, promoCode: 'LAST' }, gateway, () => now)));
   expect(results.filter(r => r.status === 'fulfilled')).toHaveLength(1);
   expect(creates).toBe(1);
@@ -88,7 +88,7 @@ it('existing Rules deny direct financial writes and cross-account ledger reads',
   const env = await initializeTestEnvironment({ projectId, firestore: { host: emulator.host, port: emulator.port, rules: readFileSync('../firebase/firestore.rules', 'utf8') } });
   try {
     const client = env.authenticatedContext('member', { email_verified: true }).firestore();
-    for (const path of ['orgs/gainpath/membershipAccounts/member', 'orgs/gainpath/transactions/forged', 'orgs/gainpath/membershipPlans/fixture', 'orgs/gainpath/promoCodes/CODE']) {
+    for (const path of ['orgs/gainpath/membershipAccounts/member', 'orgs/gainpath/transactions/forged', 'orgs/gainpath/membershipPlans/basic', 'orgs/gainpath/promoCodes/CODE']) {
       await assertFails(setDoc(doc(client, path), { expiresAtMillis: now + 9999999999, amountMinor: 1, status: 'cleared' }));
     }
     await assertFails(getDoc(doc(client, 'orgs/gainpath/transactions/other-members-payment')));
