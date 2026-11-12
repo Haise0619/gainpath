@@ -112,10 +112,11 @@ class _AdminShellState extends State<AdminShell> {
   int _index = 0;
   String? _scopedCoachIdForBookings;
   String? _scopedCoachIdForSchedule;
+  String? _scopedCoachIdForReview;
   String? _notificationCoachId;
   int _notificationReviewGeneration = 0;
   final Set<int> _visited = {0};
-  final Set<String> _expanded = {'Users & Coaches'};
+  final Set<String> _expanded = {'Users & Coaches', 'Payments'};
   final _scaffoldKey = GlobalKey<ScaffoldState>();
 
   void _openRewardCollection() {
@@ -147,7 +148,7 @@ class _AdminShellState extends State<AdminShell> {
         AdminDashboardScreen(
             live: widget.liveSession != null,
             liveSession: widget.liveSession,
-            onOpenRefunds: () => _select(_indexOfLabel('Refunds')),
+            onOpenRefunds: () => _select(_indexOfLabel('Refund Requests')),
             onOpenCoaches: () => _select(_indexOfLabel('Coaches')),
             onProcessVoucher: _openRewardCollection)),
     _NavGroup(
@@ -176,14 +177,42 @@ class _AdminShellState extends State<AdminShell> {
             live: widget.liveSession != null,
             insightsRepository: _fypRecommendations?.insights,
             queueRepository: _fypRecommendations?.queue)),
-    _NavPage(
-        Icons.receipt_long_outlined,
-        Icons.receipt_long_rounded,
-        'Refunds',
-        'Reconcile booking payments and review sandbox refunds',
-        widget.liveSession == null
-            ? const RefundsScreen()
-            : AdminPaymentReviewRoute(session: widget.liveSession!)),
+    _NavGroup(
+        Icons.payments_outlined, Icons.payments_rounded, 'Payments', [
+      _NavPage(
+          Icons.receipt_long_outlined,
+          Icons.receipt_long_rounded,
+          'Transactions',
+          'Track membership and coaching payments',
+          widget.liveSession == null
+              ? const PaymentsScreen(mode: PaymentsMode.transactions)
+              : AdminPaymentReviewRoute(
+                  session: widget.liveSession!,
+                  mode: PaymentsMode.transactions,
+                  onNavigateMode: _navigateToPaymentMode)),
+      _NavPage(
+          Icons.assignment_return_outlined,
+          Icons.assignment_return_rounded,
+          'Refund Requests',
+          'Review and manage member refund requests',
+          widget.liveSession == null
+              ? const PaymentsScreen(mode: PaymentsMode.refunds)
+              : AdminPaymentReviewRoute(
+                  session: widget.liveSession!,
+                  mode: PaymentsMode.refunds,
+                  onNavigateMode: _navigateToPaymentMode)),
+      _NavPage(
+          Icons.troubleshoot_outlined,
+          Icons.troubleshoot_rounded,
+          'Reconciliation',
+          'Investigate uncertain payments and resolve processing exceptions',
+          widget.liveSession == null
+              ? const PaymentsScreen(mode: PaymentsMode.reconciliation)
+              : AdminPaymentReviewRoute(
+                  session: widget.liveSession!,
+                  mode: PaymentsMode.reconciliation,
+                  onNavigateMode: _navigateToPaymentMode)),
+    ]),
     _NavGroup(Icons.folder_outlined, Icons.folder_rounded, 'Content', [
       _NavPage(
           Icons.video_library_outlined,
@@ -261,8 +290,31 @@ class _AdminShellState extends State<AdminShell> {
     return pages;
   }
 
-  int _indexOfLabel(String label) =>
-      _flatPages.indexWhere((p) => p.label == label);
+  void _navigateToPaymentMode(PaymentsMode mode) {
+    final label = switch (mode) {
+      PaymentsMode.transactions => 'Transactions',
+      PaymentsMode.refunds => 'Refund Requests',
+      PaymentsMode.reconciliation => 'Reconciliation',
+    };
+    _select(_indexOfLabel(label));
+  }
+
+  int _indexOfLabel(String label) {
+    final index = _flatPages.indexWhere((p) => p.label == label);
+    if (index != -1) return index;
+    if (label == 'Refunds') {
+      final refundReqIndex =
+          _flatPages.indexWhere((p) => p.label == 'Refund Requests');
+      if (refundReqIndex != -1) return refundReqIndex;
+      return _flatPages.indexWhere((p) => p.label == 'Transactions');
+    }
+    if (label == 'Payments') {
+      final txIndex = _flatPages.indexWhere((p) => p.label == 'Transactions');
+      if (txIndex != -1) return txIndex;
+      return _flatPages.indexWhere((p) => p.label == 'Refund Requests');
+    }
+    return -1;
+  }
 
   String? _groupLabelFor(int flatIndex) {
     var cursor = 0;
@@ -302,13 +354,15 @@ class _AdminShellState extends State<AdminShell> {
           'Home',
           _index == 0 &&
                   _scopedCoachIdForBookings == null &&
-                  _scopedCoachIdForSchedule == null
+                  _scopedCoachIdForSchedule == null &&
+                  _scopedCoachIdForReview == null
               ? null
               : () => _select(0))
     ];
     if (_index == 0 &&
         _scopedCoachIdForBookings == null &&
-        _scopedCoachIdForSchedule == null) {
+        _scopedCoachIdForSchedule == null &&
+        _scopedCoachIdForReview == null) {
       return crumbs;
     }
     final group = _groupLabelFor(_index);
@@ -323,6 +377,12 @@ class _AdminShellState extends State<AdminShell> {
       crumbs.add(_Crumb(_flatPages[_index].label,
           () => setState(() => _scopedCoachIdForSchedule = null)));
       crumbs.add(_Crumb('Coach Schedule ($_scopedCoachIdForSchedule)', null));
+    } else if (_scopedCoachIdForReview != null) {
+      crumbs.add(_Crumb(_flatPages[_index].label, () async {
+        if (!await _coachReviewGuard.canLeave() || !mounted) return;
+        setState(() => _scopedCoachIdForReview = null);
+      }));
+      crumbs.add(const _Crumb('Coach Profile Review', null));
     } else {
       crumbs.add(_Crumb(_flatPages[_index].label, null));
     }
@@ -338,6 +398,7 @@ class _AdminShellState extends State<AdminShell> {
       _index = flatIndex;
       _scopedCoachIdForBookings = null;
       _scopedCoachIdForSchedule = null;
+      _scopedCoachIdForReview = null;
       _visited.add(flatIndex);
       if (owner != null) _expanded.add(owner);
     });
@@ -362,6 +423,7 @@ class _AdminShellState extends State<AdminShell> {
       _expanded.add('Users & Coaches');
       _scopedCoachIdForBookings = null;
       _scopedCoachIdForSchedule = null;
+      _scopedCoachIdForReview = coachId;
       _notificationCoachId = coachId;
       _notificationReviewGeneration++;
     });
@@ -452,7 +514,7 @@ class _AdminShellState extends State<AdminShell> {
                             }
                             return CoachesScreen(
                                 key: ValueKey(_notificationReviewGeneration),
-                                initialCoachId: _notificationCoachId,
+                                initialCoachId: _scopedCoachIdForReview ?? _notificationCoachId,
                                 discardGuard: _coachReviewGuard,
                                 live: true,
                                 onOpenBookings: (id) => setState(() {
@@ -462,6 +524,9 @@ class _AdminShellState extends State<AdminShell> {
                                 onOpenSchedule: (id) => setState(() {
                                       _scopedCoachIdForSchedule = id;
                                       _scopedCoachIdForBookings = null;
+                                    }),
+                                onReviewChanged: (id) => setState(() {
+                                      _scopedCoachIdForReview = id;
                                     }));
                           }
                           return d.page;

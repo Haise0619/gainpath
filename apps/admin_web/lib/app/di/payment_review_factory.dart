@@ -7,8 +7,16 @@ import '../../features/membership/presentation/admin/refunds_screen.dart';
 import 'catalog_edit_session_guard.dart';
 
 class AdminPaymentReviewRoute extends StatefulWidget {
-  const AdminPaymentReviewRoute({super.key, required this.session});
+  const AdminPaymentReviewRoute({
+    super.key,
+    required this.session,
+    this.mode = PaymentsMode.transactions,
+    this.onNavigateMode,
+  });
   final AuthSession session;
+  final PaymentsMode mode;
+  final ValueChanged<PaymentsMode>? onNavigateMode;
+
   @override
   State<AdminPaymentReviewRoute> createState() =>
       _AdminPaymentReviewRouteState();
@@ -40,10 +48,12 @@ class _AdminPaymentReviewRouteState extends State<AdminPaymentReviewRoute> {
   @override
   Widget build(BuildContext context) => BlocBuilder<AuthBloc, AuthState>(
       builder: (_, state) => _guard!.isCurrent()
-          ? RefundsScreen(
+          ? PaymentsScreen(
               live: true,
               repository: _repository!,
-              isCurrent: _guard!.isCurrent)
+              isCurrent: _guard!.isCurrent,
+              mode: widget.mode,
+              onNavigateMode: widget.onNavigateMode)
           : const Center(
               child: Text('Payment review unavailable for this session.')));
 }

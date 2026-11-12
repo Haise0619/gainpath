@@ -145,6 +145,121 @@ class PaymentReviewRecord {
       (text('refundStatus').isEmpty ||
           ['pending_review', 'rejected', 'approved']
               .contains(text('refundStatus')));
+
+  /// Payment lifecycle status label (Paid & verified vs Pending payment)
+  String get paymentLifecycleLabel => switch (text('paymentStatus')) {
+        'cleared' => 'Paid & verified',
+        'pending' => 'Pending payment',
+        _ => text('paymentStatus'),
+      };
+
+  /// Fulfillment lifecycle status label (Membership activation or Booking fulfillment)
+  String get fulfillmentLifecycleLabel => isMembership
+      ? switch (text('fulfilmentStatus')) {
+          'confirmed' => 'Membership activated',
+          'reconciliation_required' => 'Activation requires review',
+          'awaiting_payment' => 'Awaiting payment',
+          'expired' => 'Payment expired',
+          'failed' => 'Activation failed',
+          'creating' => 'Order creating',
+          _ => text('fulfilmentStatus'),
+        }
+      : switch (text('fulfilmentStatus')) {
+          'confirmed' => 'Booking confirmed',
+          'reconciliation_required' => 'Booking requires review',
+          'awaiting_payment' => 'Awaiting payment',
+          'expired' => 'Payment expired',
+          'failed' => 'Booking failed',
+          'creating' => 'Order creating',
+          _ => text('fulfilmentStatus'),
+        };
+
+  /// Refund lifecycle status label
+  String? get refundLifecycleLabel {
+    final status = text('refundStatus');
+    if (status.isEmpty) return null;
+    return switch (status) {
+      'pending_review' => 'Refund requested · Pending review',
+      'approved' => 'Approved · Refund pending execution',
+      'rejected' => 'Refund declined',
+      'processing' => 'Sandbox refund processing',
+      'uncertain' => 'Refund outcome uncertain',
+      'completed' => 'Sandbox refund completed',
+      'failed' => 'Sandbox refund failed',
+      _ => status,
+    };
+  }
+
+  /// Human-readable business reference (e.g. "Basic Membership Purchase", "Coach Booking — Hafiz Aziz")
+  String get businessTitle {
+    if (isMembership) {
+      final plan = text('planName').isNotEmpty ? text('planName') : 'Membership';
+      final action = text('kind') == 'MembershipRenewal' ? 'Renewal' : 'Purchase';
+      return '$plan $action';
+    }
+    final coach = text('coachName').isNotEmpty ? text('coachName') : 'Coach';
+    return 'Coach Booking — $coach';
+  }
+
+  /// Clean display name for member
+  String get memberDisplay {
+    final name = text('memberDisplayName').trim();
+    if (name.isNotEmpty) return name;
+    final id = text('memberId').trim();
+    return id.isNotEmpty ? id : 'Member';
+  }
+
+  /// Human-readable short ID for table density
+  String get shortId => id.length > 14 ? '${id.substring(0, 10)}…' : id;
+
+  /// Exception category for reconciliation
+  String get reconciliationCategory {
+    if (text('resolutionReason') == 'bill_creation_uncertain') {
+      return 'Provider bill creation uncertain';
+    }
+    if (text('refundStatus') == 'uncertain') {
+      return 'Provider refund result uncertain';
+    }
+    if (isMembership && text('fulfilmentStatus') == 'reconciliation_required') {
+      return 'Membership activation requires review';
+    }
+    if (!isMembership && text('fulfilmentStatus') == 'reconciliation_required') {
+      return 'Booking fulfillment requires review';
+    }
+    if (text('paymentStatus') == 'pending' && needsReview) {
+      return 'Payment verification required';
+    }
+    return 'Manual payment review required';
+  }
+
+  /// True if this record has a refund request, active refund, or refund history
+  bool get isRefundCase =>
+      text('refundStatus').isNotEmpty || text('refundReference').isNotEmpty;
+
+  /// True if this record requires operational reconciliation
+  bool get isReconciliationCase => needsReview;
+
+  /// Formatted date string for table rows (e.g. "20 Oct 2026, 10:00 AM")
+  String get formattedDate =>
+      _formatTimestamp(data['createdAtMillis'] ?? data['updatedAtMillis']);
+
+  /// Formatted update date string
+  String get formattedUpdatedDate =>
+      _formatTimestamp(data['updatedAtMillis'] ?? data['createdAtMillis']);
+
+  static String _formatTimestamp(dynamic millis) {
+    if (millis is! num || millis <= 0) return 'Date unavailable';
+    final dt = DateTime.fromMillisecondsSinceEpoch(millis.toInt()).toLocal();
+    const months = [
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+    ];
+    final month = months[dt.month - 1];
+    final hour = dt.hour % 12 == 0 ? 12 : dt.hour % 12;
+    final minute = dt.minute.toString().padLeft(2, '0');
+    final ampm = dt.hour >= 12 ? 'PM' : 'AM';
+    return '${dt.day} $month ${dt.year}, $hour:$minute $ampm';
+  }
 }
 
 class PaymentReviewPage {
