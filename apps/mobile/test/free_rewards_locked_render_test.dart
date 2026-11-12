@@ -16,6 +16,7 @@ import '../../../test_support/fyp_render_support.dart';
 import 'support/module13_demo_render.dart' show loadDemoRenderFonts;
 import 'app_check_in_test.dart' show snapshotJson;
 import 'reward_goal_card_test.dart' show GoalRewards, Goals;
+import 'free_rewards_locked_preview_test.dart' show PreviewContentReader;
 
 void main() {
   setUpAll(loadDemoRenderFonts);
@@ -26,6 +27,25 @@ void main() {
         t.view.physicalSize = Size(width, 844);
         t.view.devicePixelRatio = 1;
         addTearDown(t.view.reset);
+        const coverDirectory = String.fromEnvironment('GAINPATH_GAME_COVER_DIR');
+        if (coverDirectory.isNotEmpty) {
+          for (final id in [
+            MiniGameContent.supportedId,
+            MiniGameContent.reachTapId
+          ]) {
+            final file = File('$coverDirectory/$id.cover');
+            await t.runAsync(() async {
+              final codec =
+                  await ui.instantiateImageCodec(await file.readAsBytes());
+              final frame = await codec.getNextFrame();
+              PaintingBinding.instance.imageCache.putIfAbsent(
+                  NetworkImage('https://example.invalid/$id.png'),
+                  () => OneFrameImageStreamCompleter(
+                      Future.value(ImageInfo(image: frame.image))));
+              codec.dispose();
+            });
+          }
+        }
         final scope =
             SessionScope(userId: 'free-render', organizationId: 'gainpath');
         final repo = GoalRewards()
@@ -64,9 +84,11 @@ void main() {
                   claims++;
                 },
                 onRefresh: () async {},
-                gamesSection: FreeMiniGamesPreview(onViewPlans: () async {
-                  plans++;
-                }),
+                gamesSection: FreeMiniGamesPreview(
+                    reader: PreviewContentReader(),
+                    onViewPlans: () async {
+                      plans++;
+                    }),
                 weeklyRankSection:
                     FitnessArcadeRank(repository: repo, onTap: () {}),
                 rewardGoalSection: RewardGoalCard(

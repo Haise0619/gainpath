@@ -1,8 +1,79 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:gainpath_domain/gainpath_domain.dart' show SessionScope;
+import 'package:gainpath_domain/gamification.dart';
 import 'package:gainpath_mobile/features/gamification/presentation/member/locked_rewards_preview.dart';
+import 'package:gainpath_mobile/features/gamification/presentation/member/mini_game_details_screen.dart';
+
+class PreviewContentReader implements MiniGameContentReader {
+  @override
+  final scope = SessionScope(userId: 'member', organizationId: 'gainpath');
+  @override
+  bool current = true;
+  int reads = 0;
+  Completer<List<MiniGameContent>>? waiting;
+  @override
+  Future<List<MiniGameContent>> load() async {
+    reads++;
+    return waiting?.future ??
+        Future.value([
+          for (final id in [
+            MiniGameContent.supportedId,
+            MiniGameContent.reachTapId
+          ])
+            MiniGameContent(
+                organizationId: 'gainpath',
+                gameId: id,
+                title: MiniGameContent.defaults('gainpath', gameId: id).title,
+                introduction: 'Published game',
+                instructions: const ['Move safely'],
+                coverUrl: 'https://example.invalid/$id.png',
+                revision: 1),
+        ]);
+  }
+}
 
 void main() {
+  testWidgets('Free preview uses configured cover URLs from the content reader',
+      (t) async {
+    final reader = PreviewContentReader();
+    await t.pumpWidget(MaterialApp(
+        home: Scaffold(
+            body: SingleChildScrollView(
+                child: FreeMiniGamesPreview(
+                    reader: reader, onViewPlans: () async {})))));
+    await t.pumpAndSettle();
+    expect(reader.reads, 1);
+    final covers = t.widgetList<MiniGameCover>(find.byType(MiniGameCover));
+    expect(covers.map((cover) => cover.content.coverUrl), [
+      'https://example.invalid/move-catch-v1.png',
+      'https://example.invalid/reach-tap-v1.png'
+    ]);
+  });
+  testWidgets('late preview covers are discarded when the session changes',
+      (t) async {
+    final reader = PreviewContentReader()
+      ..waiting = Completer<List<MiniGameContent>>();
+    await t.pumpWidget(MaterialApp(
+        home: Scaffold(
+            body: SingleChildScrollView(
+                child: FreeMiniGamesPreview(
+                    reader: reader, onViewPlans: () async {})))));
+    await t.pump();
+    reader.current = false;
+    reader.waiting!.complete([
+      MiniGameContent(
+          organizationId: 'gainpath',
+          title: 'Old account title',
+          introduction: '',
+          instructions: const [],
+          coverUrl: 'https://example.invalid/old.png')
+    ]);
+    await t.pumpAndSettle();
+    expect(find.text('Old account title'), findsNothing);
+    expect(find.byType(MiniGameDetailsScreen), findsNothing);
+  });
   testWidgets('reduced motion skips the preview fade', (t) async {
     await t.pumpWidget(MaterialApp(
         builder: (context, child) => MediaQuery(

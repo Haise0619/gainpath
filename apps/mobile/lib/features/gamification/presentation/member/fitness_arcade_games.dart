@@ -3,7 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:gainpath_domain/gamification.dart';
 import 'package:gainpath_domain/membership.dart';
-import 'package:gainpath_domain/gainpath_domain.dart' show AppRole;
+import 'package:gainpath_domain/gainpath_domain.dart' show AppRole, AuthSession;
+import '../../../../infrastructure/firebase/firebase_mini_game_content_reader.dart';
 import 'package:gainpath_identity/gainpath_identity.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
 import '../../application/mini_game_content_feature_host.dart';
@@ -28,6 +29,22 @@ class FitnessArcadeHost extends StatefulWidget {
 }
 
 class _FitnessArcadeHostState extends State<FitnessArcadeHost> {
+  AuthSession? _previewSession;
+  MiniGameContentReader? _previewReader;
+  MiniGameContentReader _coverReader(AuthBloc auth, AuthSession session) {
+    if (!identical(_previewSession, session)) {
+      _previewSession = session;
+      _previewReader = FirebaseMiniGameContentReader(
+          scope: session.scope,
+          isCurrent: () =>
+              mounted &&
+              identical(auth.state.session, session) &&
+              AuthRolePolicy.canEnter(auth.state,
+                  allowed: const {AppRole.member}));
+    }
+    return _previewReader!;
+  }
+
   @override
   Widget build(BuildContext context) {
     final auth = context.read<AuthBloc?>();
@@ -44,8 +61,9 @@ class _FitnessArcadeHostState extends State<FitnessArcadeHost> {
               enabled: true,
               feature: MembershipAccessFeature.miniGame,
               resourceId: 'fitness-arcade',
-              freePreviewBuilder: (_, viewPlans) =>
-                  FreeMiniGamesPreview(onViewPlans: viewPlans),
+              freePreviewBuilder: (_, viewPlans) => FreeMiniGamesPreview(
+                  onViewPlans: viewPlans,
+                  reader: _coverReader(auth, auth.state.session!)),
               child: MiniGameContentFeatureHost(
                   key: ObjectKey(auth.state.session),
                   builder: (reader, best, _, participation) => Builder(

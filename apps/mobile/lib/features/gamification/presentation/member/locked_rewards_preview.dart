@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:gainpath_domain/gamification.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
@@ -41,14 +42,14 @@ class LockedRewardsPreview extends StatelessWidget {
           Container(
               padding: const EdgeInsets.all(6),
               decoration: const BoxDecoration(
-                  color: AppColors.primaryTint, shape: BoxShape.circle),
+                  color: AppColors.accentTint, shape: BoxShape.circle),
               child: Container(
                   width: 46,
                   height: 46,
                   decoration: const BoxDecoration(
-                      gradient: AppColors.heroGradient, shape: BoxShape.circle),
+                      color: AppColors.accent, shape: BoxShape.circle),
                   child: const Icon(Icons.lock_outline_rounded,
-                      color: Colors.white, size: 24))),
+                      color: AppColors.primaryDark, size: 24))),
           const SizedBox(height: 12),
           Text(title,
               textAlign: TextAlign.center,
@@ -85,12 +86,22 @@ class LockedRewardsPreview extends StatelessWidget {
                     const Text('Browse rewards', textAlign: TextAlign.center)),
         ]));
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-      Text(sectionTitle,
-          style: const TextStyle(
-              color: AppColors.ink,
-              fontSize: 19,
-              height: 1.25,
-              fontWeight: FontWeight.w800)),
+      Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Container(
+            width: 4,
+            height: 19,
+            margin: const EdgeInsets.only(top: 3, right: 9),
+            decoration: BoxDecoration(
+                color: AppColors.accent,
+                borderRadius: BorderRadius.circular(4))),
+        Expanded(
+            child: Text(sectionTitle,
+                style: const TextStyle(
+                    color: AppColors.ink,
+                    fontSize: 19,
+                    height: 1.25,
+                    fontWeight: FontWeight.w800))),
+      ]),
       const SizedBox(height: 12),
       DecoratedBox(
           decoration: BoxDecoration(
@@ -108,7 +119,7 @@ class LockedRewardsPreview extends StatelessWidget {
                     child: ExcludeFocus(
                         child: ExcludeSemantics(
                             child: Opacity(
-                                opacity: .62,
+                                opacity: .78,
                                 child: Padding(
                                     padding: const EdgeInsets.fromLTRB(
                                         12, 12, 12, 30),
@@ -134,9 +145,57 @@ class LockedRewardsPreview extends StatelessWidget {
   }
 }
 
-class FreeMiniGamesPreview extends StatelessWidget {
-  const FreeMiniGamesPreview({super.key, required this.onViewPlans});
+class FreeMiniGamesPreview extends StatefulWidget {
+  const FreeMiniGamesPreview(
+      {super.key, required this.onViewPlans, this.reader});
   final Future<void> Function() onViewPlans;
+  final MiniGameContentReader? reader;
+  @override
+  State<FreeMiniGamesPreview> createState() => _FreeMiniGamesPreviewState();
+}
+
+class _FreeMiniGamesPreviewState extends State<FreeMiniGamesPreview> {
+  Map<String, MiniGameContent> _games = {};
+  int _generation = 0;
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_load());
+  }
+
+  @override
+  void didUpdateWidget(FreeMiniGamesPreview oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!identical(oldWidget.reader, widget.reader)) {
+      _games = {};
+      unawaited(_load());
+    }
+  }
+
+  Future<void> _load() async {
+    final reader = widget.reader, generation = ++_generation;
+    if (reader == null || !reader.current) return;
+    try {
+      final games = await reader.load();
+      if (!mounted || generation != _generation || !reader.current) return;
+      if (games.any((game) =>
+              game.organizationId != reader.scope.organizationId ||
+              !MiniGameContent.supportedIds.contains(game.gameId)) ||
+          games.map((game) => game.gameId).toSet().length != games.length) {
+        return;
+      }
+      setState(() => _games = {for (final game in games) game.gameId: game});
+    } catch (_) {
+      // Built-in art remains an honest fallback when published covers cannot load.
+    }
+  }
+
+  @override
+  void dispose() {
+    _generation++;
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) => LockedRewardsPreview(
       sectionTitle: 'Play Mini-Games',
@@ -145,7 +204,7 @@ class FreeMiniGamesPreview extends StatelessWidget {
           'Unlock Mini-Games with Basic or Premium. Keep earning your daily check-in points for free.',
       previewLabel:
           'Move & Catch and Reach & Tap. Mini-Games require Basic or Premium membership.',
-      onViewPlans: onViewPlans,
+      onViewPlans: widget.onViewPlans,
       child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
         for (final id in [
           MiniGameContent.supportedId,
@@ -154,7 +213,10 @@ class FreeMiniGamesPreview extends StatelessWidget {
           if (id == MiniGameContent.reachTapId) const SizedBox(width: 10),
           Expanded(
               child: _GamePreview(
-                  content: MiniGameContent.defaults('preview', gameId: id))),
+                  content: widget.reader?.current == false
+                      ? MiniGameContent.defaults('preview', gameId: id)
+                      : _games[id] ??
+                          MiniGameContent.defaults('preview', gameId: id))),
         ],
       ]));
 }
@@ -173,7 +235,7 @@ class _GamePreview extends StatelessWidget {
         ClipRRect(
             borderRadius: BorderRadius.circular(11),
             child: AspectRatio(
-                aspectRatio: 1.25, child: MiniGameCover(content: content))),
+                aspectRatio: 16 / 9, child: MiniGameCover(content: content))),
         const SizedBox(height: 10),
         Text(content.title,
             style: const TextStyle(
@@ -203,7 +265,7 @@ class FreeRewardGoalPreview extends StatelessWidget {
       title: 'Your points have possibilities',
       description: item?.premiumOnly == true
           ? 'Keep saving your points. This reward is exclusive to Premium members.'
-            : 'Keep saving your points. Turn them into gym rewards with Basic or Premium.',
+          : 'Keep saving your points. Turn them into gym rewards with Basic or Premium.',
       previewLabel: item == null
           ? 'Reward shop preview. No published rewards available yet.'
           : '${item!.title}. ${item!.pointCost} points. Redemption requires membership.',
