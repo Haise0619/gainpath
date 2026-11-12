@@ -63,16 +63,16 @@ class MemberProgressOverview extends StatelessWidget {
     final days = workoutStartDays(progress, routines?.records ?? const []);
 
     // Guided & Manual stats from routines
-    final guidedMicros = (routines?.records ?? const []).fold<int>(
-        0, (sum, r) => sum + r.guidedDurationMicros);
+    final guidedMicros = (routines?.records ?? const [])
+        .fold<int>(0, (sum, r) => sum + r.guidedDurationMicros);
     final guidedSets = (routines?.records ?? const []).fold<int>(
         0,
         (sum, r) =>
             sum +
-            r.entries.fold<int>(
-                0, (s2, e) => s2 + (e.guided?.completedSets ?? 0)));
-    final manualSets = (routines?.records ?? const []).fold<int>(
-        0, (sum, r) => sum + r.selfReportedSets);
+            r.entries
+                .fold<int>(0, (s2, e) => s2 + (e.guided?.completedSets ?? 0)));
+    final manualSets = (routines?.records ?? const [])
+        .fold<int>(0, (sum, r) => sum + r.selfReportedSets);
 
     Widget summary(BuildContext context, int? completed, [int? scheduled]) =>
         Container(
@@ -184,9 +184,7 @@ class MemberProgressOverview extends StatelessWidget {
       const SizedBox(height: 24),
       const Text('Training activity',
           style: TextStyle(
-              color: AppColors.ink,
-              fontSize: 20,
-              fontWeight: FontWeight.w700)),
+              color: AppColors.ink, fontSize: 20, fontWeight: FontWeight.w700)),
       const SizedBox(height: 4),
       const Text(
           'Breakdown of camera-tracked, video-guided, and manual workouts',
@@ -243,51 +241,39 @@ class MemberProgressOverview extends StatelessWidget {
       const SizedBox(height: 24),
       const Text('AI Form Assessments',
           style: TextStyle(
-              color: AppColors.ink,
-              fontSize: 20,
-              fontWeight: FontWeight.w700)),
+              color: AppColors.ink, fontSize: 20, fontWeight: FontWeight.w700)),
       const SizedBox(height: 4),
       const Text('Rule-based form estimates for camera-tracked exercises',
           style: TextStyle(color: AppColors.inkSoft, fontSize: 13)),
       const SizedBox(height: 12),
       Panel(
-          child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-            _formExerciseRow(
-                'Squat',
-                _latestRecord(progress, 'squat'),
-                true,
-                Icons.fitness_center_rounded),
-            const Divider(height: 16, color: AppColors.hairline),
-            _formExerciseRow(
-                'Biceps Curl',
-                _latestRecord(progress, 'curl'),
-                true,
-                Icons.fitness_center_rounded),
-            const Divider(height: 16, color: AppColors.hairline),
-            _formExerciseRow(
-                'Calf Raise',
-                _latestRecord(progress, 'calf'),
-                true,
-                Icons.fitness_center_rounded),
-            const Divider(height: 16, color: AppColors.hairline),
-            _formExerciseRow(
-                'Floor Push-Up',
-                _latestRecord(progress, 'push-up') ??
-                    _latestRecord(progress, 'push_up'),
-                true,
-                Icons.fitness_center_rounded),
-            const Divider(height: 16, color: AppColors.hairline),
-            _formExerciseRow('Standing Lateral Raise', null, false,
-                Icons.accessibility_new_rounded),
-            const Divider(height: 16, color: AppColors.hairline),
-            _formExerciseRow('Dumbbell Shoulder Press', null, false,
-                Icons.accessibility_new_rounded),
-            const SizedBox(height: 12),
-            _quick('Estimated Form Scores', Icons.accessibility_new_rounded,
-                onForm, double.infinity),
-          ])),
+          child:
+              Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        _formExerciseRow('Squat', _latestRecord(progress, 'squat'), true,
+            Icons.fitness_center_rounded),
+        const Divider(height: 16, color: AppColors.hairline),
+        _formExerciseRow('Biceps Curl', _latestRecord(progress, 'curl'), true,
+            Icons.fitness_center_rounded),
+        const Divider(height: 16, color: AppColors.hairline),
+        _formExerciseRow('Calf Raise', _latestRecord(progress, 'calf'), true,
+            Icons.fitness_center_rounded),
+        const Divider(height: 16, color: AppColors.hairline),
+        _formExerciseRow(
+            'Floor Push-Up',
+            _latestRecord(progress, 'push-up') ??
+                _latestRecord(progress, 'push_up'),
+            true,
+            Icons.fitness_center_rounded),
+        const Divider(height: 16, color: AppColors.hairline),
+        _formExerciseRow('Standing Lateral Raise', null, false,
+            Icons.accessibility_new_rounded),
+        const Divider(height: 16, color: AppColors.hairline),
+        _formExerciseRow('Dumbbell Shoulder Press', null, false,
+            Icons.accessibility_new_rounded),
+        const SizedBox(height: 12),
+        _quick('Estimated Form Scores', Icons.accessibility_new_rounded, onForm,
+            double.infinity),
+      ])),
 
       // ---------------------------------------------------------
       // SECTION 4: Goals & More
@@ -295,16 +281,12 @@ class MemberProgressOverview extends StatelessWidget {
       const SizedBox(height: 24),
       const Text('Goals & history',
           style: TextStyle(
-              color: AppColors.ink,
-              fontSize: 20,
-              fontWeight: FontWeight.w700)),
+              color: AppColors.ink, fontSize: 20, fontWeight: FontWeight.w700)),
       const SizedBox(height: 8),
       if (goals != null) ...[goals!, const SizedBox(height: 16)],
       const Text('Recent workouts',
           style: TextStyle(
-              color: AppColors.ink,
-              fontSize: 16,
-              fontWeight: FontWeight.w700)),
+              color: AppColors.ink, fontSize: 16, fontWeight: FontWeight.w700)),
       const SizedBox(height: 8),
       if (report.timeline.isEmpty)
         Panel(
@@ -317,9 +299,7 @@ class MemberProgressOverview extends StatelessWidget {
       const SizedBox(height: 16),
       const Text('Explore more',
           style: TextStyle(
-              color: AppColors.ink,
-              fontSize: 16,
-              fontWeight: FontWeight.w700)),
+              color: AppColors.ink, fontSize: 16, fontWeight: FontWeight.w700)),
       const SizedBox(height: 10),
       LayoutBuilder(builder: (context, constraints) {
         final scale = MediaQuery.textScalerOf(context).scale(1);
@@ -329,14 +309,17 @@ class MemberProgressOverview extends StatelessWidget {
         final width = (constraints.maxWidth - (columns - 1) * 8) / columns;
         return Wrap(spacing: 8, runSpacing: 8, children: [
           _quick('History', Icons.history_rounded, onHistory, width),
-          _quick('View reports', Icons.bar_chart_rounded, onReports, width),
-          if (onPoints != null)
-            _quick('Points & streak', Icons.stars_outlined, onPoints, width),
+          _quick('Training Report', Icons.bar_chart_rounded, onReports, width),
           if (onBackup != null)
             _quick('Workout backup', Icons.cloud_outlined, onBackup, width),
         ]);
       }),
       const SizedBox(height: 12),
+      if (onPoints != null)
+        TextButton.icon(
+            onPressed: onPoints,
+            icon: const Icon(Icons.stars_outlined),
+            label: const Text('Rewards & Check-in')),
       ExpansionTile(title: const Text('Measurement details'), children: [
         Padding(
             padding: const EdgeInsets.all(16),
@@ -507,8 +490,8 @@ class MemberProgressOverview extends StatelessWidget {
 
   static LocalWorkoutProgressRecord? _latestRecord(
       MemberLocalProgress progress, String keyword) {
-    final matches = progress.records.where((r) =>
-        r.exerciseId.toLowerCase().contains(keyword));
+    final matches = progress.records
+        .where((r) => r.exerciseId.toLowerCase().contains(keyword));
     return matches.isEmpty ? null : matches.first;
   }
 
@@ -518,9 +501,8 @@ class MemberProgressOverview extends StatelessWidget {
         ? '${record!.formScorePercent!.round()}/100'
         : null;
     return InkWell(
-      onTap: record != null && onWorkout != null
-          ? () => onWorkout!(record)
-          : null,
+      onTap:
+          record != null && onWorkout != null ? () => onWorkout!(record) : null,
       borderRadius: BorderRadius.circular(10),
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 4),

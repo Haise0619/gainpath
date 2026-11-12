@@ -159,9 +159,9 @@ void main() {
 
     for (final label in [
       'History',
-      'View reports',
+      'Training Report',
       'Estimated Form Scores',
-      'Points & streak',
+      'Rewards & Check-in',
       'Workout backup'
     ]) {
       await open(label);

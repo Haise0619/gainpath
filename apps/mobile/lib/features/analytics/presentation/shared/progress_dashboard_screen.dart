@@ -418,8 +418,8 @@ class _ProgressDashboardScreenState extends State<ProgressDashboardScreen>
                 const SizedBox(height: 10),
                 ReportPreviewTile(
                   icon: Icons.emoji_events_rounded,
-                  title: 'Points & streak',
-                  subtitle: 'Your gamification momentum',
+                  title: 'Rewards & Check-in',
+                  subtitle: 'Daily check-in and reward activity',
                   sparkData: local == null
                       ? context
                           .read<AnalyticsRepository>()
@@ -468,7 +468,7 @@ class _ProgressDashboardScreenState extends State<ProgressDashboardScreen>
               FilledButton.icon(
                   onPressed: widget.onOpenReport,
                   icon: const Icon(Icons.picture_as_pdf_outlined),
-                  label: const Text('Workout report & PDF')),
+                  label: const Text('Training Report & PDF')),
             if (widget.onOpenBackup != null)
               TextButton.icon(
                   onPressed: widget.onOpenBackup,

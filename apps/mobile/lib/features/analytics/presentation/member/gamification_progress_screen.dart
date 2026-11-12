@@ -24,7 +24,7 @@ class GamificationProgressScreen extends StatelessWidget {
         List.generate(pts.length, (i) => _WeekPoints(labels[i], pts[i]));
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Points & streak')),
+      appBar: AppBar(title: const Text('Rewards & Check-in')),
       body: PageBody(
         children: [
           Row(
@@ -34,14 +34,14 @@ class GamificationProgressScreen extends StatelessWidget {
                       live
                           ? '-'
                           : '${context.read<GamificationRepository>().points}',
-                      'Total points')),
+                      'Available points')),
               const SizedBox(width: 10),
               Expanded(
                   child: StatTile(
                       live
                           ? '-'
                           : '${context.read<GamificationRepository>().streak}',
-                      'Day streak',
+                      'Check-in streak',
                       valueColor: AppColors.accentDark)),
             ],
           ),

@@ -1,3 +1,4 @@
+import '../../../../app/routing/member_points_progress_route.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -36,6 +37,7 @@ class AppCheckInDashboard extends StatefulWidget {
 class _AppCheckInDashboardState extends State<AppCheckInDashboard> {
   int _gamesRevision = 0, _rankRevision = 0;
   Future<void>? _refreshRequest;
+  bool _checkInOpen = false;
   Future<void> _walletRefresh() =>
       _refreshRequest ??= Future<void>.sync(widget.onRefresh).whenComplete(() {
         _refreshRequest = null;
@@ -196,7 +198,7 @@ class _AppCheckInDashboardState extends State<AppCheckInDashboard> {
                                       Text(
                                           s == null
                                               ? 'Streak unavailable'
-                                              : '${s.currentStreak} day streak',
+                                              : '${s.currentStreak} day check-in streak',
                                           style: const TextStyle(
                                               fontWeight: FontWeight.w600)),
                                     ]),
@@ -276,6 +278,27 @@ class _AppCheckInDashboardState extends State<AppCheckInDashboard> {
                       Panel(
                           padding: EdgeInsets.zero,
                           child: Column(children: [
+                            _Shortcut(
+                                icon: Icons.stars_outlined,
+                                title: 'Rewards & Check-in',
+                                onTap: () async {
+                                  if (_checkInOpen ||
+                                      ModalRoute.of(context)?.isCurrent ==
+                                          false) {
+                                    return;
+                                  }
+                                  _checkInOpen = true;
+                                  try {
+                                    await Navigator.push(
+                                        context,
+                                        MaterialPageRoute<void>(
+                                            builder: (_) =>
+                                                const LivePointsProgress()));
+                                    if (mounted) await _refresh();
+                                  } finally {
+                                    _checkInOpen = false;
+                                  }
+                                }),
                             _Shortcut(
                                 icon: Icons.confirmation_number_outlined,
                                 title: 'My Rewards',
