@@ -23,12 +23,12 @@ List<String> membershipInvoice(Map<String, dynamic> transaction) {
     throw StateError('A verified cleared membership payment is required.');
   }
   return [
-    'GainPath — Sandbox payment invoice',
-    'Test payment. No real money collected.',
+    'GainPath membership receipt',
+    'Payment environment: Billplz Sandbox. No real funds were transferred.',
     'Invoice: ${transaction['transactionId']}',
     'Organization: ${transaction['organizationId']}',
     'Member: ${transaction['memberId']}',
-    'Type: ${transaction['kind']}',
+    'Order: ${transaction['kind'] == 'MembershipRenewal' ? 'Membership renewal' : 'Membership purchase'}',
     'Plan: ${transaction['planName']}',
     'Billplz bill: ${transaction['billId']}',
     'Paid: ${DateTime.fromMillisecondsSinceEpoch(transaction['clearedAtMillis'] as int).toUtc().toIso8601String()}',

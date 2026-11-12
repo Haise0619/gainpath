@@ -145,7 +145,7 @@ class _PurchaseFormState extends State<_PurchaseForm> {
   Widget build(BuildContext context) => Scaffold(
       appBar: AppBar(
           title:
-              Text(widget.renewal ? 'Confirm renewal' : 'Confirm your plan')),
+              Text(widget.renewal ? 'Confirm renewal' : 'Review order')),
       body: PageBody(children: [
         Panel(
             background: AppColors.primaryTint,
@@ -198,16 +198,8 @@ class _PurchaseFormState extends State<_PurchaseForm> {
               padding: EdgeInsets.only(bottom: 12),
               child: Text(
                   'Your final expiry is calculated when payment clears: any remaining paid time plus this term.')),
-        Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-                color: AppColors.accentTint,
-                borderRadius: BorderRadius.circular(12)),
-            child: Text(
-                widget.repository.sandbox
-                    ? 'Billplz Sandbox test checkout. No recurring billing. Membership activates only after server verification.'
-                    : 'Mock preview. Payment is simulated.',
-                style: const TextStyle(color: AppColors.accentDark))),
+        const Text('One-time payment. Membership activates after payment verification.'),
+        PaymentEnvironmentDetails(sandbox: widget.repository.sandbox),
         const SizedBox(height: 16),
         FilledButton(
             onPressed: _busy || _quote == null ? null : _pay,
@@ -360,6 +352,7 @@ class _MembershipPaymentScreenState extends State<MembershipPaymentScreen>
                     if (_payment['clearedAtMillis'] != null)
                       Text(
                           'Payment cleared ${membershipDate(_payment['clearedAtMillis'])}'),
+                    PaymentEnvironmentDetails(sandbox: widget.repository.sandbox),
                   ]),
               const SizedBox(height: 12),
               if (status == 'expired' || status == 'failed')
@@ -372,7 +365,7 @@ class _MembershipPaymentScreenState extends State<MembershipPaymentScreen>
                     child: const Text('Return to plans')),
               if (status == 'reconciliation_required' && !refundRequested)
                 const Text(
-                    'Admin review required. Your payment needs a check before activation. Do not make another payment for this checkout.'),
+                    'Our team needs to review this payment. Keep your reference and check this payment again before starting another.'),
               if (_payment['paymentStatus'] != 'cleared' &&
                   !['failed', 'expired'].contains(status))
                 const Text(
@@ -401,7 +394,7 @@ class _MembershipPaymentScreenState extends State<MembershipPaymentScreen>
                             builder: (_) => MembershipSupportScreen(
                                 repository: widget.repository,
                                 payment: _payment))),
-                    child: const Text('Payment assistance')),
+                    child: const Text('Contact support')),
               if (widget.repository is MembershipPaymentPreview &&
                   _payment['paymentStatus'] != 'cleared')
                 FilledButton(

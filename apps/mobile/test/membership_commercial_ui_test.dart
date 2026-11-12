@@ -64,6 +64,11 @@ class _ClearedCheckout extends CommercialMembershipFake {
 }
 
 void main() {
+  test('payment copy separates confirmation, activation and review', () {
+    expect(membershipPaymentLabel({'fulfilmentStatus': 'awaiting_payment'}), 'Awaiting payment');
+    expect(membershipPaymentLabel({'paymentStatus': 'cleared', 'fulfilmentStatus': 'confirmed'}), 'Payment confirmed · Membership activated');
+    expect(membershipPaymentLabel({'paymentStatus': 'cleared', 'fulfilmentStatus': 'reconciliation_required'}), 'Payment confirmed · Membership requires review');
+  });
   testWidgets('View membership remains open after a checkout activates', (t) async {
     final repo = _ClearedCheckout();
     await t.pumpWidget(MaterialApp(home: BrowsePlansScreen(repository: repo)));
@@ -72,7 +77,7 @@ void main() {
     await t.pumpAndSettle();
     await t.tap(find.text('Choose Basic'));
     await t.pumpAndSettle();
-    await t.ensureVisible(find.text('Continue to Payment'));
+    await t.scrollUntilVisible(find.text('Continue to Payment'), 120, scrollable: find.byType(Scrollable).first);
     await t.pumpAndSettle();
     await t.tap(find.text('Continue to Payment'));
     await t.pumpAndSettle();
@@ -117,7 +122,7 @@ void main() {
             repository: repo,
             plan: MembershipPlan('basic', 'Basic', 89, '30 days', []))));
     await t.pumpAndSettle();
-    await t.ensureVisible(find.text('Continue to Payment'));
+    await t.scrollUntilVisible(find.text('Continue to Payment'), 120, scrollable: find.byType(Scrollable).first);
     await t.pumpAndSettle();
     await t.tap(find.text('Continue to Payment'));
     await t.pumpAndSettle();
@@ -143,7 +148,7 @@ void main() {
             repository: repo,
             plan: MembershipPlan('basic', 'Basic', 89, '30 days', []))));
     await t.pumpAndSettle();
-    await t.ensureVisible(find.text('Continue to Payment'));
+    await t.scrollUntilVisible(find.text('Continue to Payment'), 120, scrollable: find.byType(Scrollable).first);
     await t.pumpAndSettle();
     await t.tap(find.text('Continue to Payment'));
     await t.pumpAndSettle();

@@ -213,8 +213,8 @@ void main() {
         home: MembershipPaymentScreen(
             repository: repo, initial: await repo.payment('m1'))));
     await tester.pump();
-    expect(find.textContaining('Admin review required'), findsOneWidget);
-    expect(find.text('Paid · Membership activated'), findsNothing);
+    expect(find.textContaining('Our team needs to review this payment'), findsOneWidget);
+    expect(find.text('Payment confirmed · Membership activated'), findsNothing);
     expect(find.text('Open Billplz Sandbox'), findsNothing);
     await tester.pumpWidget(const SizedBox());
   });

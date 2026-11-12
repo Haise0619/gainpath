@@ -69,8 +69,8 @@ class BillingHistoryScreen extends StatelessWidget {
                                   ScaffoldMessenger.of(context)
                                       .showSnackBar(SnackBar(
                                     content: Text(saved == true
-                                        ? 'Invoice saved to your chosen location.'
-                                        : 'Invoice save cancelled.'),
+                                        ? 'Receipt saved to your chosen location.'
+                                        : 'Receipt save cancelled.'),
                                     action: saved != true
                                         ? null
                                         : SnackBarAction(
@@ -94,11 +94,11 @@ class BillingHistoryScreen extends StatelessWidget {
                               } catch (_) {
                                 if (context.mounted) {
                                   showToast(context,
-                                      'Invoice could not be saved. Retry on Android.');
+                                      'Receipt could not be saved. Retry on Android.');
                                 }
                               }
                             },
-                            child: const Text('Download PDF invoice')),
+                            child: const Text('View receipt (PDF)')),
                       if (p['paymentStatus'] == 'cleared')
                         TextButton(
                             onPressed: () => open(RefundRequestScreen(

@@ -84,26 +84,28 @@ class _MembershipDataViewState extends State<MembershipDataView>
                         const Panel(
                             child: Text(
                                 'Offline cached records. Membership status may have changed. Refresh online before payment or refund decisions.')),
-                      Semantics(
-                          liveRegion: true,
-                          child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 12, vertical: 10),
-                              decoration: BoxDecoration(
-                                  color: AppColors.accentTint,
-                                  borderRadius: BorderRadius.circular(12)),
-                              child: Text(
-                                  widget.repository.sandbox
-                                      ? 'Billplz Sandbox · Test payments only'
-                                      : 'Mock preview · Simulated payments',
-                                  style: const TextStyle(
-                                      color: AppColors.accentDark,
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w600)))),
-                      const SizedBox(height: 12),
                       ...widget.builder(context, snapshot.data!, _refresh)
                     ]));
           }));
+}
+
+class PaymentEnvironmentDetails extends StatelessWidget {
+  const PaymentEnvironmentDetails({super.key, required this.sandbox});
+  final bool sandbox;
+
+  @override
+  Widget build(BuildContext context) => ExpansionTile(
+        tilePadding: EdgeInsets.zero,
+        title: const Text('About demo payments'),
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: Text(sandbox
+                ? 'This demonstration uses Billplz Sandbox. Payments here do not move real money.'
+                : 'This preview simulates payments. No money is collected.'),
+          ),
+        ],
+      );
 }
 
 String membershipDate(Object? millis) {
@@ -144,16 +146,16 @@ String membershipPaymentLabel(Map<String, dynamic> p) {
     };
   }
   if (p['paymentStatus'] == 'cleared' && p['fulfilmentStatus'] == 'confirmed') {
-    return 'Paid · Membership activated';
+    return 'Payment confirmed · Membership activated';
   }
   return switch (p['fulfilmentStatus']) {
     'creating' => 'Preparing your payment',
-    'awaiting_payment' => 'Payment not completed',
+    'awaiting_payment' => 'Awaiting payment',
     'expired' => 'Payment window ended',
     'failed' => 'Payment unsuccessful',
     'reconciliation_required' => p['paymentStatus'] == 'cleared'
-        ? 'Payment received · Review required'
-        : 'Payment needs review',
+        ? 'Payment confirmed · Membership requires review'
+        : 'Payment requires review',
     _ => 'Payment verification pending',
   };
 }
