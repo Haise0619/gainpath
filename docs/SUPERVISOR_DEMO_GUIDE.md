@@ -645,3 +645,8 @@ Training Report now has a compact mixed-mode summary, one expandable workout act
 ## Live membership-access correction — 12 November 2026
 
 For an already signed-in active Basic/Premium account, retry **Check access again** on Coaches and the Rewards Mini Games section after the scoped access correction. This is a read-only retry; do not purchase another membership or recreate the account. Live synthetic Basic checks pass. A locked/dozing phone was not unlocked or reinstalled during verification.
+
+
+## Free Rewards locked previews — 12 November 2026
+
+Source `c658751` preserves visible Mini Game and published reward previews for known Free membership, with a purple lock overlay and membership-plan CTA. Points/check-in/history/rank, paid behavior and backend authorization remain intact. All 56 focused tests, nine requested viewport/text-scale cases, scoped analysis and clean-source Android Debug build pass. No backend deployment or APK installation occurred for this UI change. [Design, screenshots and verification](ux/free-rewards-locked-preview.md).

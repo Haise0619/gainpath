@@ -459,3 +459,8 @@ Training Report now has a compact mixed-mode summary, one expandable workout act
 ## Live membership-access correction — 12 November 2026
 
 Resolved the real-device Coach/Rewards Mini Game verification error caused by the deployed legacy access contract rejecting new feature names with HTTP 400. The corrected callable is live; synthetic Basic Coach, Mini Game and digital access return HTTP 200 / allowed. Device screen retry remains to be observed because the connected phone was dozing. Financial/provider/payment deployment remains outside this correction.
+
+
+## Free Rewards locked previews — 12 November 2026
+
+Source `c658751` preserves visible Mini Game and published reward previews for known Free membership, with a purple lock overlay and membership-plan CTA. Points/check-in/history/rank, paid behavior and backend authorization remain intact. All 56 focused tests, nine requested viewport/text-scale cases, scoped analysis and clean-source Android Debug build pass. No backend deployment or APK installation occurred for this UI change. [Design, screenshots and verification](ux/free-rewards-locked-preview.md).

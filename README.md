@@ -411,3 +411,8 @@ Training Report now has a compact mixed-mode summary, one expandable workout act
 ## Live membership-access correction — 12 November 2026
 
 The Singapore membership-access callable now supports the current Coach and Mini Game contract. Existing synthetic Basic live checks return HTTP 200 / allowed; no financial functions or member data were changed. See [acceptance follow-up](docs/qa/fyp-demo-integration-acceptance.md).
+
+
+## Free Rewards locked previews — 12 November 2026
+
+Source `c658751` preserves visible Mini Game and published reward previews for known Free membership, with a purple lock overlay and membership-plan CTA. Points/check-in/history/rank, paid behavior and backend authorization remain intact. All 56 focused tests, nine requested viewport/text-scale cases, scoped analysis and clean-source Android Debug build pass. No backend deployment or APK installation occurred for this UI change. [Design, screenshots and verification](docs/ux/free-rewards-locked-preview.md).

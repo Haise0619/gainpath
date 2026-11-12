@@ -557,3 +557,8 @@ Training Report now has a compact mixed-mode summary, one expandable workout act
 ## Live membership-access correction — 12 November 2026
 
 User-authorized scoped update of `getMembershipAccessCommand` in `asia-southeast1` is active at revision `getmembershipaccesscommand-00002-quw`. Upload source comes from committed `774222b`; archive SHA-256 is `69516e7e82e8bae702d426cd66f177cb638fb84e797b651dc4b1f3487ca990ee`. Rollback source/config/IAM and verified source are retained under ignored `build/membership-access-live-fix-20261112/`. Only source and release labels were patched. Runtime, environment, IAM and all unrelated functions verified unchanged. Do not use a broad Functions deployment for rollback.
+
+
+## Free Rewards locked previews — 12 November 2026
+
+Source `c658751` preserves visible Mini Game and published reward previews for known Free membership, with a purple lock overlay and membership-plan CTA. Points/check-in/history/rank, paid behavior and backend authorization remain intact. All 56 focused tests, nine requested viewport/text-scale cases, scoped analysis and clean-source Android Debug build pass. No backend deployment or APK installation occurred for this UI change. [Design, screenshots and verification](ux/free-rewards-locked-preview.md).

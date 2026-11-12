@@ -640,3 +640,8 @@ Training Report now has a compact mixed-mode summary, one expandable workout act
 ## Live membership-access correction — 12 November 2026
 
 Deployed the explicitly requested single-callable access-contract fix after 68 source regressions, compilation, independent review and 25 exact-artifact checks. Live existing synthetic Basic checks pass for Coach, Mini Game and digital exercise (HTTP 200 / allowed). Verified deployed ZIP matches the sealed upload and preserved settings/IAM/unrelated functions. No member-data writes or provider operations. [Evidence and limitations](qa/fyp-demo-integration-acceptance.md).
+
+
+## Free Rewards locked previews — 12 November 2026
+
+Source `c658751` preserves visible Mini Game and published reward previews for known Free membership, with a purple lock overlay and membership-plan CTA. Points/check-in/history/rank, paid behavior and backend authorization remain intact. All 56 focused tests, nine requested viewport/text-scale cases, scoped analysis and clean-source Android Debug build pass. No backend deployment or APK installation occurred for this UI change. [Design, screenshots and verification](ux/free-rewards-locked-preview.md).
