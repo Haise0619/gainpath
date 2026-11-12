@@ -139,7 +139,6 @@ class _ProgressDashboardScreenState extends State<ProgressDashboardScreen>
                   onReports: widget.onOpenReport,
                   onPerformance: widget.onOpenPerformance,
                   onForm: widget.onOpenForm,
-                  onPoints: widget.onOpenPoints,
                   onBackup: widget.onOpenBackup,
                   onWorkout: widget.onOpenWorkout,
                   onRoutine: widget.onOpenRoutine),
@@ -414,26 +413,6 @@ class _ProgressDashboardScreenState extends State<ProgressDashboardScreen>
                                   live: local != null,
                                   localProgress: local,
                                   routineProgress: widget.routineProgress))),
-                ),
-                const SizedBox(height: 10),
-                ReportPreviewTile(
-                  icon: Icons.emoji_events_rounded,
-                  title: 'Rewards & Check-in',
-                  subtitle: 'Daily check-in and reward activity',
-                  sparkData: local == null
-                      ? context
-                          .read<AnalyticsRepository>()
-                          .pointsHistory
-                          .map((v) => v.toDouble())
-                          .toList()
-                      : const [],
-                  sparkColor: AppColors.accentDark,
-                  onTap: widget.onOpenPoints ??
-                      () => Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                              builder: (_) =>
-                                  const GamificationProgressScreen())),
                 ),
                 const SizedBox(height: 10),
                 ReportPreviewTile(

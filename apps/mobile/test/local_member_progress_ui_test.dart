@@ -161,7 +161,6 @@ void main() {
       'History',
       'Training Report',
       'Estimated Form Scores',
-      'Rewards & Check-in',
       'Workout backup'
     ]) {
       await open(label);
@@ -169,7 +168,8 @@ void main() {
     expect(find.text('Activity trends'), findsOneWidget);
     await open('Activity trends');
     expect(opened,
-        ['history', 'reports', 'form', 'points', 'backup', 'performance']);
+        ['history', 'reports', 'form', 'backup', 'performance']);
+    expect(find.text('Rewards & Check-in'), findsNothing);
     expect(find.text('Your progress'), findsOneWidget);
   });
   testWidgets('live dashboard uses saved measured totals and opens a record',

@@ -28,7 +28,6 @@ class MemberProgressOverview extends StatelessWidget {
       this.onReports,
       this.onPerformance,
       this.onForm,
-      this.onPoints,
       this.onBackup,
       this.onWorkout,
       this.onRoutine});
@@ -45,7 +44,6 @@ class MemberProgressOverview extends StatelessWidget {
       onReports,
       onPerformance,
       onForm,
-      onPoints,
       onBackup;
   final void Function(LocalWorkoutProgressRecord)? onWorkout;
   final void Function(RoutineAttempt)? onRoutine;
@@ -315,11 +313,6 @@ class MemberProgressOverview extends StatelessWidget {
         ]);
       }),
       const SizedBox(height: 12),
-      if (onPoints != null)
-        TextButton.icon(
-            onPressed: onPoints,
-            icon: const Icon(Icons.stars_outlined),
-            label: const Text('Rewards & Check-in')),
       ExpansionTile(title: const Text('Measurement details'), children: [
         Padding(
             padding: const EdgeInsets.all(16),
