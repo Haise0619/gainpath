@@ -62,19 +62,25 @@ class _ProgramAdherenceHostState extends State<ProgramAdherenceHost> {
                 if (widget.weeklySummaryBuilder != null)
                   widget.weeklySummaryBuilder!(
                       context,
-                      ready ? completedScheduledThisWeek(summaries, now) : null,
                       ready
-                          ? summaries
-                              .expand((s) => s.weekAt(now))
-                              .where((d) =>
-                                  d.status != ProgramAdherenceStatus.rest)
-                              .length
+                          ? completedScheduledThisWeek(
+                              current != null ? [current] : const [], now)
+                          : null,
+                      ready
+                          ? (current != null
+                              ? current
+                                  .weekAt(now)
+                                  .where((d) =>
+                                      d.status != ProgramAdherenceStatus.rest)
+                                  .length
+                              : 0)
                           : null),
                 if (widget.summaryBuilder != null)
                   widget.summaryBuilder!(
                       context,
                       ready
-                          ? completedScheduledThisWeek(summaries, now)
+                          ? completedScheduledThisWeek(
+                              current != null ? [current] : const [], now)
                           : null),
                 if (widget.weeklySummaryBuilder != null ||
                     widget.summaryBuilder != null)
