@@ -242,7 +242,7 @@ class _WorkoutResultScreenState extends State<WorkoutResultScreen>
   }
 
   Widget _measured(BuildContext context, WorkoutSessionSummary summary) {
-    final fictional = widget.fictionalObservation &&
+    final fictional = widget.fictionalObservation ||
         summary.provenance == WorkoutProvenance.recordedFixture;
     final metrics = summary.poseMetrics!;
     final score = summary.formScorePercent;
@@ -269,9 +269,9 @@ class _WorkoutResultScreenState extends State<WorkoutResultScreen>
                   : 'Exercise saved',
               complete: true,
               detail: fictional
-                  ? 'Read-only recorded fixture · not a physical camera capture.'
+                  ? 'Read-only recorded fixture · no physical camera capture, local save or rewards.'
                   : workoutSavedDate(summary.endedAt.microsecondsSinceEpoch)),
-          widget.saveStatus ?? const WorkoutSaveIndicator(),
+          if (!fictional) widget.saveStatus ?? const WorkoutSaveIndicator(),
           const SizedBox(height: 16),
           Row(children: [
             Expanded(child: StatTile('${summary.repetitions}', 'Full reps')),

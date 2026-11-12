@@ -1,3 +1,4 @@
+import 'support/workout_consent_harness.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gainpath_domain/gainpath_domain.dart' show SessionScope;
@@ -47,25 +48,20 @@ void main() {
     expect(find.text(lateralRaiseSetupConfirmation), findsOneWidget);
     expect(find.textContaining('Stand side-on'), findsNothing);
   });
-  testWidgets(
-      'lateral raise consent requires front setup acknowledgement and offers no upload',
-      (tester) async {
-    await tester.pumpWidget(MaterialApp(
-        home: Builder(
-            builder: (context) => Scaffold(
-                body: TextButton(
-                    onPressed: () => showWorkoutCaptureConsent(context,
-                        allowUpload: false,
-                        onUploadChanged: (_) {},
-                        exerciseInstruction: lateralRaiseCaptureInstruction,
-                        setupConfirmationLabel: lateralRaiseSetupConfirmation),
-                    child: const Text('Consent'))))));
-    await tester.tap(find.text('Consent'));
-    await tester.pumpAndSettle();
-    expect(find.text(lateralRaiseCaptureInstruction), findsOneWidget);
-    expect(find.text(lateralRaiseSetupConfirmation), findsOneWidget);
-    expect(find.byType(SwitchListTile), findsNothing);
-  });
+  for (final previouslyAccepted in [false, true]) {
+    testWidgets(
+        'lateral_raise consent preserves privacy and front setup; accepted=$previouslyAccepted',
+        (tester) async {
+      final preferences = await openWorkoutConsent(tester,
+          previouslyAccepted: previouslyAccepted,
+          instruction: lateralRaiseCaptureInstruction,
+          setupLabel: lateralRaiseSetupConfirmation);
+      expect(find.byType(SwitchListTile), findsNothing);
+      await confirmWorkoutSetup(tester);
+      expect(preferences.validConsent, isTrue);
+      expect(tester.takeException(), isNull);
+    });
+  }
   test('dispatcher matches only installed exact front-view lateral raise', () {
     final r = const ExerciseTrackerDispatcher().resolve(
         organizationId: 'gainpath',
@@ -141,8 +137,7 @@ void main() {
             reps: 7,
             restSeconds: 45,
             onStart: () => starts++)));
-    expect(find.text('2 sets · 7 reps per set · both arms together'),
-        findsOneWidget);
+    expect(find.text('2 sets × 7 reps · both arms together'), findsOneWidget);
     expect(find.text('45s rest between sets'), findsOneWidget);
     await tester.ensureVisible(find.text('Start camera'));
     await tester.tap(find.text('Start camera'));

@@ -9,9 +9,11 @@ class ContextualProgressFilter extends StatefulWidget {
       required this.progress,
       this.builder,
       this.reportBuilder,
+      this.exerciseChoices = const {},
       this.onExport,
       this.showDisabledExport = false});
   final MemberLocalProgress progress;
+  final Map<String, String> exerciseChoices;
   final void Function(WorkoutReportFilter)? onExport;
   final bool showDisabledExport;
   final Widget Function(MemberLocalProgress)? builder;
@@ -33,6 +35,7 @@ class _ContextualProgressFilterState extends State<ContextualProgressFilter> {
       _exercise = null;
     }
     if (_exercise != null &&
+        !widget.exerciseChoices.containsKey(_exercise) &&
         !widget.progress.records.any((r) => r.exerciseId == _exercise)) {
       _exercise = null;
     }
@@ -51,7 +54,10 @@ class _ContextualProgressFilterState extends State<ContextualProgressFilter> {
         records: source.records.where((r) =>
             filter.includes(r.endedAt) &&
             (_exercise == null || r.exerciseId == _exercise)));
-    final ids = source.records.map((r) => r.exerciseId).toSet().toList()
+    final ids = {
+      ...source.records.map((r) => r.exerciseId),
+      ...widget.exerciseChoices.keys
+    }.toList()
       ..sort();
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       Wrap(spacing: 8, children: [
@@ -70,7 +76,10 @@ class _ContextualProgressFilterState extends State<ContextualProgressFilter> {
             const DropdownMenuItem<String>(
                 value: null, child: Text('All exercises')),
             for (final id in ids)
-              DropdownMenuItem(value: id, child: Text(reportExerciseLabel(id)))
+              DropdownMenuItem(
+                  value: id,
+                  child: Text(
+                      widget.exerciseChoices[id] ?? reportExerciseLabel(id)))
           ],
           onChanged: (value) => setState(() => _exercise = value)),
       Text(

@@ -247,7 +247,7 @@ void main() {
       await tester.pumpWidget(
           MaterialApp(home: WorkoutResultScreen.measured(summary: saved)));
       await tester.pumpAndSettle();
-      expect(find.text('MEASURED FLOOR PUSH-UP RESULT'), findsOneWidget);
+      expect(find.text('Floor Push-up'), findsOneWidget);
       expect(find.textContaining('Range of motion:'), findsOneWidget);
       final forged = saved.toJson()..['exerciseId'] = 'wall-push-up-side-v1';
       expect(

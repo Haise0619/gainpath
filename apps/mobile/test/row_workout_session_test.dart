@@ -146,9 +146,10 @@ void main() {
       await tester.pumpWidget(
           MaterialApp(home: WorkoutResultScreen.measured(summary: saved)));
       await tester.pumpAndSettle();
-      expect(find.text('MEASURED ROW RESULT'), findsOneWidget);
+      expect(find.text('Dumbbell Row'), findsOneWidget);
       expect(find.text('MEASURED SQUAT RESULT'), findsNothing);
-      expect(find.text('Form score is not assessed for rows'), findsOneWidget);
+      expect(find.text('Form assessment not available for this exercise.'),
+          findsOneWidget);
       expect(find.textContaining('Selected arm:'), findsOneWidget);
     });
   }

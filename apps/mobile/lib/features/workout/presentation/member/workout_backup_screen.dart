@@ -1,6 +1,19 @@
 import 'package:flutter/material.dart';
 import '../../application/workout_backup_coordinator.dart';
 import '../../domain/workout_backup.dart';
+import '../../domain/routine_attempt.dart';
+import '../../domain/workout_contracts.dart';
+import 'widgets/workout_result_content.dart';
+import 'widgets/workout_save_indicator.dart';
+
+String _recordTitle(WorkoutBackupRecord row) {
+  if (row.kind == 'routine') {
+    final a = RoutineAttempt.fromJson(
+        Map<String, dynamic>.from(row.payload['attempt'] as Map));
+    return routineDayTitle(a.routine, a.day);
+  }
+  return measuredExerciseTitle(WorkoutSessionSummary.fromJson(row.payload));
+}
 
 String _backupDate(int millis) {
   final date = DateTime.fromMillisecondsSinceEpoch(millis, isUtc: true)
@@ -36,8 +49,16 @@ class WorkoutBackupScreen extends StatelessWidget {
                   ]));
       if (accepted != true || !c.authorized) return;
     }
-    await c.setEnabled(value);
-    await onChanged?.call();
+    try {
+      await c.setEnabled(value);
+      await onChanged?.call();
+    } catch (_) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text(
+                'Sync settings could not be saved. Your workout results are still on this device.')));
+      }
+    }
   }
 
   @override
@@ -45,13 +66,15 @@ class WorkoutBackupScreen extends StatelessWidget {
     final c = coordinator;
     if (c == null) {
       return Scaffold(
-          appBar: AppBar(title: const Text('Workout backup')),
+          appBar: AppBar(
+              toolbarHeight: 56 * MediaQuery.textScalerOf(context).scale(1),
+              title: const Text('Workout sync', maxLines: 2)),
           body: ListView(padding: const EdgeInsets.all(20), children: [
-            Text(error ?? 'Cloud backup awaiting activation',
+            Text(error ?? 'Cloud sync is unavailable in this build',
                 style: Theme.of(context).textTheme.titleLarge),
             const SizedBox(height: 12),
             const Text(
-                'Your workout results remain saved on this device. Backup and restore become available after the prepared backend is activated.'),
+                'Your workout results remain saved on this device. You can keep training and reviewing your history.'),
             if (onRetry != null)
               TextButton(onPressed: onRetry, child: const Text('Retry'))
           ]));
@@ -59,7 +82,9 @@ class WorkoutBackupScreen extends StatelessWidget {
     return ListenableBuilder(
         listenable: c,
         builder: (context, _) => Scaffold(
-            appBar: AppBar(title: const Text('Workout backup')),
+            appBar: AppBar(
+                toolbarHeight: 56 * MediaQuery.textScalerOf(context).scale(1),
+                title: const Text('Workout sync', maxLines: 2)),
             body: ListView(
                 padding: EdgeInsets.fromLTRB(
                     16, 16, 16, 24 + MediaQuery.paddingOf(context).bottom),
@@ -100,7 +125,7 @@ class WorkoutBackupScreen extends StatelessWidget {
                                 ]))),
                     SwitchListTile(
                         contentPadding: EdgeInsets.zero,
-                        title: const Text('Automatic workout backup'),
+                        title: const Text('Automatic workout sync'),
                         subtitle: const Text(
                             'Private summaries and routine progress · optional'),
                         value: c.state.enabled,
@@ -146,22 +171,13 @@ class WorkoutBackupScreen extends StatelessWidget {
                               child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Text(row.kind == 'routine'
-                                        ? '${(row.payload['attempt'] as Map)['routine']['title']} · Day ${row.payload['day']}'
-                                        : 'Exercise result · ${row.payload['exerciseId']}'),
-                                    Text(switch (c.statusFor(row)) {
-                                      BackupRecordStatus.localOnly =>
-                                        'Saved on device',
-                                      BackupRecordStatus.pendingBackup =>
-                                        'Pending backup',
-                                      BackupRecordStatus.syncing => 'Syncing',
-                                      BackupRecordStatus.backedUp =>
-                                        'Backed up',
-                                      BackupRecordStatus.retryNeeded =>
-                                        'Retry needed',
-                                      BackupRecordStatus.conflict =>
-                                        'Conflict · local data kept'
-                                    }),
+                                    Text(_recordTitle(row),
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .titleMedium),
+                                    WorkoutSaveIndicator(
+                                        status: c.statusFor(row),
+                                        syncEnabled: c.state.enabled),
                                     if (c.statusFor(row) ==
                                         BackupRecordStatus.conflict) ...[
                                       const Text(

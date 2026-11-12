@@ -183,8 +183,8 @@ void main() {
     await tester.pumpWidget(
         MaterialApp(home: WorkoutResultScreen.measured(summary: result)));
     await tester.pumpAndSettle();
-    expect(find.text('MEASURED SHOULDER PRESS RESULT'), findsOneWidget);
-    expect(find.text('Form score is not assessed for shoulder presses'),
+    expect(find.text('Shoulder Press'), findsOneWidget);
+    expect(find.text('Form assessment not available for this exercise.'),
         findsOneWidget);
     expect(find.textContaining('front view'), findsWidgets);
     expect(find.text('MEASURED SQUAT RESULT'), findsNothing);

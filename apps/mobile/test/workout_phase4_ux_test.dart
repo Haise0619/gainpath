@@ -22,14 +22,16 @@ void main() {
             availableSessionIds: ids,
             onOpenSession: opened.add));
     await tester.pumpWidget(screen({}));
-    expect(find.text('View saved exercise session'), findsNothing);
+    expect(find.text('View exercise details'), findsNothing);
     await tester.pumpWidget(screen({'camera', 'unrelated'}));
-    await tester.scrollUntilVisible(
-        find.text('View saved exercise session'), 180);
-    await tester.tap(find.text('View saved exercise session'));
+    await tester.scrollUntilVisible(find.text('Squat'), 180);
+    await tester.tap(find.text('Squat'));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(find.text('View exercise details'), 180);
+    expect(find.text('View exercise details'), findsOneWidget);
+    await tester.tap(find.text('View exercise details'));
     expect(opened, ['camera']);
-    expect(
-        find.text('Saved on this device'), findsOneWidget);
+    expect(find.text('Saved on this device'), findsOneWidget);
   });
   testWidgets(
       'measured summary keeps primary action reachable at 320px and 200% text',

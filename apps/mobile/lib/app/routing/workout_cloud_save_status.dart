@@ -12,22 +12,33 @@ import '../../features/workout/application/workout_backup_coordinator.dart';
 import '../../features/workout/presentation/member/workout_backup_screen.dart';
 import '../../features/workout/presentation/member/widgets/workout_save_indicator.dart';
 
+WorkoutBackupRecord? locallySavedWorkoutRecord(
+        WorkoutSessionSummary? summary) =>
+    summary?.provenance == WorkoutProvenance.realCamera &&
+            summary?.poseMetrics != null
+        ? WorkoutBackupRecord.session(summary!)
+        : null;
+
 /// Reuses the account lease; summaries never wait on this optional presentation.
 class WorkoutCloudSaveStatus extends StatefulWidget {
   WorkoutCloudSaveStatus.session(WorkoutSessionSummary summary,
       {super.key, this.factory})
       : scope = summary.scope,
-        record = WorkoutBackupRecord.session(summary),
+        record = locallySavedWorkoutRecord(summary),
+        localResult = summary.provenance == WorkoutProvenance.realCamera &&
+            summary.poseMetrics != null,
         attempt = null;
   WorkoutCloudSaveStatus.routine(RoutineAttempt value,
       {super.key, this.factory})
       : scope = value.scope,
         attempt = value,
+        localResult = value.scope.datasetScope == null,
         record = null;
   final SessionScope scope;
   final WorkoutBackupRecord? record;
   final RoutineAttempt? attempt;
   final WorkoutBackupFactory? factory;
+  final bool localResult;
   @override
   State<WorkoutCloudSaveStatus> createState() => _WorkoutCloudSaveStatusState();
 }
@@ -48,7 +59,8 @@ class _WorkoutCloudSaveStatusState extends State<WorkoutCloudSaveStatus>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    if (_auth != null ||
+    if (!widget.localResult ||
+        _auth != null ||
         (!workoutCloudBackupEnabled && widget.factory == null) ||
         widget.scope.datasetScope != null) {
       return;
@@ -133,6 +145,7 @@ class _WorkoutCloudSaveStatusState extends State<WorkoutCloudSaveStatus>
 
   @override
   Widget build(BuildContext context) {
+    if (!widget.localResult) return const SizedBox.shrink();
     final c = _lease?.coordinator;
     if (c == null) return const WorkoutSaveIndicator();
     if (active() == null) return const SizedBox.shrink();

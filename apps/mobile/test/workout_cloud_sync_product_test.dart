@@ -7,7 +7,29 @@ import 'package:gainpath_mobile/features/workout/domain/workout_backup.dart';
 import 'routine_journey_controller_test.dart' as fixture;
 import 'workout_backup_test.dart' as support;
 
+class FailingPreferenceStore extends support.Metadata {
+  FailingPreferenceStore(super.scope);
+  @override
+  Future<void> write(BackupState state) async => throw StateError('disk full');
+}
+
 void main() {
+  test('failed preference write cannot leave automatic sync enabled in memory',
+      () async {
+    final scope = SessionScope(userId: 'member', organizationId: 'gainpath');
+    final metadata = FailingPreferenceStore(scope);
+    final c = WorkoutBackupCoordinator(
+        scope: scope,
+        activeScope: () => scope,
+        local: support.Local(),
+        gateway: support.Remote(),
+        store: metadata);
+    await c.load();
+    await expectLater(c.setEnabled(true), throwsStateError);
+    expect(c.state.enabled, false);
+    expect(metadata.state.enabled, false);
+    c.dispose();
+  });
   testWidgets(
       'save indicator reports each cloud state without verification claims',
       (tester) async {

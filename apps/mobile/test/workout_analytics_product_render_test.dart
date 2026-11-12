@@ -17,6 +17,8 @@ import 'package:gainpath_mobile/features/workout/presentation/member/workout_bac
 import 'member_workout_report_test.dart' as reports;
 import 'routine_history_ui_test.dart' as fixture;
 import 'workout_report_ui_test.dart' show ReportExporterFake;
+import 'support/workout_analytics_fixture.dart';
+import 'package:gainpath_mobile/features/analytics/presentation/member/posture_accuracy_screen.dart';
 
 void main() {
   testWidgets('render analytics product screens', (tester) async {
@@ -60,18 +62,72 @@ void main() {
           exporter: ReportExporterFake(),
           isCurrent: () => true,
           onRefresh: () async {}),
-      'sync': const String.fromEnvironment('ANALYTICS_STAGE', defaultValue: 'before') == 'before'
+      'sync': const String.fromEnvironment('ANALYTICS_STAGE',
+                  defaultValue: 'before') ==
+              'before'
           ? const WorkoutBackupScreen()
-          : const Scaffold(body: SafeArea(child: Padding(padding: EdgeInsets.all(24),
-              child: WorkoutSaveIndicator(status: BackupRecordStatus.backedUp)))),
+          : const Scaffold(
+              body: SafeArea(
+                  child: Padding(
+                      padding: EdgeInsets.all(24),
+                      child: WorkoutSaveIndicator(
+                          status: BackupRecordStatus.backedUp)))),
     };
+    final mixed = WorkoutAnalyticsFixture();
+    if (const String.fromEnvironment('ANALYTICS_STAGE',
+            defaultValue: 'before') !=
+        'before') {
+      screens.addAll({
+        'mixed-summary': RoutineAttemptDetailScreen(
+            attempt: mixed.attempt,
+            summaries: mixed.summaries,
+            onRepeat: () {}),
+        'mixed-report': WorkoutReportScreen(
+            scope: mixed.scope,
+            source: mixed.snapshot,
+            asOf: mixed.now,
+            exporter: ReportExporterFake(),
+            isCurrent: () => true,
+            onRefresh: () async {}),
+        'mixed-form': PostureAccuracyScreen(
+            localProgress: calculateLocalMemberProgress(
+                scope: mixed.scope,
+                records: mixed.snapshot.records,
+                asOf: mixed.now)),
+        'mixed-summary-320-200': RoutineAttemptDetailScreen(
+            attempt: mixed.attempt,
+            summaries: mixed.summaries,
+            onRepeat: () {}),
+        'mixed-report-320-200': WorkoutReportScreen(
+            scope: mixed.scope,
+            source: mixed.snapshot,
+            asOf: mixed.now,
+            exporter: ReportExporterFake(),
+            isCurrent: () => true,
+            onRefresh: () async {}),
+        'mixed-summary-landscape-200': RoutineAttemptDetailScreen(
+            attempt: mixed.attempt,
+            summaries: mixed.summaries,
+            onRepeat: () {}),
+      });
+    }
     final directory = Directory('build/workout-analytics-product');
     directory.createSync(recursive: true);
     for (final entry in screens.entries) {
-      tester.view.physicalSize = const Size(390, 844);
+      tester.view.physicalSize = entry.key.contains('landscape')
+          ? const Size(844, 360)
+          : entry.key.contains('320')
+              ? const Size(320, 844)
+              : const Size(390, 844);
       tester.view.devicePixelRatio = 1;
       final key = GlobalKey();
       await tester.pumpWidget(MaterialApp(
+          builder: (context, child) => MediaQuery(
+              data: MediaQuery.of(context).copyWith(
+                  textScaler:
+                      TextScaler.linear(entry.key.contains('200') ? 2 : 1),
+                  disableAnimations: true),
+              child: child!),
           theme: ThemeData(
               useMaterial3: true,
               fontFamily: 'Barlow',
@@ -85,8 +141,8 @@ void main() {
             key.currentContext!.findRenderObject()! as RenderRepaintBoundary;
         final image = await boundary.toImage();
         final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
-        final stage = const String.fromEnvironment('ANALYTICS_STAGE',
-            defaultValue: 'before');
+        const stage =
+            String.fromEnvironment('ANALYTICS_STAGE', defaultValue: 'before');
         await File('${directory.path}/$stage-${entry.key}.png')
             .writeAsBytes(bytes!.buffer.asUint8List());
         image.dispose();

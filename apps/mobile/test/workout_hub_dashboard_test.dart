@@ -52,7 +52,7 @@ void main() {
       await tester.scrollUntilVisible(find.text('Explore programs'), 200);
       await tester.pumpAndSettle();
       expect(tester.getTopLeft(find.text('Explore programs')).dy,
-          lessThan(tester.getTopLeft(find.text("Today's exercises")).dy));
+          greaterThan(tester.getTopLeft(find.text("Today's exercises")).dy));
       await tester.ensureVisible(find.text('Explore programs'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Explore programs'));

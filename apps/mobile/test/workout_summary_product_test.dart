@@ -4,15 +4,44 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:gainpath_mobile/features/workout/presentation/member/routine_history_screen.dart';
 import 'package:gainpath_mobile/features/workout/presentation/member/workout_result_screen.dart';
 import 'package:gainpath_mobile/features/workout/domain/workout_contracts.dart';
+import 'package:gainpath_mobile/features/workout/presentation/member/widgets/workout_save_indicator.dart';
+import 'package:gainpath_mobile/features/workout/domain/workout_backup.dart';
 import 'routine_history_ui_test.dart' as fixture;
 import 'routine_journey_controller_test.dart' as sessions;
 
 void main() {
   setUpAll(() => GoogleFonts.config.allowRuntimeFetching = false);
-  testWidgets('routine details expose the exact linked assessment only', (tester) async {
+  testWidgets('fictional result never claims a local or cloud save',
+      (tester) async {
+    final original = sessions.measured(fixture.attempt().scope, 'fixture');
+    final summary = WorkoutSessionSummary(
+        sessionId: original.sessionId,
+        userId: original.userId,
+        organizationId: original.organizationId,
+        exerciseId: original.exerciseId,
+        repetitions: original.repetitions,
+        accuracy: original.accuracy,
+        startedAt: original.startedAt,
+        endedAt: original.endedAt,
+        poseMetrics: original.poseMetrics,
+        provenance: WorkoutProvenance.recordedFixture);
+    await tester.pumpWidget(MaterialApp(
+        home: WorkoutResultScreen.measured(
+            summary: summary,
+            fictionalObservation: true,
+            saveStatus: const WorkoutSaveIndicator(
+                status: BackupRecordStatus.backedUp))));
+    await tester.pumpAndSettle();
+    expect(find.text('Synced'), findsNothing);
+    expect(find.text('Saved on this device'), findsNothing);
+    expect(find.textContaining('no physical camera capture'), findsOneWidget);
+  });
+  testWidgets('routine details expose the exact linked assessment only',
+      (tester) async {
     final a = fixture.attempt();
-    await tester.pumpWidget(MaterialApp(home: RoutineAttemptDetailScreen(
-        attempt: a, summaries: [sessions.measured(a.scope, 'camera')])));
+    await tester.pumpWidget(MaterialApp(
+        home: RoutineAttemptDetailScreen(
+            attempt: a, summaries: [sessions.measured(a.scope, 'camera')])));
     await tester.scrollUntilVisible(find.text('Squat'), 150);
     await tester.tap(find.text('Squat'));
     await tester.pumpAndSettle();
@@ -20,10 +49,15 @@ void main() {
     expect(find.text('90% estimated form'), findsOneWidget);
     expect(find.textContaining('overall score'), findsNothing);
   });
-  for (final version in ['dumbbell-shoulder-press-front-v1', 'standing-lateral-raise-front-v1']) {
-    testWidgets('$version does not replace missing assessment with legacy zero', (tester) async {
+  for (final version in [
+    'dumbbell-shoulder-press-front-v1',
+    'standing-lateral-raise-front-v1'
+  ]) {
+    testWidgets('$version does not replace missing assessment with legacy zero',
+        (tester) async {
       final a = fixture.attempt();
-      final json = Map<String, dynamic>.from(sessions.measured(a.scope, 'camera').toJson());
+      final json = Map<String, dynamic>.from(
+          sessions.measured(a.scope, 'camera').toJson());
       json['exerciseId'] = version;
       json['accuracy'] = 0;
       final metrics = Map<String, dynamic>.from(json['poseMetrics'] as Map)
@@ -34,8 +68,10 @@ void main() {
         ..['formScorePercent'] = null;
       json['poseMetrics'] = metrics;
       final summary = WorkoutSessionSummary.fromJson(json);
-      await tester.pumpWidget(MaterialApp(home: WorkoutResultScreen.measured(summary: summary)));
-      expect(find.text('Form assessment not available for this exercise.'), findsOneWidget);
+      await tester.pumpWidget(
+          MaterialApp(home: WorkoutResultScreen.measured(summary: summary)));
+      expect(find.text('Form assessment not available for this exercise.'),
+          findsOneWidget);
       expect(find.text('0% estimated form'), findsNothing);
     });
   }

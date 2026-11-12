@@ -52,15 +52,24 @@ class WorkoutBackupCoordinator extends ChangeNotifier {
 
   Future<void> setEnabled(bool enabled) async {
     if (!authorized || (busy && enabled)) return;
-    ++_generation;
+    final generation = ++_generation;
+    final previous = _state;
     _state = BackupState(
         enabled: enabled,
         consentChoiceMade: true,
         baselines: _state.baselines,
         conflicts: _state.conflicts,
         lastSuccessMillis: _state.lastSuccessMillis);
-    await store.write(_state);
-    if (!authorized) return;
+    try {
+      await store.write(_state);
+    } catch (_) {
+      if (authorized && generation == _generation) {
+        _state = previous;
+        _notify();
+      }
+      rethrow;
+    }
+    if (!authorized || generation != _generation) return;
     _notify();
     if (enabled) await sync();
   }

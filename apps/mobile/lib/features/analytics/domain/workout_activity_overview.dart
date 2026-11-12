@@ -51,15 +51,23 @@ Set<String> workoutStartDays(
   return dates;
 }
 
-String routineActivitySummary(RoutineAttempt a) => [
-      if (a.entries.any((e) => e.sessionIds.isNotEmpty))
-        '${a.fullRepetitions} AI full reps',
-      if (a.guidedDurationMicros > 0)
-        '${a.timerCompletedSets} timed sets · ${reportDuration(a.guidedDurationMicros)} active',
-      if (a.selfReportedSets > 0) '${a.selfReportedSets} self-reported sets',
-      if (!hasWorkoutActivity(a))
-        '${a.completedExercises}/${a.entries.length} exercises completed',
-    ].join(' · ');
+String routineActivitySummary(RoutineAttempt a,
+    {Iterable<RoutineExerciseResult>? entries}) {
+  final rows = (entries ?? a.entries).toList();
+  final reps = rows.fold<int>(0, (n, e) => n + e.fullRepetitions);
+  final guided =
+      rows.fold<int>(0, (n, e) => n + (e.guided?.totalActiveMicroseconds ?? 0));
+  final timedSets =
+      rows.fold<int>(0, (n, e) => n + (e.guided?.completedSets ?? 0));
+  final manual = rows.fold<int>(0, (n, e) => n + e.manualSets);
+  return [
+    if (rows.any((e) => e.sessionIds.isNotEmpty)) '$reps AI full reps',
+    if (guided > 0) '$timedSets timed sets · ${reportDuration(guided)} active',
+    if (manual > 0) '$manual self-reported sets',
+    if (!rows.any((e) => e.sessionIds.isNotEmpty) && guided == 0 && manual == 0)
+      '${rows.where((e) => e.completed).length}/${rows.length} exercises completed',
+  ].join(' · ');
+}
 
 String progressArmModeLabel(String? mode) => switch (mode) {
       'leftOnly' => 'Left only',

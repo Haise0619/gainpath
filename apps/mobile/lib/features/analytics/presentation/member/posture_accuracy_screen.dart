@@ -54,11 +54,11 @@ class PostureAccuracyScreen extends StatelessWidget {
                 builder: (filtered) => Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
+                          ..._localDetails(context, filtered),
                           ExerciseImprovementCard(
                               progress: filtered,
                               routineProgress: routineProgress,
                               onOpenWorkout: onOpenWorkout),
-                          ..._localDetails(context, filtered)
                         ]))
           ]));
     }
@@ -197,7 +197,7 @@ class PostureAccuracyScreen extends StatelessWidget {
         const WorkoutMeasurementScope(formOnly: true),
         if (progress.formSeries.isEmpty)
           const Panel(child: Text('No estimated form measurements yet.')),
-        for (final group in progress.formSeries) ...[
+        for (final group in _displayGroups(progress)) ...[
           Panel(
               child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -209,82 +209,111 @@ class PostureAccuracyScreen extends StatelessWidget {
                     style: Theme.of(context).textTheme.titleMedium),
                 if (group.scoringVersion == 'single-arm-curl-side-v1')
                   Text(progressArmModeLabel(group.records.first.armMode)),
-                ExpansionTile(
-                    title: const Text('Technical details'),
-                    children: [
-                      Text(
-                          'Rule ${group.scoringVersion} · detector ${group.detectorId} · '
-                          'model ${group.detectorVersion} · view ${group.cameraView}'),
-                    ]),
                 const SizedBox(height: 10),
                 Text(group.meanScore == null
                     ? progressFormLabel(group.records.first)
                     : 'Estimated form: ${group.meanScore!.toStringAsFixed(1)}%'),
                 Text('${group.scoredAttempts} scored attempts · '
                     '${group.unassessedAttempts} unassessed attempts'),
-                SizedBox(
-                    height: 190,
-                    child: SfCartesianChart(
-                      plotAreaBorderWidth: 0,
-                      primaryXAxis: DateTimeAxis(
-                          axisLabelFormatter: (details) => ChartAxisLabel(
-                              localProgressDate(
-                                  DateTime.fromMillisecondsSinceEpoch(
-                                      details.value.toInt(),
-                                      isUtc: true),
-                                  progress.utcOffset),
-                              details.textStyle),
-                          majorGridLines: MajorGridLines(width: 0),
-                          axisLine: AxisLine(width: 0)),
-                      primaryYAxis: const NumericAxis(
-                          minimum: 0,
-                          maximum: 100,
-                          majorGridLines: MajorGridLines(
-                              width: 0.6, color: AppColors.hairline),
-                          axisLine: AxisLine(width: 0)),
-                      tooltipBehavior: TooltipBehavior(
-                          enable: true,
-                          builder:
-                              (data, point, series, pointIndex, seriesIndex) {
-                            final record = data as LocalWorkoutProgressRecord;
-                            return Padding(
-                                padding: const EdgeInsets.all(8),
-                                child: Text(
-                                    '${localProgressDate(record.endedAt, progress.utcOffset)} · ${localProgressZone(progress.utcOffset)}\n'
-                                    '${record.formScorePercent == null ? 'Unassessed' : '${record.formScorePercent!.toStringAsFixed(1)}% estimated form'}',
-                                    style:
-                                        const TextStyle(color: Colors.white)));
-                          }),
-                      series: <CartesianSeries<LocalWorkoutProgressRecord,
-                          DateTime>>[
-                        LineSeries<LocalWorkoutProgressRecord, DateTime>(
-                          name:
-                              '${group.exerciseId} · ${group.scoringVersion} · '
-                              '${group.detectorId} · ${group.detectorVersion} · ${group.cameraView}',
-                          dataSource: group.records,
-                          xValueMapper: (record, _) => record.endedAt,
-                          yValueMapper: (record, _) => record.formScorePercent,
-                          color: AppColors.primary,
-                          animationDuration:
-                              MediaQuery.disableAnimationsOf(context) ? 0 : 220,
-                          width: 2,
-                          emptyPointSettings: const EmptyPointSettings(
-                              mode: EmptyPointMode.gap),
-                          markerSettings: const MarkerSettings(
-                              isVisible: true, height: 6, width: 6),
-                        ),
-                      ],
-                    )),
-                for (final record in group.records)
-                  Text(
-                      '${localProgressDate(record.endedAt, progress.utcOffset)} · '
-                      '${record.formScorePercent == null ? 'unassessed' : '${record.formScorePercent!.toStringAsFixed(1)}%'}'
-                      ' · measurement coverage: ${localProgressCoverage(record.coverage)}',
-                      style: Theme.of(context).textTheme.bodyMedium),
+                if (group.records
+                    .any((record) => record.formScorePercent != null))
+                  SizedBox(
+                      height: 190,
+                      child: SfCartesianChart(
+                        plotAreaBorderWidth: 0,
+                        primaryXAxis: DateTimeAxis(
+                            minimum: _captureBound(group, first: true)
+                                .subtract(const Duration(hours: 12)),
+                            maximum: _captureBound(group, first: false)
+                                .add(const Duration(hours: 12)),
+                            intervalType: group.records.length == 1
+                                ? DateTimeIntervalType.days
+                                : DateTimeIntervalType.auto,
+                            interval: group.records.length == 1 ? 1 : null,
+                            axisLabelFormatter: (details) => ChartAxisLabel(
+                                localProgressDate(
+                                    DateTime.fromMillisecondsSinceEpoch(
+                                        details.value.toInt(),
+                                        isUtc: true),
+                                    progress.utcOffset),
+                                details.textStyle),
+                            majorGridLines: MajorGridLines(width: 0),
+                            axisLine: AxisLine(width: 0)),
+                        primaryYAxis: const NumericAxis(
+                            minimum: 0,
+                            maximum: 100,
+                            majorGridLines: MajorGridLines(
+                                width: 0.6, color: AppColors.hairline),
+                            axisLine: AxisLine(width: 0)),
+                        tooltipBehavior: TooltipBehavior(
+                            enable: true,
+                            builder:
+                                (data, point, series, pointIndex, seriesIndex) {
+                              final record = data as LocalWorkoutProgressRecord;
+                              return Padding(
+                                  padding: const EdgeInsets.all(8),
+                                  child: Text(
+                                      '${localProgressDate(record.endedAt, progress.utcOffset)} · ${localProgressZone(progress.utcOffset)}\n'
+                                      '${record.formScorePercent == null ? 'Unassessed' : '${record.formScorePercent!.toStringAsFixed(1)}% estimated form'}',
+                                      style: const TextStyle(
+                                          color: Colors.white)));
+                            }),
+                        series: <CartesianSeries<LocalWorkoutProgressRecord,
+                            DateTime>>[
+                          LineSeries<LocalWorkoutProgressRecord, DateTime>(
+                            name:
+                                '${group.exerciseId} · ${group.scoringVersion} · '
+                                '${group.detectorId} · ${group.detectorVersion} · ${group.cameraView}',
+                            dataSource: group.records,
+                            xValueMapper: (record, _) => record.endedAt,
+                            yValueMapper: (record, _) =>
+                                record.formScorePercent,
+                            color: AppColors.primary,
+                            animationDuration:
+                                MediaQuery.disableAnimationsOf(context)
+                                    ? 0
+                                    : 220,
+                            width: 2,
+                            emptyPointSettings: const EmptyPointSettings(
+                                mode: EmptyPointMode.gap),
+                            markerSettings: const MarkerSettings(
+                                isVisible: true, height: 6, width: 6),
+                          ),
+                        ],
+                      )),
+                ExpansionTile(
+                    title: const Text('Technical details'),
+                    children: [
+                      Text(
+                          'Rule ${group.scoringVersion} · detector ${group.detectorId} · '
+                          'model ${group.detectorVersion} · view ${group.cameraView}'),
+                      for (final record in group.records)
+                        Text(
+                            '${localProgressDate(record.endedAt, progress.utcOffset)} · '
+                            '${record.formScorePercent == null ? 'unassessed' : '${record.formScorePercent!.toStringAsFixed(1)}%'}'
+                            ' · measurement coverage: ${localProgressCoverage(record.coverage)}',
+                            style: Theme.of(context).textTheme.bodyMedium),
+                    ]),
               ])),
           const SizedBox(height: 12),
         ],
       ];
+
+  List<FormProgressSeries> _displayGroups(MemberLocalProgress progress) =>
+      [...progress.formSeries]..sort((a, b) {
+          final scored = (b.meanScore == null ? 0 : 1)
+              .compareTo(a.meanScore == null ? 0 : 1);
+          return scored == 0 ? a.versionKey.compareTo(b.versionKey) : scored;
+        });
+
+  DateTime _captureBound(FormProgressSeries group, {required bool first}) =>
+      group.records.map((r) => r.endedAt).reduce((a, b) => first
+          ? a.isBefore(b)
+              ? a
+              : b
+          : a.isAfter(b)
+              ? a
+              : b);
 }
 
 class _SessionPoint {

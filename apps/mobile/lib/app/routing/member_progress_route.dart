@@ -1,6 +1,5 @@
 import 'workout_program_route.dart';
 import 'workout_cloud_save_status.dart';
-import '../../features/workout/domain/workout_backup.dart';
 import '../../features/workout/presentation/member/widgets/workout_save_indicator.dart';
 import '../../features/analytics/presentation/member/goal_comparison_report.dart';
 import 'dart:async';
@@ -527,8 +526,11 @@ Widget _progressContent(
           routines: RoutineHistoryScreen(
               embedded: true,
               asOf: progress.asOf,
-              saveStatusBuilder: (attempt) => WorkoutRecordSyncIndicator(
-                  coordinator: backup, attempt: attempt),
+              saveStatusBuilder: (attempt) =>
+                  progress.scope.datasetScope != null
+                      ? const SizedBox.shrink()
+                      : WorkoutRecordSyncIndicator(
+                          coordinator: backup, attempt: attempt),
               attempts: state.routines?.records ?? const [],
               available: state.routines != null,
               onRefresh: refresh,
@@ -539,9 +541,7 @@ Widget _progressContent(
                 final summary = state.snapshot?.summaries[record.sessionId];
                 return WorkoutRecordSyncIndicator(
                     coordinator: backup,
-                    record: summary == null
-                        ? null
-                        : WorkoutBackupRecord.session(summary));
+                    record: locallySavedWorkoutRecord(summary));
               },
               routineProgress: state.routines,
               onOpenReport: openReport,

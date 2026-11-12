@@ -110,12 +110,15 @@ void main() {
             .localProgress!
             .weeklySessions,
         1);
-    expect(find.text('Training days'), findsOneWidget);
+    expect(find.text('Workout start days'), findsOneWidget);
     // Open the account-owned history page, then add a durable result and refresh
     // it while still open. No mock repositories or upload worker are installed.
     tester
         .widget<ProgressDashboardScreen>(find.byType(ProgressDashboardScreen))
         .onOpenHistory!();
+    await tester.pumpAndSettle();
+    expect(find.text('Workout history'), findsOneWidget);
+    await tester.tap(find.text('AI Sessions'));
     await tester.pumpAndSettle();
     expect(find.byType(ActivityTimelineScreen), findsOneWidget);
     await store(first.scope).write([
@@ -159,7 +162,7 @@ void main() {
             .localProgress!
             .weeklySessions,
         3);
-    expect(find.text('Training days'), findsOneWidget);
+    expect(find.text('Workout start days'), findsOneWidget);
     await auth.signOut();
     await tester.pumpAndSettle();
     final second =

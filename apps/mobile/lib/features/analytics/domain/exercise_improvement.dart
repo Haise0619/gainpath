@@ -47,7 +47,7 @@ String? linkedRoutineTarget(
         continue;
       }
       links.add(
-          '${attempt.routine.title} · day ${attempt.day}: ${exercise.sets} sets × ${exercise.reps} reps');
+          '${routineDayTitle(attempt.routine, attempt.day)}: ${exercise.sets} sets × ${exercise.reps} reps');
     }
   }
   return links.length == 1 ? links.single : null;

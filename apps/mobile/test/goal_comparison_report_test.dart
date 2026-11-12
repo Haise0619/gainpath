@@ -211,7 +211,7 @@ void main() {
     await tester.pumpWidget(
         MaterialApp(home: WorkoutPerformanceScreen(localProgress: progress)));
     await tester.pumpAndSettle();
-    expect(find.text('Measured workout trends'), findsOneWidget);
+    expect(find.text('Activity trends'), findsOneWidget);
     expect(find.text('Weekly volume (kg)'), findsNothing);
     await tester.tap(find.text('About measurements'));
     await tester.pumpAndSettle();

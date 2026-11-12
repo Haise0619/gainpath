@@ -57,6 +57,16 @@ class WorkoutPerformanceScreen extends StatelessWidget {
               ]),
           const SizedBox(height: 16),
           ContextualProgressFilter(
+              exerciseChoices: {
+                for (final a in routineProgress?.records ?? <RoutineAttempt>[])
+                  for (final e in a.entries)
+                    a.routine.exercises[e.index].exerciseId:
+                        reportExerciseNames(
+                                    routineProgress?.records ?? const [])[
+                                a.routine.exercises[e.index].exerciseId] ??
+                            reportExerciseLabel(
+                                a.routine.exercises[e.index].exerciseId),
+              },
               onExport: onOpenFilteredReport ??
                   (onOpenReport == null ? null : (_) => onOpenReport!()),
               progress: local,

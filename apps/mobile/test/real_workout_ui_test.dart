@@ -449,6 +449,8 @@ void main() {
                 syncStoreFactory: (_) async =>
                     MemoryRealWorkoutSyncStore(scope: scope)))));
     await tester.pumpAndSettle();
+    await tester.tap(find.text('All time'));
+    await tester.pumpAndSettle();
     final history =
         find.textContaining('0 full reps · 0 partial attempts').last;
     await tester.ensureVisible(history);
@@ -496,9 +498,9 @@ void main() {
         MaterialApp(home: WorkoutResultScreen.measured(summary: result)));
     await tester.pumpAndSettle();
     expect(find.text('Saved on this device'), findsOneWidget);
-    expect(find.text('Not enough evidence'), findsOneWidget);
+    expect(find.text('No movements assessed yet'), findsOneWidget);
     expect(find.textContaining('120'), findsNothing);
     expect(find.text('Depth improved'), findsNothing);
-    expect(find.textContaining('server-accepted'), findsOneWidget);
+    expect(find.textContaining('server-accepted'), findsNothing);
   });
 }

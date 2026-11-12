@@ -133,7 +133,7 @@ void main() {
       await tester.pumpWidget(
           MaterialApp(home: WorkoutResultScreen.measured(summary: saved)));
       await tester.pumpAndSettle();
-      expect(find.text('MEASURED CALF RAISE RESULT'), findsOneWidget);
+      expect(find.text('Calf Raise'), findsOneWidget);
       expect(find.text('MEASURED SQUAT RESULT'), findsNothing);
       session.dispose();
       repo.dispose();

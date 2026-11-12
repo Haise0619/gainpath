@@ -175,7 +175,7 @@ class WorkoutReportPlugin : FlutterPlugin, ActivityAware, PluginRegistry.Activit
             }
             for (raw in data["formTrends"] as List<*>) {
                 val group = raw as Map<*, *>; val points = group["points"] as List<*>
-                if (points.isEmpty()) continue
+                if (points.isEmpty() || points.none { (it as Map<*, *>)["score"] != null }) continue
                 for (chunk in points.chunked(12)) {
                     space(245f); text("ESTIMATED FORM | separate compatible group"); text(group["label"].toString())
                     text("Each point is a capture | Malaysia time | Unassessed captures leave gaps")

@@ -71,11 +71,13 @@ void main() {
     final h = LateralHarness(sets: 1, reps: 1);
     addTearDown(h.dispose);
     await h.session.start(consented: true, setupConfirmed: true);
-    await h.feed(tester, lateralRaiseTrajectory().where((f) => f.capturedAtMicros <= 2000000));
+    await h.feed(tester,
+        lateralRaiseTrajectory().where((f) => f.capturedAtMicros <= 2000000));
     expect(h.session.analysis!.needsCalibration, false);
     await h.feed(tester, [lateralRaiseFrame(2050000, 1, confidence: .3)]);
     expect(h.session.analysisAvailable, false);
-    await h.feed(tester, lateralRaiseTrajectory().where((f) => f.capturedAtMicros > 2050000));
+    await h.feed(tester,
+        lateralRaiseTrajectory().where((f) => f.capturedAtMicros > 2050000));
     expect(h.session.analysis!.repetitions, 0);
     await h.feed(tester, lateralRaiseTrajectory(startMicros: h.now + 50000));
     expect(h.session.analysis!.repetitions, 1);
@@ -116,8 +118,8 @@ void main() {
     await tester.pumpWidget(
         MaterialApp(home: WorkoutResultScreen.measured(summary: result)));
     await tester.pumpAndSettle();
-    expect(find.text('MEASURED LATERAL RAISE RESULT'), findsOneWidget);
-    expect(find.text('Form score is not assessed for lateral raises'),
+    expect(find.text('Lateral Raise'), findsOneWidget);
+    expect(find.text('Form assessment not available for this exercise.'),
         findsOneWidget);
     expect(find.textContaining('front view'), findsWidgets);
     expect(find.text('MEASURED SQUAT RESULT'), findsNothing);

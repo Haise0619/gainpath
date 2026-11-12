@@ -135,7 +135,8 @@ void main() {
   testWidgets('disabled production release never offers an upload control',
       (tester) async {
     await tester.pumpWidget(const MaterialApp(home: WorkoutBackupScreen()));
-    expect(find.text('Cloud backup awaiting activation'), findsOneWidget);
+    expect(
+        find.text('Cloud sync is unavailable in this build'), findsOneWidget);
     expect(find.byType(Switch), findsNothing);
     expect(find.textContaining('device'), findsWidgets);
   });

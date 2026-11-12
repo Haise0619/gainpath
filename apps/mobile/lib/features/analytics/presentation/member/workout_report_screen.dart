@@ -277,7 +277,8 @@ class _WorkoutReportScreenState extends State<WorkoutReportScreen> {
                                 '${report.formGroups[i].scoredAttempts} scored / ${report.formGroups[i].unassessedAttempts} unassessed attempts'),
                             const Text(
                                 'Each point is a camera capture · Malaysia time · Unassessed captures leave gaps'),
-                            if (report.formCharts[i].points.isNotEmpty)
+                            if (report.formCharts[i].points
+                                .any((p) => p.score != null))
                               SizedBox(
                                   height: 180,
                                   child: SfCartesianChart(
@@ -337,7 +338,7 @@ class _WorkoutReportScreenState extends State<WorkoutReportScreen> {
                                         const Icon(Icons.chevron_right_rounded),
                                     title: Text(event.title),
                                     subtitle: Text(
-                                        '${event.dateTimeLabel} MYT\n${event.kind == WorkoutTimelineKind.aiCapture ? 'AI Tracked' : 'Workout'} · ${event.kind == WorkoutTimelineKind.aiCapture ? event.detail.split(' · Estimated Form Score').first : routineActivitySummary(report.routines.firstWhere((r) => r.attempt.id == event.id).attempt)}'),
+                                        '${event.dateTimeLabel} MYT\n${event.kind == WorkoutTimelineKind.aiCapture ? 'AI Tracked' : 'Workout'} · ${event.kind == WorkoutTimelineKind.aiCapture ? event.detail.split(' · Estimated Form Score').first : routineActivitySummary(report.routines.firstWhere((r) => r.attempt.id == event.id).attempt, entries: report.routines.firstWhere((r) => r.attempt.id == event.id).entries)}'),
                                   ),
                                 if (overviewWorkoutEvents(report).length >
                                     _visible)

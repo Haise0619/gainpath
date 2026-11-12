@@ -48,13 +48,6 @@ class ExerciseImprovementCard extends StatelessWidget {
                         : 'Estimated Form Score: ${comparison.previous!.formScorePercent!.toStringAsFixed(1)} → ${comparison.latest.formScorePercent!.toStringAsFixed(1)} (${comparison.scoreChange! >= 0 ? '+' : ''}${comparison.scoreChange!.toStringAsFixed(1)} points)'),
                   ],
                   Text('Recent: ${reportDate(comparison.latest.endedAt)} MYT'),
-                  Text(
-                      'Recent routine target: ${linkedRoutineTarget(comparison.latest, routineProgress) ?? 'unavailable (no unique linked plan)'}'),
-                  if (comparison.previous != null)
-                    Text(
-                        'Previous routine target: ${linkedRoutineTarget(comparison.previous!, routineProgress) ?? 'unavailable (no unique linked plan)'}'),
-                  const Text(
-                      'Routine targets describe the authored plan, not a per-capture target or verified completion.'),
                   Wrap(spacing: 8, children: [
                     if (comparison.previous != null && onOpenWorkout != null)
                       TextButton(
@@ -68,6 +61,13 @@ class ExerciseImprovementCard extends StatelessWidget {
                   ExpansionTile(
                       title: const Text('Measurement details'),
                       children: [
+                        Text(
+                            'Recent routine target: ${linkedRoutineTarget(comparison.latest, routineProgress) ?? 'No saved workout target available'}'),
+                        if (comparison.previous != null)
+                          Text(
+                              'Previous routine target: ${linkedRoutineTarget(comparison.previous!, routineProgress) ?? 'No saved workout target available'}'),
+                        const Text(
+                            'Targets describe the saved plan, not a verified result for each recording.'),
                         Text('Exercise ID: ${comparison.latest.exerciseId}'),
                         Text(
                             '${comparison.latest.cameraView} · ${comparison.latest.scoringVersion} · ${comparison.latest.detectorId}/${comparison.latest.detectorVersion}'),

@@ -19,6 +19,11 @@ class WorkoutRecordSyncIndicator extends StatelessWidget {
         listenable: c,
         builder: (context, child) {
           if (!c.authorized) return const SizedBox.shrink();
+          if (record != null &&
+              (record!.payload['organizationId'] != c.scope.organizationId ||
+                  record!.payload['userId'] != c.scope.userId)) {
+            return const SizedBox.shrink();
+          }
           final row = record ??
               c.records
                   .where((r) =>
