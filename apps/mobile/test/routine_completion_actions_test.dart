@@ -100,11 +100,11 @@ void main() {
                 view: MemberProgressView.routines,
                 repositoryFactory: (_, __) async => repo))));
     await tester.pumpAndSettle();
-    expect(find.text('Routines'), findsOneWidget);
+    expect(find.text('Workouts'), findsOneWidget);
     await tester.tap(find.text('AI Sessions'));
     await tester.pumpAndSettle();
     expect(find.text('No saved camera sessions yet.'), findsOneWidget);
-    await tester.tap(find.text('Routines'));
+    await tester.tap(find.text('Workouts'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Strength days · Day 1'));
     await tester.pumpAndSettle();

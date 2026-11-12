@@ -49,12 +49,72 @@ class LocalProgressRecordTile extends StatelessWidget {
       required this.utcOffset,
       this.onOpenWorkout,
       this.saveStatus,
-      this.exerciseName});
+      this.exerciseName,
+      this.historyMode = false});
   final LocalWorkoutProgressRecord record;
   final String? exerciseName;
   final Widget? saveStatus;
   final Duration utcOffset;
+  final bool historyMode;
   final void Function(LocalWorkoutProgressRecord)? onOpenWorkout;
+
+  Widget _formScoreBadge(BuildContext context) {
+    final isUnscoredExercise = record.exerciseId.contains('lateral-raise') ||
+        record.exerciseId.contains('overhead-press') ||
+        record.exerciseId.contains('shoulder-press');
+
+    if (isUnscoredExercise) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+        decoration: BoxDecoration(
+          color: AppColors.surfaceAlt,
+          borderRadius: BorderRadius.circular(6),
+        ),
+        child: const Text(
+          'Assessment unavailable',
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+            color: AppColors.inkSoft,
+          ),
+        ),
+      );
+    }
+
+    if (record.formScorePercent != null) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+        decoration: BoxDecoration(
+          color: const Color(0xFFF3E8FF),
+          borderRadius: BorderRadius.circular(6),
+        ),
+        child: Text(
+          'Estimated Form: ${record.formScorePercent!.round()}/100',
+          style: const TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w700,
+            color: AppColors.primary,
+          ),
+        ),
+      );
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceAlt,
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: const Text(
+        'Not assessed',
+        style: TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.w500,
+          color: AppColors.inkSoft,
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -63,72 +123,131 @@ class LocalProgressRecordTile extends StatelessWidget {
       LocalWorkoutRecordStatus.retryable => AppColors.warning,
       _ => AppColors.inkSoft,
     };
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.hairline),
+      ),
       child: InkWell(
         borderRadius: BorderRadius.circular(16),
         onTap: onOpenWorkout == null ? null : () => onOpenWorkout!(record),
-        child: Panel(
-            child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Container(
-              width: 42,
-              height: 42,
-              decoration: BoxDecoration(
-                  color: AppColors.surfaceAlt,
-                  borderRadius: BorderRadius.circular(12)),
-              child: const Icon(Icons.fitness_center_rounded,
-                  size: 19, color: AppColors.primary)),
-          const SizedBox(width: 14),
-          Expanded(
-              child: Column(
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: AppColors.primaryTint,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Icon(
+                  Icons.videocam_outlined,
+                  size: 20,
+                  color: AppColors.primary,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                Text(exerciseName ?? reportExerciseLabel(record.exerciseId),
-                    style: Theme.of(context).textTheme.titleMedium),
-                Text(
-                    '${localProgressDate(record.endedAt, utcOffset)} · '
-                    '${record.repetitions} full reps · ${record.partialRepetitions} partial attempts',
-                    style: Theme.of(context).textTheme.bodyMedium),
-                const SizedBox(height: 6),
-                if (record.scope.datasetScope != null)
-                  const Text('Fictional recorded fixture · read only')
-                else
-                  saveStatus ?? const WorkoutSaveIndicator(),
-                if (record.scoringVersion == 'single-arm-curl-side-v1')
-                  Text(progressArmModeLabel(record.armMode)),
-                ExpansionTile(
-                  tilePadding: EdgeInsets.zero,
-                  title: const Text('Measurement details'),
-                  children: [
-                    Text(localProgressStatus(record.status),
-                        style: TextStyle(color: statusColor)),
-                    Text('Exercise ID: ${record.exerciseId}'),
-                    Text(record.sessionId),
-                    if (record.failureCode != null)
-                      Text('Upload detail: ${record.failureCode}'),
-                    if (record.acceptedAt != null)
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: Text(
+                            exerciseName ?? reportExerciseLabel(record.exerciseId),
+                            style: const TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.ink,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        _formScoreBadge(context),
+                      ],
+                    ),
+                    const SizedBox(height: 5),
+                    Text(
+                      '${localProgressDate(record.endedAt, utcOffset)} · '
+                      '${record.repetitions} full reps · ${record.partialRepetitions} partial attempts',
+                      style: const TextStyle(
+                        fontSize: 12.5,
+                        color: AppColors.ink,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    if (record.scoringVersion == 'single-arm-curl-side-v1' &&
+                        record.armMode != null) ...[
+                      const SizedBox(height: 3),
                       Text(
-                          'Accepted ${localProgressDate(record.acceptedAt!, utcOffset)}'),
-                    Text(record.formScorePercent == null
-                        ? 'Estimated form: unassessed'
-                        : 'Estimated form: ${record.formScorePercent!.toStringAsFixed(1)}%'),
-                    const Text(
-                        'Provisional estimate · upload acceptance does not validate form'),
-                    Text(
-                        'Measurement coverage: ${localProgressCoverage(record.coverage)}'),
-                    Text(
-                        'Tracked ${(record.trackedDurationMicros / 1000000).toStringAsFixed(1)} s · '
-                        'rejected ${(record.rejectedDurationMicros / 1000000).toStringAsFixed(1)} s'),
-                    Text(
-                        'Rule ${record.scoringVersion} · detector ${record.detectorId} · '
-                        'model ${record.detectorVersion} · view ${record.cameraView}',
-                        style: Theme.of(context).textTheme.bodySmall),
+                        progressArmModeLabel(record.armMode),
+                        style: const TextStyle(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.primary,
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 6),
+                    if (record.scope.datasetScope != null)
+                      const Text(
+                        'Fictional recorded fixture · read only',
+                        style: TextStyle(fontSize: 11, color: AppColors.inkSoft),
+                      )
+                    else
+                      saveStatus ?? const WorkoutSaveIndicator(),
+                    if (!historyMode)
+                      ExpansionTile(
+                        tilePadding: EdgeInsets.zero,
+                        title: const Text('Measurement details'),
+                        children: [
+                          Text(localProgressStatus(record.status),
+                              style: TextStyle(color: statusColor)),
+                          Text('Exercise ID: ${record.exerciseId}'),
+                          Text(record.sessionId),
+                          if (record.failureCode != null)
+                            Text('Upload detail: ${record.failureCode}'),
+                          if (record.acceptedAt != null)
+                            Text(
+                                'Accepted ${localProgressDate(record.acceptedAt!, utcOffset)}'),
+                          Text(record.formScorePercent == null
+                              ? 'Estimated form: unassessed'
+                              : 'Estimated form: ${record.formScorePercent!.toStringAsFixed(1)}%'),
+                          const Text(
+                              'Provisional estimate · upload acceptance does not validate form'),
+                          Text(
+                              'Measurement coverage: ${localProgressCoverage(record.coverage)}'),
+                          Text(
+                              'Tracked ${(record.trackedDurationMicros / 1000000).toStringAsFixed(1)} s · '
+                              'rejected ${(record.rejectedDurationMicros / 1000000).toStringAsFixed(1)} s'),
+                          Text(
+                              'Rule ${record.scoringVersion} · detector ${record.detectorId} · '
+                              'model ${record.detectorVersion} · view ${record.cameraView}',
+                              style: Theme.of(context).textTheme.bodySmall),
+                        ],
+                      ),
                   ],
                 ),
-              ])),
-          if (onOpenWorkout != null)
-            const Icon(Icons.chevron_right_rounded, color: AppColors.inkSoft),
-        ])),
+              ),
+              if (onOpenWorkout != null)
+                const Padding(
+                  padding: EdgeInsets.only(left: 4, top: 2),
+                  child: Icon(
+                    Icons.chevron_right_rounded,
+                    size: 18,
+                    color: AppColors.inkSoft,
+                  ),
+                ),
+            ],
+          ),
+        ),
       ),
     );
   }

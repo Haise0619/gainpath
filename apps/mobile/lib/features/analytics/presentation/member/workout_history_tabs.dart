@@ -44,7 +44,7 @@ class _WorkoutHistoryTabsState extends State<WorkoutHistoryTabs> {
                     isScrollable: scrollable,
                     onTap: (index) => setState(() => _selected = index),
                     tabs: const [
-                      Tab(text: 'Routines'),
+                      Tab(text: 'Workouts'),
                       Tab(text: 'AI Sessions'),
                     ])),
             body: IndexedStack(index: _selected, children: [

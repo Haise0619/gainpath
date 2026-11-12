@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:gainpath_domain/analytics.dart';
+import 'package:gainpath_ui/gainpath_ui.dart';
 import '../../../domain/member_workout_report.dart';
 
 /// Uses the combined report's Malaysia date semantics, applied in place.
@@ -11,11 +12,13 @@ class ContextualProgressFilter extends StatefulWidget {
       this.reportBuilder,
       this.exerciseChoices = const {},
       this.onExport,
-      this.showDisabledExport = false});
+      this.showDisabledExport = false,
+      this.compact = false});
   final MemberLocalProgress progress;
   final Map<String, String> exerciseChoices;
   final void Function(WorkoutReportFilter)? onExport;
   final bool showDisabledExport;
+  final bool compact;
   final Widget Function(MemberLocalProgress)? builder;
   final Widget Function(MemberLocalProgress, WorkoutReportFilter)?
       reportBuilder;
@@ -59,6 +62,134 @@ class _ContextualProgressFilterState extends State<ContextualProgressFilter> {
       ...widget.exerciseChoices.keys
     }.toList()
       ..sort();
+
+    final hasCustomFilters = _days != 30 || _exercise != null;
+
+    if (widget.compact) {
+      return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(children: [
+            for (final days in <int?>[30, 7, null])
+              Padding(
+                padding: const EdgeInsets.only(right: 6),
+                child: ChoiceChip(
+                  label: Text(
+                    days == null ? 'All time' : 'Last $days days',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight:
+                          _days == days ? FontWeight.w600 : FontWeight.normal,
+                      color: _days == days ? Colors.white : AppColors.ink,
+                    ),
+                  ),
+                  selected: _days == days,
+                  selectedColor: AppColors.primary,
+                  backgroundColor: AppColors.surfaceAlt,
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  side: BorderSide(
+                    color: _days == days
+                        ? AppColors.primary
+                        : AppColors.hairline,
+                  ),
+                  onSelected: (_) => setState(() => _days = days),
+                ),
+              ),
+            Container(
+              height: 20,
+              width: 1,
+              color: AppColors.hairline,
+              margin: const EdgeInsets.symmetric(horizontal: 4),
+            ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+              decoration: BoxDecoration(
+                color: AppColors.surfaceAlt,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                  color:
+                      _exercise != null ? AppColors.primary : AppColors.hairline,
+                ),
+              ),
+              child: DropdownButtonHideUnderline(
+                child: DropdownButton<String>(
+                  key: ValueKey((source.scope, _exercise)),
+                  value: ids.contains(_exercise) ? _exercise : null,
+                  isDense: true,
+                  hint: const Text('All exercises',
+                      style: TextStyle(fontSize: 12)),
+                  style: const TextStyle(fontSize: 12, color: AppColors.ink),
+                  items: [
+                    const DropdownMenuItem<String>(
+                        value: null,
+                        child:
+                            Text('All exercises', style: TextStyle(fontSize: 12))),
+                    for (final id in ids)
+                      DropdownMenuItem(
+                          value: id,
+                          child: Text(
+                              widget.exerciseChoices[id] ??
+                                  reportExerciseLabel(id),
+                              style: const TextStyle(fontSize: 12)))
+                  ],
+                  onChanged: (value) => setState(() => _exercise = value),
+                ),
+              ),
+            ),
+            if (widget.onExport != null || widget.showDisabledExport)
+              Padding(
+                padding: const EdgeInsets.only(left: 4),
+                child: IconButton(
+                  key: const ValueKey('progress-export-pdf'),
+                  tooltip: 'Export PDF',
+                  icon: const Icon(Icons.picture_as_pdf_outlined, size: 20),
+                  onPressed: widget.onExport == null
+                      ? null
+                      : () => widget.onExport!(WorkoutReportFilter(
+                          startDay: filter.startDay,
+                          endDay: filter.endDay,
+                          exerciseId: _exercise)),
+                ),
+              ),
+            if (hasCustomFilters)
+              Padding(
+                padding: const EdgeInsets.only(left: 4),
+                child: ActionChip(
+                  avatar: const Icon(Icons.refresh_rounded, size: 14),
+                  label: const Text('Reset', style: TextStyle(fontSize: 12)),
+                  backgroundColor: AppColors.surfaceAlt,
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  side: const BorderSide(color: AppColors.hairline),
+                  onPressed: () => setState(() {
+                    _days = 30;
+                    _exercise = null;
+                  }),
+                ),
+              ),
+          ]),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          '${filtered.records.length} captures · ${filter.dateLabel}',
+          style: const TextStyle(fontSize: 12, color: AppColors.inkSoft),
+        ),
+        const SizedBox(height: 12),
+        if (widget.reportBuilder != null)
+          widget.reportBuilder!(
+              filtered,
+              WorkoutReportFilter(
+                  startDay: filter.startDay,
+                  endDay: filter.endDay,
+                  exerciseId: _exercise))
+        else
+          widget.builder!(filtered),
+      ]);
+    }
+
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       Wrap(spacing: 8, children: [
         for (final days in <int?>[7, 30, null])

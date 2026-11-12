@@ -52,6 +52,7 @@ class ActivityTimelineScreen extends StatelessWidget {
             onRefresh: onRefresh,
             child: PageBody(children: [
               ContextualProgressFilter(
+                  compact: historyOnly,
                   showDisabledExport: true,
                   onExport: onOpenFilteredReport ??
                       (onOpenReport == null ? null : (_) => onOpenReport!()),
@@ -59,17 +60,16 @@ class ActivityTimelineScreen extends StatelessWidget {
                   builder: (filtered) => Column(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
-                            if (!historyOnly)
-                              const Eyebrow('Sessions per week'),
-                            const WorkoutMeasurementScope(),
                             if (!historyOnly) ...[
+                              const Eyebrow('Sessions per week'),
+                              const WorkoutMeasurementScope(),
                               LocalProgressPeriod(progress: filtered),
                               LocalWeeklyChart(progress: filtered),
+                              const SizedBox(height: 20),
+                              const Eyebrow('Saved exercise results'),
+                              Text(
+                                  '${filtered.allTimeSessions} saved sessions · ${filtered.allTimeRepetitions} full reps · ${filtered.allTimePartialRepetitions} partial attempts'),
                             ],
-                            const SizedBox(height: 20),
-                            const Eyebrow('Saved exercise results'),
-                            Text(
-                                '${filtered.allTimeSessions} saved sessions · ${filtered.allTimeRepetitions} full reps · ${filtered.allTimePartialRepetitions} partial attempts'),
                             if (local.records.isEmpty)
                               const Panel(
                                   child: Text('No saved camera sessions yet.'))
@@ -80,6 +80,7 @@ class ActivityTimelineScreen extends StatelessWidget {
                             ...filtered.records.map((record) =>
                                 LocalProgressRecordTile(
                                     record: record,
+                                    historyMode: historyOnly,
                                     saveStatus: saveStatusBuilder?.call(record),
                                     exerciseName: reportExerciseNames(
                                         routineProgress?.records ??
