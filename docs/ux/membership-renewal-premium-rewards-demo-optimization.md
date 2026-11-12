@@ -136,3 +136,16 @@ Billplz remains Sandbox. Authenticated provider checkout, real-device browser re
 | `04ab8fa` | Offline Admin screenshot typography correction |
 
 The documentation commit follows these changes. Unrelated `33297e5` financial operations work and the remaining dirty Coach, workout and homepage files are outside this task.
+
+## Follow-up: clean Admin build blocker resolved
+
+Commit `8b6b20c620e3c01e2c93df1eb007f9167d294032` fixes the Coach interface integration described above. `CoachesScreen` now accepts the intended `onReviewChanged` callback and synchronizes the shell with loaded or cleared review state. It compares against the last reported Coach ID so a failed review switch also clears stale breadcrumbs/return scope. The callback was retained because the shell uses it for review navigation; no Coach redesign was included.
+
+The missing parameter was first reproduced with a new failing compilation test against the original committed source. A separate failed-switch regression also reproduced the stale-scope issue before correction. Final verification used a fresh `git archive` of the exact fix commit in `build/admin-clean-build-fix/clean-8b6b20c`, reusing installed package caches and excluding all uncommitted application source:
+
+- **28 Flutter tests passed** across Admin shell, shared people, Coach review alerts/overview, publication flow and discard guards. New cases cover initial review, selecting another Coach, refresh clearing, denied access and failed review switches.
+- Scoped analysis of `coaches_screen.dart`, `admin_shell.dart` and the regression test: **no issues**. Full Admin analysis: **zero errors/warnings**, with **28 existing informational brace-style lints**; `flutter analyze --no-pub --no-fatal-infos` exited 0.
+- `flutter build web --release --no-pub`: **passed**, including the Wasm dry run. The existing CupertinoIcons font warning remains. [Committed-source build output](../../build/admin-clean-build-fix/clean-8b6b20c/apps/admin_web/build/web/index.html).
+- Independent review found no remaining important issues after the failed-switch correction. The pre-existing uncommitted Coach screen was preserved byte-for-byte; the fix commit contains only the minimal committed Coach integration and tests. No deployment was performed.
+
+This follow-up resolves the earlier clean-build blocker; the earlier failed result remains as historical verification evidence.
