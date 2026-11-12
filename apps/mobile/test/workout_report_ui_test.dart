@@ -157,7 +157,9 @@ void main() {
     expect(title.didExceedMaxLines, isFalse);
     expect(find.byTooltip('Filter report'), findsOneWidget);
     expect(find.byTooltip('Export PDF'), findsOneWidget);
-    expect(find.text('Camera sessions'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('AI results'), 200,
+        scrollable: find.byType(Scrollable).first);
+    expect(find.text('AI results'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -173,11 +175,11 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Apply filters'));
     await tester.pumpAndSettle();
-    final timeline = find.text('Progression history timeline (1)');
+    final timeline = find.text('Workout activity (1)');
     await tester.scrollUntilVisible(timeline, 250,
         scrollable: find.byType(Scrollable).first);
     await tester.pumpAndSettle();
-    expect(find.textContaining('Measured AI capture'), findsOneWidget);
+    expect(find.textContaining('AI Tracked'), findsWidgets);
     expect(find.text('Curl'), findsWidgets);
     expect(find.textContaining('squat-record'), findsNothing);
     await tester.tap(find.byTooltip('Export PDF'));

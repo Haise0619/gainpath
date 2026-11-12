@@ -118,12 +118,12 @@ class WorkoutReportPlugin : FlutterPlugin, ActivityAware, PluginRegistry.Activit
         var y = 66f
         fun header() {
             paint.color = purple; paint.textSize = 15f; paint.isFakeBoldText = true
-            page.canvas.drawText("GainPath | Workout progress", 36f, 35f, paint)
+            page.canvas.drawText("GainPath | Your training report", 36f, 35f, paint)
             paint.isFakeBoldText = false; paint.textSize = 10f; paint.color = Color.rgb(35, 28, 50)
         }
         fun finishPage() {
             paint.textSize = 8f; paint.color = Color.DKGRAY
-            page.canvas.drawText("Provisional measurements | Malaysia UTC+08:00 | Page $pageNumber", 36f, 817f, paint)
+            page.canvas.drawText("Personal training record | Malaysia UTC+08:00 | Page $pageNumber", 36f, 817f, paint)
             pdf.finishPage(page); paint.textSize = 10f
         }
         fun space(height: Float) {
@@ -134,19 +134,31 @@ class WorkoutReportPlugin : FlutterPlugin, ActivityAware, PluginRegistry.Activit
             }
         }
         fun text(value: String) {
+            val section = value.isNotBlank() && value.length <= 80 &&
+                value.any { it.isLetter() } && value == value.uppercase() &&
+                !value.startsWith("Source:")
+            paint.textSize = if (section) 12f else 10f
+            paint.isFakeBoldText = section
+            if (section) { space(24f); y += 6f }
             val wrapped = WorkoutReportTextLayout.wrap(value) { remaining ->
                 paint.breakText(remaining, true, 520f, null)
             }
             space(WorkoutReportTextLayout.blockHeight(wrapped.size, 14f, 720f))
             for (line in wrapped) {
-                space(14f); paint.color = Color.rgb(35, 28, 50)
+                space(14f); paint.color = if (section) purple else Color.rgb(35, 28, 50)
                 page.canvas.drawText(line, 36f, y, paint); y += 14f
             }
+            paint.textSize = 10f; paint.isFakeBoldText = false
         }
         try {
             header()
             val lines = (data["lines"] as List<*>).map { it as String }
-            lines.take(7).forEach { text(it) }
+            // New reports lead with useful mixed-workout evidence. Older
+            // payloads retain the original seven-line/chart layout.
+            val appendix = lines.indexOf("TECHNICAL APPENDIX").let {
+                if (it >= 0) it else minOf(7, lines.size)
+            }
+            lines.take(appendix).forEach { text(it) }
             val reps = data["repTrend"] as List<*>
             for (chunk in reps.chunked(12)) {
                 space(206f); text("MEASURED REPETITIONS | purple: full, orange: partial")
@@ -195,7 +207,7 @@ class WorkoutReportPlugin : FlutterPlugin, ActivityAware, PluginRegistry.Activit
                     y = bottom + 35f
                 }
             }
-            lines.drop(7).forEach { text(it) }
+            lines.drop(appendix).forEach { text(it) }
             finishPage(); check(active()); write(pdf)
         } finally { pdf.close() }
     }

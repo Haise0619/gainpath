@@ -7,6 +7,9 @@ import 'package:syncfusion_flutter_charts/charts.dart';
 import '../../domain/member_workout_report.dart';
 import '../../domain/local_member_progress_repository.dart';
 import 'widgets/workout_measurement_scope.dart';
+import 'widgets/workout_report_overview.dart';
+import '../../domain/workout_activity_overview.dart';
+import '../../../workout/domain/routine_attempt.dart';
 
 class WorkoutReportScreen extends StatefulWidget {
   const WorkoutReportScreen(
@@ -173,7 +176,9 @@ class _WorkoutReportScreenState extends State<WorkoutReportScreen> {
                                 onPressed: _saving
                                     ? null
                                     : () => setState(() {
-                                          _filter = WorkoutReportFilter.all();
+                                          _filter =
+                                              WorkoutReportFilter.lastDays(
+                                                  widget.asOf, 30);
                                           _visible = 20;
                                         }),
                                 child: const Text('Reset filters'))
@@ -200,38 +205,7 @@ class _WorkoutReportScreenState extends State<WorkoutReportScreen> {
                                 padding: EdgeInsets.symmetric(vertical: 24),
                                 child:
                                     Text('No activity matches these filters.')),
-                          LayoutBuilder(builder: (context, c) {
-                            final columns =
-                                MediaQuery.textScalerOf(context).scale(14) >= 22
-                                    ? 1
-                                    : c.maxWidth >= 520 &&
-                                            MediaQuery.textScalerOf(context)
-                                                    .scale(14) <
-                                                19
-                                        ? 3
-                                        : 2;
-                            final width =
-                                (c.maxWidth - (columns - 1) * 8) / columns;
-                            return Wrap(spacing: 8, runSpacing: 8, children: [
-                              _metric('Camera sessions',
-                                  '${report.sessions.length}', width),
-                              _metric('Full reps', '${report.fullReps}', width),
-                              _metric('Partial attempts',
-                                  '${report.partialReps}', width),
-                              _metric('Tracked time',
-                                  reportDuration(report.trackedMicros), width),
-                              _metric(
-                                  'Completed routine days',
-                                  report.completedRoutineDays?.toString() ??
-                                      'Unavailable',
-                                  width),
-                              _metric(
-                                  'Self-reported sets',
-                                  report.manualSets?.toString() ??
-                                      'Unavailable',
-                                  width),
-                            ]);
-                          }),
+                          WorkoutReportOverview(report: report),
                           const SizedBox(height: 8),
                           const Text(
                               'Routine completion requires the whole day’s targets. Manual sets reflect matching saved routine snapshots.'),
@@ -287,6 +261,17 @@ class _WorkoutReportScreenState extends State<WorkoutReportScreen> {
                             const SizedBox(height: 12),
                             Text(report.formCharts[i].label,
                                 style: Theme.of(context).textTheme.titleSmall),
+                            if (report.formGroups[i].meanScore == null)
+                              Text(progressFormLabel(
+                                  report.formGroups[i].records.first)),
+                            ExpansionTile(
+                                title: const Text('Assessment details'),
+                                children: [
+                                  Text(
+                                      'Assessment ${i + 1} · ${report.formGroups[i].scoringVersion} · ${report.formGroups[i].detectorId}/${report.formGroups[i].detectorVersion}'),
+                                  const Text(
+                                      'Attempt-weighted mean. Different assessment versions remain separate. Admin reports use cloud-backed data and a session average, which may differ.'),
+                                ]),
                             Text(
                                 '${report.formGroups[i].meanScore?.toStringAsFixed(1) ?? 'Unavailable'}${report.formGroups[i].meanScore == null ? '' : '%'} · '
                                 '${report.formGroups[i].scoredAttempts} scored / ${report.formGroups[i].unassessedAttempts} unassessed attempts'),
@@ -328,107 +313,116 @@ class _WorkoutReportScreenState extends State<WorkoutReportScreen> {
                           ExpansionTile(
                               initiallyExpanded: true,
                               title: Text(
-                                  'Progression history timeline (${report.timeline.length})'),
+                                  'Workout activity (${overviewWorkoutEvents(report).length})'),
                               subtitle:
-                                  const Text('Selected filters · newest first'),
+                                  const Text('Selected dates · newest first'),
                               children: [
-                                for (final event in report.timeline.take(_visible))
+                                for (final event
+                                    in overviewWorkoutEvents(report)
+                                        .take(_visible))
                                   ListTile(
-                                      onTap: event.sourceLabel ==
-                                              'Measured AI capture'
-                                          ? (widget.onOpenWorkout == null
-                                              ? null
-                                              : () => widget.onOpenWorkout!(
-                                                  report.sessions.firstWhere((s) =>
-                                                      s.sessionId == event.id)))
-                                          : (widget.onOpenRoutine == null
-                                              ? null
-                                              : () => widget
-                                                  .onOpenRoutine!(event.id)),
-                                      trailing: (event.sourceLabel ==
-                                                  'Measured AI capture'
-                                              ? widget.onOpenWorkout != null
-                                              : widget.onOpenRoutine != null)
-                                          ? const Icon(Icons.chevron_right_rounded)
-                                          : null,
-                                      title: Text(event.title),
-                                      subtitle: Text('${event.dateTimeLabel} MYT · ${event.sourceLabel}\n${event.dateBasis} · ${event.detail}\n${event.id}')),
-                                if (report.timeline.length > _visible)
-                                  TextButton(
-                                      onPressed: () =>
-                                          setState(() => _visible += 20),
-                                      child: const Text(
-                                          'Show 20 more activities')),
-                                if (report.timeline.isEmpty)
-                                  const ListTile(
-                                      title: Text(
-                                          'No activity matches these filters.')),
-                                const Padding(
-                                    padding: EdgeInsets.all(16),
-                                    child: Text(
-                                        'Routine snapshots are shown separately from measured captures and are never added to AI totals.')),
-                              ]),
-                          ExpansionTile(
-                              title: Text(
-                                  'Camera session details (${report.sessions.length})'),
-                              children: [
-                                for (final s in report.sessions.take(_visible))
-                                  ListTile(
-                                      title: Text(
-                                          report.exerciseName(s.exerciseId)),
-                                      subtitle: Text(
-                                          '${reportDate(s.endedAt)} · ${s.repetitions} full · ${s.partialRepetitions} partial\n'
-                                          '${reportDuration(s.trackedDurationMicros)} tracked · ${workoutAcceptanceLabel(s)}\n${s.sessionId}')),
-                                if (report.sessions.length > _visible)
+                                    onTap: event.kind ==
+                                            WorkoutTimelineKind.aiCapture
+                                        ? widget.onOpenWorkout == null
+                                            ? null
+                                            : () => widget.onOpenWorkout!(report
+                                                .sessions
+                                                .firstWhere((s) =>
+                                                    s.sessionId == event.id))
+                                        : widget.onOpenRoutine == null
+                                            ? null
+                                            : () =>
+                                                widget.onOpenRoutine!(event.id),
+                                    trailing:
+                                        const Icon(Icons.chevron_right_rounded),
+                                    title: Text(event.title),
+                                    subtitle: Text(
+                                        '${event.dateTimeLabel} MYT\n${event.kind == WorkoutTimelineKind.aiCapture ? 'AI Tracked' : 'Workout'} · ${event.kind == WorkoutTimelineKind.aiCapture ? event.detail.split(' · Estimated Form Score').first : routineActivitySummary(report.routines.firstWhere((r) => r.attempt.id == event.id).attempt)}'),
+                                  ),
+                                if (overviewWorkoutEvents(report).length >
+                                    _visible)
                                   TextButton(
                                       onPressed: () =>
                                           setState(() => _visible += 20),
                                       child:
-                                          const Text('Show 20 more sessions'))
-                              ]),
-                          ExpansionTile(
-                              title: Text(
-                                  'Routine attempts (${report.routines.length})'),
-                              children: [
+                                          const Text('Show 20 more workouts')),
                                 for (final r in report.routines.take(_visible))
-                                  ListTile(
+                                  ExpansionTile(
                                       title: Text(
-                                          '${r.attempt.routine.title} · Day ${r.attempt.day}'),
-                                      subtitle: Text(
-                                          '${r.attempt.statusLabel} · ${r.attempt.completedExercises}/${r.attempt.entries.length} exercises\n'
-                                          '${r.dateBasis}: ${reportDate(r.activityAt)}\n${r.manualSets} self-reported sets in selection${r.guidedMicros > 0 ? '\n${r.timedSets} timed sets · ${reportDuration(r.guidedMicros)} video guided · not AI verified' : ''}')),
-                                if (report.routines.length > _visible)
-                                  TextButton(
-                                      onPressed: () =>
-                                          setState(() => _visible += 20),
-                                      child:
-                                          const Text('Show 20 more attempts'))
+                                          '${routineDayTitle(r.attempt.routine, r.attempt.day)} · exercise breakdown'),
+                                      children: [
+                                        for (final e in r.entries)
+                                          ListTile(
+                                            title: Text(r.attempt.routine
+                                                .exercises[e.index].name),
+                                            subtitle: Text(e.isTimed
+                                                ? 'Video Timed · ${e.guided?.completedSets ?? 0} sets · ${reportDuration(e.guided?.totalActiveMicroseconds ?? 0)} active'
+                                                : e.sessionIds.isNotEmpty
+                                                    ? 'AI Tracked · ${e.fullRepetitions} full reps · ${e.partialRepetitions} partial reps'
+                                                    : 'Manual · ${e.manualSets} user-recorded sets'),
+                                          ),
+                                        for (final capture in report.sessions
+                                            .where((s) => r.entries.any((e) => e
+                                                .sessionIds
+                                                .contains(s.sessionId))))
+                                          TextButton(
+                                              onPressed: widget.onOpenWorkout ==
+                                                      null
+                                                  ? null
+                                                  : () => widget
+                                                      .onOpenWorkout!(capture),
+                                              child: Text(
+                                                  'View ${report.exerciseName(capture.exerciseId)} result')),
+                                      ]),
+                              ]),
+                          ExpansionTile(
+                              title: const Text('Technical details'),
+                              children: [
+                                ExpansionTile(
+                                    title: Text(
+                                        'Camera session details (${report.sessions.length})'),
+                                    children: [
+                                      for (final s
+                                          in report.sessions.take(_visible))
+                                        ListTile(
+                                            title: Text(report
+                                                .exerciseName(s.exerciseId)),
+                                            subtitle: Text(
+                                                '${reportDate(s.endedAt)} · ${s.repetitions} full · ${s.partialRepetitions} partial\n'
+                                                '${reportDuration(s.trackedDurationMicros)} tracked · ${workoutAcceptanceLabel(s)}\n${s.sessionId}')),
+                                      if (report.sessions.length > _visible)
+                                        TextButton(
+                                            onPressed: () =>
+                                                setState(() => _visible += 20),
+                                            child: const Text(
+                                                'Show 20 more sessions'))
+                                    ]),
+                                ExpansionTile(
+                                    title: Text(
+                                        'Routine attempts (${report.routines.length})'),
+                                    children: [
+                                      for (final r
+                                          in report.routines.take(_visible))
+                                        ListTile(
+                                            title: Text(routineDayTitle(
+                                                r.attempt.routine,
+                                                r.attempt.day)),
+                                            subtitle: Text(
+                                                '${r.attempt.statusLabel} · ${r.attempt.completedExercises}/${r.attempt.entries.length} exercises\n'
+                                                '${r.dateBasis}: ${reportDate(r.activityAt)}\n${r.manualSets} self-reported sets in selection${r.guidedMicros > 0 ? '\n${r.timedSets} timed sets · ${reportDuration(r.guidedMicros)} video guided · not AI verified' : ''}')),
+                                      if (report.routines.length > _visible)
+                                        TextButton(
+                                            onPressed: () =>
+                                                setState(() => _visible += 20),
+                                            child: const Text(
+                                                'Show 20 more attempts'))
+                                    ]),
                               ]),
                           const SizedBox(height: 8),
                           const Text(
                               'PDF includes every matching row, the selected filters and chart data.'),
                         ])));
   }
-
-  Widget _metric(String label, String value, double width) => SizedBox(
-      width: width,
-      child: Card(
-          margin: EdgeInsets.zero,
-          child: Padding(
-              padding: const EdgeInsets.all(12),
-              child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(value,
-                        style: Theme.of(context)
-                            .textTheme
-                            .headlineSmall
-                            ?.copyWith(
-                                color: AppColors.primary,
-                                fontWeight: FontWeight.w800)),
-                    const SizedBox(height: 4),
-                    Text(label)
-                  ]))));
 }
 
 class _ReportFilters extends StatefulWidget {

@@ -77,6 +77,17 @@ class WorkoutReportFormChart {
       {'label': label, 'points': points.map((p) => p.toJson()).toList()};
 }
 
+String workoutFormGroupLabel(FormProgressSeries g, String name) {
+  final mode = switch (g.records.first.armMode) {
+    'leftOnly' => 'Left only',
+    'rightOnly' => 'Right only',
+    'both' => 'Both arms',
+    _ => 'Arm mode unknown',
+  };
+  return '$name · ${g.cameraView == 'front' ? 'Front view' : 'Side view'}'
+      '${g.scoringVersion == 'single-arm-curl-side-v1' ? ' · $mode' : ''}';
+}
+
 class WorkoutReportDocument {
   WorkoutReportDocument(
       {required Iterable<String> lines,
@@ -213,6 +224,12 @@ class MemberWorkoutReport {
   int? get manualSets => routineHistoryAvailable
       ? routines.fold<int>(0, (n, r) => n + r.manualSets)
       : null;
+  int? get guidedMicros => routineHistoryAvailable
+      ? routines.fold<int>(0, (n, r) => n + r.guidedMicros)
+      : null;
+  int? get timedSets => routineHistoryAvailable
+      ? routines.fold<int>(0, (n, r) => n + r.timedSets)
+      : null;
   int? get completedRoutineDays => routineHistoryAvailable
       ? routines
           .where(
@@ -224,6 +241,11 @@ class MemberWorkoutReport {
       .length;
   String exerciseName(String id) =>
       exerciseNames[id] ?? reportExerciseLabel(id);
+
+  String formGroupLabel(int index) {
+    final g = formGroups[index];
+    return workoutFormGroupLabel(g, exerciseName(g.exerciseId));
+  }
 
   List<WorkoutReportTimelineEntry> get timeline {
     final entries = <WorkoutReportTimelineEntry>[
@@ -330,8 +352,8 @@ class MemberWorkoutReport {
           return order != 0 ? order : a.sessionId.compareTo(b.sessionId);
         });
       charts.add(WorkoutReportFormChart(
-          '${exerciseNames[g.exerciseId]} · ${g.scoringVersion} · ${g.detectorId}/${g.detectorVersion} · ${g.cameraView}'
-          '${g.scoringVersion == 'single-arm-curl-side-v1' ? ' · ${g.records.first.armMode ?? 'unknown arm mode'}' : ''}',
+          workoutFormGroupLabel(g,
+              exerciseNames[g.exerciseId] ?? reportExerciseLabel(g.exerciseId)),
           [
             for (final record in records)
               WorkoutReportFormPoint(
@@ -371,6 +393,32 @@ class MemberWorkoutReport {
       scope.datasetScope != null
           ? 'Source: read-only fictional dataset observations; recorded fixtures, not physical camera captures or device-local history.'
           : 'Source: account-local saved history, including restored backups.',
+      '',
+      'WORKOUT COMPLETION',
+      routineHistoryAvailable
+          ? '$completedRoutineDays completed workouts (whole routine days)'
+          : 'Workout history unavailable',
+      'AI TRACKED',
+      '${sessions.length} saved AI results · $fullReps full reps · $partialReps partial attempts',
+      'Recorded tracking time: ${reportDuration(trackedMicros)}',
+      'VIDEO TIMED',
+      routineHistoryAvailable
+          ? '$timedSets completed timed sets · ${reportDuration(guidedMicros!)} active (${guidedMicros! ~/ 1000000} seconds)'
+          : 'Timed history unavailable',
+      'Timer recorded; repetitions and form are not assessed.',
+      'MANUAL',
+      routineHistoryAvailable
+          ? '$manualSets user-recorded sets'
+          : 'Manual history unavailable',
+      'Video and manual totals describe matching workout records; not a per-day activity log.',
+      'FORM ASSESSMENT',
+      'Attempt-weighted estimates within compatible exercise, rule, detector, view and arm-mode groups.',
+      'Only supported AI assessments contribute. Missing scores are not 0%.',
+      'Member scope: locally available saved history, including restored copies. Admin scope: cloud-backed records; its session-average can differ.',
+      for (var i = 0; i < formGroups.length; i++)
+        '${formGroupLabel(i)}: ${formGroups[i].meanScore == null ? 'Not assessed' : '${formGroups[i].meanScore!.toStringAsFixed(1)}% estimated form'}',
+      '',
+      'TECHNICAL APPENDIX',
       'Provisional AI estimates; workout acceptance is not Cloud Backup status or a reward award.',
       ...warnings.map((w) => 'Data warning: $w'),
       '',
@@ -418,7 +466,7 @@ class MemberWorkoutReport {
       if (routineHistoryAvailable && routines.isEmpty)
         'No routine attempts match these filters.',
       for (final r in routines) ...[
-        '${r.attempt.routine.title} | Day ${r.attempt.day} | ${r.attempt.statusLabel} | ${r.attempt.id}',
+        '${routineDayTitle(r.attempt.routine, r.attempt.day)} | ${r.attempt.statusLabel} | ${r.attempt.id}',
         '${r.dateBasis}: ${reportDate(r.activityAt)} | Whole day: ${r.attempt.completedExercises}/${r.attempt.entries.length} exercises complete',
         for (final e in r.entries)
           e.isTimed
