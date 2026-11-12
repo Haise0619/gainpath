@@ -385,7 +385,7 @@ class MemberWorkoutReport {
 
   WorkoutReportDocument toDocument() {
     final lines = <String>[
-      'GainPath | Workout progress report',
+      'GainPath | Training Report',
       'Generated: ${asOf.add(workoutReportOffset).toIso8601String().substring(0, 19)} | Asia/Kuala_Lumpur (UTC+08:00)',
       'Dates: ${filter.dateLabel}',
       'Routine: ${filter.routineId == null ? 'All routines' : routineNames[filter.routineId] ?? filter.routineId}',

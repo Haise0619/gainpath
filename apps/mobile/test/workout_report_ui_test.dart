@@ -124,6 +124,13 @@ void main() {
               score: null),
           support.reportRecord('after', support.reportNow),
         ], routineHistoryAvailable: true));
+    final assessment = find.text('Squat · Side view');
+    await tester.scrollUntilVisible(assessment, 200,
+        scrollable: find.byType(Scrollable).first);
+    await Scrollable.ensureVisible(tester.element(assessment), alignment: 0.2);
+    await tester.pumpAndSettle();
+    await tester.tap(assessment);
+    await tester.pumpAndSettle();
     final chartFinder = find.byWidgetPredicate((w) =>
         w is SfCartesianChart &&
         w.series.any((s) => s is LineSeries<WorkoutReportFormPoint, String>));
@@ -151,15 +158,15 @@ void main() {
     addTearDown(
         () => tester.platformDispatcher.clearTextScaleFactorTestValue());
     await mount(tester, ReportExporterFake());
-    expect(find.text('Workout report'), findsOneWidget);
+    expect(find.text('Training Report'), findsOneWidget);
     final title =
-        tester.renderObject<RenderParagraph>(find.text('Workout report'));
+        tester.renderObject<RenderParagraph>(find.text('Training Report'));
     expect(title.didExceedMaxLines, isFalse);
     expect(find.byTooltip('Filter report'), findsOneWidget);
     expect(find.byTooltip('Export PDF'), findsOneWidget);
-    await tester.scrollUntilVisible(find.text('AI results'), 200,
+    await tester.scrollUntilVisible(find.textContaining('AI results'), 200,
         scrollable: find.byType(Scrollable).first);
-    expect(find.text('AI results'), findsOneWidget);
+    expect(find.textContaining('AI results'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 

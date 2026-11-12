@@ -6,7 +6,6 @@ import 'package:gainpath_ui/gainpath_ui.dart';
 import 'package:syncfusion_flutter_charts/charts.dart';
 import '../../domain/member_workout_report.dart';
 import '../../domain/local_member_progress_repository.dart';
-import 'widgets/workout_measurement_scope.dart';
 import 'widgets/workout_report_overview.dart';
 import '../../domain/workout_activity_overview.dart';
 import '../../../workout/domain/routine_attempt.dart';
@@ -104,6 +103,196 @@ class _WorkoutReportScreenState extends State<WorkoutReportScreen> {
     }
   }
 
+  Widget _activity(MemberWorkoutReport report) {
+    final events = overviewWorkoutEvents(report);
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      Text('Workout activity (${events.length})',
+          style: Theme.of(context).textTheme.titleLarge),
+      const Text('Newest first · tap a workout to review exercises',
+          style: TextStyle(color: AppColors.inkSoft)),
+      const SizedBox(height: 8),
+      for (final event in events.take(_visible))
+        if (event.kind == WorkoutTimelineKind.routine)
+          _routineActivity(report, event)
+        else
+          ListTile(
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              leading:
+                  const Icon(Icons.videocam_outlined, color: AppColors.primary),
+              title: Text(event.title),
+              subtitle: Text(
+                  '${event.dateTimeLabel} MYT\nAI Tracked · ${event.detail.split(' · Estimated Form Score').first}'),
+              trailing: widget.onOpenWorkout == null
+                  ? null
+                  : const Icon(Icons.chevron_right_rounded),
+              onTap: widget.onOpenWorkout == null
+                  ? null
+                  : () => widget.onOpenWorkout!(report.sessions
+                      .firstWhere((s) => s.sessionId == event.id))),
+      if (events.length > _visible)
+        TextButton(
+            onPressed: () => setState(() => _visible += 20),
+            child: const Text('Show 20 more workouts')),
+    ]);
+  }
+
+  Widget _routineActivity(
+      MemberWorkoutReport report, WorkoutReportTimelineEntry event) {
+    final row = report.routines.firstWhere((r) => r.attempt.id == event.id);
+    return Container(
+        margin: const EdgeInsets.only(bottom: 8),
+        decoration: BoxDecoration(
+            color: AppColors.surface, borderRadius: BorderRadius.circular(20)),
+        child: ExpansionTile(
+            expansionAnimationStyle: MediaQuery.disableAnimationsOf(context)
+                ? AnimationStyle.noAnimation
+                : const AnimationStyle(duration: Duration(milliseconds: 180)),
+            key: PageStorageKey(
+                'report-workout-${event.id}-${_filter.exerciseId}'),
+            shape: const Border(),
+            collapsedShape: const Border(),
+            tilePadding:
+                const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+            title: Text(event.title),
+            subtitle: Text(
+                '${event.dateTimeLabel} MYT\n${routineActivitySummary(row.attempt, entries: row.entries)}'),
+            children: [
+              Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                  child: Text(
+                      'Whole workout: ${row.attempt.statusLabel} · ${row.attempt.completedExercises}/${row.attempt.entries.length} exercises complete${_filter.exerciseId == null ? '' : '\nExercise breakdown is filtered.'}')),
+              for (final e in row.entries)
+                ListTile(
+                    title: Text(row.attempt.routine.exercises[e.index].name),
+                    subtitle: Text(_exerciseResult(e))),
+              for (final capture in report.sessions.where((s) =>
+                  row.entries.any((e) => e.sessionIds.contains(s.sessionId))))
+                ListTile(
+                    title: Text(
+                        'View ${report.exerciseName(capture.exerciseId)} result'),
+                    subtitle: Text(
+                        '${reportDate(capture.endedAt)} · ${capture.repetitions} full reps'),
+                    trailing: widget.onOpenWorkout == null
+                        ? null
+                        : const Icon(Icons.chevron_right_rounded),
+                    onTap: widget.onOpenWorkout == null
+                        ? null
+                        : () => widget.onOpenWorkout!(capture)),
+              if (widget.onOpenRoutine != null)
+                TextButton(
+                    onPressed: () => widget.onOpenRoutine!(event.id),
+                    child: const Text('Open workout record')),
+            ]));
+  }
+
+  String _exerciseResult(RoutineExerciseResult entry) {
+    if (entry.isTimed && entry.guided != null) {
+      return 'Video Timed · ${entry.guided!.completedSets} sets · ${reportDuration(entry.guided!.totalActiveMicroseconds)} active';
+    }
+    if (entry.sessionIds.isNotEmpty) {
+      return 'AI Tracked · ${entry.fullRepetitions} full reps · ${entry.partialRepetitions} partial attempts';
+    }
+    if (entry.manualSets > 0 ||
+        entry.status == RoutineExerciseStatus.selfReportedCompleted ||
+        entry.status == RoutineExerciseStatus.selfReportedPartial) {
+      return 'Manual · ${entry.manualSets} user-recorded sets';
+    }
+    return switch (entry.status) {
+      RoutineExerciseStatus.skipped => 'Skipped · no activity recorded',
+      RoutineExerciseStatus.instructionsReviewed =>
+        'Instructions reviewed · no activity recorded',
+      RoutineExerciseStatus.notStarted => 'Not started · no activity recorded',
+      _ => 'Recorded result details unavailable',
+    };
+  }
+
+  Widget _assessment(MemberWorkoutReport report, int i) {
+    final group = report.formGroups[i];
+    final chart = report.formCharts[i];
+    return ExpansionTile(
+        expansionAnimationStyle: MediaQuery.disableAnimationsOf(context)
+            ? AnimationStyle.noAnimation
+            : const AnimationStyle(duration: Duration(milliseconds: 180)),
+        key: PageStorageKey('report-assessment-$i-${_filter.exerciseId}'),
+        tilePadding: const EdgeInsets.symmetric(horizontal: 8),
+        title: Text(chart.label),
+        subtitle: Text(group.meanScore == null
+            ? progressFormLabel(group.records.first)
+            : '${group.meanScore!.toStringAsFixed(1)}% estimated form · ${group.scoredAttempts} scored attempts'),
+        children: [
+          Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                        'An estimate of recorded movements, not an overall workout score. Missing assessments are unavailable, never 0%.'),
+                    Text(
+                        '${group.scoredAttempts} scored / ${group.unassessedAttempts} unassessed attempts'),
+                    if (chart.points.where((p) => p.score != null).length >
+                        1) ...[
+                      const SizedBox(height: 8),
+                      const Text(
+                          'Recorded captures · Malaysia time · gaps mean unassessed'),
+                      SizedBox(
+                          height: 180,
+                          child: SfCartesianChart(
+                              primaryXAxis: CategoryAxis(
+                                  labelStyle: const TextStyle(
+                                      fontFamily: 'Barlow', fontSize: 12),
+                                  labelRotation: -45,
+                                  axisLabelFormatter: (args) => ChartAxisLabel(
+                                      chart.points
+                                          .firstWhere((p) => p.key == args.text)
+                                          .date,
+                                      args.textStyle)),
+                              primaryYAxis: NumericAxis(
+                                  minimum: 0,
+                                  maximum: 100,
+                                  labelStyle: const TextStyle(
+                                      fontFamily: 'Barlow', fontSize: 12)),
+                              series: <CartesianSeries<WorkoutReportFormPoint,
+                                  String>>[
+                                LineSeries(
+                                    dataSource: chart.points,
+                                    xValueMapper: (d, _) => d.key,
+                                    yValueMapper: (d, _) => d.score,
+                                    emptyPointSettings:
+                                        const EmptyPointSettings(
+                                            mode: EmptyPointMode.gap),
+                                    color: AppColors.primary,
+                                    animationDuration: 0,
+                                    markerSettings:
+                                        const MarkerSettings(isVisible: true))
+                              ])),
+                    ],
+                    for (final capture in group.records)
+                      ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          title: Text(
+                              '${reportDate(capture.endedAt)} · ${progressFormLabel(capture)}'),
+                          trailing: widget.onOpenWorkout == null
+                              ? null
+                              : const Icon(Icons.chevron_right_rounded),
+                          onTap: widget.onOpenWorkout == null
+                              ? null
+                              : () => widget.onOpenWorkout!(capture)),
+                    ExpansionTile(
+                        tilePadding: EdgeInsets.zero,
+                        key: PageStorageKey(
+                            'report-assessment-method-$i-${group.scoringVersion}'),
+                        title: const Text('Assessment details'),
+                        children: [
+                          Text(
+                              '${group.scoringVersion} · ${group.detectorId}/${group.detectorVersion} · ${group.cameraView}'),
+                          const Text(
+                              'Attempt-weighted within compatible exercise, scoring version, detector, camera view and arm-mode groups. Different methods remain separate.')
+                        ]),
+                  ]))
+        ]);
+  }
+
   @override
   Widget build(BuildContext context) {
     final source = widget.source;
@@ -115,9 +304,10 @@ class _WorkoutReportScreenState extends State<WorkoutReportScreen> {
             filter: _filter,
             asOf: widget.asOf);
     return Scaffold(
+        backgroundColor: AppColors.bg,
         appBar: AppBar(
             toolbarHeight: 56 * MediaQuery.textScalerOf(context).scale(1),
-            title: const Text('Workout report', maxLines: 2, softWrap: true),
+            title: const Text('Training Report', maxLines: 2, softWrap: true),
             bottom: PreferredSize(
                 preferredSize: Size.fromHeight(
                     MediaQuery.textScalerOf(context).scale(1) >= 1.8 ? 96 : 48),
@@ -159,9 +349,17 @@ class _WorkoutReportScreenState extends State<WorkoutReportScreen> {
                         children: [
                           if (widget.loading || _saving)
                             const LinearProgressIndicator(),
+                          if (widget.error != null)
+                            ListTile(
+                                contentPadding: EdgeInsets.zero,
+                                title: Text(widget.error!),
+                                trailing: TextButton(
+                                    onPressed: widget.onRefresh,
+                                    child: const Text('Retry'))),
                           Text(_filter.dateLabel,
                               style: Theme.of(context).textTheme.titleMedium),
-                          const Text('Malaysia dates · UTC+08:00'),
+                          const Text('Malaysia time · UTC+08:00',
+                              style: TextStyle(color: AppColors.inkSoft)),
                           Wrap(spacing: 6, runSpacing: 6, children: [
                             if (_filter.routineId != null)
                               Chip(
@@ -172,26 +370,23 @@ class _WorkoutReportScreenState extends State<WorkoutReportScreen> {
                               Chip(
                                   label: Text(report
                                       .exerciseName(_filter.exerciseId!))),
-                            TextButton(
-                                onPressed: _saving
-                                    ? null
-                                    : () => setState(() {
-                                          _filter =
-                                              WorkoutReportFilter.lastDays(
-                                                  widget.asOf, 30);
-                                          _visible = 20;
-                                        }),
-                                child: const Text('Reset filters'))
+                            if (_filter.routineId != null ||
+                                _filter.exerciseId != null ||
+                                _filter.dateLabel !=
+                                    WorkoutReportFilter.lastDays(
+                                            widget.asOf, 30)
+                                        .dateLabel)
+                              TextButton(
+                                  onPressed: _saving
+                                      ? null
+                                      : () => setState(() {
+                                            _filter =
+                                                WorkoutReportFilter.lastDays(
+                                                    widget.asOf, 30);
+                                            _visible = 20;
+                                          }),
+                                  child: const Text('Reset filters'))
                           ]),
-                          const ExpansionTile(
-                              tilePadding: EdgeInsets.zero,
-                              title: Text('About measurements'),
-                              children: [
-                                Padding(
-                                    padding: EdgeInsets.only(bottom: 12),
-                                    child: Text(
-                                        'Saved measurements are provisional. Workout acceptance is not Cloud Backup status. Acceptance remains held unless a server acceptance receipt is saved. Self-reported sets are shown separately. Routine completion requires the whole day’s targets. Manual sets reflect matching saved routine snapshots.'))
-                              ]),
                           for (final warning in report.warnings)
                             Padding(
                                 padding: const EdgeInsets.only(top: 8),
@@ -206,180 +401,34 @@ class _WorkoutReportScreenState extends State<WorkoutReportScreen> {
                                 child:
                                     Text('No activity matches these filters.')),
                           WorkoutReportOverview(report: report),
-                          const SizedBox(height: 8),
-                          const Text(
-                              'Routine completion requires the whole day’s targets. Manual sets reflect matching saved routine snapshots.'),
-                          const WorkoutMeasurementScope(),
-                          if (report.unknownCompletionDays > 0)
-                            Text(
-                                '${report.unknownCompletionDays} completed routine day(s) have no known completion date.'),
-                          if (!report.routineHistoryAvailable)
+                          if (_filter.exerciseId != null)
                             const Padding(
                                 padding: EdgeInsets.symmetric(vertical: 8),
-                                child: Text('Routine history unavailable')),
-                          if (report.days.isNotEmpty) ...[
-                            const SizedBox(height: 20),
-                            const Eyebrow('Measured repetitions'),
-                            SizedBox(
-                                height: 230,
-                                child: SfCartesianChart(
-                                    primaryXAxis:
-                                        CategoryAxis(labelRotation: -45),
-                                    primaryYAxis: NumericAxis(minimum: 0),
-                                    legend: const Legend(
-                                        isVisible: true,
-                                        position: LegendPosition.bottom),
-                                    tooltipBehavior:
-                                        TooltipBehavior(enable: true),
-                                    series: <CartesianSeries<WorkoutReportDay,
-                                        String>>[
-                                      ColumnSeries(
-                                          dataSource: report.days,
-                                          xValueMapper: (d, _) => d.date,
-                                          yValueMapper: (d, _) => d.fullReps,
-                                          name: 'Full reps',
-                                          color: AppColors.primary,
-                                          animationDuration: 0),
-                                      ColumnSeries(
-                                          dataSource: report.days,
-                                          xValueMapper: (d, _) => d.date,
-                                          yValueMapper: (d, _) => d.partialReps,
-                                          name: 'Partial attempts',
-                                          color: AppColors.warning,
-                                          animationDuration: 0),
-                                    ])),
-                          ],
-                          const SizedBox(height: 16),
-                          const Eyebrow('Estimated Form Scores'),
-                          const Text(
-                              'Each exercise, rule, model and camera view is kept separate. Estimates are weighted by scored attempts.'),
-                          if (report.formGroups.isEmpty)
-                            const Text('No Estimated Form Scores available.'),
-                          for (var i = 0;
-                              i < report.formGroups.length;
-                              i++) ...[
-                            const SizedBox(height: 12),
-                            Text(report.formCharts[i].label,
-                                style: Theme.of(context).textTheme.titleSmall),
-                            if (report.formGroups[i].meanScore == null)
-                              Text(progressFormLabel(
-                                  report.formGroups[i].records.first)),
-                            ExpansionTile(
-                                title: const Text('Assessment details'),
-                                children: [
-                                  Text(
-                                      'Assessment ${i + 1} · ${report.formGroups[i].scoringVersion} · ${report.formGroups[i].detectorId}/${report.formGroups[i].detectorVersion}'),
-                                  const Text(
-                                      'Attempt-weighted mean. Different assessment versions remain separate. Admin reports use cloud-backed data and a session average, which may differ.'),
-                                ]),
-                            Text(
-                                '${report.formGroups[i].meanScore?.toStringAsFixed(1) ?? 'Unavailable'}${report.formGroups[i].meanScore == null ? '' : '%'} · '
-                                '${report.formGroups[i].scoredAttempts} scored / ${report.formGroups[i].unassessedAttempts} unassessed attempts'),
+                                child: Text(
+                                    'Activity shows the selected exercise. Completed workouts still require the whole workout’s targets.')),
+                          if (!report.routineHistoryAvailable)
                             const Text(
-                                'Each point is a camera capture · Malaysia time · Unassessed captures leave gaps'),
-                            if (report.formCharts[i].points
-                                .any((p) => p.score != null))
-                              SizedBox(
-                                  height: 180,
-                                  child: SfCartesianChart(
-                                      primaryXAxis: CategoryAxis(
-                                          labelRotation: -45,
-                                          axisLabelFormatter: (args) =>
-                                              ChartAxisLabel(
-                                                  report.formCharts[i].points
-                                                      .firstWhere((p) =>
-                                                          p.key == args.text)
-                                                      .date,
-                                                  args.textStyle)),
-                                      primaryYAxis:
-                                          NumericAxis(minimum: 0, maximum: 100),
-                                      series: <CartesianSeries<
-                                          WorkoutReportFormPoint, String>>[
-                                        LineSeries(
-                                            dataSource:
-                                                report.formCharts[i].points,
-                                            xValueMapper: (d, _) => d.key,
-                                            yValueMapper: (d, _) => d.score,
-                                            emptyPointSettings:
-                                                const EmptyPointSettings(
-                                                    mode: EmptyPointMode.gap),
-                                            color: AppColors.primary,
-                                            animationDuration: 0,
-                                            markerSettings:
-                                                const MarkerSettings(
-                                                    isVisible: true))
-                                      ])),
-                          ],
+                                'Routine history unavailable. Timed and manual totals are unavailable.'),
+                          const SizedBox(height: 20),
+                          _activity(report),
+                          const SizedBox(height: 16),
+                          const Eyebrow('AI form assessments'),
+                          const Text(
+                              'Recorded estimates for supported AI exercises. Timed and manual activity is not scored.'),
+                          if (report.formGroups.isEmpty)
+                            const Text(
+                                'No recorded form assessments in this period.'),
+                          for (var i = 0; i < report.formGroups.length; i++)
+                            _assessment(report, i),
                           const SizedBox(height: 20),
                           ExpansionTile(
-                              initiallyExpanded: true,
-                              title: Text(
-                                  'Workout activity (${overviewWorkoutEvents(report).length})'),
-                              subtitle:
-                                  const Text('Selected dates · newest first'),
-                              children: [
-                                for (final event
-                                    in overviewWorkoutEvents(report)
-                                        .take(_visible))
-                                  ListTile(
-                                    onTap: event.kind ==
-                                            WorkoutTimelineKind.aiCapture
-                                        ? widget.onOpenWorkout == null
-                                            ? null
-                                            : () => widget.onOpenWorkout!(report
-                                                .sessions
-                                                .firstWhere((s) =>
-                                                    s.sessionId == event.id))
-                                        : widget.onOpenRoutine == null
-                                            ? null
-                                            : () =>
-                                                widget.onOpenRoutine!(event.id),
-                                    trailing:
-                                        const Icon(Icons.chevron_right_rounded),
-                                    title: Text(event.title),
-                                    subtitle: Text(
-                                        '${event.dateTimeLabel} MYT\n${event.kind == WorkoutTimelineKind.aiCapture ? 'AI Tracked' : 'Workout'} · ${event.kind == WorkoutTimelineKind.aiCapture ? event.detail.split(' · Estimated Form Score').first : routineActivitySummary(report.routines.firstWhere((r) => r.attempt.id == event.id).attempt, entries: report.routines.firstWhere((r) => r.attempt.id == event.id).entries)}'),
-                                  ),
-                                if (overviewWorkoutEvents(report).length >
-                                    _visible)
-                                  TextButton(
-                                      onPressed: () =>
-                                          setState(() => _visible += 20),
-                                      child:
-                                          const Text('Show 20 more workouts')),
-                                for (final r in report.routines.take(_visible))
-                                  ExpansionTile(
-                                      title: Text(
-                                          '${routineDayTitle(r.attempt.routine, r.attempt.day)} · exercise breakdown'),
-                                      children: [
-                                        for (final e in r.entries)
-                                          ListTile(
-                                            title: Text(r.attempt.routine
-                                                .exercises[e.index].name),
-                                            subtitle: Text(e.isTimed
-                                                ? 'Video Timed · ${e.guided?.completedSets ?? 0} sets · ${reportDuration(e.guided?.totalActiveMicroseconds ?? 0)} active'
-                                                : e.sessionIds.isNotEmpty
-                                                    ? 'AI Tracked · ${e.fullRepetitions} full reps · ${e.partialRepetitions} partial reps'
-                                                    : 'Manual · ${e.manualSets} user-recorded sets'),
-                                          ),
-                                        for (final capture in report.sessions
-                                            .where((s) => r.entries.any((e) => e
-                                                .sessionIds
-                                                .contains(s.sessionId))))
-                                          TextButton(
-                                              onPressed: widget.onOpenWorkout ==
-                                                      null
-                                                  ? null
-                                                  : () => widget
-                                                      .onOpenWorkout!(capture),
-                                              child: Text(
-                                                  'View ${report.exerciseName(capture.exerciseId)} result')),
-                                      ]),
-                              ]),
-                          ExpansionTile(
+                              key: const PageStorageKey(
+                                  'report-technical-details'),
                               title: const Text('Technical details'),
                               children: [
                                 ExpansionTile(
+                                    key: const PageStorageKey(
+                                        'report-camera-evidence'),
                                     title: Text(
                                         'Camera session details (${report.sessions.length})'),
                                     children: [
@@ -398,26 +447,21 @@ class _WorkoutReportScreenState extends State<WorkoutReportScreen> {
                                             child: const Text(
                                                 'Show 20 more sessions'))
                                     ]),
-                                ExpansionTile(
-                                    title: Text(
-                                        'Routine attempts (${report.routines.length})'),
-                                    children: [
-                                      for (final r
-                                          in report.routines.take(_visible))
-                                        ListTile(
-                                            title: Text(routineDayTitle(
-                                                r.attempt.routine,
-                                                r.attempt.day)),
-                                            subtitle: Text(
-                                                '${r.attempt.statusLabel} · ${r.attempt.completedExercises}/${r.attempt.entries.length} exercises\n'
-                                                '${r.dateBasis}: ${reportDate(r.activityAt)}\n${r.manualSets} self-reported sets in selection${r.guidedMicros > 0 ? '\n${r.timedSets} timed sets · ${reportDuration(r.guidedMicros)} video guided · not AI verified' : ''}')),
-                                      if (report.routines.length > _visible)
-                                        TextButton(
-                                            onPressed: () =>
-                                                setState(() => _visible += 20),
-                                            child: const Text(
-                                                'Show 20 more attempts'))
-                                    ]),
+                                const Padding(
+                                    padding: EdgeInsets.all(16),
+                                    child: Text(
+                                        'Saved AI measurements are provisional. Workout acceptance is separate from Cloud Backup and rewards. Completed workouts count completed sessions, including multiple sessions on one day. Workout elapsed time is not active exercise time. Manual sets come from matching saved records.')),
+                                if (report.unknownCompletionDays > 0)
+                                  Padding(
+                                      padding: const EdgeInsets.all(16),
+                                      child: Text(
+                                          '${report.unknownCompletionDays} completed workout(s) have no recorded completion date.')),
+                                for (final r in report.routines.take(_visible))
+                                  ListTile(
+                                      title: Text(
+                                          'Workout record: ${r.attempt.id}'),
+                                      subtitle: Text(
+                                          '${r.dateBasis}: ${reportDate(r.activityAt)} · ${r.attempt.statusLabel}')),
                               ]),
                           const SizedBox(height: 8),
                           const Text(
@@ -452,7 +496,7 @@ class _ReportFiltersState extends State<_ReportFilters> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text('Filter workout report',
+            Text('Filter Training Report',
                 style: Theme.of(context).textTheme.titleLarge),
             const SizedBox(height: 12),
             Wrap(spacing: 8, runSpacing: 8, children: [
