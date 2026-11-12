@@ -47,7 +47,39 @@ class CommercialMembershipFake extends fixture.MembershipFake {
   }
 }
 
+class _ClearedCheckout extends CommercialMembershipFake {
+  @override
+  Future<Map<String, dynamic>> checkout(String a, String b, String c,
+          {required bool renewal, String? quoteId}) => payment(c);
+
+  @override
+  Future<Map<String, dynamic>> payment(String id) async => {
+        'transactionId': id,
+        'planName': 'Basic',
+        'amountMinor': 8900,
+        'paymentStatus': 'cleared',
+        'fulfilmentStatus': 'confirmed',
+        'expiresAtMillis': 1802592000000,
+      };
+}
+
 void main() {
+  testWidgets('View membership remains open after a checkout activates', (t) async {
+    final repo = _ClearedCheckout();
+    await t.pumpWidget(MaterialApp(home: BrowsePlansScreen(repository: repo)));
+    await t.pumpAndSettle();
+    await t.scrollUntilVisible(find.text('Choose Basic'), 120);
+    await t.pumpAndSettle();
+    await t.tap(find.text('Choose Basic'));
+    await t.pumpAndSettle();
+    await t.ensureVisible(find.text('Continue to Payment'));
+    await t.pumpAndSettle();
+    await t.tap(find.text('Continue to Payment'));
+    await t.pumpAndSettle();
+    await t.tap(find.text('View membership'));
+    await t.pumpAndSettle();
+    expect(find.byType(MembershipDashboardScreen), findsOneWidget);
+  });
   test(
       'membership timestamps use exact Malaysia time regardless of device zone',
       () {

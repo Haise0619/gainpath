@@ -9,6 +9,7 @@ import '../shared/membership_data_view.dart';
 import '../../application/membership_feature_host.dart';
 import '../shared/membership_dashboard_screen.dart';
 import 'membership_support_screen.dart';
+import 'browse_plans_screen.dart';
 
 class PurchasePlanScreen extends StatelessWidget {
   const PurchasePlanScreen(
@@ -329,6 +330,7 @@ class _MembershipPaymentScreenState extends State<MembershipPaymentScreen>
   @override
   Widget build(BuildContext context) {
     final status = _payment['fulfilmentStatus'];
+    final refundRequested = _payment['refundStatus'] != null;
     return MembershipRepositoryGuard(
         repository: widget.repository,
         child: Scaffold(
@@ -363,7 +365,12 @@ class _MembershipPaymentScreenState extends State<MembershipPaymentScreen>
               if (status == 'expired' || status == 'failed')
                 const Text(
                     'Checkout closed. You may start a fresh checkout from plans. A late cleared payment will require Admin review.'),
-              if (status == 'reconciliation_required')
+              if (status == 'expired' || status == 'failed')
+                FilledButton.tonal(
+                    onPressed: () => Navigator.push(context, MaterialPageRoute<void>(
+                        builder: (_) => BrowsePlansScreen(repository: widget.repository))),
+                    child: const Text('Return to plans')),
+              if (status == 'reconciliation_required' && !refundRequested)
                 const Text(
                     'Admin review required. Your payment needs a check before activation. Do not make another payment for this checkout.'),
               if (_payment['paymentStatus'] != 'cleared' &&
@@ -380,13 +387,13 @@ class _MembershipPaymentScreenState extends State<MembershipPaymentScreen>
               if (_payment['paymentStatus'] == 'cleared' &&
                   status == 'confirmed')
                 FilledButton(
-                    onPressed: () => Navigator.pushReplacement(
+                    onPressed: () => Navigator.push(
                         context,
                         MaterialPageRoute<void>(
                             builder: (_) => MembershipDashboardScreen(
                                 repository: widget.repository))),
                     child: const Text('View membership')),
-              if (status == 'reconciliation_required')
+              if (status == 'reconciliation_required' && !refundRequested)
                 FilledButton.tonal(
                     onPressed: () => Navigator.push(
                         context,

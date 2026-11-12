@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
 import 'package:gainpath_domain/gamification.dart';
+import 'package:gainpath_domain/membership.dart';
 import 'package:gainpath_identity/gainpath_identity.dart';
 import 'live_mini_game_screen.dart';
 import 'widgets/game_media.dart';
@@ -12,6 +13,7 @@ import 'reach_tap_challenge_card.dart';
 import '../../domain/reach_tap_ports.dart';
 import '../../domain/reach_tap_participation_repository.dart';
 import 'mini_game_participation_panel.dart';
+import '../../../../navigation/membership_access_gate.dart';
 
 class MiniGamesScreen extends StatelessWidget {
   const MiniGamesScreen(
@@ -31,13 +33,19 @@ class MiniGamesScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (connected) {
-      return _MotionGames(
+      final catalog = _MotionGames(
           reader: reader,
           bestScoreStore: bestScoreStore,
           participation: participation,
           reachParticipation: reachParticipation ??
               context.read<ReachTapParticipationRepository?>()?.repository,
           rewardStatus: rewardStatus);
+      return MembershipAccessGate(
+        enabled: context.read<AuthBloc?>()?.state.session != null,
+        feature: MembershipAccessFeature.miniGame,
+        resourceId: 'mini-game-catalog',
+        child: catalog,
+      );
     }
     final games = connected
         ? List.generate(4,
