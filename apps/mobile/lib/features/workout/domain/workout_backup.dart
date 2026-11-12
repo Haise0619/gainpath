@@ -106,6 +106,7 @@ enum BackupRecordStatus {
 class BackupState {
   BackupState(
       {this.enabled = false,
+      this.consentChoiceMade = false,
       Map<String, String> baselines = const {},
       Map<String, String> conflicts = const {},
       this.lastError,
@@ -113,12 +114,16 @@ class BackupState {
       : baselines = Map.unmodifiable(baselines),
         conflicts = Map.unmodifiable(conflicts);
   final bool enabled;
+
+  /// Absent on an existing file means a legacy choice: never re-enable it.
+  final bool consentChoiceMade;
   final Map<String, String> baselines, conflicts;
   final String? lastError;
   final int? lastSuccessMillis;
   Map<String, Object?> toJson() => {
         'schemaVersion': 1,
         'enabled': enabled,
+        'consentChoiceMade': consentChoiceMade,
         'baselines': baselines,
         'conflicts': conflicts,
         'lastError': lastError,
@@ -127,6 +132,10 @@ class BackupState {
   factory BackupState.fromJson(Map<String, dynamic> json) {
     if (json['schemaVersion'] != 1 || json['enabled'] is! bool) {
       throw const FormatException('Invalid backup state');
+    }
+    if (json.containsKey('consentChoiceMade') &&
+        json['consentChoiceMade'] is! bool) {
+      throw const FormatException('Invalid sync preference');
     }
     Map<String, String> hashes(String key) {
       final raw = json[key];
@@ -150,6 +159,7 @@ class BackupState {
     }
     return BackupState(
         enabled: json['enabled'] as bool,
+        consentChoiceMade: json['consentChoiceMade'] as bool? ?? true,
         baselines: hashes('baselines'),
         conflicts: hashes('conflicts'),
         lastError: error as String?,

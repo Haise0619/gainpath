@@ -13,6 +13,7 @@ class WorkoutResultScreen extends StatefulWidget {
   final int seconds;
   final WorkoutSessionSummary? measuredSummary;
   final Widget? syncPanel;
+  final Widget? saveStatus;
   final bool fictionalObservation;
   final VoidCallback? onContinue;
   final String continueLabel;
@@ -22,6 +23,7 @@ class WorkoutResultScreen extends StatefulWidget {
       required WorkoutSessionSummary summary,
       this.fictionalObservation = false,
       this.syncPanel,
+      this.saveStatus,
       this.onContinue,
       this.continueLabel = 'Back to home'})
       : measuredSummary = summary,
@@ -36,6 +38,7 @@ class WorkoutResultScreen extends StatefulWidget {
     required this.seconds,
   })  : measuredSummary = null,
         syncPanel = null,
+        saveStatus = null,
         fictionalObservation = false,
         onContinue = null,
         continueLabel = 'Back to home';
@@ -257,6 +260,7 @@ class _WorkoutResultScreenState extends State<WorkoutResultScreen>
                             context, (route) => route.isFirst),
                     child: Text(widget.continueLabel)))),
         body: PageBody(children: [
+          if (widget.saveStatus != null) widget.saveStatus!,
           Panel(
               background: AppColors.primaryTint,
               child: Column(children: [

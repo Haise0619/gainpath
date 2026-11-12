@@ -31,7 +31,7 @@ void main() {
     await c.load();
     await tester
         .pumpWidget(MaterialApp(home: WorkoutBackupScreen(coordinator: c)));
-    expect(find.text('Saved on device'), findsOneWidget);
+    expect(find.text('Saved on this device'), findsOneWidget);
     expect(find.text('Sync now'), findsNothing);
     expect(find.text('Retry now'), findsNothing);
     await tester.tap(find.byType(Switch));
@@ -42,8 +42,8 @@ void main() {
     await tester.tap(find.text('Enable backup'));
     await tester.pumpAndSettle();
     expect(meta.state.enabled, true);
-    await tester.scrollUntilVisible(find.text('Backed up'), 180);
-    expect(find.text('Backed up'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('Synced'), 180);
+    expect(find.text('Synced'), findsOneWidget);
     await tester.pumpWidget(const SizedBox());
     c.dispose();
   });
@@ -63,7 +63,7 @@ void main() {
     await c.setEnabled(true);
     await tester
         .pumpWidget(MaterialApp(home: WorkoutBackupScreen(coordinator: c)));
-    expect(find.text('Retry needed'), findsOneWidget);
+    expect(find.text('Sync failed — Retry'), findsOneWidget);
     expect(find.text('Retry now'), findsOneWidget);
     expect(find.textContaining('automatically'), findsWidgets);
     expect(find.textContaining('local results are retained'), findsOneWidget);
@@ -72,12 +72,12 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Retry now'));
     await tester.pumpAndSettle();
-    expect(find.text('Backed up'), findsOneWidget);
+    expect(find.text('Synced'), findsOneWidget);
     expect(find.text('Retry now'), findsNothing);
     await tester.tap(find.byType(Switch));
     await tester.pumpAndSettle();
     expect(meta.state.enabled, false);
-    expect(find.text('Saved on device'), findsOneWidget);
+    expect(find.text('Saved on this device'), findsOneWidget);
     expect(find.text('Retry now'), findsNothing);
     expect(find.textContaining('does not delete'), findsOneWidget);
     await tester.pumpWidget(const SizedBox());
@@ -105,7 +105,7 @@ void main() {
     remote.pending.complete(const WorkoutBackupPage([], null));
     await sync;
     await tester.pumpAndSettle();
-    expect(find.text('Saved on device'), findsOneWidget);
+    expect(find.text('Saved on this device'), findsOneWidget);
     await tester.pumpWidget(const SizedBox());
     c.dispose();
   });

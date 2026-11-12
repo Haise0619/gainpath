@@ -123,6 +123,7 @@ class RoutineAttemptDetailScreen extends StatelessWidget {
       {super.key,
       required this.attempt,
       this.trainingSource,
+      this.saveStatus,
       this.onResume,
       this.onRepeat,
       this.onNextDay,
@@ -130,6 +131,7 @@ class RoutineAttemptDetailScreen extends StatelessWidget {
       this.onOpenSession});
   final RoutineAttempt attempt;
   final String? trainingSource;
+  final Widget? saveStatus;
   final VoidCallback? onResume, onRepeat, onNextDay;
   final Set<String> availableSessionIds;
   final ValueChanged<String>? onOpenSession;
@@ -183,7 +185,7 @@ class RoutineAttemptDetailScreen extends StatelessWidget {
               Text(
                   '${a.completedExercises}/${a.entries.length} exercises completed'),
               const SizedBox(height: 6),
-              const Text('Saved on this device'),
+              saveStatus ?? const Text('Saved on this device'),
               const SizedBox(height: 12),
               Panel(
                   background: AppColors.primaryTint,

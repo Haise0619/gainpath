@@ -10,6 +10,7 @@ import '../../features/workout/presentation/member/real_workout_sync_panel.dart'
 import '../../features/workout/presentation/member/workout_result_screen.dart';
 import '../../infrastructure/firebase/firebase_real_workout_gateway.dart';
 import '../di/real_workout_sync_store_factory.dart';
+import 'workout_cloud_save_status.dart';
 
 String newWorkoutRequestId() => List.generate(16,
         (_) => Random.secure().nextInt(256).toRadixString(16).padLeft(2, '0'))
@@ -84,6 +85,7 @@ class _SquatResultSyncState extends State<SquatResultSync> {
   @override
   Widget build(BuildContext context) => WorkoutResultScreen.measured(
       summary: widget.summary,
+      saveStatus: WorkoutCloudSaveStatus.session(widget.summary),
       onContinue: widget.returnToRoutine ? () => Navigator.pop(context) : null,
       continueLabel:
           widget.returnToRoutine ? 'Continue routine' : 'Back to home',

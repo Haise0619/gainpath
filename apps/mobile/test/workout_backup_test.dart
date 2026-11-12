@@ -167,7 +167,7 @@ void main() {
     final c = controller();
     await c.load();
     expect(c.statusFor(record()), BackupRecordStatus.pendingBackup);
-    expect(c.label, 'Pending backup');
+    expect(c.label, 'Saved on this device');
     c.dispose();
   });
   test('number normalization produces stable digest across int and double JSON',

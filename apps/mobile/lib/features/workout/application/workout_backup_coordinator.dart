@@ -55,6 +55,7 @@ class WorkoutBackupCoordinator extends ChangeNotifier {
     ++_generation;
     _state = BackupState(
         enabled: enabled,
+        consentChoiceMade: true,
         baselines: _state.baselines,
         conflicts: _state.conflicts,
         lastSuccessMillis: _state.lastSuccessMillis);
@@ -65,9 +66,10 @@ class WorkoutBackupCoordinator extends ChangeNotifier {
   }
 
   BackupRecordStatus statusFor(WorkoutBackupRecord r) {
-    if (!authorized || !_state.enabled) return BackupRecordStatus.localOnly;
+    if (!authorized) return BackupRecordStatus.localOnly;
     if (_state.conflicts.containsKey(r.key)) return BackupRecordStatus.conflict;
     if (_state.baselines[r.key] == r.digest) return BackupRecordStatus.backedUp;
+    if (!_state.enabled) return BackupRecordStatus.localOnly;
     if (busy) return BackupRecordStatus.syncing;
     return _state.lastError == null
         ? BackupRecordStatus.pendingBackup
@@ -79,15 +81,25 @@ class WorkoutBackupCoordinator extends ChangeNotifier {
       : busy
           ? 'Syncing'
           : !state.enabled
-              ? 'Saved on device'
+              ? 'Saved on this device'
               : state.conflicts.isNotEmpty
                   ? 'Conflicting copies kept'
                   : state.lastError != null
-                      ? 'Retry needed'
+                      ? 'Sync failed — Retry'
                       : records.any((r) =>
                               statusFor(r) != BackupRecordStatus.backedUp)
-                          ? 'Pending backup'
-                          : 'Backed up';
+                          ? 'Saved on this device'
+                          : 'Synced';
+
+  /// Refresh the durable queue without requiring network access or opt-in.
+  Future<void> refreshLocal() async {
+    final generation = _generation;
+    final rows = await local.read();
+    _check(generation);
+    _records = rows;
+    _notify();
+  }
+
   Future<void> sync() async {
     if (!authorized || busy || !_state.enabled) return;
     final generation = _generation;
@@ -170,6 +182,7 @@ class WorkoutBackupCoordinator extends ChangeNotifier {
       _check(generation);
       _state = BackupState(
           enabled: true,
+          consentChoiceMade: _state.consentChoiceMade,
           baselines: baselines,
           conflicts: conflicts,
           lastSuccessMillis: DateTime.now().toUtc().millisecondsSinceEpoch);
@@ -177,6 +190,7 @@ class WorkoutBackupCoordinator extends ChangeNotifier {
       if (authorized && generation == _generation) {
         _state = BackupState(
             enabled: _state.enabled,
+            consentChoiceMade: _state.consentChoiceMade,
             baselines: baselines,
             conflicts: {..._state.conflicts, ...conflicts},
             lastError: e is BackupFailure ? e.code : 'unavailable',
@@ -212,6 +226,7 @@ class WorkoutBackupCoordinator extends ChangeNotifier {
     if (local == null || !canKeepLocal(local)) return;
     _state = BackupState(
         enabled: true,
+        consentChoiceMade: _state.consentChoiceMade,
         baselines: {..._state.baselines, key: remote},
         conflicts: {..._state.conflicts}..remove(key),
         lastSuccessMillis: _state.lastSuccessMillis);

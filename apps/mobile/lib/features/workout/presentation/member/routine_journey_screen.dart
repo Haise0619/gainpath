@@ -16,8 +16,10 @@ class RoutineJourneyScreen extends StatefulWidget {
       required this.onTutorial,
       this.onManualSet,
       this.onOpenSettings,
+      this.saveStatusBuilder,
       this.onViewHistory});
   final RoutineJourneyController controller;
+  final Widget Function(RoutineCheckpoint)? saveStatusBuilder;
   final VoidCallback? onViewHistory;
   final VoidCallback? onOpenSettings;
   final Future<void> Function(int index) onTrack, onTutorial;
@@ -796,6 +798,8 @@ class _RoutineJourneyScreenState extends State<RoutineJourneyScreen> {
                 onPressed: widget.onViewHistory,
                 icon: const Icon(Icons.history_rounded),
                 label: const Text('Routine history'))),
+      if (widget.saveStatusBuilder != null && c.checkpoint != null)
+        widget.saveStatusBuilder!(c.checkpoint!),
       const SizedBox(height: 12),
       Panel(
           background: AppColors.primaryTint,

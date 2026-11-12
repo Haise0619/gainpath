@@ -148,7 +148,7 @@ void main() {
     await tester.tap(find.text('Retry'));
     await tester.pumpAndSettle();
     expect(find.byType(Switch), findsOneWidget);
-    expect(find.text('Saved on device'), findsOneWidget);
+    expect(find.text('Saved on this device'), findsOneWidget);
     await tester.pumpWidget(const SizedBox());
     c.dispose();
     await tester.runAsync(auth.close);

@@ -1,4 +1,5 @@
 import 'workout_program_route.dart';
+import 'workout_cloud_save_status.dart';
 import '../../features/analytics/presentation/member/goal_comparison_report.dart';
 import 'dart:async';
 import 'member_points_progress_route.dart';
@@ -283,6 +284,7 @@ class _MemberProgressHostState extends State<MemberProgressHost>
                         }
                         return WorkoutResultScreen.measured(
                             summary: summary,
+                            saveStatus: WorkoutCloudSaveStatus.session(summary),
                             onContinue: () => Navigator.pop(context),
                             continueLabel: 'Done',
                             fictionalObservation:
@@ -719,6 +721,7 @@ Future<void> openRoutineAttempt(BuildContext context, RoutineAttempt attempt,
                           .any((e) => e.dayNumber > attempt.day);
                       return RoutineAttemptDetailScreen(
                           attempt: attempt,
+                          saveStatus: WorkoutCloudSaveStatus.routine(attempt),
                           trainingSource: link?.enrollment.program.title ??
                               (free
                                   ? 'Free workout'

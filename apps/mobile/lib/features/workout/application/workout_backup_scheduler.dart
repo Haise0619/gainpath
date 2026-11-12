@@ -82,6 +82,7 @@ class WorkoutBackupScheduler {
     var failed = false;
     try {
       await coordinator.load();
+      await coordinator.refreshLocal();
       if (_disposed ||
           !_foreground ||
           !coordinator.authorized ||

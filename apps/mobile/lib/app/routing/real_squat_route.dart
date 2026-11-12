@@ -18,6 +18,7 @@ import '../../features/workout/data/real_workout_outbox_repository.dart';
 import '../../infrastructure/firebase/firebase_real_workout_gateway.dart';
 import '../di/real_workout_sync_store_factory.dart';
 import 'squat_result_sync.dart';
+import 'workout_cloud_save_status.dart';
 import '../../features/workout/presentation/member/live_workout_screen.dart';
 import '../../features/workout/presentation/member/workout_result_screen.dart';
 import '../../infrastructure/audio/android_workout_audio.dart';
@@ -340,6 +341,7 @@ class ScopedSquatResult extends StatelessWidget {
                   acknowledgement: acknowledgement)
               : WorkoutResultScreen.measured(
                   summary: summary,
+                  saveStatus: WorkoutCloudSaveStatus.session(summary),
                   onContinue:
                       returnToRoutine ? () => Navigator.pop(context) : null,
                   continueLabel:
