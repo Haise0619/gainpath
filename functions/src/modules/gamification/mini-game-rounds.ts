@@ -4,6 +4,7 @@ import {DomainError} from '../../platform/errors';
 import {readAll, type DocumentData, type DocumentStore, type TransactionPort} from '../../platform/firestore/store';
 import {requiredIdentifier} from '../../platform/validation';
 import {rewardInteger, rewardTime} from './mini-game-reward-policy';
+import {requireMembershipCapability} from '../commerce/membership-capabilities';
 
 type Auth = {uid: string; token: Record<string, unknown>};
 type Status = 'open' | 'awaiting_verification' | 'abandoned';
@@ -88,6 +89,7 @@ export async function miniGameRounds(store: DocumentStore, auth: Auth | undefine
         if (r.status === 'open' && (r.leaseUntilMillis <= now || r.expiresAtMillis <= now)) throw fail('Round expired. Start a new local round.');
         return snapshot(r);
       }
+      await requireMembershipCapability(tx,auth,org,'canAccessMiniGames',now);
       const [lease, collision] = await readAll(tx, [leasePath, roundPath(candidate!.attemptId)]);
       if (collision) throw fail();
       if (lease && (lease.schemaVersion !== 1 || lease.organizationId !== org || lease.memberId !== uid

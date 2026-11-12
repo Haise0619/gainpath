@@ -1,4 +1,6 @@
 import { randomUUID } from 'node:crypto';
+import {readVerifiedTargetMembershipEntitlement} from '../commerce/membership-entitlement';
+import {membershipCapabilities} from '../commerce/membership-capabilities';
 import { memberBusySlots } from './member-booking-conflicts';
 import type { DocumentData, DocumentStore, TransactionPort } from '../../platform/firestore/store';
 import { parseCreateBookingHold, requiredIdentifier } from '../../platform/validation';
@@ -39,12 +41,21 @@ export async function createBookingHoldService(store: DocumentStore, actorId: st
   const existing = await store.transact(prior);
   if (existing) return existing;
   const eligibilityFailure = await coachEligibilityFailure(readIdentity, input.coachId);
+  let memberIdentity: Awaited<ReturnType<CoachIdentityReader>> | undefined;
+  let memberIdentityFailure: DomainError | undefined;
+  if(!eligibilityFailure) {
+    try { memberIdentity=await readIdentity(input.memberId); }
+    catch { memberIdentityFailure=new DomainError('unavailable','Could not verify Member eligibility. Retry later.'); }
+  }
   const bookingId = randomUUID(); // Stable across retries; external Auth is never called in callbacks.
   return store.transact(async tx => {
     const existing = await prior(tx);
     if (existing) return existing; // A concurrent receipt wins even if the Auth lookup failed.
     if (eligibilityFailure) throw eligibilityFailure;
+    if (memberIdentityFailure) throw memberIdentityFailure;
     const now = clock();
+    const entitlement=await readVerifiedTargetMembershipEntitlement(tx,input.memberId,input.organizationId,now,memberIdentity!);
+    if(!membershipCapabilities(entitlement).canBookCoach) throw new DomainError('permission-denied','Coach booking is available with active Basic and Premium membership.');
     if (input.startAtMillis <= now || input.startAtMillis % SLOT !== 0) throw new DomainError('invalid-argument', 'Start must be a future half-hour boundary.');
     const policy = currentBookingPolicy(await tx.get(`${root}/settings/booking`));
     const date = localDate(input.startAtMillis, policy.timeZone), endAtMillis = input.startAtMillis + input.durationMinutes * 60000;

@@ -9,6 +9,10 @@ let store: MemoryStore;
 let clock: number;
 const execute = (input = command, uid = 'member-1') => createBookingHoldService(store, uid, input, eligibleCoach, () => clock);
 beforeEach(() => { store = new MemoryStore(); clock = now; Object.entries(seeds).forEach(([p, d]) => store.documents.set(p, structuredClone(d))); });
+it('denies a new Free booking but preserves replay of an already created commitment after expiry', async()=>{
+  store.documents.delete('orgs/org-1/membershipAccounts/member-1');
+  await expect(execute()).rejects.toMatchObject({code:'permission-denied'});
+});
 
 it.each([{ policyVersion: '   ' }, { policyVersion: 'booking-v1\n' }, { timeZone: '+05:30' }])(
   'rejects current policy metadata incompatible with the Member wire contract: %j', async change => {
@@ -142,7 +146,7 @@ it('captures eligibility outside retries, preserves allocated ID, and rechecks s
   const reader = vi.fn(eligibleCoach);
   const result = await createBookingHoldService(retry, 'member-1', command, reader, () => ticking);
   expect(attempts).toBe(1); expect(ids).toHaveLength(2); expect(ids[0]).toBe(ids[1]);
-  expect(reader).toHaveBeenCalledTimes(1); expect(result.holdExpiresAtMillis).toBe(now + 901000);
+  expect(reader).toHaveBeenCalledTimes(2); expect(result.holdExpiresAtMillis).toBe(now + 901000);
 });
 it.each([
   ['users/member-1', { organizationId: 'elsewhere' }],

@@ -5,6 +5,8 @@ export const command = { schemaVersion: 1 as const, requestId: 'request-1', orga
 export const seeds = {
   'orgs/org-1': { status: 'active' },
   'users/member-1': { organizationId: 'org-1' },
+  'orgs/org-1/membershipAccounts/member-1': {organizationId:'org-1',memberId:'member-1',planId:'basic',expiresAtMillis:now+60*86400000,lastTransactionId:'paid'},
+  'orgs/org-1/transactions/paid': {schemaVersion:1,organizationId:'org-1',memberId:'member-1',transactionId:'paid',kind:'MembershipPurchase',planId:'basic',planName:'Synthetic Basic',benefits:[],environment:'sandbox',provider:'billplz',currency:'MYR',paymentStatus:'cleared',fulfilmentStatus:'confirmed',billId:'bill',collectionId:'collection',amountMinor:8900,durationDays:30,clearedAtMillis:now-1,expiresAtMillis:now+60*86400000},
   'users/coach-1': { organizationId: 'org-1' },
   'users/staff-1': { organizationId: 'org-1' },
   'orgs/org-1/members/member-1': { organizationId: 'org-1', role: 'member', status: 'active', branchIds: ['branch-1', 'branch-2'] },
@@ -19,3 +21,12 @@ export const seeds = {
 };
 // Explicit synthetic Auth fixture; production always injects the B1 Auth reader.
 export const eligibleCoach = async (_uid: string) => ({ exists: true, disabled: false, emailVerified: true });
+
+export function paidMemberFixture(root: string, org: string, uid: string, at: number) {
+  const expiresAtMillis = at + 30 * 86400000;
+  const transactionId = `paid-${uid}`;
+  return {
+    [`${root}/membershipAccounts/${uid}`]: { organizationId: org, memberId: uid, planId: 'basic', expiresAtMillis, lastTransactionId: transactionId },
+    [`${root}/transactions/${transactionId}`]: { schemaVersion: 1, organizationId: org, memberId: uid, transactionId, planId: 'basic', kind: 'MembershipPurchase', environment: 'sandbox', provider: 'billplz', currency: 'MYR', paymentStatus: 'cleared', fulfilmentStatus: 'confirmed', billId: 'fixture', collectionId: 'fixture', amountMinor: 8900, durationDays: 30, clearedAtMillis: at - 1, expiresAtMillis, planName: 'Basic', benefits: [] },
+  };
+}

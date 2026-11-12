@@ -22,7 +22,7 @@ it('actual handler attaches only trusted current slot/price and never executes a
  const result:any=await fitnessAssistantHandler(f.request,{db:f.db,clock:()=>now,apiKey:'fixture',fetcher,readIdentity:eligibleCoach});
  expect(result.bookingSuggestion).toMatchObject({amountMinor:12500,startAtMillis:start,requiresConfirmation:true});
  expect(result.text).toContain('Nothing has been booked or charged');
- expect([...f.store.documents.keys()].some(p=>p.includes('/bookings/')||p.includes('/transactions/'))).toBe(false);
+ expect([...f.store.documents.keys()].some(p=>p.includes('/bookings/')||(p.includes('/transactions/')&&!p.endsWith('/paid')))).toBe(false);
  expect(fetcher.mock.calls.map(c=>c[1].body).join()).not.toContain('member-1');
 });
 it('discards booking advice if the canonical Member is revoked while inference runs',async()=>{

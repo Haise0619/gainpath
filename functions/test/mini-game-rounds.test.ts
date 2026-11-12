@@ -10,6 +10,12 @@ const call = (action: string, fields: Record<string, unknown> = {}, actor = auth
   {schemaVersion: 1, organizationId: org, action, ...fields}, {freshAuth: async () => {}, clock: () => at,
     randomId: () => (++ids).toString(16).padStart(32, '0')});
 const begin = (id = requestId) => call('begin', {requestId: id, gameId});
+it('requires paid entitlement for a new game round without changing the wallet',async()=>{
+ store.documents.delete(`orgs/${org}/membershipAccounts/member`);
+ const before=structuredClone([...store.documents]);
+ await expect(begin()).rejects.toMatchObject({code:'permission-denied'});
+ expect([...store.documents]).toEqual(before);
+});
 const bound = (round: any) => ({attemptId: round.attemptId, challengeToken: round.challengeToken});
 async function complete(round: any) {
   for (let sequence = 1; sequence <= 20; sequence++) {at += 2000;

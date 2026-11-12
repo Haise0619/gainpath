@@ -7,6 +7,7 @@ import { bookingCoachScope, bookingDaySnapshot, coachEligibilityFailure, current
 import type { CoachIdentityReader } from './coach-profile-service';
 import { storedBooking } from './booking-record';
 import { memberBusySlots } from './member-booking-conflicts';
+import {requireMembershipCapability} from '../commerce/membership-capabilities';
 
 export interface MemberBookingOption { branchId: string; startAtMillis: number; endAtMillis: number; startLabel: string; endLabel: string }
 export interface MemberBookingOptionsResult {
@@ -28,6 +29,7 @@ export async function getMemberBookingOptionsService(store: DocumentStore,
     const member = await currentBookingMembership(tx, org, uid);
     if (member.role !== 'member') throw new DomainError('permission-denied', 'Only Members can request booking options.');
     await requireBookingOrganization(tx, org);
+    if(!rescheduleId) await requireMembershipCapability(tx,auth,org,'canBookCoach',clock());
     const coach = await bookingCoachScope(tx, org, coachId, member.branchIds);
     const original = rescheduleId ? storedBooking(await tx.get(`orgs/${org}/bookings/${rescheduleId}`),org,rescheduleId) : undefined;
     if(original && (original.memberId!==uid || original.coachId!==coachId || original.durationMinutes!==durationMinutes))throw new DomainError('permission-denied','Only the owner can reschedule the original Coach and duration.');

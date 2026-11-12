@@ -18,13 +18,14 @@ const voucherPath = (org: string, voucherId: string) => `${root(org)}/premiumCoa
 /** Complete explicit configuration only. Unsupported commercial choices remain disabled. */
 export function premiumCoachVoucherPolicy(d: DocumentData | undefined) {
   if (!d || d.schemaVersion !== 1 || d.enabled !== true || !id(d.policyVersion)
-    || d.currency !== 'MYR' || d.cycleDays !== 30 || d.discountBasisPoints !== 1000 || d.maximumDiscountMinor !== 1500
+    || d.currency !== 'MYR' || d.cycleDays !== 30 || !Number.isSafeInteger(d.discountBasisPoints) || Number(d.discountBasisPoints) < 1 || Number(d.discountBasisPoints) >= 10000
+    || !Number.isSafeInteger(d.maximumDiscountMinor) || Number(d.maximumDiscountMinor) < 1 || Number(d.maximumDiscountMinor) > 100000000
     || !['floor', 'half_up'].includes(String(d.rounding)) || d.fundingSource !== 'gym' || d.coachCommissionBasis !== 'gross_fee'
     || !id(d.financeApprovalId) || d.commissionPolicyVersion !== 'sandbox-coach-80-v1' || !ids(d.eligibleBranchIds) || !ids(d.eligibleCoachIds)
     || !Array.isArray(d.eligibleDurationsMinutes) || d.eligibleDurationsMinutes.length === 0 || d.eligibleDurationsMinutes.length > 2
     || !d.eligibleDurationsMinutes.every(v => v === 30 || v === 60) || new Set(d.eligibleDurationsMinutes).size !== d.eligibleDurationsMinutes.length
     || d.expiry !== 'cycle_end' || d.stacking !== 'none' || d.refund !== 'no_reinstatement' || d.unpaidRecovery !== 'provider_deleted_only') return undefined;
-  return { policyVersion: d.policyVersion, rounding: d.rounding as 'floor' | 'half_up', eligibleBranchIds: d.eligibleBranchIds,
+  return { policyVersion: d.policyVersion, discountBasisPoints: Number(d.discountBasisPoints), maximumDiscountMinor: Number(d.maximumDiscountMinor), rounding: d.rounding as 'floor' | 'half_up', eligibleBranchIds: d.eligibleBranchIds,
     eligibleCoachIds: d.eligibleCoachIds, eligibleDurationsMinutes: d.eligibleDurationsMinutes as number[],
     fundingSource: 'gym' as const, coachCommissionBasis: 'gross_fee' as const, financeApprovalId: d.financeApprovalId,
     commissionPolicyVersion: d.commissionPolicyVersion };
@@ -106,13 +107,14 @@ export async function premiumCoachVoucherOffer(tx: TransactionPort, auth: Auth, 
       if (prior && (prior.schemaVersion !== 1 || prior.organizationId !== org || prior.memberId !== uid || prior.voucherId !== voucherId
         || prior.cycleStartAtMillis !== term.startAtMillis || prior.cycleEndAtMillis !== term.endAtMillis
         || !['available', 'reserved', 'consumed'].includes(String(prior.status)))) return { offer: { status: 'unavailable' } };
-      const discountMinor = Math.min(1500, policy.rounding === 'floor' ? Math.floor(context.amountMinor / 10) : Math.floor((context.amountMinor + 5) / 10));
+      const discountMinor = Math.min(policy.maximumDiscountMinor, Math.floor((context.amountMinor * policy.discountBasisPoints + (policy.rounding === 'half_up' ? 5000 : 0)) / 10000));
       if (discountMinor < 1 || !Number.isSafeInteger(context.amountMinor) || context.amountMinor - discountMinor < 1) return { offer: { status: 'ineligible' } };
       const offer: PremiumCoachVoucherOffer = { status: prior ? prior.status as PremiumCoachVoucherOffer['status'] : 'available', voucherId,
         cycleStartAtMillis: Number(term.startAtMillis), cycleEndAtMillis: Number(term.endAtMillis), discountMinor };
       const snapshot: VoucherSnapshot = { schemaVersion: 1, voucherId, memberId: uid, policyVersion: policy.policyVersion,
         cycleStartAtMillis: Number(term.startAtMillis), cycleEndAtMillis: Number(term.endAtMillis), grossAmountMinor: context.amountMinor,
         discountMinor, amountMinor: context.amountMinor - discountMinor, rounding: policy.rounding,
+        discountBasisPoints: policy.discountBasisPoints, maximumDiscountMinor: policy.maximumDiscountMinor,
         fundingSource: policy.fundingSource, coachCommissionBasis: policy.coachCommissionBasis,
         financeApprovalId: policy.financeApprovalId, commissionPolicyVersion: policy.commissionPolicyVersion,
         stacking: 'none', refund: 'no_reinstatement', unpaidRecovery: 'provider_deleted_only' };
@@ -139,15 +141,20 @@ export function bookingVoucherProjection(d: DocumentData) {
 /** Read before booking settlement writes; consumes on money clearance even if booking needs review. */
 export function validatedPremiumCoachVoucherSnapshot(d: DocumentData): VoucherSnapshot | undefined {
   const v = d.premiumVoucher as VoucherSnapshot;
+  // Retain existing immutable v1 snapshots; new snapshots explicitly carry commercial values.
+  const basisPoints = v?.discountBasisPoints ?? 1000, cap = v?.maximumDiscountMinor ?? 1500;
+  if (!Number.isSafeInteger(basisPoints) || Number(basisPoints) < 1 || Number(basisPoints) >= 10000
+    || !Number.isSafeInteger(cap) || Number(cap) < 1 || Number(cap) > 100000000
+    || ((v?.discountBasisPoints === undefined) !== (v?.maximumDiscountMinor === undefined))) return undefined;
   if (!v || v.schemaVersion !== 1 || !id(v.voucherId) || v.memberId !== d.memberId || v.amountMinor !== d.amountMinor
     || v.grossAmountMinor !== d.grossAmountMinor || v.discountMinor !== d.discountMinor || !id(v.policyVersion)
     || !Number.isSafeInteger(v.grossAmountMinor) || v.grossAmountMinor < 1 || v.grossAmountMinor > 100000000
-    || !Number.isSafeInteger(v.discountMinor) || v.discountMinor < 1 || v.discountMinor > 1500
+    || !Number.isSafeInteger(v.discountMinor) || v.discountMinor < 1 || v.discountMinor > Number(cap)
     || v.grossAmountMinor - v.discountMinor !== v.amountMinor || v.fundingSource !== 'gym' || v.coachCommissionBasis !== 'gross_fee'
     || !id(v.financeApprovalId) || v.commissionPolicyVersion !== 'sandbox-coach-80-v1' || v.stacking !== 'none' || v.refund !== 'no_reinstatement'
     || !validTime(v.cycleStartAtMillis) || !validTime(v.cycleEndAtMillis) || v.cycleEndAtMillis-v.cycleStartAtMillis !== CYCLE
     || v.unpaidRecovery !== 'provider_deleted_only' || !['floor','half_up'].includes(String(v.rounding))
-    || v.discountMinor !== Math.min(1500,v.rounding === 'floor' ? Math.floor(v.grossAmountMinor / 10) : Math.floor((v.grossAmountMinor + 5) / 10))) return undefined;
+    || v.discountMinor !== Math.min(Number(cap), Math.floor((v.grossAmountMinor * Number(basisPoints) + (v.rounding === 'half_up' ? 5000 : 0)) / 10000))) return undefined;
   return v;
 }
 async function reservedVoucher(tx: TransactionPort, org: string, bookingId: string, d: DocumentData) {

@@ -122,7 +122,7 @@ class _AccessCheckState extends State<_AccessCheck>
           return const Center(child: CircularProgressIndicator());
         }
         final decision = snapshot.data;
-        if (decision?.permitsEntry == true) {
+        if (decision?.outcome == MembershipAccessOutcome.allowed) {
           _exerciseAdmitted =
               widget.feature == MembershipAccessFeature.exercise;
           return widget.child;
@@ -143,14 +143,19 @@ class _AccessCheckState extends State<_AccessCheck>
                   const SizedBox(height: 8),
                   Text(
                       denied
-                          ? 'Check your current membership to access this feature.'
+                          ? widget.feature == MembershipAccessFeature.coach
+                              ? 'Coach booking is available with active Basic and Premium membership.'
+                              : 'This feature is available with active Basic and Premium membership.'
                           : 'Connect and try again to check current access.',
                       textAlign: TextAlign.center),
                   const SizedBox(height: 12),
                   if (denied)
                     FilledButton(
-                        onPressed: () => Navigator.push(context,
-                            MaterialPageRoute<void>(builder: (_) => const BrowsePlansScreen(connected: true))),
+                        onPressed: () async {
+                          await Navigator.push(context, MaterialPageRoute<void>(
+                              builder: (_) => const BrowsePlansScreen(connected: true)));
+                          if (mounted) setState(_load);
+                        },
                         child: const Text('View membership plans')),
                   TextButton(
                       onPressed: () => setState(_load),

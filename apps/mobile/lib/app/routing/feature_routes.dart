@@ -1,3 +1,5 @@
+import 'package:gainpath_domain/membership.dart';
+import '../../navigation/membership_access_gate.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:gainpath_domain/identity.dart';
@@ -33,20 +35,30 @@ Route<dynamic>? buildFeatureRoute(RouteSettings settings,
           body: Center(
               child: Text('This workflow is not connected to Firebase yet.')))
       : switch (settings.name) {
-          FeatureNavigation.reachAndTap when firebase => ReachTapRoute(
-              playAndEarn: args is MiniGameLaunchArguments && args.playAndEarn,
-              content: args is MiniGameLaunchArguments
-                  ? args.content
-                  : args is MiniGameContent
-                      ? args
-                      : null),
-          FeatureNavigation.moveAndCatch when firebase => MoveAndCatchRoute(
-              content: args is MiniGameLaunchArguments
-                  ? args.content
-                  : args is MiniGameContent
-                      ? args
-                      : null,
-              playAndEarn: args is MiniGameLaunchArguments && args.playAndEarn),
+          FeatureNavigation.reachAndTap when firebase => MembershipAccessGate(
+              enabled: true,
+              feature: MembershipAccessFeature.miniGame,
+              resourceId: 'reach-tap-v1',
+              child: ReachTapRoute(
+                  playAndEarn:
+                      args is MiniGameLaunchArguments && args.playAndEarn,
+                  content: args is MiniGameLaunchArguments
+                      ? args.content
+                      : args is MiniGameContent
+                          ? args
+                          : null)),
+          FeatureNavigation.moveAndCatch when firebase => MembershipAccessGate(
+              enabled: true,
+              feature: MembershipAccessFeature.miniGame,
+              resourceId: 'move-catch-v1',
+              child: MoveAndCatchRoute(
+                  content: args is MiniGameLaunchArguments
+                      ? args.content
+                      : args is MiniGameContent
+                          ? args
+                          : null,
+                  playAndEarn:
+                      args is MiniGameLaunchArguments && args.playAndEarn)),
           FeatureNavigation.equipment when args is GymEquipment =>
             EquipmentDetailScreen(equipment: args),
           FeatureNavigation.coach when args is Coach =>

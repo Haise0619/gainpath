@@ -108,6 +108,7 @@ Widget buildFirebaseCoachDirectory(AuthSession session,
               FirebaseCoachDirectoryRepository(
                   scope: session.scope, isCurrent: isCurrent);
           return BrowseCoachesScreen(
+              enforceMembership: factory == null,
               onMessages: () => Navigator.push(
                   context,
                   MaterialPageRoute<void>(

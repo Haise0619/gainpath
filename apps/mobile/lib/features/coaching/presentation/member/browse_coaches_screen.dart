@@ -1,3 +1,5 @@
+import 'package:gainpath_domain/membership.dart';
+import '../../../../navigation/membership_access_gate.dart';
 import 'package:flutter/material.dart';
 import 'package:gainpath_domain/identity.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -18,12 +20,13 @@ class BrowseCoachesScreen extends StatefulWidget {
       this.liveRepository,
       this.isCurrent,
       this.onOpenPublished,
-      this.bookingsBuilder, this.onMessages});
+      this.bookingsBuilder, this.onMessages, this.enforceMembership = false});
   final bool live;
   final CoachDirectoryRepository? liveRepository;
   final bool Function()? isCurrent;
   final void Function(String)? onOpenPublished;
   final WidgetBuilder? bookingsBuilder;
+  final bool enforceMembership;
   final VoidCallback? onMessages;
   @override
   State<BrowseCoachesScreen> createState() => _BrowseCoachesScreenState();
@@ -601,6 +604,11 @@ class _BrowseCoachesScreenState extends State<BrowseCoachesScreen> {
                     child: OutlinedButton(
                         onPressed: _clear, child: const Text('Clear filters'))),
             ]));
+    Widget discovery(Widget child) => MembershipAccessGate(
+        enabled: widget.enforceMembership,
+        feature: MembershipAccessFeature.coach,
+        resourceId: 'coach-directory',
+        child: child);
     final error = state?.message != null;
     final loading = state?.loading == true;
     return Scaffold(
@@ -613,7 +621,7 @@ class _BrowseCoachesScreenState extends State<BrowseCoachesScreen> {
             child: IndexedStack(index: _tab, children: [
           TickerMode(
               enabled: _tab == 0,
-              child: RefreshIndicator(
+              child: discovery(RefreshIndicator(
                   onRefresh: () async {
                     await _directory?.refresh();
                   },
@@ -990,7 +998,7 @@ class _BrowseCoachesScreenState extends State<BrowseCoachesScreen> {
                                                 : 'Load more coaches'))),
                               ]))),
                         const SliverToBoxAdapter(child: SizedBox(height: 24)),
-                      ]))),
+                      ])))),
           TickerMode(
               enabled: _tab == 1,
               child: NotificationListener<SwitchToFindCoachNotification>(

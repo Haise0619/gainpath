@@ -1,3 +1,4 @@
+import {paidMemberFixture} from './booking-fixture';
 import {beforeEach, expect, it, vi} from 'vitest';
 const mocks = vi.hoisted(() => ({getUser: vi.fn(), transact: vi.fn(), options: {} as Record<string, unknown>}));
 vi.mock('firebase-functions/v2/https', async importOriginal => {
@@ -15,7 +16,8 @@ const request = {app: {appId: 'synthetic'}, auth, data};
 let store: ReturnType<typeof seed>;
 beforeEach(() => {
   vi.resetAllMocks(); vi.stubEnv('VERIFIED_REWARDS_ORGANIZATION_ID', 'gainpath');
-  store = seed(); mocks.transact.mockImplementation(work => store.transact(work));
+  store = seed();
+  for (const [path, data] of Object.entries(paidMemberFixture('orgs/gainpath', 'gainpath', 'member', Date.now()))) store.documents.set(path, data); mocks.transact.mockImplementation(work => store.transact(work));
   mocks.getUser.mockResolvedValue({disabled: false, emailVerified: true, email: auth.token.email, tokensValidAfterTime: new Date(0).toUTCString()});
 });
 it('registers App Check enforcement and bounded Singapore runtime', () => {

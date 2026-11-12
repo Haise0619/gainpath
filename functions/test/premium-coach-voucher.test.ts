@@ -153,3 +153,18 @@ it('rejects stale lifecycle/current Auth, foreign organization and unverified id
   store.documents.get(`users/${uid}`)!.accountLifecycle = { schemaVersion: 1, state: 'pendingDeletion', revocationPending: true, sessionNotBeforeSeconds: 0 };
   await expect(quote()).rejects.toMatchObject({ code: 'permission-denied' });
 });
+it('uses explicitly configured percentage and cap rather than implicit commercial values', async () => {
+  Object.assign(store.documents.get(policyPath)!, {discountBasisPoints:725,maximumDiscountMinor:700});
+  await grant();
+  expect(await quote(now,{usePremiumVoucher:true})).toMatchObject({amountMinor:11300,discountMinor:700});
+  const checkout=await createBookingPayment(store,auth,input(),gateway,eligibleCoach,()=>now);
+  expect(checkout).toMatchObject({amountMinor:11300,discountMinor:700});
+  expect(await settleBookingPayment(store,org,bookingId,bill(bookingId,true,11300),eligibleCoach,()=>now+100)).toMatchObject({status:'confirmed',amountMinor:11300});
+});
+it('records cleared discounted payment for review when Premium expires before confirmation',async()=>{
+  await grant('short-term',now-30*DAY+500);
+  await createBookingPayment(store,auth,input(),gateway,eligibleCoach,()=>now);
+  const result=await settleBookingPayment(store,org,bookingId,bill(bookingId,true),eligibleCoach,()=>now+1000);
+  expect(result).toMatchObject({status:'reconciliation_required',paymentStatus:'cleared',resolutionReason:'premium_membership_expired'});
+  expect(store.documents.get(`orgs/${org}/bookings/${bookingId}`)!.status).toBe('pending_hold');
+});

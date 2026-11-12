@@ -1,3 +1,4 @@
+import {paidMemberFixture} from './booking-fixture';
 import {beforeAll, expect, it} from 'vitest';
 import type {Firestore} from 'firebase-admin/firestore';
 import type {DocumentData} from '../src/platform/firestore/store';
@@ -57,6 +58,7 @@ async function fixture(role: 'member' | 'coach' | 'admin' = 'member') {
   const store = new MemoryStore();
   for (const [p, d] of Object.entries(dataset.documents)) store.documents.set(p, structuredClone(d));
   const uid = role === 'admin' ? dataset.adminId : role === 'coach' ? dataset.coachIds[0] : dataset.memberIds[0];
+  if (role === 'member') for (const [path, data] of Object.entries(paidMemberFixture(FYP_ROOT, 'gainpath', uid, now))) store.documents.set(path, data);
   const identity = dataset.identities.find(i => i.uid === uid)!;
   store.documents.set(`datasetAssignments/${uid}`, {schemaVersion: 1, datasetId: 'fyp-v1', organizationId: 'gainpath', seedId: 'gainpath-fyp-v1', enabled: true, role, revision: 1, authCreatedAtMillis: 1000});
   const request = {app: {appId: 'test-app'}, auth: {uid, token: {email: identity.email, email_verified: true, auth_time: Math.floor(now / 1000), fypAuthCreatedAtMillis: 1000}}, data: {schemaVersion: 1, organizationId: 'gainpath'}};

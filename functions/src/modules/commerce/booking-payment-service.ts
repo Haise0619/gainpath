@@ -1,3 +1,4 @@
+import { readVerifiedTargetMembershipEntitlement } from './membership-entitlement';
 import type { DocumentData, DocumentStore, TransactionPort } from '../../platform/firestore/store';
 import { requireVerifiedEmail } from '../../platform/auth-context';
 import { DomainError } from '../../platform/errors';
@@ -195,6 +196,17 @@ export async function settleBookingPayment(store: DocumentStore, org: string, id
     } catch (error) {
       if (error instanceof DomainError && ['failed-precondition','permission-denied','not-found','invalid-argument'].includes(error.code)) reason='booking_ineligible';
       else throw error;
+    }
+    if (!reason && d.premiumVoucher !== undefined) {
+      // Both current Auth identities were verified above. Bind that result to the same booking parties.
+      if (d.memberId !== initial.memberId || b.memberId !== initial.memberId || b.coachId !== initial.coachId) throw review();
+      try {
+        const entitlement = await readVerifiedTargetMembershipEntitlement(tx, String(d.memberId), org, now, {exists:true,disabled:false,emailVerified:true});
+        if (entitlement.status !== 'resolved' || entitlement.effectiveTier !== 'premium') reason = 'premium_membership_expired';
+      } catch (error) {
+        if (error instanceof DomainError && error.code === 'permission-denied') reason = 'account_ineligible';
+        else throw error;
+      }
     }
     const originalDay = !reason ? await tx.get(day!.dayPath) : undefined;
     const consumeVoucher = await preparePremiumCoachVoucherConsumption(tx,org,id,d,now);

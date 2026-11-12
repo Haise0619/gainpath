@@ -92,6 +92,8 @@ it('reads the Coach self-scope once and batches availability branches plus roste
 it('overlaps independent Membership Auth/Firestore checks but gates catalogue/history reads on both', async () => {
   const store = new ReadProbeStore();
   for (const [p, d] of Object.entries(bookingSeeds)) store.documents.set(p, structuredClone(d));
+  store.documents.delete('orgs/org-1/membershipAccounts/member-1');
+  store.documents.delete('orgs/org-1/transactions/paid');
   let overlapped = false, identityChecked = false;
   const reader = { plans: async () => { expect(identityChecked).toBe(true); return []; }, payments: async () => { expect(identityChecked).toBe(true); return []; } };
   const result = await membershipOverview(store, { uid: 'member-1', token: { email_verified: true } },

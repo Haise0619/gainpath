@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:gainpath_domain/gamification.dart';
+import 'package:gainpath_domain/membership.dart';
 import 'package:gainpath_domain/gainpath_domain.dart' show AppRole;
 import 'package:gainpath_identity/gainpath_identity.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
@@ -14,6 +15,7 @@ import 'mini_game_details_screen.dart';
 import '../../application/game_leaderboard_host.dart';
 import 'mini_games_screen.dart';
 import 'mini_game_participation_panel.dart';
+import '../../../../navigation/membership_access_gate.dart';
 
 /// Uses the existing scoped feature composition only for an actual Member.
 class FitnessArcadeHost extends StatefulWidget {
@@ -37,7 +39,11 @@ class _FitnessArcadeHostState extends State<FitnessArcadeHost> {
                   allowed: const {AppRole.member})) {
             return FitnessArcadeGames(onReturn: () => widget.onReturn());
           }
-          return MiniGameContentFeatureHost(
+          return MembershipAccessGate(
+              enabled: true,
+              feature: MembershipAccessFeature.miniGame,
+              resourceId: 'fitness-arcade',
+              child: MiniGameContentFeatureHost(
               key: ObjectKey(auth.state.session),
               builder: (reader, best, _, participation) => Builder(
                   builder: (context) => FitnessArcadeGames(
@@ -48,7 +54,7 @@ class _FitnessArcadeHostState extends State<FitnessArcadeHost> {
                       reachParticipation: context
                           .read<ReachTapParticipationRepository?>()
                           ?.repository,
-                      onReturn: () => widget.onReturn())));
+                      onReturn: () => widget.onReturn()))));
         });
   }
 }

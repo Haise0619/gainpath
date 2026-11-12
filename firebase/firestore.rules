@@ -703,13 +703,49 @@ service cloud.firestore {
       return own(coachId)
         && get(/databases/$(database)/documents/orgs/$(orgId)/members/$(request.auth.uid)).data.role == 'coach';
     }
+    function paidCoachDirectoryMember(orgId) {
+      let uid = request.auth.uid;
+      let account = get(/databases/$(database)/documents/orgs/$(orgId)/membershipAccounts/$(uid)).data;
+      let user = get(/databases/$(database)/documents/users/$(uid)).data;
+      let lifecycle = user.get('accountLifecycle', null);
+      return account.organizationId == orgId && account.memberId == uid
+        && account.planId in ['basic', 'premium']
+        && account.expiresAtMillis is int && account.expiresAtMillis > request.time.toMillis()
+        && get(/databases/$(database)/documents/orgs/$(orgId)).data.status == 'active'
+        && (lifecycle == null || (lifecycle.schemaVersion == 1 && lifecycle.state == 'active'
+          && lifecycle.revocationPending == false && lifecycle.sessionNotBeforeSeconds is int
+          && lifecycle.sessionNotBeforeSeconds >= 0
+          && (lifecycle.sessionNotBeforeSeconds == 0 || request.auth.token.auth_time >= lifecycle.sessionNotBeforeSeconds)))
+        && account.lastTransactionId is string && account.lastTransactionId.matches('[A-Za-z0-9_-]{1,128}')
+        && matchingCoachDirectoryPayment(orgId, uid, account);
+    }
+    function matchingCoachDirectoryPayment(orgId, uid, account) {
+      let transactionId = account.lastTransactionId;
+      let payment = get(/databases/$(database)/documents/orgs/$(orgId)/transactions/$(transactionId)).data;
+      return payment.schemaVersion == 1 && payment.organizationId == orgId && payment.memberId == uid
+        && payment.transactionId == transactionId && payment.planId == account.planId
+        && payment.kind in ['MembershipPurchase', 'MembershipRenewal'] && payment.environment == 'sandbox'
+        && payment.provider == 'billplz' && payment.currency == 'MYR' && payment.paymentStatus == 'cleared'
+        && payment.fulfilmentStatus in ['confirmed', 'reconciliation_required']
+        && payment.billId is string && payment.billId.size() > 0
+        && payment.collectionId is string && payment.collectionId.size() > 0
+        && payment.amountMinor is int && payment.amountMinor > 0
+        && payment.durationDays is int && payment.durationDays > 0 && payment.durationDays <= 3660
+        && payment.clearedAtMillis is int && payment.clearedAtMillis > 0
+        && payment.clearedAtMillis <= request.time.toMillis()
+        && payment.expiresAtMillis == account.expiresAtMillis && payment.expiresAtMillis > payment.clearedAtMillis
+        && payment.planName is string && payment.planName.size() > 0 && payment.benefits is list;
+    }
     match /orgs/{orgId}/coachProfiles/{coachId} {
       allow get: if coachDirectoryMember(orgId) && (coachOwner(orgId, coachId) || adminMember(orgId));
       allow list: if coachDirectoryMember(orgId) && adminMember(orgId);
       allow write: if false;
     }
     match /orgs/{orgId}/coaches/{coachId} {
-      allow read: if coachDirectoryMember(orgId) && (resource.data.status == 'published' || coachOwner(orgId, coachId) || adminMember(orgId));
+      allow get: if coachDirectoryMember(orgId) && (resource.data.status == 'published' || coachOwner(orgId, coachId) || adminMember(orgId));
+      allow list: if coachDirectoryMember(orgId) && (adminMember(orgId) || (resource.data.status == 'published'
+        && (get(/databases/$(database)/documents/orgs/$(orgId)/members/$(request.auth.uid)).data.role != 'member'
+          || paidCoachDirectoryMember(orgId))));
       allow write: if false;
     }
 
@@ -911,8 +947,10 @@ service cloud.firestore {
       }
       match /coaches/{coachId} {
         // Resource predicates let ordinary status==published queries be proven.
-        allow read: if fypCohortReader() && (resource.data.status == 'published'
+        allow get: if fypCohortReader() && (resource.data.status == 'published'
           || fypRole() == 'admin' || (fypRole() == 'coach' && request.auth.uid == coachId));
+        allow list: if fypCohortReader() && (fypRole() == 'admin' || (resource.data.status == 'published'
+          && (fypRole() != 'member' || paidCoachDirectoryMember('gainpath'))));
         allow write: if false;
       }
       match /coachProfiles/{coachId} {
