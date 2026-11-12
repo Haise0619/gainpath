@@ -4,6 +4,7 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:ui' as ui;
 import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:gainpath_domain/workout.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -136,44 +137,82 @@ class _UnavailableWorkoutRepo extends _FullRepo
 
 void main() {
   const regular = PublishedReward(
-      itemId: 'regular', title: 'Training Towel', pointCost: 120, stock: 7,
-      revision: 2, active: true, validityDays: 30, conditions: 'Bring the voucher',
+      itemId: 'regular',
+      title: 'Training Towel',
+      pointCost: 120,
+      stock: 7,
+      revision: 2,
+      active: true,
+      validityDays: 30,
+      conditions: 'Bring the voucher',
       collectionInstructions: 'Collect at reception');
   const exclusive = PublishedReward(
-      itemId: 'exclusive', title: 'Performance Bottle', pointCost: 350, stock: 3,
-      revision: 4, active: true, premiumOnly: true, validityDays: 30,
-      conditions: 'Bring the voucher', collectionInstructions: 'Collect at reception');
+      itemId: 'exclusive',
+      title: 'Performance Bottle',
+      pointCost: 350,
+      stock: 3,
+      revision: 4,
+      active: true,
+      premiumOnly: true,
+      validityDays: 30,
+      conditions: 'Bring the voucher',
+      collectionInstructions: 'Collect at reception');
 
   if (const bool.fromEnvironment('GAINPATH_ADMIN_REWARD_RENDERS')) {
-    setUpAll(loadDemoRenderFonts);
+    setUpAll(() async {
+      await loadDemoRenderFonts();
+      await (FontLoader('Roboto')
+            ..addFont(Future.value(ByteData.sublistView(
+                await File('C:/Windows/Fonts/arial.ttf').readAsBytes()))))
+          .load();
+    });
     for (final width in [768.0, 1024.0, 1280.0, 1440.0]) {
-      testWidgets('Admin eligibility visual QA at ${width.toInt()}px', (tester) async {
+      testWidgets('Admin eligibility visual QA at ${width.toInt()}px',
+          (tester) async {
         addTearDown(await installFypOfflineFonts());
         tester.view.physicalSize = Size(width, 1060);
         tester.view.devicePixelRatio = 1;
         addTearDown(tester.view.reset);
         final repo = _Repo()..items = [regular, exclusive];
         const key = ValueKey('admin-reward-render');
-        await tester.pumpWidget(RepaintBoundary(key: key, child: MaterialApp(
-          debugShowCheckedModeBanner: false, theme: AppTheme.build().copyWith(textTheme: AppTheme.build().textTheme.apply(fontFamily: 'Barlow', bodyColor: AppColors.ink, displayColor: AppColors.ink)),
-          builder: (context, child) => MediaQuery(data: MediaQuery.of(context).copyWith(disableAnimations: true), child: child!),
-          home: ColoredBox(color: AppColors.bg, child: RewardManagementScreen(repository: repo, onVerify: () {})),
-        )));
+        await tester.pumpWidget(RepaintBoundary(
+            key: key,
+            child: MaterialApp(
+              debugShowCheckedModeBanner: false,
+              theme: AppTheme.build().copyWith(
+                  textTheme: AppTheme.build().textTheme.apply(
+                      fontFamily: 'CReview',
+                      bodyColor: AppColors.ink,
+                      displayColor: AppColors.ink)),
+              builder: (context, child) => MediaQuery(
+                  data:
+                      MediaQuery.of(context).copyWith(disableAnimations: true),
+                  child: child!),
+              home: ColoredBox(
+                  color: AppColors.bg,
+                  child: RewardManagementScreen(
+                      repository: repo, onVerify: () {})),
+            )));
         await tester.pumpAndSettle();
         Future<void> capture(String state) async {
           expect(tester.takeException(), isNull);
-          final boundary = tester.renderObject<RenderRepaintBoundary>(find.byKey(key));
+          final boundary =
+              tester.renderObject<RenderRepaintBoundary>(find.byKey(key));
           await tester.runAsync(() async {
             final image = await boundary.toImage();
-            final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
-            final file = File('../../build/membership-renewal-premium-rewards-demo/admin/${width.toInt()}-$state.png');
+            final bytes =
+                await image.toByteData(format: ui.ImageByteFormat.png);
+            final file = File(
+                '../../build/membership-renewal-premium-rewards-demo/admin/${width.toInt()}-$state.png');
             await file.parent.create(recursive: true);
             await file.writeAsBytes(bytes!.buffer.asUint8List());
             image.dispose();
           });
         }
+
         await capture('mixed-catalog');
-        await tester.tap(find.byKey(const ValueKey('reward-eligibility-filter')));
+        await tester
+            .tap(find.byKey(const ValueKey('reward-eligibility-filter')));
         await tester.pumpAndSettle();
         await tester.tap(find.text('Premium Exclusive').last);
         await tester.pumpAndSettle();
@@ -194,9 +233,11 @@ void main() {
     }
   }
 
-  testWidgets('filters published and retired rewards by member eligibility', (tester) async {
+  testWidgets('filters published and retired rewards by member eligibility',
+      (tester) async {
     final repo = _Repo()..items = [regular, exclusive];
-    await tester.pumpWidget(MaterialApp(home: RewardManagementScreen(repository: repo)));
+    await tester.pumpWidget(
+        MaterialApp(home: RewardManagementScreen(repository: repo)));
     await tester.pumpAndSettle();
     expect(find.text(regular.title), findsOneWidget);
     expect(find.text(exclusive.title), findsOneWidget);
@@ -208,10 +249,16 @@ void main() {
     expect(find.text(exclusive.title), findsOneWidget);
   });
 
-  testWidgets('editing preserves Premium eligibility and explains a published eligibility change', (tester) async {
+  testWidgets(
+      'editing preserves Premium eligibility and explains a published eligibility change',
+      (tester) async {
     final repo = _Repo()..fail = false;
-    await tester.pumpWidget(MaterialApp(home: RewardEditorPage(
-      repository: repo, itemId: exclusive.itemId, existing: exclusive, onDone: () {},
+    await tester.pumpWidget(MaterialApp(
+        home: RewardEditorPage(
+      repository: repo,
+      itemId: exclusive.itemId,
+      existing: exclusive,
+      onDone: () {},
     )));
     await tester.pumpAndSettle();
     expect(find.text('Premium Exclusive'), findsOneWidget);
@@ -227,7 +274,8 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Basic & Premium').last);
     await tester.pumpAndSettle();
-    expect(find.textContaining('applies to future redemptions'), findsOneWidget);
+    expect(
+        find.textContaining('applies to future redemptions'), findsOneWidget);
     await tester.ensureVisible(save);
     await tester.tap(save);
     await tester.pumpAndSettle();

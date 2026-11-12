@@ -6,6 +6,7 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gainpath_domain/membership.dart';
 import 'package:gainpath_mobile/app/member_typography_theme.dart';
+import 'package:gainpath_mobile/features/membership/domain/membership_renewal_preview.dart';
 import 'package:gainpath_mobile/features/gamification/presentation/member/reward_shop_screen.dart';
 import 'package:gainpath_domain/gamification.dart';
 import 'package:gainpath_mobile/features/membership/presentation/member/billing_history_screen.dart';
@@ -32,6 +33,9 @@ void main() {
     'basic',
     'premium',
     'expired',
+    'expired-basic',
+    'renew-basic',
+    'renew-premium',
     'unknown',
     'plans',
     'basic-plan',
@@ -39,6 +43,8 @@ void main() {
     'checkout',
     'promo',
     'price-changed',
+    'invalid-promo',
+    'recovery',
     'pending',
     'activated',
     'review',
@@ -64,12 +70,24 @@ void main() {
         final theme = buildMemberTypographyTheme();
         for (final name in scenarios) {
           final repo = _RenderCommerce();
-          if (['basic', 'premium'].contains(name)) {
-            repo.overview['entitlement'] =
-                fixture.entitlement(tier: name, paidStatus: 'active');
-          } else if (name == 'expired') {
-            repo.overview['entitlement'] =
-                fixture.entitlement(paidStatus: 'expired');
+          final renewal = name.startsWith('renew-');
+          final planId = name.contains('premium') ? 'premium' : 'basic';
+          if (['basic', 'premium'].contains(name) || renewal) {
+            repo.overview['entitlement'] = {
+              ...fixture.entitlement(tier: planId, paidStatus: 'active'),
+              'resolvedAtMillis':
+                  DateTime.utc(2026, 11, 12, 10).millisecondsSinceEpoch,
+              'paidExpiresAtMillis':
+                  DateTime.utc(2026, 11, 25, 10).millisecondsSinceEpoch,
+            };
+          } else if (name.startsWith('expired')) {
+            repo.overview['entitlement'] = {
+              ...fixture.entitlement(paidStatus: 'expired'),
+              if (name == 'expired-basic') ...{
+                'paidTier': 'basic',
+                'paidPlanId': 'basic'
+              },
+            };
           } else if (name == 'unknown') {
             repo.overview['entitlement'] = fixture.entitlement(unknown: true);
           }
@@ -116,11 +134,30 @@ void main() {
                 ],
                 redemptions: const []);
           final page = switch (name) {
-            'plans' || 'basic-plan' || 'premium-plan' =>
+            'plans' ||
+            'basic-plan' ||
+            'premium-plan' =>
               BrowsePlansScreen(repository: repo),
-            'checkout' || 'promo' || 'price-changed' => PurchasePlanScreen(
-                repository: repo,
-                plan: MembershipPlan('basic', 'Basic', 89, '30 days', [])),
+            'checkout' ||
+            'promo' ||
+            'price-changed' ||
+            'invalid-promo' ||
+            'recovery' ||
+            'renew-basic' ||
+            'renew-premium' =>
+              PurchasePlanScreen(
+                  repository: repo,
+                  renewal: renewal,
+                  renewalPreview: renewal
+                      ? MembershipRenewalPreview.fromOverview(
+                          MembershipEntitlement.fromOverview(repo.overview),
+                          planId)
+                      : null,
+                  plan: MembershipPlan(
+                      planId,
+                      planId == 'basic' ? 'Basic' : 'Premium',
+                      planId == 'basic' ? 89 : 129,
+                      '30 days', [])),
             'pending' ||
             'activated' ||
             'review' =>
@@ -163,15 +200,24 @@ void main() {
             await tester.pumpAndSettle();
           }
 
-          if (name == 'promo') {
+          if (name == 'promo' || name == 'invalid-promo') {
             await tester.scrollUntilVisible(find.byType(TextField), 100,
                 scrollable: find.byType(Scrollable).first);
-            await tester.enterText(find.byType(TextField), 'FIXTURE');
+            await tester.enterText(find.byType(TextField),
+                name == 'promo' ? 'FIXTURE' : 'INVALID');
             await tap('Verify price / apply code');
           }
-          if (name == 'price-changed') {
-            repo.error = 'membership-quote-changed';
+          if (name == 'price-changed' || name == 'recovery') {
+            repo.error = name == 'price-changed'
+                ? 'membership-quote-changed'
+                : 'unknown';
             await tap('Continue to Payment');
+          }
+          if (renewal) {
+            await tester.scrollUntilVisible(
+                find.textContaining('Estimated new expiry'), 110,
+                scrollable: find.byType(Scrollable).first);
+            await tester.pumpAndSettle();
           }
           expect(tester.takeException(), isNull, reason: name);
           final boundary =
@@ -181,7 +227,7 @@ void main() {
             final bytes =
                 await image.toByteData(format: ui.ImageByteFormat.png);
             final file = File(
-                '../../build/membership-commercial-20261112/renders/${size.width.toInt()}x${size.height.toInt()}-$scale-$name.png');
+                '../../build/membership-renewal-premium-rewards-20261112/membership/${size.width.toInt()}x${size.height.toInt()}-$scale-$name.png');
             await file.parent.create(recursive: true);
             await file.writeAsBytes(bytes!.buffer.asUint8List());
             image.dispose();
