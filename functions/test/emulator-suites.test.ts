@@ -49,3 +49,10 @@ it('routes every fixed-port test to an emulator that actually exposes that port'
     }
   }
 });
+
+it('keeps externally prepared Auth and Functions suites off the legacy core emulator', () => {
+  for (const file of ['fyp-cohort-rules', 'fyp-integration', 'fyp-seed', 'unified-admin', 'shared-data-audit']) {
+    expect(standaloneTests).toContain(`emulator/${file}.test.ts`);
+    expect(suites.core.tests).not.toContain(`emulator/${file}.test.ts`);
+  }
+});
