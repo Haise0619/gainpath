@@ -5,7 +5,7 @@ import { seeds, command, now, eligibleCoach } from './booking-fixture';
 import { createBookingHoldService } from '../src/modules/coaching/booking-service';
 import { createBookingPayment } from '../src/modules/commerce/booking-payment-service';
 import { BillplzSandboxGateway, type SandboxBill } from '../src/modules/commerce/billplz-sandbox';
-import { paymentWebhook } from '../src/modules/commerce/booking-payment-callables';
+import { billplzSandboxReturn, paymentWebhook } from '../src/modules/commerce/booking-payment-callables';
 
 vi.mock('firebase-functions/v2/https',()=>({onCall:(_opts:unknown,handler:unknown)=>handler,onRequest:(opts:unknown,handler:unknown)=>typeof opts==='function'?opts:handler,HttpsError:class extends Error{}}));
 vi.mock('firebase-functions/params',()=>({defineSecret:(key:string)=>({value:()=>key.includes('X_SIGNATURE')?'synthetic-signing-key':'synthetic-api-key'}),defineString:(key:string)=>({value:()=>key.endsWith('ENABLED')?'true':key.endsWith('COLLECTION_ID')?'sandbox-collection':'org-1'})}));
@@ -63,4 +63,23 @@ it('does not acknowledge paid notification ahead of authoritative provider statu
   vi.spyOn(BillplzSandboxGateway.prototype,'get').mockResolvedValue(bill(false));
   expect((await invoke(signed())).status).toBe(503);
   expect(memory.documents.get(`orgs/org-1/bookings/${id}`)?.status).toBe('pending_hold');
+});
+
+it('browser return gives checking instructions without confirming payment or activation', async () => {
+  const get = vi.spyOn(BillplzSandboxGateway.prototype, 'get').mockResolvedValue(bill());
+  const before = structuredClone([...memory.documents]);
+  let status: number | undefined;
+  let html = '';
+  const response = {
+    set: () => response,
+    status: (code: number) => { status = code; return response; },
+    type: () => response,
+    send: (body: string) => { html = body; return response; },
+  };
+  await billplzSandboxReturn({ method: 'GET', query: { paid: 'true', id: 'bill-1' } } as never, response as never);
+  expect(status).toBe(200);
+  expect(html).toContain('Open GainPath to check your payment');
+  expect(html).toContain('does not confirm payment or activation');
+  expect(get).not.toHaveBeenCalled();
+  expect([...memory.documents]).toEqual(before);
 });
