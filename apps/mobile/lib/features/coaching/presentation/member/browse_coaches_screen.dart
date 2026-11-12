@@ -10,6 +10,7 @@ import '../shared/published_coach_presentation.dart';
 import '../shared/member_coach_presentation.dart';
 import '../../application/coach_directory_cubit.dart';
 import 'widgets/coach_card.dart';
+import 'free_coaches_preview.dart';
 
 enum _SortBy { rating, priceLow, experience }
 
@@ -20,13 +21,14 @@ class BrowseCoachesScreen extends StatefulWidget {
       this.liveRepository,
       this.isCurrent,
       this.onOpenPublished,
-      this.bookingsBuilder, this.onMessages, this.enforceMembership = false});
+      this.bookingsBuilder, this.onMessages, this.enforceMembership = false, this.membershipAccessRepository});
   final bool live;
   final CoachDirectoryRepository? liveRepository;
   final bool Function()? isCurrent;
   final void Function(String)? onOpenPublished;
   final WidgetBuilder? bookingsBuilder;
   final bool enforceMembership;
+  final MembershipAccessRepository? membershipAccessRepository;
   final VoidCallback? onMessages;
   @override
   State<BrowseCoachesScreen> createState() => _BrowseCoachesScreenState();
@@ -606,6 +608,14 @@ class _BrowseCoachesScreenState extends State<BrowseCoachesScreen> {
             ]));
     Widget discovery(Widget child) => MembershipAccessGate(
         enabled: widget.enforceMembership,
+        repository: widget.membershipAccessRepository,
+        freePreviewBuilder: (_, viewPlans) => FreeCoachesPreview(
+            coaches: current ? published.values.toList() : const [],
+            repository: widget.liveRepository,
+            isCurrent: widget.isCurrent,
+            loading: state?.loading == true,
+            error: state?.message != null || !current,
+            onViewPlans: viewPlans),
         feature: MembershipAccessFeature.coach,
         resourceId: 'coach-directory',
         child: child);
