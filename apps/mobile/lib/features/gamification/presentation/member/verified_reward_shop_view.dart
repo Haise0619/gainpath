@@ -64,8 +64,18 @@ class _VerifiedRewardShopViewState extends State<VerifiedRewardShopView>
     if (mounted && widget.repository.current) _refresh();
   }
 
-  Future<void> _review(VerifiedRewardItem item, bool enabled, String reason,
-      int? balance) async {
+  Future<void> _membership() async {
+    if (!mounted || !widget.repository.current) return;
+    await Navigator.push(
+        context,
+        MaterialPageRoute<void>(
+            builder: (_) => const MembershipDashboardScreen(connected: true)));
+    if (mounted && widget.repository.current) _refresh();
+  }
+
+  Future<void> _review(
+      VerifiedRewardItem item, bool enabled, String reason, int? balance,
+      {bool showMembership = false}) async {
     if (_busy || !widget.repository.current) return;
     final confirmed = await Navigator.push<bool>(
         context,
@@ -77,8 +87,10 @@ class _VerifiedRewardShopViewState extends State<VerifiedRewardShopView>
                     enabled: enabled,
                     isCurrent: () => widget.repository.current,
                     disabledReason: reason,
-                    confirmedBalance: balance))));
-    if (confirmed == true && mounted && widget.repository.current) {
+                    confirmedBalance: balance,
+                    onMembershipInformation:
+                        showMembership ? _membership : null))));
+    if (enabled && confirmed == true && mounted && widget.repository.current) {
       await _redeem(item);
     }
   }
@@ -129,15 +141,21 @@ class _VerifiedRewardShopViewState extends State<VerifiedRewardShopView>
   }
 
   String _reason(VerifiedRewardsSnapshot data, VerifiedRewardItem item) {
-    if (!data.canRedeem) {
-      return 'Basic or Premium membership is required to redeem physical rewards.';
+    if (!data.available) return 'Refresh to check reward availability.';
+    if (data.effectiveTier == null) {
+      return 'Verify your membership before redeeming this reward.';
     }
     if (item.premiumOnly && data.effectiveTier != 'premium') {
-      return 'Premium membership is required for this reward.';
+      return 'Active Premium membership is required for this reward.';
+    }
+    if (!data.canRedeem) {
+      return 'An active Basic or Premium membership is required.';
     }
     if (item.stock <= 0) return 'This reward is out of stock.';
-    if ((data.balance ?? 0) < item.pointCost) {
-      return 'You need ${item.pointCost - (data.balance ?? 0)} more points.';
+    final balance = data.balance;
+    if (balance == null) return 'Refresh to verify your points balance.';
+    if (balance < item.pointCost) {
+      return 'You need ${item.pointCost - balance} more points.';
     }
     return '';
   }
@@ -275,26 +293,25 @@ class _VerifiedRewardShopViewState extends State<VerifiedRewardShopView>
                                             const Text(
                                                 'Your points are saved. Upgrade to Basic or Premium to redeem physical rewards.'),
                                             TextButton(
-                                                onPressed: () async {
-                                                  await Navigator.push(
-                                                      context,
-                                                      MaterialPageRoute<void>(
-                                                          builder: (_) =>
-                                                              const MembershipDashboardScreen(
-                                                                  connected:
-                                                                      true)));
-                                                  if (mounted &&
-                                                      widget.repository.current)
-                                                    _refresh();
-                                                },
+                                                onPressed: _membership,
                                                 child: const Text(
                                                     'Explore membership')),
                                           ],
                                         )),
                                   if (data.available &&
                                       data.effectiveTier == null)
-                                    const Text(
-                                        'Membership eligibility is unavailable. Refresh before redeeming.'),
+                                    Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        const Text(
+                                            'Verify your membership to redeem physical rewards. Your saved points and rewards remain available.'),
+                                        TextButton(
+                                            onPressed: _membership,
+                                            child: const Text(
+                                                'Verify membership')),
+                                      ],
+                                    ),
                                   if (_error != null)
                                     Padding(
                                         padding:
@@ -305,6 +322,8 @@ class _VerifiedRewardShopViewState extends State<VerifiedRewardShopView>
                                   ...data.items.map((item) {
                                     final reason = _reason(data, item),
                                         enabled = !_busy && reason.isEmpty;
+                                    final premiumLocked = item.premiumOnly &&
+                                        data.effectiveTier == 'basic';
                                     return Padding(
                                         padding:
                                             const EdgeInsets.only(bottom: 16),
@@ -347,8 +366,10 @@ class _VerifiedRewardShopViewState extends State<VerifiedRewardShopView>
                                                             top: 6),
                                                     child: Text(
                                                         'Valid for ${item.validityDays} days')),
-                                              if (item.premiumOnly)
-                                                const Text('Premium exclusive'),
+                                              if (item.premiumOnly) ...[
+                                                const SizedBox(height: 8),
+                                                const PremiumRewardBadge(),
+                                              ],
                                               if (reason.isNotEmpty)
                                                 Padding(
                                                     padding:
@@ -367,7 +388,9 @@ class _VerifiedRewardShopViewState extends State<VerifiedRewardShopView>
                                                                 item,
                                                                 enabled,
                                                                 reason,
-                                                                data.balance),
+                                                                data.balance,
+                                                                showMembership:
+                                                                    premiumLocked),
                                                         child: const Text(
                                                             'View details')),
                                                     FilledButton(
@@ -380,7 +403,14 @@ class _VerifiedRewardShopViewState extends State<VerifiedRewardShopView>
                                                             : null,
                                                         child: Text(_busy
                                                             ? 'Checking…'
-                                                            : 'Redeem'))
+                                                            : 'Redeem')),
+                                                    if (premiumLocked)
+                                                      TextButton(
+                                                          onPressed: _busy
+                                                              ? null
+                                                              : _membership,
+                                                          child: const Text(
+                                                              'Membership information')),
                                                   ]),
                                             ])));
                                   }),

@@ -82,6 +82,91 @@ void main() {
             .onPressed,
         isNull);
   });
+  testWidgets('Basic sees a locked Premium reward with membership information',
+      (tester) async {
+    final repo = RewardsFake()
+      ..value = const VerifiedRewardsSnapshot(
+          available: true,
+          balance: 25,
+          effectiveTier: 'basic',
+          canRedeem: true,
+          items: [
+            VerifiedRewardItem(
+                itemId: 'exclusive',
+                title: 'Club bottle',
+                pointCost: 5,
+                stock: 1,
+                premiumOnly: true)
+          ],
+          redemptions: []);
+    await tester.pumpWidget(
+        MaterialApp(home: RewardShopScreen(connected: true, repository: repo)));
+    await tester.pumpAndSettle();
+    expect(find.text('Premium Exclusive'), findsOneWidget);
+    expect(find.text('Active Premium membership is required for this reward.'),
+        findsOneWidget);
+    expect(find.text('Membership information'), findsOneWidget);
+    expect(
+        tester
+            .widget<FilledButton>(find.widgetWithText(FilledButton, 'Redeem'))
+            .onPressed,
+        isNull);
+    await tester.ensureVisible(find.text('View details'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('View details'));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(find.text('Confirm redemption'), 300);
+    expect(
+        tester
+            .widget<FilledButton>(
+                find.widgetWithText(FilledButton, 'Confirm redemption'))
+            .onPressed,
+        isNull);
+    expect(repo.requests, isEmpty);
+  });
+  for (final (tier, allowed, stock, points, reason) in [
+    ('premium', true, 1, 5, ''),
+    ('premium', true, 0, 5, 'This reward is out of stock.'),
+    ('premium', true, 1, 2, 'You need 3 more points.'),
+    (null, false, 1, 5, 'Verify your membership before redeeming this reward.'),
+    (
+      'free',
+      false,
+      1,
+      5,
+      'Active Premium membership is required for this reward.'
+    ),
+  ]) {
+    testWidgets('Premium reward eligibility: $tier / $stock / $points',
+        (tester) async {
+      final repo = RewardsFake()
+        ..value = VerifiedRewardsSnapshot(
+            available: true,
+            balance: points,
+            effectiveTier: tier,
+            canRedeem: allowed,
+            items: [
+              VerifiedRewardItem(
+                  itemId: 'exclusive',
+                  title: 'Club bottle',
+                  pointCost: 5,
+                  stock: stock,
+                  premiumOnly: true)
+            ],
+            redemptions: const []);
+      await tester.pumpWidget(MaterialApp(
+          home: RewardShopScreen(connected: true, repository: repo)));
+      await tester.pumpAndSettle();
+      expect(find.text('$points verified points'), findsOneWidget);
+      final redeem = find.widgetWithText(FilledButton, 'Redeem');
+      await tester.scrollUntilVisible(redeem, 150,
+          scrollable: find.byType(Scrollable).first);
+      expect(tester.widget<FilledButton>(redeem).onPressed,
+          reason.isEmpty ? isNotNull : isNull);
+      if (reason.isNotEmpty) expect(find.text(reason), findsOneWidget);
+      expect(repo.requests, isEmpty);
+    });
+  }
   testWidgets(
       'failed redemption shows no invented voucher and retries the same request',
       (tester) async {

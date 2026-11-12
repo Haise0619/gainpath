@@ -69,12 +69,14 @@ class RewardDetailsScreen extends StatelessWidget {
       required this.enabled,
       required this.isCurrent,
       required this.disabledReason,
-      this.confirmedBalance});
+      this.confirmedBalance,
+      this.onMembershipInformation});
   final VerifiedRewardItem item;
   final bool enabled;
   final bool Function() isCurrent;
   final String disabledReason;
   final int? confirmedBalance;
+  final VoidCallback? onMembershipInformation;
   @override
   Widget build(BuildContext context) => Scaffold(
       appBar: AppBar(title: const Text('Reward details')),
@@ -82,7 +84,11 @@ class RewardDetailsScreen extends StatelessWidget {
           child: PageBody(children: [
         RewardCover(url: item.imageUrl),
         const SizedBox(height: 20),
-        Text(item.title, style: Theme.of(context).textTheme.headlineSmall),
+        Text(item.title, style: Theme.of(context).textTheme.headlineMedium),
+        if (item.premiumOnly) ...[
+          const SizedBox(height: 8),
+          const PremiumRewardBadge(),
+        ],
         const SizedBox(height: 8),
         Text('${item.pointCost} points',
             style: Theme.of(context).textTheme.titleLarge?.copyWith(
@@ -95,7 +101,9 @@ class RewardDetailsScreen extends StatelessWidget {
               ? 'Balance unavailable · refresh before redeeming'
               : '$confirmedBalance points available'),
           Text('${item.stock} available · stock checked at confirmation'),
-          if (confirmedBalance != null && confirmedBalance! >= item.pointCost)
+          if (enabled &&
+              confirmedBalance != null &&
+              confirmedBalance! >= item.pointCost)
             Text(
                 '${confirmedBalance! - item.pointCost} points after redemption'),
         ])),
@@ -120,6 +128,10 @@ class RewardDetailsScreen extends StatelessWidget {
           Padding(
               padding: const EdgeInsets.only(bottom: 12),
               child: Text(disabledReason)),
+        if (onMembershipInformation != null)
+          TextButton(
+              onPressed: onMembershipInformation,
+              child: const Text('Membership information')),
         FilledButton(
             onPressed: enabled
                 ? () {
@@ -128,4 +140,25 @@ class RewardDetailsScreen extends StatelessWidget {
                 : null,
             child: const Text('Confirm redemption')),
       ])));
+}
+
+class PremiumRewardBadge extends StatelessWidget {
+  const PremiumRewardBadge({super.key});
+
+  @override
+  Widget build(BuildContext context) => Align(
+        alignment: AlignmentDirectional.centerStart,
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: AppColors.surfaceAlt,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            child: Text('Premium Exclusive',
+                style: TextStyle(
+                    color: AppColors.primaryDark, fontWeight: FontWeight.w700)),
+          ),
+        ),
+      );
 }
