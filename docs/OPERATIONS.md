@@ -562,3 +562,8 @@ User-authorized scoped update of `getMembershipAccessCommand` in `asia-southeast
 ## Free Rewards locked previews — 12 November 2026
 
 Source `c658751` preserves visible Mini Game and published reward previews for known Free membership, with a purple lock overlay and membership-plan CTA. Points/check-in/history/rank, paid behavior and backend authorization remain intact. All 56 focused tests, nine requested viewport/text-scale cases, scoped analysis and clean-source Android Debug build pass. No backend deployment or APK installation occurred for this UI change. [Design, screenshots and verification](ux/free-rewards-locked-preview.md).
+
+
+## Published covers and Coach locked previews — 12 November 2026
+
+Sources `102cf35` and `018014f` add real published game-cover loading, orange lock accents and matching published Coach locked previews. Known Free previews remain inert; unknown/paid access and My Bookings are preserved. All 81 combined regressions, both nine-case responsive matrices, scoped analysis and clean-source Android Debug build pass. No backend deployment or APK installation occurred. [Design, screenshots and verification](ux/free-rewards-locked-preview.md).
