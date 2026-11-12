@@ -454,3 +454,8 @@ Clean application source `6573957`: 775 affected Mobile tests (30 existing gated
 ## Training Report and Rewards & Check-in — 12 November 2026
 
 Training Report now has a compact mixed-mode summary, one expandable workout activity list, separate compatible AI assessments and optional technical evidence. Rewards owns the live Rewards & Check-in route with explicit guarded claims, independent balance fallback and scoped refresh/retry. Progress retains a secondary link. Clean source: 839 Mobile tests passed (33 default skips), Domain192/Pose759 passed, 20-file analysis clean and arm64 Debug APK built. Actual baseline/final Flutter renders reviewed. No installation, Firebase deployment or live reward mutation; physical Android PDF/Firebase/check-in acceptance is pending. [Report and evidence](ux/workout-report-rewards-checkin-consumer-redesign.md).
+
+
+## Live membership-access correction — 12 November 2026
+
+Resolved the real-device Coach/Rewards Mini Game verification error caused by the deployed legacy access contract rejecting new feature names with HTTP 400. The corrected callable is live; synthetic Basic Coach, Mini Game and digital access return HTTP 200 / allowed. Device screen retry remains to be observed because the connected phone was dozing. Financial/provider/payment deployment remains outside this correction.

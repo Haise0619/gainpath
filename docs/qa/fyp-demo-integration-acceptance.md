@@ -132,3 +132,12 @@ Firestore execution used `firebase emulators:exec --project demo-gainpath --only
 - Repeat runtime/provider release checks under Node 22 and prepare or repair the four legacy offline evidence/package test prerequisites before claiming a completely green repository-wide backend gate.
 
 No further confirmed defect in the requested demo module scope remains from this local acceptance pass. These outstanding device/provider and test-packaging conditions prevent an unconditional claim that every FYP runtime path has been accepted end to end.
+
+
+## Live membership-access correction — 12 November 2026
+
+The user subsequently reported that an active Basic account saw verification errors on Coaches and Rewards Mini Games. Read-only investigation identified HTTP 400 with valid Auth/App Check: the deployed source still accepted only exercise/report feature names, while the app sent `coach` and `miniGame`. On explicit user instruction to fix it, only the Singapore `getMembershipAccessCommand` was updated from committed `774222b`. Revision `getmembershipaccesscommand-00002-quw` is active.
+
+Verification: 68 membership source tests passed; 25 exact-package contract cases passed; the entrypoint exports only this function. Existing synthetic Basic live requests for Coach, Mini Game and exercise each return HTTP 200 / allowed. App Check, verified identity, organization, session and receipt checks remain enforced. The downloaded deployed source ZIP matches upload SHA-256 `69516e7e82e8bae702d426cd66f177cb638fb84e797b651dc4b1f3487ca990ee`. Runtime, environment, IAM and every unrelated function were verified unchanged. No account, membership, balance, payment, provider or inventory data writes were made by this correction.
+
+The existing phone was dozing; no unlock, APK replacement or device screen retry was performed. The signed-in user can tap **Check access again**. Protected rollback/config/archive files and sanitized live smoke results are retained under ignored `build/membership-access-live-fix-20261112/`. This authorized follow-up changes the earlier report’s no-deployment status only for this one non-financial access callable; other provider/device UAT limits remain.
