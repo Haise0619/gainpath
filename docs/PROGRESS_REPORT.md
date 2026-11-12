@@ -624,3 +624,9 @@ Workout now isolates scheduled and free attempt identities, prioritizes starting
 ## Workout Hub visual and motion redesign — 11 November 2026
 
 Workout now separates its focused action hero, independent Training Plan, compact expandable exercise list, History/Progress and equipment/help. Existing workout engine and identity/persistence protections remain. Clean-source verification: 694 Workout tests plus the added scroll case, 34 diagnostic cases, 759 Pose tests, 25 render/behavior cases, clean 16-file analysis and arm64 Debug APK. Complete Mobile suite: 1,962 passed / 34 skipped / 31 failures reproduced on untouched HEAD. Xiaomi is locked/Dozing; no installation or physical FPS claim. [Report and evidence](ux/workout-hub-visual-motion-redesign.md).
+
+## Workout analytics and automatic cloud sync — 12 November 2026
+
+Five implementation phases refine workout summaries, routine-centered History, comparable Progress and mixed-mode Report/PDF. Automatic cloud sync remains local-first and explicitly authorized; existing disabled preferences remain off and Synced requires acknowledgment of current content. Camera consent, workout acceptance and rewards remain separate. Program enrollment/schedule journals are not included in recovery.
+
+Clean application source `6573957`: 775 affected Mobile tests (30 existing gated skips), 192 full Domain and 759 full Pose tests pass; 65-file/domain analysis, three 31-test stress passes and Android Debug build pass. No live deployment, real-data write or APK install; Firebase/device/PDF acceptance remains pending. [Implementation, screenshots, hashes and reproduction](ux/workout-analytics-cloud-sync-product-optimization.md).

@@ -557,3 +557,9 @@ Release status: approved release is complete. **Standing Lateral Raise — RELEA
 Open **Member → Workout → refresh Routines → Standing Lateral Raise Validation**. Accept the front-view camera notice, review the 3×8 bilateral targets and 60s rest, and select **Start camera**. Hold arms by your sides until Ready, then raise both arms out to shoulder height and lower fully. Existing published Programs were preserved; Admin can add this Routine through a new Program version. Previous source archives, Admin bundle and installed APK are retained for recovery; never replay completed mutation scripts.
 
 Local verification: 1,340 checks pass (622 pose, 177 domain, 200 Mobile, 103 Admin, 238 backend; five existing skips), clean analysis/typechecks/architecture, independent review and both candidate builds. The host-only analyzer benchmark measured median 1.0 µs/p95 1.6 µs over 43,200 sampled frames; it does not measure phone camera, inference, rendering or thermal performance.
+
+## Workout analytics and automatic cloud sync — 12 November 2026
+
+Five implementation phases refine workout summaries, routine-centered History, comparable Progress and mixed-mode Report/PDF. Automatic cloud sync remains local-first and explicitly authorized; existing disabled preferences remain off and Synced requires acknowledgment of current content. Camera consent, workout acceptance and rewards remain separate. Program enrollment/schedule journals are not included in recovery.
+
+Clean application source `6573957`: 775 affected Mobile tests (30 existing gated skips), 192 full Domain and 759 full Pose tests pass; 65-file/domain analysis, three 31-test stress passes and Android Debug build pass. No live deployment, real-data write or APK install; Firebase/device/PDF acceptance remains pending. [Implementation, screenshots, hashes and reproduction](../ux/workout-analytics-cloud-sync-product-optimization.md).

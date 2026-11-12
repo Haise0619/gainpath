@@ -1,5 +1,7 @@
 # Workout analytics and automatic cloud sync — implementation
 
+All five phases are implemented. The final application source `6573957` passed a clean-checkout gate: 775 affected Mobile, 192 Domain and 759 Pose tests; scoped analysis, three stress runs and Android Debug build passed. Physical/Firebase/PDF acceptance remains pending as listed below.
+
 Source baseline: `0da25e9`. Implements the owner's five-phase request and [data audit](../superpowers/plans/2026-11-12-workout-history-progress-report-data-audit.md). No live deployment, real-account writes or device installation is part of this change.
 
 ## Phase 1 — local-first automatic sync
@@ -111,7 +113,7 @@ No frames, raw pose histories, fabricated calories, load/volume, inferred medica
 | 2 — workout summaries | `9f1f35b` |
 | 3 — History/Progress and comparability | `fa95d94` |
 | 4 — mixed reports/PDF | `e723c16` |
-| 5 — reliability, visual quality and verification tooling | Recorded in the final committed-source verification below |
+| 5 — reliability, visual quality and verification tooling | `01fcf33` + clean-gate provenance correction `6573957` |
 
 ### Modified files at the five-phase source checkpoint
 
@@ -210,3 +212,30 @@ Paths relative to the repository root. Unrelated working-tree files are excluded
 ### Initial clean-checkout finding and correction
 
 The first clean run at `01fcf33` completed 773 Mobile tests with 30 gated skips and two failures in unchanged guided/save-retry assertions. `recordedFixture` can describe a deterministic replay that was actually committed to the local store; it does not by itself mean a remote read-only observation. The result screen now uses the explicit `fictionalObservation` context supplied by the scoped remote-data route. Read-only observations still suppress save claims; all recorded replays remain ineligible for cloud-backup construction. The original durability/retry assertions were retained, and all 23 focused replay/real-result/FYP/status/summary tests passed after correction; two-file analysis is clean. The failed clean log is retained. Final committed-source verification reruns the entire gate after this correction.
+
+## Final committed-source verification
+
+Verified application commit: **`6573957838204f83b4c08b47bf7db7f1be305320`**, after all five phase commits and the clean-gate provenance correction. The independent local clone at `build/workout-analytics-clean/source` had an empty `git status --porcelain` before and after verification; no unrelated Admin/Home/pose/equipment working-tree edits were copied into it.
+
+The committed `tools/verify_workout_analytics.ps1` completed successfully:
+
+| Gate | Final clean result |
+|---|---|
+| Affected Mobile | **775 passed**, 30 existing gated skips, **144 committed test files** |
+| Full Domain (`dart test`) | **192 passed** |
+| Full Pose (`dart test`) | **759 passed**, including CLI subprocess validation |
+| Mobile static analysis | **65 files, no issues** |
+| Domain static analysis | **No issues** |
+| Deterministic stress | **31 passed × 3 consecutive runs** |
+| Responsive widget coverage | **320/360/390dp × 100/150/200% × portrait/landscape**, seven screens at initial and scrolled states |
+| Android Debug APK | **Built successfully** with existing cloud-sync/check-in defines; no install |
+
+The final gate represents 1,726 non-stress passing tests across the three suites. Repeated stress checks are additional executions, not additional unique tests. Optional render/recording/device-gated skips were left visible; no failing case was excluded to obtain a pass. Native build notes are existing Firestore unchecked-operation/WorkoutAudioPlugin deprecation notes, not build failures.
+
+Retained local evidence: `build/workout-analytics-clean/verification-summary.json`, `verification-run.log`, `verification-evidence/`, the initial failed clean log `mobile-initial-01fcf33.log` and the final `app-debug.apk`. The verification checkout is retained for reproducibility. Build evidence is ignored and is not a production dataset.
+
+Final clean APK SHA-256: `a51cf6d3e8b71aee9de26fc275db3ab90eca59a21c1d2ba5db49919fe03f8f90`.
+
+The final documentation-only commit records these outcomes and refreshes the operational references. Application/backend/schema source is unchanged from the verified application commit. Implementation remains on `codex/hybrid-workouts`; no merge, push, deployment, device install or real Member-data operation was performed.
+
+Additional operational references refreshed, preserving their unrelated uncommitted content: `AGENTS.md`, `README.md`, `docs/ARCHITECTURE.md`, `docs/OPERATIONS.md`, `docs/STATUS.md`, `docs/SUPERVISOR_DEMO_GUIDE.md`, `docs/PROGRESS_REPORT.md`, `docs/integration/module2-workout-programs-report-and-manual.md`.
