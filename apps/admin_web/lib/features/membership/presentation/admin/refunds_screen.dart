@@ -43,7 +43,8 @@ typedef RefundsScreenState = PaymentsScreenState;
 class PaymentsScreenState extends State<PaymentsScreen> {
   late final PaymentReviewRepository? _repository = widget.repository ??
       (widget.live ? null : EmptyPaymentReviewRepository());
-  late PaymentsMode _mode = widget.mode;
+  PaymentsMode? _overrideMode;
+  PaymentsMode get _mode => _overrideMode ?? widget.mode;
   PaymentReviewPage? _page;
   PaymentReviewDetail? _selected;
   String? _error;
@@ -67,9 +68,9 @@ class PaymentsScreenState extends State<PaymentsScreen> {
   @override
   void didUpdateWidget(PaymentsScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.mode != widget.mode) {
+    if (oldWidget.mode != widget.mode || _overrideMode != null) {
       setState(() {
-        _mode = widget.mode;
+        _overrideMode = null;
         _filter = 'All';
       });
     }
@@ -130,7 +131,7 @@ class PaymentsScreenState extends State<PaymentsScreen> {
 
   void _switchMode(PaymentsMode newMode) {
     setState(() {
-      _mode = newMode;
+      _overrideMode = newMode;
       _filter = 'All';
     });
     widget.onNavigateMode?.call(newMode);

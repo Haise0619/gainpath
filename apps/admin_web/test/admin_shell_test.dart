@@ -98,4 +98,67 @@ void main() {
     expect(find.text('Add game'), findsNothing);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets(
+      'Payments navigation switches between modes and stays synchronized across sidebar and page sub-tabs',
+      (tester) async {
+    tester.view.physicalSize = const Size(1440, 1000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(TestAdminShellRepositories(
+        child: RepositoryProvider<TutorialRepository>.value(
+            value: Catalog(), child: const MaterialApp(home: AdminShell()))));
+    await tester.pumpAndSettle();
+
+    // 1. Navigate to Transactions from sidebar
+    await tester.tap(find.text('Transactions').first);
+    await tester.pumpAndSettle();
+    expect(
+        find.text(
+            'Track membership and coaching payments across facilities.'),
+        findsOneWidget);
+
+    // 2. Click Refund Requests from inside the page sub-tab (.last)
+    await tester.tap(find.widgetWithText(InkWell, 'Refund Requests').last);
+    await tester.pumpAndSettle();
+
+    // Verify page header switched to Refund Requests immediately without needing another click
+    expect(
+        find.text(
+            'Review, approve, and manage member refund requests with audit evidence.'),
+        findsOneWidget);
+    expect(find.text('Refund Requests'), findsWidgets);
+
+    // 3. Click Reconciliation from sub-tab (.last)
+    await tester.tap(find.widgetWithText(InkWell, 'Reconciliation').last);
+    await tester.pumpAndSettle();
+    expect(
+        find.text(
+            'Investigate uncertain bills and resolve payment exceptions safely.'),
+        findsOneWidget);
+
+    // 4. Click Transactions from sidebar (.first)
+    await tester.tap(find.widgetWithText(InkWell, 'Transactions').first);
+    await tester.pumpAndSettle();
+    expect(
+        find.text(
+            'Track membership and coaching payments across facilities.'),
+        findsOneWidget);
+
+    // 5. Click Refund Requests from sidebar (.first)
+    await tester.tap(find.widgetWithText(InkWell, 'Refund Requests').first);
+    await tester.pumpAndSettle();
+    expect(
+        find.text(
+            'Review, approve, and manage member refund requests with audit evidence.'),
+        findsOneWidget);
+
+    // 6. Click Transactions from sub-tab (.last)
+    await tester.tap(find.widgetWithText(InkWell, 'Transactions').last);
+    await tester.pumpAndSettle();
+    expect(
+        find.text(
+            'Track membership and coaching payments across facilities.'),
+        findsOneWidget);
+  });
 }

@@ -49,6 +49,7 @@ class _AdminPaymentReviewRouteState extends State<AdminPaymentReviewRoute> {
   Widget build(BuildContext context) => BlocBuilder<AuthBloc, AuthState>(
       builder: (_, state) => _guard!.isCurrent()
           ? PaymentsScreen(
+              key: ValueKey(widget.mode),
               live: true,
               repository: _repository!,
               isCurrent: _guard!.isCurrent,

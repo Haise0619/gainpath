@@ -185,8 +185,12 @@ class _AdminShellState extends State<AdminShell> {
           'Transactions',
           'Track membership and coaching payments',
           widget.liveSession == null
-              ? const PaymentsScreen(mode: PaymentsMode.transactions)
+              ? PaymentsScreen(
+                  key: const ValueKey('payments-transactions'),
+                  mode: PaymentsMode.transactions,
+                  onNavigateMode: _navigateToPaymentMode)
               : AdminPaymentReviewRoute(
+                  key: const ValueKey('payments-transactions'),
                   session: widget.liveSession!,
                   mode: PaymentsMode.transactions,
                   onNavigateMode: _navigateToPaymentMode)),
@@ -196,8 +200,12 @@ class _AdminShellState extends State<AdminShell> {
           'Refund Requests',
           'Review and manage member refund requests',
           widget.liveSession == null
-              ? const PaymentsScreen(mode: PaymentsMode.refunds)
+              ? PaymentsScreen(
+                  key: const ValueKey('payments-refunds'),
+                  mode: PaymentsMode.refunds,
+                  onNavigateMode: _navigateToPaymentMode)
               : AdminPaymentReviewRoute(
+                  key: const ValueKey('payments-refunds'),
                   session: widget.liveSession!,
                   mode: PaymentsMode.refunds,
                   onNavigateMode: _navigateToPaymentMode)),
@@ -207,8 +215,12 @@ class _AdminShellState extends State<AdminShell> {
           'Reconciliation',
           'Investigate uncertain payments and resolve processing exceptions',
           widget.liveSession == null
-              ? const PaymentsScreen(mode: PaymentsMode.reconciliation)
+              ? PaymentsScreen(
+                  key: const ValueKey('payments-reconciliation'),
+                  mode: PaymentsMode.reconciliation,
+                  onNavigateMode: _navigateToPaymentMode)
               : AdminPaymentReviewRoute(
+                  key: const ValueKey('payments-reconciliation'),
                   session: widget.liveSession!,
                   mode: PaymentsMode.reconciliation,
                   onNavigateMode: _navigateToPaymentMode)),
@@ -491,11 +503,10 @@ class _AdminShellState extends State<AdminShell> {
                         index: _index,
                         children: flatPages.asMap().entries.map((entry) {
                           final session = widget.liveSession, d = entry.value;
-                          if (session == null) return d.page;
-                          if (!_visited.contains(entry.key)) {
+                          if (session != null && !_visited.contains(entry.key)) {
                             return const SizedBox.shrink();
                           }
-                          if (d.label == 'Coaches') {
+                          if (session != null && d.label == 'Coaches') {
                             if (_scopedCoachIdForBookings != null) {
                               final repository =
                                   context.read<BookingListRepository>();
@@ -529,6 +540,43 @@ class _AdminShellState extends State<AdminShell> {
                                       _scopedCoachIdForReview = id;
                                     }));
                           }
+                          if (d.label == 'Transactions') {
+                            return session == null
+                                ? PaymentsScreen(
+                                    key: const ValueKey('payments-transactions'),
+                                    mode: PaymentsMode.transactions,
+                                    onNavigateMode: _navigateToPaymentMode)
+                                : AdminPaymentReviewRoute(
+                                    key: const ValueKey('payments-transactions'),
+                                    session: session,
+                                    mode: PaymentsMode.transactions,
+                                    onNavigateMode: _navigateToPaymentMode);
+                          }
+                          if (d.label == 'Refund Requests') {
+                            return session == null
+                                ? PaymentsScreen(
+                                    key: const ValueKey('payments-refunds'),
+                                    mode: PaymentsMode.refunds,
+                                    onNavigateMode: _navigateToPaymentMode)
+                                : AdminPaymentReviewRoute(
+                                    key: const ValueKey('payments-refunds'),
+                                    session: session,
+                                    mode: PaymentsMode.refunds,
+                                    onNavigateMode: _navigateToPaymentMode);
+                          }
+                          if (d.label == 'Reconciliation') {
+                            return session == null
+                                ? PaymentsScreen(
+                                    key: const ValueKey('payments-reconciliation'),
+                                    mode: PaymentsMode.reconciliation,
+                                    onNavigateMode: _navigateToPaymentMode)
+                                : AdminPaymentReviewRoute(
+                                    key: const ValueKey('payments-reconciliation'),
+                                    session: session,
+                                    mode: PaymentsMode.reconciliation,
+                                    onNavigateMode: _navigateToPaymentMode);
+                          }
+                          if (session == null) return d.page;
                           return d.page;
                         }).toList(),
                       ),
