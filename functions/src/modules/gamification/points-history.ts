@@ -1,4 +1,5 @@
 import {DomainError} from '../../platform/errors';
+import {validCheckInBonusReceipt} from './premium-check-in-policy';
 import type {DocumentData,DocumentStore} from '../../platform/firestore/store';
 import {resolveMembershipEntitlement} from '../commerce/membership-entitlement';
 import {rewardVoucherDetails} from './reward-details';
@@ -18,7 +19,7 @@ export function buildPointsHistory(org:string,uid:string,balance:number,now:numb
    if(!id(key)||seen.has(key)||(kind==='participation'?![1,2].includes(Number(d.schemaVersion)):d.schemaVersion!==1)||d.organizationId!==org||d.memberId!==uid||!int(d.points,1))throw fail();seen.add(key);
    let at:unknown,title:string,source:string,points=Number(d.points),redemptionId:string|null=null;
    if(kind==='claims'){
-    if(d.source!=='app_check_in'||d.policyVersion!=='app-check-in-v1'||d.points!==50||d.date!==key||!/^\d{4}-\d{2}-\d{2}$/.test(key))throw fail();
+    if(d.source!=='app_check_in'||d.policyVersion!=='app-check-in-v1'||!validCheckInBonusReceipt(d,50)||d.date!==key||!/^\d{4}-\d{2}-\d{2}$/.test(key))throw fail();
     at=d.claimedAtMillis;title='Daily check-in';source='app_check_in';
     if(int(at,1)&&new Date(at+8*3600000).toISOString().slice(0,10)!==key)throw fail();
    }else if(kind==='adjustments'){

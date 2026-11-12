@@ -21,6 +21,7 @@ export async function pointsRewardCatalogCommand(store:DocumentStore,auth:Auth,r
   const d=raw as DocumentData;
   const actions:Record<string,string[]>={pointsOverview:[],savePoints:['requestId','itemId','baseItemRevision','title','description','category','imageUrl','pointCost','stockToAdd','validityDays','conditions','collectionInstructions'],retirePoints:['requestId','itemId','baseItemRevision']};
   const action=String(d.action),fields=['schemaVersion','organizationId','action',...(actions[action]??[])];
+  if(action==='savePoints'&&Object.hasOwn(d,'premiumOnly')){fields.push('premiumOnly');if(typeof d.premiumOnly!=='boolean')throw new InputValidationError('Invalid reward membership eligibility.');}
   if (d.schemaVersion!==1||!Object.hasOwn(actions,action)||Object.keys(d).length!==fields.length||Object.keys(d).some(k=>!fields.includes(k))) throw new InputValidationError('Invalid points reward fields.');
   const org=requiredIdentifier(d.organizationId,'organizationId'),uid=requiredIdentifier(auth!.uid,'uid');
   if(action!=='pointsOverview'){
@@ -63,7 +64,7 @@ export async function pointsRewardCatalogCommand(store:DocumentStore,auth:Auth,r
       const details=rewardItemDetails({rewardDetailsVersion:1,description:d.description,imageUrl:d.imageUrl,validityDays:d.validityDays,conditions:d.conditions,collectionInstructions:d.collectionInstructions})!;
       const stock=Number(existing?.stock??0)+Number(d.stockToAdd);if(!integer(stock))throw fail('Reward stock is outside supported limits.');
       if(!catalogItemIds.includes(itemId)&&catalogItemIds.length>=100)throw fail('Reward catalog limit reached.');
-      next={schemaVersion:1,organizationId:org,itemId,title:String(d.title).trim(),category:d.category,active:true,pricingMode:'points_only',pointCost:d.pointCost,stock,premiumOnly:false,revision:Number(d.baseItemRevision)+1,...details};
+      next={schemaVersion:1,organizationId:org,itemId,title:String(d.title).trim(),category:d.category,active:true,pricingMode:'points_only',pointCost:d.pointCost,stock,premiumOnly:d.premiumOnly??existing?.premiumOnly??false,revision:Number(d.baseItemRevision)+1,...details};
       itemIds=[...new Set([...itemIds,itemId])];catalogItemIds=[...new Set([...catalogItemIds,itemId])];
     }
     tx.set(itemPath,{...next,updatedBy:uid,updatedAtMillis:now});

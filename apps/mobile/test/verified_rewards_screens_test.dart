@@ -74,6 +74,7 @@ void main() {
         MaterialApp(home: RewardShopScreen(connected: true, repository: repo)));
     await tester.pumpAndSettle();
     expect(find.text('25 verified points'), findsOneWidget);
+    expect(find.text('Explore membership'), findsOneWidget);
     expect(find.textContaining('Basic or Premium'), findsWidgets);
     expect(
         tester

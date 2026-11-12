@@ -9,6 +9,7 @@ import '../../application/rewards_feature_host.dart';
 import 'my_rewards_screen.dart';
 import 'reward_details.dart';
 import 'voucher_screen.dart';
+import '../../../membership/presentation/shared/membership_dashboard_screen.dart';
 
 class VerifiedRewardShopView extends StatefulWidget {
   const VerifiedRewardShopView(
@@ -216,34 +217,39 @@ class _VerifiedRewardShopViewState extends State<VerifiedRewardShopView>
                                                 onTap: () => Navigator.push(
                                                     context,
                                                     MaterialPageRoute<void>(
-                                                        builder: (_) => PointsHistoryScreen(
-                                                            repository: widget
-                                                                .repository))),
+                                                        builder: (_) =>
+                                                            PointsHistoryScreen(
+                                                                repository: widget
+                                                                    .repository))),
                                                 child: Semantics(
                                                     button: true,
                                                     label:
                                                         "View points history",
                                                     child: Row(
-                                                      mainAxisSize: MainAxisSize.min,
+                                                      mainAxisSize:
+                                                          MainAxisSize.min,
                                                       children: [
                                                         SvgPicture.asset(
                                                           'assets/icons/reward_point.svg',
                                                           width: 28,
                                                           height: 28,
                                                         ),
-                                                        const SizedBox(width: 8),
-                                                        Text(
+                                                        const SizedBox(
+                                                            width: 8),
+                                                        Flexible(child: Text(
                                                             data.balance == null
                                                                 ? 'No verified balance yet.'
                                                                 : '${data.balance} verified points',
-                                                            style: Theme.of(context)
+                                                            style: Theme.of(
+                                                                    context)
                                                                 .textTheme
                                                                 .headlineSmall
                                                                 ?.copyWith(
                                                                     color: Colors
                                                                         .white,
                                                                     fontWeight:
-                                                                        FontWeight.w800)),
+                                                                        FontWeight
+                                                                            .w800))),
                                                       ],
                                                     ))),
                                             const SizedBox(height: 8),
@@ -259,10 +265,31 @@ class _VerifiedRewardShopViewState extends State<VerifiedRewardShopView>
                                     const Text('No rewards are configured.'),
                                   if (data.available &&
                                       data.effectiveTier == 'free')
-                                    const Padding(
+                                    Padding(
                                         padding: EdgeInsets.only(bottom: 16),
-                                        child: Text(
-                                            'Your points are retained. Basic or Premium membership is required to redeem physical rewards.')),
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            const Text(
+                                                'Your points are saved. Upgrade to Basic or Premium to redeem physical rewards.'),
+                                            TextButton(
+                                                onPressed: () async {
+                                                  await Navigator.push(
+                                                      context,
+                                                      MaterialPageRoute<void>(
+                                                          builder: (_) =>
+                                                              const MembershipDashboardScreen(
+                                                                  connected:
+                                                                      true)));
+                                                  if (mounted &&
+                                                      widget.repository.current)
+                                                    _refresh();
+                                                },
+                                                child: const Text(
+                                                    'Explore membership')),
+                                          ],
+                                        )),
                                   if (data.available &&
                                       data.effectiveTier == null)
                                     const Text(
@@ -301,12 +328,13 @@ class _VerifiedRewardShopViewState extends State<VerifiedRewardShopView>
                                                     height: 16,
                                                   ),
                                                   const SizedBox(width: 5),
-                                                  Text(
-                                                  '${item.pointCost} points · ${item.stock} available',
-                                                  style: const TextStyle(
-                                                      color: AppColors.primary,
-                                                      fontWeight:
-                                                          FontWeight.w700)),
+                                                  Flexible(child: Text(
+                                                      '${item.pointCost} points · ${item.stock} available',
+                                                      style: const TextStyle(
+                                                          color:
+                                                              AppColors.primary,
+                                                          fontWeight:
+                                                              FontWeight.w700))),
                                                 ],
                                               ),
                                               if (item.validityDays != null)

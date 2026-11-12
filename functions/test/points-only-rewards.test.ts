@@ -7,6 +7,19 @@ const admin = (action: string, fields = {}) => rewardCatalogCommand(store, admin
 const member = (action: string, fields = {}) => rewardsCommand(store, auth, {schemaVersion:1, organizationId:org, action, ...fields}, identity, () => now);
 const input = {requestId:'create',itemId:'bottle',baseItemRevision:0,title:'Training bottle',description:'Reusable bottle',category:'Merchandise',imageUrl:'',pointCost:137,stockToAdd:5,validityDays:10,conditions:'Collect in person',collectionInstructions:'Reception'};
 beforeEach(() => {store=seed();});
+it('explicit Premium reward eligibility survives compatible edits and denies Basic',async()=>{
+ await admin('savePoints',{...input,premiumOnly:true});
+ expect(store.documents.get(path('rewardItems','bottle'))?.premiumOnly).toBe(true);
+ await admin('savePoints',{...input,requestId:'edit-exclusive',baseItemRevision:1,stockToAdd:0});
+ expect(store.documents.get(path('rewardItems','bottle'))?.premiumOnly).toBe(true);
+ const account=store.documents.get(path('membershipAccounts','member'))!;
+ store.documents.set(path('membershipAccounts','member'),{...account,planId:'basic'});
+ const transaction=store.documents.get(path('transactions',String(account.lastTransactionId)))!;
+ store.documents.set(path('transactions',String(account.lastTransactionId)),{...transaction,planId:'basic'});
+ await expect(member('redeem',{itemId:'bottle',requestId:'exclusive',expectedPointCost:137,expectedItemRevision:2})).rejects.toMatchObject({code:'permission-denied'});
+ expect(store.documents.get(path('rewardBalances','member'))?.points).toBe(1000);
+ expect(store.documents.get(path('rewardItems','bottle'))?.stock).toBe(5);
+});
 it('creates and lists points-only rewards without a policy, conversion or draft', async () => {
   await admin('savePoints',input);
   const item=store.documents.get(path('rewardItems','bottle'))!;

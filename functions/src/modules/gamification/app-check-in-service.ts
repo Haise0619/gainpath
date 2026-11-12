@@ -2,6 +2,7 @@ import {DomainError} from '../../platform/errors';
 import {InputValidationError,requiredIdentifier} from '../../platform/validation';
 import {requireVerifiedEmail,requireActiveMembership} from '../../platform/auth-context';
 import {readAll,type DocumentStore,type DocumentData,type TransactionPort} from '../../platform/firestore/store';
+import {premiumCheckInBonus,validCheckInBonusReceipt} from './premium-check-in-policy';
 
 // PROPOSED POLICY: only the isolated reviewed release may activate this producer.
 export const APP_CHECK_IN_POLICY=Object.freeze({organizationId:'gainpath',version:'app-check-in-v1',points:50,timezone:'Asia/Kuala_Lumpur'});
@@ -13,7 +14,7 @@ const fail=()=>new DomainError('failed-precondition','Check-in records are unava
 const date=(ordinal:number)=>new Date(ordinal*DAY).toISOString().slice(0,10);
 const ordinal=(value:string)=>{if(!/^\d{4}-\d{2}-\d{2}$/.test(value))throw fail();const n=Date.parse(value+'T00:00:00.000Z')/DAY;if(!Number.isInteger(n)||date(n)!==value)throw fail();return n;};
 interface Profile {lastOrdinal:number|null;streak:number;longest:number;totalClaims:number;recentDays:string[];badges:Record<string,number>;}
-interface Receipt {schemaVersion:number;organizationId:string;memberId:string;date:string;points:number;claimedAtMillis:number;policyVersion:string;source:string;}
+interface Receipt {schemaVersion:number;organizationId:string;memberId:string;date:string;points:number;claimedAtMillis:number;policyVersion:string;source:string;basePoints?:number;premiumBonusPoints?:number;premiumBonusPolicyVersion?:string;}
 export interface CheckInSnapshot {schemaVersion:number;organizationId:string;memberId:string;policyVersion:string;timezone:string;pointsPerClaim:number;balance:number;today:string;claimedToday:boolean;currentStreak:number;longestStreak:number;totalClaims:number;serverNowMillis:number;nextResetMillis:number;days:{date:string;claimed:boolean}[];recentClaims:Receipt[];badges:{id:string;title:string;requiredStreak:number;unlockedAtMillis:number|null}[];}
 function parseProfile(raw:DocumentData|undefined,org:string,uid:string,today:number):Profile {
  if(!raw)return {lastOrdinal:null,streak:0,longest:0,totalClaims:0,recentDays:[],badges:{}};
@@ -29,7 +30,7 @@ function parseBalance(raw:DocumentData|undefined,org:string,uid:string,p:Profile
  if(raw.schemaVersion!==1||raw.organizationId!==org||raw.memberId!==uid||!integer(raw.points)||!Array.isArray(raw.recentRedemptionIds)||raw.recentRedemptionIds.length>50||raw.recentRedemptionIds.some(v=>typeof v!=='string'||!/^[A-Za-z0-9_-]{1,128}$/.test(v)))throw fail();return raw.points;
 }
 function receipt(raw:DocumentData|undefined,org:string,uid:string,day:string):Receipt {
- if(!raw||raw.schemaVersion!==1||raw.organizationId!==org||raw.memberId!==uid||raw.date!==day||raw.points!==APP_CHECK_IN_POLICY.points||raw.policyVersion!==APP_CHECK_IN_POLICY.version||raw.source!=='app_check_in'||!integer(raw.claimedAtMillis)||Math.floor((raw.claimedAtMillis+OFFSET)/DAY)!==ordinal(day))throw fail();return raw as unknown as Receipt;
+ if(!raw||raw.schemaVersion!==1||raw.organizationId!==org||raw.memberId!==uid||raw.date!==day||!validCheckInBonusReceipt(raw,APP_CHECK_IN_POLICY.points)||raw.policyVersion!==APP_CHECK_IN_POLICY.version||raw.source!=='app_check_in'||!integer(raw.claimedAtMillis)||Math.floor((raw.claimedAtMillis+OFFSET)/DAY)!==ordinal(day))throw fail();return raw as unknown as Receipt;
 }
 // Pure validators reused by read-only analytics; earning behavior stays unchanged.
 export {parseProfile as parseAppCheckInProfile, receipt as parseAppCheckInReceipt};
@@ -53,11 +54,13 @@ export async function appCheckInCommand(store:DocumentStore,auth:Auth,raw:unknow
   if(todayReceipt){receipt(todayReceipt,org,uid,today);if(p.lastOrdinal!==todayOrdinal)throw fail();}
   else if(p.lastOrdinal===todayOrdinal)throw fail();
   if(data.action==='claim'&&!todayReceipt){
-   if(!Number.isSafeInteger(balance+APP_CHECK_IN_POLICY.points)||!Number.isSafeInteger(p.totalClaims+1))throw fail();
+   const bonus=await premiumCheckInBonus(tx,auth!,org,now,Number.MAX_SAFE_INTEGER-balance-APP_CHECK_IN_POLICY.points);
+   const points=APP_CHECK_IN_POLICY.points+(bonus?.points??0);
+   if(!Number.isSafeInteger(points)||!Number.isSafeInteger(balance+points)||!Number.isSafeInteger(p.totalClaims+1))throw fail();
    const streak=p.lastOrdinal===todayOrdinal-1?p.streak+1:1;
    p={lastOrdinal:todayOrdinal,streak,longest:Math.max(p.longest,streak),totalClaims:p.totalClaims+1,recentDays:[today,...p.recentDays].slice(0,50),badges:{...p.badges}};
    for(const b of badgeDefinitions)if(streak>=b.requiredStreak&&p.badges[b.id]===undefined)p.badges[b.id]=now;
-   created={schemaVersion:1,organizationId:org,memberId:uid,date:today,points:APP_CHECK_IN_POLICY.points,claimedAtMillis:now,policyVersion:APP_CHECK_IN_POLICY.version,source:'app_check_in'};balance+=APP_CHECK_IN_POLICY.points;awarded=true;
+   created={schemaVersion:1,organizationId:org,memberId:uid,date:today,points,claimedAtMillis:now,policyVersion:APP_CHECK_IN_POLICY.version,source:'app_check_in',...(bonus?{basePoints:APP_CHECK_IN_POLICY.points,premiumBonusPoints:bonus.points,premiumBonusPolicyVersion:bonus.version}:{})};balance+=points;awarded=true;
   }
   // Read all historical receipts before any transaction writes.
   const priorDays=p.recentDays.filter(d=>!(created&&d===today));

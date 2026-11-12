@@ -1,3 +1,4 @@
+import {membershipCapabilities} from '../commerce/membership-capabilities';
 import { createHash } from 'node:crypto';
 import { requireVerifiedEmail, requireActiveMembership } from '../../platform/auth-context';
 import { DomainError } from '../../platform/errors';
@@ -129,6 +130,7 @@ export async function rewardsCommand(store: DocumentStore, auth: Auth, raw: unkn
       return { schemaVersion: 1, redemption: next };
     }
     const entitlement = await resolveMembershipEntitlement(tx, auth, org, now);
+    const capabilities = membershipCapabilities(entitlement);
     if (action === 'voucher') {
       const key = String(d.redemptionId), r = redemption(await tx.get(path('rewardRedemptions', key)), org, key);
       if (r.memberId !== uid) throw deny();
@@ -149,7 +151,7 @@ export async function rewardsCommand(store: DocumentStore, auth: Auth, raw: unkn
       try { catalog = shop ? items.map((r,i)=>{const value=pointsRewardItem(r,ids[i],org);if(r?.active!==true)throw fail();return value;}) : p ? items.map((r, i) => item(r, p.itemIds[i], org, p)) : []; } catch { available = false; }
       return { schemaVersion: 1, organizationId: org, memberId: uid, available, policyVersion: available ? (shop?.version??p!.version) : null,
         balance: b.points, effectiveTier: entitlement.status === 'resolved' ? entitlement.effectiveTier : null,
-        canRedeem: available && entitlement.status === 'resolved' && ['basic', 'premium'].includes(String(entitlement.effectiveTier)),
+        canRedeem: available && capabilities.canRedeemRegularPhysicalRewards,
         items: available ? catalog : [], redemptions, resolvedAtMillis: now };
     }
     if (action === 'redeem') {
@@ -194,7 +196,7 @@ export async function rewardsCommand(store: DocumentStore, auth: Auth, raw: unkn
       return { schemaVersion: 1, award: receipt };
     }
     const itemId = String(d.itemId), requestId = String(d.requestId), redemptionId = digest(uid, requestId);
-    if (entitlement.status !== 'resolved' || !['basic', 'premium'].includes(String(entitlement.effectiveTier))) throw deny();
+    if (!capabilities.canRedeemRegularPhysicalRewards) throw deny();
     const itemDoc = await tx.get(path('rewardItems', itemId));
     if(shop&&(!shop.itemIds.includes(itemId)||itemDoc?.active!==true))throw fail();
     const selected = shop?pointsRewardItem(itemDoc,itemId,org):item(itemDoc,itemId,org,p!);
@@ -205,7 +207,7 @@ export async function rewardsCommand(store: DocumentStore, auth: Auth, raw: unkn
     if (selected.rewardDetailsVersion === 1 && d.expectedItemRevision !== selected.revision) {
       throw new DomainError('aborted', 'Reward information changed. Refresh and review its conditions and validity before redeeming.');
     }
-    if (selected.premiumOnly && entitlement.effectiveTier !== 'premium') throw deny();
+    if (selected.premiumOnly && !capabilities.canRedeemPremiumRewards) throw deny();
     if (selected.stock < 1 || b.points === null || b.points < selected.pointCost) throw new DomainError('failed-precondition', 'Insufficient points or reward stock.');
     const details = rewardItemDetails(itemDoc!), expiresAtMillis = details ? now + details.validityDays * DAY : null;
     if (expiresAtMillis !== null && !time(expiresAtMillis)) throw fail();

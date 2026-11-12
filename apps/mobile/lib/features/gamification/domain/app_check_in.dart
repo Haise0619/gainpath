@@ -6,9 +6,16 @@ class AppCheckInUnavailable implements Exception {
 
 class AppCheckInClaim {
   const AppCheckInClaim(
-      {required this.date, required this.points, required this.atMillis});
+      {required this.date,
+      required this.points,
+      required this.atMillis,
+      this.basePoints = 50,
+      this.premiumBonusPoints = 0,
+      this.premiumBonusPolicyVersion});
   final String date;
   final int points, atMillis;
+  final int basePoints, premiumBonusPoints;
+  final String? premiumBonusPolicyVersion;
 }
 
 class AppCheckInBadge {
@@ -166,12 +173,22 @@ class AppCheckInSnapshot {
         'policyVersion',
         'source'
       };
-      if (c.length != fields.length ||
+      final bonus = c['premiumBonusPoints'];
+      final hasBonus = bonus != null;
+      final validPoints = hasBonus
+          ? bonus is int &&
+              bonus > 0 &&
+              c['basePoints'] == 50 &&
+              c['premiumBonusPolicyVersion'] is String &&
+              (c['premiumBonusPolicyVersion'] as String).trim().isNotEmpty &&
+              c['points'] == 50 + bonus
+          : c['points'] == 50;
+      if (c.length != fields.length + (hasBonus ? 3 : 0) ||
           !fields.every(c.containsKey) ||
           c['schemaVersion'] != 1 ||
           c['organizationId'] != scope.organizationId ||
           c['memberId'] != scope.userId ||
-          c['points'] != 50 ||
+          !validPoints ||
           c['policyVersion'] != raw['policyVersion'] ||
           c['source'] != 'app_check_in') {
         throw const FormatException('Invalid claim receipt');
@@ -187,7 +204,12 @@ class AppCheckInSnapshot {
         throw const FormatException('Invalid claim chronology');
       }
       parsedClaims.add(AppCheckInClaim(
-          date: c['date'] as String, points: 50, atMillis: time));
+          date: c['date'] as String,
+          points: number(c['points']),
+          atMillis: time,
+          premiumBonusPoints: hasBonus ? number(bonus) : 0,
+          premiumBonusPolicyVersion:
+              c['premiumBonusPolicyVersion'] as String?));
     }
     if (parsedDays.last.claimed != raw['claimedToday'] ||
         parsedClaims.length != count.clamp(0, 50) ||
