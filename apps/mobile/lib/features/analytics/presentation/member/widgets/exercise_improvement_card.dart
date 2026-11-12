@@ -4,6 +4,7 @@ import 'package:gainpath_ui/gainpath_ui.dart';
 import '../../../domain/exercise_improvement.dart';
 import '../../../../workout/domain/routine_attempt.dart';
 import '../../../domain/member_workout_report.dart';
+import '../../../domain/workout_activity_overview.dart';
 
 class ExerciseImprovementCard extends StatelessWidget {
   const ExerciseImprovementCard(
@@ -34,6 +35,9 @@ class ExerciseImprovementCard extends StatelessWidget {
                               comparison.latest.exerciseId] ??
                           reportExerciseLabel(comparison.latest.exerciseId),
                       style: Theme.of(context).textTheme.titleMedium),
+                  if (comparison.latest.scoringVersion ==
+                      'single-arm-curl-side-v1')
+                    Text(progressArmModeLabel(comparison.latest.armMode)),
                   if (comparison.previous == null)
                     const Text('Not enough compatible captures yet.')
                   else ...[

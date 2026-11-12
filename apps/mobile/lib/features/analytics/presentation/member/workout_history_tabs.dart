@@ -45,7 +45,7 @@ class _WorkoutHistoryTabsState extends State<WorkoutHistoryTabs> {
                     onTap: (index) => setState(() => _selected = index),
                     tabs: const [
                       Tab(text: 'Routines'),
-                      Tab(text: 'Exercise sessions'),
+                      Tab(text: 'AI Sessions'),
                     ])),
             body: IndexedStack(index: _selected, children: [
               widget.routines,

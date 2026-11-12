@@ -95,8 +95,8 @@ void main() {
     expect(find.text('Avg Form'), findsNothing);
     expect(find.text('Day Streak'), findsNothing);
     expect(find.text('Volume and muscle group split'), findsNothing);
-    expect(find.text('Training days'), findsOneWidget);
-    expect(find.text('Training days'), findsOneWidget);
+    expect(find.text('Workout start days'), findsOneWidget);
+    expect(find.text('Workout start days'), findsOneWidget);
     expect(find.text('Measurement details'), findsOneWidget);
     expect(find.text('Saved sessions'), findsNothing);
   });
@@ -166,9 +166,8 @@ void main() {
     ]) {
       await open(label);
     }
-    expect(find.text('Workout performance'), findsNothing);
-    await open('Measurement details');
-    await open('Workout performance');
+    expect(find.text('Activity trends'), findsOneWidget);
+    await open('Activity trends');
     expect(opened,
         ['history', 'reports', 'form', 'points', 'backup', 'performance']);
     expect(find.text('Your progress'), findsOneWidget);
@@ -188,7 +187,7 @@ void main() {
           ]),
           onOpenWorkout: (record) => opened = record,
         ));
-    expect(find.text('Training days'), findsOneWidget);
+    expect(find.text('Workout start days'), findsOneWidget);
     expect(find.text('1'), findsOneWidget);
     expect(find.text('3,400'), findsNothing);
     await tester.ensureVisible(find.text('Squat').first);
@@ -239,6 +238,14 @@ void main() {
           for (final status in LocalWorkoutRecordStatus.values)
             _record(id: status.name, status: status),
         ])));
+    expect(find.textContaining('Provisional estimate'), findsNothing);
+    for (var i = 0; i < LocalWorkoutRecordStatus.values.length; i++) {
+      final detail = find.text('Measurement details').at(i);
+      await tester.ensureVisible(detail);
+      await tester.pumpAndSettle();
+      await tester.tap(detail);
+      await tester.pumpAndSettle();
+    }
     for (final label in [
       'Server-accepted',
       'Provisional · local only',
@@ -247,18 +254,11 @@ void main() {
       'Pending upload · retry needed',
       'Upload status unavailable'
     ]) {
-      await tester.scrollUntilVisible(find.text(label), 200);
+      await tester.ensureVisible(find.text(label));
+      await tester.pumpAndSettle();
       expect(find.text(label), findsOneWidget);
     }
     expect(find.byTooltip('Export'), findsOneWidget);
-    expect(find.textContaining('Provisional estimate'), findsNothing);
-    await tester.scrollUntilVisible(
-        find.text('Measurement details').first, -200,
-        scrollable: find.byType(Scrollable).first);
-    await tester.ensureVisible(find.text('Measurement details').first);
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Measurement details').first);
-    await tester.pumpAndSettle();
     expect(find.textContaining('Provisional estimate'), findsWidgets);
     expect(tester.takeException(), isNull);
   });
@@ -321,6 +321,12 @@ void main() {
           _record(id: 'new-version', score: 91, scoringVersion: 'rule-b'),
         ])));
     expect(find.text('Estimated Form Scores'), findsOneWidget);
+    for (var i = 0; i < 2; i++) {
+      await tester.ensureVisible(find.text('Technical details').at(i));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Technical details').at(i));
+      await tester.pumpAndSettle();
+    }
     expect(find.textContaining('rule-a'), findsWidgets);
     expect(find.textContaining('rule-b'), findsWidgets);
     final charts = tester

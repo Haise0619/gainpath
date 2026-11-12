@@ -18,7 +18,7 @@ void main() {
       () {
     final names = reportExerciseNames([routines.attempt()]);
     expect(names['press'], 'Press');
-    expect(names['F3b8xIr8ynBDd3gEICKX'], 'Saved exercise');
+    expect(names['F3b8xIr8ynBDd3gEICKX'], 'Squat');
     expect(
         reportExerciseLabel('bodyweight_squat-side'), 'Bodyweight squat side');
   });

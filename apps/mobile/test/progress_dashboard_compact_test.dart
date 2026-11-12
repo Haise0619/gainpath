@@ -73,7 +73,7 @@ void main() {
             onOpenRoutine: (a) => opened = a)));
     await tester.pumpAndSettle();
     expect(find.text('Front / squat-low'), findsOneWidget);
-    expect(find.text('5 reps · Measured / provisional'), findsOneWidget);
+    expect(find.text('5 full reps · AI Tracked'), findsOneWidget);
     expect(find.textContaining('2 self-reported sets'), findsOneWidget);
     final training = find.byKey(const ValueKey('progress-training-days'));
     expect(find.descendant(of: training, matching: find.text('1')),
@@ -145,13 +145,13 @@ void main() {
               localProgress: progress, onStartWorkout: () => starts++)));
       await tester.pumpAndSettle();
       expect(find.text('This week'), findsOneWidget);
-      expect(find.text('Training days'), findsOneWidget);
+      expect(find.text('Workout start days'), findsOneWidget);
       expect(find.text('Saved sessions'), findsNothing);
       expect(
           find.byKey(const ValueKey('progress-training-days')), findsOneWidget);
       expect(
           find.byKey(const ValueKey('progress-quick-History')), findsOneWidget);
-      expect(find.text('Adherence'), findsOneWidget);
+      expect(find.text('Scheduled completion'), findsOneWidget);
       expect(find.text('Estimated Form Scores'), findsOneWidget);
       final form = find.ancestor(
           of: find.text('Estimated Form Scores'),

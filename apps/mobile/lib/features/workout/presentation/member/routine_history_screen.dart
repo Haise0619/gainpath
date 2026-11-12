@@ -4,6 +4,8 @@ import '../../domain/routine_attempt.dart';
 import '../workout_presentation.dart';
 import '../../domain/workout_contracts.dart';
 import 'widgets/workout_result_content.dart';
+import '../../../analytics/domain/member_workout_report.dart';
+import '../../../analytics/domain/workout_activity_overview.dart';
 
 String _date(int micros) {
   final d = DateTime.fromMicrosecondsSinceEpoch(micros, isUtc: true)
@@ -20,6 +22,8 @@ class RoutineHistoryScreen extends StatefulWidget {
       required this.onOpenAttempt,
       this.onRefresh,
       this.onOpenBackup,
+      this.asOf,
+      this.saveStatusBuilder,
       this.embedded = false,
       this.available = true});
   final List<RoutineAttempt> attempts;
@@ -28,6 +32,8 @@ class RoutineHistoryScreen extends StatefulWidget {
   final bool available;
   final bool embedded;
   final VoidCallback? onOpenBackup;
+  final DateTime? asOf;
+  final Widget Function(RoutineAttempt)? saveStatusBuilder;
 
   @override
   State<RoutineHistoryScreen> createState() => _RoutineHistoryScreenState();
@@ -35,10 +41,17 @@ class RoutineHistoryScreen extends StatefulWidget {
 
 class _RoutineHistoryScreenState extends State<RoutineHistoryScreen> {
   _HistoryFilter _filter = _HistoryFilter.all;
+  int? _days = 30;
 
   @override
   Widget build(BuildContext context) {
+    final dates = _days == null
+        ? WorkoutReportFilter.all()
+        : WorkoutReportFilter.lastDays(widget.asOf ?? DateTime.now(), _days!);
     final attempts = widget.attempts
+        .where((a) => dates.includes(DateTime.fromMicrosecondsSinceEpoch(
+            a.finishedAtMicros ?? a.updatedAtMicros,
+            isUtc: true)))
         .where((attempt) => switch (_filter) {
               _HistoryFilter.all => true,
               _HistoryFilter.completed => attempt.isComplete,
@@ -69,6 +82,16 @@ class _RoutineHistoryScreenState extends State<RoutineHistoryScreen> {
                     16, 16, 16, 16 + MediaQuery.paddingOf(context).bottom),
                 physics: const AlwaysScrollableScrollPhysics(),
                 children: [
+                  Wrap(spacing: 8, runSpacing: 4, children: [
+                    for (final days in <int?>[7, 30, null])
+                      ChoiceChip(
+                          label: Text(
+                              days == null ? 'All time' : 'Last $days days'),
+                          selected: _days == days,
+                          onSelected: (_) => setState(() => _days = days)),
+                  ]),
+                  Text('${dates.dateLabel} · Malaysia time',
+                      style: const TextStyle(color: AppColors.inkSoft)),
                   if (!widget.available)
                     const Panel(
                         child: Text(
@@ -98,6 +121,10 @@ class _RoutineHistoryScreenState extends State<RoutineHistoryScreen> {
                   for (final a
                       in widget.available ? attempts : <RoutineAttempt>[])
                     Card(
+                        elevation: 0,
+                        color: AppColors.surface,
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(18)),
                         child: ListTile(
                             leading: Icon(
                                 a.isComplete
@@ -113,6 +140,9 @@ class _RoutineHistoryScreenState extends State<RoutineHistoryScreen> {
                                       '${a.completedExercises}/${a.entries.length} exercises'),
                                   Text(_date(
                                       a.finishedAtMicros ?? a.updatedAtMicros)),
+                                  Text(routineActivitySummary(a)),
+                                  if (widget.saveStatusBuilder != null)
+                                    widget.saveStatusBuilder!(a),
                                 ]),
                             trailing: const Icon(Icons.chevron_right_rounded),
                             onTap: () => widget.onOpenAttempt(a))),

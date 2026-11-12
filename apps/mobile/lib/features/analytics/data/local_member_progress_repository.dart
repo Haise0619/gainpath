@@ -119,6 +119,7 @@ class StoredLocalMemberProgressRepository
             detectorId: m.detectorId,
             detectorVersion: m.detectorVersion,
             cameraView: m.cameraView,
+            armMode: m.curlArms?.mode.name,
             status: status,
             failureCode: failure,
             acceptedAt: acceptedAt);

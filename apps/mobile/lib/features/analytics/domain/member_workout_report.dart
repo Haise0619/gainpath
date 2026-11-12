@@ -121,6 +121,15 @@ class WorkoutReportRoutine {
 
 /// Readable identifier fallback only; this does not assert a catalogue title.
 String reportExerciseLabel(String id) {
+  const labels = {
+    'F3b8xIr8ynBDd3gEICKX': 'Squat',
+    'standing-single-arm-curl-side-v1': 'Biceps Curl',
+    'standing-lateral-raise-front-v1': 'Lateral Raise',
+    'dumbbell-shoulder-press-front-v1': 'Shoulder Press',
+    'standing-calf-raise-side-v1': 'Calf Raise',
+    'standard-floor-push-up-side-v1': 'Floor Push-up',
+  };
+  if (labels.containsKey(id)) return labels[id]!;
   if (id == 'standard-floor-push-up-side-v1') return 'Standard Floor Push-Up';
   if (RegExp(r'^[A-Za-z0-9]{16,}$').hasMatch(id)) return 'Saved exercise';
   final words = id.split('/').last.replaceAll(RegExp(r'[-_]'), ' ').trim();
@@ -148,9 +157,12 @@ Map<String, String> reportExerciseNames(Iterable<RoutineAttempt> attempts) {
 }
 
 /// Filtered read-only chronology. Routine snapshots are not additional AI captures.
+enum WorkoutTimelineKind { aiCapture, routine }
+
 class WorkoutReportTimelineEntry {
   WorkoutReportTimelineEntry(
       {required this.id,
+      this.kind = WorkoutTimelineKind.aiCapture,
       required this.title,
       required DateTime at,
       required this.sourceLabel,
@@ -158,6 +170,7 @@ class WorkoutReportTimelineEntry {
       required this.detail})
       : at = at.toUtc();
   final String id, title, sourceLabel, dateBasis, detail;
+  final WorkoutTimelineKind kind;
   final DateTime at;
   String get dateTimeLabel => at
       .add(workoutReportOffset)
@@ -230,7 +243,8 @@ class MemberWorkoutReport {
       for (final r in routines)
         WorkoutReportTimelineEntry(
             id: r.attempt.id,
-            title: '${r.attempt.routine.title} · Day ${r.attempt.day}',
+            kind: WorkoutTimelineKind.routine,
+            title: routineDayTitle(r.attempt.routine, r.attempt.day),
             at: r.activityAt,
             sourceLabel: 'Saved routine snapshot',
             dateBasis: r.dateBasis,
@@ -316,7 +330,8 @@ class MemberWorkoutReport {
           return order != 0 ? order : a.sessionId.compareTo(b.sessionId);
         });
       charts.add(WorkoutReportFormChart(
-          '${exerciseNames[g.exerciseId]} · ${g.scoringVersion} · ${g.detectorId}/${g.detectorVersion} · ${g.cameraView}',
+          '${exerciseNames[g.exerciseId]} · ${g.scoringVersion} · ${g.detectorId}/${g.detectorVersion} · ${g.cameraView}'
+          '${g.scoringVersion == 'single-arm-curl-side-v1' ? ' · ${g.records.first.armMode ?? 'unknown arm mode'}' : ''}',
           [
             for (final record in records)
               WorkoutReportFormPoint(

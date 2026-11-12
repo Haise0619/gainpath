@@ -282,6 +282,10 @@ class _GoalComparisonReportState extends State<GoalComparisonReport> {
                                       color: AppColors.inkSoft)),
                             ]),
                             const SizedBox(height: 6),
+                            if (comparison.goal.category ==
+                                NumericGoalCategory.trainingFrequency)
+                              const Text(
+                                  'Attempts started · Monday–Sunday UTC'),
                             Text(
                                 comparison.goal.category ==
                                         NumericGoalCategory.bodyWeight
@@ -338,7 +342,10 @@ class _GoalComparisonReportState extends State<GoalComparisonReport> {
                       Text(comparison.goal.category.label,
                           style: Theme.of(context).textTheme.titleMedium),
                       Text('Target: ${comparison.goal.targetLabel}'),
-                      Text(comparison.goal.category.periodLabel),
+                      Text(comparison.goal.category ==
+                              NumericGoalCategory.trainingFrequency
+                          ? 'Attempts started · Monday–Sunday UTC'
+                          : comparison.goal.category.periodLabel),
                       Text(comparison.measuredValue == null
                           ? 'No measured value available'
                           : comparison.goal.category ==

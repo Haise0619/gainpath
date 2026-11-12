@@ -7,8 +7,9 @@ import 'widgets/local_progress_widgets.dart';
 import '../../domain/member_workout_report.dart';
 import '../../../workout/domain/routine_attempt.dart';
 import 'widgets/contextual_progress_filter.dart';
-import 'widgets/exercise_improvement_card.dart';
 import 'widgets/workout_measurement_scope.dart';
+import '../../domain/local_member_progress_repository.dart';
+import '../../../workout/presentation/member/widgets/workout_result_content.dart';
 
 /// AD-M5.2 (Workout performance) — weekly lifted volume as a column
 /// chart, paired with a doughnut breakdown of muscle-group split. Column
@@ -42,10 +43,9 @@ class WorkoutPerformanceScreen extends StatelessWidget {
     final local = localProgress;
     if (local != null) {
       return Scaffold(
-        appBar: AppBar(
-            title: const Text('Measured workout trends'), actions: const []),
+        appBar: AppBar(title: const Text('Activity trends'), actions: const []),
         body: PageBody(children: [
-          const Text('Saved camera captures · provisional measurements'),
+          const Text('Your saved workouts · AI, Video Timed and Manual'),
           const WorkoutMeasurementScope(),
           const SizedBox(height: 12),
           const ExpansionTile(
@@ -60,15 +60,38 @@ class WorkoutPerformanceScreen extends StatelessWidget {
               onExport: onOpenFilteredReport ??
                   (onOpenReport == null ? null : (_) => onOpenReport!()),
               progress: local,
-              builder: (filtered) => Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        ExerciseImprovementCard(
-                            progress: filtered,
-                            routineProgress: routineProgress,
-                            onOpenWorkout: onOpenWorkout),
-                        ..._localDetails(context, filtered),
-                      ])),
+              reportBuilder: (filtered, filter) {
+                final report = MemberWorkoutReport.build(
+                    scope: local.scope,
+                    source: LocalMemberProgressSnapshot(
+                        records: local.records,
+                        attempts: routineProgress?.records ?? const [],
+                        routineHistoryAvailable: routineProgress != null),
+                    filter: filter,
+                    asOf: local.asOf);
+                return Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Wrap(spacing: 8, runSpacing: 8, children: [
+                        WorkoutFact(
+                            report.completedRoutineDays?.toString() ?? '—',
+                            'Completed workouts'),
+                        WorkoutFact('${report.sessions.length}', 'AI results'),
+                        if (report.routines.any((r) => r.guidedMicros > 0))
+                          WorkoutFact(
+                              reportDuration(report.routines
+                                  .fold<int>(0, (n, r) => n + r.guidedMicros)),
+                              'Video active time'),
+                        if ((report.manualSets ?? 0) > 0)
+                          WorkoutFact(
+                              '${report.manualSets}', 'Self-reported sets'),
+                      ]),
+                      const SizedBox(height: 12),
+                      const Text(
+                          'Video and manual totals describe matching workout records. AI charts use capture end dates.'),
+                      ..._localDetails(context, filtered),
+                    ]);
+              }),
         ]),
       );
     }

@@ -1,6 +1,43 @@
 import 'package:flutter/material.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
 import '../../../domain/workout_backup.dart';
+import '../../../domain/routine_attempt.dart';
+import '../../../application/workout_backup_coordinator.dart';
+
+/// Shared read-only status for a list row: no per-row stores or network work.
+class WorkoutRecordSyncIndicator extends StatelessWidget {
+  const WorkoutRecordSyncIndicator(
+      {super.key, this.coordinator, this.record, this.attempt});
+  final WorkoutBackupCoordinator? coordinator;
+  final WorkoutBackupRecord? record;
+  final RoutineAttempt? attempt;
+  @override
+  Widget build(BuildContext context) {
+    final c = coordinator;
+    if (c == null) return const WorkoutSaveIndicator();
+    return ListenableBuilder(
+        listenable: c,
+        builder: (context, child) {
+          if (!c.authorized) return const SizedBox.shrink();
+          final row = record ??
+              c.records
+                  .where((r) =>
+                      r.kind == 'routine' &&
+                      r.id == attempt?.id &&
+                      attempt?.scope == c.scope &&
+                      backupCanonical(r.payload['attempt']) ==
+                          backupCanonical(attempt?.toJson()))
+                  .firstOrNull;
+          return WorkoutSaveIndicator(
+              status:
+                  row == null ? BackupRecordStatus.localOnly : c.statusFor(row),
+              syncEnabled: c.state.enabled,
+              onRetry: () {
+                c.sync().catchError((Object _) {});
+              });
+        });
+  }
+}
 
 /// Cloud-copy state only. It never implies form verification or a reward.
 class WorkoutSaveIndicator extends StatelessWidget {

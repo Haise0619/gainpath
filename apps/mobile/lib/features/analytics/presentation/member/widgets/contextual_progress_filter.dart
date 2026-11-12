@@ -7,26 +7,29 @@ class ContextualProgressFilter extends StatefulWidget {
   const ContextualProgressFilter(
       {super.key,
       required this.progress,
-      required this.builder,
+      this.builder,
+      this.reportBuilder,
       this.onExport,
       this.showDisabledExport = false});
   final MemberLocalProgress progress;
   final void Function(WorkoutReportFilter)? onExport;
   final bool showDisabledExport;
-  final Widget Function(MemberLocalProgress) builder;
+  final Widget Function(MemberLocalProgress)? builder;
+  final Widget Function(MemberLocalProgress, WorkoutReportFilter)?
+      reportBuilder;
   @override
   State<ContextualProgressFilter> createState() =>
       _ContextualProgressFilterState();
 }
 
 class _ContextualProgressFilterState extends State<ContextualProgressFilter> {
-  int? _days;
+  int? _days = 30;
   String? _exercise;
   @override
   void didUpdateWidget(covariant ContextualProgressFilter oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.progress.scope != widget.progress.scope) {
-      _days = null;
+      _days = 30;
       _exercise = null;
     }
     if (_exercise != null &&
@@ -88,7 +91,15 @@ class _ContextualProgressFilterState extends State<ContextualProgressFilter> {
                             exerciseId: _exercise)),
                     icon: const Icon(Icons.picture_as_pdf_outlined)))),
       const SizedBox(height: 16),
-      widget.builder(filtered),
+      if (widget.reportBuilder != null)
+        widget.reportBuilder!(
+            filtered,
+            WorkoutReportFilter(
+                startDay: filter.startDay,
+                endDay: filter.endDay,
+                exerciseId: _exercise))
+      else
+        widget.builder!(filtered),
     ]);
   }
 }

@@ -20,7 +20,10 @@ List<ExerciseImprovement> exerciseImprovements(MemberLocalProgress progress) =>
     ];
 
 ExerciseImprovement _comparison(List<LocalWorkoutProgressRecord> records) {
-  final sorted = [...records]..sort((a, b) => b.endedAt.compareTo(a.endedAt));
+  final sorted = [...records]..sort((a, b) {
+      final time = b.endedAt.compareTo(a.endedAt);
+      return time == 0 ? a.sessionId.compareTo(b.sessionId) : time;
+    });
   return ExerciseImprovement(
       sorted.first, sorted.length < 2 ? null : sorted[1]);
 }

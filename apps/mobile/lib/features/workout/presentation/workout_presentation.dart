@@ -3,13 +3,9 @@ import 'package:gainpath_domain/workout.dart';
 import '../domain/exercise_tracker_dispatcher.dart';
 import '../domain/published_routine_view.dart';
 import '../domain/routine_attempt.dart';
+export '../domain/routine_attempt.dart' show routineDayTitle;
 
 enum WorkoutExerciseMode { aiTracked, videoTimed, manual, unavailable }
-
-String routineDayTitle(PublishedRoutine routine, int day) =>
-    routine.exercises.any((exercise) => exercise.dayNumber != day)
-        ? '${routine.title} · Day $day'
-        : routine.title;
 
 String workoutCount(int count, String noun) =>
     '$count $noun${count == 1 ? '' : 's'}';

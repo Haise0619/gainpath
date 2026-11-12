@@ -6,6 +6,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:gainpath_domain/analytics.dart';
 import 'widgets/local_progress_widgets.dart';
 import '../../domain/member_workout_report.dart';
+import '../../domain/workout_activity_overview.dart';
 import '../../../workout/domain/routine_attempt.dart';
 import 'widgets/contextual_progress_filter.dart';
 import 'widgets/exercise_improvement_card.dart';
@@ -179,7 +180,7 @@ class PostureAccuracyScreen extends StatelessWidget {
           BuildContext context, MemberLocalProgress progress) =>
       [
         Text(
-            'Provisional rule estimates · ${localProgressZone(progress.utcOffset)}',
+            'Rule-based form feedback · ${localProgressZone(progress.utcOffset)}',
             style: Theme.of(context).textTheme.bodyMedium),
         const SizedBox(height: 12),
         const ExpansionTile(
@@ -192,7 +193,7 @@ class PostureAccuracyScreen extends StatelessWidget {
                   'Unassessed captures appear as gaps.')
             ]),
         const SizedBox(height: 20),
-        const Eyebrow('Estimated form by version'),
+        const Eyebrow('Exercise form assessments'),
         const WorkoutMeasurementScope(formOnly: true),
         if (progress.formSeries.isEmpty)
           const Panel(child: Text('No estimated form measurements yet.')),
@@ -206,12 +207,18 @@ class PostureAccuracyScreen extends StatelessWidget {
                             group.exerciseId] ??
                         reportExerciseLabel(group.exerciseId),
                     style: Theme.of(context).textTheme.titleMedium),
-                Text(
-                    'Rule ${group.scoringVersion} · detector ${group.detectorId} · '
-                    'model ${group.detectorVersion} · view ${group.cameraView}'),
+                if (group.scoringVersion == 'single-arm-curl-side-v1')
+                  Text(progressArmModeLabel(group.records.first.armMode)),
+                ExpansionTile(
+                    title: const Text('Technical details'),
+                    children: [
+                      Text(
+                          'Rule ${group.scoringVersion} · detector ${group.detectorId} · '
+                          'model ${group.detectorVersion} · view ${group.cameraView}'),
+                    ]),
                 const SizedBox(height: 10),
                 Text(group.meanScore == null
-                    ? 'Estimated form: unassessed'
+                    ? progressFormLabel(group.records.first)
                     : 'Estimated form: ${group.meanScore!.toStringAsFixed(1)}%'),
                 Text('${group.scoredAttempts} scored attempts · '
                     '${group.unassessedAttempts} unassessed attempts'),
@@ -258,6 +265,8 @@ class PostureAccuracyScreen extends StatelessWidget {
                           xValueMapper: (record, _) => record.endedAt,
                           yValueMapper: (record, _) => record.formScorePercent,
                           color: AppColors.primary,
+                          animationDuration:
+                              MediaQuery.disableAnimationsOf(context) ? 0 : 220,
                           width: 2,
                           emptyPointSettings: const EmptyPointSettings(
                               mode: EmptyPointMode.gap),

@@ -24,3 +24,13 @@ Added a shared purple/ivory completion header, responsive activity facts and exp
 The primary summary no longer leads with reward/acceptance internals. Completion motion is finite and respects reduced motion. Elapsed time is disclosed separately because it includes breaks/time away. The existing workout continuation, partial/skipped statuses and safe resume/repeat actions are preserved.
 
 Verification: 26 summary/history/mixed/continuity tests passed (including 5 new product tests); six-file analysis clean. Actual 390dp Flutter summary render inspected against the before image. The first run exposed stale copy assertions and an offscreen test finder, corrected without dropping evidence assertions.
+
+## Phase 3 — routine-centered History and meaningful Progress
+
+History now defaults consistently to Routines; its AI-only tab is named AI Sessions. Routine cards include mode-aware activity summaries and use the shared, read-only sync coordinator for per-content status. Date (7/30/all) and completion filters compose; both tabs remain mounted to preserve navigation context. Dates default to 30 days throughout detailed analytics.
+
+Progress uses workout-centered recent cards, retaining unlinked AI captures but hiding linked captures from duplicate top-level activity. Workout start days use saved routine starts (standalone capture starts only when not represented by a known routine); empty attempts do not count. This is explicitly not a reconstructed active-time calendar. Activity trends is a direct primary link and includes completed routines, recorded video time and manual sets, with AI-only charts clearly scoped. Scheduled completion identifies the full-week denominator, including upcoming slots; numeric goals retain their existing UTC semantics and display them explicitly instead of silently changing a contract.
+
+Curl arm mode is read from existing summary evidence, carried in the progress DTO, included in comparison keys and shown in comparisons/form groups. Left/right/both/unknown remain separate; no historical values are invented. Technical versions and workout verification states remain inspectable behind details. Single-day names reuse one domain title helper.
+
+Verification: 43 focused Mobile tests plus 36 Domain tests passed; 19-file scoped analysis clean. Actual History/Progress Flutter renders inspected. A broader analytics directory scan also reported a pre-existing coach earnings style info; final scoped analysis excludes that unrelated file. No scoring, scheduling backend or Firebase schema/formula was changed.

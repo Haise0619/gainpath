@@ -30,6 +30,7 @@ class LocalWorkoutProgressRecord {
     required this.detectorVersion,
     required this.cameraView,
     required this.status,
+    this.armMode,
     this.failureCode,
     DateTime? acceptedAt,
   })  : startedAt = startedAt.toUtc(),
@@ -77,6 +78,10 @@ class LocalWorkoutProgressRecord {
             formScorePercent > 100)) {
       throw ArgumentError('Estimated form must be a finite percentage.');
     }
+    if (armMode != null &&
+        !{'leftOnly', 'rightOnly', 'both'}.contains(armMode)) {
+      throw ArgumentError('Unknown saved arm mode.');
+    }
   }
 
   final SessionScope scope;
@@ -93,6 +98,7 @@ class LocalWorkoutProgressRecord {
   final String detectorId;
   final String detectorVersion;
   final String cameraView;
+  final String? armMode;
   final LocalWorkoutRecordStatus status;
   final String? failureCode;
   final DateTime? acceptedAt;
@@ -110,6 +116,7 @@ class LocalWorkoutProgressRecord {
         detectorId,
         detectorVersion,
         cameraView,
+        armMode,
       ]);
 }
 
@@ -316,6 +323,7 @@ bool _sameRecord(LocalWorkoutProgressRecord a, LocalWorkoutProgressRecord b) =>
     a.detectorId == b.detectorId &&
     a.detectorVersion == b.detectorVersion &&
     a.cameraView == b.cameraView &&
+    a.armMode == b.armMode &&
     a.status == b.status &&
     a.failureCode == b.failureCode &&
     a.acceptedAt == b.acceptedAt;

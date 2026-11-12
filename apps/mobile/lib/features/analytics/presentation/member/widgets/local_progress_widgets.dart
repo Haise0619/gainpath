@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../domain/member_workout_report.dart';
+import '../../../domain/workout_activity_overview.dart';
+import '../../../../workout/presentation/member/widgets/workout_save_indicator.dart';
 import 'package:gainpath_domain/analytics.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
 import 'package:syncfusion_flutter_charts/charts.dart';
@@ -46,9 +48,11 @@ class LocalProgressRecordTile extends StatelessWidget {
       required this.record,
       required this.utcOffset,
       this.onOpenWorkout,
+      this.saveStatus,
       this.exerciseName});
   final LocalWorkoutProgressRecord record;
   final String? exerciseName;
+  final Widget? saveStatus;
   final Duration utcOffset;
   final void Function(LocalWorkoutProgressRecord)? onOpenWorkout;
 
@@ -86,16 +90,18 @@ class LocalProgressRecordTile extends StatelessWidget {
                     '${record.repetitions} full reps · ${record.partialRepetitions} partial attempts',
                     style: Theme.of(context).textTheme.bodyMedium),
                 const SizedBox(height: 6),
-                Text(
-                    record.scope.datasetScope != null
-                        ? 'Fictional recorded fixture · read only'
-                        : localProgressStatus(record.status),
-                    style: TextStyle(
-                        color: statusColor, fontWeight: FontWeight.w700)),
+                if (record.scope.datasetScope != null)
+                  const Text('Fictional recorded fixture · read only')
+                else
+                  saveStatus ?? const WorkoutSaveIndicator(),
+                if (record.scoringVersion == 'single-arm-curl-side-v1')
+                  Text(progressArmModeLabel(record.armMode)),
                 ExpansionTile(
                   tilePadding: EdgeInsets.zero,
                   title: const Text('Measurement details'),
                   children: [
+                    Text(localProgressStatus(record.status),
+                        style: TextStyle(color: statusColor)),
                     Text('Exercise ID: ${record.exerciseId}'),
                     Text(record.sessionId),
                     if (record.failureCode != null)

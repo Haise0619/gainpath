@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:gainpath_domain/analytics.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
 import '../../domain/member_workout_report.dart';
+import '../../domain/workout_activity_overview.dart';
 import '../../domain/local_member_progress_repository.dart';
 import '../../../workout/domain/routine_attempt.dart';
 import '../member/widgets/local_progress_widgets.dart';
@@ -52,26 +53,7 @@ class MemberProgressOverview extends StatelessWidget {
             routineHistoryAvailable: routines != null),
         filter: WorkoutReportFilter.all(),
         asOf: progress.asOf);
-    final days = <String>{};
-    bool inWeek(DateTime at) =>
-        !at.isBefore(progress.weekStart) &&
-        at.isBefore(progress.weekEnd) &&
-        !at.isAfter(progress.asOf);
-    for (final record in progress.records) {
-      if (inWeek(record.endedAt) && record.trackedDurationMicros > 0) {
-        days.add(reportDate(record.endedAt));
-      }
-    }
-    for (final attempt in routines?.records ?? <RoutineAttempt>[]) {
-      if (attempt.startedAtMicros != null &&
-          (attempt.trackedDurationMicros > 0 ||
-              attempt.guidedDurationMicros > 0 ||
-              attempt.selfReportedSets > 0)) {
-        final at = DateTime.fromMicrosecondsSinceEpoch(attempt.startedAtMicros!,
-            isUtc: true);
-        if (inWeek(at)) days.add(reportDate(at));
-      }
-    }
+    final days = workoutStartDays(progress, routines?.records ?? const []);
     Widget summary(BuildContext context, int? completed, [int? scheduled]) =>
         Container(
           padding: const EdgeInsets.all(20),
@@ -94,7 +76,7 @@ class MemberProgressOverview extends StatelessWidget {
             LayoutBuilder(builder: (context, constraints) {
               final stacked = constraints.maxWidth < 300 &&
                   MediaQuery.textScalerOf(context).scale(1) > 1.3;
-              final training = _metric('${days.length}', 'Training days',
+              final training = _metric('${days.length}', 'Workout start days',
                   Icons.fitness_center_rounded,
                   key: const ValueKey('progress-training-days'));
               final completedMetric = _metric(
@@ -127,7 +109,7 @@ class MemberProgressOverview extends StatelessWidget {
                 spacing: 12,
                 runSpacing: 4,
                 children: [
-                  const Text('Adherence',
+                  const Text('Scheduled completion',
                       style: TextStyle(
                           color: Colors.white, fontWeight: FontWeight.w600)),
                   Text(
@@ -149,7 +131,7 @@ class MemberProgressOverview extends StatelessWidget {
                             ? 0
                             : completed / scheduled)),
             const SizedBox(height: 12),
-            const Text('Monday–Sunday · Malaysia time',
+            const Text('Monday–Sunday · Malaysia time · full-week schedule',
                 style: TextStyle(color: Colors.white, fontSize: 12)),
           ]),
         );
@@ -180,7 +162,7 @@ class MemberProgressOverview extends StatelessWidget {
             child: Text(routines == null
                 ? 'No camera workouts recorded yet. Routine history is unavailable.'
                 : 'No workouts recorded yet. Start a workout to see your progress here.')),
-      for (final event in report.timeline.take(3))
+      for (final event in overviewWorkoutEvents(report).take(3))
         _recent(context, report, event),
       const SizedBox(height: 8),
       Text('Explore progress',
@@ -191,6 +173,8 @@ class MemberProgressOverview extends StatelessWidget {
         final columns = constraints.maxWidth >= 520 ? 3 : 2;
         final width = (constraints.maxWidth - (columns - 1) * 8) / columns;
         return Wrap(spacing: 8, runSpacing: 8, children: [
+          _quick(
+              'Activity trends', Icons.insights_outlined, onPerformance, width),
           _quick('History', Icons.history_rounded, onHistory, width),
           _quick('View reports', Icons.bar_chart_rounded, onReports, width),
           _quick('Estimated Form Scores', Icons.accessibility_new_rounded,
@@ -215,9 +199,8 @@ class MemberProgressOverview extends StatelessWidget {
                       'Measurement coverage: ${progress.weeklyCoverage == null ? 'Unavailable' : localProgressCoverage(progress.weeklyCoverage)}'),
                   const Text(
                       'Camera measurements are provisional. Manual sets are self-reported. Tracker versions may differ.'),
-                  TextButton(
-                      onPressed: onPerformance,
-                      child: const Text('Workout performance')),
+                  const Text(
+                      'Workout start days use saved start dates. Linked AI results count with their workout, not as another workout day.'),
                 ]))
       ]),
     ]);
@@ -268,7 +251,7 @@ class MemberProgressOverview extends StatelessWidget {
     final captures = report.sessions.where((s) => s.sessionId == event.id);
     final attempts = report.routines.where((r) => r.attempt.id == event.id);
     final capture =
-        event.sourceLabel == 'Measured AI capture' && captures.isNotEmpty
+        event.kind == WorkoutTimelineKind.aiCapture && captures.isNotEmpty
             ? captures.first
             : null;
     final attempt =
@@ -321,8 +304,10 @@ class MemberProgressOverview extends StatelessWidget {
                                     borderRadius: BorderRadius.circular(8)),
                                 child: Text(
                                     capture != null
-                                        ? '${capture.repetitions} reps · Measured / provisional'
-                                        : '${attempt?.statusLabel ?? 'Saved routine'} · ${attempt?.selfReportedSets ?? 0} self-reported sets',
+                                        ? '${capture.repetitions} full reps · AI Tracked'
+                                        : attempt == null
+                                            ? 'Saved workout'
+                                            : routineActivitySummary(attempt),
                                     style: const TextStyle(
                                         color: AppColors.primaryDark,
                                         fontSize: 12,

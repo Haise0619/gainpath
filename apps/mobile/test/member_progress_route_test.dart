@@ -59,7 +59,7 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
     expect(find.text('Workout history'), findsOneWidget);
-    expect(find.text('Exercise sessions'), findsOneWidget);
+    expect(find.text('AI Sessions'), findsOneWidget);
     waiting.completeError(StateError('read failed'));
     await tester.pumpAndSettle();
     expect(find.textContaining('Showing previously loaded local results.'),

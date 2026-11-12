@@ -4,6 +4,11 @@ import 'published_routine_view.dart';
 import 'guided_timed_progress.dart';
 import 'package:gainpath_domain/workout.dart';
 
+String routineDayTitle(PublishedRoutine routine, int day) =>
+    routine.exercises.any((exercise) => exercise.dayNumber != day)
+        ? '${routine.title} · Day $day'
+        : routine.title;
+
 enum RoutineExerciseStatus {
   notStarted,
   partial,

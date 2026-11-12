@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
 import '../../../../workout/domain/routine_attempt.dart';
-import '../../../../workout/presentation/workout_presentation.dart';
 
 class RoutineProgressCard extends StatelessWidget {
   const RoutineProgressCard(

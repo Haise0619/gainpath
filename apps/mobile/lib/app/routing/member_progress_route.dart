@@ -1,5 +1,7 @@
 import 'workout_program_route.dart';
 import 'workout_cloud_save_status.dart';
+import '../../features/workout/domain/workout_backup.dart';
+import '../../features/workout/presentation/member/widgets/workout_save_indicator.dart';
 import '../../features/analytics/presentation/member/goal_comparison_report.dart';
 import 'dart:async';
 import 'member_points_progress_route.dart';
@@ -513,7 +515,7 @@ Widget _progressContent(
         onOpenRoutine: openSavedRoutine,
         onRefresh: refresh,
         onOpenWorkout: openWorkout,
-        onOpenHistory: () => open(MemberProgressView.history),
+        onOpenHistory: () => open(MemberProgressView.routines),
         onOpenPerformance: () => open(MemberProgressView.performance),
         onOpenForm: () => open(MemberProgressView.form)),
     MemberProgressView.history ||
@@ -524,12 +526,23 @@ Widget _progressContent(
           onBackup: () => open(MemberProgressView.backup),
           routines: RoutineHistoryScreen(
               embedded: true,
+              asOf: progress.asOf,
+              saveStatusBuilder: (attempt) => WorkoutRecordSyncIndicator(
+                  coordinator: backup, attempt: attempt),
               attempts: state.routines?.records ?? const [],
               available: state.routines != null,
               onRefresh: refresh,
               onOpenAttempt: openSavedRoutine),
           sessions: ActivityTimelineScreen(
               historyOnly: true,
+              saveStatusBuilder: (record) {
+                final summary = state.snapshot?.summaries[record.sessionId];
+                return WorkoutRecordSyncIndicator(
+                    coordinator: backup,
+                    record: summary == null
+                        ? null
+                        : WorkoutBackupRecord.session(summary));
+              },
               routineProgress: state.routines,
               onOpenReport: openReport,
               onOpenFilteredReport: (filter) => openReport(filter),

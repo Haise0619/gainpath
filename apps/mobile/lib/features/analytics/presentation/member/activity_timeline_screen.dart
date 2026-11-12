@@ -22,10 +22,12 @@ class ActivityTimelineScreen extends StatelessWidget {
       this.onOpenWorkout,
       this.onOpenReport,
       this.historyOnly = false,
+      this.saveStatusBuilder,
       this.onOpenFilteredReport});
 
   final MemberLocalProgress? localProgress;
   final bool historyOnly;
+  final Widget Function(LocalWorkoutProgressRecord)? saveStatusBuilder;
   final RoutineProgress? routineProgress;
   final VoidCallback? onOpenReport;
   final void Function(WorkoutReportFilter)? onOpenFilteredReport;
@@ -78,6 +80,7 @@ class ActivityTimelineScreen extends StatelessWidget {
                             ...filtered.records.map((record) =>
                                 LocalProgressRecordTile(
                                     record: record,
+                                    saveStatus: saveStatusBuilder?.call(record),
                                     exerciseName: reportExerciseNames(
                                         routineProgress?.records ??
                                             const [])[record.exerciseId],
