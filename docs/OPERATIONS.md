@@ -567,3 +567,8 @@ Source `c658751` preserves visible Mini Game and published reward previews for k
 ## Published covers and Coach locked previews — 12 November 2026
 
 Sources `102cf35` and `018014f` add real published game-cover loading, orange lock accents and matching published Coach locked previews. Known Free previews remain inert; unknown/paid access and My Bookings are preserved. All 81 combined regressions, both nine-case responsive matrices, scoped analysis and clean-source Android Debug build pass. No backend deployment or APK installation occurred. [Design, screenshots and verification](ux/free-rewards-locked-preview.md).
+
+
+## Basic Coach loading correction — 12 November 2026
+
+Source `6720183` fixes a cached initial loading child inside the signed-in membership gate. Live directory results now propagate without dropping session protection; other SDK graphs remain cached. All 33 affected tests pass in working and clean-source runs; scoped analysis is clean. The working-app APK was built and installed in place to preserve the existing device UI/data, with matching installed checksum and previous APK retained. Manual post-update Coach-list observation remains pending while the phone is dozing; no backend or member-data change occurred. [Design, screenshots and verification](ux/free-rewards-locked-preview.md).
