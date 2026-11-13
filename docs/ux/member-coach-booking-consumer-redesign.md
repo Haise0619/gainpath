@@ -1,6 +1,6 @@
 # Member Coach Booking consumer redesign
 
-Implemented 13 November 2026. This is a source implementation and local acceptance record, not a live rollout.
+Implemented 13 November 2026. Initial source/local acceptance is recorded below; the paired live activation that followed the reported device error is recorded at the end.
 
 ## Business rules
 
@@ -93,3 +93,15 @@ Logs and manifests: `backend-files.json`, `all-source-files.json`, `functions-fu
 - `2f03b37` — consumer selection/review, payment, list/details and regression/render coverage.
 
 Unrelated uncommitted Admin, Home, Rewards, pose and documentation work is preserved. No live Functions/Rules/config were deployed, no payment/refund executed, no production booking modified, and no APK installed. Real provider/browser handoff, device accessibility, live callback timing and end-to-end bank refund completion still need authorized Sandbox/device acceptance. Deploy the matching backend before making the new client available to live accounts.
+
+## Paired booking backend activation — 13 November 2026
+
+The owner subsequently reported the redesigned Book a session screen failing immediately with “Check the booking date, duration and selected time.” Read-only reproduction using the existing synthetic Basic fixture confirmed a release mismatch: the deployed options handler accepted the legacy 60-minute request (HTTP200), but rejected the new `includeDisplayNames:true` request (HTTP400, `Unsupported scheduling field.`). This was not a date-selection error.
+
+Under the existing standing scoped-deployment authorization, the seven existing Singapore callables were updated from committed source `38234a4`: `getMemberBookingOptionsCommand`, `getBookingPaymentQuoteCommand`, `createBookingPaymentCommand`, `getBookingPaymentCommand`, `createBookingHold`, the actual read alias `getBookingListReadCommand`, and `fitnessAssistantCommand`. This activates the paired fixed60/quotation/list contract; no Firestore migration, financial configuration, secrets, IAM or other service changes were performed.
+
+The sealed 40-file package exports only those seven functions. SHA256: `83b2d6a4775c4fc95037ffe9dd08cdc7db9b8d1fc598b7baf986c46137ded3fe`. All seven deployed archives match it. Their existing Node22 runtime, environment, secret bindings, service settings and IAM were verified preserved; unrelated Function revisions/source remained unchanged. Each prior source archive and its config/IAM snapshot is retained for rollback under ignored `build/booking-live-fix-20261113/`.
+
+Fresh activation checks: 190 affected service/callback regressions pass; exact-package five contract cases and seven export/App Check source checks pass; independent package review found no blocking issue. Live synthetic Basic reads now return HTTP200 for display-name options, reviewed quotation and the list's payment-detail flag. Coach/branch names resolve and the next available date has 15 real options (four dates checked). The legacy60 read still returns200 without new optional fields; new30 options reject with400; anonymous access rejects with401. No hold, bill, payment/refund or booking-data write was created by these probes.
+
+No APK was installed for this server correction. Re-enter Book a session or use Try again to replace the cached failed request. Owner-device visual acceptance and actual Sandbox provider/payment/refund UAT remain separate; the live checks above use the existing synthetic fixture, not the owner's account. Minor pre-existing assistant wording still mentions30/60 choices although new30 requests are rejected; it does not bypass fixed60 enforcement.
