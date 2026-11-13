@@ -97,6 +97,15 @@ class FirebaseAccountPhotoStore implements AccountPhotoStore {
     } on AdminAccountContactSessionChanged {
       rethrow;
     } catch (_) {
+      if (_client == null) {
+        try {
+          final data = await _storage.ref(path).getData(AccountPhoto.maxBytes);
+          _check();
+          if (data != null && data.isNotEmpty) {
+            return AccountPhoto(data).bytes;
+          }
+        } catch (_) {}
+      }
       throw const AccountPhotoUnavailable();
     } finally {
       if (_client == null) client.close();

@@ -95,10 +95,14 @@ class _ReviewState extends State<CoachCertificationReviewPanel> {
                                     child: Text(
                                         'Unsupported document preview.')))),
                   ]))));
-    } catch (_) {
-      if (mounted)
-        setState(() =>
-            message = 'Could not load private document. Refresh and retry.');
+    } catch (e, st) {
+      debugPrint('Could not preview document: $e\n$st');
+      if (mounted) {
+        final errText = e is CoachRepositoryException && e.message.isNotEmpty
+            ? e.message
+            : 'Could not load private document. Refresh and retry.';
+        setState(() => message = errText);
+      }
     } finally {
       if (mounted) setState(() => busy = false);
     }
@@ -304,9 +308,60 @@ class _ReviewState extends State<CoachCertificationReviewPanel> {
               icon: const Icon(Icons.refresh))
         ]),
         const Text(
-            'Documents are private. Approval records verification; directory publication remains a separate action.'),
-        if (busy) const LinearProgressIndicator(),
-        if (message != null) Text(message!),
+            'Documents are private. Approval records verification; directory publication remains a separate action.',
+            style: TextStyle(fontSize: 13, color: Colors.black54)),
+        const SizedBox(height: 12),
+        if (busy) ...[
+          const LinearProgressIndicator(),
+          const SizedBox(height: 12),
+        ],
+        if (message != null) ...[
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: BoxDecoration(
+              color: message!.contains('approved') || message!.contains('verified')
+                  ? const Color(0xFFE8F5E9)
+                  : const Color(0xFFFFF3E0),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                color: message!.contains('approved') || message!.contains('verified')
+                    ? const Color(0xFFA5D6A7)
+                    : const Color(0xFFFFCC80),
+              ),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  message!.contains('approved') || message!.contains('verified')
+                      ? Icons.check_circle_outline
+                      : Icons.info_outline,
+                  size: 18,
+                  color: message!.contains('approved') || message!.contains('verified')
+                      ? const Color(0xFF2E7D32)
+                      : const Color(0xFFE65100),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    message!,
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                      color: message!.contains('approved') || message!.contains('verified')
+                          ? const Color(0xFF1B5E20)
+                          : const Color(0xFFBF360C),
+                    ),
+                  ),
+                ),
+                InkWell(
+                  onTap: () => setState(() => message = null),
+                  child: const Icon(Icons.close, size: 16, color: Colors.black54),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+        ],
         FutureBuilder<Map<String, dynamic>>(
             future: future,
             builder: (context, snapshot) {

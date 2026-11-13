@@ -1,5 +1,19 @@
 # Workout Hub: visual-first refinement
 
+## Latest visual refresh — 7 November 2026
+
+The hub now uses a compact photographic title card with a solid high-contrast text panel, inline icon-led facts and real saved progress. Decorative bundled gym artwork stays separate from actual exercise thumbnails. Start/Continue/Summary remains the primary action and is visible on an ordinary phone's first screen.
+
+Exercise order/check badges overlay thumbnails. Typed saved statuses use short Done/In progress/Skipped/Reviewed labels, with green completion and amber unfinished/review states. Full manual/timer/AI provenance remains accessible and execution mode remains visible. Initial rows omit repeated Not started labels. Tools use compact icon-and-label shortcuts: Training plan, Camera setup, Scan equipment and Saved sessions. Semantic foreground/container pairs and Change workout adapt to light/dark themes; no theme switch was introduced.
+
+Fresh verification: **42 tests passed across ten affected files**, including three opt-in render variants; **seven-file analysis clean**; independent scoped review found no important issues; isolated arm64 Android debug APK built successfully. Contrast tests verify all custom text pairs at >=4.5:1. Layout/action tests cover 320/375/390px, landscape, tablet and 200% text. Fresh fixture top/bottom light, dark and large-text renders were inspected. Fixtures do not establish live-account or physical-camera acceptance.
+
+Evidence and APK are under ignored `build/workout-visual-refresh-20261107/`; its manifest records source/APK hashes and the unchanged dependency lock. The build contains committed source plus only this UI change, excluding unrelated dirty Admin/Program/pose work. Read-only Xiaomi preflight found AOD/Dozing and a black screenshot; safe idle could not be established, so no installation was performed. Existing phone application/data were preserved.
+
+[Design](../superpowers/specs/2026-11-07-workout-visual-refresh-design.md) · [Implementation plan](../superpowers/plans/2026-11-07-workout-visual-refresh.md)
+
+## Earlier refinement
+
 7 November 2026. Implements the owner's request for lower text density and more visual guidance in the existing Flutter Workout page.
 
 ## Design and implementation plan

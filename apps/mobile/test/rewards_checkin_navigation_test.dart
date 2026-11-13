@@ -7,13 +7,12 @@ import 'package:gainpath_domain/gainpath_domain.dart' show SessionScope;
 import 'package:gainpath_mobile/features/gamification/application/app_check_in_cubit.dart';
 import 'package:gainpath_mobile/features/gamification/domain/app_check_in.dart';
 import 'package:gainpath_mobile/features/gamification/presentation/member/app_check_in_dashboard.dart';
-import 'package:gainpath_mobile/app/routing/member_points_progress_route.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'app_check_in_test.dart' show snapshotJson;
 
 void main() {
   setUpAll(() => GoogleFonts.config.allowRuntimeFetching = false);
-  testWidgets('Rewards opens live check-in route with account guard',
+  testWidgets('Rewards dashboard removes redundant Rewards & Check-in shortcut',
       (t) async {
     final auth = AuthBloc(repository: InMemoryAuthRepository());
     final scope = SessionScope(userId: 'member', organizationId: 'gainpath');
@@ -28,12 +27,11 @@ void main() {
                 onClaim: () async {},
                 onRefresh: () async {}))));
     await t.pumpAndSettle();
-    await t.ensureVisible(find.text('Rewards & Check-in'));
-    await t.pumpAndSettle();
-    await t.tap(find.text('Rewards & Check-in'));
-    await t.pumpAndSettle();
-    expect(find.byType(LivePointsProgress), findsOneWidget);
-    expect(find.textContaining('Sign in'), findsOneWidget);
+    expect(find.text('Rewards & Check-in'), findsNothing);
+    await t.ensureVisible(find.text('My Rewards'));
+    expect(find.text('My Rewards'), findsOneWidget);
+    expect(find.text('Badges'), findsOneWidget);
+    expect(find.text('Points History'), findsOneWidget);
     await t.pumpWidget(const SizedBox());
     await t.runAsync(auth.close);
   });

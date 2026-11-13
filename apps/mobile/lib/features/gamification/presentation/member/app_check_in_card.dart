@@ -12,9 +12,11 @@ class AppCheckInCard extends StatelessWidget {
       required this.onClaim,
       this.onRefresh,
       this.compact = false,
-      this.homeDense = false});
+      this.homeDense = false,
+      this.showDays = true});
   final bool homeDense;
   final bool compact;
+  final bool showDays;
   final AppCheckInState state;
   final Future<void> Function() onClaim;
   final Future<void> Function()? onRefresh;
@@ -23,7 +25,10 @@ class AppCheckInCard extends StatelessWidget {
   Widget build(BuildContext context) {
     if (homeDense) {
       return HomeDailyCheckInCard(
-          state: state, onClaim: onClaim, onRefresh: onRefresh);
+          state: state,
+          onClaim: onClaim,
+          onRefresh: onRefresh,
+          showDays: showDays);
     }
     final s = state.snapshot,
         ready = state.status == AppCheckInStatus.ready ||

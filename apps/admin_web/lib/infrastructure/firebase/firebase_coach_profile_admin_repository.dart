@@ -4,6 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:gainpath_domain/gainpath_domain.dart' show SessionScope;
 import 'package:gainpath_domain/identity.dart';
 import 'firebase_function_transport.dart';
+import 'admin_coach_ratings.dart';
 
 class FirebaseCoachProfileAdminRepository
     implements CoachProfileAdminRepository {
@@ -97,8 +98,30 @@ class FirebaseCoachProfileAdminRepository
       _page('coachProfiles', afterId, CoachProfessionalProfile.fromDocument);
   @override
   Future<CoachDirectoryPage<PublishedCoachProfile>> loadPublicPage(
-          {String? afterId}) =>
-      _page('coaches', afterId, PublishedCoachProfile.fromDocument);
+      {String? afterId}) async {
+    final page =
+        await _page('coaches', afterId, PublishedCoachProfile.fromDocument);
+    final profiles = await loadAdminCoachRatings(page.items, (ids) async {
+      _check();
+      try {
+        final response = await firebaseScopedCallable(
+                scope, 'getCoachRatingsCommand',
+                functions: _functions)
+            .call<Map<String, dynamic>>({
+          'schemaVersion': 1,
+          'organizationId': scope.organizationId,
+          'coachIds': ids,
+        });
+        await _admin();
+        return response.data;
+      } on FirebaseException catch (error) {
+        throw CoachRepositoryException(error.code);
+      }
+    });
+    _check();
+    return CoachDirectoryPage(profiles, nextCursor: page.nextCursor);
+  }
+
   @override
   Future<CoachPublicationReview> loadReview(String coachId) async {
     await _admin();
@@ -166,7 +189,8 @@ class FirebaseCoachProfileAdminRepository
       throw const CoachRepositoryException('failed-precondition');
     }
     try {
-      final response = await firebaseScopedCallable(scope, 'setCoachDirectoryStatusCommand',
+      final response = await firebaseScopedCallable(
+              scope, 'setCoachDirectoryStatusCommand',
               functions: _functions)
           .call<Map<String, dynamic>>({
         'schemaVersion': 1,

@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:typed_data';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -94,7 +95,7 @@ class CoachCertificationAdminAdapter {
             'alt': 'media'
           });
       final request = http.Request('GET', uri)..followRedirects = false;
-      request.headers['Authorization'] = 'Firebase $token';
+      request.headers['Authorization'] = 'Bearer $token';
       String? appCheck;
       try {
         appCheck = await FirebaseAppCheck.instance.getToken();
@@ -102,23 +103,36 @@ class CoachCertificationAdminAdapter {
       if (appCheck != null) request.headers['X-Firebase-AppCheck'] = appCheck;
       final response =
           await client.send(request).timeout(const Duration(seconds: 20));
-      if (response.statusCode != 200 ||
-          (response.contentLength ?? 0) > 5 * 1024 * 1024) {
-        throw const CoachRepositoryException('unavailable');
-      }
-      final bytes = BytesBuilder(copy: false);
-      await for (final chunk
-          in response.stream.timeout(const Duration(seconds: 20))) {
-        if (bytes.length + chunk.length > 5 * 1024 * 1024) {
-          throw const CoachRepositoryException('resource-exhausted');
+      if (response.statusCode == 200 &&
+          (response.contentLength ?? 0) <= 5 * 1024 * 1024) {
+        final bytes = BytesBuilder(copy: false);
+        await for (final chunk
+            in response.stream.timeout(const Duration(seconds: 20))) {
+          if (bytes.length + chunk.length > 5 * 1024 * 1024) {
+            throw const CoachRepositoryException('resource-exhausted');
+          }
+          bytes.add(chunk);
         }
-        bytes.add(chunk);
+        await _check();
+        return bytes.takeBytes();
       }
-      await _check();
-      return bytes.takeBytes();
+    } catch (_) {
+      // Direct HTTP fetch failed or was blocked by browser CORS; fallback to Storage SDK.
     } finally {
       client.close();
     }
+
+    try {
+      final data = await FirebaseStorage.instance
+          .ref(path as String)
+          .getData(5 * 1024 * 1024);
+      await _check();
+      if (data != null && data.isNotEmpty) {
+        return data;
+      }
+    } catch (_) {}
+
+    throw const CoachRepositoryException('unavailable');
   }
 
   Future<void> review(
@@ -157,3 +171,31 @@ bool isPrivateCertificationPath(
     path is String &&
     RegExp('^orgs/${RegExp.escape(organizationId)}/coachCertifications/${RegExp.escape(coachId)}/[a-f0-9]{32}\$')
         .hasMatch(path);
+
+Uint8List createFictionalCredentialPdf(String title, {String? coachName}) {
+  final name = coachName ?? 'Demonstration Coach';
+  final text =
+      'DEMO ONLY - Fictional educational credential for $name. Not a real professional qualification.';
+  final stream = 'BT /F1 12 Tf 32 740 Td ($text) Tj ET';
+  final streamBytes = ascii.encode(stream);
+  final bodies = [
+    '<< /Type /Catalog /Pages 2 0 R >>',
+    '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
+    '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>',
+    '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>',
+    '<< /Length ${streamBytes.length} >>\nstream\n$stream\nendstream',
+  ];
+  final offsets = <int>[];
+  var out = '%PDF-1.4\n';
+  for (var i = 0; i < bodies.length; i++) {
+    offsets.add(out.length);
+    out += '${i + 1} 0 obj\n${bodies[i]}\nendobj\n';
+  }
+  final start = out.length;
+  out += 'xref\n0 6\n0000000000 65535 f \n';
+  for (final n in offsets) {
+    out += '${n.toString().padLeft(10, '0')} 00000 n \n';
+  }
+  out += 'trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n$start\n%%EOF\n';
+  return Uint8List.fromList(ascii.encode(out));
+}

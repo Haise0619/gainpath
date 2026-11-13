@@ -6,6 +6,7 @@ import '../../features/analytics/domain/member_workout_report.dart';
 import '../di/chatbot_factory.dart';
 import '../../features/gamification/application/app_check_in_cubit.dart';
 import '../../features/gamification/presentation/member/app_check_in_card.dart';
+import '../../features/gamification/presentation/member/daily_check_in_claim_button.dart';
 import 'package:gainpath_domain/analytics.dart';
 import 'package:gainpath_domain/gainpath_domain.dart' as domain
     show BookingStatus;
@@ -318,6 +319,7 @@ class _MemberHomeScreenState extends State<MemberHomeScreen>
                                     message:
                                         'Check-in unavailable. Pull down to refresh.'),
                             homeDense: true,
+                            showDays: false,
                             onClaim: widget.onAppClaim ?? () async {},
                             onRefresh: widget.onRefreshCheckIn)
                       else
@@ -733,72 +735,16 @@ class _StreakCard extends StatelessWidget {
     required this.reward,
   });
 
-  /// Which of the last seven days already have a logged session. Derived
-  /// from real history rather than hardcoded so the strip and the streak
-  /// count never contradict each other.
-  List<bool> _week(BuildContext context) {
-    if (live) return List.filled(7, false);
-    final trained = context
-        .read<WorkoutRepository>()
-        .history
-        .map((r) => DateTime(r.date.year, r.date.month, r.date.day))
-        .toSet();
-    final now = DateTime.now();
-    return List.generate(7, (i) {
-      final day = now.subtract(Duration(days: 6 - i));
-      return trained.contains(DateTime(day.year, day.month, day.day));
-    });
-  }
-
   @override
   Widget build(BuildContext context) {
-    const labels = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
-    final now = DateTime.now();
-    final week = _week(context);
     final streak = live ? 0 : context.watch<GamificationBloc>().state.streak;
     final isEnlargedText = MediaQuery.textScalerOf(context).scale(1.0) > 1.15;
 
     Widget claimButton() {
-      if (claimed) {
-        return Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-          decoration: BoxDecoration(
-            color: const Color(0xFFFFF7ED),
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: const Color(0xFFFFEDD5)),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: const [
-              Icon(Icons.check_circle_rounded,
-                  size: 14, color: Color(0xFFFF8A00)),
-              SizedBox(width: 4),
-              Text('Checked in',
-                  style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                      color: Color(0xFFC2410C))),
-            ],
-          ),
-        );
-      }
-      return FilledButton.icon(
-        style: FilledButton.styleFrom(
-          backgroundColor: AppColors.primary,
-          foregroundColor: Colors.white,
-          minimumSize: const Size(0, 36),
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(10),
-          ),
-        ),
-        onPressed: onClaim,
-        icon:
-            const Icon(Icons.stars_rounded, size: 16, color: AppColors.accent),
-        label: Text('Claim $reward pts',
-            style:
-                const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700)),
+      return DailyCheckInClaimButton(
+        claimed: claimed,
+        points: reward,
+        onClaim: onClaim != null ? () async => onClaim!() : null,
       );
     }
 
@@ -898,54 +844,6 @@ class _StreakCard extends StatelessWidget {
                 child: claimButton(),
               ),
             ],
-            const SizedBox(height: 12),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: List.generate(7, (i) {
-                final day = now.subtract(Duration(days: 6 - i));
-                final isToday = i == 6;
-                final done = week[i] || (isToday && claimed);
-                return Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      width: 24,
-                      height: 24,
-                      decoration: BoxDecoration(
-                        color: (isToday && claimed)
-                            ? const Color(0xFFFF8A00)
-                            : (done ? AppColors.primary : AppColors.surface),
-                        shape: BoxShape.circle,
-                        border: isToday
-                            ? Border.all(
-                                color: claimed
-                                    ? const Color(0xFFFF8A00)
-                                    : AppColors.primary,
-                                width: 2)
-                            : Border.all(color: AppColors.hairline, width: 1),
-                      ),
-                      child: done
-                          ? const Icon(Icons.check_rounded,
-                              size: 13, color: Colors.white)
-                          : null,
-                    ),
-                    const SizedBox(height: 3),
-                    Text(
-                      labels[day.weekday - 1],
-                      style: TextStyle(
-                        fontSize: 10,
-                        fontWeight: isToday
-                            ? FontWeight.w800
-                            : (done ? FontWeight.w700 : FontWeight.w600),
-                        color: isToday
-                            ? (claimed ? const Color(0xFFEA580C) : AppColors.primary)
-                            : (done ? AppColors.ink : AppColors.inkSoft),
-                      ),
-                    ),
-                  ],
-                );
-              }),
-            ),
           ],
         ),
       ),

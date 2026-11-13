@@ -94,6 +94,22 @@ class CoachDirectoryAdminCubit extends Cubit<CoachDirectoryAdminState> {
           draftCursor: page ? draftCursor : s.draftCursor,
           publicCursor: page ? publicCursor : s.publicCursor,
           message: message);
+  void clearReview() {
+    if (isClosed || state.busy) return;
+    emit(CoachDirectoryAdminState(
+      loading: false,
+      allowed: state.allowed,
+      busy: false,
+      conflict: false,
+      drafts: state.drafts,
+      publicProfiles: state.publicProfiles,
+      draftCursor: state.draftCursor,
+      publicCursor: state.publicCursor,
+      review: null,
+      message: null,
+    ));
+  }
+
   Future<void> review(String id) async {
     if (isClosed || state.busy || !state.allowed) return;
     final n = ++_generation, original = state;

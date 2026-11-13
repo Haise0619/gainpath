@@ -2,13 +2,20 @@ import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
 import '../../application/app_check_in_cubit.dart';
+import 'daily_check_in_claim_button.dart';
 
 class HomeDailyCheckInCard extends StatelessWidget {
-  const HomeDailyCheckInCard(
-      {super.key, required this.state, required this.onClaim, this.onRefresh});
+  const HomeDailyCheckInCard({
+    super.key,
+    required this.state,
+    required this.onClaim,
+    this.onRefresh,
+    this.showDays = true,
+  });
   final AppCheckInState state;
   final Future<void> Function() onClaim;
   final Future<void> Function()? onRefresh;
+  final bool showDays;
   @override
   Widget build(BuildContext context) {
     final s = state.snapshot;
@@ -46,17 +53,13 @@ class HomeDailyCheckInCard extends StatelessWidget {
               fontWeight: (s?.claimedToday ?? false) ? FontWeight.w600 : FontWeight.normal,
               color: (s?.claimedToday ?? false) ? const Color(0xFFEA580C) : AppColors.inkSoft)),
     ]);
-    final canClaim = s != null && !s.claimedToday && ready;
-    final action = canClaim
-        ? FilledButton(
-            onPressed: state.claiming ? null : onClaim,
-            style: FilledButton.styleFrom(
-                minimumSize: const Size(48, 44),
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8)),
-            child: Text(state.claiming
-                ? 'Claiming…'
-                : 'Claim ${s.pointsPerClaim} points'))
+    final action = (s != null && ready)
+        ? DailyCheckInClaimButton(
+            claimed: s.claimedToday,
+            claiming: state.claiming,
+            points: s.pointsPerClaim,
+            onClaim: onClaim,
+          )
         : null;
     return Panel(
         padding: const EdgeInsets.all(12),
@@ -70,7 +73,7 @@ class HomeDailyCheckInCard extends StatelessWidget {
               Expanded(child: info),
               if (action != null) ...[const SizedBox(width: 8), action]
             ]),
-          if (s != null && s.days.isNotEmpty) ...[
+          if (showDays && s != null && s.days.isNotEmpty) ...[
             const SizedBox(height: 10),
             Row(children: [
               for (final day in s.days.take(7))

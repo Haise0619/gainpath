@@ -187,7 +187,7 @@ void main() {
     expect(find.byType(FloatingActionButton), findsOneWidget);
     expect(find.byKey(const ValueKey('home-ai-entry')), findsOneWidget);
 
-    final claimTextFinder = find.text('Claim 10 points');
+    final claimTextFinder = find.text('Claim +10');
     await tester.ensureVisible(claimTextFinder);
     await tester.pumpAndSettle();
 

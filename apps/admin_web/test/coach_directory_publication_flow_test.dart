@@ -95,6 +95,31 @@ class AdminFake implements CoachProfileAdminRepository {
 
 void main() {
   setUpAll(() => GoogleFonts.config.allowRuntimeFetching = false);
+  testWidgets('Admin coach card shows 4.0 and one review, never a session count',
+      (tester) async {
+    tester.view.physicalSize = const Size(1600, 1200);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final auth = InMemoryAuthRepository();
+    final session = await auth.signIn(
+        role: AppRole.admin, email: 'admin@example.test', password: 'fixture');
+    final repo = AdminFake(session.scope)..seed();
+    repo.publication = PublishedCoachProfile(
+        id: 'coach', fields: repo.fields, revision: 1, sourceRevision: 1,
+        status: 'published', branchIds: ['main'], createdAtMillis: 1,
+        updatedAtMillis: 1, publishedAtMillis: 1, averageRating: 4.0,
+        reviewCount: 1);
+    await tester.pumpWidget(GainPathAdminWebApp.injected(
+        authRepository: auth,
+        accountContactFactory: (_, __) => _EmptyPhotoAccount(),
+        coachRepositoryFactory: (_, __) => repo));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Coaches').last);
+    await tester.pumpAndSettle();
+    expect(find.text('4.0'), findsOneWidget);
+    expect(find.text('(1 review)'), findsOneWidget);
+    expect(find.text('1 sessions'), findsNothing);
+  });
   test('unsupported stored schema directs Admin to the stable main entry',
       () async {
     final repo = AdminFake(SessionScope(userId: 'admin', organizationId: 'o'))

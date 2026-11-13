@@ -2,6 +2,8 @@ import 'package:gainpath_domain/identity.dart';
 import 'package:gainpath_domain/membership.dart';
 import 'package:gainpath_domain/gainpath_domain.dart' show SessionScope;
 import 'firebase_unified_admin.dart';
+import 'admin_coach_ratings.dart';
+import 'firebase_function_transport.dart';
 import '../../features/gamification/reward_fulfilment_repository.dart';
 
 Map<String,dynamic> unifiedMap(Object? value) => Map<String,dynamic>.from(value as Map);
@@ -74,7 +76,8 @@ class UnifiedAdminMemberDirectory implements AdminMemberDirectoryRepository, Mem
 }
 
 class UnifiedAdminCoachDirectory implements CoachProfileAdminRepository {
-  UnifiedAdminCoachDirectory(this.transport,this.canonical);
+  UnifiedAdminCoachDirectory(this.transport,this.canonical, {this.readExistingRatings});
+  final Future<Map<String, dynamic>> Function(List<String>)? readExistingRatings;
   final UnifiedAdminTransport transport;
   final CoachProfileAdminRepository canonical;
   @override
@@ -88,7 +91,40 @@ class UnifiedAdminCoachDirectory implements CoachProfileAdminRepository {
   @override
   Future<CoachDirectoryPage<CoachProfessionalProfile>> loadDraftPage({String? afterId})=>_page('coachProfiles',afterId,CoachProfessionalProfile.fromDocument);
   @override
-  Future<CoachDirectoryPage<PublishedCoachProfile>> loadPublicPage({String? afterId})=>_page('coaches',afterId,PublishedCoachProfile.fromDocument);
+  Future<CoachDirectoryPage<PublishedCoachProfile>> loadPublicPage({String? afterId}) async {
+    final page = await transport.read('directory', {
+      'kind': 'coaches', 'limit': 20, if (afterId != null) 'afterId': afterId,
+    });
+    final rows = (page['items'] as List).map(unifiedMap).toList();
+    final rated = <String, PublishedCoachProfile>{};
+    for (final source in ['existing', 'fyp']) {
+      final profiles = rows.where((row) => row['source'] == source).map((row) =>
+          PublishedCoachProfile.fromDocument(row['id'] as String, unifiedMap(row['record']))).toList();
+      final hydrated = await loadAdminCoachRatings(profiles, (ids) async {
+        if (!transport.isCurrent) throw const CoachRepositoryException('permission-denied');
+        final input = <String, dynamic>{'schemaVersion': 1,
+          'organizationId': scope.organizationId, 'coachIds': ids};
+        final Map<String, dynamic> response;
+        if (source == 'fyp') {
+          response = Map<String, dynamic>.from(await transport.read('cohort', {
+            'operation': 'module/getCoachRatingsCommand', 'input': input,
+          }));
+        } else {
+          response = readExistingRatings != null
+              ? await readExistingRatings!(ids)
+              : (await firebaseScopedCallable(scope, 'getCoachRatingsCommand')
+                  .call<Map<String, dynamic>>(input)).data;
+        }
+        if (!transport.isCurrent) throw const CoachRepositoryException('permission-denied');
+        return response;
+      });
+      for (final profile in hydrated) { rated[profile.id] = profile; }
+    }
+    if (!transport.isCurrent) throw const CoachRepositoryException('permission-denied');
+    if (rated.length != rows.length) throw const CoachRepositoryException('invalid-response');
+    return CoachDirectoryPage(rows.map((row) => rated[row['id']]!).toList(),
+        nextCursor: page['nextCursor'] as String?);
+  }
   @override
   Future<CoachPublicationReview> loadReview(String coachId) async {
     final r=await transport.read('coach',{'coachId':coachId});

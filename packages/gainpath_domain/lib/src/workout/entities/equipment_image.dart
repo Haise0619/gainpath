@@ -26,6 +26,7 @@ class EquipmentImage {
   /// An independent native buffer for browser image and upload APIs.
   Uint8List copyBytes() => Uint8List.fromList(bytes);
   late final String contentType;
+  String get extension => contentType.split('/').last;
   bool _starts(List<int> prefix) =>
       bytes.length >= prefix.length &&
       List.generate(prefix.length, (i) => bytes[i] == prefix[i])

@@ -286,7 +286,7 @@ void main() {
     await t.pumpAndSettle();
     expect(find.text('3-day streak'), findsOneWidget);
     expect(find.text('Checked in today'), findsOneWidget);
-    expect(find.text('Claim 10 points'), findsNothing);
+    expect(find.text('Claim +10'), findsNothing);
   });
   testWidgets(
       'eligible claim remains callable and zero completed differs from unknown',
@@ -301,7 +301,7 @@ void main() {
           claims++;
         }));
     await t.pumpAndSettle();
-    await t.tap(find.text('Claim 10 points'));
+    await t.tap(find.text('Claim +10'));
     await t.pumpAndSettle();
     expect(claims, 1);
     expect(find.text('0 completed workouts'), findsOneWidget);

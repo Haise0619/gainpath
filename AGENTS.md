@@ -1,3 +1,5 @@
+**Squat APK comparison and runtime capture (7 November 2026):** pulled phone APK differs from6November validated package only in shared kernel bytes and omitted non-arm64 Flutter libraries; embedded Squat analyzer/session/processing/preview and all pose infrastructure source match, shared native/model/resources identical. Version regression is not established. Added debug-only bounded60scalar timing reports (processing/delivery gap/age/stale discards), no image/joint collection/upload/visible overlay or admission changes.24focused tests pass (3optional skips), scoped analysis clean, arm64 normal-debug build installed in place with same signer; prior APK retained. Physical test/live cause attribution pending. Evidence: build/squat-version-20261107/comparison.json.
+
 **Shoulder Press delivery watchdog fix (6 November 2026):** capture-age watchdog prematurely invalidated calibration during steady200ms inference latency. Watchdog now measures accepted geometry delivery absence; incoming250ms capture age/gap checks, true geometry rejection, bottom reset, angle/dwell rules remain unchanged. Deterministic full-cycle replay0→1, stale input remains rejected and actual delivery dropout resets.750pose/34focusedMobile tests pass; scoped analysis clean; Android debug build passes. Synthetic evidence does not establish physical accuracy. Evidence: build/press-count-fix-20261106/verification.json.
 
 **Standing Lateral Raise editor — PRIVATE CLIENT FIX ACTIVE (7 November 2026):** the form now preserves saved categories such as Shoulders in a deduplicated dropdown, preventing the opening assertion without relabeling records.60 focused Admin tests and the release build pass; analysis has no errors/warnings. Corrected localhost:7359 bundle and served hash verified; previous client preserved. The earlier cover-error wording correction is included. No cloud/data changes; live browser acceptance remains pending. [Fix and evidence](docs/integration/hybrid-workouts.md).
@@ -201,6 +203,19 @@ Light lavender overview, real initial progress, compact exercise rows and respon
 Workout Hub now uses icon-led metrics, actual checkpoint progress ring, compact provenance badges and colored tool icons with less visible copy. Existing capability resolution, target qualifiers, action/navigation and data logic remain unchanged. 33 focused tests passed; three-file analysis clean; fresh renders inspected; isolated Android debug build passed. Physical acceptance/install remains pending because safe phone idle was not established. See [design and verification](docs/ux/workout-hub-visual-design.md).
 
 
+## Workout visual refresh — 7 November 2026
+
+Compact photographic overview, inline facts, thumbnail order/check badges and typed colored states reduce repeated copy. Tools have shorter labels; semantic pairs support light/dark contrast. Existing actions, navigation and workout logic remain. Fresh 42 affected tests pass, seven-file analysis clean, scoped independent review clear and isolated arm64 debug APK built. Phone is AOD/Dozing with a black capture; safe idle unverified, so installation remains pending. [Changes and evidence](docs/ux/workout-hub-visual-design.md).
+
+## Admin coach rating correction — 8 November 2026
+
+Admin coach cards now load the same authorized review aggregate used by Member discovery, so a 4.0 average from one review displays as 4.0 (1 review). Missing ratings no longer default to 5.0, and review counts are no longer labeled sessions. Inactive publications remain excluded from the published-only ratings API. The scoped client change passed 16 focused tests, five-file analysis and a release web build; independent review found no actionable issues. The corrected private Admin is active at http://localhost:7359/ with its served JavaScript hash verified and the prior bundle preserved. Refresh Admin to load it. No backend or review-data change occurred; signed-in live Jackson UI acceptance remains pending. Evidence: build/coach-rating-fix-20261108/.
+
+### Unified Admin rating follow-up — 8 November 2026
+
+The first rating fix missed the ordinary Admin's UnifiedAdminCoachDirectory wrapper, which bypasses the canonical repository. The wrapper now hydrates existing and FYP profiles through their separate authorized rating routes while preserving source isolation, ordering and pagination. Fresh 17 focused tests, scoped analysis, independent review and release build pass. The corrected bundle is active at localhost:7359 with served hash verified and both previous bundles preserved. Signed-in Chrome was refreshed and Coach Management visibly confirmed Jackson at 4.0 (1 review), with 11 coach records retained. This supersedes the earlier pending live-acceptance note. No backend or review data was changed. Evidence: build/coach-rating-fix-20261108/unified-followup/.
+
+
 ## Mobile Member Coach UX — 8 November 2026
 
 The owner-approved Member coach discovery/profile redesign is implemented: responsive factual cards, explicit ratings/reviews/location fallback, honest price sorting and empty/error/loading states, retained search/filter/pagination/navigation, compact profile and persistent SafeArea booking access. Unsupported metrics/testimonials are omitted. Existing publication, scoped authorization, certification, booking/payment/cancellation and privacy contracts are preserved. Fresh 64 affected tests, 8 render scenarios (24 PNGs), scoped analysis, independent review and isolated Android debug build pass. No backend/Admin/product-data changes or phone installation; physical acceptance is pending. The Admin optimization plan remains deferred. Details: docs/ux/mobile-member-coach-ux-implementation.md; evidence and prior-source backups: build/member-coach-ux-20261108/.
@@ -289,13 +304,16 @@ The six retained trackers now use bounded fresh outcome speech and preserve fina
 
 The live camera overlay repaints independently and projects each anatomical point once. The deterministic 120-delivery fixture reduced camera preview rebuilds from 120 to zero while retaining 120 overlay paints. Sixteen synthetic painter comparisons produced equal pixels and reduced landmark lookups from 103 to 33. Phase 0 diagnostics now include snapshot, stream-start, paint, Flutter frame-budget and rest inference observations. Verified with 363 affected Mobile tests, 759 pose tests, 28 diagnostic-mode tests, clean scoped analysis and an arm64 Android Debug build. ADB listed no connected devices. Physical performance and the ML Kit prototype remain pending measured evidence. [Phase 3 rendering report](docs/ux/module-2-phase3-rendering.md)
 
+
 ## Module 2 Phase 4 ? 11 November 2026
 
 The six retained AI exercises now support opt-in Auto-Continue Between Sets. A fresh, calibrated starting pose gates the preparation countdown. Manual continuation remains available and two-arm Curl keeps its explicit arm switch. Full Coaching can announce set, rest and exercise transitions. The live camera layout improves counter, alignment, status and control readability. Physical Android acceptance remains pending. [Phase 4 workout continuity report](docs/ux/module-2-phase4-workout-continuity.md)
 
+
 ## Module 2 Phase 5A ? 11 November 2026
 
 Routine checkpoints now advance their revision through equal or backward wall-clock readings, and competing updates are rejected under the existing lock. The routine cover preview builds from committed source. Clean-source Mobile, pose, checkpoint stress and arm64 Debug build verification passed. Physical device acceptance remains pending. [Phase 5A release readiness](docs/ux/module-2-phase5a-release-readiness.md)
+
 
 ## Complete Workout optimization — 11 November 2026
 

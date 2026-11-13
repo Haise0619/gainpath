@@ -162,8 +162,8 @@ void main() {
             initialData: c.state,
             builder: (_, value) => AppCheckInDashboard(
                 state: value.data!, onClaim: c.claim, onRefresh: c.refresh))));
-    await tester.scrollUntilVisible(find.text('Claim 50 points'), 180);
-    await tester.tap(find.text('Claim 50 points'));
+    await tester.scrollUntilVisible(find.text('Claim +50'), 180);
+    await tester.tap(find.text('Claim +50'));
     await tester.pumpAndSettle();
     expect(find.text('Claimed today'), findsOneWidget);
     await tester.scrollUntilVisible(find.text('Badges'), 180);

@@ -1,7 +1,7 @@
-// ignore_for_file: deprecated_member_use, avoid_web_libraries_in_flutter
-import 'dart:html' as html;
+import 'dart:js_interop';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:web/web.dart' as web;
 
 Widget privatePdfPreview(Uint8List bytes) => _PrivatePdf(bytes);
 
@@ -13,21 +13,55 @@ class _PrivatePdf extends StatefulWidget {
 }
 
 class _PrivatePdfState extends State<_PrivatePdf> {
-  late final url = html.Url.createObjectUrlFromBlob(
-      html.Blob([widget.bytes], 'application/pdf'));
+  String? _url;
+
   @override
-  void dispose() {
-    html.Url.revokeObjectUrl(url);
-    super.dispose();
+  void initState() {
+    super.initState();
+    _createUrl();
+  }
+
+  void _createUrl() {
+    try {
+      final blob = web.Blob(
+        [widget.bytes.toJS].toJS,
+        web.BlobPropertyBag(type: 'application/pdf'),
+      );
+      _url = web.URL.createObjectURL(blob);
+    } catch (_) {}
+  }
+
+  void _release() {
+    if (_url != null) {
+      try {
+        web.URL.revokeObjectURL(_url!);
+      } catch (_) {}
+      _url = null;
+    }
   }
 
   @override
-  Widget build(BuildContext context) => HtmlElementView.fromTagName(
+  void dispose() {
+    _release();
+    super.dispose();
+  }
+
+  void _attach(Object element) {
+    final frame = element as web.HTMLIFrameElement;
+    if (_url != null) {
+      frame.src = _url!;
+    }
+    frame.title = 'Private certification PDF';
+    frame.style.border = '0';
+    frame.style.width = '100%';
+    frame.style.height = '100%';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return HtmlElementView.fromTagName(
       tagName: 'iframe',
-      onElementCreated: (element) {
-        final frame = element as html.IFrameElement;
-        frame.src = url;
-        frame.title = 'Private certification PDF';
-        frame.style.border = '0';
-      });
+      onElementCreated: _attach,
+    );
+  }
 }

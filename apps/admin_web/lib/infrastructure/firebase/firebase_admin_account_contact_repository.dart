@@ -175,6 +175,7 @@ class FirebaseAdminAccountContactRepository
         (avatarPath != null && saved.avatarPath != avatarPath)) {
       throw const AdminAccountContactConflict();
     }
+    _preview = null;
     return saved;
   }
 
@@ -239,8 +240,12 @@ class FirebaseAdminAccountContactRepository
   Future<Uint8List?> loadCurrentPhoto() {
     try {
       _check();
-      return _preview ??= load().then(readPhoto);
+      return _preview ??= load().then(readPhoto).catchError((e) {
+        _preview = null;
+        throw e;
+      });
     } catch (e) {
+      _preview = null;
       return Future.error(e);
     }
   }

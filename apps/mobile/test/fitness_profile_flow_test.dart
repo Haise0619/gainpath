@@ -263,11 +263,11 @@ void main() {
     await tap(tester, 'Workout');
     expect(find.byType(WorkoutPrepScreen), findsOneWidget);
     expect(find.text('Start workout'), findsNothing);
-    await tester.scrollUntilVisible(find.text('Review camera setup'), 200,
+    await tester.scrollUntilVisible(find.text('Camera setup'), 200,
         scrollable: find.descendant(
             of: find.byType(WorkoutPrepScreen),
             matching: find.byType(Scrollable)));
-    expect(find.text('Review camera setup'), findsOneWidget);
+    expect(find.text('Camera setup'), findsOneWidget);
     await tap(tester, 'Rewards');
     expect(find.byType(GamificationDashboardScreen), findsOneWidget);
     expect(find.text('YOUR POINTS'), findsOneWidget);

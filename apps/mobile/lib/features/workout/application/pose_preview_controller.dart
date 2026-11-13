@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:convert';
+import '../../../infrastructure/pose/pose_runtime_timing.dart';
 import 'package:flutter/foundation.dart';
 import 'package:gainpath_domain/gainpath_domain.dart' show SessionScope;
 import 'package:gainpath_pose/gainpath_pose.dart';
@@ -45,6 +47,11 @@ class PosePreviewController extends ChangeNotifier {
         _responsivePreview = responsivePreview,
         quality = quality ?? PoseQualityDiagnostics(clockMicros: clockMicros);
   final PoseQualityDiagnostics quality;
+  final _runtimeTiming = kDebugMode
+      ? PoseRuntimeTiming(onReport: (value) {
+          debugPrint('POSE_RUNTIME_TIMING ${jsonEncode(value)}');
+        })
+      : null;
   final RealSquatPerformance? performance;
   final Duration cleanupTimeout;
   final Duration startupTimeout;
@@ -276,13 +283,14 @@ class PosePreviewController extends ChangeNotifier {
                 baseline?.sample(
                     WorkoutMetric.hostProcessingMicros, clockMicros() - start);
                 quality.sample('hostProcessingMicros', clockMicros() - start);
+                _runtimeTiming?.processed(clockMicros() - start);
                 return result;
               },
               onDiscard: (input, reason) {
                 baseline?.discarded(reason);
-                if (quality.enabled) {
-                  quality.discard(input.timestampMicros, reason);
-                }
+                quality.discard(input.timestampMicros, reason);
+                _runtimeTiming?.discarded(reason);
+                _runtimeTiming?.report(clockMicros());
               },
               onResult: (pose) {
                 if (!_active) {
@@ -315,6 +323,8 @@ class PosePreviewController extends ChangeNotifier {
                 baseline?.sample(WorkoutMetric.deliveryAgeMicros,
                     clockMicros() - pose.capturedAtMicros);
                 _lastDisplayDelivery = clockMicros();
+                _runtimeTiming?.delivered(_lastDisplayDelivery!,
+                    _lastDisplayDelivery! - pose.capturedAtMicros);
                 onRefined?.call(pose);
                 performance?.delivered(pose.capturedAtMicros);
                 _notify();

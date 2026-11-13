@@ -1,4 +1,3 @@
-import '../../../../app/routing/member_points_progress_route.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -38,7 +37,6 @@ class AppCheckInDashboard extends StatefulWidget {
 class _AppCheckInDashboardState extends State<AppCheckInDashboard> {
   int _gamesRevision = 0, _rankRevision = 0;
   Future<void>? _refreshRequest;
-  bool _checkInOpen = false;
   Future<void> _walletRefresh() =>
       _refreshRequest ??= Future<void>.sync(widget.onRefresh).whenComplete(() {
         _refreshRequest = null;
@@ -182,65 +180,12 @@ class _AppCheckInDashboardState extends State<AppCheckInDashboard> {
                                     color: Colors.white)),
                           ])),
                       const SizedBox(height: 12),
-                      Panel(
-                          padding: const EdgeInsets.all(14),
-                          child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [
-                                Wrap(
-                                    alignment: WrapAlignment.spaceBetween,
-                                    spacing: 12,
-                                    runSpacing: 4,
-                                    children: [
-                                      Text('Daily check-in',
-                                          style: Theme.of(context)
-                                              .textTheme
-                                              .titleMedium),
-                                      Text(
-                                          s == null
-                                              ? 'Streak unavailable'
-                                              : '${s.currentStreak} day check-in streak',
-                                          style: const TextStyle(
-                                              fontWeight: FontWeight.w600)),
-                                    ]),
-                                if (s != null) ...[
-                                  const SizedBox(height: 8),
-                                  Row(children: [
-                                    for (final day in s.days)
-                                      Expanded(
-                                          child: Semantics(
-                                              label:
-                                                  '${day.date}, ${day.claimed ? 'checked in' : 'not checked in'}',
-                                              child: Padding(
-                                                  padding:
-                                                      const EdgeInsets.symmetric(
-                                                          horizontal: 2),
-                                                  child: Container(
-                                                      height: 8,
-                                                      decoration: BoxDecoration(
-                                                          color: day.claimed
-                                                              ? AppColors
-                                                                  .primary
-                                                              : AppColors
-                                                                  .hairline,
-                                                          borderRadius:
-                                                              BorderRadius.circular(
-                                                                  6),
-                                                          border: day.date ==
-                                                                  s.today
-                                                              ? Border.all(
-                                                                  color: AppColors
-                                                                      .primary)
-                                                              : null)))))
-                                  ]),
-                                ],
-                                const SizedBox(height: 8),
-                                AppCheckInCard(
-                                    state: state,
-                                    onClaim: onClaim,
-                                    onRefresh: onRefresh,
-                                    compact: true),
-                              ])),
+                      AppCheckInCard(
+                        state: state,
+                        onClaim: onClaim,
+                        onRefresh: onRefresh,
+                        homeDense: true,
+                      ),
                       const SizedBox(height: 18),
                       widget.gamesSection ??
                           FitnessArcadeHost(
@@ -282,27 +227,6 @@ class _AppCheckInDashboardState extends State<AppCheckInDashboard> {
                       Panel(
                           padding: EdgeInsets.zero,
                           child: Column(children: [
-                            _Shortcut(
-                                icon: Icons.stars_outlined,
-                                title: 'Rewards & Check-in',
-                                onTap: () async {
-                                  if (_checkInOpen ||
-                                      ModalRoute.of(context)?.isCurrent ==
-                                          false) {
-                                    return;
-                                  }
-                                  _checkInOpen = true;
-                                  try {
-                                    await Navigator.push(
-                                        context,
-                                        MaterialPageRoute<void>(
-                                            builder: (_) =>
-                                                const LivePointsProgress()));
-                                    if (mounted) await _refresh();
-                                  } finally {
-                                    _checkInOpen = false;
-                                  }
-                                }),
                             _Shortcut(
                                 icon: Icons.confirmation_number_outlined,
                                 title: 'My Rewards',

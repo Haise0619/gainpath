@@ -156,7 +156,7 @@ void main() {
     await show(
         tester, const AppCheckInState(status: AppCheckInStatus.unavailable));
     expect(find.text('—'), findsWidgets);
-    expect(find.text('Claim 50 points'), findsNothing);
+    expect(find.text('Claim +50'), findsNothing);
     expect(find.text('1840'), findsNothing);
     expect(find.text('Rank #4'), findsNothing);
     expect(tester.takeException(), isNull);
@@ -168,7 +168,7 @@ void main() {
     await show(tester, ready(claimed: false), claim: () async {
       claims++;
     });
-    await tester.tap(find.text('Claim 50 points'));
+    await tester.tap(find.text('Claim +50'));
     expect(claims, 1);
     await show(tester, ready(claimed: false, claiming: true), claim: () async {
       claims++;
