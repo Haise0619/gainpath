@@ -81,7 +81,7 @@ void main() {
     expect(r.creates, 0);
     await t.tap(find.text('CIMB Clicks'));
     await t.pump();
-    await t.tap(find.text('Continue'));
+    await t.tap(find.text('Continue to Payment'));
     await t.pump();
     expect(r.selected, 'BCBB0235');
     expect(r.creates, 1);
@@ -127,10 +127,10 @@ void main() {
     });
     await t.tap(find.text('CIMB Clicks'));
     await t.pump();
-    await t.tap(find.text('Continue'));
+    await t.tap(find.text('Continue to Payment'));
     await t.pump();
     expect(find.text('Confirming payment'), findsOneWidget);
-    expect(find.text('Continue'), findsNothing);
+    expect(find.text('Continue to Payment'), findsNothing);
     await t.tap(find.text('Return to payment'));
     await t.pump();
     expect(opened.length, 2);

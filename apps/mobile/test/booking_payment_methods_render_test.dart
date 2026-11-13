@@ -78,13 +78,14 @@ void main() {
             expect(find.byIcon(Icons.radio_button_checked), findsOneWidget);
           }
           if (['redirecting', 'confirming'].contains(stage)) {
-            await t.scrollUntilVisible(find.text('Continue'), 250,
+            await t.scrollUntilVisible(find.text('Continue to Payment'), 250,
                 scrollable: find.byType(Scrollable).first);
             await t.pump();
-            await Scrollable.ensureVisible(t.element(find.text('Continue')),
+            await Scrollable.ensureVisible(
+                t.element(find.text('Continue to Payment')),
                 alignment: 0.5);
             await t.pump();
-            await t.tap(find.text('Continue'));
+            await t.tap(find.text('Continue to Payment'));
             await t.pump();
             await t.pump(const Duration(milliseconds: 220));
             expect(r.selected, 'BCBB0235');

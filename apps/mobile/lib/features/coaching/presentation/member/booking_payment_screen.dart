@@ -17,6 +17,8 @@ class BookingPaymentScreen extends StatefulWidget {
       this.usePremiumVoucher = false,
       this.reviewedQuoteToken,
       this.reviewedQuote,
+      this.initialMethodCode,
+      this.onMethodChanged,
       this.onViewBookings,
       this.openCheckout,
       this.onCancelUnpaidReservation,
@@ -28,6 +30,8 @@ class BookingPaymentScreen extends StatefulWidget {
   final bool usePremiumVoucher;
   final String? reviewedQuoteToken;
   final BookingPaymentQuote? reviewedQuote;
+  final String? initialMethodCode;
+  final ValueChanged<String?>? onMethodChanged;
   final VoidCallback? onViewBookings;
   final Future<bool> Function(Uri)? openCheckout;
   final Future<void> Function()? onCancelUnpaidReservation;
@@ -104,6 +108,7 @@ class _BookingPaymentScreenState extends State<BookingPaymentScreen>
   @override
   void initState() {
     super.initState();
+    _selectedGateway = widget.initialMethodCode;
     WidgetsBinding.instance.addObserver(this);
     final lifecycle = WidgetsBinding.instance.lifecycleState;
     _foreground = lifecycle == null || lifecycle == AppLifecycleState.resumed;
@@ -288,6 +293,7 @@ class _BookingPaymentScreenState extends State<BookingPaymentScreen>
             _message =
                 'That payment method is no longer available. Please reload and choose again.';
           });
+          widget.onMethodChanged?.call(null);
           return;
         }
         if (error is BookingException &&
@@ -376,7 +382,10 @@ class _BookingPaymentScreenState extends State<BookingPaymentScreen>
           loading: _busy,
           message: _message,
           onSelect: (code) {
-            if (_canCheck && !_busy) setState(() => _selectedGateway = code);
+            if (_canCheck && !_busy) {
+              setState(() => _selectedGateway = code);
+              widget.onMethodChanged?.call(code);
+            }
           },
           onContinue: _selectedGateway == null ? null : _continueWithMethod,
           onRetry: _loadMethods);
@@ -476,7 +485,7 @@ class _BookingPaymentScreenState extends State<BookingPaymentScreen>
                   const SizedBox(height: 16),
                   PaymentMethodSummary(
                       label: _selectedChoice!.name,
-                      category: _selectedChoice!.categoryLabel,
+                      category: 'Preferred payment method',
                       iconKey: _selectedChoice!.iconKey),
                   const SizedBox(height: 16)
                 ],

@@ -30,6 +30,9 @@ void main() {
     await t.scrollUntilVisible(find.text('E-Wallet · GrabPay'), 300,
         scrollable: find.byType(Scrollable).first);
     expect(find.text('E-Wallet · GrabPay'), findsOneWidget);
+    expect(find.text('Preferred payment method'), findsOneWidget);
+    expect(find.text('Processing gateway'), findsOneWidget);
+    expect(find.text('Billplz Sandbox'), findsOneWidget);
   });
   testWidgets('legacy invoice has graceful unrecorded method fallback',
       (t) async {

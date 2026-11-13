@@ -1294,22 +1294,24 @@ class PaymentsScreenState extends State<PaymentsScreen> {
             r.isMembership ? r.text('kind') : 'CoachingBooking'),
         if (!r.isMembership) ...[
           const Divider(height: 24),
+          const DetailRow('Processing gateway', 'Billplz Sandbox'),
+          const SizedBox(height: 8),
           const Align(
               alignment: Alignment.centerLeft,
-              child: Text('Selected payment method')),
+              child: Text('Preferred payment method')),
           const SizedBox(height: 8),
           PaymentMethodSummary(
               label: r.selectedPaymentMethodLabel,
               category: r.selectedPaymentMethod == null
                   ? 'Legacy booking'
-                  : 'Member choice at checkout',
+                  : 'Member preference',
               iconKey: r.selectedPaymentMethod?.choice.iconKey ?? 'unknown'),
           if (r.selectedPaymentMethod != null) ...[
             const SizedBox(height: 8),
             DetailRow(
                 'Selected at', _time(r.selectedPaymentMethod!.selectedAt)),
             const Text(
-                'Member selection is separate from the payment method processed by the provider.',
+                'Billplz does not report which bank, wallet or card processed this payment here.',
                 style: TextStyle(fontSize: 12, color: AppColors.inkSoft))
           ],
         ],

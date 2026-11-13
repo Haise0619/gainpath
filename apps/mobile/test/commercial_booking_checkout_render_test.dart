@@ -17,13 +17,15 @@ void main() {
     addTearDown(await installFypOfflineFonts());
     WidgetController.hitTestWarningShouldBeFatal = true;
     addTearDown(() => WidgetController.hitTestWarningShouldBeFatal = false);
-    final dir = Directory('../../build/commercial-checkout-20261113/renders')
+    final dir = Directory('../../build/booking-payment-redesign/after')
       ..createSync(recursive: true);
     final now = DateTime.fromMillisecondsSinceEpoch(1800000000000);
     for (final width in [320.0, 360.0, 390.0]) {
       for (final scale in [1.0, 1.5, 2.0]) {
         for (final stage in [
           'methods',
+          'more-banks',
+          'summary',
           'bank-selected',
           'wallet-selected',
           'card-selected',
@@ -61,29 +63,42 @@ void main() {
                   theme: buildMemberTypographyTheme(),
                   builder: (c, child) => MediaQuery(
                       data: MediaQuery.of(c).copyWith(
-                          textScaler: TextScaler.linear(scale),
+                          textScaler:
+                              memberTextScaler(TextScaler.linear(scale)),
                           disableAnimations: true),
                       child: child!),
                   home: screen)));
           await t.pump();
           await t.pump(const Duration(milliseconds: 220));
-          if (!['methods', 'confirmed'].contains(stage)) {
+          Future<void> tap(String label) async {
+            final target = find.text(label);
+            await t.scrollUntilVisible(target, 180,
+                scrollable: find.byType(Scrollable).first);
+            await Scrollable.ensureVisible(t.element(target), alignment: .5);
+            await t.pump();
+            await t.tap(target);
+            await t.pumpAndSettle();
+          }
+
+          if (stage == 'summary') await tap('Booking summary');
+          if (stage == 'more-banks') await tap('More Banks');
+          if (!['methods', 'confirmed', 'more-banks', 'summary']
+              .contains(stage)) {
+            if (['wallet-selected', 'redirecting', 'confirming']
+                .contains(stage)) {
+              await tap('E-Wallet');
+            }
+            if (stage == 'card-selected') await tap('Credit / Debit Card');
             final label = stage == 'bank-selected'
                 ? 'Maybank2u'
                 : stage == 'card-selected'
                     ? 'Visa / Mastercard'
                     : 'GrabPay';
-            await t.scrollUntilVisible(find.text(label), 250,
-                scrollable: find.byType(Scrollable).first);
-            await t.pump();
-            await Scrollable.ensureVisible(t.element(find.text(label)),
-                alignment: 0.5);
-            await t.pump();
-            await t.tap(find.text(label));
-            await t.pump();
-            expect(find.text('Continue').hitTestable(), findsOneWidget);
+            await tap(label);
+            expect(
+                find.text('Continue to Payment').hitTestable(), findsOneWidget);
             if (['redirecting', 'confirming'].contains(stage)) {
-              await t.tap(find.text('Continue'));
+              await t.tap(find.text('Continue to Payment'));
               await t.pump();
               await t.pump(const Duration(milliseconds: 220));
               expect(
@@ -98,8 +113,7 @@ void main() {
               find.textContaining(
                   RegExp('sandbox|simulator|demo|test', caseSensitive: false)),
               findsNothing);
-          final scroll =
-              t.state<ScrollableState>(find.byType(Scrollable).first);
+          final scroll = t.state<ScrollableState>(find.byType(Scrollable).last);
           scroll.position.jumpTo(0);
           await t.pump();
           var part = 0;

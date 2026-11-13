@@ -1,6 +1,5 @@
 import 'package:gainpath_domain/coaching.dart' show BookingPaymentRepository;
 import '../../infrastructure/firebase/firebase_booking_payment_repository.dart';
-import '../../features/coaching/presentation/member/booking_payment_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:gainpath_domain/chatbot.dart';
 import 'package:gainpath_data/gainpath_data.dart' show RemoteBookingRepository;
@@ -50,18 +49,10 @@ Widget buildBookingListContent(
             scope: session.scope, isCurrent: current),
         review: FirebaseBookingReviewRepository(
             scope: session.scope, isCurrent: current),
-        onPayment: session.role != AppRole.member
+        createPaymentRepository: session.role != AppRole.member
             ? null
-            : (id) => Navigator.push(
-                context,
-                MaterialPageRoute<void>(
-                    builder: (_) => BookingPaymentScreen(
-                        repository: FirebaseBookingPaymentRepository(
-                            scope: session.scope, isCurrent: current),
-                        bookingId: id,
-                        // Receipt closes itself, revealing this existing list.
-                        onViewBookings: () {},
-                        isCurrent: current))),
+            : () => FirebaseBookingPaymentRepository(
+                scope: session.scope, isCurrent: current),
         loadCoachName: (id) async =>
             (await FirebaseCoachDirectoryRepository(scope: session.scope, isCurrent: current)
                     .loadPublished(id))

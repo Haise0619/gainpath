@@ -60,6 +60,7 @@ class _MemberBookingFlowState extends State<MemberBookingFlow>
   bool _interacted = false;
   final _scroll = ScrollController();
   String? _cancelRequestId;
+  String? _paymentPreferenceBookingId, _paymentPreference;
   bool get _current => mounted && widget.isCurrent();
   @override
   void initState() {
@@ -330,6 +331,10 @@ class _MemberBookingFlowState extends State<MemberBookingFlow>
       if (widget.payments == null) {
         return; // Explicit injected hold-only composition.
       }
+      if (_paymentPreferenceBookingId != hold.bookingId) {
+        _paymentPreferenceBookingId = hold.bookingId;
+        _paymentPreference = null;
+      }
       final outcome = await Navigator.push<String>(
           context,
           MaterialPageRoute<String>(
@@ -340,6 +345,10 @@ class _MemberBookingFlowState extends State<MemberBookingFlow>
                   create: true,
                   reviewedQuoteToken: _quote?.quoteToken,
                   reviewedQuote: _quote,
+                  initialMethodCode: _paymentPreference,
+                  onMethodChanged: (code) {
+                    if (_current) _paymentPreference = code;
+                  },
                   onViewBookings: () {
                     if (_current) {
                       Navigator.pop(context);

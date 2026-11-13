@@ -2,8 +2,16 @@ import 'package:flutter/material.dart';
 import 'dart:async';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gainpath_domain/coaching.dart';
+import 'package:gainpath_domain/gainpath_domain.dart'
+    show BookingCursor, BookingHold, BookingPage;
 import 'package:gainpath_mobile/features/coaching/presentation/member/booking_payment_screen.dart';
 import 'booking_payment_consumer_test.dart' show ConsumerPayments;
+import 'booking_selection_consumer_test.dart' show SelectionOptions;
+import 'package:gainpath_mobile/features/coaching/presentation/member/book_session_screen.dart';
+import 'live_booking_cubit_test.dart' show Writer;
+import 'booking_history_coach_fix_test.dart' show bookingJson;
+import 'member_booking_refresh_test.dart' show RangeBookings;
+import 'package:gainpath_mobile/features/coaching/presentation/shared/live_booking_list_view.dart';
 
 class CommercialPayments extends ConsumerPayments
     implements BookingPaymentSelectionRepository {
@@ -68,7 +76,117 @@ class CommercialPayments extends ConsumerPayments
   }
 }
 
+class _PendingBookings extends RangeBookings {
+  @override
+  Future<BookingPage> load({
+    String? coachId,
+    String? firstLocalDate,
+    int? dayCount,
+    BookingCursor? cursor,
+  }) async {
+    final page = await super.load(
+        firstLocalDate: firstLocalDate, dayCount: dayCount, cursor: cursor);
+    return BookingPage.fromJson({
+      ...page.toJson(),
+      'records': [
+        if (dayCount != 1 && firstLocalDate == null)
+          {
+            ...bookingJson('booking', DateTime.utc(2026, 11, 12, 2, 30),
+                status: 'pending_hold'),
+            'createdAtMillis': page.serverNowMillis - 60000,
+            'holdExpiresAtMillis': page.serverNowMillis + 600000,
+          },
+      ],
+    });
+  }
+}
+
 void main() {
+  testWidgets('My bookings retains the preference when reopening the hold',
+      (t) async {
+    t.view.physicalSize = const Size(390, 844);
+    t.view.devicePixelRatio = 1;
+    addTearDown(t.view.reset);
+    final payments = CommercialPayments();
+    await t.pumpWidget(MaterialApp(
+      home: LiveBookingListView(
+        repository: _PendingBookings(),
+        isCurrent: () => true,
+        createPaymentRepository: () => payments,
+      ),
+    ));
+    await t.pumpAndSettle();
+    final continuePayment = find.text('Continue to Payment');
+    await t.scrollUntilVisible(continuePayment, 180,
+        scrollable: find.byType(Scrollable).first);
+    await t.tap(continuePayment);
+    await t.pumpAndSettle();
+    await t.scrollUntilVisible(find.text('CIMB Clicks'), 180,
+        scrollable: find.byType(Scrollable).first);
+    await t.tap(find.text('CIMB Clicks'));
+    await t.pumpAndSettle();
+    await t.pageBack();
+    await t.pumpAndSettle();
+    await t.tap(continuePayment);
+    await t.pumpAndSettle();
+    expect(find.byIcon(Icons.radio_button_checked), findsOneWidget);
+    expect(payments.loads, 2);
+    expect(payments.creates, 0);
+    await t.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('returning to review preserves the preference for the same hold',
+      (t) async {
+    t.view.physicalSize = const Size(390, 844);
+    t.view.devicePixelRatio = 1;
+    addTearDown(t.view.reset);
+    final writer = Writer()..pending = Completer();
+    final payments = CommercialPayments();
+    await t.pumpWidget(MaterialApp(
+      home: BookSessionScreen(
+        options: SelectionOptions(),
+        writer: writer,
+        payments: payments,
+        coachId: 'coach',
+        isCurrent: () => true,
+        onOpenBookings: () {},
+      ),
+    ));
+    await t.pumpAndSettle();
+    await t.tap(find.text('8:00 AM'));
+    await t.pumpAndSettle();
+    await t.tap(find.text('Review Booking'));
+    await t.pumpAndSettle();
+    await t.tap(find.text('Continue to payment'));
+    await t.pump();
+    writer.pending!.complete(BookingHold.fromJson({
+      'schemaVersion': 1,
+      'requestId': writer.requests.single.requestId,
+      'bookingId': 'booking',
+      'status': 'pending_hold',
+      'holdExpiresAtMillis': payments.expiry,
+    }));
+    await t.pumpAndSettle();
+    expect(payments.loads, 1);
+    await t.scrollUntilVisible(find.text('E-Wallet'), 180,
+        scrollable: find.byType(Scrollable).first);
+    await t.tap(find.text('E-Wallet'));
+    await t.pumpAndSettle();
+    await t.scrollUntilVisible(find.text('GrabPay'), 180,
+        scrollable: find.byType(Scrollable).first);
+    await t.tap(find.text('GrabPay'));
+    await t.pumpAndSettle();
+    await t.pageBack();
+    await t.pumpAndSettle();
+    await t.tap(find.text('Continue reservation'));
+    await t.pumpAndSettle();
+    expect(find.text('GrabPay'), findsOneWidget);
+    expect(find.byIcon(Icons.radio_button_checked), findsOneWidget);
+    expect(writer.requests, hasLength(1));
+    expect(payments.creates, 0);
+    await t.pumpWidget(const SizedBox());
+  });
+
   Future<void> show(WidgetTester t, CommercialPayments r,
       {bool Function()? current, Future<bool> Function(Uri)? open}) async {
     t.view.physicalSize = const Size(390, 844);
@@ -99,20 +217,33 @@ void main() {
     await t.pump();
   }
 
-  testWidgets('grouped choices and sticky Continue do not expose testing words',
+  testWidgets('checkout expands one category and searches all banks',
       (t) async {
     final r = CommercialPayments();
     await show(t, r);
-    expect(find.text('Continue'), findsOneWidget);
-    await tap(t, 'More banks');
+    expect(find.text('GrabPay'), findsNothing);
+    expect(find.text('Visa / Mastercard'), findsNothing);
+    expect(find.text('Maybank2u'), findsOneWidget);
+    await tap(t, 'More Banks');
+    await t.pumpAndSettle();
+    await t.enterText(find.byType(TextField), 'affin');
+    await t.pumpAndSettle();
+    expect(find.text('BSN'), findsNothing);
+    await t.tap(find.text('Affin Bank'));
+    await t.pumpAndSettle();
+    expect(find.text('Affin Bank').hitTestable(), findsOneWidget);
+    await tap(t, 'E-Wallet');
+    await t.pumpAndSettle();
+    expect(find.text('Maybank2u'), findsNothing);
     await tap(t, 'GrabPay');
+    await tap(t, 'Credit / Debit Card');
+    await t.pumpAndSettle();
+    expect(find.text('Visa / Mastercard'), findsOneWidget);
+    await tap(t, 'E-Wallet');
+    await t.pumpAndSettle();
     expect(r.creates, 0);
-    expect(find.text('Continue').hitTestable(), findsOneWidget);
-    expect(
-        find.textContaining(
-            RegExp('sandbox|simulator|demo|test', caseSensitive: false)),
-        findsNothing);
-    await t.tap(find.text('Continue'));
+    expect(find.text('Continue to Payment').hitTestable(), findsOneWidget);
+    await t.tap(find.text('Continue to Payment'));
     await t.pump();
     expect(r.choiceCode, 'grabpay');
     expect(r.reviewToken, 'a' * 64);
@@ -137,7 +268,7 @@ void main() {
     final r = CommercialPayments();
     await show(t, r);
     await tap(t, 'Maybank2u');
-    await t.tap(find.text('Continue'));
+    await t.tap(find.text('Continue to Payment'));
     await t.pump();
     expect(find.text('Payment successful'), findsNothing);
     expect(r.creates, 1);
@@ -159,7 +290,7 @@ void main() {
     final r = CommercialPayments()..changed = true;
     await show(t, r);
     await tap(t, 'Maybank2u');
-    await t.tap(find.text('Continue'));
+    await t.tap(find.text('Continue to Payment'));
     await t.pump();
     await t.pump(const Duration(seconds: 30));
     expect(find.text('Return to booking review'), findsOneWidget);
@@ -171,7 +302,7 @@ void main() {
     final r = CommercialPayments()..expiry = 1799999999999;
     await show(t, r);
     expect(find.text('Choose another time'), findsOneWidget);
-    expect(find.text('Continue'), findsNothing);
+    expect(find.text('Continue to Payment'), findsNothing);
     expect(r.creates, 0);
     await t.pumpWidget(const SizedBox());
   });
@@ -181,7 +312,7 @@ void main() {
     final r = CommercialPayments()..recoverLegacy = true;
     await show(t, r);
     await tap(t, 'Maybank2u');
-    await t.tap(find.text('Continue'));
+    await t.tap(find.text('Continue to Payment'));
     await t.pump();
     expect(find.text('Maybank2u'), findsNothing);
     expect(r.creates, 1);

@@ -90,7 +90,7 @@ class _AdminBookingListViewState extends State<AdminBookingListView> {
                                       : '${record.selectedPaymentMethod!.choice.categoryLabel} · ${record.selectedPaymentMethod!.choice.name}',
                                   category: record.selectedPaymentMethod == null
                                       ? 'Legacy booking'
-                                      : 'Selected payment method',
+                                      : 'Preferred payment method',
                                   iconKey: record.selectedPaymentMethod?.choice
                                           .iconKey ??
                                       'unknown'),

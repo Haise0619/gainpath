@@ -5,6 +5,7 @@ import 'package:gainpath_domain/gainpath_domain.dart';
 import 'package:gainpath_domain/coaching.dart'
     show
         Booking,
+        BookingPaymentRepository,
         BookingCommunicationRepository,
         ConsultationNotesRepository,
         CoachBookingCancellationRepository,
@@ -15,6 +16,7 @@ import '../coach/client_posture_screen.dart';
 import '../coach/consultation_notes_screen.dart';
 import '../../application/live_booking_cubit.dart';
 import '../member/booking_schedule_screen.dart';
+import '../member/booking_payment_screen.dart';
 import '../member/member_booking_change_screen.dart';
 import 'package:gainpath_domain/coaching.dart'
     show MemberBookingChangeRepository;
@@ -36,6 +38,7 @@ class LiveBookingListView extends StatefulWidget {
       this.memberChanges,
       this.coachCancellation,
       this.onPayment,
+      this.createPaymentRepository,
       this.communication,
       this.notes,
       this.posture,
@@ -51,6 +54,7 @@ class LiveBookingListView extends StatefulWidget {
   final bool embedded;
   final BookingListRepository repository;
   final void Function(String bookingId)? onPayment;
+  final BookingPaymentRepository Function()? createPaymentRepository;
   final bool Function() isCurrent;
   final BookingCancellationRepository? cancellation;
   final MemberBookingChangeRepository? memberChanges;
@@ -72,6 +76,49 @@ class LiveBookingListView extends StatefulWidget {
 }
 
 class _LiveBookingListViewState extends State<LiveBookingListView> {
+  final _paymentPreferences = <String, String>{};
+
+  @override
+  void didUpdateWidget(covariant LiveBookingListView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.repository.scope != widget.repository.scope) {
+      _paymentPreferences.clear();
+    }
+  }
+
+  void Function(String)? get _onPayment =>
+      widget.createPaymentRepository == null ? widget.onPayment : _openPayment;
+
+  void _openPayment(String bookingId) {
+    final scope = widget.repository.scope;
+    final isCurrent = widget.isCurrent;
+    bool current() =>
+        mounted && widget.repository.scope == scope && isCurrent();
+    if (!current()) return;
+    final repository = widget.createPaymentRepository!();
+    Navigator.push(
+      context,
+      MaterialPageRoute<void>(
+        builder: (_) => BookingPaymentScreen(
+          repository: repository,
+          bookingId: bookingId,
+          initialMethodCode: _paymentPreferences[bookingId],
+          onMethodChanged: (code) {
+            if (!current()) return;
+            if (code == null) {
+              _paymentPreferences.remove(bookingId);
+            } else {
+              _paymentPreferences[bookingId] = code;
+            }
+          },
+          // Closing the receipt reveals this list.
+          onViewBookings: () {},
+          isCurrent: current,
+        ),
+      ),
+    );
+  }
+
   void _openConversation(Booking booking) {
     final repository = widget.communication;
     Navigator.push(
@@ -694,11 +741,11 @@ class _LiveBookingListViewState extends State<LiveBookingListView> {
                     children: [
                       const SizedBox(height: 6),
                       DetailRow('Booking', record.bookingId),
-                      if (widget.onPayment != null)
+                      if (_onPayment != null)
                         TextButton(
                             onPressed: state.busy
                                 ? null
-                                : () => widget.onPayment!(record.bookingId),
+                                : () => _onPayment!(record.bookingId),
                             child: const Text('View payment / continue')),
                       DetailRow(
                           'Status',
@@ -833,7 +880,7 @@ class _LiveBookingListViewState extends State<LiveBookingListView> {
                 statusLabels: labels,
                 header: header,
                 recordFor: (id) => recordMap[id],
-                onPayment: widget.onPayment,
+                onPayment: _onPayment,
                 onNotes: widget.notes != null ? (b) => _notes(b) : null,
                 onRescheduleBooking: widget.memberChanges != null
                     ? (b) {

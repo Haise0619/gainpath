@@ -83,8 +83,7 @@ class BookingConfirmedScreen extends StatelessWidget {
                   const Divider(height: 24),
                   PaymentMethodSummary(
                       label: payment!.selectedPaymentMethod!.choice.name,
-                      category:
-                          payment.selectedPaymentMethod!.choice.categoryLabel,
+                      category: 'Preferred payment method',
                       iconKey: payment.selectedPaymentMethod!.choice.iconKey)
                 ],
                 if (payment != null) ...[
