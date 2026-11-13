@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 
 import '../../tokens/app_theme.dart';
 
-/// Neutral symbols for payment preferences when checkout marks are unavailable.
+/// Bundled payment preference marks with a neutral fallback.
 class PaymentMethodIcon extends StatelessWidget {
   const PaymentMethodIcon({super.key, required this.iconKey, this.size = 42});
 
@@ -20,11 +21,56 @@ class PaymentMethodIcon extends StatelessWidget {
       'unknown' => Icons.payments_outlined,
       _ => Icons.account_balance_outlined,
     };
+    final asset = switch (iconKey) {
+      'maybank' ||
+      'cimb' ||
+      'tng' ||
+      'grabpay' ||
+      'shopeepay' =>
+        '$iconKey.svg',
+      'public_bank' ||
+      'rhb' ||
+      'bank_islam' ||
+      'affin' ||
+      'alliance' ||
+      'ambank' ||
+      'bsn' =>
+        '$iconKey.png',
+      _ => null,
+    };
+    final fallback = Icon(icon, size: size * .62, color: AppColors.inkSoft);
     return ExcludeSemantics(
-      child: SizedBox.square(
-        dimension: size,
-        child: Icon(icon, size: size * .62, color: AppColors.inkSoft),
+      child: SizedBox(
+        width: size * 1.6,
+        height: size,
+        child: switch (iconKey) {
+          'visa_mastercard' => Row(
+              children: [
+                Expanded(child: _mark('visa.svg', fallback)),
+                const SizedBox(width: 3),
+                Expanded(child: _mark('mastercard.svg', fallback)),
+              ],
+            ),
+          _ => asset == null ? fallback : _mark(asset, fallback),
+        },
       ),
+    );
+  }
+
+  Widget _mark(String asset, Widget fallback) {
+    const package = 'gainpath_ui';
+    final path = 'assets/payment/$asset';
+    if (asset.endsWith('.svg')) {
+      return SvgPicture.asset(path,
+          package: package,
+          fit: BoxFit.contain,
+          errorBuilder: (context, error, stackTrace) => fallback);
+    }
+    return Image.asset(
+      path,
+      package: package,
+      fit: BoxFit.contain,
+      errorBuilder: (context, error, stackTrace) => fallback,
     );
   }
 }
