@@ -60,7 +60,11 @@ class BookingPaymentQuote {
       required this.durationMinutes,
       this.grossAmountMinor,
       this.discountMinor,
-      this.voucher});
+      this.voucher,
+      this.quoteToken,
+      this.serverNowMillis});
+  final String? quoteToken;
+  final int? serverNowMillis;
   final int amountMinor, durationMinutes;
   final String coachName, branchName;
   final int? grossAmountMinor, discountMinor;
@@ -79,6 +83,15 @@ class BookingPaymentQuote {
         json['branchName'] is! String ||
         (json['branchName'] as String).trim().isEmpty) {
       throw const FormatException('Invalid payment quote');
+    }
+    if ((json['quoteToken'] != null &&
+            (json['quoteToken'] is! String ||
+                !RegExp(r'^[a-f0-9]{64}$')
+                    .hasMatch(json['quoteToken'] as String))) ||
+        (json['serverNowMillis'] != null &&
+            (json['serverNowMillis'] is! int ||
+                (json['serverNowMillis'] as int) < 1))) {
+      throw const FormatException('Invalid reviewed quote');
     }
     final rawVoucher = json['premiumVoucher'];
     if (rawVoucher != null && rawVoucher is! Map) {
@@ -106,7 +119,9 @@ class BookingPaymentQuote {
         durationMinutes: json['durationMinutes'] as int,
         grossAmountMinor: gross as int?,
         discountMinor: discount as int?,
-        voucher: voucher);
+        voucher: voucher,
+        quoteToken: json['quoteToken'] as String?,
+        serverNowMillis: json['serverNowMillis'] as int?);
   }
 }
 
@@ -122,10 +137,12 @@ class BookingPaymentView {
       this.checkoutUrl,
       this.paymentStatus,
       this.refundStatus,
-      this.resolutionReason});
+      this.resolutionReason,
+      this.serverNowMillis});
   final String bookingId, status, startLabel, endLabel, localDate;
   final BookingPaymentQuote quote;
   final int holdExpiresAtMillis;
+  final int? serverNowMillis;
   final String? checkoutUrl, resolutionReason;
   final String? paymentStatus, refundStatus;
   bool get confirmed => status == 'confirmed';
@@ -164,6 +181,7 @@ class BookingPaymentView {
       throw const FormatException('Invalid payment status');
     }
     return BookingPaymentView(
+        serverNowMillis: quote.serverNowMillis,
         bookingId: bookingId,
         status: json['status'] as String,
         quote: quote,
@@ -196,4 +214,10 @@ abstract interface class PremiumVoucherBookingPaymentRepository {
       required int durationMinutes,
       required bool usePremiumVoucher});
   Future<BookingPaymentView> createWithPremiumVoucher(String bookingId);
+}
+
+/// Optional server reviewed price protection capability.
+abstract interface class ReviewedBookingPaymentRepository {
+  Future<BookingPaymentView> createReviewed(String bookingId,
+      {required String quoteToken, bool usePremiumVoucher = false});
 }

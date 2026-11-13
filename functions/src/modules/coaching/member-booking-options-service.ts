@@ -13,17 +13,20 @@ export interface MemberBookingOption { branchId: string; startAtMillis: number; 
 export interface MemberBookingOptionsResult {
   schemaVersion: 1; coachId: string; durationMinutes: 30 | 60; serverNowMillis: number;
   todayLocalDate: string; localDate: string; timeZone: string; throughLocalDate: string;
+  coachDisplayName?: string; branchDisplayNames?: Record<string,string>;
   permittedBranchIds: string[]; options: MemberBookingOption[]; unavailableReason?: 'no_open_times' | 'daily_limit';
 }
 export async function getMemberBookingOptionsService(store: DocumentStore,
   auth: { uid: string; token: Record<string, unknown> } | undefined, raw: unknown,
   readIdentity: CoachIdentityReader, clock = Date.now): Promise<MemberBookingOptionsResult> {
   requireVerifiedEmail(auth);
-  const input = object(raw); allowed(input, ['schemaVersion', 'organizationId', 'coachId', 'localDate', 'durationMinutes', 'rescheduleBookingId']);
+  const input = object(raw); allowed(input, ['schemaVersion', 'organizationId', 'coachId', 'localDate', 'durationMinutes', 'rescheduleBookingId', 'includeDisplayNames']);
   if (input.schemaVersion !== 1 || (input.durationMinutes !== 30 && input.durationMinutes !== 60)) throw new InputValidationError('schemaVersion 1 and a 30/60 minute duration are required.');
   const durationMinutes = input.durationMinutes, org = requiredIdentifier(input.organizationId, 'organizationId'), coachId = requiredIdentifier(input.coachId, 'coachId'), uid = requiredIdentifier(auth!.uid, 'actorId');
   const requestedDate = input.localDate;
   const rescheduleId = input.rescheduleBookingId === undefined ? undefined : requiredIdentifier(input.rescheduleBookingId,'rescheduleBookingId');
+  if (!rescheduleId && durationMinutes !== 60) throw new InputValidationError('New coaching sessions last 60 minutes.');
+  if (input.includeDisplayNames !== undefined && typeof input.includeDisplayNames !== 'boolean') throw new InputValidationError('Invalid display request.');
   if (requestedDate !== undefined) dateEpoch(requestedDate);
   const scope = async (tx: TransactionPort) => {
     const member = await currentBookingMembership(tx, org, uid);
@@ -54,7 +57,17 @@ export async function getMemberBookingOptionsService(store: DocumentStore,
       if (start <= now || !window || day.blocked.has(start) || memberBlocked.has(start) || (durationMinutes === 60 && (day.blocked.has(start + SLOT) || memberBlocked.has(start+SLOT)))) continue;
       options.push({ branchId: window.branchId, startAtMillis: start, endAtMillis: end, startLabel: labels.get(start)!, endLabel: labels.get(end)! });
     }
-    return { schemaVersion: 1, coachId, durationMinutes, serverNowMillis: now, todayLocalDate: day.today,
+    let display = {};
+    if (input.includeDisplayNames === true) {
+      const publication = await tx.get(`orgs/${org}/coaches/${coachId}`);
+      const branchDisplayNames: Record<string,string> = {};
+      for (const branchId of coach.permitted) {
+        const branch = await tx.get(`orgs/${org}/branches/${branchId}`);
+        if (typeof branch?.displayName === 'string' && branch.displayName.trim()) branchDisplayNames[branchId] = branch.displayName.trim().slice(0,120);
+      }
+      display = {branchDisplayNames,...(typeof publication?.displayName === 'string' && publication.displayName.trim() ? {coachDisplayName:publication.displayName.trim().slice(0,80)} : {})};
+    }
+    return { ...display, schemaVersion: 1, coachId, durationMinutes, serverNowMillis: now, todayLocalDate: day.today,
       localDate: date, timeZone: policy.timeZone, throughLocalDate: day.through, permittedBranchIds: coach.permitted, options,
       ...(options.length ? {} : { unavailableReason: dailyLimit ? 'daily_limit' as const : 'no_open_times' as const }) };
   });

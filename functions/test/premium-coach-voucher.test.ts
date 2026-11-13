@@ -168,3 +168,12 @@ it('records cleared discounted payment for review when Premium expires before co
   expect(result).toMatchObject({status:'reconciliation_required',paymentStatus:'cleared',resolutionReason:'premium_membership_expired'});
   expect(store.documents.get(`orgs/${org}/bookings/${bookingId}`)!.status).toBe('pending_hold');
 });
+
+it('refuses a changed or withdrawn reviewed voucher before reserving or creating a bill',async()=>{
+ await grant();
+ const reviewed=await getBookingPaymentQuote(store,auth,{...quoteInput,usePremiumVoucher:true,includeQuoteToken:true},()=>now,eligibleCoach);
+ store.documents.delete(policyPath);
+ const before=structuredClone([...store.documents]);
+ await expect(createBookingPayment(store,auth,{...input(),quoteToken:reviewed.quoteToken},gateway,eligibleCoach,()=>now)).rejects.toMatchObject({reason:'quote_changed'});
+ expect([...store.documents]).toEqual(before);
+});

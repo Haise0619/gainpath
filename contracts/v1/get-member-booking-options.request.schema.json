@@ -10,6 +10,8 @@
     "organizationId": { "type": "string", "pattern": "^[A-Za-z0-9_-]{1,128}$" },
     "coachId": { "type": "string", "pattern": "^[A-Za-z0-9_-]{1,128}$" },
     "localDate": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" },
-    "durationMinutes": { "enum": [30, 60] }
+    "durationMinutes": { "enum": [30, 60] },
+    "rescheduleBookingId": {"type":"string","pattern":"^[A-Za-z0-9_-]{1,128}$"},
+    "includeDisplayNames": {"type":"boolean"}
   }
 }

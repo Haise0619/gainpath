@@ -40,6 +40,7 @@ export async function createBookingHoldService(store: DocumentStore, actorId: st
   };
   const existing = await store.transact(prior);
   if (existing) return existing;
+  if (input.durationMinutes !== 60) throw new DomainError('invalid-argument', 'New coaching sessions last 60 minutes.');
   const eligibilityFailure = await coachEligibilityFailure(readIdentity, input.coachId);
   let memberIdentity: Awaited<ReturnType<CoachIdentityReader>> | undefined;
   let memberIdentityFailure: DomainError | undefined;

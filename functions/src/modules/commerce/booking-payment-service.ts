@@ -16,10 +16,11 @@ const txPath = (org: string, id: string) => `orgs/${org}/transactions/${id}`;
 const review = () => new DomainError('failed-precondition', 'Payment data requires authorized review.');
 function paymentInput(auth: Auth, raw: unknown, allowVoucher = false) {
   requireVerifiedEmail(auth);
-  const d = object(raw); allowed(d, ['schemaVersion', 'organizationId', 'bookingId', ...(allowVoucher ? ['usePremiumVoucher'] : [])]);
+  const d = object(raw); allowed(d, ['schemaVersion', 'organizationId', 'bookingId', ...(allowVoucher ? ['usePremiumVoucher', 'quoteToken'] : [])]);
   if (d.schemaVersion !== 1) throw new InputValidationError('schemaVersion 1 is required.');
   if (d.usePremiumVoucher !== undefined && typeof d.usePremiumVoucher !== 'boolean') throw new InputValidationError('Choose whether to apply the voucher.');
-  return { org: requiredIdentifier(d.organizationId, 'organizationId'), id: requiredIdentifier(d.bookingId, 'bookingId'), uid: requiredIdentifier(auth!.uid, 'actorId'), usePremiumVoucher: d.usePremiumVoucher === true };
+  if (d.quoteToken !== undefined && (typeof d.quoteToken !== 'string' || !/^[a-f0-9]{64}$/.test(d.quoteToken))) throw new InputValidationError('Invalid reviewed quote.');
+  return { quoteToken: d.quoteToken as string | undefined, org: requiredIdentifier(d.organizationId, 'organizationId'), id: requiredIdentifier(d.bookingId, 'bookingId'), uid: requiredIdentifier(auth!.uid, 'actorId'), usePremiumVoucher: d.usePremiumVoucher === true };
 }
 async function authorizedBooking(tx: TransactionPort, org: string, id: string, uid: string, write = false) {
   const actor = await currentBookingMembership(tx, org, uid); await requireBookingOrganization(tx, org);
@@ -43,15 +44,23 @@ async function requireCredentials(tx: TransactionPort, org: string, coachId: str
   const certification = await tx.get(`orgs/${org}/coachProfiles/${coachId}/certificationState/current`);
   if (publication?.certificationVerified !== true || certification?.certificationVerified !== true || !Number.isSafeInteger(certification.approvedCount) || Number(certification.approvedCount) < 1 || Number(certification.approvedCount)>100) throw new DomainError('failed-precondition', 'Approved Coach credentials are required.');
 }
+export class BookingQuoteChangedError extends DomainError {
+  readonly reason = 'quote_changed';
+  constructor() { super('failed-precondition','The session price or voucher changed. Review the updated amount before continuing.'); }
+}
+function financialToken(org:string,uid:string,coachId:string,branchId:string,duration:number,gross:number,amount:number,voucher?:unknown) {
+  return keyOf('booking-review-v1',org,uid,coachId,branchId,duration,'MYR',gross,amount,voucher ?? null);
+}
 export interface BookingPaymentQuoteResult {
+  quoteToken?: string; serverNowMillis?: number;
   schemaVersion: number; amountMinor: number; currency: 'MYR'; coachName: string; branchName: string; durationMinutes: number;
   grossAmountMinor?: number; discountMinor?: number; premiumVoucher?: PremiumCoachVoucherOffer;
 }
 export async function getBookingPaymentQuote(store: DocumentStore, auth: Auth, raw: unknown, clock = Date.now, readIdentity?: CoachIdentityReader): Promise<BookingPaymentQuoteResult> {
   requireVerifiedEmail(auth);
-  const d = object(raw); allowed(d, ['schemaVersion', 'organizationId', 'coachId', 'branchId', 'durationMinutes', 'includePremiumVoucher', 'usePremiumVoucher']);
-  if (d.schemaVersion !== 1 || ![30,60].includes(Number(d.durationMinutes)) || typeof d.durationMinutes !== 'number') throw new InputValidationError('Choose a supported duration.');
-  if (['includePremiumVoucher', 'usePremiumVoucher'].some(k => d[k] !== undefined && typeof d[k] !== 'boolean')) throw new InputValidationError('Invalid voucher selection.');
+  const d = object(raw); allowed(d, ['schemaVersion', 'organizationId', 'coachId', 'branchId', 'durationMinutes', 'includePremiumVoucher', 'usePremiumVoucher', 'includeQuoteToken']);
+  if (d.schemaVersion !== 1 || d.durationMinutes !== 60 || typeof d.durationMinutes !== 'number') throw new InputValidationError('Choose a supported duration.');
+  if (['includePremiumVoucher', 'usePremiumVoucher', 'includeQuoteToken'].some(k => d[k] !== undefined && typeof d[k] !== 'boolean')) throw new InputValidationError('Invalid voucher selection.');
   const org = requiredIdentifier(d.organizationId, 'organizationId'), coachId = requiredIdentifier(d.coachId, 'coachId'), branchId = requiredIdentifier(d.branchId, 'branchId');
   if (d.includePremiumVoucher === true || d.usePremiumVoucher === true) {
     if (!readIdentity) throw new DomainError('unavailable', 'Current account verification is unavailable.');
@@ -61,13 +70,14 @@ export async function getBookingPaymentQuote(store: DocumentStore, auth: Auth, r
     const member = await currentBookingMembership(tx, org, auth!.uid); await requireBookingOrganization(tx, org);
     if (member.role !== 'member') throw new DomainError('permission-denied', 'Only Members may start checkout.');
     const quote = { schemaVersion: 1, ...await professionalQuote(tx, org, coachId, branchId, member.branchIds), durationMinutes: d.durationMinutes as number };
-    if (d.includePremiumVoucher !== true && d.usePremiumVoucher !== true) return quote;
+    const reviewed = (result: BookingPaymentQuoteResult, voucher?: unknown) => d.includeQuoteToken === true ? {...result,serverNowMillis:clock(),quoteToken:financialToken(org,auth!.uid,coachId,branchId,d.durationMinutes as number,quote.amountMinor,result.amountMinor,voucher)} : result;
+    if (d.includePremiumVoucher !== true && d.usePremiumVoucher !== true) return reviewed(quote);
     const voucher = await premiumCoachVoucherOffer(tx, auth, org, { ...quote, coachId, branchId }, clock());
     if (d.usePremiumVoucher === true) {
       const snapshot = requireAvailablePremiumCoachVoucher(voucher);
-      return { ...quote, amountMinor: snapshot.amountMinor, grossAmountMinor: quote.amountMinor, discountMinor: snapshot.discountMinor, premiumVoucher: voucher.offer };
+      return reviewed({ ...quote, amountMinor: snapshot.amountMinor, grossAmountMinor: quote.amountMinor, discountMinor: snapshot.discountMinor, premiumVoucher: voucher.offer },snapshot);
     }
-    return { ...quote, premiumVoucher: voucher.offer };
+    return reviewed({ ...quote, premiumVoucher: voucher.offer });
   });
 }
 function payment(d: DocumentData | undefined, org: string, id: string): DocumentData {
@@ -91,8 +101,8 @@ function closeUnpaidCheckout(tx: TransactionPort, org: string, id: string, d: Do
   const next={...d,fulfilmentStatus:'reconciliation_required',resolutionReason:'hold_closed_unpaid',updatedAtMillis:now};
   tx.set(txPath(org,id),next); audit(tx,org,id,'checkout_closed',now); return next;
 }
-export async function createBookingPayment(store: DocumentStore, auth: Auth, raw: unknown, gateway: BillplzGateway, readIdentity: CoachIdentityReader, clock = Date.now) {
-  const {org,id,uid,usePremiumVoucher} = paymentInput(auth,raw,true);
+async function createBookingPaymentInternal(store: DocumentStore, auth: Auth, raw: unknown, gateway: BillplzGateway, readIdentity: CoachIdentityReader, clock = Date.now) {
+  const {org,id,uid,usePremiumVoucher,quoteToken} = paymentInput(auth,raw,true);
   if (usePremiumVoucher) { const failure = await coachEligibilityFailure(readIdentity,uid); if (failure) throw failure; }
   const captured = await store.transact(async tx => {
     const b = await authorizedBooking(tx,org,id,uid,true);
@@ -112,7 +122,9 @@ export async function createBookingPayment(store: DocumentStore, auth: Auth, raw
     const quote = await professionalQuote(tx,org,b.coachId,b.branchId,member.branchIds);
     const user = await tx.get(`users/${uid}`);
     const voucher = usePremiumVoucher ? await premiumCoachVoucherOffer(tx,auth,org,{...quote,coachId:b.coachId,branchId:b.branchId,durationMinutes:b.durationMinutes},now) : undefined;
+    if (quoteToken !== undefined && voucher && (!voucher.snapshot || voucher.offer.status !== 'available')) throw new BookingQuoteChangedError();
     const snapshot = voucher ? requireAvailablePremiumCoachVoucher(voucher) : undefined;
+    if (quoteToken !== undefined && quoteToken !== financialToken(org,uid,b.coachId,b.branchId,b.durationMinutes,quote.amountMinor,snapshot?.amountMinor ?? quote.amountMinor,snapshot)) throw new BookingQuoteChangedError();
     if (typeof user?.email !== 'string' || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(user.email) || user.email.length > 254) throw new DomainError('failed-precondition','A valid account email is required.');
     const format = new Intl.DateTimeFormat('en-GB',{timeZone:b.timeZone,hour:'2-digit',minute:'2-digit',hourCycle:'h23',timeZoneName:'shortOffset'});
     const d = { schemaVersion: 1, environment: 'sandbox', provider: 'billplz', type: 'CoachingBooking', organizationId: org, bookingId: id, memberId: uid, coachId: b.coachId, branchId: b.branchId,
@@ -224,7 +236,7 @@ export async function settleBookingPayment(store: DocumentStore, org: string, id
   });
 }
 
-export async function readBookingPayment(store: DocumentStore, auth: Auth, raw: unknown, gateway: BillplzGateway, readIdentity: CoachIdentityReader, clock = Date.now) {
+async function readBookingPaymentInternal(store: DocumentStore, auth: Auth, raw: unknown, gateway: BillplzGateway, readIdentity: CoachIdentityReader, clock = Date.now) {
   const {org,id,uid}=paymentInput(auth,raw);
   const captured = await store.transact(async tx => {
     const b=await authorizedBooking(tx,org,id,uid);
@@ -244,4 +256,12 @@ export async function readBookingPayment(store: DocumentStore, auth: Auth, raw: 
     const b=await authorizedBooking(tx,org,id,uid),d=payment(await tx.get(txPath(org,id)),org,id);
     return view(closeUnpaidCheckout(tx,org,id,d,b.status,b.holdExpiresAtMillis,clock()));
   });
+}
+
+// Capture server time after the operation; reopening never changes the persisted deadline.
+export async function createBookingPayment(...args: Parameters<typeof createBookingPaymentInternal>) {
+  return {...await createBookingPaymentInternal(...args),serverNowMillis:(args[5] ?? Date.now)()};
+}
+export async function readBookingPayment(...args: Parameters<typeof readBookingPaymentInternal>) {
+  return {...await readBookingPaymentInternal(...args),serverNowMillis:(args[5] ?? Date.now)()};
 }

@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:cloud_functions/cloud_functions.dart' show FirebaseFunctionsException;
+import 'package:cloud_functions/cloud_functions.dart'
+    show FirebaseFunctionsException;
 import 'package:gainpath_domain/coaching.dart' show BookingChangeSource;
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:gainpath_data/gainpath_data.dart'
@@ -19,7 +20,10 @@ class BookingTransport {
       String? Function()? currentUid,
       BookingCallable? call})
       : _uid = currentUid ?? (() => FirebaseAuth.instance.currentUser?.uid),
-        _call = call ?? ((name, input) async => (await firebaseScopedCallable(scope, name).call<Map<String, dynamic>>(input)).data);
+        _call = call ??
+            ((name, input) async => (await firebaseScopedCallable(scope, name)
+                    .call<Map<String, dynamic>>(input))
+                .data);
 
   final SessionScope scope;
   final bool Function() isCurrent;
@@ -40,6 +44,13 @@ class BookingTransport {
       return result;
     } on FirebaseException catch (error) {
       check();
+      if (name == 'createBookingPaymentCommand' &&
+          error is FirebaseFunctionsException &&
+          error.details is Map &&
+          (error.details as Map)['checkoutCreated'] == false &&
+          (error.details as Map)['reason'] == 'quote_changed') {
+        throw const BookingException('booking-quote-changed');
+      }
       // Only an explicit server rejection before reservation permits a fresh
       // membership quote. Generic failures must retain the immutable request.
       if (name == 'createMembershipPaymentCommand' &&
@@ -141,6 +152,7 @@ class FirebaseBookingRepository
             'schemaVersion': 1,
             'organizationId': scope.organizationId,
             'coachId': coachId,
+            'includeDisplayNames': true,
             'durationMinutes': durationMinutes,
             if (localDate != null) 'localDate': localDate
           }),
@@ -222,6 +234,7 @@ class FirebaseBookingListRepository
             'includeReviewDetails': true,
             'includeCancellationDetails': true,
             'includeMemberChangeDetails': true,
+            'includePaymentDetails': true,
             'organizationId': scope.organizationId,
             if (coachId != null) 'coachId': coachId,
             if (firstLocalDate != null) 'firstLocalDate': firstLocalDate,

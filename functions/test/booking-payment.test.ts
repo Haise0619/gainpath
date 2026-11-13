@@ -142,3 +142,26 @@ it('cancellation during independent provider lookup cannot return a checkout URL
   const result=await readBookingPayment(store,auth(),input(),cancelling,eligibleCoach,()=>now+2);
   expect(result.status).toBe('reconciliation_required');expect(result).not.toHaveProperty('checkoutUrl');
 });
+
+it('rejects changed reviewed prices without creating a checkout', async()=>{
+ const q=await getBookingPaymentQuote(store,auth(),{schemaVersion:1,organizationId:'org-1',coachId:'coach-1',branchId:'branch-1',durationMinutes:60,includeQuoteToken:true},()=>now);
+ expect(q).toHaveProperty('quoteToken');
+ store.documents.get('orgs/org-1/coaches/coach-1')!.consultationFeeMinor=13000;
+ await expect(createBookingPayment(store,auth(),{...input(),quoteToken:q.quoteToken},gateway,eligibleCoach,()=>now)).rejects.toMatchObject({code:'failed-precondition',reason:'quote_changed'});
+ expect(creates).toBe(0); expect(store.documents.has('orgs/org-1/transactions/'+id)).toBe(false);
+});
+it('rejects new 30 minute quotes',async()=>{await expect(getBookingPaymentQuote(store,auth(),{schemaVersion:1,organizationId:'org-1',coachId:'coach-1',branchId:'branch-1',durationMinutes:30})).rejects.toThrow();});
+
+it('repeated reviewed checkout preserves the existing bill after fees change',async()=>{
+ const q=await getBookingPaymentQuote(store,auth(),{schemaVersion:1,organizationId:'org-1',coachId:'coach-1',branchId:'branch-1',durationMinutes:60,includeQuoteToken:true},()=>now);
+ await createBookingPayment(store,auth(),{...input(),quoteToken:q.quoteToken},gateway,eligibleCoach,()=>now);
+ store.documents.get('orgs/org-1/coaches/coach-1')!.consultationFeeMinor=13000;
+ const result=await createBookingPayment(store,auth(),{...input(),quoteToken:q.quoteToken},gateway,eligibleCoach,()=>now+1000);
+ expect(result.amountMinor).toBe(12000); expect(result.serverNowMillis).toBe(now+1000); expect(creates).toBe(1);
+});
+it('preserves a legacy thirty minute pending hold payment contract',async()=>{
+ const booking=store.documents.get('orgs/org-1/bookings/'+id)!;
+ booking.durationMinutes=30; booking.endAtMillis=Number(booking.startAtMillis)+1800000;
+ const result=await createBookingPayment(store,auth(),input(),gateway,eligibleCoach,()=>now);
+ expect(result.durationMinutes).toBe(30); expect(result.amountMinor).toBe(12000);
+});

@@ -51,6 +51,23 @@ Map<String, dynamic> page() => {
     };
 
 void main() {
+  test('retains safe names and evidence based refund projection', () {
+    final context = BookingOptionsContext.fromJson({
+      ...options(),
+      'coachDisplayName': 'Coach',
+      'branchDisplayNames': {'branch-1': 'Gym'}
+    });
+    expect(context.coachDisplayName, 'Coach');
+    expect(context.branchDisplayNames['branch-1'], 'Gym');
+    final booking = PersistedBookingRecord.fromJson({
+      ...record(),
+      'paymentStatus': 'cleared',
+      'refundStatus': 'processing',
+      'refundReviewRequired': true
+    });
+    expect(booking.refundStatus, 'processing');
+    expect(booking.refundReviewRequired, isTrue);
+  });
   test('options accept Coach configured advance windows from 1 through 30 days',
       () {
     for (final days in [1, 14, 30]) {

@@ -2,6 +2,20 @@ import 'package:test/test.dart';
 import 'package:gainpath_domain/coaching.dart';
 
 void main() {
+  test('retains reviewed quote token and trusted server time', () {
+    final q = BookingPaymentQuote.fromJson({
+      'schemaVersion': 1,
+      'currency': 'MYR',
+      'amountMinor': 100,
+      'durationMinutes': 60,
+      'coachName': 'Coach',
+      'branchName': 'Branch',
+      'quoteToken': 'a' * 64,
+      'serverNowMillis': 1000
+    });
+    expect(q.quoteToken, 'a' * 64);
+    expect(q.serverNowMillis, 1000);
+  });
   test(
       'voucher quote validates server discount math and retains unavailable state',
       () {

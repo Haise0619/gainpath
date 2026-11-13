@@ -1,5 +1,5 @@
 import { getFirestore } from 'firebase-admin/firestore';
-import { onCall, onRequest } from 'firebase-functions/v2/https';
+import { HttpsError, onCall, onRequest } from 'firebase-functions/v2/https';
 import { defineSecret, defineString } from 'firebase-functions/params';
 import { createHash } from 'node:crypto';
 import { FirestoreStore } from '../../platform/firestore/firestore-store';
@@ -7,7 +7,7 @@ import { DomainError } from '../../platform/errors';
 import { coachCommandError } from '../coaching/coach-profile-callables';
 import { readCoachIdentity } from '../coaching/coach-identity-reader';
 import { BillplzSandboxGateway, verifyBillplzCallback } from './billplz-sandbox';
-import { createBookingPayment, getBookingPaymentQuote, readBookingPayment, settleBookingPayment } from './booking-payment-service';
+import { BookingQuoteChangedError, createBookingPayment, getBookingPaymentQuote, readBookingPayment, settleBookingPayment } from './booking-payment-service';
 import { settleMembershipPayment } from './membership-payment-service';
 
 const apiKey = defineSecret('BILLPLZ_SANDBOX_API_KEY');
@@ -24,15 +24,18 @@ function gateway() {
   if (!project || !/^[a-z0-9-]+$/.test(project)) throw new DomainError('unavailable','Sandbox callback configuration unavailable.');
   return new BillplzSandboxGateway({apiKey:apiKey.value(),collectionId:collection.value(),callbackUrl:`https://us-central1-${project}.cloudfunctions.net/paymentWebhook`,redirectUrl:`https://us-central1-${project}.cloudfunctions.net/billplzSandboxReturn`});
 }
+export function bookingPaymentCommandError(error:unknown) {
+  return error instanceof BookingQuoteChangedError ? new HttpsError(error.code,error.message,{reason:error.reason,checkoutCreated:false}) : coachCommandError(error);
+}
 const store=()=>new FirestoreStore(getFirestore());
 export const getBookingPaymentQuoteCommand=onCall({enforceAppCheck:true},async r=>{
-  try { configured(r.data); return await getBookingPaymentQuote(store(),r.auth,r.data,Date.now,readCoachIdentity); } catch(e) {throw coachCommandError(e);}
+  try { configured(r.data); return await getBookingPaymentQuote(store(),r.auth,r.data,Date.now,readCoachIdentity); } catch(e) {throw bookingPaymentCommandError(e);}
 });
 export const createBookingPaymentCommand=onCall({enforceAppCheck:true,secrets:[apiKey]},async r=>{
-  try { configured(r.data); return await createBookingPayment(store(),r.auth,r.data,gateway(),readCoachIdentity); } catch(e) {throw coachCommandError(e);}
+  try { configured(r.data); return await createBookingPayment(store(),r.auth,r.data,gateway(),readCoachIdentity); } catch(e) {throw bookingPaymentCommandError(e);}
 });
 export const getBookingPaymentCommand=onCall({enforceAppCheck:true,secrets:[apiKey]},async r=>{
-  try { configured(r.data); return await readBookingPayment(store(),r.auth,r.data,gateway(),readCoachIdentity); } catch(e) {throw coachCommandError(e);}
+  try { configured(r.data); return await readBookingPayment(store(),r.auth,r.data,gateway(),readCoachIdentity); } catch(e) {throw bookingPaymentCommandError(e);}
 });
 
 export const paymentWebhook=onRequest({secrets:[apiKey,signatureKey]},async(req,res)=>{

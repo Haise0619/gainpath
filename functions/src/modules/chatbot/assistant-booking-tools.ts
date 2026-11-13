@@ -46,7 +46,7 @@ export class AssistantBookingTools {
        try{
          const failure=await coachEligibilityFailure(this.identity,coachId);if(failure)throw failure;
          const branches=await this.store.transact(async tx=>{const m=await currentBookingMembership(tx,this.org,this.auth!.uid);return (await bookingCoachScope(tx,this.org,coachId,m.branchIds)).permitted;});
-         const quote=await getBookingPaymentQuote(this.store,this.auth,{schemaVersion:1,organizationId:this.org,coachId,branchId:branches[0],durationMinutes:30});
+         const quote=await getBookingPaymentQuote(this.store,this.auth,{schemaVersion:1,organizationId:this.org,coachId,branchId:branches[0],durationMinutes:60});
          items.push({coachId,name:quote.coachName,branchId:branches[0],branchName:quote.branchName,amountMinor:quote.amountMinor,currency:quote.currency});
        }catch(e){if(!(e instanceof DomainError)||!['permission-denied','failed-precondition','not-found'].includes(e.code))throw e;}
      }

@@ -184,3 +184,19 @@ it('returns saved review stars only for opted-in participants', async () => {
   expect((await read('member-1', { includeReviewDetails: true })).records[0]).toHaveProperty('reviewStars', 4);
   expect((await read()).records[0]).not.toHaveProperty('reviewStars');
 });
+it('projects payment/refund evidence only on explicit opt-in and matching cleared transaction', async () => {
+  const payment = {schemaVersion:1, organizationId:'org-1', bookingId:'booking-1', memberId:'member-1', coachId:'coach-1', branchId:'branch-1', paymentStatus:'cleared', fulfilmentStatus:'reconciliation_required', refundReviewRequired:true, refundStatus:'processing', billId:'private-bill', refundReference:'private-reference'};
+  store.documents.set('orgs/org-1/transactions/booking-1', payment);
+  expect((await read()).records[0]).not.toHaveProperty('refundStatus');
+  const projected = (await read('member-1', {includePaymentDetails:true})).records[0];
+  expect(projected).toMatchObject({paymentStatus:'cleared',refundReviewRequired:true,refundStatus:'processing'});
+  expect(projected).not.toHaveProperty('billId');
+  expect(projected).not.toHaveProperty('refundReference');
+  store.documents.set('orgs/org-1/transactions/booking-1', {...payment, memberId:'other'});
+  expect((await read('member-1', {includePaymentDetails:true})).records[0]).not.toHaveProperty('refundStatus');
+  store.documents.set('orgs/org-1/transactions/booking-1', {...payment, paymentStatus:'pending'});
+  const unpaid=(await read('member-1', {includePaymentDetails:true})).records[0];
+  expect(unpaid).not.toHaveProperty('refundStatus');
+  expect(unpaid).not.toHaveProperty('refundReviewRequired');
+  await expect(read('member-1',{includePaymentDetails:'yes'})).rejects.toThrow();
+});

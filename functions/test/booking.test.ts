@@ -203,3 +203,13 @@ it.each([
   await expect(execute()).rejects.toMatchObject({ code: 'failed-precondition' });
   expect([...store.documents]).toEqual(before);
 });
+
+it('rejects new 30 minute holds',async()=>{await expect(execute({...command,durationMinutes:30} as unknown as typeof command)).rejects.toMatchObject({code:'invalid-argument'});});
+
+it('replays a preexisting legacy thirty minute receipt without renewing its hold',async()=>{
+ const first=await execute(); const legacy={...command,durationMinutes:30};
+ const receipt=store.documents.get('orgs/org-1/commandReceipts/'+keyOf('createBookingHold','member-1',command.requestId))!;
+ receipt.fingerprint=keyOf(legacy);
+ clock=first.holdExpiresAtMillis+1;
+ expect(await createBookingHoldService(store,'member-1',legacy,eligibleCoach,()=>clock)).toEqual(first);
+});

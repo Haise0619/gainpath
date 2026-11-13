@@ -38,6 +38,14 @@
         30,
         60
       ]
+    },
+    "quoteToken": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "serverNowMillis": {
+      "type": "integer",
+      "minimum": 1
     }
   }
 }

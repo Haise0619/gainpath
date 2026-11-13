@@ -7,7 +7,8 @@ import 'firebase_app_check_readiness.dart';
 class FirebaseBookingPaymentRepository
     implements
         BookingPaymentRepository,
-        PremiumVoucherBookingPaymentRepository {
+        PremiumVoucherBookingPaymentRepository,
+        ReviewedBookingPaymentRepository {
   FirebaseBookingPaymentRepository(
       {required this.scope,
       required bool Function() isCurrent,
@@ -41,10 +42,11 @@ class FirebaseBookingPaymentRepository
       required String branchId,
       required int durationMinutes}) async {
     try {
-      final quote = BookingPaymentQuote.fromJson(await _call(
-          'getBookingPaymentQuoteCommand', {
+      final quote = BookingPaymentQuote.fromJson(
+          await _call('getBookingPaymentQuoteCommand', {
         'coachId': coachId,
         'branchId': branchId,
+        'includeQuoteToken': true,
         'durationMinutes': durationMinutes
       }));
       if (quote.durationMinutes != durationMinutes) {
@@ -67,6 +69,7 @@ class FirebaseBookingPaymentRepository
           await _call('getBookingPaymentQuoteCommand', {
         'coachId': coachId,
         'branchId': branchId,
+        'includeQuoteToken': true,
         'durationMinutes': durationMinutes,
         'includePremiumVoucher': true,
         if (usePremiumVoucher) 'usePremiumVoucher': true,
@@ -82,11 +85,12 @@ class FirebaseBookingPaymentRepository
   }
 
   Future<BookingPaymentView> _payment(String name, String id,
-      {bool usePremiumVoucher = false}) async {
+      {bool usePremiumVoucher = false, String? quoteToken}) async {
     try {
       return BookingPaymentView.fromJson(
           await _call(name, {
             'bookingId': id,
+            if (quoteToken != null) 'quoteToken': quoteToken,
             if (usePremiumVoucher) 'usePremiumVoucher': true
           }),
           bookingId: id);
@@ -95,6 +99,11 @@ class FirebaseBookingPaymentRepository
     }
   }
 
+  @override
+  Future<BookingPaymentView> createReviewed(String bookingId,
+          {required String quoteToken, bool usePremiumVoucher = false}) =>
+      _payment('createBookingPaymentCommand', bookingId,
+          quoteToken: quoteToken, usePremiumVoucher: usePremiumVoucher);
   @override
   Future<BookingPaymentView> create(String bookingId) =>
       _payment('createBookingPaymentCommand', bookingId);

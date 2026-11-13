@@ -84,10 +84,24 @@
       "maxLength": 80
     },
     "paymentStatus": {
-      "enum": ["pending", "cleared"]
+      "enum": [
+        "pending",
+        "cleared"
+      ]
     },
     "refundStatus": {
-      "enum": ["approved", "rejected", "processing", "uncertain", "completed", "failed"]
+      "enum": [
+        "approved",
+        "rejected",
+        "processing",
+        "uncertain",
+        "completed",
+        "failed"
+      ]
+    },
+    "serverNowMillis": {
+      "type": "integer",
+      "minimum": 1
     }
   }
 }

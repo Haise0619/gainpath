@@ -4,7 +4,7 @@ import { beforeAll, beforeEach, afterAll, expect, it } from 'vitest';
 import { FirestoreStore } from '../src/platform/firestore/firestore-store';
 import { createBookingHoldService } from '../src/modules/coaching/booking-service';
 import { expireBookingHoldService } from '../src/modules/coaching/booking-lifecycle-service';
-import { createBookingPayment, settleBookingPayment } from '../src/modules/commerce/booking-payment-service';
+import { getBookingPaymentQuote, createBookingPayment, settleBookingPayment } from '../src/modules/commerce/booking-payment-service';
 import { seeds, command, now, eligibleCoach } from '../test/booking-fixture';
 import { keyOf } from '../src/platform/idempotency';
 import type { BillplzGateway, SandboxBill } from '../src/modules/commerce/billplz-sandbox';
@@ -72,4 +72,16 @@ it('concurrent Admin refund execution reserves one provider order and preserves 
  await manageAdminBookingPayment(store(),actor,input('approve_refund','approve'),deps,()=>now+901000);
  await Promise.all(Array.from({length:4},()=>manageAdminBookingPayment(store(),actor,input('execute_refund','execute'),deps,()=>now+902000)));
  expect(payouts).toBe(1);expect((await db.doc(`orgs/org-1/transactions/${id}`).get()).data()?.refundStatus).toBe('completed');expect((await db.doc(`orgs/org-1/bookings/${id}`).get()).data()?.status).toBe('expired');
+});
+
+it('changed reviewed fee produces no transaction or bill; unchanged concurrent retries reserve one bill',async()=>{
+ const q=await getBookingPaymentQuote(store(),auth,{schemaVersion:1,organizationId:'org-1',coachId:'coach-1',branchId:'branch-1',durationMinutes:60,includeQuoteToken:true},()=>now);
+ await db.doc('orgs/org-1/coaches/coach-1').update({consultationFeeMinor:13000});
+ const input={schemaVersion:1,organizationId:'org-1',bookingId:id,quoteToken:q.quoteToken};
+ await expect(createBookingPayment(store(),auth,input,gateway,eligibleCoach,()=>now)).rejects.toMatchObject({reason:'quote_changed'});
+ expect(creates).toBe(0);expect((await db.doc('orgs/org-1/transactions/'+id).get()).exists).toBe(false);
+ await db.doc('orgs/org-1/coaches/coach-1').update({consultationFeeMinor:12000});
+ await Promise.all(Array.from({length:4},()=>createBookingPayment(store(),auth,input,gateway,eligibleCoach,()=>now)));
+ await db.doc('orgs/org-1/coaches/coach-1').update({consultationFeeMinor:13000});
+ expect((await createBookingPayment(store(),auth,input,gateway,eligibleCoach,()=>now)).amountMinor).toBe(12000);expect(creates).toBe(1);
 });

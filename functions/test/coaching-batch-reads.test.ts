@@ -78,8 +78,8 @@ it('uses the same full-date batched lock checks for Member options without writi
   const f = fixture();
   await saveCoachAvailabilityDayService(f.store, auth('coach'), save(), () => now);
   const before = structuredClone([...f.memory.documents]);
-  const result = await getMemberBookingOptionsService(f.store, auth('member'), {schemaVersion:1,organizationId:'b2-org',coachId:'coach',localDate:'2026-10-16',durationMinutes:30}, eligibleCoach, () => now);
-  expect(result.options).toHaveLength(2);
+  const result = await getMemberBookingOptionsService(f.store, auth('member'), {schemaVersion:1,organizationId:'b2-org',coachId:'coach',localDate:'2026-10-16',durationMinutes:60}, eligibleCoach, () => now);
+  expect(result.options).toHaveLength(1);
   expect(f.batches.at(-1)).toEqual(dateGrid('2026-10-16','Asia/Kuala_Lumpur').slots.map(s=>`${root}/slotLocks/${keyOf('coach',s)}`));
   expect([...f.memory.documents]).toEqual(before);
 });

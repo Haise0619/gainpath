@@ -25,7 +25,7 @@ it('returns bounded 30/60-minute options with authoritative epochs, branches and
   expect(result.options).toHaveLength(7);
   expect(result.options[0]).toMatchObject({ branchId: 'branch-1', startAtMillis: start, endAtMillis: start + 3600000, startLabel: '10:00 GMT+8', endLabel: '11:00 GMT+8' });
   expect(result).toMatchObject({ todayLocalDate: '2026-10-01', throughLocalDate: '2026-10-31', permittedBranchIds: ['branch-1'] });
-  expect((await read({ durationMinutes: 30 })).options).toHaveLength(8);
+  await expect(read({durationMinutes:30})).rejects.toThrow();
   expect([...store.documents]).toEqual(before);
 });
 it('checks both slots for 60 minutes and ignores only known expired locks', async () => {
@@ -91,13 +91,13 @@ it('produces distinct UTC-grid options across repeated DST hours and rejects a c
   store.documents.get('orgs/org-1/settings/booking')!.timeZone = zone;
   store.documents.set(`orgs/org-1/coachAvailability/coach-1/days/${date}`, { schemaVersion: 1, revision: 1, timeZone: zone, policyVersion: 'older-policy', createdAtMillis: time, updatedAtMillis: time,
     windows: [{ branchId: 'branch-1', startAtMillis: grid.slots[0], endAtMillis: grid.slots.at(-1)! + 1800000 }] });
-  const result = await read({ localDate: date, durationMinutes: 30 }, time);
-  expect(result.options).toHaveLength(50);
+  const result = await read({ localDate: date, durationMinutes: 60 }, time);
+  expect(result.options).toHaveLength(49);
   const repeated = result.options.filter(o => o.startLabel.startsWith('01:00'));
   expect(repeated).toHaveLength(2); expect(repeated[0].startLabel).not.toBe(repeated[1].startLabel);
   await expect(createBookingHoldService(store, auth.uid, { ...command, startAtMillis: grid.slots.at(-1)! }, eligibleCoach, () => time)).rejects.toMatchObject({ code: 'invalid-argument' });
   const valid = repeated[1];
-  await expect(createBookingHoldService(store, auth.uid, { ...command, startAtMillis: valid.startAtMillis, durationMinutes: 30 }, eligibleCoach, () => time)).resolves.toMatchObject({ status: 'pending_hold' });
+  await expect(createBookingHoldService(store, auth.uid, { ...command, startAtMillis: valid.startAtMillis, durationMinutes: 60 }, eligibleCoach, () => time)).resolves.toMatchObject({ status: 'pending_hold' });
 });
 it('parses the whole Coach day before filtering shared branches and accepts old compatible policy metadata', async () => {
   const coach = store.documents.get('orgs/org-1/members/coach-1')!; coach.branchIds = ['branch-1', 'branch-2'];
@@ -135,4 +135,19 @@ it.each([
   const before = structuredClone([...store.documents]);
   await expect(read()).rejects.toMatchObject({ code: 'failed-precondition' });
   expect([...store.documents]).toEqual(before);
+});
+
+it('only opted in readers receive actual publication and branch display names',async()=>{
+ store.documents.get('orgs/org-1/coaches/coach-1')!.displayName='Verified Coach';
+ store.documents.get('orgs/org-1/branches/branch-1')!.displayName='Verified Gym';
+ expect(await read()).not.toHaveProperty('coachDisplayName');
+ expect(await read({includeDisplayNames:true})).toMatchObject({coachDisplayName:'Verified Coach',branchDisplayNames:{'branch-1':'Verified Gym'}});
+});
+it('preserves original thirty minute duration for confirmed legacy rescheduling options',async()=>{
+ const hold=await createBookingHoldService(store,auth.uid,command,eligibleCoach,()=>now);
+ const booking=store.documents.get('orgs/org-1/bookings/'+hold.bookingId)!;
+ Object.assign(booking,{status:'confirmed',durationMinutes:30,endAtMillis:command.startAtMillis+1800000});
+ store.documents.get('orgs/org-1/settings/booking')!.maxActiveBookingsPerMemberPerDay=32;
+ expect((await read({rescheduleBookingId:hold.bookingId,durationMinutes:30})).durationMinutes).toBe(30);
+ await expect(read({rescheduleBookingId:hold.bookingId,durationMinutes:60})).rejects.toMatchObject({code:'permission-denied'});
 });

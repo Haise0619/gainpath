@@ -27,10 +27,16 @@
       "pattern": "^[A-Za-z0-9_-]{1,128}$"
     },
     "durationMinutes": {
-      "enum": [
-        30,
-        60
-      ]
+      "const": 60
+    },
+    "includeQuoteToken": {
+      "type": "boolean"
+    },
+    "includePremiumVoucher": {
+      "type": "boolean"
+    },
+    "usePremiumVoucher": {
+      "type": "boolean"
     }
   }
 }

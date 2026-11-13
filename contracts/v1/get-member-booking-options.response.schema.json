@@ -14,6 +14,8 @@
   "properties": {
     "schemaVersion": { "const": 1 },
     "coachId": { "$ref": "#/definitions/id" },
+    "coachDisplayName": {"type":"string","minLength":1,"maxLength":80},
+    "branchDisplayNames": {"type":"object","maxProperties":8,"additionalProperties":{"type":"string","minLength":1,"maxLength":120}},
     "durationMinutes": { "enum": [30, 60] },
     "serverNowMillis": { "$ref": "#/definitions/time" },
     "todayLocalDate": { "$ref": "#/definitions/date" },

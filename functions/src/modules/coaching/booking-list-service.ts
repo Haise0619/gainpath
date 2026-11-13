@@ -21,6 +21,9 @@ export interface PersistedBookingRecord {
   cancelledBy?: string;
   feeMinor?: number;
   reviewStars?: number;
+  paymentStatus?: 'pending' | 'cleared';
+  refundStatus?: 'approved' | 'rejected' | 'processing' | 'uncertain' | 'completed' | 'failed';
+  refundReviewRequired?: boolean;
 }
 export interface BookingPage { schemaVersion: 1; serverNowMillis: number; timeZone: string; firstLocalDate: string; throughLocalDate: string; records: PersistedBookingRecord[]; nextCursor?: BookingCursor }
 const review = () => new DomainError('failed-precondition', 'Stored bookings need authorized review.');
@@ -45,7 +48,8 @@ function project(row: { path: string; data: DocumentData }, q: BookingQuery, inc
 }
 export async function getBookingListService(store: DocumentStore, auth: { uid: string; token: Record<string, unknown> } | undefined, raw: unknown, reader: BookingQueryReader, clock = Date.now): Promise<BookingPage> {
   requireVerifiedEmail(auth);
-  const input = object(raw); allowed(input, ['schemaVersion', 'organizationId', 'coachId', 'firstLocalDate', 'dayCount', 'cursor', 'includeParticipantNames', 'includeCancellationDetails', 'includeReviewDetails', 'includeMemberChangeDetails']);
+  const input = object(raw); allowed(input, ['schemaVersion', 'organizationId', 'coachId', 'firstLocalDate', 'dayCount', 'cursor', 'includeParticipantNames', 'includeCancellationDetails', 'includeReviewDetails', 'includeMemberChangeDetails', 'includePaymentDetails']);
+  if (input.includePaymentDetails !== undefined && typeof input.includePaymentDetails !== 'boolean') throw new InputValidationError('includePaymentDetails must be a boolean.');
   if (input.includeMemberChangeDetails !== undefined && typeof input.includeMemberChangeDetails !== 'boolean') throw new InputValidationError('includeMemberChangeDetails must be a boolean.');
   if (input.includeReviewDetails !== undefined && typeof input.includeReviewDetails !== 'boolean') throw new InputValidationError('includeReviewDetails must be a boolean.');
   if (input.includeParticipantNames !== undefined && typeof input.includeParticipantNames !== 'boolean') throw new InputValidationError('includeParticipantNames must be a boolean.');
@@ -116,6 +120,17 @@ export async function getBookingListService(store: DocumentStore, auth: { uid: s
       if (typeof name === 'string' && name.trim() && name.trim().length <= 120) record.memberDisplayName = name.trim();
       const payment = values[memberIds.length + i];
       if (payment && Number.isSafeInteger(payment.amountMinor) && Number(payment.amountMinor) >= 0) record.feeMinor = Number(payment.amountMinor);
+      if (input.includePaymentDetails === true && payment?.schemaVersion === 1
+          && payment.organizationId === org && payment.bookingId === record.bookingId
+          && payment.memberId === record.memberId && payment.coachId === record.coachId && payment.branchId === record.branchId
+          && ['pending', 'cleared'].includes(String(payment.paymentStatus))) {
+        record.paymentStatus = payment.paymentStatus as 'pending' | 'cleared';
+        if (payment.paymentStatus === 'cleared') {
+          if (payment.fulfilmentStatus === 'reconciliation_required' && payment.refundReviewRequired === true) record.refundReviewRequired = true;
+          if (['approved', 'rejected', 'processing', 'uncertain', 'completed', 'failed'].includes(String(payment.refundStatus)))
+            record.refundStatus = payment.refundStatus as PersistedBookingRecord['refundStatus'];
+        }
+      }
       const saved = input.includeReviewDetails === true ? values[memberIds.length + records.length + i] : undefined;
       if (saved?.schemaVersion === 1 && saved.bookingId === record.bookingId && saved.coachId === record.coachId && saved.memberId === record.memberId
           && Number.isInteger(saved.stars) && Number(saved.stars) >= 1 && Number(saved.stars) <= 5) record.reviewStars = Number(saved.stars);

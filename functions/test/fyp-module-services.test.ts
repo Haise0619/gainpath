@@ -101,16 +101,16 @@ it('returns real bounded Member booking options without creating holds or paymen
   expect([...f.store.documents]).toEqual(before);
   expect(f.paths).toEqual([]);
   f.store.documents.get(`${FYP_ROOT}/coaches/${coachId}`)!.status = 'inactive';
-  await expect(f.call('getMemberBookingOptionsCommand', {coachId, durationMinutes: 30})).rejects.toMatchObject({code: 'failed-precondition'});
+  await expect(f.call('getMemberBookingOptionsCommand', {coachId, durationMinutes: 60})).rejects.toMatchObject({code: 'failed-precondition'});
 });
 it('booking options preserve Member-only ownership, target Auth verification and malformed-input rejection', async () => {
   const admin = await fixture('admin');
-  await expect(admin.call('getMemberBookingOptionsCommand', {coachId: dataset.coachIds[0], durationMinutes: 30})).rejects.toMatchObject({code: 'permission-denied'});
+  await expect(admin.call('getMemberBookingOptionsCommand', {coachId: dataset.coachIds[0], durationMinutes: 60})).rejects.toMatchObject({code: 'permission-denied'});
   const f = await fixture(), data = {...f.request.data, coachId: dataset.coachIds[0], durationMinutes: 60};
   await expect(fypModuleRead('module/getMemberBookingOptionsCommand', {...f.request, data}, {...f.deps,
     readAuthIdentity: async uid => ({...await f.deps.readAuthIdentity(uid), disabled: uid === dataset.coachIds[0]})})).rejects.toMatchObject({code: 'failed-precondition'});
   await expect(f.call('getMemberBookingOptionsCommand', {coachId: dataset.coachIds[0], durationMinutes: 45})).rejects.toThrow();
-  await expect(f.call('getMemberBookingOptionsCommand', {coachId: dataset.coachIds[0], durationMinutes: 30, memberId: dataset.memberIds[1]})).rejects.toThrow();
+  await expect(f.call('getMemberBookingOptionsCommand', {coachId: dataset.coachIds[0], durationMinutes: 60, memberId: dataset.memberIds[1]})).rejects.toThrow();
 });
 it('reuses Admin roster, credential, Program and reporting services with cohort-only denominators', async () => {
   const f = await fixture('admin'), coachId = dataset.coachIds[0];

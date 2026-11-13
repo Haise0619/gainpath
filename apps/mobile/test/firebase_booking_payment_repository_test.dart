@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'package:cloud_functions/cloud_functions.dart'
+    show FirebaseFunctionsException;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gainpath_domain/gainpath_domain.dart';
 import 'package:gainpath_mobile/infrastructure/firebase/firebase_app_check_readiness.dart';
@@ -26,6 +28,42 @@ void main() {
     'holdExpiresAtMillis': 123,
     'checkoutUrl': 'https://www.billplz-sandbox.com/bills/abc'
   };
+  test('only explicit no-checkout quote change permits review refresh',
+      () async {
+    final repo = FirebaseBookingPaymentRepository(
+        scope: scope,
+        isCurrent: () => true,
+        currentUid: () => 'member',
+        readiness: ready(),
+        call: (_, data) async {
+          throw FirebaseFunctionsException(
+              code: 'failed-precondition',
+              message: 'changed',
+              details: const {'reason': 'quote_changed', 'checkoutCreated': false});
+        });
+    await expectLater(
+        repo.createReviewed('booking', quoteToken: 'a' * 64),
+        throwsA(isA<BookingException>()
+            .having((e) => e.code, 'code', 'booking-quote-changed')));
+  });
+  test('reviewed checkout sends server token and explicit voucher choice',
+      () async {
+    Map<String, dynamic>? received;
+    final repo = FirebaseBookingPaymentRepository(
+        scope: scope,
+        isCurrent: () => true,
+        currentUid: () => 'member',
+        readiness: ready(),
+        call: (_, data) async {
+          received = data;
+          return payment;
+        });
+    await repo.createReviewed('booking',
+        quoteToken: 'a' * 64, usePremiumVoucher: true);
+    expect(received?['quoteToken'], 'a' * 64);
+    expect(received?['usePremiumVoucher'], isTrue);
+    expect(received!.containsKey('amountMinor'), isFalse);
+  });
   test('create sends booking reference only and validates hosted URL',
       () async {
     Map<String, dynamic>? received;
@@ -74,6 +112,7 @@ void main() {
         'coachId': 'coach',
         'branchId': 'branch',
         'durationMinutes': 30,
+        'includeQuoteToken': true,
         'includePremiumVoucher': true
       },
       {

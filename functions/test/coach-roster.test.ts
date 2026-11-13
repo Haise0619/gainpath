@@ -83,8 +83,8 @@ it('requires roster revision for dated edits and validates changed future blocks
 it('enforces HOURS for 60 minute holds, keeps member limits separate, and ignores expired locks', async () => {
   const store = setup(); await saveCoachRosterService(store, auth('coach'), { ...rosterSave(), weeklyAvailability: { ...weekly, dailyCapacityHours: 1 } }, () => now);
   const first = await createBookingHoldService(store, 'member', hold(), eligibleCoach, () => now);
-  await expect(createBookingHoldService(store, 'member', hold('next', start + 3600000, 30), eligibleCoach, () => now)).rejects.toMatchObject({ code: 'resource-exhausted' });
-  const options = await getMemberBookingOptionsService(store, auth('member'), { ...rosterRead, localDate: date, durationMinutes: 30 }, eligibleCoach, () => now);
+  await expect(createBookingHoldService(store, 'member', hold('next', start + 3600000, 60), eligibleCoach, () => now)).rejects.toMatchObject({ code: 'resource-exhausted' });
+  const options = await getMemberBookingOptionsService(store, auth('member'), { ...rosterRead, localDate: date, durationMinutes: 60 }, eligibleCoach, () => now);
   expect(options.options).toEqual([]);
   expect(await createBookingHoldService(store, 'member', hold(), eligibleCoach, () => first.holdExpiresAtMillis)).toMatchObject({ bookingId: first.bookingId });
   await createBookingHoldService(store, 'member', hold('after-expiry', start + 3600000), eligibleCoach, () => first.holdExpiresAtMillis);
@@ -93,7 +93,7 @@ it('enforces inclusive organization-local advance window in options and checkout
   const store = setup(); await saveCoachRosterService(store, auth('coach'), { ...rosterSave(), weeklyAvailability: { ...weekly, advanceBookingWindowDays: 1 } }, () => now);
   await createBookingHoldService(store, 'member', hold(), eligibleCoach, () => now);
   await expect(createBookingHoldService(store, 'member', hold('late', start + 86400000), eligibleCoach, () => now)).rejects.toMatchObject({ code: 'invalid-argument' });
-  const result = await getMemberBookingOptionsService(store, auth('member'), { ...rosterRead, localDate: date, durationMinutes: 30 }, eligibleCoach, () => now);
+  const result = await getMemberBookingOptionsService(store, auth('member'), { ...rosterRead, localDate: date, durationMinutes: 60 }, eligibleCoach, () => now);
   expect(result.throughLocalDate).toBe('2026-10-16');
   expect((await getCoachAvailabilityService(store, auth('member'), read(), () => now)).days.find(d => d.localDate === '2026-10-17')?.windows).toEqual([]);
 });
@@ -138,10 +138,10 @@ it('replays the originally saved full snapshot after a later roster update', asy
 it('retains existing holds when lowering capacity while blocking all additional hours', async () => {
   const store = setup(); await saveCoachRosterService(store, auth('coach'), rosterSave(), () => now);
   const first = await createBookingHoldService(store, 'member', hold(), eligibleCoach, () => now);
-  await createBookingHoldService(store, 'member', hold('second', start + 3600000, 30), eligibleCoach, () => now);
+  await createBookingHoldService(store, 'member', hold('second', start + 3600000, 60), eligibleCoach, () => now);
   await saveCoachRosterService(store, auth('coach'), { ...rosterSave('lower', 1), weeklyAvailability: { ...weekly, dailyCapacityHours: 1 } }, () => now);
   expect(await createBookingHoldService(store, 'member', hold(), eligibleCoach, () => now)).toEqual(first);
-  expect((await getMemberBookingOptionsService(store, auth('member'), { ...rosterRead, localDate: date, durationMinutes: 30 }, eligibleCoach, () => now)).options).toEqual([]);
+  expect((await getMemberBookingOptionsService(store, auth('member'), { ...rosterRead, localDate: date, durationMinutes: 60 }, eligibleCoach, () => now)).options).toEqual([]);
   expect(store.documents.get(`${root}/slotLocks/${keyOf('coach', start)}`)?.bookingId).toBe(first.bookingId);
 });
 it('derives recurring wall times across DST without inventing or dropping repeated slots', () => {

@@ -51,9 +51,18 @@ class BookingOptionsContext {
       required this.throughLocalDate,
       required List<String> permittedBranchIds,
       required List<BookingOption> options,
-      this.unavailableReason})
-      : permittedBranchIds = List.unmodifiable(permittedBranchIds),
+      this.unavailableReason,
+      this.coachDisplayName,
+      Map<String, String> branchDisplayNames = const {}})
+      : branchDisplayNames = Map.unmodifiable(branchDisplayNames),
+        permittedBranchIds = List.unmodifiable(permittedBranchIds),
         options = List.unmodifiable(options) {
+    if (coachDisplayName != null) bookingText(coachDisplayName, max: 80);
+    for (final entry in branchDisplayNames.entries) {
+      bookingId(entry.key);
+      bookingText(entry.value, max: 120);
+      if (!permittedBranchIds.contains(entry.key)) invalidBookingData();
+    }
     bookingId(coachId);
     bookingDuration(durationMinutes);
     bookingInt(serverNowMillis);
@@ -94,6 +103,8 @@ class BookingOptionsContext {
     }
   }
   final String coachId, todayLocalDate, localDate, timeZone, throughLocalDate;
+  final String? coachDisplayName;
+  final Map<String, String> branchDisplayNames;
   final String? unavailableReason;
   final int durationMinutes, serverNowMillis;
   final List<String> permittedBranchIds;
@@ -115,7 +126,9 @@ class BookingOptionsContext {
       'permittedBranchIds',
       'options'
     ], [
-      'unavailableReason'
+      'unavailableReason',
+      'coachDisplayName',
+      'branchDisplayNames'
     ]);
     bookingVersion(data['schemaVersion']);
     final coach = bookingId(data['coachId']);
@@ -130,6 +143,13 @@ class BookingOptionsContext {
       invalidBookingData();
     }
     return BookingOptionsContext(
+        coachDisplayName: data['coachDisplayName'] == null
+            ? null
+            : bookingText(data['coachDisplayName'], max: 80),
+        branchDisplayNames: data['branchDisplayNames'] == null
+            ? const {}
+            : bookingMap(data['branchDisplayNames']).map((key, value) =>
+                MapEntry(bookingId(key), bookingText(value, max: 120))),
         coachId: coach,
         durationMinutes: duration,
         serverNowMillis: bookingInt(data['serverNowMillis']),
@@ -147,6 +167,9 @@ class BookingOptionsContext {
   Map<String, dynamic> toJson() => {
         'schemaVersion': 1,
         'coachId': coachId,
+        if (coachDisplayName != null) 'coachDisplayName': coachDisplayName,
+        if (branchDisplayNames.isNotEmpty)
+          'branchDisplayNames': branchDisplayNames,
         'durationMinutes': durationMinutes,
         'serverNowMillis': serverNowMillis,
         'todayLocalDate': todayLocalDate,
@@ -203,7 +226,26 @@ class PersistedBookingRecord {
       this.memberDisplayName,
       this.cancellationReason,
       this.cancelledBy,
-      this.feeMinor, this.reviewStars}) {
+      this.feeMinor,
+      this.reviewStars,
+      this.paymentStatus,
+      this.refundStatus,
+      this.refundReviewRequired}) {
+    if (paymentStatus != null &&
+        !const ['pending', 'cleared'].contains(paymentStatus)) {
+      invalidBookingData();
+    }
+    if (refundStatus != null &&
+        !const [
+          'approved',
+          'rejected',
+          'processing',
+          'uncertain',
+          'completed',
+          'failed'
+        ].contains(refundStatus)) {
+      invalidBookingData();
+    }
     if (memberDisplayName != null) bookingText(memberDisplayName, max: 120);
     for (final id in [
       bookingId,
@@ -239,7 +281,12 @@ class PersistedBookingRecord {
         if (resolution == 'member_cancelled') {
           if (resolvedAtMillis! >= holdExpiresAtMillis) invalidBookingData();
         } else if (resolution == 'member_confirmed_cancelled') {
-          if (startAtMillis - resolvedAtMillis! < 12 * 3600000 || cancelledBy != memberId || cancellationReason == null || cancellationReason!.trim().isEmpty) invalidBookingData();
+          if (startAtMillis - resolvedAtMillis! < 12 * 3600000 ||
+              cancelledBy != memberId ||
+              cancellationReason == null ||
+              cancellationReason!.trim().isEmpty) {
+            invalidBookingData();
+          }
         } else if (resolution == 'coach_cancelled') {
           if (resolvedAtMillis! > startAtMillis) invalidBookingData();
         } else if (resolution != null) {
@@ -284,6 +331,8 @@ class PersistedBookingRecord {
   final String? memberDisplayName;
   final String? cancellationReason;
   final String? cancelledBy;
+  final String? paymentStatus, refundStatus;
+  final bool? refundReviewRequired;
   final int? feeMinor;
   final int? reviewStars;
   int get schemaVersion => 1;
@@ -322,11 +371,18 @@ class PersistedBookingRecord {
       'cancellationReason',
       'cancelledBy',
       'feeMinor',
-      'reviewStars'
+      'reviewStars',
+      'paymentStatus',
+      'refundStatus',
+      'refundReviewRequired'
     ]);
     if ((data.containsKey('resolvedAtMillis') &&
             data['resolvedAtMillis'] == null) ||
         (data.containsKey('resolution') && data['resolution'] is! String)) {
+      invalidBookingData();
+    }
+    if (data['refundReviewRequired'] != null &&
+        data['refundReviewRequired'] is! bool) {
       invalidBookingData();
     }
     bookingVersion(data['schemaVersion']);
@@ -363,8 +419,18 @@ class PersistedBookingRecord {
         cancelledBy: data['cancelledBy'] == null
             ? null
             : _bookingIdValue(data['cancelledBy']),
-        feeMinor: data['feeMinor'] == null ? null : bookingInt(data['feeMinor']),
-        reviewStars: data['reviewStars'] == null ? null : bookingInt(data['reviewStars'], min: 1, max: 5));
+        paymentStatus: data['paymentStatus'] == null
+            ? null
+            : bookingText(data['paymentStatus']),
+        refundStatus: data['refundStatus'] == null
+            ? null
+            : bookingText(data['refundStatus']),
+        refundReviewRequired: data['refundReviewRequired'] as bool?,
+        feeMinor:
+            data['feeMinor'] == null ? null : bookingInt(data['feeMinor']),
+        reviewStars: data['reviewStars'] == null
+            ? null
+            : bookingInt(data['reviewStars'], min: 1, max: 5));
   }
   Map<String, dynamic> toJson() => {
         'bookingId': bookingId,
@@ -386,9 +452,14 @@ class PersistedBookingRecord {
         if (resolvedAtMillis != null) 'resolvedAtMillis': resolvedAtMillis,
         if (resolution != null) 'resolution': resolution,
         if (memberDisplayName != null) 'memberDisplayName': memberDisplayName,
-        if (cancellationReason != null) 'cancellationReason': cancellationReason,
+        if (cancellationReason != null)
+          'cancellationReason': cancellationReason,
         if (cancelledBy != null) 'cancelledBy': cancelledBy,
-    if (feeMinor != null) 'feeMinor': feeMinor,
+        if (paymentStatus != null) 'paymentStatus': paymentStatus,
+        if (refundStatus != null) 'refundStatus': refundStatus,
+        if (refundReviewRequired != null)
+          'refundReviewRequired': refundReviewRequired,
+        if (feeMinor != null) 'feeMinor': feeMinor,
         if (reviewStars != null) 'reviewStars': reviewStars,
         'startLabel': startLabel,
         'endLabel': endLabel,
