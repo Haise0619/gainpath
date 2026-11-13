@@ -1,6 +1,6 @@
 # Member Coach Booking — commercial checkout
 
-Implemented13November2026. This supersedes the previous Member selection page that listed enabled provider gateways. The new page records a member's preferred payment method independently from the actual hosted payment rail. No deployment, installation, live booking change, provider payment or payment-setting change is included.
+Implemented13November2026. This supersedes the previous Member selection page that listed enabled provider gateways. The new page records a member's preferred payment method independently from the actual hosted payment rail. **Activation update:** the seven matching existing backend handlers are now active and routing fix `54e23e9` is installed on the existing Xiaomi. The owner confirmed that payment methods load. Initial acceptance and subsequent activation evidence are distinguished below. No provider payment or payment-setting change was performed.
 
 Implementation commits: `0c7164e` (canonical preference persistence and compatible projections/transport) and `da31559` (Member/Admin UX, regressions and screenshots). Documentation closeout is separate.
 
@@ -74,6 +74,20 @@ APK SHA256: `a9d23471cd4c5fa95abb73144e9df5e4192e35aeda1376cf1ee23190f40d5741`. 
 
 ## Release and provider/device acceptance
 
-The new discovery/create/read projections and booking/Admin readers need matching backend activation before distributing the clients. No activation or APK installation was performed. The implementation reuses the existing Sandbox provider integration; app copy does not change the provider environment. Provider-owned page wording and controls remain under Billplz's control.
+The initial implementation needed matching backend activation before client distribution. That activation and the phone routing correction are now complete as recorded below. The implementation reuses the existing Sandbox provider integration; app copy does not change the provider environment. Provider-owned page wording and controls remain under Billplz's control. The prepared Admin Web bundle was not activated by the phone loading fix.
 
 An actual hosted transaction, browser-to-app return, externally delivered signed callback and physical-device end-to-end acceptance remain pending. Emulator/fixture settlement is not provider or real-device acceptance. There is no automatic success, redirect-based confirmation, simulator auto-click or real payment. All unrelated uncommitted Admin Coach/Home/Rewards/pose work and existing document edits are preserved.
+
+## Payment-method loading fix and activation —13November2026
+
+The owner-reported failure was a client/release mismatch: `getBookingPaymentMethodsCommand` did not exist in either US or Singapore, while the phone was already running its caller and deployed payment read/create handlers still used `38234a4`. Fix `54e23e9` routes presentation discovery through the existing Singapore `getBookingPaymentCommand` using strict `includeSelectionMethods:true`. Ordinary invoice reads retain the original verification path. No new public endpoint or IAM binding was introduced.
+
+Fresh verification:225 backend tests,30 focused Mobile tests in the working and clean committed-source export, source/test TypeScript checks, two-file Flutter analysis and clean Debug APK build72.6s. The sealed37-file package exports exactly six existing callables and the existing HTTP webhook; artifact checks and independent release review passed. Seven rollback source ZIPs and previous runtime/configuration/IAM snapshots were retained privately.
+
+Activated source only for Singapore create/get payment, Admin list/get/manage payment and booking-list read, plus US `paymentWebhook`. All seven deployed ZIP hashes match source commit `54e23e9` and release SHA256 `6177358537d89c35b2813a1ac877a4a9e1885f5985f42943828ea077f4d74781`. Runtime, entrypoints, environment, secret bindings and IAM remain unchanged; unrelated Functions are unchanged. Standing owner deployment authority covers these source updates. No financial/provider configuration or IAM modification was needed.
+
+Authenticated read-only probes using the existing synthetic fixture accepted both selection and legacy invoice routes, returning the expected application NOT_FOUND for random nonexistent booking IDs; the selection flag no longer fails as unsupported. Anonymous requests returned401 and webhook GET returned405. Automated smoke created no bookings/bills and made no provider operation.
+
+The same-signer clean APK was installed in place and launched after the owner unlocked the phone and its Payment screen was observed. Installed SHA256 `bc724fd35a3ae7ad3863bb73d69a558b4780ef6c7329429e4b6ac0c1ae3f5637` matches the candidate; UID, data directory and first-install time are preserved, with the previous APK retained. No data clear or remote screen taps occurred. The owner manually re-entered booking and confirmed **payment methods now load**. Actual payment/provider-return acceptance remains separate; the owner was asked to stop before continuing to Billplz.
+
+Private operational evidence: `build/checkout-load-fix-20261113/` (`endpoint-check.json`, `manifest.json`, `artifact-smoke.json`, `verified.json`, `live-smoke.json`, `device-verified.json`, test/build logs and rollback files).
