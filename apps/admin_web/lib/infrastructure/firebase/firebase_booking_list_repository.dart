@@ -43,6 +43,7 @@ class FirebaseBookingListRepository implements BookingListRepository {
         'schemaVersion': 1,
         'organizationId': scope.organizationId,
         'coachId': coachId,
+        'includeSelectedPaymentMethod': true,
         if (firstLocalDate != null) 'firstLocalDate': firstLocalDate,
         if (dayCount != null) 'dayCount': dayCount,
         if (cursor != null) 'cursor': cursor.toJson()

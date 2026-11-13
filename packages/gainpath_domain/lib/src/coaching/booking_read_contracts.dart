@@ -1,6 +1,7 @@
 import '../coaching.dart' show BookingStatus;
 import '../identity.dart' show SessionScope;
 import 'booking_wire_validation.dart';
+import 'booking_payment_selection.dart';
 
 class BookingOption {
   BookingOption(
@@ -229,6 +230,7 @@ class PersistedBookingRecord {
       this.feeMinor,
       this.reviewStars,
       this.paymentStatus,
+      this.selectedPaymentMethod,
       this.refundStatus,
       this.refundReviewRequired}) {
     if (paymentStatus != null &&
@@ -332,6 +334,7 @@ class PersistedBookingRecord {
   final String? cancellationReason;
   final String? cancelledBy;
   final String? paymentStatus, refundStatus;
+  final SelectedBookingPaymentMethod? selectedPaymentMethod;
   final bool? refundReviewRequired;
   final int? feeMinor;
   final int? reviewStars;
@@ -373,6 +376,11 @@ class PersistedBookingRecord {
       'feeMinor',
       'reviewStars',
       'paymentStatus',
+      'selectedPaymentMethodCategory',
+      'selectedPaymentMethodCode',
+      'selectedPaymentMethodLabel',
+      'selectedPaymentMethodIconKey',
+      'selectedAt',
       'refundStatus',
       'refundReviewRequired'
     ]);
@@ -422,6 +430,8 @@ class PersistedBookingRecord {
         paymentStatus: data['paymentStatus'] == null
             ? null
             : bookingText(data['paymentStatus']),
+        selectedPaymentMethod:
+            SelectedBookingPaymentMethod.fromPaymentJson(data),
         refundStatus: data['refundStatus'] == null
             ? null
             : bookingText(data['refundStatus']),
@@ -456,6 +466,7 @@ class PersistedBookingRecord {
           'cancellationReason': cancellationReason,
         if (cancelledBy != null) 'cancelledBy': cancelledBy,
         if (paymentStatus != null) 'paymentStatus': paymentStatus,
+        ...?selectedPaymentMethod?.toJson(),
         if (refundStatus != null) 'refundStatus': refundStatus,
         if (refundReviewRequired != null)
           'refundReviewRequired': refundReviewRequired,

@@ -30,6 +30,15 @@ beforeEach(async()=>{
   id=(await createBookingHoldService(store(),'member-1',command,eligibleCoach,()=>now)).bookingId;
 });
 const create=()=>createBookingPayment(store(),auth,{schemaVersion:1,organizationId:'org-1',bookingId:id},gateway,eligibleCoach,()=>now);
+it('member preference is persisted once in the original invoice independently of gateway and verified success',async()=>{
+  const args={schemaVersion:1,organizationId:'org-1',bookingId:id};
+  await Promise.all(['tng','grabpay','visa_mastercard'].map(code=>createBookingPayment(store(),auth,{...args,selectedPaymentMethodCode:code},gateway,eligibleCoach,()=>now)));
+  expect(creates).toBe(1);const saved=(await db.doc(`orgs/org-1/transactions/${id}`).get()).data()!;
+  expect(['tng','grabpay','visa_mastercard']).toContain(saved.selectedPaymentMethodCode);expect(saved.selectedPaymentMethodCategory).toBe(saved.selectedPaymentMethodCode==='visa_mastercard'?'card':'ewallet');expect(saved.selectedAt).toBe(now);expect(saved.gatewayCode).toBeUndefined();
+  const reopened=await getBookingPaymentMethods(store(),auth,{...args,includeSelectionMethods:true},gateway,()=>now+1);expect(reopened.existingPayment).toMatchObject({selectedPaymentMethodCode:saved.selectedPaymentMethodCode});
+  await Promise.all(Array.from({length:3},()=>settleBookingPayment(store(),'org-1',id,bill(true),eligibleCoach,()=>now+2)));
+  expect((await db.doc(`orgs/org-1/bookings/${id}`).get()).data()?.status).toBe('confirmed');expect((await db.doc(`orgs/org-1/transactions/${id}`).get()).data()?.selectedPaymentMethodCode).toBe(saved.selectedPaymentMethodCode);expect(creates).toBe(1);
+});
 it('direct method discovery and concurrent checkout retain one immutable bill and confirm exactly once',async()=>{
   const refs=bookingBillReferences('org-1',id,'BCBB0235');
   const direct=(paid=false):SandboxBill=>({...bill(paid),reference_1:refs.reference1,reference_2:refs.reference2});

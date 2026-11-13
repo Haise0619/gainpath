@@ -226,6 +226,98 @@
           "type": "string",
           "minLength": 1,
           "maxLength": 80
+        },
+        "selectedPaymentMethodCategory": {
+          "enum": [
+            "fpx",
+            "ewallet",
+            "card"
+          ]
+        },
+        "selectedPaymentMethodCode": {
+          "type": "string",
+          "enum": [
+            "maybank2u",
+            "cimbclicks",
+            "publicbank",
+            "rhb",
+            "hongleong",
+            "bankislam",
+            "ambank",
+            "bsn",
+            "affin",
+            "alliance",
+            "tng",
+            "grabpay",
+            "shopeepay",
+            "visa_mastercard"
+          ]
+        },
+        "selectedPaymentMethodLabel": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "selectedPaymentMethodIconKey": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "selectedAt": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "selectionMethods": {
+      "type": "array",
+      "maxItems": 100,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "category",
+          "code",
+          "name",
+          "iconKey"
+        ],
+        "properties": {
+          "category": {
+            "enum": [
+              "fpx",
+              "ewallet",
+              "card"
+            ]
+          },
+          "code": {
+            "type": "string",
+            "enum": [
+              "maybank2u",
+              "cimbclicks",
+              "publicbank",
+              "rhb",
+              "hongleong",
+              "bankislam",
+              "ambank",
+              "bsn",
+              "affin",
+              "alliance",
+              "tng",
+              "grabpay",
+              "shopeepay",
+              "visa_mastercard"
+            ]
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "iconKey": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          }
         }
       }
     }

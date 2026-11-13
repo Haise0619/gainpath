@@ -14,6 +14,7 @@ import { membershipPayment, settleMembershipPayment } from './membership-payment
 import { storedBooking } from '../coaching/booking-record';
 import { bookingVoucherProjection } from './premium-coach-voucher';
 import {matchesBookingBillReferences} from './booking-bill-reference';
+import {selectedPaymentProjection} from './booking-payment-selection';
 type Auth = {
     uid: string;
     token: Record<string, unknown>;
@@ -88,7 +89,7 @@ async function reviewRows(store: DocumentStore, org: string, uid: string, rows: 
         const related = new Map(paths.map((path, i) => [path, values[i]]));
         const result: DocumentData[] = [];
         for (const d of rows) {
-            const projected: DocumentData = { ...projection(d), ...bookingVoucherProjection(d), bookingId: d.bookingId ?? d.transactionId }; // Legacy Admin command routing key; kind remains explicit.
+            const projected: DocumentData = { ...projection(d), ...bookingVoucherProjection(d),...selectedPaymentProjection(d), bookingId: d.bookingId ?? d.transactionId }; // Legacy Admin command routing key; kind remains explicit.
             const raw = isMembership(d) ? undefined : related.get(`orgs/${org}/bookings/${d.bookingId}`);
             if (raw && !isMembership(d)) {
                 const b = storedBooking(raw, org, String(d.bookingId));

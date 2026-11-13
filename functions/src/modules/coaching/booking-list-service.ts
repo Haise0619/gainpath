@@ -7,10 +7,11 @@ import { InputValidationError, requiredIdentifier } from '../../platform/validat
 import { allowed, dateEpoch, dateGrid, integer, localDate, object, plusDate, SLOT } from './coach-availability-contracts';
 import { storedBooking, type BookingResolution } from './booking-record';
 import { currentBookingMembership, currentBookingPolicy, requireBookingOrganization } from './booking-validation';
+import {selectedPaymentProjection,type SelectedPaymentMetadata} from '../commerce/booking-payment-selection';
 export interface BookingCursor { startAtMillis: number; bookingId: string }
 export interface BookingQuery { organizationId: string; ownerField: 'memberId' | 'coachId'; ownerId: string; branchIds?: readonly string[]; firstStartAtMillis: number; throughStartAtMillis: number; cursor?: BookingCursor; limit: 21 }
 export interface BookingQueryReader { read(query: BookingQuery): Promise<{ path: string; data: DocumentData }[]> }
-export interface PersistedBookingRecord {
+export interface PersistedBookingRecord extends Partial<SelectedPaymentMetadata> {
   schemaVersion: 1; bookingId: string; organizationId: string; memberId: string; coachId: string; branchId: string; requestId: string;
   startAtMillis: number; endAtMillis: number; durationMinutes: 30 | 60; status: 'pending_hold' | 'confirmed' | 'cancelled' | 'expired' | 'completed' | 'refunded';
   holdExpiresAtMillis: number; localDate: string; timeZone: string; policyVersion: string; createdAtMillis: number;
@@ -48,7 +49,8 @@ function project(row: { path: string; data: DocumentData }, q: BookingQuery, inc
 }
 export async function getBookingListService(store: DocumentStore, auth: { uid: string; token: Record<string, unknown> } | undefined, raw: unknown, reader: BookingQueryReader, clock = Date.now): Promise<BookingPage> {
   requireVerifiedEmail(auth);
-  const input = object(raw); allowed(input, ['schemaVersion', 'organizationId', 'coachId', 'firstLocalDate', 'dayCount', 'cursor', 'includeParticipantNames', 'includeCancellationDetails', 'includeReviewDetails', 'includeMemberChangeDetails', 'includePaymentDetails']);
+  const input = object(raw); allowed(input, ['schemaVersion', 'organizationId', 'coachId', 'firstLocalDate', 'dayCount', 'cursor', 'includeParticipantNames', 'includeCancellationDetails', 'includeReviewDetails', 'includeMemberChangeDetails', 'includePaymentDetails','includeSelectedPaymentMethod']);
+  if(input.includeSelectedPaymentMethod!==undefined&&typeof input.includeSelectedPaymentMethod!=='boolean')throw new InputValidationError('Invalid payment method projection.');
   if (input.includePaymentDetails !== undefined && typeof input.includePaymentDetails !== 'boolean') throw new InputValidationError('includePaymentDetails must be a boolean.');
   if (input.includeMemberChangeDetails !== undefined && typeof input.includeMemberChangeDetails !== 'boolean') throw new InputValidationError('includeMemberChangeDetails must be a boolean.');
   if (input.includeReviewDetails !== undefined && typeof input.includeReviewDetails !== 'boolean') throw new InputValidationError('includeReviewDetails must be a boolean.');
@@ -119,6 +121,7 @@ export async function getBookingListService(store: DocumentStore, auth: { uid: s
       const name = member?.organizationId === org ? member.displayName : undefined;
       if (typeof name === 'string' && name.trim() && name.trim().length <= 120) record.memberDisplayName = name.trim();
       const payment = values[memberIds.length + i];
+      if(input.includeSelectedPaymentMethod===true&&payment?.schemaVersion===1&&payment.environment==='sandbox'&&payment.provider==='billplz'&&payment.organizationId===org&&payment.bookingId===record.bookingId&&payment.memberId===record.memberId&&payment.coachId===record.coachId&&payment.branchId===record.branchId)Object.assign(record,selectedPaymentProjection(payment));
       if (payment && Number.isSafeInteger(payment.amountMinor) && Number(payment.amountMinor) >= 0) record.feeMinor = Number(payment.amountMinor);
       if (input.includePaymentDetails === true && payment?.schemaVersion === 1
           && payment.organizationId === org && payment.bookingId === record.bookingId

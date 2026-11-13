@@ -1,4 +1,5 @@
 import 'booking_payment.dart';
+import 'booking_payment_selection.dart';
 
 class BookingPaymentMethod {
   const BookingPaymentMethod(
@@ -24,6 +25,7 @@ class BookingPaymentMethods {
   const BookingPaymentMethods(
       {required this.methods,
       required this.serverNowMillis,
+      this.selectionMethods = const [],
       this.existingPayment,
       this.quote,
       this.localDate,
@@ -31,6 +33,7 @@ class BookingPaymentMethods {
       this.endLabel,
       this.holdExpiresAtMillis});
   final List<BookingPaymentMethod> methods;
+  final List<BookingPaymentChoice> selectionMethods;
   final int serverNowMillis;
   final BookingPaymentView? existingPayment;
   final BookingPaymentQuote? quote;
@@ -53,8 +56,23 @@ class BookingPaymentMethods {
       throw const FormatException('Duplicate payment methods');
     }
     final old = json['existingPayment'];
+    final choices = json['selectionMethods'];
+    if (choices != null && (choices is! List || choices.length > 100)) {
+      throw const FormatException('Invalid payment choices');
+    }
+    final selections = choices == null
+        ? const <BookingPaymentChoice>[]
+        : (choices as List).map((m) {
+            if (m is! Map) {
+              throw const FormatException('Invalid payment choice');
+            }
+            return BookingPaymentChoice.fromJson(Map<String, dynamic>.from(m));
+          }).toList(growable: false);
+    if (selections.map((m) => m.code).toSet().length != selections.length) {
+      throw const FormatException('Duplicate choices');
+    }
     if (old != null) {
-      if (methods.isNotEmpty || old is! Map) {
+      if (methods.isNotEmpty || selections.isNotEmpty || old is! Map) {
         throw const FormatException('Existing checkout is immutable');
       }
       return BookingPaymentMethods(
@@ -79,6 +97,7 @@ class BookingPaymentMethods {
     }
     return BookingPaymentMethods(
         methods: List.unmodifiable(methods),
+        selectionMethods: List.unmodifiable(selections),
         serverNowMillis: json['serverNowMillis'] as int,
         quote: quote,
         localDate: session['localDate'] as String,

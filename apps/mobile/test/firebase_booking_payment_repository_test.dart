@@ -52,6 +52,35 @@ void main() {
       'gatewayCode': 'BCBB0235'
     });
   });
+  test(
+      'presentation preference submits code only and opts in to selection discovery',
+      () async {
+    Map<String, dynamic>? sent;
+    final repo = FirebaseBookingPaymentRepository(
+        scope: scope,
+        isCurrent: () => true,
+        currentUid: () => 'member',
+        readiness: ready(),
+        call: (n, d) async {
+          sent = d;
+          if (n == 'getBookingPaymentMethodsCommand') {
+            return {
+              'schemaVersion': 1,
+              'serverNowMillis': 1000,
+              'methods': [],
+              'existingPayment': payment
+            };
+          }
+          return payment;
+        });
+    await repo.createWithSelectedPaymentMethod('booking',
+        selectedPaymentMethodCode: 'grabpay', quoteToken: 'a' * 64);
+    expect(sent?['selectedPaymentMethodCode'], 'grabpay');
+    expect(sent!.containsKey('gatewayCode'), isFalse);
+    expect(sent!.containsKey('selectedAt'), isFalse);
+    await repo.loadPaymentSelections('booking');
+    expect(sent?['includeSelectionMethods'], true);
+  });
   test('method discovery rejects stale account responses', () async {
     var current = true;
     final repo = FirebaseBookingPaymentRepository(

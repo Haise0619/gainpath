@@ -30,6 +30,25 @@
     "gatewayCode": {
       "type": "string",
       "pattern": "^[A-Za-z0-9_-]{1,64}$"
+    },
+    "selectedPaymentMethodCode": {
+      "type": "string",
+      "enum": [
+        "maybank2u",
+        "cimbclicks",
+        "publicbank",
+        "rhb",
+        "hongleong",
+        "bankislam",
+        "ambank",
+        "bsn",
+        "affin",
+        "alliance",
+        "tng",
+        "grabpay",
+        "shopeepay",
+        "visa_mastercard"
+      ]
     }
   }
 }

@@ -18,3 +18,4 @@ export 'src/coaching/module9.dart';
 export 'src/coaching/member_booking_change.dart';
 export 'src/coaching/google_integration.dart';
 export 'src/coaching/booking_payment_methods.dart';
+export 'src/coaching/booking_payment_selection.dart';

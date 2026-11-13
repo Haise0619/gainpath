@@ -8,3 +8,4 @@ export 'src/core.dart';
 export 'src/identity.dart';
 export 'src/identity_contracts.dart';
 export 'src/identity_credentials_policy.dart';
+export 'src/coaching/booking_payment_selection.dart';

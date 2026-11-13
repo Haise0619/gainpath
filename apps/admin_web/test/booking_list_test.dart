@@ -38,7 +38,8 @@ void main() {
     expect(sent, {
       'schemaVersion': 1,
       'organizationId': 'org',
-      'coachId': 'selected-coach'
+      'coachId': 'selected-coach',
+      'includeSelectedPaymentMethod':true
     });
     expect(cubit.state.page, isNotNull);
     await cubit.close();

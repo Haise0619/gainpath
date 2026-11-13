@@ -1,4 +1,5 @@
 import '../identity.dart';
+import 'booking_payment_selection.dart';
 
 bool isBillplzSandboxCheckoutUrl(String value) {
   final uri = Uri.tryParse(value);
@@ -140,6 +141,7 @@ class BookingPaymentView {
       this.resolutionReason,
       this.gatewayCode,
       this.paymentMethodName,
+      this.selectedPaymentMethod,
       this.serverNowMillis});
   final String bookingId, status, startLabel, endLabel, localDate;
   final BookingPaymentQuote quote;
@@ -147,6 +149,7 @@ class BookingPaymentView {
   final int? serverNowMillis;
   final String? checkoutUrl, resolutionReason;
   final String? gatewayCode, paymentMethodName;
+  final SelectedBookingPaymentMethod? selectedPaymentMethod;
   final String? paymentStatus, refundStatus;
   bool get confirmed => status == 'confirmed';
   factory BookingPaymentView.fromJson(Map<String, dynamic> json,
@@ -194,6 +197,8 @@ class BookingPaymentView {
     }
     return BookingPaymentView(
         serverNowMillis: quote.serverNowMillis,
+        selectedPaymentMethod:
+            SelectedBookingPaymentMethod.fromPaymentJson(json),
         gatewayCode: json['gatewayCode'] as String?,
         paymentMethodName: json['paymentMethodName'] as String?,
         bookingId: bookingId,

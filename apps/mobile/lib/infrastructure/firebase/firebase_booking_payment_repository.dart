@@ -9,7 +9,8 @@ class FirebaseBookingPaymentRepository
         BookingPaymentRepository,
         PremiumVoucherBookingPaymentRepository,
         ReviewedBookingPaymentRepository,
-        BookingPaymentMethodRepository {
+        BookingPaymentMethodRepository,
+        BookingPaymentSelectionRepository {
   FirebaseBookingPaymentRepository(
       {required this.scope,
       required bool Function() isCurrent,
@@ -88,12 +89,15 @@ class FirebaseBookingPaymentRepository
   Future<BookingPaymentView> _payment(String name, String id,
       {bool usePremiumVoucher = false,
       String? quoteToken,
-      String? gatewayCode}) async {
+      String? gatewayCode,
+      String? selectedPaymentMethodCode}) async {
     try {
       return BookingPaymentView.fromJson(
           await _call(name, {
             'bookingId': id,
             if (gatewayCode != null) 'gatewayCode': gatewayCode,
+            if (selectedPaymentMethodCode != null)
+              'selectedPaymentMethodCode': selectedPaymentMethodCode,
             if (quoteToken != null) 'quoteToken': quoteToken,
             if (usePremiumVoucher) 'usePremiumVoucher': true
           }),
@@ -138,4 +142,26 @@ class FirebaseBookingPaymentRepository
       throw const BookingException('invalid-response');
     }
   }
+
+  @override
+  Future<BookingPaymentMethods> loadPaymentSelections(String bookingId) async {
+    try {
+      return BookingPaymentMethods.fromJson(
+          await _call('getBookingPaymentMethodsCommand',
+              {'bookingId': bookingId, 'includeSelectionMethods': true}),
+          bookingId: bookingId);
+    } on FormatException {
+      throw const BookingException('invalid-response');
+    }
+  }
+
+  @override
+  Future<BookingPaymentView> createWithSelectedPaymentMethod(String bookingId,
+          {required String selectedPaymentMethodCode,
+          String? quoteToken,
+          bool usePremiumVoucher = false}) =>
+      _payment('createBookingPaymentCommand', bookingId,
+          selectedPaymentMethodCode: selectedPaymentMethodCode,
+          quoteToken: quoteToken,
+          usePremiumVoucher: usePremiumVoucher);
 }
