@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:gainpath_domain/gainpath_domain.dart';
+import 'package:gainpath_ui/gainpath_ui.dart';
 import '../../application/booking_list_cubit.dart';
 
 class AdminBookingListView extends StatefulWidget {
@@ -82,6 +83,17 @@ class _AdminBookingListViewState extends State<AdminBookingListView> {
                                   'Coach: ${record.coachId} · Member: ${record.memberId}'),
                               Text(
                                   'Branch: ${record.branchId} · ${record.durationMinutes} minutes'),
+                              const SizedBox(height: 12),
+                              PaymentMethodSummary(
+                                  label: record.selectedPaymentMethod == null
+                                      ? 'Not recorded'
+                                      : '${record.selectedPaymentMethod!.choice.categoryLabel} · ${record.selectedPaymentMethod!.choice.name}',
+                                  category: record.selectedPaymentMethod == null
+                                      ? 'Legacy booking'
+                                      : 'Selected payment method',
+                                  iconKey: record.selectedPaymentMethod?.choice
+                                          .iconKey ??
+                                      'unknown'),
                             ]))),
               if (state.page?.nextCursor != null)
                 TextButton(

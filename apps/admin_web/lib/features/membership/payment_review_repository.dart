@@ -93,6 +93,11 @@ class PaymentReviewRecord {
     }
   }
   final Map<String, dynamic> data;
+  SelectedBookingPaymentMethod? get selectedPaymentMethod =>
+      SelectedBookingPaymentMethod.fromPaymentJson(data);
+  String get selectedPaymentMethodLabel => selectedPaymentMethod == null
+      ? 'Not recorded'
+      : '${selectedPaymentMethod!.choice.categoryLabel} · ${selectedPaymentMethod!.choice.name}';
   String text(String key) => data[key]?.toString() ?? '';
   String get id => text('bookingId');
   bool get isMembership =>
@@ -193,8 +198,10 @@ class PaymentReviewRecord {
   /// Human-readable business reference (e.g. "Basic Membership Purchase", "Coach Booking — Hafiz Aziz")
   String get businessTitle {
     if (isMembership) {
-      final plan = text('planName').isNotEmpty ? text('planName') : 'Membership';
-      final action = text('kind') == 'MembershipRenewal' ? 'Renewal' : 'Purchase';
+      final plan =
+          text('planName').isNotEmpty ? text('planName') : 'Membership';
+      final action =
+          text('kind') == 'MembershipRenewal' ? 'Renewal' : 'Purchase';
       return '$plan $action';
     }
     final coach = text('coachName').isNotEmpty ? text('coachName') : 'Coach';
@@ -223,7 +230,8 @@ class PaymentReviewRecord {
     if (isMembership && text('fulfilmentStatus') == 'reconciliation_required') {
       return 'Membership activation requires review';
     }
-    if (!isMembership && text('fulfilmentStatus') == 'reconciliation_required') {
+    if (!isMembership &&
+        text('fulfilmentStatus') == 'reconciliation_required') {
       return 'Booking fulfillment requires review';
     }
     if (text('paymentStatus') == 'pending' && needsReview) {
@@ -251,8 +259,18 @@ class PaymentReviewRecord {
     if (millis is! num || millis <= 0) return 'Date unavailable';
     final dt = DateTime.fromMillisecondsSinceEpoch(millis.toInt()).toLocal();
     const months = [
-      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec'
     ];
     final month = months[dt.month - 1];
     final hour = dt.hour % 12 == 0 ? 12 : dt.hour % 12;

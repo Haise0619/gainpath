@@ -81,7 +81,7 @@ void main() {
     expect(r.creates, 0);
     await t.tap(find.text('CIMB Clicks'));
     await t.pump();
-    await t.tap(find.text('Continue to Payment'));
+    await t.tap(find.text('Continue'));
     await t.pump();
     expect(r.selected, 'BCBB0235');
     expect(r.creates, 1);
@@ -92,7 +92,7 @@ void main() {
     final r = MethodPayments()..enabledFpx = false;
     await show(t, r);
     expect(find.text('Maybank2u'), findsNothing);
-    expect(find.text('Billplz Sandbox'), findsOneWidget);
+    expect(find.text('Online payment'), findsOneWidget);
     expect(r.creates, 0);
     await t.pumpWidget(const SizedBox());
   });
@@ -127,10 +127,10 @@ void main() {
     });
     await t.tap(find.text('CIMB Clicks'));
     await t.pump();
-    await t.tap(find.text('Continue to Payment'));
+    await t.tap(find.text('Continue'));
     await t.pump();
-    expect(find.text('Confirming your payment'), findsOneWidget);
-    expect(find.text('Continue to Payment'), findsNothing);
+    expect(find.text('Confirming payment'), findsOneWidget);
+    expect(find.text('Continue'), findsNothing);
     await t.tap(find.text('Return to payment'));
     await t.pump();
     expect(opened.length, 2);

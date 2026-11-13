@@ -54,6 +54,13 @@ class _BookingPaymentScreenState extends State<BookingPaymentScreen>
   BookingPaymentMethods? _methods;
   String? _selectedGateway;
   bool _chooseMethod = false, _createStarted = false;
+  bool get _preferenceMode =>
+      widget.repository is BookingPaymentSelectionRepository;
+  BookingPaymentChoice? get _selectedChoice => _payment != null
+      ? _payment!.selectedPaymentMethod?.choice
+      : _methods?.selectionMethods
+          .where((m) => m.code == _selectedGateway)
+          .firstOrNull;
   bool get _selectingMethod => _chooseMethod && !_createStarted;
   final Stopwatch _serverClock = Stopwatch();
   int? _serverAnchor;
@@ -102,7 +109,8 @@ class _BookingPaymentScreenState extends State<BookingPaymentScreen>
     _foreground = lifecycle == null || lifecycle == AppLifecycleState.resumed;
     // Discovery recovers an existing invoice without changing its gateway, or
     // offers selection for a held booking which has not created a bill yet.
-    _chooseMethod = widget.repository is BookingPaymentMethodRepository;
+    _chooseMethod =
+        _preferenceMode || widget.repository is BookingPaymentMethodRepository;
     if (_selectingMethod) {
       _loadMethods();
     } else {
@@ -144,8 +152,11 @@ class _BookingPaymentScreenState extends State<BookingPaymentScreen>
       _message = null;
     });
     try {
-      final result = await (widget.repository as BookingPaymentMethodRepository)
-          .loadPaymentMethods(widget.bookingId);
+      final result = await (_preferenceMode
+          ? (widget.repository as BookingPaymentSelectionRepository)
+              .loadPaymentSelections(widget.bookingId)
+          : (widget.repository as BookingPaymentMethodRepository)
+              .loadPaymentMethods(widget.bookingId));
       if (!_canCheck) return;
       _serverAnchor = result.serverNowMillis;
       _serverClock
@@ -160,7 +171,8 @@ class _BookingPaymentScreenState extends State<BookingPaymentScreen>
       } else {
         setState(() {
           _methods = result;
-          if (!result.methods.any((m) => m.code == _selectedGateway)) {
+          if (!(result.methods.any((m) => m.code == _selectedGateway) ||
+              result.selectionMethods.any((m) => m.code == _selectedGateway))) {
             _selectedGateway = null;
           }
         });
@@ -181,7 +193,10 @@ class _BookingPaymentScreenState extends State<BookingPaymentScreen>
         _expired ||
         _busy ||
         _selectedGateway == null ||
-        !(_methods?.methods.any((m) => m.code == _selectedGateway) ?? false)) {
+        !((_methods?.methods.any((m) => m.code == _selectedGateway) ?? false) ||
+            (_methods?.selectionMethods
+                    .any((m) => m.code == _selectedGateway) ??
+                false))) {
       return;
     }
     setState(() => _createStarted = true);
@@ -196,7 +211,7 @@ class _BookingPaymentScreenState extends State<BookingPaymentScreen>
     final remaining = _nextAllowedCheck?.difference(widget.now());
     if (remaining != null && remaining > Duration.zero) {
       setState(() => _message =
-          'Waiting for the next trusted check. We will check again automatically.');
+          'We are still confirming your payment. Please wait a moment.');
       _scheduleCheck();
       return;
     }
@@ -210,24 +225,31 @@ class _BookingPaymentScreenState extends State<BookingPaymentScreen>
     });
     try {
       final result = await (shouldCreate
-          ? _selectedGateway != null &&
-                  widget.repository is BookingPaymentMethodRepository
-              ? (widget.repository as BookingPaymentMethodRepository)
-                  .createWithPaymentMethod(widget.bookingId,
-                      gatewayCode: _selectedGateway!,
+          ? _selectedGateway != null && _preferenceMode
+              ? (widget.repository as BookingPaymentSelectionRepository)
+                  .createWithSelectedPaymentMethod(widget.bookingId,
+                      selectedPaymentMethodCode: _selectedGateway!,
                       quoteToken: widget.reviewedQuoteToken ??
                           _methods?.quote?.quoteToken,
                       usePremiumVoucher: widget.usePremiumVoucher)
-              : widget.reviewedQuoteToken != null
-                  ? (widget.repository as ReviewedBookingPaymentRepository)
-                      .createReviewed(widget.bookingId,
-                          quoteToken: widget.reviewedQuoteToken!,
+              : _selectedGateway != null &&
+                      widget.repository is BookingPaymentMethodRepository
+                  ? (widget.repository as BookingPaymentMethodRepository)
+                      .createWithPaymentMethod(widget.bookingId,
+                          gatewayCode: _selectedGateway!,
+                          quoteToken: widget.reviewedQuoteToken ??
+                              _methods?.quote?.quoteToken,
                           usePremiumVoucher: widget.usePremiumVoucher)
-                  : widget.usePremiumVoucher
-                      ? (widget.repository
-                              as PremiumVoucherBookingPaymentRepository)
-                          .createWithPremiumVoucher(widget.bookingId)
-                      : widget.repository.create(widget.bookingId)
+                  : widget.reviewedQuoteToken != null
+                      ? (widget.repository as ReviewedBookingPaymentRepository)
+                          .createReviewed(widget.bookingId,
+                              quoteToken: widget.reviewedQuoteToken!,
+                              usePremiumVoucher: widget.usePremiumVoucher)
+                      : widget.usePremiumVoucher
+                          ? (widget.repository
+                                  as PremiumVoucherBookingPaymentRepository)
+                              .createWithPremiumVoucher(widget.bookingId)
+                          : widget.repository.create(widget.bookingId)
           : widget.repository.get(widget.bookingId));
       if (!mounted || !widget.isCurrent()) return;
       setState(() {
@@ -274,7 +296,7 @@ class _BookingPaymentScreenState extends State<BookingPaymentScreen>
           return;
         }
         setState(() => _message =
-            'Payment status unavailable. Check again or retry payment for this same booking.');
+            'We could not check your payment. Please try again here.');
       }
     } finally {
       _nextAllowedCheck = widget.now().add(const Duration(seconds: 10));
@@ -374,12 +396,12 @@ class _BookingPaymentScreenState extends State<BookingPaymentScreen>
               ? 'Reservation expired'
               : value?.status == 'reconciliation_required'
                   ? 'Payment needs review'
-                  : _opening
-                      ? 'Opening secure payment'
+                  : _opening || (_busy && _createStarted && value == null)
+                      ? 'Redirecting to secure payment'
                       : value == null
                           ? 'Preparing your payment'
                           : _openedPayment || value.paymentStatus == 'cleared'
-                              ? 'Confirming your payment'
+                              ? 'Confirming payment'
                               : 'Your time is reserved',
     };
     final detail = switch (refund) {
@@ -410,7 +432,8 @@ class _BookingPaymentScreenState extends State<BookingPaymentScreen>
     return Scaffold(
         appBar: AppBar(title: const Text('Session payment')),
         body: PageBody(children: [
-          if (_busy || _opening) const LinearProgressIndicator(),
+          if (_busy || _opening)
+            const LinearProgressIndicator(color: AppColors.primary),
           Panel(
               background: AppColors.primaryTint,
               child: Column(children: [
@@ -438,7 +461,33 @@ class _BookingPaymentScreenState extends State<BookingPaymentScreen>
                 const SizedBox(height: 12),
                 if (refund == null && !_expired && !_quoteChanged)
                   const Text(
-                      'Pay securely with Billplz. Return here for confirmation.'),
+                      'Your payment and booking are being securely processed.'),
+                if (_openedPayment &&
+                    !_expired &&
+                    refund == null &&
+                    value?.status == 'awaiting_payment') ...[
+                  const SizedBox(height: 12),
+                  LinearProgressIndicator(
+                      value:
+                          MediaQuery.disableAnimationsOf(context) ? 0.6 : null),
+                  const SizedBox(height: 12),
+                ],
+                if (_selectedChoice != null) ...[
+                  const SizedBox(height: 16),
+                  PaymentMethodSummary(
+                      label: _selectedChoice!.name,
+                      category: _selectedChoice!.categoryLabel,
+                      iconKey: _selectedChoice!.iconKey),
+                  const SizedBox(height: 16)
+                ],
+                if (value == null &&
+                    (widget.reviewedQuote ?? _methods?.quote) != null) ...[
+                  const SizedBox(height: 12),
+                  DetailRow(
+                      'Total',
+                      (widget.reviewedQuote ?? _methods!.quote)!
+                          .formattedAmount)
+                ],
                 if (value != null) ...[
                   const SizedBox(height: 20),
                   DetailRow('Coach', value.quote.coachName),
@@ -448,8 +497,6 @@ class _BookingPaymentScreenState extends State<BookingPaymentScreen>
                   DetailRow('Total', value.quote.formattedAmount),
                   DetailRow('Session length',
                       '${value.quote.durationMinutes} minutes'),
-                  if (value.paymentMethodName != null)
-                    DetailRow('Payment method', value.paymentMethodName!),
                   if (!_expired &&
                       !_quoteChanged &&
                       value.status == 'awaiting_payment' &&
@@ -494,7 +541,8 @@ class _BookingPaymentScreenState extends State<BookingPaymentScreen>
               refund == null &&
               value?.paymentStatus != 'cleared' &&
               value?.status == 'awaiting_payment' &&
-              value?.checkoutUrl != null)
+              value?.checkoutUrl != null &&
+              !_opening)
             if (_openedPayment)
               TextButton(
                   onPressed: _busy || _opening ? null : _open,
@@ -503,14 +551,15 @@ class _BookingPaymentScreenState extends State<BookingPaymentScreen>
               FilledButton(
                   onPressed: _busy || _opening ? null : _open,
                   child: const Text('Continue to Payment')),
-          if (_openedPayment)
-            FilledButton(
-                onPressed: _busy ? null : () => _load(manual: true),
-                child: const Text('Check payment status'))
-          else
-            OutlinedButton(
-                onPressed: _busy ? null : () => _load(manual: true),
-                child: const Text('Check payment status')),
+          if (!_opening && !(_busy && value == null))
+            if (_openedPayment && _followupsRemaining == 0)
+              FilledButton(
+                  onPressed: _busy ? null : () => _load(manual: true),
+                  child: const Text('Check payment status'))
+            else
+              OutlinedButton(
+                  onPressed: _busy ? null : () => _load(manual: true),
+                  child: const Text('Check payment status')),
           if (!_expired &&
               !_quoteChanged &&
               (value == null ||

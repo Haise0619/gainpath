@@ -1292,6 +1292,27 @@ class PaymentsScreenState extends State<PaymentsScreen> {
         const Divider(height: 20),
         DetailRow('Payment type',
             r.isMembership ? r.text('kind') : 'CoachingBooking'),
+        if (!r.isMembership) ...[
+          const Divider(height: 24),
+          const Align(
+              alignment: Alignment.centerLeft,
+              child: Text('Selected payment method')),
+          const SizedBox(height: 8),
+          PaymentMethodSummary(
+              label: r.selectedPaymentMethodLabel,
+              category: r.selectedPaymentMethod == null
+                  ? 'Legacy booking'
+                  : 'Member choice at checkout',
+              iconKey: r.selectedPaymentMethod?.choice.iconKey ?? 'unknown'),
+          if (r.selectedPaymentMethod != null) ...[
+            const SizedBox(height: 8),
+            DetailRow(
+                'Selected at', _time(r.selectedPaymentMethod!.selectedAt)),
+            const Text(
+                'Member selection is separate from the payment method processed by the provider.',
+                style: TextStyle(fontSize: 12, color: AppColors.inkSoft))
+          ],
+        ],
         if (r.hasPremiumVoucher) ...[
           const Divider(height: 20),
           DetailRow('Original booking fee', r.originalAmount),

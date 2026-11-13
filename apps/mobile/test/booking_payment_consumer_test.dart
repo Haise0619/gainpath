@@ -141,7 +141,7 @@ void main() {
     final repo = ConsumerPayments()..failed = true;
     var current = true;
     await setup(t, repo, current: () => current);
-    expect(find.textContaining('Payment status unavailable'), findsOneWidget);
+    expect(find.textContaining('We could not check your payment'), findsOneWidget);
     repo
       ..failed = false
       ..status = 'confirmed';
@@ -188,7 +188,7 @@ void main() {
       (t) async {
     final repo = ConsumerPayments()..paid = 'cleared';
     await setup(t, repo);
-    expect(find.text('Confirming your payment'), findsOneWidget);
+    expect(find.text('Confirming payment'), findsOneWidget);
     expect(find.text('Continue to Payment'), findsNothing);
     expect(find.textContaining('Time remaining:'), findsNothing);
     expect(find.byType(BookingConfirmedScreen), findsNothing);

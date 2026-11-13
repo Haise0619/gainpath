@@ -149,8 +149,8 @@ void main() {
     await tester.tap(find.byType(CheckboxListTile));
     await tester.pumpAndSettle();
     expect(find.text('RM 112.50'), findsWidgets);
-    await tester.ensureVisible(find.text('Reserve session'));
-    await tester.tap(find.text('Reserve session'));
+    await tester.ensureVisible(find.text('Continue to payment'));
+    await tester.tap(find.text('Continue to payment'));
     await tester.pumpAndSettle();
     await tester.ensureVisible(find.text('Retry reservation'));
     await tester.tap(find.text('Retry reservation'));
@@ -303,8 +303,8 @@ void main() {
     await tester.tap(find.text('Review Booking'));
     await tester.pumpAndSettle();
     expect(writer.requests, isEmpty);
-    await tester.ensureVisible(find.text('Reserve session'));
-    await tester.tap(find.text('Reserve session'));
+    await tester.ensureVisible(find.text('Continue to payment'));
+    await tester.tap(find.text('Continue to payment'));
     await tester.pumpAndSettle();
     expect(repo.creates, 0);
     expect(find.text('Retry reservation'), findsOneWidget);
@@ -384,7 +384,7 @@ void main() {
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
     await tester.pump();
     expect(repo.gets, 1);
-    expect(find.textContaining('Waiting for the next trusted check'),
+    expect(find.textContaining('We are still confirming your payment'),
         findsOneWidget);
     await tester.pump(const Duration(seconds: 7));
     expect(repo.gets, 1);
@@ -429,7 +429,7 @@ void main() {
             isCurrent: () => true,
             now: tester.binding.clock.now)));
     await tester.pumpAndSettle();
-    expect(find.textContaining('Payment status unavailable'), findsOneWidget);
+    expect(find.textContaining('We could not check your payment'), findsOneWidget);
     repo.fail = false;
     repo.status = 'confirmed';
     await tester.pump(const Duration(seconds: 10));

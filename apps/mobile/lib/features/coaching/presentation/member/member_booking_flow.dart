@@ -488,7 +488,7 @@ class _MemberBookingFlowState extends State<MemberBookingFlow>
                                             ? 'Accept updated price'
                                             : held
                                                 ? 'Continue reservation'
-                                                : 'Reserve session'))
+                                                : 'Continue to payment'))
                                     : 'Review Booking')))),
                 body: SingleChildScrollView(
                     controller: _scroll,

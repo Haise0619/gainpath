@@ -137,7 +137,7 @@ void main() {
     expect(find.text('Review booking'), findsOneWidget);
     options.gate.complete();
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Reserve session'));
+    await tester.tap(find.text('Continue to payment'));
     await tester.pumpAndSettle();
     expect(
         writer.requests.single.startAt.millisecondsSinceEpoch, start + 1800000);

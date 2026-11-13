@@ -2,8 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:gainpath_domain/coaching.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
 
-/// Provider availability is authoritative; this view never invents a bank.
-class BookingPaymentMethodPage extends StatelessWidget {
+class BookingPaymentMethodPage extends StatefulWidget {
   const BookingPaymentMethodPage(
       {super.key,
       required this.data,
@@ -22,161 +21,273 @@ class BookingPaymentMethodPage extends StatelessWidget {
   final VoidCallback? onContinue;
   final VoidCallback onRetry;
   @override
+  State<BookingPaymentMethodPage> createState() =>
+      _BookingPaymentMethodPageState();
+}
+
+class _BookingPaymentMethodPageState extends State<BookingPaymentMethodPage> {
+  bool _details = false, _moreBanks = false;
+  Duration get _motion => MediaQuery.disableAnimationsOf(context)
+      ? Duration.zero
+      : const Duration(milliseconds: 180);
+  Widget _expand(Widget child) => MediaQuery.disableAnimationsOf(context)
+      ? child
+      : AnimatedSize(
+          duration: _motion, alignment: Alignment.topCenter, child: child);
+  List<BookingPaymentChoice> get _choices =>
+      widget.data?.selectionMethods.isNotEmpty == true
+          ? widget.data!.selectionMethods
+          : [
+              for (final m
+                  in widget.data?.methods ?? const <BookingPaymentMethod>[])
+                BookingPaymentChoice(
+                    m.category == 'fpx' ? 'fpx' : 'other',
+                    m.code,
+                    m.category == 'fpx' ? m.name : 'Online payment',
+                    'bank')
+            ];
+  @override
   Widget build(BuildContext context) {
-    final quote = reviewedQuote ?? data?.quote;
-    final methods = data?.methods ?? const <BookingPaymentMethod>[];
+    final quote = widget.reviewedQuote ?? widget.data?.quote;
+    final chosen = _choices.where((m) => m.code == widget.selected).firstOrNull;
     return Scaffold(
-        appBar: AppBar(title: const Text('Payment method')),
-        body: PageBody(children: [
-          Text('Choose a payment method',
-              style: Theme.of(context)
-                  .textTheme
-                  .headlineMedium
-                  ?.copyWith(color: AppColors.ink)),
-          const SizedBox(height: 8),
-          const Text('One step closer to your next session.'),
-          const SizedBox(height: 20),
-          if (quote != null)
-            Panel(
-                background: AppColors.primaryTint,
-                child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+      appBar: AppBar(title: const Text('Payment')),
+      bottomNavigationBar: SafeArea(
+          top: false,
+          child: Container(
+              decoration: const BoxDecoration(
+                  color: AppColors.surface,
+                  border: Border(top: BorderSide(color: AppColors.hairline))),
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+              child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    if (quote != null)
+                      Wrap(
+                          alignment: WrapAlignment.spaceBetween,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          spacing: 12,
                           children: [
-                            const Icon(Icons.fitness_center_rounded,
-                                color: AppColors.primary),
-                            const SizedBox(width: 12),
-                            Expanded(
-                                child: Text(quote.coachName,
-                                    style:
-                                        Theme.of(context).textTheme.titleLarge))
+                            const Text('Total to pay'),
+                            Text(quote.formattedAmount,
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .titleLarge
+                                    ?.copyWith(color: AppColors.primary))
                           ]),
-                      const SizedBox(height: 12),
-                      Text('${quote.durationMinutes}-minute coaching session'),
-                      if (data?.localDate != null)
-                        Text(
-                            '${data!.localDate} · ${data!.startLabel} – ${data!.endLabel}'),
-                      const SizedBox(height: 6),
-                      Text(quote.branchName),
-                      const Divider(height: 28),
-                      Text('Total to pay',
-                          style: Theme.of(context).textTheme.labelLarge),
-                      Text(quote.formattedAmount,
-                          style: Theme.of(context)
-                              .textTheme
-                              .headlineMedium
-                              ?.copyWith(
-                                  color: AppColors.primary,
-                                  fontWeight: FontWeight.w700)),
-                      if (quote.voucherApplied)
-                        const Text('Premium Coach voucher included'),
-                    ])),
-          const SizedBox(height: 20),
-          if (loading) ...[
-            const LinearProgressIndicator(),
-            const SizedBox(height: 12),
-            const Text('Finding available payment methods…')
-          ],
-          if (!loading && message != null) ...[
-            Text(message!),
-            TextButton(onPressed: onRetry, child: const Text('Try again'))
-          ],
-          if (!loading &&
-              message == null &&
-              data != null &&
-              methods.isEmpty) ...[
-            const Text(
-                'No payment methods are available right now. Your reservation has not been charged.'),
-            TextButton(onPressed: onRetry, child: const Text('Try again'))
-          ],
-          if (methods.any((m) => m.category == 'fpx')) ...[
-            Text('FPX Online Banking',
-                style: Theme.of(context).textTheme.titleMedium),
+                    const SizedBox(height: 10),
+                    FilledButton(
+                        style: FilledButton.styleFrom(
+                            foregroundColor: Colors.white,
+                            disabledForegroundColor: AppColors.inkSoft,
+                            animationDuration: _motion),
+                        onPressed: widget.loading ? null : widget.onContinue,
+                        child: const Text('Continue')),
+                    const SizedBox(height: 8),
+                    const Text('Your payment will be securely processed.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                            fontFamily: 'Barlow',
+                            fontSize: 12,
+                            color: AppColors.inkSoft)),
+                  ]))),
+      body: ListView(
+          padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
+          children: [
+            const Text('2 of 3 · Payment',
+                style: TextStyle(
+                    color: AppColors.primary,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 12)),
             const SizedBox(height: 8),
-            const Text(
-                'Choose your bank. Complete payment securely outside GainPath.'),
-            const SizedBox(height: 12),
-          ],
-          for (final method in methods) _methodCard(context, method),
-          const SizedBox(height: 12),
-          const Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Icon(Icons.lock_outline_rounded,
-                size: 20, color: AppColors.primary),
-            SizedBox(width: 8),
-            Expanded(
-                child: Text(
-                    'Payment is handled securely by Billplz. GainPath never asks for your banking password.'))
+            Text('Choose a payment method',
+                style: Theme.of(context)
+                    .textTheme
+                    .headlineMedium
+                    ?.copyWith(color: AppColors.ink)),
+            const SizedBox(height: 16),
+            if (quote != null) _summary(quote),
+            const SizedBox(height: 20),
+            if (widget.loading) ...[
+              LinearProgressIndicator(
+                  value: MediaQuery.disableAnimationsOf(context) ? 0.6 : null),
+              const SizedBox(height: 12),
+              const Text('Getting your payment ready…')
+            ],
+            if (!widget.loading && widget.message != null) ...[
+              Text(widget.message!),
+              TextButton(
+                  onPressed: widget.onRetry, child: const Text('Try again'))
+            ],
+            for (final category in ['fpx', 'ewallet', 'card', 'other'])
+              if (_choices.any((m) => m.category == category)) ...[
+                _groupHeading(category),
+                const SizedBox(height: 10),
+                if (category == 'fpx') ...[
+                  for (final m in _choices
+                      .where((m) => m.category == category)
+                      .take(_moreBanks ? 100 : 6))
+                    _card(m),
+                  if (_choices.where((m) => m.category == category).length > 6)
+                    TextButton.icon(
+                        onPressed: () =>
+                            setState(() => _moreBanks = !_moreBanks),
+                        icon: Icon(
+                            _moreBanks ? Icons.expand_less : Icons.expand_more),
+                        label: Text(_moreBanks ? 'Fewer banks' : 'More banks')),
+                ] else
+                  for (final m in _choices.where((m) => m.category == category))
+                    _card(m),
+                const SizedBox(height: 16),
+              ],
+            if (!widget.loading &&
+                widget.message == null &&
+                widget.data != null &&
+                _choices.isEmpty) ...[
+              const Text(
+                  'Payment is temporarily unavailable. Please try again.'),
+              TextButton(
+                  onPressed: widget.onRetry, child: const Text('Try again'))
+            ],
+            if (chosen != null)
+              Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: Text('Selected: ${chosen.name}',
+                      style: const TextStyle(
+                          color: AppColors.primary,
+                          fontWeight: FontWeight.w600))),
+            const Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Icon(Icons.lock_outline_rounded,
+                  size: 18, color: AppColors.primary),
+              SizedBox(width: 8),
+              Expanded(
+                  child: Text(
+                      'Final payment options are shown at secure checkout. Your booking is confirmed after payment is verified.',
+                      style: TextStyle(fontSize: 12, color: AppColors.inkSoft)))
+            ]),
           ]),
-          const SizedBox(height: 24),
-          FilledButton(
-              onPressed: loading ? null : onContinue,
-              child: const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 4),
-                  child: Text('Continue to Payment'))),
-          const SizedBox(height: 8),
-          const Text('Your booking is confirmed after payment is verified.',
-              textAlign: TextAlign.center),
-        ]));
+    );
   }
 
-  Widget _methodCard(BuildContext context, BookingPaymentMethod method) {
-    final active = selected == method.code;
+  Widget _summary(BookingPaymentQuote quote) => Material(
+      color: AppColors.primaryTint,
+      borderRadius: BorderRadius.circular(20),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+          onTap: () => setState(() => _details = !_details),
+          child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(children: [
+                      const Icon(Icons.fitness_center_rounded,
+                          color: AppColors.primary),
+                      const SizedBox(width: 10),
+                      Expanded(
+                          child: Text(quote.coachName,
+                              style: Theme.of(context).textTheme.titleLarge)),
+                      Icon(_details ? Icons.expand_less : Icons.expand_more,
+                          color: AppColors.primary)
+                    ]),
+                    const SizedBox(height: 8),
+                    Text('${quote.durationMinutes}-minute coaching session'),
+                    if (widget.data?.localDate != null)
+                      Text(
+                          '${widget.data!.localDate} · ${widget.data!.startLabel} – ${widget.data!.endLabel}'),
+                    _expand(_details
+                        ? Padding(
+                            padding: const EdgeInsets.only(top: 10),
+                            child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(quote.branchName),
+                                  if (quote.voucherApplied)
+                                    const Text('Premium Coach voucher included')
+                                ]))
+                        : const SizedBox.shrink()),
+                  ]))));
+  Widget _groupHeading(String category) => Row(children: [
+        Icon(
+            switch (category) {
+              'fpx' => Icons.account_balance_outlined,
+              'ewallet' => Icons.account_balance_wallet_outlined,
+              'card' => Icons.credit_card_rounded,
+              _ => Icons.shield_outlined
+            },
+            size: 20,
+            color: AppColors.primary),
+        const SizedBox(width: 8),
+        Expanded(
+            child: Text(
+                switch (category) {
+                  'fpx' => 'Online Banking / FPX',
+                  'ewallet' => 'E-Wallet',
+                  'card' => 'Cards',
+                  _ => 'Secure payment'
+                },
+                style: Theme.of(context).textTheme.titleMedium))
+      ]);
+  Widget _card(BookingPaymentChoice choice) {
+    final selected = widget.selected == choice.code;
     return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: Semantics(
-        selected: active,
-        button: true,
-        child: Material(
-          color: active ? AppColors.primaryTint : Colors.white,
-          shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(18),
-              side: BorderSide(
-                  color: active ? AppColors.primary : const Color(0xFFE3DDF0))),
-          clipBehavior: Clip.antiAlias,
-          child: InkWell(
-            onTap: loading ? null : () => onSelect(method.code),
-            child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Row(children: [
-                  Container(
-                      padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(
-                          color: AppColors.primaryTint,
-                          borderRadius: BorderRadius.circular(12)),
-                      child: Icon(
-                          method.category == 'fpx'
-                              ? Icons.account_balance_rounded
-                              : Icons.shield_outlined,
-                          color: AppColors.primary)),
-                  const SizedBox(width: 12),
-                  Expanded(
-                      child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                        Text(method.name,
-                            style: Theme.of(context).textTheme.titleMedium),
-                        Text(
-                            method.category == 'fpx'
-                                ? 'Online banking'
-                                : 'Secure hosted payment',
-                            style: Theme.of(context)
-                                .textTheme
-                                .bodyMedium
-                                ?.copyWith(fontSize: 12))
-                      ])),
-                  const SizedBox(width: 8),
-                  Icon(
-                      active
-                          ? Icons.radio_button_checked
-                          : Icons.radio_button_off,
-                      color:
-                          active ? AppColors.primary : const Color(0xFF797183)),
-                ])),
-          ),
-        ),
-      ),
-    );
+        padding: const EdgeInsets.only(bottom: 10),
+        child: Semantics(
+            button: true,
+            selected: selected,
+            child: AnimatedContainer(
+                duration: _motion,
+                decoration: BoxDecoration(
+                    color: selected ? AppColors.primaryTint : AppColors.surface,
+                    borderRadius: BorderRadius.circular(18),
+                    border: Border.all(
+                        color:
+                            selected ? AppColors.primary : AppColors.hairline,
+                        width: selected ? 1.5 : 1)),
+                child: Material(
+                    color: Colors.transparent,
+                    borderRadius: BorderRadius.circular(18),
+                    clipBehavior: Clip.antiAlias,
+                    child: InkWell(
+                        onTap: widget.loading
+                            ? null
+                            : () => widget.onSelect(choice.code),
+                        child: Padding(
+                            padding: const EdgeInsets.all(14),
+                            child: Row(children: [
+                              PaymentMethodIcon(iconKey: choice.iconKey),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                  child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                    Text(choice.name,
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .titleMedium),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                        switch (choice.category) {
+                                          'fpx' => 'Pay through your bank',
+                                          'ewallet' =>
+                                            'Your preferred e-wallet',
+                                          'card' => 'Credit or debit card',
+                                          _ => 'Secure online payment'
+                                        },
+                                        style: const TextStyle(
+                                            fontSize: 12,
+                                            color: AppColors.inkSoft))
+                                  ])),
+                              const SizedBox(width: 8),
+                              Icon(
+                                  selected
+                                      ? Icons.radio_button_checked
+                                      : Icons.radio_button_off,
+                                  color: selected
+                                      ? AppColors.primary
+                                      : AppColors.inkSoft)
+                            ])))))));
   }
 }

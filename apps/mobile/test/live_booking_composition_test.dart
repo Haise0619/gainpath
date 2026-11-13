@@ -67,7 +67,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Review Booking'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Reserve session'));
+    await tester.tap(find.text('Continue to payment'));
     await tester.pumpAndSettle();
     expect(find.text('Retry reservation'), findsOneWidget);
     await tester.tap(find.text('Retry reservation'));

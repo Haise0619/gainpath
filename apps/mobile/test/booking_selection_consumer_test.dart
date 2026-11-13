@@ -149,7 +149,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Review Booking'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Reserve session'));
+    await tester.tap(find.text('Continue to payment'));
     await tester.pumpAndSettle();
     expect(find.text('Retry reservation'), findsOneWidget);
     final back = tester.widget<IconButton>(
@@ -254,7 +254,7 @@ void main() {
     expect(writer.requests, isEmpty);
     await tester.tap(find.text('Accept updated price'));
     await tester.pumpAndSettle();
-    expect(find.text('Reserve session'), findsOneWidget);
+    expect(find.text('Continue to payment'), findsOneWidget);
     expect(writer.requests, isEmpty);
   });
 }
