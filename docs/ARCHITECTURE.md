@@ -512,3 +512,8 @@ Sources `102cf35` and `018014f` add real published game-cover loading, orange lo
 ## Basic Coach loading correction — 12 November 2026
 
 Source `6720183` fixes a cached initial loading child inside the signed-in membership gate. Live directory results now propagate without dropping session protection; other SDK graphs remain cached. All 33 affected tests pass in working and clean-source runs; scoped analysis is clean. The working-app APK was built and installed in place to preserve the existing device UI/data, with matching installed checksum and previous APK retained. Manual post-update Coach-list observation remains pending while the phone is dozing; no backend or member-data change occurred. [Design, screenshots and verification](ux/free-rewards-locked-preview.md).
+
+
+## Mini-game earning labels — 13 November 2026
+
+Normal mobile builds now retain the previously approved mini-game participation integration (explicit false build flag remains supported). Cards distinguish checking/unavailable points from confirmed fun-only eligibility and refresh server allowance on app resume. No claim, wallet, quota or backend policy changes. All 36 arcade/participation tests and scoped analysis pass; explicit false override test passes. Android debug build passes. Read-only synthetic Basic fixture confirms both games active at 20 points per game/day in Asia/Kuala_Lumpur; this is not evidence of a real user's claim history. Evidence: `build/mini-game-status-20261113/`.

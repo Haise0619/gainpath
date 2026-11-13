@@ -12,6 +12,7 @@ import 'package:gainpath_mobile/features/gamification/presentation/member/mini_g
 import 'package:gainpath_mobile/features/gamification/presentation/member/mini_games_screen.dart';
 import 'package:gainpath_mobile/features/gamification/presentation/member/reach_tap_challenge_card.dart';
 import 'support/mini_game_participation_fixture.dart';
+import 'package:gainpath_mobile/infrastructure/firebase/firebase_mini_game_participation_repository.dart';
 
 class Reader implements MiniGameContentReader {
   @override
@@ -87,6 +88,52 @@ Widget host(Widget child, {double scale = 1}) => MaterialApp(
     );
 
 void main() {
+  testWidgets('resume refreshes the server allowance after the previous day',
+      (t) async {
+    final repo = Participation()
+      ..response = participationFixture(active: true, earned: 20);
+    await t.pumpWidget(
+        host(FitnessArcadeGames(participation: repo, onReturn: () async {})));
+    await t.pumpAndSettle();
+    expect(find.text('+20 points'), findsNothing);
+    repo.response = participationFixture(active: true);
+    (repo.response['overview'] as Map)['today'] = '2026-11-13';
+    t.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    t.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await t.pumpAndSettle();
+    expect(repo.calls, 2);
+    expect(find.text('+20 points'), findsOneWidget);
+  });
+  test('normal builds retain the approved participation reward integration',
+      () {
+    expect(
+        FirebaseMiniGameParticipationRepository.enabled,
+        const bool.fromEnvironment('MINI_GAME_PARTICIPATION_ENABLED',
+            defaultValue: true));
+  });
+  testWidgets('pending allowance is checking, not an assumed fun-only game',
+      (t) async {
+    final repo = Participation()..pending = Completer<MiniGameParticipation>();
+    await t.pumpWidget(
+        host(FitnessArcadeGames(participation: repo, onReturn: () async {})));
+    await t.pump();
+    expect(find.text('Checking points…'), findsOneWidget);
+    expect(find.text('+20 points'), findsNothing);
+    repo.pending!.complete(MiniGameParticipation.fromJson(
+        participationFixture(active: true), repo.scope));
+    await t.pumpAndSettle();
+    expect(find.text('+20 points'), findsOneWidget);
+  });
+  testWidgets('failed allowance stays unavailable without claiming daily use',
+      (t) async {
+    final repo = Participation()..fail = true;
+    await t.pumpWidget(
+        host(FitnessArcadeGames(participation: repo, onReturn: () async {})));
+    await t.pumpAndSettle();
+    expect(find.text('Points unavailable'), findsNWidgets(2));
+    expect(find.text('Play for fun'), findsNothing);
+    expect(find.text('+20 points'), findsNothing);
+  });
   Map<String, dynamic> reachResponse(
       {int claimed = 0, int earned = 0, bool active = true}) {
     final d = participationFixture(active: active, earned: earned);
@@ -145,7 +192,8 @@ void main() {
         onReturn: () async {})));
     await tester.pumpAndSettle();
     expect(find.text('+20 points'), findsNothing);
-    expect(find.text('Play for fun'), findsNWidgets(2));
+    expect(find.text('Play for fun'), findsOneWidget);
+    expect(find.text('Points unavailable'), findsOneWidget);
   });
 
   testWidgets(
@@ -186,7 +234,7 @@ void main() {
     expect(move.right, lessThan(reach.left));
     expect(move.height, lessThan(280));
     expect(find.text('+20 points'), findsOneWidget);
-    expect(find.text('Play for fun'), findsOneWidget);
+    expect(find.text('Points unavailable'), findsOneWidget);
     expect(tester.getTopLeft(find.text('Best: 120')).dy,
         greaterThan(tester.getTopLeft(find.text('+20 points')).dy));
     expect(tester.getRect(find.text('View all')).center.dy,
@@ -310,7 +358,7 @@ void main() {
     expect(find.text('Move & Catch'), findsOneWidget);
     expect(find.text('Reach & Tap'), findsOneWidget);
     expect(find.text('Best: —'), findsNWidgets(2));
-    expect(find.text('Play for fun'), findsNWidgets(2));
+    expect(find.text('Points unavailable'), findsNWidgets(2));
     expect(tester.takeException(), isNull);
   });
 
@@ -365,7 +413,8 @@ void main() {
       await tester.pumpWidget(host(FitnessArcadeGames(
           reader: Reader(), participation: p, onReturn: () async {})));
       await tester.pumpAndSettle();
-      expect(find.text('Play for fun'), findsNWidgets(2));
+      expect(find.text('Play for fun'), findsOneWidget);
+      expect(find.text('Points unavailable'), findsOneWidget);
       expect(find.text('+20 points'), findsNothing);
     });
   }
@@ -431,7 +480,7 @@ void main() {
         host(FitnessArcadeGames(reader: reader, onReturn: () async {})));
     await tester.pumpAndSettle();
     expect(find.text('Move & Catch'), findsOneWidget);
-    expect(find.text('Play for fun'), findsNWidgets(2));
+    expect(find.text('Points unavailable'), findsNWidgets(2));
     reader.fail = false;
     reader.pending = Completer()
       ..complete([
@@ -493,7 +542,7 @@ void main() {
         participation: p,
         onReturn: () async {})));
     await tester.pumpAndSettle();
-    expect(find.text('Play for fun'), findsNWidgets(2));
+    expect(find.text('Points unavailable'), findsNWidgets(2));
     expect(find.text('Best: 120'), findsOneWidget);
     p.fail = false;
     await tester.tap(find.byKey(const Key('arcade-move-catch-card')));

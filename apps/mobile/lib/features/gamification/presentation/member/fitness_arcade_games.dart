@@ -100,7 +100,8 @@ class FitnessArcadeGames extends StatefulWidget {
   State<FitnessArcadeGames> createState() => _FitnessArcadeGamesState();
 }
 
-class _FitnessArcadeGamesState extends State<FitnessArcadeGames> {
+class _FitnessArcadeGamesState extends State<FitnessArcadeGames>
+    with WidgetsBindingObserver {
   final _content = <String, MiniGameContent>{};
   int? _moveBest, _reachBest;
   MiniGameParticipation? _participation, _reachParticipation;
@@ -123,7 +124,18 @@ class _FitnessArcadeGamesState extends State<FitnessArcadeGames> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     unawaited(_load());
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed &&
+        mounted &&
+        !_opening &&
+        _current) {
+      unawaited(_refreshAfterGame());
+    }
   }
 
   @override
@@ -338,18 +350,20 @@ class _FitnessArcadeGamesState extends State<FitnessArcadeGames> {
 
   String _earningLabel({bool reach = false}) {
     if (reach ? _reachParticipationLoading : _participationLoading) {
-      return 'Play for fun';
+      return 'Checking points…';
     }
     final result = reach ? _reachParticipation : _participation;
+    if (result == null) return 'Points unavailable';
     final gameId =
         reach ? MiniGameContent.reachTapId : MiniGameContent.supportedId;
     if (!MiniGameLaunchArguments.canEarn(result, gameId)) return 'Play for fun';
-    final game = result!.policy.games.singleWhere((g) => g.gameId == gameId);
+    final game = result.policy.games.singleWhere((g) => g.gameId == gameId);
     return '+${game.points} points';
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _generation++;
     super.dispose();
   }

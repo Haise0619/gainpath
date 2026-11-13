@@ -20,8 +20,8 @@ class FirebaseMiniGameParticipationRepository
                     input,
                     readiness ?? FirebaseAppCheckReadiness.instance,
                     () => _current(isCurrent, currentUid, scope.userId))));
-  static const enabled =
-      bool.fromEnvironment('MINI_GAME_PARTICIPATION_ENABLED');
+  static const enabled = bool.fromEnvironment('MINI_GAME_PARTICIPATION_ENABLED',
+      defaultValue: true);
 }
 
 bool _current(
