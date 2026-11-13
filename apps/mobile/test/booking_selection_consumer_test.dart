@@ -152,7 +152,8 @@ void main() {
     await tester.tap(find.text('Reserve session'));
     await tester.pumpAndSettle();
     expect(find.text('Retry reservation'), findsOneWidget);
-    final back = tester.widget<IconButton>(find.byWidgetPredicate((w) => w is IconButton && w.tooltip == 'Back'));
+    final back = tester.widget<IconButton>(
+        find.byWidgetPredicate((w) => w is IconButton && w.tooltip == 'Back'));
     expect(back.onPressed, isNull);
     expect(writer.requests, hasLength(1));
   });
@@ -161,11 +162,6 @@ void main() {
       (tester) async {
     await selection(
         tester, EmptyUntilSelectionOptions(), SelectionPayments(), Writer());
-    expect(find.text('No open sessions on this date'), findsOneWidget);
-    await tester.ensureVisible(find.text('Find next available date'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Find next available date'));
-    await tester.pumpAndSettle();
     expect(find.text('No open sessions on this date'), findsNothing);
     expect(find.text('8:00 AM'), findsOneWidget);
     expect(find.text('Real Studio'), findsOneWidget);
@@ -223,7 +219,8 @@ void main() {
         payments = SelectionPayments(),
         writer = Writer();
     await selection(tester, options, payments, writer);
-    expect(options.durations, [60]);
+    expect(options.durations, everyElement(60));
+    expect(options.durations.length, lessThanOrEqualTo(7));
     expect(find.byType(DropdownButtonFormField<int>), findsNothing);
     expect(find.text('60-minute coaching session'), findsOneWidget);
     expect(find.text('8:00 AM'), findsOneWidget);

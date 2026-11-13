@@ -92,6 +92,20 @@ class LiveBookingCubit extends Cubit<LiveBookingState> {
             durationMinutes: context.durationMinutes)));
   }
 
+  /// Reuse an account-guarded calendar read; creating a hold still revalidates it.
+  void useAvailability(BookingOptionsContext context) {
+    if (state.busy ||
+        state.uncertain ||
+        state.hold != null ||
+        !_current(_generation) ||
+        context.coachId != coachId ||
+        context.durationMinutes != 60) {
+      return;
+    }
+    _generation++;
+    emit(LiveBookingState(options: context));
+  }
+
   Future<void> submit() async {
     if (state.busy ||
         state.hold != null ||
