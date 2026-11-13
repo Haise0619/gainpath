@@ -665,3 +665,8 @@ Normal mobile builds now retain the previously approved mini-game participation 
 ## Member Progress dashboard — 13 November 2026
 
 Compact weekly activity, same-Malaysia-week mixed-mode summary, latest valid compatible form assessments, goals and one latest workout replace the long overview. Full assessments, technical measurements, reports/backup and schedules remain in secondary destinations with account and membership guards. No pose/scoring/save/sync/backend changes. Fresh109 affected tests pass in working and isolated source, 15-file analysis is clean, 24 Flutter render scenarios pass, and both Android Debug builds succeed. Independent review is resolved. Phone disconnected: no installation. [Implementation and actual before/after Flutter screenshots](ux/member-progress-dashboard.md).
+
+
+## Member Coach Booking consumer redesign — 13 November 2026
+
+Source f9ddb9e/2f03b37 implements fixed60 new sessions at unchanged per-session fees, transactional reviewed-price protection, focused selection/review, server-anchored hold/payment recovery and payment-evidence refund progress. Historical30-minute contracts,12h/24h changes and purchased-session management remain. Fresh132 Mobile tests pass in working and isolated source, Domain194 and Firestore Emulator12 pass; full Functions2124pass/1Node22-version assertion fails on installedNode24.33-file analysis has0errors/0warnings and8unchanged infos; required320/360/390 and200percent Flutter renders and both Android Debug builds pass. Independent review resolved. No live deployment/payment/data mutation/APK installation. Matching backend rollout is required before live client use. [Rules, screenshots, commits and verification](ux/member-coach-booking-consumer-redesign.md).
