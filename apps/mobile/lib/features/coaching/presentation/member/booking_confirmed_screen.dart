@@ -42,57 +42,75 @@ class BookingConfirmedScreen extends StatelessWidget {
           automaticallyImplyLeading: false),
       body: PageBody(
         children: [
-          Panel(
-            background: AppColors.primaryTint,
-            child: Column(
-              children: [
-                Container(
-                    padding: const EdgeInsets.all(18),
-                    decoration: const BoxDecoration(
-                        color: Colors.white, shape: BoxShape.circle),
-                    child: const Icon(Icons.check_rounded,
-                        size: 44, color: AppColors.primary)),
-                const SizedBox(height: 12),
-                if (payment != null)
-                  Text('Payment successful',
-                      style: Theme.of(context)
-                          .textTheme
-                          .titleMedium
-                          ?.copyWith(color: AppColors.primary)),
-                const SizedBox(height: 6),
-                Text('Booking confirmed',
-                    style: Theme.of(context).textTheme.titleLarge),
-                const SizedBox(height: 6),
-                Text('$coachName at $dateLabel',
-                    style: Theme.of(context).textTheme.bodyLarge),
-              ],
-            ),
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 20),
+            child: Column(children: [
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: const BoxDecoration(
+                  color: Color(0xFFF0FAF5), shape: BoxShape.circle),
+                child: Container(
+                  width: 68, height: 68,
+                  decoration: const BoxDecoration(
+                    color: Color(0xFFDDF4E7), shape: BoxShape.circle),
+                  child: const Icon(Icons.check_rounded,
+                      size: 40, color: Color(0xFF16804A)),
+                ),
+              ),
+              const SizedBox(height: 18),
+              Text(payment != null ? 'Payment successful' : 'Booking confirmed',
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.headlineMedium),
+              const SizedBox(height: 6),
+              Text('Your coaching session is confirmed.',
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.bodyMedium),
+            ]),
           ),
           const SizedBox(height: 18),
           Panel(
             child: Column(
               children: [
-                DetailRow('Coach', coachName),
-                const Divider(height: 20),
+                Row(children: [
+                  const ExcludeSemantics(child: Icon(Icons.person_outline_rounded,
+                      color: AppColors.primary, size: 22)),
+                  const SizedBox(width: 12),
+                  Expanded(child: Text(coachName,
+                      style: Theme.of(context).textTheme.titleLarge)),
+                ]),
+                const Divider(height: 24, color: AppColors.hairline),
                 DetailRow('Date & time', dateLabel),
-                const Divider(height: 20),
+                const Divider(height: 24, color: AppColors.hairline),
                 DetailRow('Location', branch),
-                const Divider(height: 20),
-                DetailRow('Paid', amount),
+                const Divider(height: 24, color: AppColors.hairline),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                  decoration: BoxDecoration(color: AppColors.surfaceAlt,
+                      borderRadius: BorderRadius.circular(12)),
+                  child: Row(children: [
+                    Expanded(child: Text('Paid',
+                        style: Theme.of(context).textTheme.bodyMedium)),
+                    const SizedBox(width: 12),
+                    Flexible(child: Text(amount, textAlign: TextAlign.end,
+                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                            color: AppColors.ink, fontWeight: FontWeight.w700))),
+                  ]),
+                ),
                 if (payment?.selectedPaymentMethod != null) ...[
-                  const Divider(height: 24),
+                  const Divider(height: 24, color: AppColors.hairline),
                   PaymentMethodSummary(
                       label: payment!.selectedPaymentMethod!.choice.name,
                       category: 'Preferred payment method',
                       iconKey: payment.selectedPaymentMethod!.choice.iconKey)
                 ],
                 if (payment != null) ...[
-                  const Divider(height: 20),
+                  const Divider(height: 24, color: AppColors.hairline),
                   DetailRow('Session length',
                       '${payment.quote.durationMinutes} minutes'),
                   const SizedBox(height: 12),
                   const Text(
-                      'This is the time booked at checkout. My Bookings shows your current time if you rescheduled.'),
+                      'Booked time shown. Check My Bookings for any schedule changes.',
+                      style: TextStyle(fontSize: 12, color: AppColors.inkSoft)),
                 ],
               ],
             ),
