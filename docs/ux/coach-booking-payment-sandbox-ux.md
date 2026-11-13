@@ -1,5 +1,7 @@
 # Coach Booking — Billplz Sandbox payment experience
 
+> The Member selection UI in this report is superseded by the [commercial checkout and recorded preferences](member-coach-booking-commercial-checkout.md). Existing provider-gateway contracts remain compatible; new clients record a separate canonical preference and use the established hosted payment path.
+
 Implemented 13 November 2026. Code and local verification only; no Functions deployment, payment-setting change, live booking mutation or APK installation.
 
 Implementation commits: **`de06ee5`** (provider methods, direct bill references, Domain/transport compatibility) and **`5129c0e`** (member checkout, receipt, regressions and screenshots). The documentation closeout is a separate commit.
