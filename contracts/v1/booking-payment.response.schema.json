@@ -102,6 +102,15 @@
     "serverNowMillis": {
       "type": "integer",
       "minimum": 1
+    },
+    "gatewayCode": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{1,64}$"
+    },
+    "paymentMethodName": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 80
     }
   }
 }

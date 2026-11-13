@@ -28,6 +28,47 @@ void main() {
     'holdExpiresAtMillis': 123,
     'checkoutUrl': 'https://www.billplz-sandbox.com/bills/abc'
   };
+  test('method selection sends only server code and reviewed token', () async {
+    Map<String, dynamic>? sent;
+    String? name;
+    final repo = FirebaseBookingPaymentRepository(
+        scope: scope,
+        isCurrent: () => true,
+        currentUid: () => 'member',
+        readiness: ready(),
+        call: (n, d) async {
+          name = n;
+          sent = d;
+          return payment;
+        });
+    await repo.createWithPaymentMethod('booking',
+        gatewayCode: 'BCBB0235', quoteToken: 'a' * 64);
+    expect(name, 'createBookingPaymentCommand');
+    expect(sent, {
+      'schemaVersion': 1,
+      'organizationId': 'org',
+      'bookingId': 'booking',
+      'quoteToken': 'a' * 64,
+      'gatewayCode': 'BCBB0235'
+    });
+  });
+  test('method discovery rejects stale account responses', () async {
+    var current = true;
+    final repo = FirebaseBookingPaymentRepository(
+        scope: scope,
+        isCurrent: () => current,
+        currentUid: () => 'member',
+        readiness: ready(),
+        call: (n, d) async {
+          expect(n, 'getBookingPaymentMethodsCommand');
+          current = false;
+          return {};
+        });
+    await expectLater(
+        repo.loadPaymentMethods('booking'),
+        throwsA(isA<BookingException>()
+            .having((e) => e.code, 'code', 'permission-denied')));
+  });
   test('only explicit no-checkout quote change permits review refresh',
       () async {
     final repo = FirebaseBookingPaymentRepository(
@@ -39,7 +80,10 @@ void main() {
           throw FirebaseFunctionsException(
               code: 'failed-precondition',
               message: 'changed',
-              details: const {'reason': 'quote_changed', 'checkoutCreated': false});
+              details: const {
+                'reason': 'quote_changed',
+                'checkoutCreated': false
+              });
         });
     await expectLater(
         repo.createReviewed('booking', quoteToken: 'a' * 64),

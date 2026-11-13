@@ -1,12 +1,14 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { DomainError } from '../../platform/errors';
+import {sandboxPaymentMethods,type SandboxPaymentMethod} from './billplz-payment-options';
 
 export interface SandboxBill {
   id: string; collection_id: string; amount: number; paid: boolean; paid_amount: number;
   state: 'due' | 'paid' | 'deleted'; url: string; reference_1?: string; reference_2?: string;
 }
-type CreateBill = { amountMinor: number; name: string; email: string; reference: string; organizationId: string; description: string };
+type CreateBill = { amountMinor: number; name: string; email: string; reference: string; organizationId: string; description: string; gatewayCode?:string; paymentReference?:string };
 export interface BillplzGateway {
+  paymentMethods?():Promise<SandboxPaymentMethod[]>;
   create(input: CreateBill): Promise<SandboxBill>;
   get(id: string): Promise<SandboxBill>;
 }
@@ -36,12 +38,15 @@ export class BillplzSandboxGateway implements BillplzGateway {
       || [input.name, input.email, input.reference, input.organizationId, input.description].some(v => typeof v !== 'string' || !v.trim() || v.length > 2048)) {
       throw new DomainError('invalid-argument', 'Invalid sandbox bill request.');
     }
+    if(input.gatewayCode!==undefined && (!/^[A-Za-z0-9_-]{1,64}$/.test(input.gatewayCode)||!input.paymentReference||!/^[a-f0-9]{64}$/.test(input.paymentReference)))throw new DomainError('invalid-argument','Invalid payment method.');
+    const reference1=input.gatewayCode??input.reference,reference2=input.gatewayCode?input.paymentReference!:input.organizationId;
     const body = new URLSearchParams({ collection_id: this.config.collectionId, email: input.email,
       name: input.name, amount: String(input.amountMinor), callback_url: this.config.callbackUrl,
-      description: input.description, reference_1: input.reference, reference_2: input.organizationId });
+      description: input.description, reference_1: reference1, reference_2: reference2 });
+    if(input.gatewayCode){body.set('reference_1_label','Bank Code');body.set('reference_2_label','GainPath Booking');}
     if (this.config.redirectUrl) body.set('redirect_url', this.config.redirectUrl);
     const bill = await this.request('/bills', { method: 'POST', body: body.toString(), headers: { 'Content-Type': 'application/x-www-form-urlencoded' } });
-    if (bill.amount !== input.amountMinor || bill.reference_1 !== input.reference || bill.reference_2 !== input.organizationId) throw providerFailure();
+    if (bill.amount !== input.amountMinor || bill.reference_1 !== reference1 || bill.reference_2 !== reference2) throw providerFailure();
     return bill;
   }
   async get(id: string): Promise<SandboxBill> {
@@ -50,6 +55,7 @@ export class BillplzSandboxGateway implements BillplzGateway {
     if (bill.id !== id) throw providerFailure();
     return bill;
   }
+  paymentMethods():Promise<SandboxPaymentMethod[]> {return sandboxPaymentMethods(this.config.apiKey,this.config.collectionId,this.fetcher);}
   private async request(path: string, init: RequestInit): Promise<SandboxBill> {
     const controller = new AbortController();
     let timer: ReturnType<typeof setTimeout> | undefined;

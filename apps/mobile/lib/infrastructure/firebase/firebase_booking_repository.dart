@@ -48,6 +48,13 @@ class BookingTransport {
           error is FirebaseFunctionsException &&
           error.details is Map &&
           (error.details as Map)['checkoutCreated'] == false &&
+          (error.details as Map)['reason'] == 'payment_method_unavailable') {
+        throw const BookingException('booking-payment-method-unavailable');
+      }
+      if (name == 'createBookingPaymentCommand' &&
+          error is FirebaseFunctionsException &&
+          error.details is Map &&
+          (error.details as Map)['checkoutCreated'] == false &&
           (error.details as Map)['reason'] == 'quote_changed') {
         throw const BookingException('booking-quote-changed');
       }

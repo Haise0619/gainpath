@@ -12,6 +12,8 @@ import { readFileSync } from 'node:fs';
 import { initializeTestEnvironment, assertFails } from '@firebase/rules-unit-testing';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { manageAdminBookingPayment } from '../src/modules/commerce/booking-payment-admin';
+import {bookingBillReferences} from '../src/modules/commerce/booking-bill-reference';
+import {getBookingPaymentMethods} from '../src/modules/commerce/booking-payment-service';
 let app:App,db:Firestore,id:string,creates:number;
 const store=()=>new FirestoreStore(db);
 const auth={uid:'member-1',token:{email_verified:true}};
@@ -28,6 +30,18 @@ beforeEach(async()=>{
   id=(await createBookingHoldService(store(),'member-1',command,eligibleCoach,()=>now)).bookingId;
 });
 const create=()=>createBookingPayment(store(),auth,{schemaVersion:1,organizationId:'org-1',bookingId:id},gateway,eligibleCoach,()=>now);
+it('direct method discovery and concurrent checkout retain one immutable bill and confirm exactly once',async()=>{
+  const refs=bookingBillReferences('org-1',id,'BCBB0235');
+  const direct=(paid=false):SandboxBill=>({...bill(paid),reference_1:refs.reference1,reference_2:refs.reference2});
+  const g:BillplzGateway={paymentMethods:async()=>[{code:'BCBB0235',name:'CIMB Clicks',category:'fpx'}],create:async()=>{creates++;return direct();},get:async()=>direct(true)};
+  const args={schemaVersion:1,organizationId:'org-1',bookingId:id};
+  const methods=await getBookingPaymentMethods(store(),auth,args,g,()=>now);expect(methods.methods).toHaveLength(1);
+  await Promise.all(Array.from({length:4},()=>createBookingPayment(store(),auth,{...args,gatewayCode:'BCBB0235'},g,eligibleCoach,()=>now)));
+  expect(creates).toBe(1);
+  await Promise.all(Array.from({length:4},()=>settleBookingPayment(store(),'org-1',id,direct(true),eligibleCoach,()=>now+1)));
+  expect((await db.doc(`orgs/org-1/bookings/${id}`).get()).data()?.status).toBe('confirmed');
+  expect(await createBookingPayment(store(),auth,{...args,gatewayCode:'MB2U0227'},g,eligibleCoach,()=>now+2)).toMatchObject({gatewayCode:'BCBB0235',status:'confirmed'});expect(creates).toBe(1);
+});
 it('concurrent checkout creates one bill; concurrent verified callbacks confirm exactly once',async()=>{
   await Promise.all(Array.from({length:4},create));expect(creates).toBe(1);
   const result=await Promise.all(Array.from({length:4},()=>settleBookingPayment(store(),'org-1',id,bill(true),eligibleCoach,()=>now+1000)));

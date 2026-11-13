@@ -13,6 +13,7 @@ import { settleBookingPayment } from './booking-payment-service';
 import { membershipPayment, settleMembershipPayment } from './membership-payment-service';
 import { storedBooking } from '../coaching/booking-record';
 import { bookingVoucherProjection } from './premium-coach-voucher';
+import {matchesBookingBillReferences} from './booking-bill-reference';
 type Auth = {
     uid: string;
     token: Record<string, unknown>;
@@ -109,7 +110,7 @@ export async function listAdminBookingPayments(store: DocumentStore, auth: Auth,
 export async function getAdminBookingPayment(store: DocumentStore, auth: Auth, raw: unknown, deps: PaymentAdminDependencies) { const { d, org, uid } = context(auth, raw, ['schemaVersion', 'organizationId', 'bookingId']); const id = requiredIdentifier(d.bookingId, 'bookingId'); await readSnapshot(store, org, id, uid); const events = await deps.reader.events(org, id); const p = await readSnapshot(store, org, id, uid); return { schemaVersion: 1, payment: (await reviewRows(store, org, uid, [p]))[0], events: events.map(r => ({ id: r.id, ...Object.fromEntries(['event', 'atMillis', 'actorId', 'reason'].filter(k => r.data[k] !== undefined).map(k => [k, r.data[k]])) })), refundExecutionAvailable: !isMembership(p) && !!deps.refunds && !!deps.refundCollectionId }; }
 function eligible(d: DocumentData) { if (d.paymentStatus !== 'cleared' || d.fulfilmentStatus !== 'reconciliation_required')
     throw invalid(); }
-function matchBill(b: SandboxBill, d: DocumentData, org: string, id: string, collectionId: string) { if (b.id !== d.billId || b.collection_id !== collectionId || b.amount !== d.amountMinor || b.reference_1 !== id || b.reference_2 !== org)
+function matchBill(b: SandboxBill, d: DocumentData, org: string, id: string, collectionId: string) { if (b.id !== d.billId || b.collection_id !== collectionId || b.amount !== d.amountMinor || (isMembership(d) ? b.reference_1 !== id || b.reference_2 !== org : !matchesBookingBillReferences(b,d,org,id)))
     throw invalid(); }
 function paid(b: SandboxBill, d: DocumentData) { if (!b.paid || b.state !== 'paid' || b.paid_amount !== d.amountMinor)
     throw invalid(); }

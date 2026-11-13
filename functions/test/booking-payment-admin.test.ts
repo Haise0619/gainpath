@@ -2,6 +2,7 @@ import { beforeEach, expect, it } from 'vitest';
 import { MemoryStore } from './memory-store';
 import { manageAdminBookingPayment, getAdminBookingPayment, listAdminBookingPayments } from '../src/modules/commerce/booking-payment-admin';
 import type { SandboxBill } from '../src/modules/commerce/billplz-sandbox';
+import {bookingBillReferences} from '../src/modules/commerce/booking-bill-reference';
 const org = 'org', id = 'booking', path = `orgs/${org}/transactions/${id}`, auth = { uid: 'admin', token: { email_verified: true } };
 let store: MemoryStore, creates: number;
 const bill: SandboxBill = { id: 'bill', collection_id: 'collection', amount: 100, paid: true, paid_amount: 100, state: 'paid', url: 'https://www.billplz-sandbox.com/bills/bill', reference_1: id, reference_2: org };
@@ -17,6 +18,14 @@ it('includes invoice schedule and refund recovery metadata in both queue and det
     expect(row).toMatchObject({ localDate: '2026-10-20', startLabel: '10:00', endLabel: '11:00', refundReference: 'refund-booking', reviewedAtMillis: 123, refundReservedAtMillis: 456, refundProviderStatus: 'reviewing' });
     expect(row).not.toHaveProperty('privateBankSecret');
   }
+});
+it('refunds new direct bills once while rejecting another booking binding',async()=>{
+  const refs=bookingBillReferences(org,id,'BCBB0235');Object.assign(store.documents.get(path)!,{providerReferenceVersion:2,gatewayCode:'BCBB0235',paymentMethodName:'CIMB Clicks'});
+  const d=deps();d.bills.get=async()=>({...bill,reference_1:refs.reference1,reference_2:'other'});
+  await manageAdminBookingPayment(store,auth,input('approve_refund'),d);
+  await expect(manageAdminBookingPayment(store,auth,input('execute_refund'),d)).rejects.toThrow();expect(creates).toBe(0);
+  d.bills.get=async()=>({...bill,reference_1:refs.reference1,reference_2:refs.reference2});
+  await manageAdminBookingPayment(store,auth,input('execute_refund'),d);await manageAdminBookingPayment(store,auth,input('execute_refund'),d);expect(creates).toBe(1);
 });
 it('projects the approved gross fee, voucher discount and funding snapshot for financial review', async () => {
   const premiumVoucher = { schemaVersion: 1, voucherId: 'synthetic', fundingSource: 'gym', coachCommissionBasis: 'gross_fee', policyVersion: 'fixture-only' };

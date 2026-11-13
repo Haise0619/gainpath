@@ -7,7 +7,7 @@ import { DomainError } from '../../platform/errors';
 import { coachCommandError } from '../coaching/coach-profile-callables';
 import { readCoachIdentity } from '../coaching/coach-identity-reader';
 import { BillplzSandboxGateway, verifyBillplzCallback } from './billplz-sandbox';
-import { BookingQuoteChangedError, createBookingPayment, getBookingPaymentQuote, readBookingPayment, settleBookingPayment } from './booking-payment-service';
+import { BookingQuoteChangedError, BookingPaymentMethodUnavailableError, createBookingPayment, getBookingPaymentMethods, getBookingPaymentQuote, readBookingPayment, settleBookingPayment } from './booking-payment-service';
 import { settleMembershipPayment } from './membership-payment-service';
 
 const apiKey = defineSecret('BILLPLZ_SANDBOX_API_KEY');
@@ -25,7 +25,7 @@ function gateway() {
   return new BillplzSandboxGateway({apiKey:apiKey.value(),collectionId:collection.value(),callbackUrl:`https://us-central1-${project}.cloudfunctions.net/paymentWebhook`,redirectUrl:`https://us-central1-${project}.cloudfunctions.net/billplzSandboxReturn`});
 }
 export function bookingPaymentCommandError(error:unknown) {
-  return error instanceof BookingQuoteChangedError ? new HttpsError(error.code,error.message,{reason:error.reason,checkoutCreated:false}) : coachCommandError(error);
+  return error instanceof BookingQuoteChangedError || error instanceof BookingPaymentMethodUnavailableError ? new HttpsError(error.code,error.message,{reason:error.reason,checkoutCreated:false}) : coachCommandError(error);
 }
 const store=()=>new FirestoreStore(getFirestore());
 export const getBookingPaymentQuoteCommand=onCall({enforceAppCheck:true},async r=>{
@@ -33,6 +33,9 @@ export const getBookingPaymentQuoteCommand=onCall({enforceAppCheck:true},async r
 });
 export const createBookingPaymentCommand=onCall({enforceAppCheck:true,secrets:[apiKey]},async r=>{
   try { configured(r.data); return await createBookingPayment(store(),r.auth,r.data,gateway(),readCoachIdentity); } catch(e) {throw bookingPaymentCommandError(e);}
+});
+export const getBookingPaymentMethodsCommand=onCall({enforceAppCheck:true,secrets:[apiKey]},async r=>{
+  try {configured(r.data);return await getBookingPaymentMethods(store(),r.auth,r.data,gateway());}catch(e){throw bookingPaymentCommandError(e);}
 });
 export const getBookingPaymentCommand=onCall({enforceAppCheck:true,secrets:[apiKey]},async r=>{
   try { configured(r.data); return await readBookingPayment(store(),r.auth,r.data,gateway(),readCoachIdentity); } catch(e) {throw bookingPaymentCommandError(e);}

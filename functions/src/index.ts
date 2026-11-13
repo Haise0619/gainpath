@@ -21,7 +21,7 @@ export { saveCoachProfileCommand, setCoachDirectoryStatusCommand } from './modul
 export { getCoachAvailabilityCommand, saveCoachAvailabilityDayCommand } from './modules/coaching/coach-availability-callables';
 export { getCoachRosterCommand, saveCoachRosterCommand } from './modules/coaching/coach-availability-callables';
 export { paymentWebhook } from './modules/commerce/payment-webhook';
-export { getBookingPaymentQuoteCommand, createBookingPaymentCommand, getBookingPaymentCommand, billplzSandboxReturn } from './modules/commerce/booking-payment-callables';
+export { getBookingPaymentMethodsCommand, getBookingPaymentQuoteCommand, createBookingPaymentCommand, getBookingPaymentCommand, billplzSandboxReturn } from './modules/commerce/booking-payment-callables';
 export { listAdminBookingPaymentsCommand, getAdminBookingPaymentCommand, manageAdminBookingPaymentCommand } from './modules/commerce/booking-payment-admin-callables';
 export { provisionMemberRegistration } from './modules/identity/provision-member-registration';
 export { getMemberAccountLifecycleCommand, requestMemberDeactivationCommand, cancelMemberDeactivationCommand } from './modules/identity/member-account-lifecycle-callables';

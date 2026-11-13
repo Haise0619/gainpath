@@ -138,17 +138,29 @@ class BookingPaymentView {
       this.paymentStatus,
       this.refundStatus,
       this.resolutionReason,
+      this.gatewayCode,
+      this.paymentMethodName,
       this.serverNowMillis});
   final String bookingId, status, startLabel, endLabel, localDate;
   final BookingPaymentQuote quote;
   final int holdExpiresAtMillis;
   final int? serverNowMillis;
   final String? checkoutUrl, resolutionReason;
+  final String? gatewayCode, paymentMethodName;
   final String? paymentStatus, refundStatus;
   bool get confirmed => status == 'confirmed';
   factory BookingPaymentView.fromJson(Map<String, dynamic> json,
       {required String bookingId}) {
     final quote = BookingPaymentQuote.fromJson(json);
+    if ((json['gatewayCode'] != null || json['paymentMethodName'] != null) &&
+        (json['gatewayCode'] is! String ||
+            !RegExp(r'^[A-Za-z0-9_-]{1,64}$')
+                .hasMatch(json['gatewayCode'] as String) ||
+            json['paymentMethodName'] is! String ||
+            (json['paymentMethodName'] as String).trim().isEmpty ||
+            (json['paymentMethodName'] as String).length > 80)) {
+      throw const FormatException('Invalid payment method');
+    }
     if (json['bookingId'] != bookingId ||
         !const [
           'creating',
@@ -182,6 +194,8 @@ class BookingPaymentView {
     }
     return BookingPaymentView(
         serverNowMillis: quote.serverNowMillis,
+        gatewayCode: json['gatewayCode'] as String?,
+        paymentMethodName: json['paymentMethodName'] as String?,
         bookingId: bookingId,
         status: json['status'] as String,
         quote: quote,

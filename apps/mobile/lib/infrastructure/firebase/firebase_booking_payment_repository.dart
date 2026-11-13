@@ -8,7 +8,8 @@ class FirebaseBookingPaymentRepository
     implements
         BookingPaymentRepository,
         PremiumVoucherBookingPaymentRepository,
-        ReviewedBookingPaymentRepository {
+        ReviewedBookingPaymentRepository,
+        BookingPaymentMethodRepository {
   FirebaseBookingPaymentRepository(
       {required this.scope,
       required bool Function() isCurrent,
@@ -85,11 +86,14 @@ class FirebaseBookingPaymentRepository
   }
 
   Future<BookingPaymentView> _payment(String name, String id,
-      {bool usePremiumVoucher = false, String? quoteToken}) async {
+      {bool usePremiumVoucher = false,
+      String? quoteToken,
+      String? gatewayCode}) async {
     try {
       return BookingPaymentView.fromJson(
           await _call(name, {
             'bookingId': id,
+            if (gatewayCode != null) 'gatewayCode': gatewayCode,
             if (quoteToken != null) 'quoteToken': quoteToken,
             if (usePremiumVoucher) 'usePremiumVoucher': true
           }),
@@ -114,4 +118,24 @@ class FirebaseBookingPaymentRepository
   @override
   Future<BookingPaymentView> get(String bookingId) =>
       _payment('getBookingPaymentCommand', bookingId);
+  @override
+  Future<BookingPaymentView> createWithPaymentMethod(String bookingId,
+          {required String gatewayCode,
+          String? quoteToken,
+          bool usePremiumVoucher = false}) =>
+      _payment('createBookingPaymentCommand', bookingId,
+          gatewayCode: gatewayCode,
+          quoteToken: quoteToken,
+          usePremiumVoucher: usePremiumVoucher);
+  @override
+  Future<BookingPaymentMethods> loadPaymentMethods(String bookingId) async {
+    try {
+      return BookingPaymentMethods.fromJson(
+          await _call(
+              'getBookingPaymentMethodsCommand', {'bookingId': bookingId}),
+          bookingId: bookingId);
+    } on FormatException {
+      throw const BookingException('invalid-response');
+    }
+  }
 }
