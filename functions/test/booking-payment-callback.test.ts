@@ -5,7 +5,7 @@ import { seeds, command, now, eligibleCoach } from './booking-fixture';
 import { createBookingHoldService } from '../src/modules/coaching/booking-service';
 import { createBookingPayment } from '../src/modules/commerce/booking-payment-service';
 import { BillplzSandboxGateway, type SandboxBill } from '../src/modules/commerce/billplz-sandbox';
-import { billplzSandboxReturn, paymentWebhook } from '../src/modules/commerce/booking-payment-callables';
+import { billplzSandboxReturn, paymentWebhook,getBookingPaymentCommand } from '../src/modules/commerce/booking-payment-callables';
 
 vi.mock('firebase-functions/v2/https',()=>({onCall:(_opts:unknown,handler:unknown)=>handler,onRequest:(opts:unknown,handler:unknown)=>typeof opts==='function'?opts:handler,HttpsError:class extends Error{}}));
 vi.mock('firebase-functions/params',()=>({defineSecret:(key:string)=>({value:()=>key.includes('X_SIGNATURE')?'synthetic-signing-key':'synthetic-api-key'}),defineString:(key:string)=>({value:()=>key.endsWith('ENABLED')?'true':key.endsWith('COLLECTION_ID')?'sandbox-collection':'org-1'})}));
@@ -50,6 +50,18 @@ it('rejects tampering before provider lookup or ingress writes',async()=>{
   const get=vi.spyOn(BillplzSandboxGateway.prototype,'get').mockResolvedValue(bill());
   expect((await invoke(signed().replace('amount=12000','amount=1'))).status).toBe(401);
   expect(get).not.toHaveBeenCalled();expect([...memory.documents.keys()].some(p=>p.startsWith('system/paymentIngress/'))).toBe(false);
+});
+it('existing protected payment-read callable discovers preference choices without an invoice or provider write',async()=>{
+  memory.documents.delete(`orgs/org-1/transactions/${id}`);
+  const methods=vi.spyOn(BillplzSandboxGateway.prototype,'paymentMethods').mockRejectedValue(Error('must not need a new gateway'));
+  const before=[...memory.documents];
+  const result=await getBookingPaymentCommand({auth:{uid:'member-1',token:{email_verified:true}},data:{schemaVersion:1,organizationId:'org-1',bookingId:id,includeSelectionMethods:true}} as never,undefined as never) as unknown as {selectionMethods:{code:string}[]};
+  expect(result.selectionMethods.map(m=>m.code)).toContain('grabpay');expect(methods).not.toHaveBeenCalled();expect([...memory.documents]).toEqual(before);
+});
+it('existing payment-read requests still verify the original bill',async()=>{
+  const get=vi.spyOn(BillplzSandboxGateway.prototype,'get').mockResolvedValue(bill());
+  const result=await getBookingPaymentCommand({auth:{uid:'member-1',token:{email_verified:true}},data:{schemaVersion:1,organizationId:'org-1',bookingId:id}} as never,undefined as never) as unknown as {status:string};
+  expect(result.status).toBe('confirmed');expect(get).toHaveBeenCalledTimes(1);
 });
 it('signed callback independently verifies provider status and replay never repeats lookup/confirmation',async()=>{
   const get=vi.spyOn(BillplzSandboxGateway.prototype,'get').mockResolvedValue(bill());

@@ -147,7 +147,7 @@ class FirebaseBookingPaymentRepository
   Future<BookingPaymentMethods> loadPaymentSelections(String bookingId) async {
     try {
       return BookingPaymentMethods.fromJson(
-          await _call('getBookingPaymentMethodsCommand',
+          await _call('getBookingPaymentCommand',
               {'bookingId': bookingId, 'includeSelectionMethods': true}),
           bookingId: bookingId);
     } on FormatException {

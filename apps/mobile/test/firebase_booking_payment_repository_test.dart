@@ -56,14 +56,16 @@ void main() {
       'presentation preference submits code only and opts in to selection discovery',
       () async {
     Map<String, dynamic>? sent;
+    String? endpoint;
     final repo = FirebaseBookingPaymentRepository(
         scope: scope,
         isCurrent: () => true,
         currentUid: () => 'member',
         readiness: ready(),
         call: (n, d) async {
+          endpoint = n;
           sent = d;
-          if (n == 'getBookingPaymentMethodsCommand') {
+          if (d['includeSelectionMethods'] == true) {
             return {
               'schemaVersion': 1,
               'serverNowMillis': 1000,
@@ -79,6 +81,7 @@ void main() {
     expect(sent!.containsKey('gatewayCode'), isFalse);
     expect(sent!.containsKey('selectedAt'), isFalse);
     await repo.loadPaymentSelections('booking');
+    expect(endpoint, 'getBookingPaymentCommand');
     expect(sent?['includeSelectionMethods'], true);
   });
   test('method discovery rejects stale account responses', () async {

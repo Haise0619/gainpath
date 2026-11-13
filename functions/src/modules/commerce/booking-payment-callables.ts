@@ -38,7 +38,9 @@ export const getBookingPaymentMethodsCommand=onCall({enforceAppCheck:true,secret
   try {configured(r.data);return await getBookingPaymentMethods(store(),r.auth,r.data,gateway());}catch(e){throw bookingPaymentCommandError(e);}
 });
 export const getBookingPaymentCommand=onCall({enforceAppCheck:true,secrets:[apiKey]},async r=>{
-  try { configured(r.data); return await readBookingPayment(store(),r.auth,r.data,gateway(),readCoachIdentity); } catch(e) {throw bookingPaymentCommandError(e);}
+  try { configured(r.data); return r.data?.includeSelectionMethods===true
+    ? await getBookingPaymentMethods(store(),r.auth,r.data,gateway())
+    : await readBookingPayment(store(),r.auth,r.data,gateway(),readCoachIdentity); } catch(e) {throw bookingPaymentCommandError(e);}
 });
 
 export const paymentWebhook=onRequest({secrets:[apiKey,signatureKey]},async(req,res)=>{
