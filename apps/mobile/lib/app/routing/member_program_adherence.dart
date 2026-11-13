@@ -16,7 +16,9 @@ class LiveProgramAdherence extends StatelessWidget {
       this.summaryBuilder,
       this.weeklySummaryBuilder,
       this.onChooseProgram,
-      this.onOpenProgram});
+      this.onOpenProgram,
+      this.summaryOnly = false});
+  final bool summaryOnly;
   final Widget Function(BuildContext, int?)? summaryBuilder;
   final Widget Function(BuildContext, int?, int?)? weeklySummaryBuilder;
   final VoidCallback? onChooseProgram;
@@ -35,6 +37,7 @@ class LiveProgramAdherence extends StatelessWidget {
     return BlocBuilder<AuthBloc, AuthState>(builder: (context, state) {
       if (activeScope() == null) return const SizedBox.shrink();
       return ProgramAdherenceHost(
+          summaryOnly: summaryOnly,
           key: ValueKey((scope, reloadToken, captured)),
           scope: scope,
           summaryBuilder: summaryBuilder,

@@ -95,9 +95,11 @@ void main() {
     expect(find.text('Avg Form'), findsNothing);
     expect(find.text('Day Streak'), findsNothing);
     expect(find.text('Volume and muscle group split'), findsNothing);
-    expect(find.text('Workout start days'), findsOneWidget);
-    expect(find.text('Workout start days'), findsOneWidget);
-    expect(find.text('Measurement details'), findsOneWidget);
+    expect(
+        find.byKey(const ValueKey('progress-training-days')), findsOneWidget);
+    expect(
+        find.byKey(const ValueKey('progress-training-days')), findsOneWidget);
+    expect(find.byTooltip('More progress options'), findsOneWidget);
     expect(find.text('Saved sessions'), findsNothing);
   });
   testWidgets(
@@ -157,18 +159,19 @@ void main() {
       await tester.pumpAndSettle();
     }
 
-    for (final label in [
-      'History',
-      'Training Report',
-      'Estimated Form Scores',
-      'Workout backup'
-    ]) {
+    for (final label in ['View History', 'Training Report', 'Workout backup']) {
+      if (label != 'View History') {
+        await tester.tap(find.byTooltip('More progress options'));
+        await tester.pumpAndSettle();
+      }
       await open(label);
     }
-    expect(find.text('Activity trends'), findsOneWidget);
-    await open('Activity trends');
-    expect(opened,
-        ['history', 'reports', 'form', 'backup', 'performance']);
+    await open('View All Assessments');
+    await open('View Form Trends');
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    await open('View Activity Trends');
+    expect(opened, ['history', 'reports', 'backup', 'form', 'performance']);
     expect(find.text('Rewards & Check-in'), findsNothing);
     expect(find.text('Your progress'), findsOneWidget);
   });
@@ -187,12 +190,15 @@ void main() {
           ]),
           onOpenWorkout: (record) => opened = record,
         ));
-    expect(find.text('Workout start days'), findsOneWidget);
-    expect(find.text('1'), findsOneWidget);
+    expect(
+        find.byKey(const ValueKey('progress-training-days')), findsOneWidget);
+    expect(find.text('1 training day'), findsOneWidget);
     expect(find.text('3,400'), findsNothing);
     await tester.ensureVisible(find.text('Squat').first);
     await tester.tap(find.text('Squat').first);
     expect(opened?.sessionId, 'capture-a');
+    await tester.tap(find.byTooltip('More progress options'));
+    await tester.pumpAndSettle();
     await tester.ensureVisible(find.text('Measurement details'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Measurement details'));
@@ -214,15 +220,16 @@ void main() {
             refreshes++;
           },
         ));
-    expect(
-        find.text(
-            'No camera workouts recorded yet. Routine history is unavailable.'),
-        findsOneWidget);
+    expect(find.text('No workouts recorded this week.'), findsOneWidget);
+    await tester.tap(find.byTooltip('More progress options'));
+    await tester.pumpAndSettle();
     await tester.ensureVisible(find.text('Measurement details'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Measurement details'));
     await tester.pumpAndSettle();
     expect(find.text('Measurement coverage: Unavailable'), findsOneWidget);
+    await tester.pageBack();
+    await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('Refresh'));
     await tester.pumpAndSettle();
     expect(refreshes, 1);

@@ -1,4 +1,6 @@
 import 'workout_program_route.dart';
+import '../../features/analytics/presentation/shared/progress_dashboard_details.dart';
+import '../../features/analytics/presentation/shared/progress_dashboard_data.dart';
 import 'workout_cloud_save_status.dart';
 import '../../features/workout/presentation/member/widgets/workout_save_indicator.dart';
 import '../../features/analytics/presentation/member/goal_comparison_report.dart';
@@ -47,7 +49,10 @@ enum MemberProgressView {
   form,
   routines,
   goals,
-  backup
+  backup,
+  assessments,
+  measurements,
+  programDetails
 }
 
 typedef ProgressGoalSummaryBuilder = Widget Function(
@@ -67,11 +72,13 @@ class MemberProgressHost extends StatefulWidget {
       required this.scope,
       required this.builder,
       this.backupFactory,
+      this.programProgressBuilder,
       this.goalSummaryBuilder,
       this.repositoryFactory = createLocalMemberProgressRepository});
   final SessionScope scope;
   final LocalMemberProgressRepositoryFactory repositoryFactory;
   final ProgressGoalSummaryBuilder? goalSummaryBuilder;
+  final Widget Function(SessionScope, Object)? programProgressBuilder;
   final MemberProgressBuilder builder;
   final WorkoutBackupFactory? backupFactory;
   @override
@@ -240,6 +247,7 @@ class _MemberProgressHostState extends State<MemberProgressHost>
         MaterialPageRoute<void>(
             builder: (_) => _ScopedProgressPage(
                 scope: widget.scope,
+                programProgressBuilder: widget.programProgressBuilder,
                 goalSummaryBuilder: widget.goalSummaryBuilder,
                 auth: _auth!,
                 cubit: _cubit!,
@@ -363,6 +371,7 @@ class MemberProgressRoute extends StatelessWidget {
       key: ValueKey(scope),
       scope: scope,
       repositoryFactory: repositoryFactory,
+      programProgressBuilder: programProgressBuilder,
       builder: (context, state, refresh, open, openWorkout) => _progressContent(
           context, state, view, refresh, open, openWorkout,
           programProgressBuilder: programProgressBuilder,
@@ -372,6 +381,7 @@ class MemberProgressRoute extends StatelessWidget {
 class _ScopedProgressPage extends StatelessWidget {
   const _ScopedProgressPage(
       {required this.scope,
+      this.programProgressBuilder,
       this.goalSummaryBuilder,
       required this.auth,
       required this.cubit,
@@ -383,6 +393,7 @@ class _ScopedProgressPage extends StatelessWidget {
       this.retryBackup});
   final SessionScope scope;
   final ProgressGoalSummaryBuilder? goalSummaryBuilder;
+  final Widget Function(SessionScope, Object)? programProgressBuilder;
   final AuthBloc auth;
   final MemberProgressCubit cubit;
   final MemberProgressView view;
@@ -410,6 +421,7 @@ class _ScopedProgressPage extends StatelessWidget {
                 builder: (context, state) => _progressContent(
                     context, state, view, refresh, open, openWorkout,
                     goalSummaryBuilder: goalSummaryBuilder,
+                    programProgressBuilder: programProgressBuilder,
                     backup: presentation.coordinator,
                     backupError: presentation.error,
                     retryBackup: retryBackup));
@@ -474,6 +486,10 @@ Widget _progressContent(
         captured?.scope == progress.scope &&
         AuthRolePolicy.canEnter(auth.state, allowed: const {AppRole.member});
     if (!current()) return;
+    if (programProgressBuilder != null) {
+      open(MemberProgressView.programDetails);
+      return;
+    }
     await Navigator.push(
         context,
         MaterialPageRoute<void>(
@@ -483,6 +499,8 @@ Widget _progressContent(
 
   final screen = switch (view) {
     MemberProgressView.dashboard => ProgressDashboardScreen(
+        onOpenAssessments: () => open(MemberProgressView.assessments),
+        onOpenMeasurements: () => open(MemberProgressView.measurements),
         onStartWorkout: openProgram,
         startWorkoutLabel: 'Open training plan',
         goalSummary: goalSummaryBuilder?.call(progress.scope, progress,
@@ -494,6 +512,7 @@ Widget _progressContent(
                 onView: () => open(MemberProgressView.goals)),
         programStatsBuilder: programProgressBuilder == null
             ? (summaryBuilder) => LiveProgramAdherence(
+                summaryOnly: true,
                 scope: progress.scope,
                 reloadToken: progress,
                 weeklySummaryBuilder: summaryBuilder,
@@ -517,6 +536,18 @@ Widget _progressContent(
         onOpenHistory: () => open(MemberProgressView.routines),
         onOpenPerformance: () => open(MemberProgressView.performance),
         onOpenForm: () => open(MemberProgressView.form)),
+    MemberProgressView.assessments => ProgressAssessmentsScreen(
+        data: ProgressDashboardData(progress, state.routines),
+        onOpen: openWorkout,
+        onTrends: () => open(MemberProgressView.form)),
+    MemberProgressView.measurements =>
+      ProgressMeasurementScreen(progress: progress),
+    MemberProgressView.programDetails => Scaffold(
+        appBar: AppBar(title: const Text('Training plan')),
+        body: SingleChildScrollView(
+            padding: const EdgeInsets.all(16),
+            child: programProgressBuilder?.call(progress.scope, progress) ??
+                const SizedBox.shrink())),
     MemberProgressView.history ||
     MemberProgressView.routines =>
       WorkoutHistoryTabs(

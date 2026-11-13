@@ -239,7 +239,7 @@ class _GoalComparisonReportState extends State<GoalComparisonReport> {
               child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                const Text('Goal summary',
+                const Text('Goals',
                     style: TextStyle(
                         color: AppColors.ink,
                         fontSize: 18,
@@ -263,7 +263,7 @@ class _GoalComparisonReportState extends State<GoalComparisonReport> {
                                     : 'Current: ${comparison.measuredValue!.toStringAsFixed(comparison.goal.category == NumericGoalCategory.bodyWeight ? 1 : 0)} ${comparison.goal.unit}',
                                 style: const TextStyle(
                                     color: AppColors.ink,
-                                    fontSize: 24,
+                                    fontSize: 20,
                                     fontWeight: FontWeight.w800)),
                             const SizedBox(height: 8),
                             Wrap(spacing: 12, runSpacing: 4, children: [
@@ -271,15 +271,13 @@ class _GoalComparisonReportState extends State<GoalComparisonReport> {
                                   style: const TextStyle(
                                       color: AppColors.primaryDark,
                                       fontWeight: FontWeight.w600)),
-                              Text(
-                                  comparison.measuredValue == null
-                                      ? 'Remaining: unavailable'
-                                      : comparison.goal.category ==
-                                              NumericGoalCategory.bodyWeight
-                                          ? 'Gap: ${(comparison.goal.targetValue - comparison.measuredValue!).abs().toStringAsFixed(1)} kg · direction unset'
-                                          : 'Remaining: ${(comparison.goal.targetValue - comparison.measuredValue!).clamp(0, double.infinity).toStringAsFixed(0)} ${comparison.goal.unit}',
-                                  style: const TextStyle(
-                                      color: AppColors.inkSoft)),
+                              if (comparison.measuredValue != null &&
+                                  comparison.goal.category !=
+                                      NumericGoalCategory.bodyWeight)
+                                Text(
+                                    'Remaining: ${(comparison.goal.targetValue - comparison.measuredValue!).clamp(0, double.infinity).toStringAsFixed(0)} ${comparison.goal.unit}',
+                                    style: const TextStyle(
+                                        color: AppColors.inkSoft)),
                             ]),
                             const SizedBox(height: 6),
                             if (comparison.goal.category ==
@@ -290,9 +288,9 @@ class _GoalComparisonReportState extends State<GoalComparisonReport> {
                                 comparison.goal.category ==
                                         NumericGoalCategory.bodyWeight
                                     ? 'Self-reported profile · measurement date unavailable'
-                                    : 'Provisional local observation',
+                                    : 'From saved workouts',
                                 style: const TextStyle(
-                                    color: AppColors.inkSoft, fontSize: 12)),
+                                    color: AppColors.inkSoft, fontSize: 13)),
                           ])),
                 TextButton(
                     onPressed: widget.onView,

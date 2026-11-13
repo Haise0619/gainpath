@@ -23,8 +23,8 @@ void main() {
         scope: scope,
         sessionId: 'camera',
         exerciseId: 'F3b8xIr8ynBDd3gEICKX',
-        startedAt: now.subtract(const Duration(minutes: 1)),
-        endedAt: now,
+        startedAt: now.subtract(const Duration(minutes: 31)),
+        endedAt: now.subtract(const Duration(minutes: 30)),
         repetitions: 5,
         partialRepetitions: 1,
         formScorePercent: null,
@@ -50,8 +50,7 @@ void main() {
         finished: true,
         startedAtMicros:
             now.subtract(const Duration(hours: 2)).microsecondsSinceEpoch,
-        finishedAtMicros:
-            now.subtract(const Duration(hours: 1)).microsecondsSinceEpoch,
+        finishedAtMicros: now.microsecondsSinceEpoch,
         updatedAtMicros: now.microsecondsSinceEpoch,
         entries: [
           RoutineExerciseResult(
@@ -72,12 +71,12 @@ void main() {
                 scope: scope, attempts: [manual, manual], asOf: now),
             onOpenRoutine: (a) => opened = a)));
     await tester.pumpAndSettle();
-    expect(find.text('Front / squat-low'), findsOneWidget);
-    expect(find.text('5 full reps · AI Tracked'), findsOneWidget);
+    expect(find.text('Front / squat-low'), findsNothing);
+    expect(find.text('5 full reps · AI Tracked'), findsNothing);
     expect(find.textContaining('2 self-reported sets'), findsOneWidget);
     final training = find.byKey(const ValueKey('progress-training-days'));
-    expect(find.descendant(of: training, matching: find.text('1')),
-        findsOneWidget);
+    expect(tester.widget<Text>(training).textSpan!.toPlainText(),
+        '1 training day');
     await tester.tap(find.textContaining('2 self-reported sets'));
     expect(opened?.id, 'routine');
     expect(tester.takeException(), isNull);
@@ -99,13 +98,13 @@ void main() {
     }
 
     await render(2, 4);
-    expect(find.text('2 / 4'), findsOneWidget);
+    expect(find.text('2 / 4 planned workouts'), findsOneWidget);
     expect(find.text('50%'), findsOneWidget);
     await render(0, 0);
     expect(find.text('0%'), findsNothing);
-    expect(find.text('—'), findsOneWidget);
+    expect(find.byType(LinearProgressIndicator), findsNothing);
     await render(null, null);
-    expect(find.text('—'), findsNWidgets(2));
+    expect(find.byType(LinearProgressIndicator), findsNothing);
   });
   for (final populated in [false, true]) {
     testWidgets('compact Progress $populated narrow enlarged text and actions',
@@ -123,8 +122,8 @@ void main() {
               scope: scope,
               sessionId: 's',
               exerciseId: 'squat',
-              startedAt: now.subtract(const Duration(minutes: 1)),
-              endedAt: now,
+              startedAt: now.subtract(const Duration(minutes: 31)),
+              endedAt: now.subtract(const Duration(minutes: 30)),
               repetitions: 5,
               partialRepetitions: 1,
               formScorePercent: null,
@@ -145,26 +144,27 @@ void main() {
               localProgress: progress, onStartWorkout: () => starts++)));
       await tester.pumpAndSettle();
       expect(find.text('This week'), findsOneWidget);
-      expect(find.text('Workout start days'), findsOneWidget);
+      expect(
+          find.byKey(const ValueKey('progress-training-days')), findsOneWidget);
       expect(find.text('Saved sessions'), findsNothing);
       expect(
           find.byKey(const ValueKey('progress-training-days')), findsOneWidget);
-      expect(
-          find.byKey(const ValueKey('progress-quick-History')), findsOneWidget);
-      expect(find.text('Scheduled completion'), findsOneWidget);
-      expect(find.text('Estimated Form Scores'), findsOneWidget);
+      expect(find.text('View History'), findsOneWidget);
+      expect(find.text('Scheduled completion'), findsNothing);
+      expect(find.text('View All Assessments'), findsOneWidget);
       final form = find.ancestor(
-          of: find.text('Estimated Form Scores'),
+          of: find.text('View All Assessments'),
           matching: find.byType(ExpansionTile));
       expect(form, findsNothing);
       final heading = tester.widget<Text>(find.text('This week'));
       expect(heading.style?.color, Colors.white);
-      await tester.scrollUntilVisible(find.text('Start workout'), 150);
-      await tester.ensureVisible(find.text('Start workout'));
+      await tester.scrollUntilVisible(find.text('Training plan  ›'), 150);
+      await tester.ensureVisible(find.text('Training plan  ›'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Start workout'));
+      await tester.tap(find.text('Training plan  ›'));
       expect(starts, 1);
-      await tester.scrollUntilVisible(find.text('Measurement details'), 150);
+      await tester.tap(find.byTooltip('More progress options'));
+      await tester.pumpAndSettle();
       expect(find.text('Partial attempts'), findsNothing);
       await tester.ensureVisible(find.text('Measurement details'));
       await tester.pumpAndSettle();

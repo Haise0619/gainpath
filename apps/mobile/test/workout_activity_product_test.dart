@@ -160,10 +160,10 @@ void main() {
                     onPerformance: () {})))));
     await tester.pumpAndSettle();
     final metric = find.byKey(const ValueKey('progress-training-days'));
+    expect(find.text('1 training day'), findsOneWidget);
     expect(
-        find.descendant(of: metric, matching: find.text('1')), findsOneWidget);
-    expect(find.text('Workout start days'), findsOneWidget);
+        tester.widget<Text>(metric).textSpan!.toPlainText(), '1 training day');
     expect(find.text('5 reps · Measured / provisional'), findsNothing);
-    expect(find.text('Activity trends'), findsOneWidget);
+    expect(find.text('View Activity Trends'), findsOneWidget);
   });
 }

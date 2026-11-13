@@ -110,7 +110,8 @@ void main() {
             .localProgress!
             .weeklySessions,
         1);
-    expect(find.text('Workout start days'), findsOneWidget);
+    expect(
+        find.byKey(const ValueKey('progress-training-days')), findsOneWidget);
     // Open the account-owned history page, then add a durable result and refresh
     // it while still open. No mock repositories or upload worker are installed.
     tester
@@ -162,7 +163,8 @@ void main() {
             .localProgress!
             .weeklySessions,
         3);
-    expect(find.text('Workout start days'), findsOneWidget);
+    expect(
+        find.byKey(const ValueKey('progress-training-days')), findsOneWidget);
     await auth.signOut();
     await tester.pumpAndSettle();
     final second =

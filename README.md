@@ -431,3 +431,8 @@ Source `6720183` fixes a cached initial loading child inside the signed-in membe
 ## Mini-game earning labels — 13 November 2026
 
 Normal mobile builds now retain the previously approved mini-game participation integration (explicit false build flag remains supported). Cards distinguish checking/unavailable points from confirmed fun-only eligibility and refresh server allowance on app resume. No claim, wallet, quota or backend policy changes. All 36 arcade/participation tests and scoped analysis pass; explicit false override test passes. Android debug build passes. Read-only synthetic Basic fixture confirms both games active at 20 points per game/day in Asia/Kuala_Lumpur; this is not evidence of a real user's claim history. Evidence: `build/mini-game-status-20261113/`.
+
+
+## Member Progress dashboard — 13 November 2026
+
+Compact weekly activity, same-Malaysia-week mixed-mode summary, latest valid compatible form assessments, goals and one latest workout replace the long overview. Full assessments, technical measurements, reports/backup and schedules remain in secondary destinations with account and membership guards. No pose/scoring/save/sync/backend changes. Fresh109 affected tests pass in working and isolated source, 15-file analysis is clean, 24 Flutter render scenarios pass, and both Android Debug builds succeed. Independent review is resolved. Phone disconnected: no installation. [Implementation and actual before/after Flutter screenshots](docs/ux/member-progress-dashboard.md).

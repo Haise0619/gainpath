@@ -37,6 +37,69 @@ void main() {
     return auth;
   }
 
+  testWidgets(
+      'supplied program content remains accessible in its secondary plan page',
+      (tester) async {
+    final auth = await signIn(tester);
+    final repo = TestRepository(auth.state.session!.scope);
+    await tester.pumpWidget(BlocProvider.value(
+        value: auth,
+        child: MaterialApp(
+            home: MemberProgressRoute(
+                scope: repo.scope,
+                repositoryFactory: (_, __) async => repo,
+                programProgressBuilder: (_, __) =>
+                    const Text('Saved program details'),
+                goalSummaryBuilder: (_, __, ___, ____) => const SizedBox()))));
+    await tester.pumpAndSettle();
+    expect(find.text('Saved program details'), findsNothing);
+    await tester.tap(find.text('Training plan  ›'));
+    await tester.pumpAndSettle();
+    expect(find.text('Saved program details'), findsOneWidget);
+    await tester.runAsync(() async {
+      auth.add(const LoggedOut());
+      await auth.stream.firstWhere((s) => s.status == AuthStatus.signedOut);
+    });
+    await tester.pumpAndSettle();
+    expect(find.text('Saved program details'), findsNothing);
+    await tester.pumpWidget(const SizedBox());
+    await tester.runAsync(auth.close);
+  });
+
+  for (final view in [
+    MemberProgressView.assessments,
+    MemberProgressView.measurements
+  ]) {
+    testWidgets(
+        '$view hides secondary progress information immediately on logout',
+        (tester) async {
+      final auth = await signIn(tester);
+      final repo = TestRepository(auth.state.session!.scope);
+      await tester.pumpWidget(BlocProvider.value(
+          value: auth,
+          child: MaterialApp(
+              home: MemberProgressRoute(
+                  scope: repo.scope,
+                  view: view,
+                  repositoryFactory: (_, __) async => repo))));
+      await tester.pumpAndSettle();
+      final title = view == MemberProgressView.assessments
+          ? 'All assessments'
+          : 'Measurement details';
+      expect(find.text(title), findsOneWidget);
+      await tester.runAsync(() async {
+        auth.add(const LoggedOut());
+        await auth.stream.firstWhere((s) => s.status == AuthStatus.signedOut);
+      });
+      await tester.pumpAndSettle();
+      expect(find.text(title), findsNothing);
+      expect(find.text('Sign in to view this account’s progress.'),
+          findsOneWidget);
+      await tester.pumpWidget(const SizedBox());
+      await tester.runAsync(auth.close);
+    });
+  }
+
   testWidgets('history opens immediately while refresh is pending',
       (tester) async {
     final auth = await signIn(tester);
@@ -84,10 +147,7 @@ void main() {
                 programProgressBuilder: (_, __) => const SizedBox(),
                 goalSummaryBuilder: (_, __, ___, ____) => const SizedBox()))));
     await tester.pumpAndSettle();
-    expect(
-        find.text(
-            'No camera workouts recorded yet. Routine history is unavailable.'),
-        findsOneWidget);
+    expect(find.text('No workouts recorded this week.'), findsOneWidget);
     expect(find.text('84%'), findsNothing);
     expect(repo.reads, 1);
     await tester.tap(find.byTooltip('Refresh'));
@@ -118,10 +178,7 @@ void main() {
     });
     pending.complete(LocalMemberProgressSnapshot(records: []));
     await tester.pumpAndSettle();
-    expect(
-        find.text(
-            'No camera workouts recorded yet. Routine history is unavailable.'),
-        findsNothing);
+    expect(find.text('No workouts recorded this week.'), findsNothing);
     expect(
         find.text('Sign in to view this account’s progress.'), findsOneWidget);
     await tester.pumpWidget(const SizedBox());

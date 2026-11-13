@@ -13,7 +13,9 @@ class ProgramAdherenceHost extends StatefulWidget {
       this.weeklySummaryBuilder,
       this.onChooseProgram,
       this.onOpenProgram,
-      this.now});
+      this.now,
+      this.summaryOnly = false});
+  final bool summaryOnly;
   final Widget Function(BuildContext, int?)? summaryBuilder;
   final Widget Function(BuildContext, int?, int?)? weeklySummaryBuilder;
   final VoidCallback? onChooseProgram;
@@ -56,6 +58,35 @@ class _ProgramAdherenceHostState extends State<ProgramAdherenceHost> {
               ready ? snapshot.data! : <ProgramAdherenceSummary>[];
           final now = widget.now ?? DateTime.now();
           final current = summaries.where((s) => s.isCurrent).firstOrNull;
+          if (widget.summaryOnly) {
+            final done = ready
+                ? completedScheduledThisWeek(
+                    current == null ? const [] : [current], now)
+                : null;
+            final total = !ready
+                ? null
+                : current
+                        ?.weekAt(now)
+                        .where((d) => d.status != ProgramAdherenceStatus.rest)
+                        .length ??
+                    0;
+            return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (widget.weeklySummaryBuilder != null)
+                    widget.weeklySummaryBuilder!(context, done, total),
+                  if (widget.summaryBuilder != null)
+                    widget.summaryBuilder!(context, done),
+                  if (snapshot.hasError)
+                    Align(
+                        alignment: Alignment.centerRight,
+                        child: TextButton(
+                            onPressed: () => setState(() {
+                                  _future = widget.load();
+                                }),
+                            child: const Text('Retry plan summary'))),
+                ]);
+          }
           return Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [

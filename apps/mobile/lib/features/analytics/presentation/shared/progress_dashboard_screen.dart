@@ -1,4 +1,5 @@
 import 'member_progress_overview.dart';
+import 'progress_dashboard_details.dart';
 import '../member/widgets/workout_measurement_scope.dart';
 import 'package:flutter/material.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
@@ -44,7 +45,9 @@ class ProgressDashboardScreen extends StatefulWidget {
       this.startWorkoutLabel = 'Start workout',
       this.goalSummary,
       this.programSummaryBuilder,
-      this.programStatsBuilder});
+      this.programStatsBuilder,
+      this.onOpenAssessments,
+      this.onOpenMeasurements});
 
   final MemberLocalProgress? localProgress;
   final RoutineProgress? routineProgress;
@@ -67,6 +70,7 @@ class ProgressDashboardScreen extends StatefulWidget {
   final Widget Function(Widget Function(BuildContext, int?, int?))?
       programStatsBuilder;
   final VoidCallback? onOpenGoals;
+  final VoidCallback? onOpenAssessments, onOpenMeasurements;
 
   @override
   State<ProgressDashboardScreen> createState() =>
@@ -122,7 +126,35 @@ class _ProgressDashboardScreenState extends State<ProgressDashboardScreen>
               IconButton(
                   tooltip: 'Refresh',
                   onPressed: widget.onRefresh,
-                  icon: const Icon(Icons.refresh_rounded))
+                  icon: const Icon(Icons.refresh_rounded)),
+            PopupMenuButton<String>(
+                tooltip: 'More progress options',
+                onSelected: (value) {
+                  if (value == 'report') widget.onOpenReport?.call();
+                  if (value == 'backup') widget.onOpenBackup?.call();
+                  if (value == 'measurements') {
+                    if (widget.onOpenMeasurements != null) {
+                      widget.onOpenMeasurements!();
+                    } else {
+                      Navigator.push(
+                          context,
+                          MaterialPageRoute<void>(
+                              builder: (_) =>
+                                  ProgressMeasurementScreen(progress: local)));
+                    }
+                  }
+                },
+                itemBuilder: (_) => [
+                      if (widget.onOpenReport != null)
+                        const PopupMenuItem(
+                            value: 'report', child: Text('Training Report')),
+                      if (widget.onOpenBackup != null)
+                        const PopupMenuItem(
+                            value: 'backup', child: Text('Workout backup')),
+                      const PopupMenuItem(
+                          value: 'measurements',
+                          child: Text('Measurement details')),
+                    ]),
           ]),
           body: PageBody(children: [
             _reveal(
@@ -139,6 +171,7 @@ class _ProgressDashboardScreenState extends State<ProgressDashboardScreen>
                   onReports: widget.onOpenReport,
                   onPerformance: widget.onOpenPerformance,
                   onForm: widget.onOpenForm,
+                  onAssessments: widget.onOpenAssessments,
                   onBackup: widget.onOpenBackup,
                   onWorkout: widget.onOpenWorkout,
                   onRoutine: widget.onOpenRoutine),
