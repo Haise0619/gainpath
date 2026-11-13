@@ -8,8 +8,13 @@ class BookingConfirmedScreen extends StatelessWidget {
   final Booking? booking;
   final BookingPaymentView? payment;
   final bool Function()? isCurrent;
+  final VoidCallback? onViewBookings;
   const BookingConfirmedScreen(
-      {super.key, this.booking, this.payment, this.isCurrent})
+      {super.key,
+      this.booking,
+      this.payment,
+      this.isCurrent,
+      this.onViewBookings})
       : assert(booking != null || payment != null);
 
   @override
@@ -41,9 +46,20 @@ class BookingConfirmedScreen extends StatelessWidget {
             background: AppColors.primaryTint,
             child: Column(
               children: [
-                const Icon(Icons.event_available_rounded,
-                    size: 44, color: AppColors.primary),
+                Container(
+                    padding: const EdgeInsets.all(18),
+                    decoration: const BoxDecoration(
+                        color: Colors.white, shape: BoxShape.circle),
+                    child: const Icon(Icons.check_rounded,
+                        size: 44, color: AppColors.primary)),
                 const SizedBox(height: 12),
+                if (payment != null)
+                  Text('Payment successful',
+                      style: Theme.of(context)
+                          .textTheme
+                          .titleMedium
+                          ?.copyWith(color: AppColors.primary)),
+                const SizedBox(height: 6),
                 Text('You are booked in',
                     style: Theme.of(context).textTheme.titleLarge),
                 const SizedBox(height: 6),
@@ -76,8 +92,16 @@ class BookingConfirmedScreen extends StatelessWidget {
           ),
           const SizedBox(height: 18),
           FilledButton(
-            onPressed: () => Navigator.popUntil(context, (r) => r.isFirst),
-            child: const Text('Done'),
+            onPressed: () {
+              if (isCurrent != null && !isCurrent!()) return;
+              if (onViewBookings != null) {
+                Navigator.pop(context);
+                onViewBookings!();
+              } else {
+                Navigator.popUntil(context, (r) => r.isFirst);
+              }
+            },
+            child: Text(onViewBookings != null ? 'View My Bookings' : 'Done'),
           ),
         ],
       ),

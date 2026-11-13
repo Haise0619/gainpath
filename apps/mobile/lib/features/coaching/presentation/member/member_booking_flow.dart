@@ -339,6 +339,13 @@ class _MemberBookingFlowState extends State<MemberBookingFlow>
                   isCurrent: widget.isCurrent,
                   create: true,
                   reviewedQuoteToken: _quote?.quoteToken,
+                  reviewedQuote: _quote,
+                  onViewBookings: () {
+                    if (_current) {
+                      Navigator.pop(context);
+                      widget.onOpenBookings();
+                    }
+                  },
                   usePremiumVoucher: _voucher && _quote!.voucherApplied,
                   onCancelUnpaidReservation:
                       widget.cancellation == null ? null : _cancelHold)));

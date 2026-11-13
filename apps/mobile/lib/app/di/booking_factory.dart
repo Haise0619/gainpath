@@ -40,7 +40,8 @@ BookingListRepository createBookingList(AuthSession session,
         branchIds: session.branchIds,
         isCurrent: current);
 
-Widget buildBookingListContent(BuildContext context, AuthSession session, bool Function() current,
+Widget buildBookingListContent(
+        BuildContext context, AuthSession session, bool Function() current,
         {BookingListFactory? factory, bool embedded = false}) =>
     LiveBookingListView(
         embedded: embedded,
@@ -58,14 +59,22 @@ Widget buildBookingListContent(BuildContext context, AuthSession session, bool F
                         repository: FirebaseBookingPaymentRepository(
                             scope: session.scope, isCurrent: current),
                         bookingId: id,
+                        // Receipt closes itself, revealing this existing list.
+                        onViewBookings: () {},
                         isCurrent: current))),
         loadCoachName: (id) async =>
-            (await FirebaseCoachDirectoryRepository(scope: session.scope, isCurrent: current).loadPublished(id))
+            (await FirebaseCoachDirectoryRepository(scope: session.scope, isCurrent: current)
+                    .loadPublished(id))
                 ?.fields
                 .displayName,
         loadCoachProfile: (id) =>
-            FirebaseCoachDirectoryRepository(scope: session.scope, isCurrent: current).loadPublished(id),
-        coachPhotoBuilder: (profile) => PublishedCoachPhoto(coach: profile, repository: FirebaseCoachDirectoryRepository(scope: session.scope, isCurrent: current), isCurrent: current, size: 48),
+            FirebaseCoachDirectoryRepository(scope: session.scope, isCurrent: current)
+                .loadPublished(id),
+        coachPhotoBuilder: (profile) => PublishedCoachPhoto(
+            coach: profile,
+            repository: FirebaseCoachDirectoryRepository(scope: session.scope, isCurrent: current),
+            isCurrent: current,
+            size: 48),
         communication: FirebaseBookingCommunicationRepository(scope: session.scope, isCurrent: current),
         repository: createBookingList(session, current, factory),
         coachId: session.role == AppRole.coach ? session.userId : null,

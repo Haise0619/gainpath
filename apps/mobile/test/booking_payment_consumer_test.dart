@@ -188,7 +188,7 @@ void main() {
       (t) async {
     final repo = ConsumerPayments()..paid = 'cleared';
     await setup(t, repo);
-    expect(find.text('Checking your payment'), findsOneWidget);
+    expect(find.text('Confirming your payment'), findsOneWidget);
     expect(find.text('Continue to Payment'), findsNothing);
     expect(find.textContaining('Time remaining:'), findsNothing);
     expect(find.byType(BookingConfirmedScreen), findsNothing);
