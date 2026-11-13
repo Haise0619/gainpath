@@ -72,10 +72,13 @@ String memberBookingStatus(
       MemberBookingPhase.completed => 'Completed',
       MemberBookingPhase.cancelled => 'Cancelled',
       MemberBookingPhase.expired => 'Expired',
-      MemberBookingPhase.refunded => 'Refunded',
+      MemberBookingPhase.refunded =>
+        memberBookingRefundStatus(record) == 'Refunded'
+            ? 'Refunded'
+            : 'Cancelled',
       MemberBookingPhase.upcoming =>
         record.status == live.BookingStatus.pendingHold
-            ? 'Pending hold'
+            ? 'Awaiting payment'
             : 'Confirmed',
     };
 
@@ -84,4 +87,17 @@ DateTime _calendarTime(String date, String label) {
   return DateTime.parse('${date}T00:00:00').add(Duration(
       hours: int.tryParse(match?.group(1) ?? '') ?? 0,
       minutes: int.tryParse(match?.group(2) ?? '') ?? 0));
+}
+
+/// Refund progress requires the matching server transaction projection.
+/// Cancellation and the booking's historical status alone prove no settlement.
+String? memberBookingRefundStatus(live.PersistedBookingRecord? record) {
+  if (record == null || record.paymentStatus != 'cleared') return null;
+  return switch (record.refundStatus) {
+    'approved' => 'Refund approved',
+    'processing' => 'Refund processing',
+    'completed' => 'Refunded',
+    'uncertain' || 'failed' || 'rejected' => 'Refund needs attention',
+    _ => record.refundReviewRequired == true ? 'Refund under review' : null,
+  };
 }

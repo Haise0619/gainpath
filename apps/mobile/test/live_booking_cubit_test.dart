@@ -123,7 +123,7 @@ void main() {
     await cubit.submit();
     expect(cubit.state.uncertain, true);
     await cubit.refresh(durationMinutes: 60);
-    expect(cubit.state.intent!.durationMinutes, 30);
+    expect(cubit.state.intent!.durationMinutes, 60);
     await cubit.submit();
     expect(identical(writer.requests.first, writer.requests.last), true);
     expect(cubit.state.hold!.bookingId, 'booking');

@@ -2,21 +2,25 @@ import 'package:flutter/material.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
 import 'package:gainpath_domain/coaching.dart';
 
-/// Shown right after a successful Billplz payment for a coaching
-/// session. Takes the actual [Booking] that was just created (and
-/// already added to `memberBookings`) rather than loose
-/// coach/time parameters, so every figure shown here is guaranteed to
-/// match what "My bookings" will show afterwards.
+/// Confirmation uses the verified booking/payment response.
+/// Payment responses retain the checkout schedule after rescheduling.
 class BookingConfirmedScreen extends StatelessWidget {
   final Booking? booking;
   final BookingPaymentView? payment;
-  const BookingConfirmedScreen({super.key, this.booking, this.payment})
+  final bool Function()? isCurrent;
+  const BookingConfirmedScreen(
+      {super.key, this.booking, this.payment, this.isCurrent})
       : assert(booking != null || payment != null);
 
   @override
   Widget build(BuildContext context) {
+    if (isCurrent != null && !isCurrent!()) {
+      return const Scaffold(
+          body: Center(child: Text('Bookings unavailable for this account.')));
+    }
     final payment = this.payment;
-    if (payment != null && !payment.confirmed) {
+    if (payment != null &&
+        (!payment.confirmed || payment.refundStatus != null)) {
       return const Scaffold(
           body: Center(child: Text('Booking is not confirmed.')));
     }
@@ -59,6 +63,14 @@ class BookingConfirmedScreen extends StatelessWidget {
                 DetailRow('Location', branch),
                 const Divider(height: 20),
                 DetailRow('Paid', amount),
+                if (payment != null) ...[
+                  const Divider(height: 20),
+                  DetailRow('Session length',
+                      '${payment.quote.durationMinutes} minutes'),
+                  const SizedBox(height: 12),
+                  const Text(
+                      'This is the time booked at checkout. My Bookings shows your current time if you rescheduled.'),
+                ],
               ],
             ),
           ),

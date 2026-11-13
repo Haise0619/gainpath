@@ -63,16 +63,18 @@ void main() {
     await tester.tap(find.text('Book a session'));
     await tester.pumpAndSettle();
     expect(created, 1);
-    await tester.tap(find.textContaining('08:00 GMT+8 – 08:30 GMT+8'));
+    await tester.tap(find.text('8:00 AM'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Request pending hold'));
+    await tester.tap(find.text('Review Booking'));
     await tester.pumpAndSettle();
-    expect(find.text('Retry same request'), findsOneWidget);
-    await tester.tap(find.text('Retry same request'));
+    await tester.tap(find.text('Reserve session'));
     await tester.pumpAndSettle();
-    expect(find.text('Booking booking'), findsOneWidget);
+    expect(find.text('Retry reservation'), findsOneWidget);
+    await tester.tap(find.text('Retry reservation'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Your reservation is saved.'), findsOneWidget);
     expect(find.byType(BookingConfirmedScreen), findsNothing);
-    await tester.tap(find.text('View persisted bookings'));
+    await tester.tap(find.text('My bookings'));
     await tester.pumpAndSettle();
     expect(find.text('Hold time elapsed'), findsOneWidget);
     await tester.tap(find.text('View details'));
@@ -87,7 +89,7 @@ void main() {
         email: 'fixture@example.test',
         role: AppRole.member));
     await tester.pumpAndSettle();
-    expect(find.text('Booking booking'), findsNothing);
+    expect(find.textContaining('Your reservation is saved.'), findsNothing);
     await tester.pumpWidget(const SizedBox());
     await tester.runAsync(() async {
       await bloc.close();

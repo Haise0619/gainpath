@@ -50,7 +50,11 @@ class Payments implements BookingPaymentRepository {
           {required String coachId,
           required String branchId,
           required int durationMinutes}) async =>
-      value().quote;
+      BookingPaymentQuote(
+          amountMinor: 12500,
+          coachName: 'Real Coach',
+          branchName: 'Real Studio',
+          durationMinutes: durationMinutes);
 }
 
 class FutureOptions extends Options {
@@ -134,24 +138,32 @@ void main() {
             isCurrent: () => true,
             onOpenBookings: () {})));
     await tester.pumpAndSettle();
-    await tester.tap(find.textContaining('08:00 GMT+8').first);
+    await tester.tap(find.text('8:00 AM').first);
     await tester.pumpAndSettle();
     expect(find.text('RM 125.00'), findsOneWidget);
     expect(repo.voucherCreates, 0);
-    await tester.tap(find.byType(SwitchListTile));
+    expect(writer.requests, isEmpty);
+    await tester.tap(find.text('Review Booking'));
     await tester.pumpAndSettle();
-    expect(find.text('RM 112.50'), findsOneWidget);
-    await tester.ensureVisible(find.text('Continue to payment'));
-    await tester.tap(find.text('Continue to payment'));
+    expect(writer.requests, isEmpty);
+    await tester.tap(find.byType(CheckboxListTile));
     await tester.pumpAndSettle();
-    await tester.ensureVisible(find.text('Retry same request'));
-    await tester.tap(find.text('Retry same request'));
+    expect(find.text('RM 112.50'), findsWidgets);
+    await tester.ensureVisible(find.text('Reserve session'));
+    await tester.tap(find.text('Reserve session'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Retry reservation'));
+    await tester.tap(find.text('Retry reservation'));
     await tester.pumpAndSettle();
     expect(repo.voucherCreates, 1);
     expect(repo.creates, 0);
+    expect(writer.requests, hasLength(2));
+    expect(writer.requests[0].requestId, writer.requests[1].requestId);
+    expect(writer.requests.every((request) => request.durationMinutes == 60),
+        isTrue);
   });
   testWidgets(
-      'missing voucher policy displays unavailable while preserving full-price checkout',
+      'missing voucher policy omits voucher choice while preserving full-price review',
       (tester) async {
     addTearDown(() => tester.pumpWidget(const SizedBox.shrink()));
     tester.view.physicalSize = const Size(1000, 1800);
@@ -168,11 +180,13 @@ void main() {
             isCurrent: () => true,
             onOpenBookings: () {})));
     await tester.pumpAndSettle();
-    await tester.tap(find.textContaining('08:00 GMT+8').first);
+    await tester.tap(find.text('8:00 AM').first);
     await tester.pumpAndSettle();
-    expect(find.text('Premium Coach voucher unavailable.'), findsOneWidget);
-    expect(find.byType(SwitchListTile), findsNothing);
-    expect(find.text('RM 125.00'), findsOneWidget);
+    await tester.tap(find.text('Review Booking'));
+    await tester.pumpAndSettle();
+    expect(find.text('Use Premium Coach voucher'), findsNothing);
+    expect(find.byType(CheckboxListTile), findsNothing);
+    expect(find.text('RM 125.00'), findsWidgets);
   });
   testWidgets(
       'AI suggestion reloads trusted options and price without creating a hold or payment',
@@ -187,10 +201,10 @@ void main() {
       'localDate': options.date(options.start),
       'timeZone': 'Asia/Kuala_Lumpur',
       'startAtMillis': options.start,
-      'endAtMillis': options.start + 1800000,
+      'endAtMillis': options.start + 3600000,
       'startLabel': '08:00 GMT+8',
       'endLabel': '08:30 GMT+8',
-      'durationMinutes': 30,
+      'durationMinutes': 60,
       'amountMinor': 1,
       'currency': 'MYR',
       'expiresAtMillis': DateTime.now().millisecondsSinceEpoch + 60000,
@@ -218,7 +232,7 @@ void main() {
       {
         ...suggestion.data,
         'startAtMillis': options.start + 7200000,
-        'endAtMillis': options.start + 9000000
+        'endAtMillis': options.start + 10800000
       },
     ]) {
       await tester.pumpWidget(MaterialApp(
@@ -233,7 +247,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(
           find.text(
-              'The suggested time expired or is no longer available. Choose a current time.'),
+              'That suggestion is no longer available. Choose a current 60-minute session.'),
           findsOneWidget);
       expect(writer.requests, isEmpty);
       expect(repo.creates, 0);
@@ -280,21 +294,27 @@ void main() {
             isCurrent: () => true,
             onOpenBookings: () {})));
     await tester.pumpAndSettle();
-    await tester.tap(find.textContaining('08:00 GMT+8').first);
+    await tester.tap(find.text('8:00 AM').first);
     await tester.pumpAndSettle();
     expect(find.text('RM 125.00'), findsOneWidget);
     expect(find.text('Real Coach'), findsOneWidget);
     expect(find.text('Real Studio'), findsOneWidget);
-    await tester.ensureVisible(find.text('Continue to payment'));
-    await tester.tap(find.text('Continue to payment'));
+    expect(writer.requests, isEmpty);
+    await tester.tap(find.text('Review Booking'));
+    await tester.pumpAndSettle();
+    expect(writer.requests, isEmpty);
+    await tester.ensureVisible(find.text('Reserve session'));
+    await tester.tap(find.text('Reserve session'));
     await tester.pumpAndSettle();
     expect(repo.creates, 0);
-    expect(find.text('Retry same request'), findsOneWidget);
-    await tester.ensureVisible(find.text('Retry same request'));
-    await tester.tap(find.text('Retry same request'));
+    expect(find.text('Retry reservation'), findsOneWidget);
+    await tester.ensureVisible(find.text('Retry reservation'));
+    await tester.tap(find.text('Retry reservation'));
     await tester.pumpAndSettle();
     expect(writer.requests.length, 2);
     expect(writer.requests[0].requestId, writer.requests[1].requestId);
+    expect(writer.requests.every((request) => request.durationMinutes == 60),
+        isTrue);
     expect(repo.creates, 1);
     expect(find.byType(BookingPaymentScreen), findsOneWidget);
     expect(find.byType(BookingConfirmedScreen), findsNothing);
@@ -311,6 +331,7 @@ void main() {
     expect(find.byType(BookingConfirmedScreen), findsNothing);
     expect(find.text('Real Coach'), findsOneWidget);
     expect(find.text('RM 125.00'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('Check payment status'), 200);
     await tester.tap(find.text('Check payment status'));
     await tester.pumpAndSettle();
     expect(repo.gets, 1);
@@ -433,6 +454,7 @@ void main() {
     }
     expect(repo.gets, 7);
     expect(find.textContaining('Automatic checks paused'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('Check payment status'), 200);
     await tester.tap(find.text('Check payment status'));
     await tester.pump();
     expect(repo.gets, 8);

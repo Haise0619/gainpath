@@ -99,6 +99,10 @@ Future<void> openMemberBooking(
               builder: (routeContext, current) {
                 final services = (factory ?? _services)(session.scope, current);
                 return LiveMemberBookingView(
+                    cancellation: factory == null
+                        ? FirebaseBookingRepository(
+                            scope: session.scope, isCurrent: current)
+                        : null,
                     suggestion: suggestion,
                     payments: payments ??
                         (factory == null

@@ -8,6 +8,7 @@ import 'package:gainpath_domain/identity.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
 import '../shared/coach_profile_screen.dart';
 import '../shared/booking_coach_info.dart';
+import '../shared/persisted_booking_presentation.dart';
 
 /// Formats a branch ID into a human-readable location name.
 /// Never exposes raw IDs like 'branch_internal_42' or 'removed-branch'.
@@ -66,7 +67,7 @@ String resolveStatusLabel(BookingStatus status,
   }
   switch (status) {
     case BookingStatus.pending:
-      return 'Pending hold';
+      return 'Awaiting payment';
     case BookingStatus.confirmed:
       return 'Confirmed';
     case BookingStatus.completed:
@@ -178,9 +179,9 @@ class _BookingDetailsScreenState extends State<BookingDetailsScreen> {
   }
 
   String _formatTime(DateTime d) {
-    final h = d.hour.toString().padLeft(2, '0');
+    final h = d.hour % 12 == 0 ? 12 : d.hour % 12;
     final m = d.minute.toString().padLeft(2, '0');
-    return '$h:$m';
+    return '$h:$m ${d.hour >= 12 ? 'PM' : 'AM'}';
   }
 
   String _formatEndTime(DateTime start, int durationMin) {
@@ -313,10 +314,9 @@ class _BookingDetailsScreenState extends State<BookingDetailsScreen> {
                 ),
                 if (sessionEnded) ...[
                   const SizedBox(height: 12),
-                  const Text('The scheduled session time has passed.'),
+                  const Text(
+                      'Your session has ended. Your coach’s session notes are still pending.'),
                   const Text('Completion has not been recorded.'),
-                  if (r != null)
-                    Text('Recorded booking status: ${r.rawStatus}'),
                 ],
                 if (holdElapsed) ...[
                   const SizedBox(height: 12),
@@ -356,9 +356,7 @@ class _BookingDetailsScreenState extends State<BookingDetailsScreen> {
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        r != null
-                            ? '${r.startLabel} – ${r.endLabel}'
-                            : '${_formatTime(b.start)} – ${_formatEndTime(b.start, b.durationMin)}',
+                        '${_formatTime(b.start)} – ${_formatEndTime(b.start, b.durationMin)}',
                         style: const TextStyle(
                           fontSize: 13.5,
                           fontWeight: FontWeight.w600,
@@ -539,7 +537,11 @@ class _BookingDetailsScreenState extends State<BookingDetailsScreen> {
                 _detailRow(
                   'Payment Status',
                   widget.live
-                      ? 'See payment details'
+                      ? (r?.paymentStatus == 'cleared'
+                          ? 'Paid'
+                          : r?.paymentStatus == 'pending'
+                              ? 'Awaiting payment'
+                              : 'See payment details')
                       : isConfirmed
                           ? 'Paid'
                           : isPending
@@ -554,6 +556,8 @@ class _BookingDetailsScreenState extends State<BookingDetailsScreen> {
                           size: 16, color: AppColors.success)
                       : null,
                 ),
+                if (memberBookingRefundStatus(r) != null)
+                  _detailRow('Refund status', memberBookingRefundStatus(r)!),
                 if (widget.onPayment != null) ...[
                   const SizedBox(height: 10),
                   SizedBox(
@@ -567,9 +571,11 @@ class _BookingDetailsScreenState extends State<BookingDetailsScreen> {
                         ),
                       ),
                       onPressed: widget.onPayment,
-                      child: Text(isPending && !holdElapsed
-                          ? 'View payment / continue'
-                          : 'View payment details'),
+                      child: Text(memberBookingRefundStatus(r) != null
+                          ? 'View Refund Details'
+                          : isPending && !holdElapsed
+                              ? 'Continue to Payment'
+                              : 'View payment details'),
                     ),
                   ),
                 ],
@@ -578,7 +584,11 @@ class _BookingDetailsScreenState extends State<BookingDetailsScreen> {
           ),
 
           // 4. Booking Management
-          if (isPending || isConfirmed || isCancelled || isExpired) ...[
+          if ((isPending && widget.onCancel != null) ||
+              isConfirmed ||
+              ((isCancelled || isExpired) &&
+                  (b.cancellationReason?.isNotEmpty == true ||
+                      widget.onBookAgain != null))) ...[
             _sectionTitle('Booking Management'),
             Panel(
               child: Column(
@@ -700,121 +710,126 @@ class _BookingDetailsScreenState extends State<BookingDetailsScreen> {
           ],
 
           // 5. Session Activity
-          _sectionTitle('Session Activity'),
-          Panel(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if (widget.onMessage != null) ...[
-                  OutlinedButton.icon(
-                    style: OutlinedButton.styleFrom(
-                      minimumSize: const Size(double.infinity, 42),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                    ),
-                    onPressed: widget.onMessage,
-                    icon:
-                        const Icon(Icons.chat_bubble_outline_rounded, size: 17),
-                    label: Text(sessionEnded || isCompleted
-                        ? 'View conversation'
-                        : 'Message $coachName'),
-                  ),
-                  const SizedBox(height: 10),
-                ],
-                if (b.notes != null && b.notes!.isNotEmpty) ...[
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: AppColors.surfaceAlt,
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Row(
-                          children: [
-                            Icon(Icons.sticky_note_2_outlined,
-                                size: 15, color: AppColors.inkSoft),
-                            SizedBox(width: 6),
-                            Text(
-                              'Consultation Notes',
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w700,
-                                color: AppColors.inkSoft,
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 6),
-                        Text(
-                          b.notes!,
-                          style: const TextStyle(fontSize: 13, height: 1.4),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                ],
-                if (widget.onNotes != null) ...[
-                  OutlinedButton.icon(
-                    style: OutlinedButton.styleFrom(
-                      minimumSize: const Size(double.infinity, 42),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                    ),
-                    onPressed: widget.onNotes,
-                    icon: const Icon(Icons.sticky_note_2_outlined, size: 17),
-                    label: const Text('View consultation notes'),
-                  ),
-                  const SizedBox(height: 10),
-                ],
-                if (isCompleted) ...[
-                  if (b.rated)
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 12, vertical: 8),
-                      decoration: BoxDecoration(
-                        color: AppColors.accentTint,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Row(
-                        children: [
-                          const Icon(Icons.star_rounded,
-                              size: 17, color: AppColors.accent),
-                          const SizedBox(width: 6),
-                          Text(
-                            'Session reviewed · ${b.reviewStars ?? 5}/5',
-                            style: const TextStyle(
-                              fontSize: 12.5,
-                              fontWeight: FontWeight.w600,
-                              color: AppColors.accentDark,
-                            ),
-                          ),
-                        ],
-                      ),
-                    )
-                  else if (widget.onReview != null)
-                    FilledButton.icon(
-                      style: FilledButton.styleFrom(
-                        backgroundColor: AppColors.primary,
+          if (widget.onMessage != null ||
+              widget.onNotes != null ||
+              b.notes?.isNotEmpty == true ||
+              isCompleted) ...[
+            _sectionTitle('Session Activity'),
+            Panel(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (widget.onMessage != null) ...[
+                    OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(
                         minimumSize: const Size(double.infinity, 42),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(10),
                         ),
                       ),
-                      onPressed: widget.onReview,
-                      icon: const Icon(Icons.star_rate_rounded, size: 17),
-                      label: const Text('Leave a review'),
+                      onPressed: widget.onMessage,
+                      icon: const Icon(Icons.chat_bubble_outline_rounded,
+                          size: 17),
+                      label: Text(sessionEnded || isCompleted
+                          ? 'View conversation'
+                          : 'Message $coachName'),
                     ),
+                    const SizedBox(height: 10),
+                  ],
+                  if (b.notes != null && b.notes!.isNotEmpty) ...[
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: AppColors.surfaceAlt,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Row(
+                            children: [
+                              Icon(Icons.sticky_note_2_outlined,
+                                  size: 15, color: AppColors.inkSoft),
+                              SizedBox(width: 6),
+                              Text(
+                                'Consultation Notes',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w700,
+                                  color: AppColors.inkSoft,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            b.notes!,
+                            style: const TextStyle(fontSize: 13, height: 1.4),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                  ],
+                  if (widget.onNotes != null) ...[
+                    OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(
+                        minimumSize: const Size(double.infinity, 42),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                      ),
+                      onPressed: widget.onNotes,
+                      icon: const Icon(Icons.sticky_note_2_outlined, size: 17),
+                      label: const Text('View consultation notes'),
+                    ),
+                    const SizedBox(height: 10),
+                  ],
+                  if (isCompleted) ...[
+                    if (b.rated)
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: AppColors.accentTint,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.star_rounded,
+                                size: 17, color: AppColors.accent),
+                            const SizedBox(width: 6),
+                            Text(
+                              'Session reviewed · ${b.reviewStars ?? 5}/5',
+                              style: const TextStyle(
+                                fontSize: 12.5,
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.accentDark,
+                              ),
+                            ),
+                          ],
+                        ),
+                      )
+                    else if (widget.onReview != null)
+                      FilledButton.icon(
+                        style: FilledButton.styleFrom(
+                          backgroundColor: AppColors.primary,
+                          minimumSize: const Size(double.infinity, 42),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                        ),
+                        onPressed: widget.onReview,
+                        icon: const Icon(Icons.star_rate_rounded, size: 17),
+                        label: const Text('Leave a review'),
+                      ),
+                  ],
                 ],
-              ],
+              ),
             ),
-          ),
 
-          // 6. Booking Reference (Collapsible)
+            // 6. Booking Reference (Collapsible)
+          ],
           _sectionTitle('Booking Reference'),
           Panel(
             child: Theme(

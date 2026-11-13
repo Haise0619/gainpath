@@ -598,7 +598,7 @@ class _LiveBookingListViewState extends State<LiveBookingListView> {
                       const SizedBox(width: 6),
                       Expanded(
                         child: Text(
-                          '${controller.recentHistory ? "Past 30 days" : "Next 30 days"} · ${state.page!.timeZone} · ${state.records.length} loaded session${state.records.length == 1 ? '' : 's'}',
+                          '${controller.recentHistory ? "Past 30 days" : "Next 30 days"} · ${state.page!.timeZone == 'Asia/Kuala_Lumpur' ? 'Malaysia time (MYT)' : state.page!.timeZone}',
                           style: const TextStyle(
                             fontSize: 11,
                             color: AppColors.inkSoft,
@@ -813,6 +813,9 @@ class _LiveBookingListViewState extends State<LiveBookingListView> {
                 embedded: widget.embedded,
                 serverNowMillis: state.page?.serverNowMillis,
                 coachInfoFor: (id) => _coachResults[id]?.future,
+                locationFor: (booking) => _coachProfiles[booking.coachId]
+                    ?.statistics
+                    ?.branchNames[booking.branch],
                 coachSpecialtyFor: (id) => _coachProfiles[id]?.fields.specialty,
                 coachPhotoBuilder: (booking) {
                   final profile = _coachProfiles[booking.coachId];

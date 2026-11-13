@@ -29,7 +29,7 @@ class FakeBookingListRepository implements BookingListRepository {
       firstLocalDate: pageDate,
       throughLocalDate: pageDate,
       serverNowMillis:
-          DateTime.parse('${pageDate}T08:00:00Z').millisecondsSinceEpoch,
+          records.first.startAtMillis - const Duration(hours: 2).inMilliseconds,
       timeZone: 'Asia/Kuala_Lumpur',
     );
   }
@@ -153,8 +153,7 @@ void main() {
     // Enter a valid reason
     final dialogField = find.descendant(
         of: find.byType(AlertDialog), matching: find.byType(TextField));
-    await tester.enterText(
-        dialogField, 'Emergency doctor appointment');
+    await tester.enterText(dialogField, 'Emergency doctor appointment');
     await tester.pumpAndSettle();
 
     // Submit dialog

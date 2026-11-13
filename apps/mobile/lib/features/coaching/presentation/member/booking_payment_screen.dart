@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:gainpath_domain/coaching.dart';
+import 'package:gainpath_domain/gainpath_domain.dart' show BookingException;
 import 'package:gainpath_ui/gainpath_ui.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'booking_confirmed_screen.dart';
@@ -13,12 +14,16 @@ class BookingPaymentScreen extends StatefulWidget {
       required this.isCurrent,
       this.create = false,
       this.usePremiumVoucher = false,
+      this.reviewedQuoteToken,
+      this.onCancelUnpaidReservation,
       this.now = DateTime.now});
   final BookingPaymentRepository repository;
   final String bookingId;
   final bool Function() isCurrent;
   final bool create;
   final bool usePremiumVoucher;
+  final String? reviewedQuoteToken;
+  final Future<void> Function()? onCancelUnpaidReservation;
   final DateTime Function() now;
   @override
   State<BookingPaymentScreen> createState() => _BookingPaymentScreenState();
@@ -36,6 +41,26 @@ class _BookingPaymentScreenState extends State<BookingPaymentScreen>
   bool _foreground = true;
   bool _finished = false;
   bool _createRequested = false;
+  bool _quoteChanged = false;
+  bool _opening = false;
+  bool _openedPayment = false;
+  final Stopwatch _serverClock = Stopwatch();
+  int? _serverAnchor;
+  Timer? _countdown;
+  int get _nowMillis => _serverAnchor == null
+      ? widget.now().millisecondsSinceEpoch
+      : _serverAnchor! + _serverClock.elapsedMilliseconds;
+  int get _remainingSeconds => _payment == null
+      ? 0
+      : ((_payment!.holdExpiresAtMillis - _nowMillis) / 1000)
+          .ceil()
+          .clamp(0, 86400);
+  bool get _expired =>
+      _payment != null &&
+      const ['creating', 'awaiting_payment'].contains(_payment!.status) &&
+      _payment!.paymentStatus != 'cleared' &&
+      _payment!.refundStatus == null &&
+      _remainingSeconds == 0;
   bool get _canCheck =>
       mounted && _foreground && !_finished && widget.isCurrent();
 
@@ -59,11 +84,15 @@ class _BookingPaymentScreenState extends State<BookingPaymentScreen>
     final lifecycle = WidgetsBinding.instance.lifecycleState;
     _foreground = lifecycle == null || lifecycle == AppLifecycleState.resumed;
     _load(create: widget.create);
+    _countdown = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (_canCheck && _payment != null) setState(() {});
+    });
   }
 
   @override
   void dispose() {
     _retryTimer?.cancel();
+    _countdown?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -101,31 +130,48 @@ class _BookingPaymentScreenState extends State<BookingPaymentScreen>
     });
     try {
       final result = await (shouldCreate
-          ? widget.usePremiumVoucher
-              ? (widget.repository as PremiumVoucherBookingPaymentRepository)
-                  .createWithPremiumVoucher(widget.bookingId)
-              : widget.repository.create(widget.bookingId)
+          ? widget.reviewedQuoteToken != null
+              ? (widget.repository as ReviewedBookingPaymentRepository)
+                  .createReviewed(widget.bookingId,
+                      quoteToken: widget.reviewedQuoteToken!,
+                      usePremiumVoucher: widget.usePremiumVoucher)
+              : widget.usePremiumVoucher
+                  ? (widget.repository
+                          as PremiumVoucherBookingPaymentRepository)
+                      .createWithPremiumVoucher(widget.bookingId)
+                  : widget.repository.create(widget.bookingId)
           : widget.repository.get(widget.bookingId));
       if (!mounted || !widget.isCurrent()) return;
       setState(() {
         _payment = result;
         _lastChecked = widget.now();
+        if (result.serverNowMillis != null) {
+          // Never allow a stale response to extend an existing reservation.
+          final previousNow = _serverAnchor == null ? null : _nowMillis;
+          _serverAnchor =
+              previousNow == null || result.serverNowMillis! > previousNow
+                  ? result.serverNowMillis
+                  : previousNow;
+          _serverClock
+            ..reset()
+            ..start();
+        }
       });
-      if (_foreground &&
-          result.confirmed &&
-          result.refundStatus != 'completed') {
+      if (_foreground && result.confirmed && result.refundStatus == null) {
         _finished = true;
         Navigator.pushReplacement(
             context,
             MaterialPageRoute<void>(
-                builder: (_) => BookingConfirmedScreen(payment: result)));
-      } else if (_foreground &&
-          shouldCreate &&
-          result.status == 'awaiting_payment') {
-        await _open();
+                builder: (_) => BookingConfirmedScreen(
+                    payment: result, isCurrent: widget.isCurrent)));
       }
-    } catch (_) {
+    } catch (error) {
       if (mounted && widget.isCurrent()) {
+        if (error is BookingException &&
+            error.code == 'booking-quote-changed') {
+          setState(() => _quoteChanged = true);
+          return;
+        }
         setState(() => _message =
             'Payment status unavailable. Check again or retry payment for this same booking.');
       }
@@ -141,14 +187,23 @@ class _BookingPaymentScreenState extends State<BookingPaymentScreen>
   Future<void> _open() async {
     final value = _payment;
     if (!widget.isCurrent() ||
+        _busy ||
+        _opening ||
+        _expired ||
+        _quoteChanged ||
+        value?.paymentStatus == 'cleared' ||
         value?.status != 'awaiting_payment' ||
         value?.checkoutUrl == null ||
         !isBillplzSandboxCheckoutUrl(value!.checkoutUrl!)) {
       return;
     }
+    setState(() => _opening = true);
     try {
       final opened = await launchUrl(Uri.parse(value.checkoutUrl!),
           mode: LaunchMode.externalApplication);
+      if (opened && mounted && widget.isCurrent()) {
+        setState(() => _openedPayment = true);
+      }
       if (!opened && mounted && widget.isCurrent()) {
         setState(() =>
             _message = 'Could not open Billplz. Try opening payment again.');
@@ -158,6 +213,24 @@ class _BookingPaymentScreenState extends State<BookingPaymentScreen>
         setState(() =>
             _message = 'Could not open Billplz. Try opening payment again.');
       }
+    } finally {
+      if (mounted) setState(() => _opening = false);
+    }
+  }
+
+  Future<void> _cancel() async {
+    if (_busy || !widget.isCurrent()) return;
+    setState(() => _busy = true);
+    try {
+      await widget.onCancelUnpaidReservation!();
+      if (mounted && widget.isCurrent()) Navigator.pop(context, 'cancelled');
+    } catch (_) {
+      if (mounted && widget.isCurrent()) {
+        setState(() => _message =
+            'Could not cancel your reservation. Check its status before trying again.');
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
     }
   }
 
@@ -176,9 +249,17 @@ class _BookingPaymentScreenState extends State<BookingPaymentScreen>
       'uncertain' => 'Refund outcome not confirmed',
       'processing' => 'Refund in progress',
       'rejected' => 'Refund request declined',
-      _ => value?.status == 'reconciliation_required'
-          ? 'Payment needs review'
-          : 'Complete payment with Billplz',
+      _ => _quoteChanged
+          ? 'Your booking price changed'
+          : _expired
+              ? 'Reservation expired'
+              : value?.status == 'reconciliation_required'
+                  ? 'Payment needs review'
+                  : value == null
+                      ? 'Preparing your payment'
+                      : _openedPayment || value.paymentStatus == 'cleared'
+                          ? 'Checking your payment'
+                          : 'Your time is reserved',
     };
     final detail = switch (refund) {
       'completed' =>
@@ -197,7 +278,13 @@ class _BookingPaymentScreenState extends State<BookingPaymentScreen>
           ? value?.paymentStatus == 'cleared'
               ? 'Payment was received, but your booking is not confirmed. Contact the gym for a payment review.'
               : 'Your booking is not confirmed. Contact the gym before attempting another payment.'
-          : 'Your booking remains pending until the server verifies payment.',
+          : _quoteChanged
+              ? 'Review the updated total before continuing. No checkout was created.'
+              : _expired
+                  ? 'This unpaid reservation has ended. Choose another available time. If you already paid, check payment status before booking again.'
+                  : _openedPayment || value?.paymentStatus == 'cleared'
+                      ? 'We are waiting for payment confirmation. You can safely check again here without paying twice.'
+                      : 'Complete payment before your reservation ends to secure your session.',
     };
     return Scaffold(
         appBar: AppBar(title: const Text('Session payment')),
@@ -209,20 +296,32 @@ class _BookingPaymentScreenState extends State<BookingPaymentScreen>
             const SizedBox(height: 12),
             Text(title, style: Theme.of(context).textTheme.titleLarge),
             const SizedBox(height: 12),
-            const Text(
-                'Billplz sandbox opens in your browser. Return here to check the trusted booking status.'),
+            if (refund == null && !_expired && !_quoteChanged)
+              const Text(
+                  'Pay securely with Billplz Sandbox. Return here for confirmation.'),
             if (value != null) ...[
               DetailRow('Coach', value.quote.coachName),
               DetailRow('Location', value.quote.branchName),
               const Text(
-                  'Original checkout schedule. Check My bookings for the current session time after rescheduling.'),
+                  'Checkout time. See My Bookings for any rescheduled time.'),
               DetailRow('Date', value.localDate),
               DetailRow('Time', '${value.startLabel} – ${value.endLabel}'),
               DetailRow('Total', value.quote.formattedAmount),
+              DetailRow(
+                  'Session length', '${value.quote.durationMinutes} minutes'),
+              if (!_expired &&
+                  !_quoteChanged &&
+                  value.status == 'awaiting_payment' &&
+                  value.paymentStatus != 'cleared' &&
+                  refund == null)
+                Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    child: Text(
+                        'Time remaining: ${_remainingSeconds ~/ 60}:${(_remainingSeconds % 60).toString().padLeft(2, '0')}',
+                        style: Theme.of(context).textTheme.titleLarge)),
               if (value.quote.voucherApplied)
                 DetailRow('Premium Coach voucher',
                     '- RM ${(value.quote.discountMinor! / 100).toStringAsFixed(2)}'),
-              Text(detail),
               if (_lastChecked != null)
                 Text(
                     'Last checked at ${TimeOfDay.fromDateTime(_lastChecked!).format(context)}.'),
@@ -230,22 +329,50 @@ class _BookingPaymentScreenState extends State<BookingPaymentScreen>
                   ? 'Checks continue every 10 seconds while this screen is open.'
                   : 'Automatic checks paused. Check again when you are ready.'),
             ],
+            Text(detail),
             if (_message != null) Text(_message!),
           ])),
-          if (value?.status == 'awaiting_payment' && value?.checkoutUrl != null)
+          if (_quoteChanged)
             FilledButton(
-                onPressed: _busy ? null : _open,
-                child: const Text('Open Billplz sandbox')),
+                onPressed: () => Navigator.pop(context, 'quote_changed'),
+                child: const Text('Return to booking review')),
+          if (_expired)
+            FilledButton(
+                onPressed: () => Navigator.pop(context, 'expired'),
+                child: const Text('Choose another time')),
+          if (!_expired &&
+              !_quoteChanged &&
+              refund == null &&
+              value?.paymentStatus != 'cleared' &&
+              value?.status == 'awaiting_payment' &&
+              value?.checkoutUrl != null)
+            FilledButton(
+                onPressed: _busy || _opening ? null : _open,
+                child: const Text('Continue to Payment')),
           OutlinedButton(
               onPressed: _busy ? null : () => _load(manual: true),
               child: const Text('Check payment status')),
-          if (value == null ||
-              value.status == 'creating' ||
-              (value.status == 'awaiting_payment' && value.checkoutUrl == null))
+          if (!_expired &&
+              !_quoteChanged &&
+              (value == null ||
+                  value.status == 'creating' ||
+                  (value.status == 'awaiting_payment' &&
+                      value.checkoutUrl == null)))
             TextButton(
                 onPressed:
                     _busy ? null : () => _load(create: true, manual: true),
                 child: const Text('Retry payment for same booking')),
+          if (!_expired &&
+              !_quoteChanged &&
+              refund == null &&
+              value?.paymentStatus != 'cleared' &&
+              value?.status == 'awaiting_payment' &&
+              widget.onCancelUnpaidReservation != null)
+            TextButton(
+                onPressed: _busy ? null : _cancel,
+                child: const Text('Cancel unpaid reservation')),
+          const Text(
+              'Need help? Contact your gym with the coach, session time and payment status shown here.'),
         ]));
   }
 }

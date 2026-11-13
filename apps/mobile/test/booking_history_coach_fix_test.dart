@@ -130,8 +130,11 @@ void main() {
       final stored = PersistedBookingRecord.fromJson(bookingJson(
           status, DateTime.utc(2026, 10, 21, 2, 30),
           status: status));
-      expect(memberBookingStatus(stored, serverNow),
-          status[0].toUpperCase() + status.substring(1));
+      expect(
+          memberBookingStatus(stored, serverNow),
+          status == 'refunded'
+              ? 'Cancelled'
+              : status[0].toUpperCase() + status.substring(1));
     }
     final expiredJson = bookingJson('expired', DateTime.utc(2026, 11, 9, 2, 30),
         status: 'expired');

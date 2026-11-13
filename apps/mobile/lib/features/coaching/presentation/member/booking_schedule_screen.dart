@@ -43,6 +43,7 @@ class BookingScheduleScreen extends StatefulWidget {
       this.coachPhotoBuilder,
       this.coachSpecialtyFor,
       this.coachInfoFor,
+      this.locationFor,
       this.onPayment,
       this.onNotes,
       this.onRescheduleBooking,
@@ -56,6 +57,7 @@ class BookingScheduleScreen extends StatefulWidget {
   final Widget? Function(Booking)? coachPhotoBuilder;
   final String? Function(String)? coachSpecialtyFor;
   final Future<BookingCoachInfo>? Function(String)? coachInfoFor;
+  final String? Function(Booking)? locationFor;
   final bool embedded;
   final List<Booking>? persistedBookings;
   final Map<String, String> statusLabels;
@@ -148,6 +150,9 @@ class _BookingScheduleScreenState extends State<BookingScheduleScreen> {
 
   Widget _buildMainTabs(
       _MainBookingTab currentTab, int upcomingCount, int historyCount) {
+    final tabWidth = MediaQuery.textScalerOf(context).scale(1) > 1.3
+        ? MediaQuery.sizeOf(context).width - 38
+        : (MediaQuery.sizeOf(context).width - 42) / 2;
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(3),
@@ -155,9 +160,12 @@ class _BookingScheduleScreenState extends State<BookingScheduleScreen> {
         color: AppColors.primary.withValues(alpha: .08),
         borderRadius: BorderRadius.circular(14),
       ),
-      child: Row(
+      child: Wrap(
+        spacing: 4,
+        runSpacing: 4,
         children: [
-          Expanded(
+          SizedBox(
+            width: tabWidth,
             child: _buildMainTabButton(
               tab: _MainBookingTab.upcoming,
               label: 'Upcoming',
@@ -173,11 +181,11 @@ class _BookingScheduleScreenState extends State<BookingScheduleScreen> {
               },
             ),
           ),
-          const SizedBox(width: 4),
-          Expanded(
+          SizedBox(
+            width: tabWidth,
             child: _buildMainTabButton(
               tab: _MainBookingTab.history,
-              label: 'History',
+              label: 'Past & Cancelled',
               count: historyCount,
               isSelected: currentTab == _MainBookingTab.history,
               icon: Icons.history_rounded,
@@ -233,46 +241,43 @@ class _BookingScheduleScreenState extends State<BookingScheduleScreen> {
                   ]
                 : null,
           ),
-          child: FittedBox(
-            fit: BoxFit.scaleDown,
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(
-                  icon,
-                  size: 16,
-                  color: isSelected ? Colors.white : AppColors.inkSoft,
-                ),
-                const SizedBox(width: 6),
-                Text(
-                  label,
-                  style: TextStyle(
-                    fontSize: 13.5,
-                    fontWeight: isSelected ? FontWeight.w700 : FontWeight.w600,
-                    color: isSelected ? Colors.white : AppColors.ink,
-                  ),
-                ),
-                const SizedBox(width: 6),
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: isSelected
-                        ? Colors.white.withValues(alpha: .22)
-                        : AppColors.surfaceAlt,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                icon,
+                size: 16,
+                color: isSelected ? Colors.white : AppColors.inkSoft,
+              ),
+              const SizedBox(width: 6),
+              Flexible(
                   child: Text(
-                    '$count',
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                      color: isSelected ? Colors.white : AppColors.inkSoft,
-                    ),
+                label,
+                style: TextStyle(
+                  fontSize: 13.5,
+                  fontWeight: isSelected ? FontWeight.w700 : FontWeight.w600,
+                  color: isSelected ? Colors.white : AppColors.ink,
+                ),
+              )),
+              const SizedBox(width: 6),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: isSelected
+                      ? Colors.white.withValues(alpha: .22)
+                      : AppColors.surfaceAlt,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  '$count',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: isSelected ? Colors.white : AppColors.inkSoft,
                   ),
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),
@@ -544,6 +549,7 @@ class _BookingScheduleScreenState extends State<BookingScheduleScreen> {
         padding: const EdgeInsets.only(bottom: 10),
         child: BookingCard(
           booking: booking,
+          locationLabel: widget.locationFor?.call(booking),
           record: record,
           live: live,
           statusLabel: widget.statusLabels[booking.id] ??
@@ -612,7 +618,12 @@ class _BookingScheduleScreenState extends State<BookingScheduleScreen> {
         ];
     List<Booking> group(MemberBookingPhase phase) =>
         bookings.where((b) => _phase(b) == phase).toList();
-    final upcoming = group(MemberBookingPhase.upcoming);
+    final current = group(MemberBookingPhase.upcoming);
+    bool awaitingPayment(Booking b) =>
+        widget.recordFor?.call(b.id)?.rawStatus == 'pending_hold' ||
+        b.status == BookingStatus.pending;
+    final upcoming = current.where((b) => !awaitingPayment(b)).toList();
+    final awaiting = current.where(awaitingPayment).toList();
     final past = group(MemberBookingPhase.past),
         elapsed = group(MemberBookingPhase.holdElapsed);
     final completed = group(MemberBookingPhase.completed),
@@ -627,7 +638,7 @@ class _BookingScheduleScreenState extends State<BookingScheduleScreen> {
         refunded.length;
 
     if (widget.historyRange == false || widget.historyRange == null) {
-      _lastKnownUpcomingCount = upcoming.length;
+      _lastKnownUpcomingCount = current.length;
     }
     if (widget.historyRange == true || widget.historyRange == null) {
       _lastKnownHistoryCount = historyCount;
@@ -637,7 +648,7 @@ class _BookingScheduleScreenState extends State<BookingScheduleScreen> {
             upcoming.isEmpty &&
             _lastKnownUpcomingCount != null)
         ? _lastKnownUpcomingCount!
-        : upcoming.length;
+        : current.length;
 
     final displayHistoryCount = (widget.historyRange == false &&
             historyCount == 0 &&
@@ -646,7 +657,7 @@ class _BookingScheduleScreenState extends State<BookingScheduleScreen> {
         : historyCount;
 
     final live = widget.persistedBookings != null;
-    final tab = _currentTab(upcoming.length, historyCount);
+    final tab = _currentTab(current.length, historyCount);
     final sections = <({String title, List<Booking> rows})>[
       if (_historyFilter == _HistoryFilter.all ||
           _historyFilter == _HistoryFilter.refunded)
@@ -654,7 +665,7 @@ class _BookingScheduleScreenState extends State<BookingScheduleScreen> {
       if (_historyFilter == _HistoryFilter.all ||
           _historyFilter == _HistoryFilter.past) ...[
         (title: 'Past sessions', rows: past),
-        (title: 'Elapsed holds', rows: elapsed)
+        (title: 'Reservation time elapsed', rows: elapsed)
       ],
       if (_historyFilter == _HistoryFilter.all ||
           _historyFilter == _HistoryFilter.completed)
@@ -677,7 +688,7 @@ class _BookingScheduleScreenState extends State<BookingScheduleScreen> {
           _buildMainTabs(tab, displayUpcomingCount, displayHistoryCount),
           if (tab == _MainBookingTab.upcoming) ...[
             _sectionHeader('Upcoming', upcoming.length),
-            if (upcoming.isEmpty)
+            if (current.isEmpty)
               _emptyState(context,
                   icon: Icons.event_available_outlined,
                   title: 'No upcoming sessions',
@@ -685,6 +696,10 @@ class _BookingScheduleScreenState extends State<BookingScheduleScreen> {
                       'You have no scheduled sessions. Find a coach to book a consultation.',
                   action: _buildFindCoachButton()),
             ...upcoming.map((b) => _card(b, live)),
+            if (awaiting.isNotEmpty) ...[
+              _sectionHeader('Awaiting Payment', awaiting.length),
+              ...awaiting.map((b) => _card(b, live)),
+            ],
           ] else ...[
             _buildHistoryFilterChips(
                 historyCount, completed.length, cancelled.length,

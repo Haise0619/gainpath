@@ -123,13 +123,23 @@ void main() {
         home: LiveBookingListView(
             repository: fake, cancellation: fake, isCurrent: () => true)));
     await tester.pumpAndSettle();
-    await tester.ensureVisible(find.widgetWithText(OutlinedButton, 'Cancel'));
-    await tester.tap(find.widgetWithText(OutlinedButton, 'Cancel'));
+    await tester.tap(find.text('View details'));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+        find.widgetWithText(OutlinedButton, 'Cancel hold'), 180);
+    await tester
+        .ensureVisible(find.widgetWithText(OutlinedButton, 'Cancel hold'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(OutlinedButton, 'Cancel hold'));
     await tester.pumpAndSettle();
     expect(fake.requests, isEmpty);
-    await tester.tap(find.text('Cancel hold'));
+    await tester.tap(find.widgetWithText(TextButton, 'Cancel hold'));
     await tester.pumpAndSettle();
     expect(fake.requests.length, 1);
+    await tester.tap(find.byType(BackButton));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('tab_history')));
+    await tester.pumpAndSettle();
     expect(find.text('Cancelled'), findsWidgets);
     expect(find.widgetWithText(OutlinedButton, 'Cancel'), findsNothing);
     await tester.pumpWidget(MaterialApp(
@@ -138,11 +148,10 @@ void main() {
             repository: LifecycleFake(),
             isCurrent: () => true)));
     await tester.pumpAndSettle();
-    expect(
-        tester
-            .widget<OutlinedButton>(
-                find.widgetWithText(OutlinedButton, 'Cancel'))
-            .onPressed,
-        isNull);
+    await tester.tap(find.text('View details'));
+    await tester.pumpAndSettle();
+    await tester.drag(find.byType(Scrollable).first, const Offset(0, -600));
+    await tester.pumpAndSettle();
+    expect(find.widgetWithText(OutlinedButton, 'Cancel hold'), findsNothing);
   });
 }

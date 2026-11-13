@@ -77,7 +77,7 @@ void main() {
 
       // Main tabs are visible with counts: Upcoming (1), History (2)
       expect(find.widgetWithText(InkWell, 'Upcoming'), findsOneWidget);
-      expect(find.widgetWithText(InkWell, 'History'), findsOneWidget);
+      expect(find.byKey(const ValueKey('tab_history')), findsOneWidget);
       expect(find.text('1'), findsWidgets);
       expect(find.text('2'), findsWidgets);
 
@@ -110,7 +110,9 @@ void main() {
       await tester.pumpAndSettle();
 
       // Switch to History tab
-      await tester.tap(find.widgetWithText(InkWell, 'History'));
+      await tester.ensureVisible(find.byKey(const ValueKey('tab_history')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('tab_history')));
       await tester.pumpAndSettle();
 
       // Upcoming is hidden
@@ -145,7 +147,9 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      await tester.tap(find.widgetWithText(InkWell, 'History'));
+      await tester.ensureVisible(find.byKey(const ValueKey('tab_history')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('tab_history')));
       await tester.pumpAndSettle();
 
       // Tap on Completed sub-filter
@@ -176,7 +180,9 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      await tester.tap(find.widgetWithText(InkWell, 'History'));
+      await tester.ensureVisible(find.byKey(const ValueKey('tab_history')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('tab_history')));
       await tester.pumpAndSettle();
 
       // Tap on Cancelled sub-filter
@@ -235,7 +241,9 @@ void main() {
       expect(findCoachTapped, isTrue);
 
       // Switch to History tab with 0 sessions
-      await tester.tap(find.widgetWithText(InkWell, 'History'));
+      await tester.ensureVisible(find.byKey(const ValueKey('tab_history')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('tab_history')));
       await tester.pumpAndSettle();
 
       expect(find.text('No session history'), findsOneWidget);
@@ -300,7 +308,9 @@ void main() {
       expect(tester.takeException(), isNull);
 
       // Switch to History tab at 320px 2.0x scale
-      await tester.tap(find.widgetWithText(InkWell, 'History'));
+      await tester.ensureVisible(find.byKey(const ValueKey('tab_history')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('tab_history')));
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
     });
@@ -346,7 +356,7 @@ void main() {
           resolveStatusLabel(BookingStatus.cancelled, labelOverride: 'Expired'),
           'Expired');
       expect(resolveStatusLabel(BookingStatus.cancelled), 'Cancelled');
-      expect(resolveStatusLabel(BookingStatus.pending), 'Pending hold');
+      expect(resolveStatusLabel(BookingStatus.pending), 'Awaiting payment');
       expect(resolveStatusLabel(BookingStatus.confirmed), 'Confirmed');
       expect(resolveStatusLabel(BookingStatus.completed), 'Completed');
     });
@@ -416,8 +426,8 @@ void main() {
       await tester.scrollUntilVisible(find.text('BOOKING MANAGEMENT'), 100);
       expect(find.text('BOOKING MANAGEMENT'), findsOneWidget);
 
-      await tester.scrollUntilVisible(find.text('SESSION ACTIVITY'), 100);
-      expect(find.text('SESSION ACTIVITY'), findsOneWidget);
+      // No conversation, notes or review destination was supplied.
+      expect(find.text('SESSION ACTIVITY'), findsNothing);
 
       await tester.scrollUntilVisible(find.text('BOOKING REFERENCE'), 100);
       expect(find.text('BOOKING REFERENCE'), findsOneWidget);

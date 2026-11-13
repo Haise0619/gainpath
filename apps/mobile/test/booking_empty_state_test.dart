@@ -41,9 +41,9 @@ void main() {
             isCurrent: () => true,
             onOpenBookings: () => opened++)));
     await tester.pumpAndSettle();
-    expect(find.textContaining('Daily booking limit reached for 2026-10-14'),
+    expect(find.textContaining('daily booking limit'),
         findsOneWidget);
-    expect(find.textContaining('active unpaid hold'), findsOneWidget);
+    expect(find.textContaining('active reservations'), findsOneWidget);
     await tester.ensureVisible(find.text('View My bookings'));
     await tester.tap(find.text('View My bookings'));
     expect(opened, 1);

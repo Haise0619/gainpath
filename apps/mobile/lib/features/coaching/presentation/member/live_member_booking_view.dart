@@ -11,6 +11,7 @@ class LiveMemberBookingView extends StatelessWidget {
       required this.options,
       required this.writer,
       this.payments,
+      this.cancellation,
       this.suggestion,
       required this.coachId,
       required this.isCurrent,
@@ -18,6 +19,7 @@ class LiveMemberBookingView extends StatelessWidget {
   final MemberBookingOptionsRepository options;
   final BookingRepository writer;
   final BookingPaymentRepository? payments;
+  final BookingCancellationRepository? cancellation;
   final BookingSuggestionAttachment? suggestion;
   final String coachId;
   final bool Function() isCurrent;
@@ -27,6 +29,7 @@ class LiveMemberBookingView extends StatelessWidget {
       options: options,
       writer: writer,
       payments: payments,
+      cancellation: cancellation,
       suggestion: suggestion,
       coachId: coachId,
       isCurrent: isCurrent,

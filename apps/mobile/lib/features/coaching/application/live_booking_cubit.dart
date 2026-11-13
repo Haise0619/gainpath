@@ -53,7 +53,7 @@ class LiveBookingCubit extends Cubit<LiveBookingState> {
   Future<void> refresh({String? localDate, int? durationMinutes}) async {
     if (state.busy || state.uncertain || !_current(_generation)) return;
     final generation = ++_generation;
-    final duration = durationMinutes ?? state.options?.durationMinutes ?? 30;
+    final duration = durationMinutes ?? state.options?.durationMinutes ?? 60;
     final date = localDate ?? state.options?.localDate;
     emit(const LiveBookingState(busy: true));
     try {
@@ -152,6 +152,14 @@ class LiveBookingCubit extends Cubit<LiveBookingState> {
         options: state.options,
         message:
             'Intent discarded here. Any existing hold remains unchanged. Refresh My bookings.'));
+  }
+
+  /// Caller has confirmed closure through the owned server cancellation command.
+  /// Never use a local timer or a transport failure as closure evidence.
+  void clearClosedHold() {
+    if (state.busy || state.hold == null || !_current(_generation)) return;
+    _generation++;
+    emit(LiveBookingState(options: state.options));
   }
 
   static String _safe(Object error) => error is BookingException
