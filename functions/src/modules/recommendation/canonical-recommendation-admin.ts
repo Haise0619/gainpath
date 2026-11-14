@@ -1,3 +1,4 @@
+import {canonicalRecommendationPage} from './canonical-recommendation-page';
 import {DomainError} from '../../platform/errors';
 import {requiredIdentifier} from '../../platform/validation';
 import {keys,object} from '../workouts/workout-backup-validation';
@@ -21,14 +22,13 @@ export function createCanonicalRecommendationAdmin(deps: RecommendationCommandDe
       if(e.operation==='admin.queue.list') {
         keys(q,['schemaVersion','organizationId','afterId']);
         if(q.schemaVersion!==1||q.afterId!==null&&(typeof q.afterId!=='string'||!/^[a-f0-9]{64}$/.test(q.afterId)))throw new DomainError('invalid-argument','Invalid query.');
-        const ids=await lifecycle.ids(auth,org,q.afterId as string|null,true),records:unknown[]=[];
-        for(const id of ids)try{records.push(await lifecycle.adminDetail(auth,org,id));}catch(error){if(!(error instanceof DomainError)||error.code!=='failed-precondition')throw error;}
-        return{schemaVersion:1,mode:'accepted_workout',organizationId:org,records,nextAfterId:ids.length===25?ids[ids.length-1]:null};
+        const page=await canonicalRecommendationPage({...deps,runtime:deps.runtime},auth,org,q.afterId as string|null,true);
+        return{schemaVersion:1,mode:'accepted_workout',organizationId:org,enabled:true,reason:null,records:page.records,nextAfterId:page.nextAfterId};
       }
       if(e.operation==='admin.queue.detail'||e.operation==='delivery.process') {
         keys(q,['schemaVersion','organizationId','id']); if(q.schemaVersion!==1||typeof q.id!=='string')throw new DomainError('invalid-argument','Invalid lookup.');
-        await lifecycle.adminDetail(auth,org,q.id);
-        return e.operation==='delivery.process'?await lifecycle.deliver(org,q.id):await lifecycle.adminDetail(auth,org,q.id);
+        const detail=await lifecycle.adminDetail(auth,org,q.id);
+        return e.operation==='delivery.process'?await lifecycle.deliver(org,q.id):detail;
       }
       keys(q,['schemaVersion','organizationId','id','expectedRevision','commandId','action']);
       if(q.schemaVersion!==1||typeof q.id!=='string'||!Number.isSafeInteger(q.expectedRevision)||Number(q.expectedRevision)<1||typeof q.commandId!=='string'||!['send','dismiss'].includes(String(q.action)))throw new DomainError('invalid-argument','Invalid decision.');

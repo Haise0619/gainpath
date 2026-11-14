@@ -7,4 +7,3 @@ export {module13MemberCommand, module13AdminCommand} from './modules/recommendat
 export {module9MemberCommandCallable} from './modules/coaching/module9-member-callable';
 export {module13WorkoutBackupCreated, module13WorkoutConsentChanged} from './modules/recommendation/workout-backup-recommendation-events';
 export {module13FypWorkoutBackupCreated, module13FypWorkoutConsentChanged} from './modules/recommendation/fyp-workout-backup-events';
-export {module13ReplayWorkoutHistory} from './modules/recommendation/workout-backup-history-callable';

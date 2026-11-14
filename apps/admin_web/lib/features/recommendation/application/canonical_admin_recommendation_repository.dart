@@ -198,6 +198,7 @@ class CanonicalAdminRecommendationRepository {
   final bool Function() _current;
   final CanonicalAdminInvoke _invoke;
   bool _enabled = false;
+  bool _accessDenied = false;
   bool get enabled => _enabled && isCurrent;
   bool get isCurrent {
     try {
@@ -236,6 +237,7 @@ class CanonicalAdminRecommendationRepository {
       throw const FormatException('Invalid canonical access.');
     }
     _enabled = r['enabled'] == true;
+    _accessDenied = !_enabled;
     return enabled;
   }
 
@@ -247,7 +249,8 @@ class CanonicalAdminRecommendationRepository {
   }
 
   Future<CanonicalAdminPage> list({String? afterId}) async {
-    _ready();
+    _guard();
+    if (_accessDenied) throw StateError('Recommendations require review.');
     if (afterId != null) _id(afterId);
     final r = await _call('admin.queue.list', {'afterId': afterId});
     if (r['schemaVersion'] != 1 ||
@@ -267,6 +270,7 @@ class CanonicalAdminRecommendationRepository {
     if (next == afterId && next != null) {
       throw const FormatException('Repeated queue page.');
     }
+    _enabled = true;
     return CanonicalAdminPage(List.unmodifiable(records), next);
   }
 

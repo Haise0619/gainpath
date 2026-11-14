@@ -44,6 +44,51 @@ void main() {
         'Guidance for your exercise practice.');
   });
   setUpAll(() => GoogleFonts.config.allowRuntimeFetching = false);
+  testWidgets(
+      'notification signals coalesce and retain cards during refresh without polling',
+      (t) async {
+    final updates = StreamController<void>.broadcast();
+    final repo = RpcMemberRecommendationRepository(
+        scope: scope,
+        isCurrent: () => true,
+        invoke: (_) async => memberDetail());
+    var calls = 0, invalidations = 0;
+    Completer<MemberRecommendationPage>? pending;
+    final record =
+        MemberRecommendationDetail.parse(memberDetail(), 'gym1', 'r1');
+    await t.pumpWidget(MaterialApp(
+        home: Scaffold(
+            body: SingleChildScrollView(
+                child: MemberRecommendationsView(
+                    repository: repo,
+                    isCurrent: () => true,
+                    updates: updates.stream,
+                    onInvalidate: () => invalidations++,
+                    onOpenTarget: (_, __) async {},
+                    loadPage: ({required bool history, String? afterId}) async {
+                      calls++;
+                      return pending?.future ??
+                          Future.value(
+                              MemberRecommendationPage(records: [record]));
+                    })))));
+    await t.pumpAndSettle();
+    expect(calls, 1);
+    pending = Completer<MemberRecommendationPage>();
+    updates.add(null);
+    updates.add(null);
+    updates.add(null);
+    await t.pump();
+    await t.pump(const Duration(milliseconds: 300));
+    expect(calls, 2);
+    expect(invalidations, 3);
+    expect(find.text('Coach Alex'), findsOneWidget);
+    pending.complete(MemberRecommendationPage(records: [record]));
+    await t.pumpAndSettle();
+    await t.pump(const Duration(seconds: 65));
+    expect(calls, 2);
+    await t.pumpWidget(const SizedBox());
+    await updates.close();
+  });
   testWidgets('returning Home discovers a delayed automatic delivery',
       (t) async {
     var visible = false, calls = 0;

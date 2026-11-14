@@ -16,6 +16,18 @@ const callable=(method:'session'|'command')=>onCall(options,async request=>{
 });
 export const fypDatasetSessionCommand=callable('session');
 export const fypDatasetCommand=callable('command');
+// Emulator-only comparison with the archived pre-optimization backend.
+// This endpoint is never part of the eight-entry deployment package.
+export const fypDatasetBaselineCommand=onCall(options,async request=>{
+  if(process.env.GCLOUD_PROJECT!=='demo-gainpath-fyp'||
+    process.env.FIRESTORE_EMULATOR_HOST!=='127.0.0.1:18231'||
+    process.env.FIREBASE_AUTH_EMULATOR_HOST!=='127.0.0.1:19131')throw new HttpsError('permission-denied','Emulator only.');
+  const baseline=require('../baseline/modules/dataset/fyp-backend.js') as typeof import('./modules/dataset/fyp-backend');
+  return baseline.createFypDatasetBackend({db:getFirestore(),auth:getAuth()}).command(request as never);
+});
+export {module13MemberCommand,module13AdminCommand} from './modules/recommendation/canonical-recommendation-callables';
+export {module13WorkoutBackupCreated,module13WorkoutConsentChanged} from './modules/recommendation/workout-backup-recommendation-events';
+export {workoutBackupCommand} from './modules/workouts/workout-backup-callable';
 // Actual legacy endpoints are loaded ONLY in this emulator package to prove
 // assigned actors cannot acquire canonical authority through older clients.
 export {provisionMemberRegistration} from './modules/identity/provision-member-registration';

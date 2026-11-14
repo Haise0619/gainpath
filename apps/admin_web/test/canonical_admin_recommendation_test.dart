@@ -69,6 +69,7 @@ void main() {
       (t) async {
     final h = CanonicalAdminHarness();
     await show(t, h);
+    expect(h.requests.map((r) => r['operation']), ['admin.queue.list']);
     expect(find.text('Awaiting delivery: 1'), findsOneWidget);
     expect(find.text('Fictional educational dataset'), findsNothing);
     h.pendingDetail = Completer<Object?>();

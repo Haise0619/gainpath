@@ -27,6 +27,14 @@ function publication(extra: Record<string, unknown> = {}, dayNumber: number | un
 }
 
 describe('Module 13 release boundaries and truthful catalog coverage', () => {
+  it('prepares exactly eight entrypoints with history inside the Member API', () => {
+    const release=readFileSync(resolve(process.cwd(),'src/workout-recommendation-release-index.ts'),'utf8');
+    const names=[...release.matchAll(/export \{([^}]+)\}/g)].flatMap(match=>match[1].split(',').map(name=>name.trim()));
+    expect(names).toHaveLength(8);
+    expect(names).toContain('module13MemberCommand');
+    expect(names).not.toContain('module13ReplayWorkoutHistory');
+    expect(release).not.toMatch(/BaselineCommand|fyp-local-index/);
+  });
   it('keeps all production activation controls off with no invented approved policy', () => {
     expect(config).toMatchObject({revision: 0, policies: [],
       activation: {generation: false, externalAi: false, matching: false, delivery: false}});
@@ -58,7 +66,6 @@ describe('Module 13 release boundaries and truthful catalog coverage', () => {
       "export {module13MemberCommand,module13AdminCommand} from './modules/recommendation/canonical-recommendation-callables';",
       "export {module13AcceptedWorkoutCreated,module13RecoverDeliveries} from './modules/recommendation/canonical-recommendation-events';",
       "export {module13WorkoutBackupCreated,module13WorkoutConsentChanged} from './modules/recommendation/workout-backup-recommendation-events';",
-      "export {module13ReplayWorkoutHistory} from './modules/recommendation/workout-backup-history-callable';",
       "export {module13FypWorkoutBackupCreated,module13FypWorkoutConsentChanged} from './modules/recommendation/fyp-workout-backup-events';",
     ]);
     const withoutReviewedBoundaries = canonicalExports.reduce((source,line)=>source.replace(line,''),entry);

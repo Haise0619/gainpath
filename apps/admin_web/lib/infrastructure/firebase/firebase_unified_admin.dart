@@ -50,7 +50,8 @@ class UnifiedAdminTransport implements ScopedCommandTransport {
           'report',
           'workouts',
           'business',
-          'cohort'
+          'cohort',
+          'recommendations'
         }.contains(action) ||
         data.keys.any(const {
           'rootPath',

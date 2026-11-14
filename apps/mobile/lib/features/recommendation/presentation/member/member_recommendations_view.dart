@@ -14,12 +14,16 @@ class MemberRecommendationsView extends StatefulWidget {
       required this.loadPage,
       required this.isCurrent,
       required this.onOpenTarget,
+      this.updates,
+      this.onInvalidate,
       this.photoBuilder,
       this.onSettings,
       this.onViewAll,
       this.compact = false,
       this.visible = true});
 
+  final Stream<void>? updates;
+  final VoidCallback? onInvalidate;
   final MemberRecommendationRepository repository;
   final MemberRecommendationPageLoader loadPage;
   final bool Function() isCurrent;
@@ -38,6 +42,9 @@ class _RecommendationsState extends State<MemberRecommendationsView> {
   String? _error, _next;
   int _generation = 0;
   Timer? _afterWorkoutRefresh;
+  Timer? _signalDebounce;
+  StreamSubscription<void>? _updates;
+  bool _fetching = false, _refreshPending = false;
   bool get _current =>
       mounted && widget.isCurrent() && widget.repository.isCurrent;
 
@@ -45,11 +52,34 @@ class _RecommendationsState extends State<MemberRecommendationsView> {
   void initState() {
     super.initState();
     _load();
+    _listen();
+  }
+
+  void _listen() {
+    _updates?.cancel();
+    _updates = widget.updates?.listen((_) {
+      widget.onInvalidate?.call();
+      _signalDebounce?.cancel();
+      _signalDebounce = Timer(const Duration(milliseconds: 250), () {
+        if (!_current || !widget.visible) return;
+        if (_fetching) {
+          _refreshPending = true;
+          return;
+        }
+        _load(quiet: true);
+      });
+    }, onError: (_) {/* Pull to refresh remains available. */});
+  }
+
+  void _refresh() {
+    widget.onInvalidate?.call();
+    _load();
   }
 
   @override
   void didUpdateWidget(covariant MemberRecommendationsView oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.updates != widget.updates) _listen();
     if (oldWidget.repository != widget.repository) {
       _records.clear();
       _next = null;
@@ -57,7 +87,7 @@ class _RecommendationsState extends State<MemberRecommendationsView> {
     } else if (!oldWidget.visible && widget.visible) {
       _load();
       _afterWorkoutRefresh?.cancel();
-      _refreshAfterReturn(0);
+      if (widget.updates == null) _refreshAfterReturn(0);
     } else if (!widget.visible) {
       _afterWorkoutRefresh?.cancel();
     }
@@ -84,10 +114,13 @@ class _RecommendationsState extends State<MemberRecommendationsView> {
   @override
   void dispose() {
     _afterWorkoutRefresh?.cancel();
+    _signalDebounce?.cancel();
+    _updates?.cancel();
     super.dispose();
   }
 
   Future<void> _load({bool more = false, bool quiet = false}) async {
+    _fetching = true;
     final generation = ++_generation;
     if (!widget.repository.enabled || !widget.isCurrent()) {
       setState(() {
@@ -100,7 +133,6 @@ class _RecommendationsState extends State<MemberRecommendationsView> {
     setState(() {
       _loading = !quiet;
       _error = null;
-      if (!more && !quiet) _records.clear();
     });
     try {
       final page = await widget.loadPage(
@@ -117,7 +149,7 @@ class _RecommendationsState extends State<MemberRecommendationsView> {
       setState(() {
         _enabled = page.enabled;
         _next = page.nextAfterId;
-        if (!more && quiet) {
+        if (!more) {
           _records.clear();
         }
         for (final record in page.records) {
@@ -138,6 +170,14 @@ class _RecommendationsState extends State<MemberRecommendationsView> {
           _error = 'We could not load your recommendations.';
         }
       });
+    } finally {
+      if (generation == _generation) {
+        _fetching = false;
+        if (_refreshPending && _current && widget.visible) {
+          _refreshPending = false;
+          _load(quiet: true);
+        }
+      }
     }
   }
 
@@ -149,7 +189,10 @@ class _RecommendationsState extends State<MemberRecommendationsView> {
         isCurrent: widget.isCurrent,
         onOpenTarget: widget.onOpenTarget,
         scopedPhotoBuilder: widget.photoBuilder);
-    if (_current) await _load();
+    if (_current) {
+      widget.onInvalidate?.call();
+      await _load(quiet: true);
+    }
   }
 
   Future<void> _open(MemberRecommendationDetail previous) async {
@@ -169,7 +212,10 @@ class _RecommendationsState extends State<MemberRecommendationsView> {
       }
       if (!_current) return;
       await widget.onOpenTarget(context, detail);
-      if (_current) await _load();
+      if (_current) {
+        widget.onInvalidate?.call();
+        await _load(quiet: true);
+      }
     } catch (_) {
       if (_current) {
         setState(() {
@@ -190,7 +236,10 @@ class _RecommendationsState extends State<MemberRecommendationsView> {
     try {
       await widget.repository.act(detail, 'dismiss',
           'dismiss-${detail.recommendationId}-${detail.revision}');
-      if (_current) await _load();
+      if (_current) {
+        widget.onInvalidate?.call();
+        await _load(quiet: true);
+      }
     } catch (_) {
       if (_current) {
         setState(() {
@@ -249,7 +298,7 @@ class _RecommendationsState extends State<MemberRecommendationsView> {
       else if (_error != null)
         _message(_error!,
             action: TextButton(
-                onPressed: _loading ? null : () => _load(),
+                onPressed: _loading ? null : _refresh,
                 child: const Text('Try again')))
       else if (_records.isEmpty)
         _message(

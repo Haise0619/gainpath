@@ -9,6 +9,8 @@ import {getAuth,type Auth} from 'firebase-admin/auth';
 import {afterAll,beforeAll,expect,it} from 'vitest';
 import {buildFypDataset,FYP_ROOT,type FypDataset} from '../src/modules/dataset/fyp-dataset';
 import {applyFypSeed,describeFypSeed,cleanupFypSeedDryRun} from '../src/modules/dataset/fyp-seed';
+import {fypDigest} from '../src/modules/dataset/fyp-integrity';
+import {UNIFIED_ADMIN_GATE} from '../src/modules/dataset/unified-admin-scope';
 const project='demo-gainpath-fyp',out='../build/fyp-cohort-integration';
 let app:App,db:Firestore,auth:Auth,dataset:FypDataset;
 const password=randomBytes(24).toString('base64url'),tokens=new Map<string,string>(),proof:Record<string,unknown>={schemaVersion:1,projectId:project,databaseId:'(default)',liveFirebase:false,appCheck:'Functions emulator decoded test token, not production cryptographic attestation'};
@@ -236,3 +238,85 @@ it('preserves every protected baseline and leaves paid/reward/workout acceptance
  expect(await protectedSnapshot()).toEqual(proof.protectedBefore);
  for(const col of['transactions','payments','rewardBalances','rewardAwards','memberPrograms','workoutSessions'])expect((await db.collection(`${FYP_ROOT}/${col}`).get()).empty).toBe(true);proof.baselineUnchanged=true;
 });
+
+it('bulk Member feed retains legacy history and measures authenticated baseline versus optimized calls',async()=>{
+ const uid=dataset.memberIds[3],admin=dataset.adminId;
+ const baseline=(actor:string,operation:string,data:unknown)=>rawCall(actor,'fypDatasetBaselineCommand',{schemaVersion:1,operation,data});
+ async function oldMember(){
+  const inbox=await baseline(uid,'member.inbox',q());
+  const records=[];let requests=1;
+  for(const notice of inbox.records){
+   if(!notice.recommendation)continue;
+   records.push(await baseline(uid,'member.recommendation.command',q({recommendationId:notice.recommendation.recommendationId,
+    action:'get',commandId:null,expectedRevision:null})));requests++;
+  }
+  return{records,requests};
+ }
+ const latest=await call(uid,'member.recommendation.list',q({history:true,afterId:null}));
+ const original=await oldMember();
+ expect(latest.recommendations.map((r:any)=>r.recommendationId).sort()).toEqual(original.records.map((r:any)=>r.recommendationId).sort());
+ expect(latest.recommendations.some((r:any)=>r.mode==='workout_backup')).toBe(true);
+ expect(latest.recommendations.some((r:any)=>r.mode==='synthetic_local')).toBe(true);
+ await expect(call(dataset.adminId,'member.recommendation.list',q({history:true,afterId:null}))).rejects.toThrow();
+ const samples:any[]=[];
+ for(let round=0;round<3;round++){
+  let start=performance.now();const before=await oldMember();const beforeMillis=performance.now()-start;
+  start=performance.now();await call(uid,'member.recommendation.list',q({history:true,afterId:null}));const afterMillis=performance.now()-start;
+  start=performance.now();await baseline(admin,'workout.session.access',q());await baseline(admin,'workout.admin.queue.list',q({afterId:null}));const adminBeforeMillis=performance.now()-start;
+  start=performance.now();await call(admin,'workout.admin.queue.list',q({afterId:null}));const adminAfterMillis=performance.now()-start;
+  samples.push({round,member:{beforeRequests:before.requests,afterRequests:1,beforeMillis,afterMillis},admin:{beforeRequests:2,afterRequests:1,beforeMillis:adminBeforeMillis,afterMillis:adminAfterMillis}});
+ }
+ proof.optimizationPerformance={environment:'loopback Firebase Emulator; authenticated HTTP; warmed endpoints; same records; no camera or live latency claim',samples};
+ mkdirSync('../build/module13-final-optimization',{recursive:true});
+ writeFileSync('../build/module13-final-optimization/performance.json',JSON.stringify(proof.optimizationPerformance,null,2));
+},120000);
+
+it('ordinary authenticated Member backup event delivers, replays, dismisses and is visible in unified Admin monitoring',async()=>{
+ const uid='baseline-member',admin='baseline-admin';
+ const gate={schemaVersion:1,organizationId:'gainpath',cohortId:'fyp-v1',rootPath:FYP_ROOT,enabled:true,version:'unified-admin-v1'};
+ await db.doc(UNIFIED_ADMIN_GATE).set(gate);
+ await db.doc(`${FYP_ROOT}/unifiedSampleOwnership/${fypDigest(UNIFIED_ADMIN_GATE)}`).set({
+  schemaVersion:1,seedId:'unified-admin-business-v1',path:UNIFIED_ADMIN_GATE,digest:fypDigest(gate)});
+ // Explicit synthetic emulator inputs. This is not a camera or live account acceptance test.
+ for(const collection of ['exerciseVideos','content']){
+  const rows=await db.collection(`${FYP_ROOT}/${collection}`).get();
+  for(const row of rows.docs)await db.doc(`orgs/gainpath/${collection}/${row.id}`).set(row.data());
+ }
+ const member=(operation:string,data:unknown)=>rawCall(uid,'module13MemberCommand',{schemaVersion:1,operation,data});
+ const notice=await member('member.consent.notice',q());
+ let consent=await member('member.consent.get',{schemaVersion:2,organizationId:'gainpath'});
+ for(const purpose of ['exerciseInsights','recommendationGeneration','recommendationDelivery']){
+  await member('member.consent.set',{schemaVersion:2,organizationId:'gainpath',commandId:'ordinary-'+purpose,
+   expectedRevision:consent?.revision??0,purpose,action:'grant',noticePolicyId:notice.policyId,
+   acceptedNoticeVersion:notice.noticeVersion,acceptedContentVersion:notice.contentVersion});
+  consent=await member('member.consent.get',{schemaVersion:2,organizationId:'gainpath'});
+ }
+ const id='ordinary-unscored',payload=demoWorkoutPayload(uid,id,DEMO_EXERCISES.squat,null,Date.now()-1000);
+ const command={schemaVersion:1,organizationId:'gainpath',memberId:uid,consented:true,kind:'session',id,baseDigest:null,payload};
+ await rawCall(uid,'workoutBackupCommand',{action:'save',command});
+ let rows:any[]=[];
+ for(let attempt=0;attempt<40;attempt++){
+  rows=(await member('member.recommendation.list',q({history:false,afterId:null}))).recommendations;
+  if(rows.length)break;
+  await new Promise(resolve=>setTimeout(resolve,500));
+ }
+ expect(rows).toHaveLength(1);const recommendation=rows[0];
+ expect(recommendation).toMatchObject({mode:'workout_backup',kind:'content',state:'available'});
+ const saved=await db.doc(`orgs/gainpath/members/${uid}/workoutBackups/session-${id}`).get();expect(saved.exists).toBe(true);
+ const inbox=(await db.collection('orgs/gainpath/notifications').where('recipientId','==',uid).get()).docs;
+ expect(inbox).toHaveLength(1);expect(inbox[0].data().recommendationId).toBe(recommendation.recommendationId);
+ const monitor=await call(admin,'admin.unified.recommendations',q({operation:'admin.queue.list',input:q({afterId:null})}));
+ expect(monitor.records.some((r:any)=>r.memberId===uid&&r.id===recommendation.recommendationId)).toBe(true);
+ expect(monitor.records.some((r:any)=>dataset.memberIds.includes(r.memberId))).toBe(true);
+ const detail=await call(admin,'admin.unified.recommendations',q({operation:'admin.queue.detail',input:q({id:recommendation.recommendationId})}));
+ expect(detail.id).toBe(recommendation.recommendationId);
+ await expect(call(uid,'admin.unified.recommendations',q({operation:'admin.queue.list',input:q({afterId:null})}))).rejects.toThrow();
+ await member('member.history.replay',q({afterId:null}));await member('member.history.replay',q({afterId:null}));
+ await rawCall(uid,'workoutBackupCommand',{action:'save',command});
+ expect((await db.collection('orgs/gainpath/notifications').where('recipientId','==',uid).get()).size).toBe(1);
+ await member('member.recommendation.command',q({recommendationId:recommendation.recommendationId,
+  action:'dismiss',commandId:'ordinary-dismiss',expectedRevision:recommendation.revision}));
+ expect((await member('member.recommendation.list',q({history:false,afterId:null}))).recommendations).toHaveLength(0);
+ expect((await member('member.recommendation.list',q({history:true,afterId:null}))).recommendations[0].state).toBe('dismissed');
+ proof.ordinaryWorkoutEventDelivered={id:recommendation.recommendationId,source:'synthetic emulator payload',actualCamera:false,liveFirebase:false};
+},120000);

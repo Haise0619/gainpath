@@ -1,3 +1,5 @@
+import {replayWorkoutHistory} from './workout-backup-history';
+import {workoutRecommendationDependencies} from './workout-backup-recommendation-events';
 import {getWorkoutBackupRuntime} from './workout-backup-recommendation-runtime';
 import {getAuth} from 'firebase-admin/auth';
 import {getFirestore} from 'firebase-admin/firestore';
@@ -14,7 +16,7 @@ export const module13MemberCommand = onCall({region: 'asia-southeast1', enforceA
   try {
     const db = getFirestore();
     if (db.databaseId !== '(default)') throw new DomainError('failed-precondition', 'Canonical database required.');
-    return await createCanonicalRecommendationBackend({runtime:getWorkoutBackupRuntime(),store: new FirestoreStore(db), readAuthIdentity: async uid => {
+    return await createCanonicalRecommendationBackend({replayHistory: (org, member, after) => replayWorkoutHistory(db, workoutRecommendationDependencies(), org, member, after),runtime:getWorkoutBackupRuntime(),store: new FirestoreStore(db), readAuthIdentity: async uid => {
       const user = await getAuth().getUser(uid);
       return {uid: user.uid, email: user.email ?? '', emailVerified: user.emailVerified, disabled: user.disabled,
         tokensValidAfterMillis: user.tokensValidAfterTime ? Date.parse(user.tokensValidAfterTime) : 0};

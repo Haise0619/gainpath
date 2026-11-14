@@ -1,3 +1,6 @@
+import 'dart:async';
+import '../../features/recommendation/application/member_recommendation_page_cache.dart';
+import '../../infrastructure/firebase/firebase_module9_repository.dart';
 import 'package:gainpath_data/gainpath_data.dart' show ScopedCommandTransport;
 import '../../infrastructure/firebase/firebase_fyp_dataset.dart';
 import '../../infrastructure/firebase/firebase_member_recommendations.dart';
@@ -68,7 +71,10 @@ Widget buildMemberRecommendationNotifications(AuthSession session,
           return MemberNotificationsScreen(
               session: session,
               isCurrent: current,
-              module9Repository: inbox ?? scoped?.inbox,
+              module9Repository: inbox ??
+                  scoped?.inbox ??
+                  FirebaseModule9Repository(
+                      scope: session.scope, isCurrent: current),
               announcementReader: announcements,
               recommendationRepository: repository,
               onOpenRecommendationTarget: navigator?.open,
@@ -118,6 +124,10 @@ class _RecommendationHostState extends State<MemberRecommendationHost> {
   late MemberRecommendationRepository _repository;
   late MemberRecommendationPageLoader _load;
   MemberRecommendationNavigator? _navigator;
+  late MemberRecommendationPageCache _cache;
+  Stream<void>? _updates;
+  StreamController<void>? _signals;
+  StreamSubscription<void>? _signalSource;
 
   @override
   void initState() {
@@ -151,22 +161,26 @@ class _RecommendationHostState extends State<MemberRecommendationHost> {
             scope: session.scope, isCurrent: current)
         : null;
     _repository = demo?.recommendation ?? canonical!.recommendation;
-    _load = canonical?.loadPage ??
-        ({required bool history, String? afterId}) async {
-          final page = await demo!.inbox.loadInbox(afterId: afterId);
-          final records = <MemberRecommendationDetail>[];
-          for (final notice in page.records) {
-            final recommendation = notice.recommendation;
-            if (recommendation == null) continue;
-            final detail =
-                await _repository.get(recommendation.recommendationId);
-            if (detail.deliveredAt != null && (history || detail.available)) {
-              records.add(detail);
-            }
-          }
-          return MemberRecommendationPage(
-              records: records, nextAfterId: page.nextAfterId);
-        };
+    _cache = MemberRecommendationPageCache(
+        canonical?.loadPage ?? demo!.loadRecommendations, current);
+    _load = _cache.load;
+    _signalSource?.cancel();
+    _signals?.close();
+    final signals = StreamController<void>.broadcast();
+    StreamSubscription<void>? source;
+    signals.onListen = () {
+      source =
+          FirebaseModule9Repository(scope: session.scope, isCurrent: current)
+              .watchInbox()
+              .listen(signals.add, onError: signals.addError);
+      _signalSource = source;
+    };
+    signals.onCancel = () {
+      source?.cancel();
+      source = null;
+    };
+    _signals = signals;
+    _updates = _repository.enabled ? signals.stream : null;
     _navigator = null;
     if (!_repository.enabled) return;
     _navigator = MemberRecommendationNavigator(
@@ -178,7 +192,6 @@ class _RecommendationHostState extends State<MemberRecommendationHost> {
             FirebaseCoachDirectoryRepository(
                 scope: session.scope, isCurrent: current),
         catalog: widget.catalog ??
-            demo?.catalog ??
             FirebasePublishedRoutineRepository(
                 scope: session.scope,
                 activeScope: () => current() ? session.scope : null),
@@ -186,6 +199,21 @@ class _RecommendationHostState extends State<MemberRecommendationHost> {
         bookingListFactory: widget.bookingListFactory,
         availabilityFactory: widget.availabilityFactory,
         bookingNavigationEnabled: true);
+  }
+
+  @override
+  void dispose() {
+    _signalSource?.cancel();
+    _signals?.close();
+    _cache.invalidate();
+    super.dispose();
+  }
+
+  Future<void> _settings() async {
+    await openRecommendationPrivacyPreview(context, widget.isCurrent);
+    if (!mounted) return;
+    _cache.invalidate();
+    _signals?.add(null);
   }
 
   void _openAll() {
@@ -200,6 +228,8 @@ class _RecommendationHostState extends State<MemberRecommendationHost> {
                         child: MemberRecommendationsView(
                             repository: _repository,
                             loadPage: _load,
+                            updates: _updates,
+                            onInvalidate: _cache.invalidate,
                             isCurrent: widget.isCurrent,
                             onOpenTarget: (context, detail) async {
                               final navigator = _navigator;
@@ -210,14 +240,15 @@ class _RecommendationHostState extends State<MemberRecommendationHost> {
                               await navigator.open(context, detail);
                             },
                             photoBuilder: _navigator?.buildCoachPhoto,
-                            onSettings: () => openRecommendationPrivacyPreview(
-                                context, widget.isCurrent)))))));
+                            onSettings: _settings))))));
   }
 
   @override
   Widget build(BuildContext context) => MemberRecommendationsView(
       repository: _repository,
       loadPage: _load,
+      updates: _updates,
+      onInvalidate: _cache.invalidate,
       isCurrent: widget.isCurrent,
       onOpenTarget: (context, detail) async {
         final navigator = _navigator;
@@ -227,8 +258,7 @@ class _RecommendationHostState extends State<MemberRecommendationHost> {
         await navigator.open(context, detail);
       },
       photoBuilder: _navigator?.buildCoachPhoto,
-      onSettings: () =>
-          openRecommendationPrivacyPreview(context, widget.isCurrent),
+      onSettings: _settings,
       onViewAll: _openAll,
       compact: widget.compact,
       visible: widget.visible);

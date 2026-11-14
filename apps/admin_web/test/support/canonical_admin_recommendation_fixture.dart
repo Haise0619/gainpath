@@ -68,6 +68,7 @@ class CanonicalAdminHarness {
           'reason': enabled ? null : 'review_required'
         };
       case 'admin.queue.list':
+        if (!enabled) throw StateError('Recommendations unavailable.');
         return {
           'schemaVersion': 1,
           'mode': 'accepted_workout',

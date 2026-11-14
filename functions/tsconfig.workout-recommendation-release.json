@@ -1,0 +1,5 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {"outDir": "../build/module13-final-release/package/lib"},
+  "include": ["src/workout-recommendation-release-index.ts"]
+}

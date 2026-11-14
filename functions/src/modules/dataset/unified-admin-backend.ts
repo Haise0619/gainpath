@@ -1,3 +1,5 @@
+import {createCanonicalRecommendationAdmin} from '../recommendation/canonical-recommendation-admin';
+import {getWorkoutBackupRuntime} from '../recommendation/workout-backup-recommendation-runtime';
 import {FieldPath,type Firestore} from 'firebase-admin/firestore';
 import type {Auth} from 'firebase-admin/auth';
 import {DomainError} from '../../platform/errors';
@@ -23,8 +25,19 @@ const fields:Record<string,string[]>={
  'admin.unified.programs':[], 'admin.unified.report':['startAtMillis','endAtMillis'],
  'admin.unified.workouts':['startAtMillis','endAtMillis'], 'admin.unified.business':['startAtMillis','endAtMillis'],
  'admin.unified.cohort':['operation','input'],
+ 'admin.unified.recommendations':['operation','input'],
 };
 const deny=()=>new DomainError('permission-denied','Current unified Admin read access is required.');
+/** A source's cursor is its scanned frontier, including filtered rows. Never
+ * advance past an unfinished source or later valid records could be skipped. */
+export function mergeRecommendationPages(pages: readonly {records:DocumentData[];nextAfterId:string|null}[]) {
+ const rows=pages.flatMap(page=>page.records).sort((a,b)=>String(a.id).localeCompare(String(b.id)));
+ if(new Set(rows.map(row=>row.id)).size!==rows.length)throw deny();
+ const frontiers=pages.map(page=>page.nextAfterId).filter((id):id is string=>id!==null);
+ if(rows.length>25)frontiers.push(String(rows[24].id));
+ const nextAfterId=frontiers.sort()[0]??null;
+ return{records:rows.filter(row=>nextAfterId===null||String(row.id)<=nextAfterId).slice(0,25),nextAfterId};
+}
 export function parseUnifiedAdminEnvelope(raw:unknown){const q=object(raw);keys(q,['schemaVersion','operation','data']);
  if(q.schemaVersion!==1||typeof q.operation!=='string'||!Object.hasOwn(fields,q.operation)||Buffer.byteLength(JSON.stringify(q))>16384)throw deny();
  const data=object(q.data);keys(data,['schemaVersion','organizationId',...fields[q.operation]],['schemaVersion','organizationId']);
@@ -44,7 +57,26 @@ export function createUnifiedAdminBackend(options:{db:Firestore;auth:Pick<Auth,'
   const input={schemaVersion:d.schemaVersion,organizationId:'gainpath',startAtMillis:d.startAtMillis,endAtMillis:d.endAtMillis};
   const window={startAtMillis:Number(d.startAtMillis),endAtMillis:Number(d.endAtMillis)};
   let result:unknown;
-  if(e.operation==='admin.unified.cohort')result=await call(String(d.operation),object(d.input));
+  if(e.operation==='admin.unified.recommendations') {
+   const operation=String(d.operation),input=object(d.input);
+   if(!['admin.queue.list','admin.queue.detail'].includes(operation))throw deny();
+   const normal=createCanonicalRecommendationAdmin({store:canonical,runtime:getWorkoutBackupRuntime(),clock,
+    readAuthIdentity:async uid=>{const user=await auth.getUser(uid);return{uid:user.uid,email:user.email??'',disabled:user.disabled,
+     emailVerified:user.emailVerified,tokensValidAfterMillis:user.tokensValidAfterTime?Date.parse(user.tokensValidAfterTime):0};}});
+   const normalCall=()=>normal({...request,data:{schemaVersion:1,operation,data:input}});
+   if(operation==='admin.queue.detail') {
+    const id=requiredIdentifier(input.id,'recommendation');
+    if(!/^[a-f0-9]{64}$/.test(id))throw deny();
+    result=(await db.doc('orgs/gainpath/canonicalRecommendations/'+id).get()).exists?
+      await normalCall():await call('workout.'+operation,input);
+   } else {
+    const [existing,sample]=await Promise.all([normalCall(),call('workout.'+operation,input)]) as
+      {records:DocumentData[];nextAfterId:string|null}[];
+    result={schemaVersion:1,mode:'accepted_workout',organizationId:'gainpath',enabled:true,reason:null,
+      ...mergeRecommendationPages([existing,sample])};
+   }
+  }
+  else if(e.operation==='admin.unified.cohort')result=await call(String(d.operation),object(d.input));
   else if(e.operation==='admin.unified.directory')result=await reader.list(Object.fromEntries(fields[e.operation].filter(k=>d[k]!==undefined).map(k=>[k,d[k]])) as unknown as UnifiedDirectoryQuery);
   else if(e.operation==='admin.unified.coach'){
    const id=requiredIdentifier(d.coachId,'coachId'),publication=await reader.coachSource(id),root=publication.source==='fyp'?UNIFIED_ROOT:'orgs/gainpath';

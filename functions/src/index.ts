@@ -75,5 +75,4 @@ export { workoutProgramCommand } from './modules/content/workout-program-callabl
 
 export {exerciseCatalogCommand} from './modules/content/exercise-catalog-callable';
 export {module13WorkoutBackupCreated,module13WorkoutConsentChanged} from './modules/recommendation/workout-backup-recommendation-events';
-export {module13ReplayWorkoutHistory} from './modules/recommendation/workout-backup-history-callable';
 export {module13FypWorkoutBackupCreated,module13FypWorkoutConsentChanged} from './modules/recommendation/fyp-workout-backup-events';

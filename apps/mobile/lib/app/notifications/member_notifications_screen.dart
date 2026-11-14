@@ -86,7 +86,8 @@ class _MemberNotificationsScreenState extends State<MemberNotificationsScreen> {
   int _generation = 0;
   String? _error;
   StreamSubscription<void>? _inboxUpdates;
-  Timer? _pollingTimer;
+  Timer? _signalDebounce;
+  bool _refreshing = false, _refreshPending = false;
 
   @override
   void initState() {
@@ -98,11 +99,16 @@ class _MemberNotificationsScreenState extends State<MemberNotificationsScreen> {
     }
     if (widget.module9Repository != null) {
       _inboxUpdates = widget.module9Repository!.watchInbox().listen((_) {
-        if (!_loading) _load(silent: true);
+        _signalDebounce?.cancel();
+        _signalDebounce = Timer(const Duration(milliseconds: 250), () {
+          if (!_current) return;
+          if (_refreshing) {
+            _refreshPending = true;
+            return;
+          }
+          _load(silent: true);
+        });
       }, onError: (_) {/* Manual and pull-to-refresh remain available */});
-      _pollingTimer = Timer.periodic(const Duration(seconds: 30), (_) {
-        if (!_loading) _load(silent: true);
-      });
     }
   }
 
@@ -110,7 +116,7 @@ class _MemberNotificationsScreenState extends State<MemberNotificationsScreen> {
   void dispose() {
     _generation++;
     unawaited(_inboxUpdates?.cancel());
-    _pollingTimer?.cancel();
+    _signalDebounce?.cancel();
     super.dispose();
   }
 
@@ -118,6 +124,7 @@ class _MemberNotificationsScreenState extends State<MemberNotificationsScreen> {
 
   Future<void> _load({bool silent = false}) async {
     if (!_current) return;
+    _refreshing = true;
     final generation = ++_generation;
     String? nextCursor;
     if (!silent) {
@@ -201,6 +208,11 @@ class _MemberNotificationsScreenState extends State<MemberNotificationsScreen> {
       _loading = false;
       _error = loadError;
     });
+    _refreshing = false;
+    if (_refreshPending) {
+      _refreshPending = false;
+      _load(silent: true);
+    }
   }
 
   Future<void> _loadMore() async {

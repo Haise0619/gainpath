@@ -29,7 +29,7 @@ import {createRecommendationReadServices} from '../recommendation/recommendation
 import {createRecommendationNoticeProjector} from '../recommendation/module9-recommendation-projection';
 import {module9MemberCommand} from '../coaching/module9-member-service';
 const modules=['getCoachRatingsCommand','getMemberBookingOptionsCommand','getCoachAvailabilityCommand','getCoachRosterCommand','getBookingListCommand','module9MemberCommandCallable','adminReportingCommand','adminWorkoutReportingCommand','adminCheckInReportingCommand','workoutProgramCommand','getCoachCertificationsCommand','getCoachPublishedPhotoCommand'];
-const operations=new Set(['admin.insights','admin.configuration.get','admin.configuration.save','admin.configuration.choices','admin.queue.refresh','admin.queue.automatic','admin.queue.list','admin.queue.monitor','admin.queue.detail','admin.queue.decide','admin.queue.status','member.history','member.workoutHistory','member.workout.backup','workout.session.access','workout.admin.queue.list','workout.admin.queue.detail','workout.member.history.replay','workout.member.consent.get','workout.member.consent.set','workout.member.consent.notice','workout.member.recommendation.list','workout.member.recommendation.command','member.consent.get','member.consent.set','member.consent.notice','member.recommendation.command','member.inbox','member.coach','member.routine','delivery.process',...modules.map(n=>`module/${n}`)]);
+const operations=new Set(['admin.insights','admin.configuration.get','admin.configuration.save','admin.configuration.choices','admin.queue.refresh','admin.queue.automatic','admin.queue.list','admin.queue.monitor','admin.queue.detail','admin.queue.decide','admin.queue.status','member.history','member.workoutHistory','member.workout.backup','workout.session.access','workout.admin.queue.list','workout.admin.queue.detail','workout.member.history.replay','workout.member.consent.get','workout.member.consent.set','workout.member.consent.notice','workout.member.recommendation.list','workout.member.recommendation.command','member.consent.get','member.consent.set','member.consent.notice','member.recommendation.command','member.inbox','member.recommendation.list','member.coach','member.routine','delivery.process',...modules.map(n=>`module/${n}`)]);
 export function parseFypEnvelope(raw:unknown):{operation:string;data:DocumentData}{
   const q=object(raw);keys(q,['schemaVersion','operation','data']);
   if(q.schemaVersion!==1||!operations.has(String(q.operation))||Buffer.byteLength(JSON.stringify(q))>16384)throw new DomainError('invalid-argument','Unsupported bounded dataset command.');
@@ -43,7 +43,7 @@ function guard(db:Firestore,release?:FypRuntimeReleaseGrant){
   if(!(db instanceof Firestore)||(db as unknown as {projectId:string}).projectId!=='demo-gainpath-fyp'||db.databaseId!=='(default)'||process.env.GCLOUD_PROJECT!=='demo-gainpath-fyp'||process.env.GOOGLE_CLOUD_PROJECT!=='demo-gainpath-fyp'||process.env.FIRESTORE_EMULATOR_HOST!=='127.0.0.1:18231'||process.env.FIREBASE_AUTH_EMULATOR_HOST!=='127.0.0.1:19131'||s?.servicePath!=='127.0.0.1'||s.port!==18231||s.ssl!==false)throw new DomainError('failed-precondition','Dedicated default-database FYP emulator composition required.');
 }
 const deny=()=>new DomainError('permission-denied','This operation is unavailable for your current dataset role.');
-const adminReads=new Set(['admin.insights','admin.configuration.get','admin.configuration.choices','admin.queue.list','admin.queue.monitor','admin.queue.detail','admin.queue.status','module/adminReportingCommand','module/adminWorkoutReportingCommand','module/adminCheckInReportingCommand','module/workoutProgramCommand','module/getCoachAvailabilityCommand','module/getCoachRosterCommand','module/getCoachRatingsCommand','module/getCoachCertificationsCommand','module/getCoachPublishedPhotoCommand','module/getBookingListCommand']);
+const adminReads=new Set(['workout.admin.queue.list','workout.admin.queue.detail','admin.insights','admin.configuration.get','admin.configuration.choices','admin.queue.list','admin.queue.monitor','admin.queue.detail','admin.queue.status','module/adminReportingCommand','module/adminWorkoutReportingCommand','module/adminCheckInReportingCommand','module/workoutProgramCommand','module/getCoachAvailabilityCommand','module/getCoachRosterCommand','module/getCoachRatingsCommand','module/getCoachCertificationsCommand','module/getCoachPublishedPhotoCommand','module/getBookingListCommand']);
 export function assertFypAdminReadOperation(operation:string):void {if(!adminReads.has(operation))throw deny();}
 function logical(path:string){
   if(path===FYP_SCOPE_ROOT)return'orgs/gainpath';
@@ -278,6 +278,33 @@ export function createFypDatasetBackend(options:{db:Firestore;auth:Pick<Auth,'ge
             break;
           }
           case'module/module9MemberCommandCallable':result=await fypModuleRead(e.operation,request,{...genericDeps,projectRecommendation});break;
+          case 'member.recommendation.list': {
+            const q=object(request.data); keys(q,['schemaVersion','organizationId','history','afterId']);
+            if(q.schemaVersion!==1||typeof q.history!=='boolean'||q.afterId!==null&&
+              (typeof q.afterId!=='string'||!/^[A-Za-z0-9_-]{1,128}$/.test(q.afterId)))throw deny();
+            const rows=await adapters.inboxReader.list(scope.organizationId,scope.uid,q.afterId as string|null ?? undefined);
+            if(rows.length>31)throw deny();
+            const records:unknown[]=[];
+            const lifecycle=createCanonicalRecommendationLifecycle(workoutDeps);
+            const legacy=createMemberRecommendationService(deliveryDeps);
+            for(let offset=0;offset<Math.min(30,rows.length);offset+=4){
+              const batch=await Promise.all(rows.slice(offset,Math.min(offset+4,30)).map(async ({data})=>{
+                if(data.recipientId!==scope.uid)throw deny();
+                if(data.type!=='recommendation')return null;
+                const id=data.recommendationId;
+                if(typeof id!=='string'||!/^[a-f0-9]{64}$/.test(id))throw deny();
+                const detail=data.mode==='workout_backup'?
+                  await lifecycle.member(incoming.auth!,scope.organizationId,id,'get',null,null):
+                  await legacy({...request,data:{schemaVersion:1,organizationId:scope.organizationId,
+                    recommendationId:id,action:'get',commandId:null,expectedRevision:null}});
+                return detail.deliveredAtMillis!==null&&(q.history||detail.state==='available')?detail:null;
+              }));
+              records.push(...batch.filter(row=>row!==null));
+            }
+            result={schemaVersion:1,organizationId:scope.organizationId,enabled:true,recommendations:records,
+              nextAfterId:rows.length>30?rows[29].id:null};
+            break;
+          }
           case'member.inbox':{const q=object(request.data);keys(q,['schemaVersion','organizationId','afterId'],['schemaVersion','organizationId']);result=await module9MemberCommand(store,incoming.auth,{...q,action:'inbox'},clock,{...adapters.inboxReader,projectRecommendation});break;}
           case'member.coach':case'member.routine':{const q=object(request.data),coach=e.operation==='member.coach',field=coach?'coachId':'routineId';keys(q,['schemaVersion','organizationId',field]);if(q.schemaVersion!==1||typeof q[field]!=='string'||!(coach?coachIds:source.publicationIds as string[]).includes(String(q[field])))throw deny();result=await store.transact(tx=>tx.get(`orgs/gainpath/${coach?'coaches':'content'}/${q[field]}`));if(!result||(result as DocumentData).status!=='published')throw deny();break;}
           default:throw deny();

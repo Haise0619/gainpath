@@ -1,5 +1,7 @@
 # Module 2 and Module 13 automatic workout recommendations
 
+> Final optimization update: the [eight-entry release and verification report](module13-final-optimization.md) supersedes this report's nine-entry package and polling descriptions. This document retains the original implementation evidence.
+
 The implementation connects synced workout summaries to automatic exercise guidance and the existing Member inbox. Deployment is pending explicit owner approval.
 
 ## Data and normal workflow

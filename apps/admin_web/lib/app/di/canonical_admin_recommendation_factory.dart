@@ -1,8 +1,8 @@
+import '../../infrastructure/firebase/firebase_unified_admin.dart';
 import '../../infrastructure/firebase/firebase_fyp_dataset.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:gainpath_domain/gainpath_domain.dart' show AuthSession, AppRole;
 import '../../features/recommendation/application/canonical_admin_recommendation_repository.dart';
-import '../../infrastructure/firebase/firebase_function_transport.dart';
 
 typedef CanonicalAdminRecommendationFactory
     = CanonicalAdminRecommendationRepository? Function(
@@ -33,11 +33,12 @@ CanonicalAdminRecommendationRepository? createCanonicalAdminRecommendations(
       organizationId: session.scope.organizationId,
       isCurrent: () => isCurrent() && uid() == session.scope.userId,
       invoke: invoke ??
-          (operation, data) async =>
-              (await firebaseCallable('module13AdminCommand').call<Object?>({
-                'schemaVersion': 1,
+          (operation, data) => UnifiedAdminTransport(
+                      scope: session.scope,
+                      isCurrent: isCurrent,
+                      currentUid: uid)
+                  .read('recommendations', {
                 'operation': operation,
-                'data': data
-              }))
-                  .data);
+                'input': data,
+              }));
 }

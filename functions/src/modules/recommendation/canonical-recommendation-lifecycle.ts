@@ -162,7 +162,11 @@ export function createCanonicalRecommendationLifecycle(deps: CanonicalLifecycleD
   async function current(tx: TransactionPort, r: CanonicalRecord, now: number) {
     const consent = await privacy(tx, r.organizationId, r.memberId, now, true);
     if (r.expiresAtMillis <= now || r.createdAtMillis > now || consent.fingerprint !== r.consentFingerprint) throw unavailable();
-    if (r.mode === 'workout_backup') return runtime.resolveTarget(tx, r.organizationId, r.suggestion, now, r.memberId, true);
+    if (r.mode === 'workout_backup') {
+      const target = await runtime.resolveTarget(tx, r.organizationId, r.suggestion, now, r.memberId, true);
+      if (!target) throw unavailable();
+      return target;
+    }
     const suggestion = await derive(tx, r.organizationId, r.memberId, now, consent.historyStart);
     if (!suggestion || digestOf(suggestion) !== digestOf(r.suggestion)) throw unavailable();
     const target = await runtime.resolveTarget(tx, r.organizationId, suggestion, now, r.memberId);

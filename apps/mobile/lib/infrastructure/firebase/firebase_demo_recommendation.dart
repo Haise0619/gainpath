@@ -15,7 +15,8 @@ import '../../features/workout/domain/published_routine_catalog_repository.dart'
 import '../../features/workout/domain/published_routine_view.dart';
 import '../../features/workout/domain/workout_contracts.dart'
     show WorkoutSessionSummary;
-import 'firebase_module9_repository.dart' show parseMemberNotice;
+import 'firebase_module9_repository.dart'
+    show parseMemberNotice, FirebaseModule9Repository;
 
 Module13DemoTransport createFirebaseDemoMemberTransport(
     {required AuthSession session,
@@ -100,6 +101,35 @@ class FirebaseDemoMemberRepositories {
   late final PublishedRoutineCatalogRepository catalog;
   Map<String, Object?> get _scope =>
       {'schemaVersion': 1, 'organizationId': transport.scope.organizationId};
+  Future<MemberRecommendationPage> loadRecommendations(
+      {required bool history, String? afterId}) async {
+    final raw = await transport.map('member.recommendation.list', {
+      ..._scope,
+      'history': history,
+      'afterId': afterId,
+    });
+    if (raw['schemaVersion'] != 1 ||
+        raw['organizationId'] != transport.scope.organizationId ||
+        raw['enabled'] != true ||
+        raw['recommendations'] is! List ||
+        (raw['recommendations'] as List).length > 30 ||
+        raw['nextAfterId'] != null && raw['nextAfterId'] is! String) {
+      throw const FormatException('Invalid recommendation page.');
+    }
+    final records = (raw['recommendations'] as List).map((row) {
+      final data = Map<String, Object?>.from(row as Map);
+      return MemberRecommendationDetail.parse(data,
+          transport.scope.organizationId, data['recommendationId'] as String);
+    }).toList();
+    if (records.any((r) => r.deliveredAt == null) ||
+        records.map((r) => r.recommendationId).toSet().length !=
+            records.length) {
+      throw const FormatException('Invalid delivered recommendations.');
+    }
+    return MemberRecommendationPage(
+        records: records, nextAfterId: raw['nextAfterId'] as String?);
+  }
+
   Future<Map<String, Object?>> access() =>
       transport.map('session.access', _scope);
   Future<RecommendationConsentNotice> notice() async {
@@ -233,7 +263,11 @@ class FirebaseDemoInboxRepository implements Module9Repository {
   FirebaseDemoInboxRepository(this.transport);
   final ScopedCommandTransport transport;
   @override
-  Stream<void> watchInbox() => const Stream.empty();
+  Stream<void> watchInbox() => transport is FypDatasetTransport
+      ? FirebaseModule9Repository(
+          scope: transport.scope,
+          isCurrent: () => transport.isCurrent).watchInbox()
+      : const Stream.empty();
   @override
   Future<NoticePage> loadInbox({String? afterId}) async {
     final raw = await transport.map('member.inbox', {

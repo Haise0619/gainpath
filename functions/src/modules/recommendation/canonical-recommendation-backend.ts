@@ -1,3 +1,4 @@
+import {canonicalRecommendationPage} from './canonical-recommendation-page';
 import {DomainError} from '../../platform/errors';
 import {requiredIdentifier} from '../../platform/validation';
 import {keys, object} from '../workouts/workout-backup-validation';
@@ -18,11 +19,11 @@ export const CANONICAL_RECOMMENDATION_RELEASE = Object.freeze({
 });
 
 const OPERATIONS = ['session.access', 'member.consent.get', 'member.consent.set', 'member.consent.notice',
-  'member.recommendation.list', 'member.recommendation.command'] as const;
+  'member.recommendation.list', 'member.recommendation.command', 'member.history.replay'] as const;
 
 /** Default-database Member boundary. Deliberately never instantiates a demo/FYP
  * capability and never queries synthetic lead or recipient collections. */
-export function createCanonicalRecommendationBackend(deps: RecommendationCommandDependencies & {readonly runtime?: ReviewedCanonicalRuntime}) {
+export function createCanonicalRecommendationBackend(deps: RecommendationCommandDependencies & {readonly runtime?: ReviewedCanonicalRuntime; readonly replayHistory?: (org: string, member: string, after: unknown) => Promise<unknown>}) {
   return async (incoming: InsightsRequest): Promise<unknown> => {
     try {
       const envelope = object(incoming.data); keys(envelope, ['schemaVersion', 'operation', 'data']);
@@ -35,6 +36,11 @@ export function createCanonicalRecommendationBackend(deps: RecommendationCommand
       await deps.store.transact(async tx => {if(!deps.runtime?.scopedDataset && await tx.get(`datasetAssignments/${auth.uid}`))throw new DomainError('permission-denied','Canonical account required.');
         await requireRecommendationMember(tx, auth, org);});
       const operation = envelope.operation;
+      if (operation === 'member.history.replay') {
+        keys(data, ['schemaVersion','organizationId','afterId']);
+        if (data.schemaVersion !== 1 || !deps.replayHistory) throw new DomainError('failed-precondition','History replay unavailable.');
+        return await deps.replayHistory(org, auth.uid, data.afterId);
+      }
       if (operation === 'member.consent.set') {
         // Privacy revocation remains available during rollout/rollback. Grants
         // need a reviewed notice; no such production policy is registered.
@@ -63,16 +69,9 @@ export function createCanonicalRecommendationBackend(deps: RecommendationCommand
           throw new DomainError('invalid-argument', 'Invalid inbox query.');
         }
         if (deps.runtime) {
-          const lifecycle = createCanonicalRecommendationLifecycle({...deps, runtime: deps.runtime});
-          const ids = await lifecycle.ids(auth, org, data.afterId as string|null), recommendations: unknown[] = [];
-          for (const id of ids) {
-            try {const detail = await lifecycle.member(auth, org, id, 'get', null, null);
-              const d=object(detail);
-              if (d.deliveredAtMillis!==null&&(data.history || d.state==='available')) recommendations.push(detail);
-            } catch (error) {if (!(error instanceof DomainError) || !['failed-precondition','permission-denied'].includes(error.code)) throw error;}
-          }
+          const page = await canonicalRecommendationPage({...deps, runtime: deps.runtime}, auth, org, data.afterId as string|null, false, data.history);
           return {schemaVersion: 1, mode: 'accepted_workout', organizationId: org, enabled: true, reason: null,
-            recommendations, nextAfterId: ids.length === 25 ? ids[ids.length - 1] : null};
+            recommendations: page.records, nextAfterId: page.nextAfterId};
         }
         return {schemaVersion: 1, mode: 'accepted_workout', organizationId: org, enabled: false,
           reason: CANONICAL_RECOMMENDATION_RELEASE.reason, recommendations: [], nextAfterId: null};

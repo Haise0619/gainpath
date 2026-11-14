@@ -27,7 +27,7 @@ class _CanonicalAdminRecommendationPanelState
   final _records = <CanonicalAdminRecommendation>[];
   String _search = '', _kind = 'all', _status = 'all';
   String? _next, _error;
-  bool _loading = false, _working = false, _accessChecked = false;
+  bool _loading = false, _working = false;
   int _generation = 0;
   DateTime get _now => (widget.clock ?? DateTime.now)().toUtc();
   @override
@@ -40,7 +40,8 @@ class _CanonicalAdminRecommendationPanelState
   void didUpdateWidget(covariant CanonicalAdminRecommendationPanel old) {
     super.didUpdateWidget(old);
     if (!identical(old.repository, widget.repository)) {
-      _accessChecked = false;
+      _records.clear();
+      _next = null;
       _load();
     }
   }
@@ -68,29 +69,8 @@ class _CanonicalAdminRecommendationPanelState
     setState(() {
       _loading = true;
       _error = null;
-      if (!append) {
-        _records.clear();
-        _next = null;
-      }
     });
     try {
-      if (!_accessChecked) {
-        final enabled = repo.enabled || await repo.access();
-        if (!_current(repo, generation)) {
-          _lost();
-          return;
-        }
-        setState(() => _accessChecked = true);
-        if (!enabled) {
-          setState(() => _loading = false);
-          widget.onUnavailable?.call();
-          return;
-        }
-      }
-      if (!repo.enabled) {
-        setState(() => _loading = false);
-        return;
-      }
       final page = await repo.list(afterId: append ? _next : null);
       if (!_current(repo, generation)) {
         if (mounted && identical(repo, widget.repository) && !repo.isCurrent) {
@@ -98,10 +78,12 @@ class _CanonicalAdminRecommendationPanelState
         }
         return;
       }
-      if (page.records.any((r) => _records.any((old) => old.id == r.id))) {
+      if (append &&
+          page.records.any((r) => _records.any((old) => old.id == r.id))) {
         throw const FormatException('Repeated queue page.');
       }
       setState(() {
+        if (!append) _records.clear();
         _records.addAll(page.records);
         _next = page.nextAfterId;
         _loading = false;
@@ -267,7 +249,7 @@ class _CanonicalAdminRecommendationPanelState
               if (!current)
                 const Text(
                     'Your Admin session changed. Reopen Recommendations.')
-              else if (_accessChecked && !widget.repository.enabled)
+              else if (!_loading && !widget.repository.enabled)
                 const Text(
                     'Recommendations are unavailable while evidence, permission and delivery policies await review.')
               else ...[
