@@ -68,12 +68,13 @@ describe('FYP actual default-database Rules isolation', () => {
   });
   it('published Coach and Tutorial queries return cohort documents only; missing publication filters fail closed', async () => {
     for (const kind of ['coaches', 'content']) {
-      const result = await assertSucceeds(getDocs(query(collection(client(), `${base}/${kind}`), where('status', '==', 'published'), limit(21))));
+      const result = await assertSucceeds(getDocs(query(collection(client(kind==='coaches'?'fyp-admin':'fyp-member'), `${base}/${kind}`), where('status', '==', 'published'), limit(21))));
+      if(kind==='coaches')await assertFails(getDocs(query(collection(client(),`${base}/coaches`),where('status','==','published'),limit(21))));
       expect(result.docs.map(d => d.id)).toEqual(['published']);
       await assertFails(getDocs(query(collection(client(), `${base}/${kind}`), limit(21))));
       await assertFails(getDoc(doc(client(), `${base}/${kind}/draft`)));
       await assertFails(getDocs(query(collection(client(), `orgs/gainpath/${kind}`), where('status', '==', 'published'), limit(21))));
-      expect((await getDocs(query(collection(client('ordinary-member'), `orgs/gainpath/${kind}`), where('status', '==', 'published')))).size).toBe(1);
+      expect((await getDocs(query(collection(client(kind==='coaches'?'ordinary-admin':'ordinary-member'), `orgs/gainpath/${kind}`), where('status', '==', 'published')))).size).toBe(1);
       await assertFails(getDocs(query(collection(client('ordinary-member'), `${base}/${kind}`), where('status', '==', 'published'))));
     }
   });

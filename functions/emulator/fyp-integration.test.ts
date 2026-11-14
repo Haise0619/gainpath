@@ -46,9 +46,10 @@ it('normal email/password sign-in resolves a server-owned session without canoni
  proof.normalAuthSession=true;
 });
 it('actual Rules-backed published queries cannot cross the dataset boundary',async()=>{
- const coaches=await directory(dataset.memberIds[0],FYP_ROOT,'coaches',[{field:'status',value:'published'}]);expect(coaches.length).toBe(7);expect(coaches).not.toContain('baseline-coach');
+ await expect(directory(dataset.memberIds[0],FYP_ROOT,'coaches',[{field:'status',value:'published'}])).rejects.toThrow();
+ const coaches=await directory(dataset.adminId,FYP_ROOT,'coaches',[{field:'status',value:'published'}]);expect(coaches.length).toBe(7);expect(coaches).not.toContain('baseline-coach');
  const tutorials=await directory(dataset.memberIds[0],FYP_ROOT,'content',[{field:'status',value:'published'},{field:'kind',value:'routine'}]);expect(tutorials).toHaveLength(12);
- expect(await directory('baseline-member','orgs/gainpath','coaches',[{field:'status',value:'published'}])).toEqual(['baseline-coach']);
+ expect(await directory('baseline-admin','orgs/gainpath','coaches',[{field:'status',value:'published'}])).toEqual(['baseline-coach']);
  await expect(directory('baseline-member',FYP_ROOT,'coaches',[{field:'status',value:'published'}])).rejects.toThrow();
  await expect(directory(dataset.memberIds[0],'orgs/gainpath','coaches',[{field:'status',value:'published'}])).rejects.toThrow();
  proof.publishedIsolation={coaches:coaches.length,tutorials:tutorials.length};
@@ -93,7 +94,7 @@ it('derives educational needs from the same observations and ranks multiple elig
  for(const kind of ['trainer','content']){
   let continuation:string|null=null,generated:any;for(let page=0;page<11;page++){generated=await call(dataset.adminId,'admin.queue.refresh',q({kind,commandId:`fyp-${kind}-first`,continuation}));continuation=generated.summary.nextCursor;if(!continuation)break;}proof[`${kind}Generation`]=generated.summary;console.info('FYP generation aggregate',JSON.stringify(generated.summary));expect(generated.summary.status).toBe('complete');expect(generated.summary.generated).toBeGreaterThanOrEqual(5);
   const list=await call(dataset.adminId,'admin.queue.list',q({kind,status:'all',startAtMillis:dataset.anchorMillis-86400000,endAtMillis:Date.now(),exerciseId:null,category:null,specialization:null,afterLeadId:null,limit:25}));
-  const lead=list.leads.find((l:any)=>l.memberId===dataset.memberIds[0]);expect(lead).toMatchObject({exerciseId:'F3b8xIr8ynBDd3gEICKX',evidence:{scoredSessions:3,estimatedFormScorePercent:60},ranking:{model:'gainpath-demo-structured-mock-v1'}});
+  const lead=list.leads.find((l:any)=>l.memberId===dataset.memberIds[0]);expect(lead).toMatchObject({exerciseId:'F3b8xIr8ynBDd3gEICKX',evidence:{scoredSessions:3,estimatedFormScorePercent:60},ranking:{model:null,origin:'deterministic_fallback'}});
   expect(list.leads.some((l:any)=>l.memberId===dataset.memberIds[6])).toBe(false);expect(list.leads.some((l:any)=>l.memberId===dataset.memberIds[8])).toBe(false);
   if(kind==='trainer')trainer=lead;else content=lead;proof[kind]={generation:generated.summary,lead};
  }

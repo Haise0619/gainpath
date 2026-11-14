@@ -29,6 +29,8 @@ const unavailable=()=>new DomainError('failed-precondition','The controlled demo
  * named database. No collection-group/default-database fallbacks exist. */
 export async function createModule13DemoDataAdapters(options:{db:Firestore;manifest:Pick<Module13DemoManifest,'seedId'|'memberIds'|'coachIds'|'recordPaths'|'noticePolicies'>;store:DocumentStore;deps:QueueSecurityDependencies;readAuthIdentity:(uid:string)=>Promise<FreshAuthIdentity>;clock:()=>number;
  queryRoot?:string;
+ /** Optional server-owned semantic assistant; never supplied by a client or source record. */
+ rankingProvider?:RankingProvider;
  observations?:{read:(scope:EvidenceScope,window:DemoSource['window'],generation:boolean)=>Promise<AttestedWorkoutEvidenceBatch>;revalidate:(tx:ReadTx,scope:EvidenceScope,revision:string,policyFingerprint:string)=>Promise<boolean>};
 }){
  const{db,manifest,store,deps,readAuthIdentity,clock}=options;
@@ -87,7 +89,10 @@ export async function createModule13DemoDataAdapters(options:{db:Firestore;manif
   const transact=<T>(work:(t:ReadTx)=>Promise<T>)=>tx?work(wrap(tx)):store.transact(t=>work(wrap(t)));
   const expertiseRows=await readRows(source.expertisePaths,tx),suitabilityRows=await readRows(source.suitabilityPaths,tx);
   const trustedExpertise=expertiseRows.map(r=>r.data as unknown as TrustedTrainerExpertise),suitability=suitabilityRows.map(r=>r.data as unknown as CuratedContentSuitability);
-  const ranking={context:{mode:'synthetic_local' as const,datasetId:'module13-batch-b-v1' as const,organizationId:'gainpath' as const,evidenceStatus:item.evidenceStatus},exerciseMapping:{exercise:item.need.exercise,exerciseId:item.exerciseId,version:'synthetic-exercise-v1' as const},...(inference?{provider}:{})};
+  // The shared FYP application uses deterministic ranking unless a real optional
+  // adapter is explicitly composed. Historical isolated fixture tests retain their recorded provider.
+  const selectedProvider=options.rankingProvider??(queryRoot===ROOT?provider:undefined);
+  const ranking={context:{mode:'synthetic_local' as const,datasetId:'module13-batch-b-v1' as const,organizationId:'gainpath' as const,evidenceStatus:item.evidenceStatus},exerciseMapping:{exercise:item.need.exercise,exerciseId:item.exerciseId,version:'synthetic-exercise-v1' as const},...(inference&&selectedProvider?{provider:selectedProvider}:{})};
   const result=kind==='trainer'?await recommendTrainerCandidates(item.need,{schemaVersion:1,organizationId:'gainpath',memberId:item.memberId,exerciseId:item.exerciseId,learningObjective:item.need.objective,level:item.need.level,localDate:source.bookingDate,durationMinutes:60},{repository:{transact,listCoachIds:async()=>[...source.coachIds]},trustedExpertise,clock,readIdentity:async uid=>{if(!manifest.coachIds.includes(uid)&&uid!==item.memberId)throw unavailable();return coachIdentities[uid];}},ranking):await transact(async t=>recommendContentCandidates(item.need,{organizationId:'gainpath',exerciseId:item.exerciseId,objective:item.need.objective,level:item.need.level},{schemaVersion:1,organizationId:'gainpath',sourceVersion:manifest.seedId,curationVersion:'demo-curation-v1',memberAccess:'organization_published_routines',catalog:await readRows(source.catalogIds.map(id=>`${ROOT}/exerciseVideos/${id}`),t),publications:await readRows(source.publicationIds.map(id=>`${ROOT}/content/${id}`),t),suitability,compatibleExercises:[]},ranking));
   const displays=await transact(async t=>{
    const d:QueueEngineResult['targetLabels']={};for(const id of source.coachIds){const p=await t.get(`${ROOT}/coaches/${id}`);if(p&&typeof p.displayName==='string')d[id]={label:p.displayName,specialization:typeof p.specialty==='string'?p.specialty:null,branchLabel:'Demo Training Branch'};}return d;

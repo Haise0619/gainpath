@@ -1,0 +1,22 @@
+// Node22 fixed project only. inspect/dry-run never write cloud data. apply requires a matching saved dry-run plan.
+const fs=require('node:fs'),path=require('node:path'),core=require('./module13-presentation-core.cjs'),p=require('./fyp-live-platform.cjs');
+const out=path.join(p.root,'build/module13-presentation'),planFile=path.join(out,'plan.json');
+let stage='arguments';
+async function connect(){
+ stage='configured_project';
+ const firebaserc=p.read('.firebaserc');if(Object.values(firebaserc.projects??{}).some(v=>v!==core.PROJECT)||!Object.values(firebaserc.projects??{}).length)throw Error('Project configuration mismatch.');
+ for(const app of ['admin_web','mobile']){const options=fs.readFileSync(path.join(p.root,'apps',app,'lib/firebase_options.dart'),'utf8'),ids=[...options.matchAll(/projectId:\s*'([^']+)'/g)].map(m=>m[1]);if(!ids.length||ids.some(v=>v!==core.PROJECT))throw Error('App configuration mismatch.');}
+ stage='oauth_project_confirmation';
+ for(const [k,v]of Object.entries(process.env))if(/EMULATOR/.test(k)&&v)throw Error('Live fixed scope refuses emulator configuration.');
+ const c=await require(path.join(p.root,'build/latency-completion-20261024/cloud.cjs')).cloud();
+ const project=await c.request('GET',`https://cloudresourcemanager.googleapis.com/v1/projects/${core.PROJECT}`);if(project.projectId!==core.PROJECT||project.projectNumber!=='879719977530'||project.lifecycleState!=='ACTIVE')throw Error('Fresh exact project confirmation failed.');
+ const cliAuth=p.req('firebase-tools/lib/auth'),credential={getAccessToken:async()=>{const t=await cliAuth.getAccessToken(c.options.tokens.refresh_token,c.options.authScopes);return {access_token:t.access_token,expires_in:3600};}};
+ const {initializeApp,deleteApp}=p.req('firebase-admin/app'),{Firestore}=p.req('firebase-admin/firestore'),{getAuth}=p.req('firebase-admin/auth'),{createRequire}=require('node:module'),sdk=createRequire(p.req.resolve('firebase-admin/firestore')),fr=createRequire(sdk.resolve('@google-cloud/firestore')),gax=createRequire(fr.resolve('google-gax')),{GoogleAuth,OAuth2Client}=gax('google-auth-library'),oauth=new OAuth2Client();oauth.refreshHandler=async()=>{const t=await credential.getAccessToken();return {access_token:t.access_token,expiry_date:Date.now()+3500000};};
+ const app=initializeApp({projectId:core.PROJECT,credential},'module13-presentation'),db=new Firestore({projectId:core.PROJECT,databaseId:'(default)',ssl:true,preferRest:true,auth:new GoogleAuth({authClient:oauth,projectId:core.PROJECT})});return {...c,app,db,auth:getAuth(app),close:async()=>{await db.terminate();await deleteApp(app);}};
+}
+async function main(){const mode=process.argv[2];if(process.argv.length!==3||!['inspect','dry-run','apply','validate'].includes(mode)||!process.version.startsWith('v22.'))throw Error('Exact Node22 mode required.');
+ const saved=fs.existsSync(planFile)?JSON.parse(fs.readFileSync(planFile,'utf8')):undefined;if(['apply','validate'].includes(mode)&&!saved)throw Error('Saved inspected dry-run plan required.');
+ const anchor=saved?.anchorMillis??Math.floor(Date.now()/86400000)*86400000,plan=core.buildPlan(p.read('docs/integration/gainpath-fyp-cohort-preflight.json'),p.read('build/fyp-cohort-integration/proposed-source-records.json'),anchor);if(saved&&saved.digest!==plan.digest)throw Error('Local plan inputs changed.');
+ stage='local_plan';const c=await connect();try{stage='transaction_preflight';const result=await core.execute(c.db,c.auth,plan,{write:mode==='apply',validate:mode==='validate'});fs.mkdirSync(out,{recursive:true});if(mode==='dry-run')fs.writeFileSync(planFile,JSON.stringify({anchorMillis:anchor,digest:plan.digest},null,2)+'\n');const record={mode,at:new Date().toISOString(),projectId:core.PROJECT,databaseId:'(default)',planDigest:plan.digest,anchorMillis:anchor,observations:Object.keys(plan.entries).filter(p=>p.includes('/syntheticObservations/')).length,availabilityDays:24,generationWindow:plan.sourceAfter.window,bookingDate:plan.sourceAfter.bookingDate,policyEffect:'fictional window end extension can stale prior pending evidence; no policy thresholds or consent changes',result};fs.writeFileSync(path.join(out,`${mode}-${Date.now()}.json`),JSON.stringify(record,null,2)+'\n');console.log(JSON.stringify(record));}finally{await c.close();}}
+if(require.main===module)main().catch(e=>{console.error(JSON.stringify({status:'presentation_stopped',stage,code:e.presentationCode??'fixed_scope_check_failed',credentialsLogged:false}));process.exitCode=1;});
+module.exports={connect};
