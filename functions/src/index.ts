@@ -2,6 +2,10 @@ import { initializeApp } from 'firebase-admin/app';
 
 initializeApp();
 
+// Prepared canonical Member boundary; admission remains disabled in code.
+export {module13MemberCommand,module13AdminCommand} from './modules/recommendation/canonical-recommendation-callables';
+export {module13AcceptedWorkoutCreated,module13RecoverDeliveries} from './modules/recommendation/canonical-recommendation-events';
+
 export { getMembershipOverviewCommand, getMembershipQuoteCommand, createMembershipPaymentCommand, getMembershipPaymentCommand, requestMembershipRefundCommand } from './modules/commerce/membership-payment-callables';
 export { getMembershipAccessCommand, verifyMemberMembershipCommand } from './modules/commerce/membership-access-callables';
 export { verifiedRewardsCommand } from './modules/gamification/verified-rewards-callables';

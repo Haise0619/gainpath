@@ -28,7 +28,9 @@ export interface QueueGenerationSource {
   recommend(item:QueueGenerationItem,kind:RecommendationKind,allowInference:boolean):Promise<QueueEngineResult>;
   validate(tx:Pick<TransactionPort,'get'|'getAll'>,item:QueueGenerationItem,kind:RecommendationKind,fingerprint:string):Promise<boolean>;
 }
-export interface QueueGenerationDependencies extends QueueSecurityDependencies {source:QueueGenerationSource}
+export interface QueueGenerationDependencies extends QueueSecurityDependencies {source:QueueGenerationSource;
+ /** Explicit reviewed policy only; no production policy is activated by this optional control. */
+ evidenceFatiguePolicy?:{cooldownMillis:number;dismissalSuppressionMillis:number};}
 export interface QueueGenerationResponse {schemaVersion:1;mode:'synthetic_local';organizationId:string;summary:QueueGenerationSummary}
 interface Run {schemaVersion:1;actorId:string;commandId:string;inputFingerprint:string;index:number;summary:QueueGenerationSummary}
 const PAGE=2,LEASE=60000;
@@ -61,6 +63,8 @@ export function queueLeadFromEngine(item:QueueGenerationItem,kind:Recommendation
 }
 /** Page-at-a-time durable generation; no external inference inside transactions. */
 export function createRecommendationQueueGeneration(deps:QueueGenerationDependencies){
+  const fatigue=deps.evidenceFatiguePolicy;
+  if(fatigue&&(![fatigue.cooldownMillis,fatigue.dismissalSuppressionMillis].every(n=>Number.isSafeInteger(n)&&n>=60000&&n<=90*86400000)))throw new DomainError('failed-precondition','Invalid reviewed fatigue policy.');
   return async(request:InsightsRequest):Promise<QueueGenerationResponse>=>{
     let reserved:{runId:string;token:string;index:number;auth:any;org:string;now:number}|undefined;
     try{
@@ -77,7 +81,7 @@ export function createRecommendationQueueGeneration(deps:QueueGenerationDependen
         if(prior){if(prior.inputFingerprint!==inputFingerprint)throw new DomainError('aborted','Refresh changed.');const response=object(prior.response);keys(response,['schemaVersion','mode','organizationId','summary']);if(response.schemaVersion!==1||response.mode!=='synthetic_local'||response.organizationId!==ctx.organizationId)throw new DomainError('failed-precondition','Invalid page receipt.');return{replay:{schemaVersion:1 as const,mode:'synthetic_local' as const,organizationId:ctx.organizationId,summary:parseQueueGenerationSummary(response.summary,kind)}};}
         if((old?.index??0)!==index||old?.summary.status==='failed')throw new DomainError('aborted','Refresh continuation changed.');
         if(lock&&queueInteger(lock.expiresAtMillis)&&lock.expiresAtMillis>ctx.now)throw new DomainError('aborted','Queue refresh is already in progress.');
-        const summary:QueueGenerationSummary=old?.summary??{runId,kind,status:'in_progress',processed:source.abstentions?.length??0,candidateCount:0,generated:0,abstained:source.abstentions?.length??0,fallbackCount:0,nextCursor:null,failureCode:null,algorithmVersion:'experimental-40-baseline-60-semantic-v1',model:null,updatedAtMillis:ctx.now,abstentionReasons:{insufficient_evidence:0,unsupported_evidence:0,missing_consent:0,no_eligible_candidates:0,semantic_abstention:0}};
+        const summary:QueueGenerationSummary=old?.summary??{runId,kind,status:'in_progress',processed:source.abstentions?.length??0,candidateCount:0,generated:0,abstained:source.abstentions?.length??0,fallbackCount:0,nextCursor:null,failureCode:null,algorithmVersion:'deterministic-80-semantic-20-v2',model:null,updatedAtMillis:ctx.now,abstentionReasons:{insufficient_evidence:0,unsupported_evidence:0,missing_consent:0,no_eligible_candidates:0,semantic_abstention:0}};
         if(!old)for(const a of source.abstentions??[])summary.abstentionReasons[a.reason]++;
         tx.set(lockPath,{schemaVersion:1,runId,token,expiresAtMillis:ctx.now+LEASE});tx.set(runPath,{schemaVersion:1,actorId:ctx.auth.uid,commandId,inputFingerprint,index,summary});
         return{replay:null};
@@ -106,6 +110,17 @@ export function createRecommendationQueueGeneration(deps:QueueGenerationDependen
           if(row.engine.evidenceBinding){if(!evidenceSources.has(source))throw new DomainError('failed-precondition','Unverified evidence binding.');evidenceBindings.push({fingerprint:row.engine.sourceFingerprint,data:row.engine.evidenceBinding});}
           candidateCount+=row.engine.recommendation.rankingCandidates.length;model=row.engine.recommendation.ranking.provenance.model??model;const lead=queueLeadFromEngine(row.item,kind,row.engine,source,m.fingerprint,runId,now);
           if(!lead){abstained++;abstentionReasons[row.engine.recommendation.ranking.provenance.fallbackReason==='semantic_abstention'?'semantic_abstention':'no_eligible_candidates']++;continue;}if(lead.ranking.origin==='deterministic_fallback')fallbackCount++;model=lead.ranking.model??model;
+          if(fatigue&&evidenceSources.has(source)){
+            // Stable Member/need scope survives observation and candidate revisions.
+            const path=`${ROOT}/recommendationFatigue/${digestOf({memberId:lead.memberId,exerciseId:lead.exerciseId,objective:lead.objective,level:lead.level,kind})}`;
+            const prior=await tx.get(path);
+            if(prior&&prior.leadId!==lead.leadId){
+              if(!queueInteger(prior.atMillis)||prior.atMillis>now||typeof prior.leadId!=='string'||!/^[a-f0-9]{64}$/.test(prior.leadId))throw new DomainError('failed-precondition','Invalid fatigue state.');
+              const last=await tx.get(`${ROOT}/recommendationLeads/${prior.leadId}`);
+              const suppressed=now-prior.atMillis<fatigue.cooldownMillis||last?.status==='dismissed'&&now-Number((last.decision as any)?.atMillis??prior.atMillis)<fatigue.dismissalSuppressionMillis;
+              if(suppressed)continue;
+            }
+          }
           if(!existing.has(lead.leadId)){
             const rawOld=await tx.get(`${ROOT}/recommendationLeads/${lead.leadId}`),old=rawOld?parseRecommendationLead(rawOld,ctx.organizationId):null;
             if(!old)leads.push({lead,previous:null});
@@ -119,6 +134,7 @@ export function createRecommendationQueueGeneration(deps:QueueGenerationDependen
         const next=index+selected.length,summary:QueueGenerationSummary={...current.summary,processed:next+(source.abstentions?.length??0),candidateCount:current.summary.candidateCount+candidateCount,generated:current.summary.generated+leads.length,abstained:current.summary.abstained+abstained,abstentionReasons,fallbackCount:current.summary.fallbackCount+fallbackCount,status:next<items.length?'in_progress':'complete',nextCursor:next<items.length?`${runId}:${next}`:null,failureCode:null,model,updatedAtMillis:now};
         const response:QueueGenerationResponse={schemaVersion:1,mode:'synthetic_local',organizationId:ctx.organizationId,summary};
         for(const binding of evidenceBindings)tx.set(`${ROOT}/recommendationEvidenceBindings/${binding.fingerprint}`,binding.data);
+        if(fatigue&&evidenceSources.has(source))for(const {lead} of leads)tx.set(`${ROOT}/recommendationFatigue/${digestOf({memberId:lead.memberId,exerciseId:lead.exerciseId,objective:lead.objective,level:lead.level,kind})}`,{schemaVersion:1,leadId:lead.leadId,atMillis:now});
         for(const change of leads){const lead=change.lead;if(change.previous){tx.set(`${ROOT}/recommendationLeads/${lead.leadId}`,lead);tx.create(`${ROOT}/recommendationRefreshAudits/${digestOf({runId,index,leadId:lead.leadId,revision:lead.revision})}`,{schemaVersion:1,organizationId:ctx.organizationId,actorId:ctx.auth.uid,leadId:lead.leadId,runId,previousStatus:change.previous.status,previousRevision:change.previous.revision,revision:lead.revision,atMillis:now,sourceFingerprint:lead.sourceFingerprint});}else tx.create(`${ROOT}/recommendationLeads/${lead.leadId}`,lead);}
         tx.set(runPath,{...current,index:next,summary});tx.set(lockPath,{schemaVersion:1,runId,token,expiresAtMillis:now});tx.create(pagePath,{schemaVersion:1,inputFingerprint,response});tx.set(`${ROOT}/recommendationGenerationState/${kind}`,{schemaVersion:1,summary});
         return response;

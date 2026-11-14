@@ -22,7 +22,7 @@ for (const suite of Object.values(suites)) {
 const dedicated = new Set(Object.values(suites).flatMap(suite => suite.tests));
 // Standalone suites need their reviewed multi-service configs or prepared Functions.
 // Preserve their guarded projects/ports; never route them through legacy core.
-const standaloneTests = ['emulator/module13-a2.test.ts', 'emulator/module13-c.test.ts',
+const standaloneTests = ['emulator/canonical-recommendation.test.ts', 'emulator/module13-a2.test.ts', 'emulator/module13-c.test.ts',
   'emulator/module13-d.test.ts', 'emulator/module13-e.test.ts', 'emulator/module13-final.test.ts', 'emulator/module13-demo.test.ts',
   'emulator/fyp-cohort-rules.test.ts', 'emulator/fyp-integration.test.ts',
   'emulator/fyp-seed.test.ts', 'emulator/unified-admin.test.ts', 'emulator/shared-data-audit.test.ts'];

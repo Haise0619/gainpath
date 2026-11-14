@@ -23,7 +23,7 @@ export interface AnonymousRankingRequest {
 }
 export interface ValidatedAiEntry { candidateId: string; relevance: number; reasonCodes: ReasonCode[]; evidenceKeys: string[]; abstain: boolean }
 export interface ProviderUsage { inputTokens: number | null; outputTokens: number | null; thinkingTokens: number | null; totalTokens: number | null }
-export interface RankingInference { text: string; model: string; latencyMillis: number; usage: ProviderUsage }
+export interface RankingInference { providerSource?:'gemini'|'mock_or_recorded'; cacheHit?:boolean; text: string; model: string; latencyMillis: number; usage: ProviderUsage }
 export type RankingProvider = (request: AnonymousRankingRequest['payload']) => Promise<RankingInference>;
 export const classOrder = (value: RankingCandidate['eligibilityClass']): number => value === 'exact_exercise' ? 0 : 1;
 export const stableCompare = (a: string, b: string): number => a < b ? -1 : a > b ? 1 : 0;

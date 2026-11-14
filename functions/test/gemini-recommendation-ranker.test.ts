@@ -30,3 +30,11 @@ describe('dedicated Gemini educational ranker REST boundary', () => {
     await expect(p({...request(),kind:['content']} as any)).rejects.toMatchObject({reason:'invalid_request'});expect(f).not.toHaveBeenCalled();
   });
 });
+
+it('coalesces identical calls, reports cache reuse honestly and caps distinct provider requests',async()=>{
+ const fetcher=vi.fn(async()=>ok());let now=0;
+ const provider=createGeminiRecommendationRanker({apiKey:'test',fetcher:fetcher as any,maxRequests:1,clock:()=>now});
+ const [first,cached]=await Promise.all([provider(request()),provider(request())]);
+ expect(first.providerSource).toBe('mock_or_recorded');expect(cached.cacheHit).toBe(true);expect(cached.usage.totalTokens).toBe(0);expect(fetcher).toHaveBeenCalledTimes(1);
+ now=300000;await expect(provider(request())).rejects.toMatchObject({reason:'rate_limited'});expect(fetcher).toHaveBeenCalledTimes(1);
+});

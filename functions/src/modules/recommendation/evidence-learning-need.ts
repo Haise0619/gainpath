@@ -46,13 +46,27 @@ export function deriveEvidenceLearningNeed(scope:EvidenceScope,batch:AttestedWor
   const mapped=EXERCISE_MAP[policy.compatibility.exerciseId];if(scope.organizationId!=='gainpath'||!mapped)return{status:'abstained',reason:'unsupported_exercise'};
   const compatible=sessions.filter(s=>s.compatibility&&digestOf(s.compatibility)===digestOf(policy.compatibility));
   if(!compatible.length)return{status:'abstained',reason:sessions.some(s=>s.compatibility)?'incompatible_scoring':'unsupported_exercise'};
-  const latest=Math.max(...compatible.map(s=>s.endedAtMillis));if(now-latest>policy.maximumAgeMillis)return{status:'abstained',reason:'stale_evidence'};
-  const group=aggregateExerciseEvidence([{memberId:scope.memberId,sessions:compatible}],policy.provisionalSamplePolicy)[0];
+  const decision=qualifiedDecisionEvidence(compatible,policy.provisionalSamplePolicy,policy.maximumAgeMillis,now,scope.memberId);
+  if(decision.status==='abstained')return decision;
+  const {qualified,latest,group}=decision;
   if(!group||group.evidenceState!=='meets_provisional_minimums'||group.meanEstimatedFormScore===null||group.trackingCoverage===null)return{status:'abstained',reason:'insufficient_evidence'};
   if(group.meanEstimatedFormScore>=policy.attentionThreshold.estimatedFormScorePercent)return{status:'abstained',reason:'no_guidance_opportunity'};
   const need:LearningNeed={exercise:mapped,objective:policy.objective,level:policy.level};
-  const minimal=sessions.map(s=>({key:s.recordKey,digest:s.digest})).sort((a,b)=>a.key.localeCompare(b.key));
+  const minimal=qualified.map(s=>({key:s.recordKey,digest:s.digest})).sort((a,b)=>a.key.localeCompare(b.key));
   const provenance:DerivedEvidenceProvenance={schemaVersion:1,origin:'validated_workout_evidence',scope:{...scope},window:{...window},sourceRevision:batch.sourceRevision,policyFingerprint,compatibilityFingerprint:digestOf(policy.compatibility),evidenceFingerprint:digestOf({scope,policyFingerprint,minimal,need}),duplicateRecords:duplicates,latestCaptureAtMillis:latest};
   return{status:'derived',need,exerciseId:policy.compatibility.exerciseId,evidence:{summary:'Educational technique guidance derived from validated workout evidence under an explicitly synthetic reviewed policy.',scoredSessions:group.scoredSessions,estimatedFormScorePercent:group.meanEstimatedFormScore,coverage:group.trackingCoverage,sourceVersion:'validated-workout-evidence-v1',configVersion:policy.reviewVersion},provenance};
  }catch{return{status:'abstained',reason:'invalid_source'};}
+}
+
+/** Pure decision semantics for already validated sessions; conveys no capture or consent authority.
+ * Callers must first enforce exact compatibility and trusted source admission. */
+export function qualifiedDecisionEvidence(sessions:readonly SessionEvidence[],sample:ProvisionalSamplePolicy,maximumAgeMillis:number,now:number,memberId:string):
+ {status:'qualified';qualified:SessionEvidence[];latest:number;group:ReturnType<typeof aggregateExerciseEvidence>[number]}|{status:'abstained';reason:'stale_evidence'|'insufficient_evidence'}{
+ const fresh=sessions.filter(s=>s.endedAtMillis<=now&&now-s.endedAtMillis<=maximumAgeMillis);
+ if(!fresh.length)return{status:'abstained',reason:sessions.length?'stale_evidence':'insufficient_evidence'};
+ const qualified=fresh.filter(s=>s.compatibility?.scoreSupport==='scored'&&s.formScorePercent!==null&&s.trackingCoverage!==null&&s.trackingCoverage>=sample.minimumTrackingCoverage);
+ if(!qualified.length)return{status:'abstained',reason:'insufficient_evidence'};
+ const group=aggregateExerciseEvidence([{memberId,sessions:qualified}],sample)[0];
+ if(!group||group.evidenceState!=='meets_provisional_minimums')return{status:'abstained',reason:'insufficient_evidence'};
+ return{status:'qualified',qualified,latest:Math.max(...qualified.map(s=>s.endedAtMillis)),group};
 }

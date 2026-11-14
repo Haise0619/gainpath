@@ -53,7 +53,13 @@ describe('Module 13 release boundaries and truthful catalog coverage', () => {
 
   it('does not register local recommendation services in the deployable Functions entry point', () => {
     const entry = readFileSync(resolve(process.cwd(), 'src/index.ts'), 'utf8');
-    expect(entry).not.toMatch(/(?:from\s*|import\s*\()\s*['"][^'"]*modules\/recommendation\//);
+    const canonicalExports = entry.match(/^export .* from ['"].*modules\/recommendation\/[^'"]+['"];?$/gm) ?? [];
+    expect(canonicalExports).toEqual([
+      "export {module13MemberCommand,module13AdminCommand} from './modules/recommendation/canonical-recommendation-callables';",
+      "export {module13AcceptedWorkoutCreated,module13RecoverDeliveries} from './modules/recommendation/canonical-recommendation-events';",
+    ]);
+    const withoutReviewedBoundaries = canonicalExports.reduce((source,line)=>source.replace(line,''),entry);
+    expect(withoutReviewedBoundaries).not.toMatch(/(?:from\s*|import\s*\()\s*['"][^'"]*modules\/recommendation\//);
     expect(entry).not.toMatch(/export\s+(?:const|function)\s+(?:recommendation|exerciseInsights)/i);
   });
 });

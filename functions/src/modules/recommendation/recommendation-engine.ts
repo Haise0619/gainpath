@@ -14,18 +14,18 @@ export interface RecommendationRankingResult {
   schemaVersion:1; status:'ranked'|'abstained';
   origin:'ai_reranked'|'deterministic_fallback'|'deterministic_single_candidate'|'abstained';
   baseline:BaselineEntry[]; ai:ValidatedAiEntry[]|null; final:FinalRecommendationEntry[];
-  provenance:{rankingPolicy:'experimental-40-baseline-60-semantic-v1';promptVersion:'module13-rank-v1';schemaVersion:1;
-    model:string|null;validationStatus:'not_called'|'valid'|'invalid'|'provider_failed';fallbackReason:string|null;
+  provenance:{rankingPolicy:'deterministic-80-semantic-20-v2';promptVersion:'module13-rank-v1';schemaVersion:1;
+    inferenceSource:'not_called'|'gemini'|'mock_or_recorded'|'unknown';cacheHit:boolean;model:string|null;validationStatus:'not_called'|'valid'|'invalid'|'provider_failed';fallbackReason:string|null;
     latencyMillis:number|null;usage:ProviderUsage;withheldEvidenceCount:number;source:'synthetic_local';datasetId:'module13-batch-b-v1'};
 }
 const unknownUsage=():ProviderUsage=>({inputTokens:null,outputTokens:null,thinkingTokens:null,totalTokens:null});
 const REASON_TEMPLATES:Record<ReasonCode,string>={
-  exercise_match:'Reviewed mapping supports this exercise.',
-  objective_match:'Reviewed educational mapping supports the selected learning objective.',
-  level_match:'Reviewed educational mapping supports the selected experience level.',
-  available_slot:'An eligible unreserved coaching option was observed; availability must be checked again before booking.',
-  experience:'The published profile supplies experience information; it is not a quality guarantee.',
-  instructional_focus:'The supplied educational description provides context for this learning need.',
+  exercise_match:'Matches the exercise you practised.',
+  objective_match:'Supports your current learning focus.',
+  level_match:'Matches the selected experience level.',
+  available_slot:'A coaching time was available when checked. Check again before booking.',
+  experience:'Experience is listed on the coach’s published profile.',
+  instructional_focus:'Includes guidance related to your learning focus.',
 };
 export function requireSyntheticContext(context:SyntheticRecommendationContext):void {
   if(!isRecord(context)||!exactKeys(context,['mode','datasetId','organizationId','evidenceStatus'])||context.mode!=='synthetic_local'||context.datasetId!=='module13-batch-b-v1'||!['synthetic-org','gainpath'].includes(context.organizationId)
@@ -39,7 +39,7 @@ function baselineFinal(baseline:BaselineEntry[],candidates:readonly RankingCandi
 export async function rankRecommendationCandidates(need:LearningNeed,candidates:readonly RankingCandidate[],options:RankingOptions):Promise<RecommendationRankingResult>{
   requireSyntheticContext(options.context);validateNeed(need);
   if(candidates.some(c=>c.organizationId!==options.context.organizationId))throw Error('foreign_candidate_scope');
-  const result:RecommendationRankingResult={schemaVersion:1,status:'abstained',origin:'abstained',baseline:[],ai:null,final:[],provenance:{rankingPolicy:'experimental-40-baseline-60-semantic-v1',promptVersion:'module13-rank-v1',schemaVersion:1,model:null,validationStatus:'not_called',fallbackReason:null,latencyMillis:null,usage:unknownUsage(),withheldEvidenceCount:0,source:'synthetic_local',datasetId:options.context.datasetId}};
+  const result:RecommendationRankingResult={schemaVersion:1,status:'abstained',origin:'abstained',baseline:[],ai:null,final:[],provenance:{rankingPolicy:'deterministic-80-semantic-20-v2',promptVersion:'module13-rank-v1',schemaVersion:1,inferenceSource:'not_called',cacheHit:false,model:null,validationStatus:'not_called',fallbackReason:null,latencyMillis:null,usage:unknownUsage(),withheldEvidenceCount:0,source:'synthetic_local',datasetId:options.context.datasetId}};
   if(options.context.evidenceStatus!=='sufficient_synthetic'){result.provenance.fallbackReason=options.context.evidenceStatus;return result;}
   result.baseline=baselineRankCandidates(candidates);
   if(!candidates.length){result.provenance.fallbackReason='no_eligible_candidates';return result;}
@@ -54,14 +54,16 @@ export async function rankRecommendationCandidates(need:LearningNeed,candidates:
   let inference;
   try{inference=await options.provider(request.payload);}
   catch(error){result.provenance.validationStatus='provider_failed';result.provenance.fallbackReason=error instanceof RecommendationProviderError?error.reason:'provider_unavailable';result.provenance.latencyMillis=Math.max(0,clock()-start);return result;}
+  result.provenance.inferenceSource=inference.providerSource??'unknown';result.provenance.cacheHit=inference.cacheHit===true;
   result.provenance.model=inference.model;result.provenance.usage=inference.usage;result.provenance.latencyMillis=inference.latencyMillis;
   try{result.ai=validateAiRanking(inference.text,request).entries;}
   catch{result.provenance.validationStatus='invalid';result.provenance.fallbackReason='invalid_ai_output';return result;}
   result.provenance.validationStatus='valid';
-  result.final=result.ai.filter(a=>!a.abstain).map(a=>{const baseline=result.baseline.find(b=>b.id===a.candidateId)!;
-    return{id:baseline.id,eligibilityClass:baseline.eligibilityClass,score:Math.round((.4*baseline.score+.6*a.relevance)*100)/100,explanations:a.reasonCodes.map(r=>REASON_TEMPLATES[r]),evidenceKeys:a.evidenceKeys};
+  result.final=result.ai.map(a=>{const baseline=result.baseline.find(b=>b.id===a.candidateId)!;
+    if(a.abstain)return baselineFinal([baseline],candidates)[0];
+    return{id:baseline.id,eligibilityClass:baseline.eligibilityClass,score:Math.round((.8*baseline.score+.2*a.relevance)*100)/100,explanations:a.reasonCodes.map(r=>REASON_TEMPLATES[r]),evidenceKeys:a.evidenceKeys};
   }).sort((a,b)=>classOrder(a.eligibilityClass)-classOrder(b.eligibilityClass)||b.score-a.score||stableCompare(a.id,b.id));
-  if(!result.final.length){result.status='abstained';result.origin='abstained';result.provenance.fallbackReason='semantic_abstention';}
+  if(result.ai.every(a=>a.abstain)){result.origin='deterministic_fallback';result.provenance.fallbackReason='semantic_abstention';}
   else{result.origin='ai_reranked';}
   return result;
 }

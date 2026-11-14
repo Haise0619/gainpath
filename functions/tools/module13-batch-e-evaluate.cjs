@@ -44,6 +44,17 @@ async function evaluateOffline(){
       }
       const provider=record.attempt===null?undefined:async()=>({text:record.rawStructuredResponse,model:record.result.provenance.model,latencyMillis:record.result.provenance.latencyMillis,usage:record.result.provenance.usage});
       const replay=await rankRecommendationCandidates(scenario.need,prepared.candidates,{context:prepared.context,provider});
+      // Frozen Batch B evaluates its recorded 40/60 policy, never the current 80/20 policy.
+      // Reuse today's strict validation, then explicitly replay the historical arithmetic offline.
+      if(record.result.provenance.rankingPolicy==='experimental-40-baseline-60-semantic-v1'&&replay.ai&&replay.provenance.validationStatus==='valid'){
+        replay.final=replay.final.filter(entry=>!replay.ai.find(a=>a.candidateId===entry.id).abstain).map(entry=>({...entry,score:Math.round((.4*replay.baseline.find(b=>b.id===entry.id).score+.6*replay.ai.find(a=>a.candidateId===entry.id).relevance)*100)/100})).sort((a,b)=>(a.eligibilityClass==='exact_exercise'?0:1)-(b.eligibilityClass==='exact_exercise'?0:1)||b.score-a.score||(a.id<b.id?-1:a.id>b.id?1:0));
+        replay.status=replay.final.length?'ranked':'abstained';replay.origin=replay.final.length?'ai_reranked':'abstained';
+      }
+      // Historical explanation copy is part of the frozen v1 contract too.
+      if(record.result.provenance.rankingPolicy==='experimental-40-baseline-60-semantic-v1'){
+        const historicalReasons={exercise_match:'Reviewed mapping supports this exercise.',objective_match:'Reviewed educational mapping supports the selected learning objective.',level_match:'Reviewed educational mapping supports the selected experience level.',available_slot:'An eligible unreserved coaching option was observed; availability must be checked again before booking.',experience:'The published profile supplies experience information; it is not a quality guarantee.',instructional_focus:'The supplied educational description provides context for this learning need.'};
+        replay.final=replay.final.map(entry=>{const ai=replay.ai?.find(a=>a.candidateId===entry.id&&!a.abstain);const reasons=ai?.reasonCodes??[...new Set(prepared.candidates.find(c=>c.id===entry.id).evidence.flatMap(e=>e.supports))];return{...entry,explanations:reasons.map(r=>historicalReasons[r])};});
+      }
       const comparison=r=>({baseline:r.baseline,ai:r.ai,final:r.final,origin:r.origin,status:r.status});
       if(JSON.stringify(comparison(replay))!==JSON.stringify(comparison(record.result)))throw Error('recorded_ranking_replay_mismatch');
       const baseline=replay.baseline.map(r=>r.id),hybrid=replay.final.map(r=>r.id);

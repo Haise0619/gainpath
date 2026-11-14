@@ -42,7 +42,7 @@ export function createEvidenceDrivenQueueSource(options:EvidenceQueueSourceOptio
    if(b.provenance.schemaVersion!==1||!['trainer','content'].includes(b.kind)||!Number.isSafeInteger(b.provenance.latestCaptureAtMillis)||b.provenance.latestCaptureAtMillis<0||b.provenance.latestCaptureAtMillis>clock())return false;
   }catch{return false;}
   if(!b||b.schemaVersion!==1||b.scope.organizationId!==options.organizationId||b.provenance.origin!=='validated_workout_evidence'||digestOf(b.scope)!==digestOf(b.provenance.scope)||b.exerciseId!==lead?.exerciseId&&lead!==undefined||digestOf(b)!==fingerprint)return false;
-  if(b.deduplicationFingerprint!==digestOf({evidence:b.provenance.evidenceFingerprint,candidate:b.candidateFingerprint,kind:b.kind}))return false;
+  if(b.deduplicationFingerprint!==digestOf({evidence:b.provenance.evidenceFingerprint,kind:b.kind}))return false;
   if(lead&&(b.scope.memberId!==lead.memberId||b.kind!==lead.kind||lead.objective!==b.need.objective||lead.level!==b.need.level||digestOf(lead.evidence)!==digestOf(b.evidence)||queueBusinessKey(lead.organizationId,lead.memberId,lead.kind,lead.exerciseId,lead.objective,b.deduplicationFingerprint)!==lead.leadId))return false;
   const currentMember=await readRecommendationMemberState(tx,b.scope,clock(),options.noticePolicies??[],['exerciseInsights','recommendationGeneration']);
   if(!currentMember.eligible||currentMember.fingerprint!==b.memberFingerprintAtExtraction)return false;
@@ -94,7 +94,7 @@ export function createEvidenceDrivenQueueSource(options:EvidenceQueueSourceOptio
     recommend:async(item,kind,allowInference)=>{
      const d=derived.get(item.id);if(!d||digestOf(item)!==itemFingerprints.get(item.id)||digestOf(item.need)!==digestOf(d.need)||item.exerciseId!==d.exerciseId)throw denied();
      const engine=await options.recommend(item,kind,allowInference);
-     const binding:EvidenceQueueBinding={schemaVersion:1,scope:d.provenance.scope,exerciseId:d.exerciseId,need:d.need,kind,provenance:d.provenance,candidateFingerprint:engine.sourceFingerprint,deduplicationFingerprint:digestOf({evidence:d.provenance.evidenceFingerprint,candidate:engine.sourceFingerprint,kind}),maximumAgeMillis:maxAges.get(item.id)!,memberFingerprintAtExtraction:extractionMembers.get(item.id)!,evidence:d.evidence};
+     const binding:EvidenceQueueBinding={schemaVersion:1,scope:d.provenance.scope,exerciseId:d.exerciseId,need:d.need,kind,provenance:d.provenance,candidateFingerprint:engine.sourceFingerprint,deduplicationFingerprint:digestOf({evidence:d.provenance.evidenceFingerprint,kind}),maximumAgeMillis:maxAges.get(item.id)!,memberFingerprintAtExtraction:extractionMembers.get(item.id)!,evidence:d.evidence};
      const sourceFingerprint=digestOf(binding);bindings.set(sourceFingerprint,binding);
      return{...engine,sourceFingerprint,deduplicationFingerprint:binding.deduplicationFingerprint,evidenceBinding:binding as unknown as DocumentData};
     },

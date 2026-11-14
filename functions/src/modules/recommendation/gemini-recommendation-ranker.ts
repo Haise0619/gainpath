@@ -1,5 +1,6 @@
+import {createHash} from 'node:crypto';
 import { RANKING_RESPONSE_SCHEMA } from './recommendation-ai-validation';
-import { exactKeys, isRecord, REASON_CODES, validateNeed, type AnonymousRankingRequest, type RankingProvider } from './recommendation-ranking-contracts';
+import { exactKeys, isRecord, REASON_CODES, validateNeed, type AnonymousRankingRequest, type RankingProvider, type RankingInference } from './recommendation-ranking-contracts';
 
 export type ProviderFailureReason = 'invalid_request' | 'authentication' | 'billing_unavailable' | 'rate_limited' | 'timeout' | 'provider_unavailable' | 'invalid_provider_output';
 export class RecommendationProviderError extends Error {
@@ -37,9 +38,9 @@ async function boundedText(response: Response): Promise<string> {
   return Buffer.concat(chunks).toString('utf8');
 }
 /** Credential supplied by existing GEMINI_API_KEY integration; never resolved at import time. */
-export function createGeminiRecommendationRanker(options: {apiKey:string; model?:string; fetcher?:typeof fetch; timeoutMillis?:number; clock?:()=>number}): RankingProvider {
+export function createGeminiRecommendationRanker(options: {apiKey:string; model?:string; fetcher?:typeof fetch; timeoutMillis?:number; clock?:()=>number; maxRequests?:number}): RankingProvider {
   const model=options.model??process.env.GEMINI_CHAT_MODEL??'gemini-3.5-flash-lite';
-  return async request => {
+  const invoke:RankingProvider=async request => {
     assertAnonymousRequest(request);
     if(!options.apiKey||!/^[a-zA-Z0-9.-]{1,100}$/.test(model)) throw new RecommendationProviderError('authentication');
     const timeout=options.timeoutMillis??GEMINI_RANK_LIMITS.timeoutMillis;
@@ -56,10 +57,26 @@ export function createGeminiRecommendationRanker(options: {apiKey:string; model?
       const text=c[0].content.parts.map((p:any)=>p.text).join('');
       if(!text||Buffer.byteLength(text)>32768)throw new RecommendationProviderError('invalid_provider_output');
       const token=(key:string):number|null=>Number.isSafeInteger(b.usageMetadata?.[key])&&b.usageMetadata[key]>=0?b.usageMetadata[key]:null;
-      return {text,model:typeof b.modelVersion==='string'&&/^[\w.-]{1,128}$/.test(b.modelVersion)?b.modelVersion:model,latencyMillis:Math.max(0,clock()-start),usage:{inputTokens:token('promptTokenCount'),outputTokens:token('candidatesTokenCount'),thinkingTokens:token('thoughtsTokenCount'),totalTokens:token('totalTokenCount')}};
+      return {providerSource:options.fetcher?'mock_or_recorded' as const:'gemini' as const,cacheHit:false,text,model:typeof b.modelVersion==='string'&&/^[\w.-]{1,128}$/.test(b.modelVersion)?b.modelVersion:model,latencyMillis:Math.max(0,clock()-start),usage:{inputTokens:token('promptTokenCount'),outputTokens:token('candidatesTokenCount'),thinkingTokens:token('thoughtsTokenCount'),totalTokens:token('totalTokenCount')}};
     };
     try{return await Promise.race([operation(),new Promise<never>((_,reject)=>{timer=setTimeout(()=>{controller.abort();reject(new RecommendationProviderError('timeout'));},timeout);})]);}
     catch(error){if(error instanceof RecommendationProviderError)throw error;throw new RecommendationProviderError(controller.signal.aborted?'timeout':'provider_unavailable');}
     finally{if(timer)clearTimeout(timer);}
   };
+  const limit=options.maxRequests??20;
+  if(!Number.isSafeInteger(limit)||limit<1||limit>20)throw new RecommendationProviderError('invalid_request');
+  let requests=0;
+  const cache=new Map<string,{at:number;result:Promise<RankingInference>}>();
+  return async request=>{
+    assertAnonymousRequest(request);
+    const at=(options.clock??Date.now)();
+    for(const [key,value]of cache)if(at-value.at>=300000||at<value.at)cache.delete(key);
+    const key=createHash('sha256').update(JSON.stringify(request)).digest('hex'),prior=cache.get(key);
+    if(prior)return {...await prior.result,cacheHit:true,usage:{inputTokens:0,outputTokens:0,thinkingTokens:0,totalTokens:0}};
+    if(requests>=limit)throw new RecommendationProviderError('rate_limited');
+    requests++;
+    const result=invoke(request);cache.set(key,{at,result});
+    try{return await result;}catch(error){cache.delete(key);throw error;}
+  };
+
 }
