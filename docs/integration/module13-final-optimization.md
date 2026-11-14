@@ -1,5 +1,7 @@
 # Module 13 — Final hybrid integration and verification
 
+> Deployment update (15 November 2026): all eight Functions are now ACTIVE and the two new callable transports were separately approved and enabled. See the [live deployment and access verification](module13-deployment-2026-11-15.md). Historical local-only statements below describe the implementation checkpoint; physical Android workout acceptance remains pending.
+
 Date: 2026-11-14. Baseline: `e557db9`. Scope: existing Module 2/13 integration, eight release entrypoints, no live deployment, no live Rules edits, no account/data edits and no billable Gemini calls.
 
 ## Implemented

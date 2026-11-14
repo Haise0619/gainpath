@@ -7,8 +7,8 @@ Owner approval followed implementation commit `b1d9ce7e0589b7ed20725cb373b235c0b
 | Entry | Result |
 |---|---|
 | `fypDatasetCommand` | ACTIVE; source-only update, existing settings/IAM preserved |
-| `module13AdminCommand` | ACTIVE; new callable, client transport activation pending |
-| `module13MemberCommand` | ACTIVE; new callable, client transport activation pending |
+| `module13AdminCommand` | ACTIVE; owner-approved client transport enabled, Auth/App Check/role denials verified |
+| `module13MemberCommand` | ACTIVE; owner-approved client transport enabled, ordinary Member reads verified |
 | `module9MemberCommandCallable` | ACTIVE; source-only update, existing settings/IAM preserved |
 | `module13WorkoutBackupCreated` | ACTIVE; exact ordinary backup create filter and retry verified |
 | `module13WorkoutConsentChanged` | ACTIVE; exact ordinary consent-write filter and retry verified |
@@ -38,15 +38,30 @@ Used the two previously authorized sample accounts with their existing private c
 
 These checks verify live authentication, App Check and reads. They do not establish a real camera workout or automatic delivery acceptance.
 
-## Client transport activation — pending separate approval
+## Client transport activation — approved and verified
 
-Both new callable services return Cloud Run HTTP 401 with an HTML response when reached using a Firebase Member token and valid App Check. The request does not reach the callable handler. Neither service currently has an `allUsers` Cloud Run invocation binding.
+Before activation, both new callable services returned Cloud Run HTTP 401 with an HTML response even with Firebase Auth and valid App Check. Requests did not reach the handler. The owner separately and explicitly approved invocation access for only these two services on 15 November 2026.
 
-Prepared, but not applied: add only `roles/run.invoker` for `allUsers` on `module13MemberCommand` and `module13AdminCommand`. This permits Flutter/Firebase callable transport to reach the handler; the deployed handlers still enforce Auth, App Check, fresh organization membership and Member/Admin role checks. No project-wide IAM, existing service IAM or Firestore permission change is proposed. `AGENTS.md` requires explicit approval for IAM changes; the deployment approval was not used to alter them.
+Added only `roles/run.invoker` for `allUsers` on `module13MemberCommand` and `module13AdminCommand`. This permits Flutter/Firebase callable transport to reach the handler; handlers still enforce Auth, App Check, fresh organization membership and Member/Admin role checks. Readback verified the exact bindings. Project-level IAM, the other six Module 13 service policies and Firestore Rules remain unchanged. The deployment approval was not used to change IAM; this step followed the owner's separate approval required by `AGENTS.md`.
+
+Fresh live checks used existing ordinary Member and FYP credentials plus real App Check, without creating/resetting accounts or granting consent:
+
+| Check | Result |
+|---|---|
+| Both new APIs, missing Auth | JSON HTTP 401 `UNAUTHENTICATED` |
+| Both new APIs, missing App Check | JSON HTTP 401 `UNAUTHENTICATED` |
+| Ordinary Member access | HTTP 200, recommendations enabled |
+| Ordinary Member recommendation history | HTTP 200; empty for this account, no examples fabricated |
+| Ordinary Member consent and current notice | HTTP 200 |
+| Member calling Admin API | HTTP 403 `PERMISSION_DENIED` |
+| Member selecting another organization | HTTP 403 `PERMISSION_DENIED` |
+| FYP Member calling ordinary Member/Admin APIs | HTTP 403 `PERMISSION_DENIED` |
+
+All 12 Auth/App Check/access/isolation checks passed. Both APIs also passed Chrome localhost:7361 CORS preflight. No product record mutation, consent grant, payment/booking action or Gemini request was made. Evidence: `transport-activation-verified.json`, `transport-authenticated-verified.json`, `cors-verified.json` under the private deployment folder.
 
 ## Remaining acceptance and rollback
 
-After approved transport activation, repeat unauthenticated/missing-App-Check and wrong-role denial checks, then use an ordinary Member account for a read-only recommendation access check. A real Android workout and offline/reconnect demonstration are still pending; no device installation or camera session was performed here. Members must authorize the current summary-personalization notice and existing backup preference. Previous consent is not silently upgraded. A valid new save or explicit permission update then invokes the deployed automatic pipeline without Admin review.
+Transport activation and the read-only access/denial checks are complete. A real Android workout and offline/reconnect demonstration are still pending; no device installation or camera session was performed here. Members must authorize the current summary-personalization notice and existing backup preference. Previous consent is not silently upgraded. A valid new save or explicit permission update then invokes the deployed automatic pipeline without Admin review. Positive ordinary Admin authentication was not tested with an ordinary Admin password; the actual FYP Admin monitoring read and ordinary Member denial on the Admin endpoint were verified separately.
 
 Rollback artifacts and operation/source verification remain private under `build/module13-deploy-20261115/`. Restore the two shared functions' captured source using a source-only update; remove/disable only newly created Module 13 endpoints if separately authorized. Preserve all workout, recommendation, Inbox, payment and booking records. No destructive rollback was performed.
 
