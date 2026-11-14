@@ -17,13 +17,14 @@ import {createRecommendationConsentV2Command,type ReviewedConsentNoticePolicy} f
 import {createRecommendationQueueGeneration} from '../recommendation/recommendation-queue-generation';
 import {createRecommendationQueueList} from '../recommendation/recommendation-queue-reader';
 import {createRecommendationLeadDecision} from '../recommendation/recommendation-lead-decisions';
+import {runFypAutomaticRecommendationPage} from './fyp-automatic-recommendations';
 import {createRecommendationDelivery} from '../recommendation/recommendation-delivery';
 import {createMemberRecommendationService} from '../recommendation/recommendation-member-service';
 import {createRecommendationReadServices} from '../recommendation/recommendation-read-services';
 import {createRecommendationNoticeProjector} from '../recommendation/module9-recommendation-projection';
 import {module9MemberCommand} from '../coaching/module9-member-service';
 const modules=['getCoachRatingsCommand','getMemberBookingOptionsCommand','getCoachAvailabilityCommand','getCoachRosterCommand','getBookingListCommand','module9MemberCommandCallable','adminReportingCommand','adminWorkoutReportingCommand','adminCheckInReportingCommand','workoutProgramCommand','getCoachCertificationsCommand','getCoachPublishedPhotoCommand'];
-const operations=new Set(['admin.insights','admin.configuration.get','admin.configuration.save','admin.configuration.choices','admin.queue.refresh','admin.queue.list','admin.queue.detail','admin.queue.decide','admin.queue.status','member.history','member.workoutHistory','member.consent.get','member.consent.set','member.consent.notice','member.recommendation.command','member.inbox','member.coach','member.routine','delivery.process',...modules.map(n=>`module/${n}`)]);
+const operations=new Set(['admin.insights','admin.configuration.get','admin.configuration.save','admin.configuration.choices','admin.queue.refresh','admin.queue.automatic','admin.queue.list','admin.queue.monitor','admin.queue.detail','admin.queue.decide','admin.queue.status','member.history','member.workoutHistory','member.consent.get','member.consent.set','member.consent.notice','member.recommendation.command','member.inbox','member.coach','member.routine','delivery.process',...modules.map(n=>`module/${n}`)]);
 export function parseFypEnvelope(raw:unknown):{operation:string;data:DocumentData}{
   const q=object(raw);keys(q,['schemaVersion','operation','data']);
   if(q.schemaVersion!==1||!operations.has(String(q.operation))||Buffer.byteLength(JSON.stringify(q))>16384)throw new DomainError('invalid-argument','Unsupported bounded dataset command.');
@@ -37,7 +38,7 @@ function guard(db:Firestore,release?:FypRuntimeReleaseGrant){
   if(!(db instanceof Firestore)||(db as unknown as {projectId:string}).projectId!=='demo-gainpath-fyp'||db.databaseId!=='(default)'||process.env.GCLOUD_PROJECT!=='demo-gainpath-fyp'||process.env.GOOGLE_CLOUD_PROJECT!=='demo-gainpath-fyp'||process.env.FIRESTORE_EMULATOR_HOST!=='127.0.0.1:18231'||process.env.FIREBASE_AUTH_EMULATOR_HOST!=='127.0.0.1:19131'||s?.servicePath!=='127.0.0.1'||s.port!==18231||s.ssl!==false)throw new DomainError('failed-precondition','Dedicated default-database FYP emulator composition required.');
 }
 const deny=()=>new DomainError('permission-denied','This operation is unavailable for your current dataset role.');
-const adminReads=new Set(['admin.insights','admin.configuration.get','admin.configuration.choices','admin.queue.list','admin.queue.detail','admin.queue.status','module/adminReportingCommand','module/adminWorkoutReportingCommand','module/adminCheckInReportingCommand','module/workoutProgramCommand','module/getCoachAvailabilityCommand','module/getCoachRosterCommand','module/getCoachRatingsCommand','module/getCoachCertificationsCommand','module/getCoachPublishedPhotoCommand','module/getBookingListCommand']);
+const adminReads=new Set(['admin.insights','admin.configuration.get','admin.configuration.choices','admin.queue.list','admin.queue.monitor','admin.queue.detail','admin.queue.status','module/adminReportingCommand','module/adminWorkoutReportingCommand','module/adminCheckInReportingCommand','module/workoutProgramCommand','module/getCoachAvailabilityCommand','module/getCoachRosterCommand','module/getCoachRatingsCommand','module/getCoachCertificationsCommand','module/getCoachPublishedPhotoCommand','module/getBookingListCommand']);
 export function assertFypAdminReadOperation(operation:string):void {if(!adminReads.has(operation))throw deny();}
 function logical(path:string){
   if(path===FYP_SCOPE_ROOT)return'orgs/gainpath';
@@ -108,6 +109,24 @@ export function createFypDatasetBackend(options:{db:Firestore;auth:Pick<Auth,'ge
           },backups:async(uid,after,limit)=>(await evidence.rows(uid)).filter(r=>!after||r.id>after).slice(0,limit)},clock,fypCapability);
           return await finalize(result);
         }
+        if (e.operation === 'admin.queue.list' || e.operation === 'admin.queue.monitor') {
+          const readLeads = async (org: string, after: string | null, limit: number) => {
+            if (org !== scope.organizationId) throw deny();
+            let query = db.collection(`${scope.rootPath}/recommendationLeads`)
+                .orderBy(FieldPath.documentId()).limit(limit);
+            if (after) query = query.startAfter(after);
+            const rows = (await query.get()).docs;
+            return store.transact(async tx => {
+              const paths = rows.map(row => logical(row.ref.path));
+              const data = tx.getAll ? await tx.getAll(paths)
+                : await Promise.all(paths.map(path => tx.get(path)));
+              return rows.map((row, i) => ({id: row.id, data: data[i] ?? {}}));
+            });
+          };
+          return finalize(await createRecommendationQueueList({
+            ...deps, reader: {readLeads}, includeDeliveryProof: e.operation === 'admin.queue.monitor',
+          })(request));
+        }
         const memberIds=(source.members as {memberId:string}[]).map(m=>m.memberId),coachIds=source.coachIds as string[];
         const adapters=await createModule13DemoDataAdapters({db,queryRoot:scope.rootPath,manifest:{seedId:scope.seedId,memberIds,coachIds,recordPaths:(run.sourcePaths as string[]).map(logical),noticePolicies},store,deps,readAuthIdentity,clock,observations:evidence});
         const deliveryDeps={...deps,resolveTarget:adapters.resolveTarget},reads=createRecommendationReadServices({...deliveryDeps,validateTarget:adapters.validateTarget});
@@ -118,7 +137,21 @@ export function createFypDatasetBackend(options:{db:Firestore;auth:Pick<Auth,'ge
           case'admin.configuration.save':result=await createRecommendationConfigurationCommand({...deps,reviewedPolicies:adapters.reviewedPolicies})(request);break;
           case'admin.configuration.choices':{const config=await reads.configuration(request);result={schemaVersion:1,organizationId:'gainpath',revision:config.revision,selectedPolicyIds:config.policies.map(p=>p.policyId),availablePolicies:adapters.reviewedPolicies.map(p=>({policyId:p.policyId,title:`Fictional educational ${p.compatibility.exerciseId} (${p.compatibility.mode})`,definition:'Fictional-cohort educational evidence only; provisional and not a clinical risk threshold.'}))};break;}
           case'admin.queue.refresh':result=await createRecommendationQueueGeneration({...deps,source:adapters.queueSource})(request);break;
-          case'admin.queue.list':result=await createRecommendationQueueList({...deps,reader:adapters.queueReader})(request);break;
+          case 'admin.queue.automatic':
+            result = await runFypAutomaticRecommendationPage(request, {
+              generation: createRecommendationQueueGeneration({
+                ...deps, source: adapters.queueSource,
+                evidenceFatiguePolicy: {cooldownMillis: 7 * 86400000, dismissalSuppressionMillis: 30 * 86400000},
+              }),
+              decide: createRecommendationLeadDecision({...deps, validateTarget: adapters.validateTarget}),
+              deliver: createRecommendationDelivery(deliveryDeps),
+              listRunLeads: async runId => {
+                const rows = await db.collection(`${scope.rootPath}/recommendationLeads`)
+                  .where('runId', '==', runId).limit(21).get();
+                return store.transact(tx => Promise.all(rows.docs.map(row => tx.get(logical(row.ref.path)))));
+              },
+            });
+            break;
           case'admin.queue.detail':result=await reads.lead(request);break;
           case'admin.queue.status':result=await reads.status(request);break;
           case'admin.queue.decide':{

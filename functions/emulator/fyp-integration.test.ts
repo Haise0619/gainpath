@@ -11,7 +11,7 @@ import {applyFypSeed,describeFypSeed,cleanupFypSeedDryRun} from '../src/modules/
 const project='demo-gainpath-fyp',out='../build/fyp-cohort-integration';
 let app:App,db:Firestore,auth:Auth,dataset:FypDataset;
 const password=randomBytes(24).toString('base64url'),tokens=new Map<string,string>(),proof:Record<string,unknown>={schemaVersion:1,projectId:project,databaseId:'(default)',liveFirebase:false,appCheck:'Functions emulator decoded test token, not production cryptographic attestation'};
-let trainer:any,content:any;
+
 function guard(){if(process.env.FIRESTORE_EMULATOR_HOST!=='127.0.0.1:18231'||process.env.FIREBASE_AUTH_EMULATOR_HOST!=='127.0.0.1:19131'||process.env.GCLOUD_PROJECT!==project)throw Error('Dedicated loopback emulators only.');}
 const check=()=>[Buffer.from(JSON.stringify({alg:'none',typ:'JWT'})).toString('base64url'),Buffer.from(JSON.stringify({sub:'gainpath-fyp-node',aud:[`projects/${project}`],iat:Math.floor(Date.now()/1000),exp:Math.floor(Date.now()/1000)+3600})).toString('base64url'),''].join('.');
 async function token(uid:string,refresh=false){if(!refresh&&tokens.has(uid))return tokens.get(uid)!;const u=await auth.getUser(uid);const r=await fetch('http://127.0.0.1:19131/identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=emulator-key',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:u.email,password,returnSecureToken:true})});const body=await r.json() as any;if(!r.ok||!body.idToken)throw Error('Fictional emulator sign-in failed.');tokens.set(uid,body.idToken);return body.idToken as string;}
@@ -90,26 +90,45 @@ it('rejects missing AppCheck/Auth, client scope selection, wrong roles and unass
  await expect(call(dataset.adminId,'member.history',q())).rejects.toThrow();
  await expect(call(dataset.memberIds[0],'member.history',{schemaVersion:1,cohortId:'foreign'})).rejects.toThrow();proof.authorizationNegatives=true;
 });
-it('derives educational needs from the same observations and ranks multiple eligible candidates',async()=>{
- for(const kind of ['trainer','content']){
-  let continuation:string|null=null,generated:any;for(let page=0;page<11;page++){generated=await call(dataset.adminId,'admin.queue.refresh',q({kind,commandId:`fyp-${kind}-first`,continuation}));continuation=generated.summary.nextCursor;if(!continuation)break;}proof[`${kind}Generation`]=generated.summary;console.info('FYP generation aggregate',JSON.stringify(generated.summary));expect(generated.summary.status).toBe('complete');expect(generated.summary.generated).toBeGreaterThanOrEqual(5);
-  const list=await call(dataset.adminId,'admin.queue.list',q({kind,status:'all',startAtMillis:dataset.anchorMillis-86400000,endAtMillis:Date.now(),exerciseId:null,category:null,specialization:null,afterLeadId:null,limit:25}));
-  const lead=list.leads.find((l:any)=>l.memberId===dataset.memberIds[0]);expect(lead).toMatchObject({exerciseId:'F3b8xIr8ynBDd3gEICKX',evidence:{scoredSessions:3,estimatedFormScorePercent:60},ranking:{model:null,origin:'deterministic_fallback'}});
-  expect(list.leads.some((l:any)=>l.memberId===dataset.memberIds[6])).toBe(false);expect(list.leads.some((l:any)=>l.memberId===dataset.memberIds[8])).toBe(false);
-  if(kind==='trainer')trainer=lead;else content=lead;proof[kind]={generation:generated.summary,lead};
- }
-});
-it('explicit Admin Send delivers once through existing lifecycle and Member current destination',async()=>{
- for(const lead of[trainer,content]){
-  expect(lead).toBeTruthy();const input=q({leadId:lead.leadId,commandId:`fyp-send-${lead.kind}`,expectedRevision:lead.revision,action:'send',reason:null});
-  const sent=await call(dataset.adminId,'admin.queue.decide',input);expect(sent.outcome).toBe('prepared');expect(await call(dataset.adminId,'admin.queue.decide',input)).toEqual(sent);
-  const recipient=sent.recipientRecommendationId;expect(recipient).toBeTruthy();
-  const detail=await call(dataset.memberIds[0],'member.recommendation.command',q({action:'get',commandId:null,expectedRevision:null,recommendationId:recipient}));expect(detail.state).toBe('available');
-  await expect(call(dataset.memberIds[1],'member.recommendation.command',q({action:'get',commandId:null,expectedRevision:null,recommendationId:recipient}))).rejects.toMatchObject({code:'PERMISSION_DENIED'});
-  const destination=detail.kind==='trainer'?await call(dataset.memberIds[0],'member.coach',q({coachId:detail.target.coachId})):await call(dataset.memberIds[0],'member.routine',q({routineId:detail.target.destination.routineId}));expect(destination.status).toBe('published');
- }
- const inbox=await call(dataset.memberIds[0],'module/module9MemberCommandCallable',q({action:'inbox'}));expect(inbox.records).toHaveLength(2);const others=await call(dataset.memberIds[1],'module/module9MemberCommandCallable',q({action:'inbox'}));expect(others.records).toHaveLength(0);
- expect((await db.collection(`${FYP_ROOT}/recommendationDeliveryReceipts`).get()).size).toBe(2);proof.adminSendMemberDelivery=true;
+it('automatically delivers qualified recommendations and replays without duplicate inbox entries', async () => {
+  const admin = dataset.adminId, uid = dataset.memberIds[0];
+  const command = (kind: string, continuation: string | null) =>
+    q({kind, commandId: `fyp-automatic-${kind}`, continuation});
+  await expect(call(uid, 'admin.queue.automatic', command('content', null))).rejects.toThrow();
+  for (const kind of ['content', 'trainer']) {
+    let continuation: string | null = null, finalInput: unknown, result: any;
+    for (let page = 0; page < 11; page++) {
+      finalInput = command(kind, continuation);
+      result = await call(admin, 'admin.queue.automatic', finalInput);
+      continuation = result.summary.nextCursor;
+      if (!continuation) break;
+    }
+    expect(result.summary.status).toBe('complete');
+    expect(result.summary.generated).toBeGreaterThanOrEqual(5);
+    expect(result.delivery.delivered).toBeGreaterThan(0);
+    const inboxCount = (await db.collection(`${FYP_ROOT}/notifications`).count().get()).data().count;
+    expect(await call(admin, 'admin.queue.automatic', finalInput)).toEqual(result);
+    expect((await db.collection(`${FYP_ROOT}/notifications`).count().get()).data().count).toBe(inboxCount);
+    const page = await call(admin, 'admin.queue.monitor', q({kind,status:'all',
+      startAtMillis:dataset.anchorMillis-86400000,endAtMillis:Date.now(),exerciseId:null,
+      category:null,specialization:null,afterLeadId:null,limit:25}));
+    const lead = page.leads.find((row: any) => row.memberId === uid);
+    expect(lead).toMatchObject({status:'sent', ranking:{model:null,origin:'deterministic_fallback'}});
+    expect(page.deliveredLeadIds).toContain(lead.leadId);
+    expect(page.leads.some((row: any) => row.memberId === dataset.memberIds[8])).toBe(false);
+    const id = lead.decision.recipientRecommendationId;
+    const lookup = q({action:'get',commandId:null,expectedRevision:null,recommendationId:id});
+    const detail = await call(uid, 'member.recommendation.command', lookup);
+    expect(detail.state).toBe('available');
+    await expect(call(dataset.memberIds[1], 'member.recommendation.command', lookup)).rejects.toMatchObject({code:'PERMISSION_DENIED'});
+    const destination = kind === 'trainer'
+      ? await call(uid, 'member.coach', q({coachId:detail.target.coachId}))
+      : await call(uid, 'member.routine', q({routineId:detail.target.destination.routineId}));
+    expect(destination.status).toBe('published');
+  }
+  const inbox = await call(uid, 'module/module9MemberCommandCallable', q({action:'inbox'}));
+  expect(inbox.records.filter((row: any) => row.recommendation?.state === 'available')).toHaveLength(2);
+  proof.automaticMemberDelivery = true;
 });
 it.skipIf(process.env.FYP_WITH_FLUTTER!=='1')('ordinary Flutter Admin and Member compositions consume the seeded default emulator graph and capture UI',async()=>{
  async function flutter(application:string,test:string){return new Promise<number>((done,reject)=>{const log=`${out}/${application}-client-output-${dataset.anchorMillis}.log`;proof[`${application}ClientLog`]=log;let pending='';const emit=(chunk:string)=>{pending+=chunk;const lines=pending.split('\n');pending=lines.pop()!;for(const line of lines){const clean=line.replaceAll(password,'[ephemeral emulator credential redacted]')+'\n';writeFileSync(log,clean,{flag:'a'});process.stdout.write(clean);}};const child=spawn('C:/flutter/bin/cache/dart-sdk/bin/dart.exe',['C:/flutter/bin/cache/flutter_tools.snapshot','test','--no-pub','--reporter','expanded',test],{cwd:resolve(`../apps/${application}`),env:{...process.env,FYP_EMULATOR_PASSWORD:password},stdio:['ignore','pipe','pipe'],windowsHide:true});child.stdout.on('data',c=>emit(String(c)));child.stderr.on('data',c=>emit(String(c)));child.once('error',reject);child.once('close',code=>{emit('\n');done(code??1);});});}

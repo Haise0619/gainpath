@@ -7,7 +7,7 @@ import {authorizeRecommendationSession,recommendationCommandError} from './recom
 import {parseRecommendationLead,parseQueueGenerationSummary,queueInteger,queueText,QUEUE_STATUSES,type RecommendationLead,type QueueGenerationSummary,type RecommendationQueuePage,type RecommendationQueueQuery} from './recommendation-queue-contracts';
 import {authorizeQueue,requireQueueAdmin,readRecommendationMemberState,type QueueSecurityDependencies} from './recommendation-queue-security';
 
-import {recommendationPurposes,validRecipientIdentity} from './recommendation-delivery';
+import {bindRecommendationRecipient,parseRecommendationRecipient,recommendationPurposes,validRecipientIdentity,verifyRecommendationDelivery} from './recommendation-delivery';
 export interface QueuePageReader {readLeads(organizationId:string,afterLeadId:string|null,limit:number):Promise<{id:string;data:DocumentData}[]>}
 function parseQuery(raw:unknown,now:number):RecommendationQueueQuery{
   const q=object(raw);keys(q,['schemaVersion','organizationId','kind','status','startAtMillis','endAtMillis','exerciseId','category','specialization','afterLeadId','limit']);
@@ -22,7 +22,7 @@ function generationSummary(raw:unknown,kind:string):QueueGenerationSummary|null{
   return parseQueueGenerationSummary(s,kind as 'trainer'|'content');
 }
 /** Bounded on-demand view, all filters before stable page slicing; no raw histories. */
-export function createRecommendationQueueList(deps:QueueSecurityDependencies&{reader:QueuePageReader}){
+export function createRecommendationQueueList(deps:QueueSecurityDependencies&{reader:QueuePageReader; includeDeliveryProof?:boolean}){
   return async(request:InsightsRequest):Promise<RecommendationQueuePage>=>{
     try{
       const ctx=await authorizeQueue(request,deps),q=parseQuery(request.data,ctx.now),all:RecommendationLead[]=[];let after:string|null=null;
@@ -31,14 +31,15 @@ export function createRecommendationQueueList(deps:QueueSecurityDependencies&{re
       // revocation. No redacted lead wire shape is approved: refuse the whole list.
       await authorizeRecommendationSession(request,deps);
       const memberIds=[...new Set(all.filter(l=>l.kind===q.kind).map(l=>l.memberId))];
-      for(const uid of memberIds)if(!validRecipientIdentity(await deps.readAuthIdentity(uid),uid))throw new DomainError('permission-denied','Current recommendation purposes are required.');
+      const identities = await Promise.all(memberIds.map(uid => deps.readAuthIdentity(uid)));
+      if (identities.some((identity, index) => !validRecipientIdentity(identity, memberIds[index]))) throw new DomainError('permission-denied','Current recommendation purposes are required.');
       const verifiedAt=(deps.clock??Date.now)();if(!queueInteger(verifiedAt,ctx.now)||verifiedAt>8640000000000000)throw new DomainError('unavailable','Invalid queue clock.');
       const generation=await deps.store.transact(async tx=>{
         await requireQueueAdmin(tx,ctx.auth,ctx.organizationId);
-        for(const lead of all.filter(l=>l.kind===q.kind)){
+        await Promise.all(all.filter(l=>l.kind===q.kind).map(async lead => {
           const purposes=recommendationPurposes(lead).filter(p=>p!=='recommendationDelivery');
           if(!(await readRecommendationMemberState(tx,{organizationId:ctx.organizationId,memberId:lead.memberId},verifiedAt,deps.noticePolicies??[],purposes)).eligible)throw new DomainError('permission-denied','Current recommendation purposes are required.');
-        }
+        }));
         return generationSummary(await tx.get(`orgs/${ctx.organizationId}/recommendationGenerationState/${q.kind}`),q.kind);
       });
       const capturedAt=(deps.clock??Date.now)();if(!queueInteger(capturedAt,verifiedAt)||capturedAt>8640000000000000)throw new DomainError('unavailable','Invalid queue clock.');
@@ -49,7 +50,27 @@ export function createRecommendationQueueList(deps:QueueSecurityDependencies&{re
       const summary={pending:visible.filter(l=>l.status==='pending').length,processed:visible.filter(l=>l.status==='sent'||l.status==='dismissed').length,unavailable:visible.filter(l=>['expired','stale','revoked'].includes(l.status)).length};
       const selected=visible.filter(l=>(q.status==='all'||l.status===q.status)&&(q.afterLeadId===null||l.leadId>q.afterLeadId)),leads=selected.slice(0,q.limit),nextAfterLeadId=selected.length>q.limit?leads.at(-1)!.leadId:null;
 
-      return{schemaVersion:1,mode:'synthetic_local',organizationId:ctx.organizationId,kind:q.kind,capturedAtMillis:capturedAt,leads,nextAfterLeadId,summary,facets,generation};
+      const deliveredLeadIds = deps.includeDeliveryProof
+        ? await deps.store.transact(async tx => {
+            await requireQueueAdmin(tx, ctx.auth, ctx.organizationId);
+            const ids = await Promise.all(leads.map(async lead => {
+              const recipientId = lead.decision?.recipientRecommendationId;
+              if (lead.status !== 'sent' || !recipientId) return null;
+              try {
+                const recipient = parseRecommendationRecipient(await tx.get(
+                  `orgs/${ctx.organizationId}/recommendationRecipients/${recipientId}`), ctx.organizationId, recipientId);
+                bindRecommendationRecipient(recipient, lead);
+                return await verifyRecommendationDelivery(tx, ctx.organizationId, recipient, lead)
+                  ? lead.leadId : null;
+              } catch (error) {
+                if (error instanceof DomainError || error instanceof InputValidationError) return null;
+                throw error;
+              }
+            }));
+            return ids.filter((id): id is string => id !== null);
+          })
+        : undefined;
+      return{...(deliveredLeadIds ? {deliveredLeadIds} : {}),schemaVersion:1,mode:'synthetic_local',organizationId:ctx.organizationId,kind:q.kind,capturedAtMillis:capturedAt,leads,nextAfterLeadId,summary,facets,generation};
     }catch(error){throw recommendationCommandError(error);}
   };
 }

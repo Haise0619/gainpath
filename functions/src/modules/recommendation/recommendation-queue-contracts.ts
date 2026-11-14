@@ -29,6 +29,7 @@ export interface RecommendationQueueQuery {
 }
 export interface RecommendationQueuePage {
   schemaVersion:1;mode:'synthetic_local';organizationId:string;kind:RecommendationKind;capturedAtMillis:number;
+  deliveredLeadIds?:string[];
   leads:RecommendationLead[];nextAfterLeadId:string|null;summary:{pending:number;processed:number;unavailable:number};
   facets:{exercises:{id:string;label:string}[];categories:string[];specializations:string[]};generation:QueueGenerationSummary|null;
 }
