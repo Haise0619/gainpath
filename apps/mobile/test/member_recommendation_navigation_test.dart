@@ -390,6 +390,7 @@ void main() {
                 displayName: 'Fictional Coach Amira',
                 specialty: 'Squat foundations',
                 bio: 'Fictional reviewed educational profile.',
+                consultationFeeMinor: 12500,
                 specializationTags: ['Squat foundations'],
                 yearsExperience: null),
             revision: 2,

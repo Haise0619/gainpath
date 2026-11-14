@@ -75,7 +75,7 @@ class MemberRecommendationDetail {
         raw.length != keys.length ||
         !raw.keys.toSet().containsAll(keys) ||
         raw['schemaVersion'] != 1 ||
-        raw['mode'] != 'synthetic_local' ||
+        !const ['synthetic_local', 'accepted_workout'].contains(raw['mode']) ||
         raw['organizationId'] != org ||
         raw['recommendationId'] != id ||
         raw['revision'] is! int ||
@@ -217,7 +217,8 @@ class RpcMemberRecommendationRepository
   RpcMemberRecommendationRepository(
       {required this.scope,
       required bool Function() isCurrent,
-      required MemberRecommendationRpc invoke})
+      required MemberRecommendationRpc invoke,
+      this.fixtureOnly = true})
       : _current = isCurrent,
         _invoke = invoke;
   @override
@@ -227,7 +228,7 @@ class RpcMemberRecommendationRepository
   @override
   bool get enabled => true;
   @override
-  bool get fixtureOnly => true;
+  final bool fixtureOnly;
   @override
   bool get isCurrent => _current();
   void _check() {
@@ -270,3 +271,15 @@ class RpcMemberRecommendationRepository
         commandId: commandId, revision: detail.revision);
   }
 }
+
+/// Delivered projections only. Loading never marks a recommendation as read.
+class MemberRecommendationPage {
+  const MemberRecommendationPage(
+      {required this.records, this.nextAfterId, this.enabled = true});
+  final List<MemberRecommendationDetail> records;
+  final String? nextAfterId;
+  final bool enabled;
+}
+
+typedef MemberRecommendationPageLoader = Future<MemberRecommendationPage>
+    Function({required bool history, String? afterId});

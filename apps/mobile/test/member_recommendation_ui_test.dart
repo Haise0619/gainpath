@@ -82,7 +82,7 @@ void main() {
     expect(
         find.text('Notifications are currently unavailable.'), findsOneWidget);
     expect(find.text('Public holiday gym hours'), findsNothing);
-    expect(find.text('Synthetic local preview'), findsNothing);
+    expect(find.text('Fictional demonstration data'), findsNothing);
     await tester.pumpWidget(const SizedBox());
   });
   testWidgets(
@@ -144,7 +144,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(actions, ['get', 'read']);
     expect(find.text('Acknowledged'), findsNothing);
-    expect(find.text('Synthetic local preview'), findsOneWidget);
+    expect(find.text('Fictional demonstration data'), findsOneWidget);
     expect(find.text('r1'), findsNothing);
     expect(find.text('c1'), findsNothing);
     await tester.ensureVisible(find.text('Acknowledge'));

@@ -264,7 +264,7 @@ class _MemberRecommendationSheetState extends State<MemberRecommendationSheet> {
     return ClipRRect(
         borderRadius: BorderRadius.circular(16),
         child: SizedBox(
-            height: 144,
+            height: 112,
             width: double.infinity,
             child: valid
                 ? Image.network(uri.toString(),
@@ -282,7 +282,7 @@ class _MemberRecommendationSheetState extends State<MemberRecommendationSheet> {
     return FractionallySizedBox(
         heightFactor: 0.9,
         child: SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
             child: ConstrainedBox(
                 constraints: const BoxConstraints(minWidth: double.infinity),
                 child: Column(
@@ -290,7 +290,7 @@ class _MemberRecommendationSheetState extends State<MemberRecommendationSheet> {
                     children: [
                       Row(children: [
                         Expanded(
-                            child: Text('Recommendation',
+                            child: Text('Recommended for You',
                                 style: Theme.of(context).textTheme.titleLarge)),
                         IconButton(
                             tooltip: 'Close recommendation',
@@ -300,7 +300,7 @@ class _MemberRecommendationSheetState extends State<MemberRecommendationSheet> {
                       if (widget.repository.fixtureOnly)
                         const Padding(
                             padding: EdgeInsets.only(bottom: 12),
-                            child: Text('Synthetic local preview',
+                            child: Text('Fictional demonstration data',
                                 style: TextStyle(
                                     color: AppColors.primary,
                                     fontWeight: FontWeight.w700))),
@@ -343,7 +343,8 @@ class _MemberRecommendationSheetState extends State<MemberRecommendationSheet> {
                                   ?.copyWith(color: AppColors.primary)),
                           const SizedBox(height: 8),
                           Text(detail.targetLabel ?? detail.title,
-                              style: Theme.of(context).textTheme.headlineSmall),
+                              style:
+                                  Theme.of(context).textTheme.headlineMedium),
                           if (detail.specialization != null)
                             Padding(
                                 padding: const EdgeInsets.only(top: 8),
@@ -351,18 +352,14 @@ class _MemberRecommendationSheetState extends State<MemberRecommendationSheet> {
                                     style: const TextStyle(
                                         color: AppColors.inkSoft))),
                           const SizedBox(height: 12),
-                          Text(detail.summary),
+                          Text(detail.summary,
+                              style: Theme.of(context).textTheme.bodyLarge),
                           if (detail.exerciseLabel != null)
                             Padding(
                                 padding: const EdgeInsets.only(top: 12),
                                 child: Text(detail.exerciseLabel!,
                                     style: const TextStyle(
                                         fontWeight: FontWeight.w700))),
-                          if (detail.objective != null)
-                            Padding(
-                                padding: const EdgeInsets.only(top: 4),
-                                child:
-                                    Text(_objectiveLabel(detail.objective!))),
                           for (final reason in detail.explanations)
                             Padding(
                                 padding: const EdgeInsets.only(top: 8),
@@ -396,7 +393,7 @@ class _MemberRecommendationSheetState extends State<MemberRecommendationSheet> {
                                     label: Text(detail.kind ==
                                             RecommendationKind.trainer
                                         ? 'View Coach'
-                                        : 'View Tutorial'))),
+                                        : 'Watch Tutorial'))),
                             if (detail.kind == RecommendationKind.trainer)
                               const Padding(
                                   padding: EdgeInsets.only(top: 8),
@@ -439,12 +436,6 @@ class _MemberRecommendationSheetState extends State<MemberRecommendationSheet> {
   }
 }
 
-String _objectiveLabel(String value) => switch (value) {
-      'technique' => 'Focus: technique',
-      'consistency' => 'Focus: consistency',
-      'progression' => 'Focus: progression',
-      _ => 'Learning objective: ${value.replaceAll('_', ' ')}'
-    };
 String _unavailable(MemberRecommendationState state) => switch (state) {
       MemberRecommendationState.expired => 'This recommendation has expired.',
       MemberRecommendationState.dismissed => 'Recommendation dismissed.',

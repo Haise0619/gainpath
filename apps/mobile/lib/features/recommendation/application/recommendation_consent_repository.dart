@@ -14,7 +14,9 @@ class RecommendationConsentNotice {
       {required this.policyId,
       required this.noticeVersion,
       required this.contentVersion,
-      required this.historyDescription});
+      required this.historyDescription,
+      this.fictional = true});
+  final bool fictional;
   final String policyId;
   final String noticeVersion;
   final String contentVersion;

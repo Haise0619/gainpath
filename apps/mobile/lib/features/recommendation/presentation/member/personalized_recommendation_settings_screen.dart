@@ -103,8 +103,8 @@ class _SettingsState extends State<PersonalizedRecommendationSettingsScreen> {
                       mainAxisSize: MainAxisSize.min,
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text(
-                            'Synthetic review only. This does not activate production processing.'),
+                        if (widget.notice?.fictional == true)
+                          const Text('Fictional demonstration data'),
                         const SizedBox(height: 12),
                         Text(granted
                             ? _explanation(purpose)
@@ -202,24 +202,24 @@ class _SettingsState extends State<PersonalizedRecommendationSettingsScreen> {
                       children: [
                     Text(
                         injected
-                            ? 'Synthetic consent review'
-                            : 'Privacy settings preview',
+                            ? 'Choose what works for you'
+                            : 'Personalization settings',
                         style: heading),
                     const SizedBox(height: 8),
                     Text(injected
-                        ? 'Local test data only. These choices do not enroll production Members.'
-                        : 'Consent collection is unavailable while wording, AI data transfer, history scope and retention await approval.'),
+                        ? widget.notice?.fictional == true
+                            ? 'Fictional demonstration data'
+                            : 'Control how eligible exercise assessments help personalize your suggestions.'
+                        : 'Personalization is not available for your account yet.'),
                     const SizedBox(height: 8),
                     const Text(
-                        'Each purpose is independent and starts off. Camera and backup permissions do not grant recommendation consent.'),
+                        'Each choice is optional. You can change your choices at any time.'),
                   ])),
               const SizedBox(height: 16),
               if (_loading) const LinearProgressIndicator(),
               if (!injected)
                 const Text(
-                    'Current server state unavailable. Switches show the default-off preview, not saved account choices.'),
-              if (_state != null)
-                Text('Current server state · revision ${_state!.revision}'),
+                    'Your saved choices are unavailable. Controls will be enabled when personalization is ready.'),
               if (_error != null)
                 Text(_error!, style: const TextStyle(color: AppColors.danger)),
               if (_message != null)
@@ -233,16 +233,22 @@ class _SettingsState extends State<PersonalizedRecommendationSettingsScreen> {
                         onPressed: _load,
                         child: const Text('Reload current state'))),
               const SizedBox(height: 12),
-              Text(widget.notice == null
-                  ? 'Notice and history policy awaiting owner review.'
-                  : 'Review notice: ${widget.notice!.noticeVersion} · Content: ${widget.notice!.contentVersion}'),
+              if (widget.notice != null)
+                ExpansionTile(
+                    tilePadding: EdgeInsets.zero,
+                    title: const Text('Privacy details'),
+                    children: [
+                      Text(widget.notice!.historyDescription),
+                      Text(
+                          'Notice ${widget.notice!.noticeVersion} · ${widget.notice!.contentVersion}')
+                    ]),
               const SizedBox(height: 12),
               for (final purpose in RecommendationConsentPurpose.values) ...[
                 _purposeCard(purpose),
                 const SizedBox(height: 12),
               ],
               const Text(
-                  'Revocation stops future authorized use for the selected purpose. It does not confirm deletion of prior records. Retention, audit access and deletion rules are pending owner review.'),
+                  'Turning a choice off stops future use for that purpose. Turning this off does not delete existing records.'),
               const SizedBox(height: 16),
             ],
           )),
@@ -271,8 +277,8 @@ class _SettingsState extends State<PersonalizedRecommendationSettingsScreen> {
       Text(_state == null
           ? 'Saved choice unavailable'
           : granted
-              ? 'Granted on server'
-              : 'Not granted'),
+              ? 'On'
+              : 'Off'),
       if (value?.noticeVersion != null)
         Text(
             'Accepted notice: ${value!.noticeVersion} · Content: ${value.contentVersion}'),
@@ -284,21 +290,22 @@ class _SettingsState extends State<PersonalizedRecommendationSettingsScreen> {
 }
 
 String _title(RecommendationConsentPurpose purpose) => switch (purpose) {
-      RecommendationConsentPurpose.exerciseInsights => 'Exercise Insights',
+      RecommendationConsentPurpose.exerciseInsights =>
+        'Understand my exercise technique',
       RecommendationConsentPurpose.recommendationGeneration =>
-        'Recommendation Generation',
+        'Personalize my suggestions',
       RecommendationConsentPurpose.externalAiInference =>
-        'External AI Inference',
+        'Optional Gemini assistance',
       RecommendationConsentPurpose.recommendationDelivery =>
-        'Recommendation Delivery',
+        'Receive reviewed suggestions',
     };
 String _explanation(RecommendationConsentPurpose purpose) => switch (purpose) {
       RecommendationConsentPurpose.exerciseInsights =>
-        'Use compatible workout form scores and session evidence to describe exercises needing attention. These are educational estimates, not a medical risk assessment.',
+        'Use eligible assessed sessions to identify where exercise guidance may help.',
       RecommendationConsentPurpose.recommendationGeneration =>
-        'Use eligible exercise evidence to prepare Coach and tutorial suggestions for Admin review. This does not book a Coach or change your workouts.',
+        'Prepare relevant tutorials and optional Coach suggestions for your gym to review.',
       RecommendationConsentPurpose.externalAiInference =>
-        'Send minimized eligible exercise evidence and candidate descriptions to an external AI provider for semantic ranking. Provider, fields, transfer safeguards and retention require approval before release.',
+        'Let Gemini help rank eligible suggestions using minimal, anonymized context. Suggestions also work without Gemini.',
       RecommendationConsentPurpose.recommendationDelivery =>
-        'Receive Admin-approved suggestions in your existing Notification Center. Opening a suggestion does not create a booking, payment or reward.',
+        'Show approved recommendations on Home and in your Notification Center.',
     };

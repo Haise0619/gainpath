@@ -65,6 +65,7 @@ class MemberHomeScreen extends StatefulWidget {
       this.onRefreshProgress,
       this.onRefreshRoutines,
       this.announcements,
+      this.recommendations,
       this.onRefreshAnnouncements,
       this.onOpenRewards,
       this.onOpenProgress,
@@ -94,6 +95,7 @@ class MemberHomeScreen extends StatefulWidget {
   final Future<void> Function()? onRefreshProgress;
   final Future<void> Function()? onRefreshRoutines;
   final Widget? announcements;
+  final Widget? recommendations;
   final Future<void> Function()? onRefreshAnnouncements;
   final VoidCallback? onOpenProgress, onOpenHistory, onOpenRewards;
   final VoidCallback? onOpenPlan;
@@ -470,6 +472,10 @@ class _MemberHomeScreenState extends State<MemberHomeScreen>
                         onOpenWorkout: widget.onOpenWorkout,
                       ),
                       const SizedBox(height: 20),
+                      if (widget.recommendations != null) ...[
+                        widget.recommendations!,
+                        const SizedBox(height: 20),
+                      ],
                       const _HomeSectionHeading('Quick access'),
                       _QuickActionsGrid(
                           onOpenRewards: widget.onOpenRewards,

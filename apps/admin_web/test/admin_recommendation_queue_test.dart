@@ -20,8 +20,12 @@ void main() {
             child: Scaffold(
                 body: RecommendationQueuePanel(
                     trainer: trainer,
+                    history: h.status != 'pending',
                     repository: h.repository,
                     clock: () => queueNow)))));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Queue maintenance'));
+    await tester.tap(find.text('Queue maintenance'));
     await tester.pumpAndSettle();
   }
 
@@ -34,12 +38,12 @@ void main() {
     await tester.pumpWidget(const MaterialApp(home: RiskLeaderboardScreen()));
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
-    await tester.tap(find.text('Trainer Matching'));
+    await tester.tap(find.text('Needs Review'));
     await tester.pumpAndSettle();
     expect(find.text('Recommendation queue is unavailable in this release.'),
         findsOneWidget);
     expect(find.text('Export CSV'), findsNothing);
-    await tester.tap(find.text('Content Recommendations'));
+    await tester.tap(find.text('History'));
     await tester.pumpAndSettle();
     expect(find.text('Recommendation queue is unavailable in this release.'),
         findsOneWidget);
@@ -49,24 +53,31 @@ void main() {
       (tester) async {
     final h = QueueTransportHarness();
     await show(tester, h);
-    expect(find.text('Educational review'), findsOneWidget);
+    expect(find.text('Fictional educational dataset'), findsOneWidget);
     expect(find.text('Sample Member'), findsOneWidget);
-    expect(find.text('Sample Coach'), findsOneWidget);
-    await tester.tap(find.text('View details'));
+
+    await tester.tap(find.text('Review').last);
     await tester.pumpAndSettle();
     expect(find.textContaining('Observed option'), findsOneWidget);
     expect(find.textContaining('not reserved'), findsOneWidget);
+    expect(find.textContaining('Estimated Form Score: 64.0%').hitTestable(),
+        findsNothing);
+    await tester.tap(find.text('Technical Details'));
+    await tester.pumpAndSettle();
     expect(find.textContaining('Estimated Form Score: 64.0%'), findsOneWidget);
     expect(find.text('member-1'), findsNothing);
     expect(find.text('coach-1'), findsNothing);
-    expect(find.text('Matches the supported exercise.'), findsOneWidget);
+    expect(find.text('Matches the supported exercise.'), findsWidgets);
   });
   testWidgets(
       'Send requires confirmation and reports preparation without claiming delivery',
       (tester) async {
     final h = QueueTransportHarness();
     await show(tester, h);
-    await tester.tap(find.text('Send'));
+    await tester.tap(find.text('Review').last);
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Approve & Send'));
+    await tester.tap(find.text('Approve & Send'));
     await tester.pumpAndSettle();
     expect(h.requests.where((r) => r['method'] == 'decide'), isEmpty);
     expect(find.byType(LinearProgressIndicator), findsNothing);
@@ -85,9 +96,9 @@ void main() {
     final h = QueueTransportHarness()..failDetail = true;
     await show(tester, h);
     expect(find.text('Sample Member'), findsOneWidget);
-    await tester.tap(find.text('View details'));
+    await tester.tap(find.text('Review').last);
     await tester.pumpAndSettle();
-    expect(find.text('Recommendation details'), findsNothing);
+    expect(find.text('Review recommendation'), findsNothing);
     expect(find.text('Evidence summary'), findsNothing);
     expect(find.text('Synthetic compatible squat observations for review.'),
         findsNothing);
@@ -105,9 +116,9 @@ void main() {
     final h = QueueTransportHarness()
       ..freshDetail = (queueLead()..['targetLabel'] = 'Fresh authorized Coach');
     await show(tester, h);
-    await tester.tap(find.text('View details'));
+    await tester.tap(find.text('Review').last);
     await tester.pumpAndSettle();
-    expect(find.text('Recommendation details'), findsOneWidget);
+    expect(find.text('Review recommendation'), findsOneWidget);
     expect(
         find.text('Suggested Coach: Fresh authorized Coach'), findsOneWidget);
     expect(find.text('Suggested Coach: Sample Coach'), findsNothing);
@@ -125,10 +136,10 @@ void main() {
     final h = QueueTransportHarness();
     await show(tester, h);
     h.detailPending = Completer<Map<String, Object?>>();
-    await tester.tap(find.text('View details'));
+    await tester.tap(find.text('Review').last);
     await tester.pump();
     expect(find.byType(LinearProgressIndicator), findsOneWidget);
-    expect(find.text('Recommendation details'), findsNothing);
+    expect(find.text('Review recommendation'), findsNothing);
     expect(find.text('Evidence summary'), findsNothing);
     h.current = false;
     h.detailPending!.complete({
@@ -138,7 +149,7 @@ void main() {
       'lead': queueLead()
     });
     await tester.pumpAndSettle();
-    expect(find.text('Recommendation details'), findsNothing);
+    expect(find.text('Review recommendation'), findsNothing);
     expect(find.text('Sample Member'), findsNothing);
     expect(find.text('Your Admin session changed. Reopen Recommendations.'),
         findsOneWidget);
@@ -164,7 +175,7 @@ void main() {
     }))));
     await tester.pumpAndSettle();
     old.detailPending = Completer<Map<String, Object?>>();
-    await tester.tap(find.text('View details'));
+    await tester.tap(find.text('Review').last);
     await tester.pump();
     replace(() => selected = fresh);
     await tester.pumpAndSettle();
@@ -176,7 +187,7 @@ void main() {
     });
     await tester.pumpAndSettle();
     expect(find.text('Old private label'), findsNothing);
-    expect(find.text('Recommendation details'), findsNothing);
+    expect(find.text('Review recommendation'), findsNothing);
     expect(find.text('Sample Member'), findsOneWidget);
   });
   testWidgets(
@@ -184,6 +195,9 @@ void main() {
       (tester) async {
     final h = QueueTransportHarness();
     await show(tester, h);
+    await tester.tap(find.text('Review').last);
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Dismiss'));
     await tester.tap(find.text('Dismiss'));
     await tester.pumpAndSettle();
     await tester.enterText(
@@ -267,7 +281,7 @@ void main() {
       'content details show an existing tutorial destination without exposing IDs',
       (tester) async {
     await show(tester, QueueTransportHarness(), trainer: false);
-    await tester.tap(find.text('View details'));
+    await tester.tap(find.text('Review').last);
     await tester.pumpAndSettle();
     expect(find.textContaining('Published routine tutorial'), findsOneWidget);
     expect(find.textContaining('Day 1'), findsOneWidget);
@@ -307,7 +321,10 @@ void main() {
       (tester) async {
     final h = QueueTransportHarness()..failDecision = true;
     await show(tester, h);
-    await tester.tap(find.text('Send'));
+    await tester.tap(find.text('Review').last);
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Approve & Send'));
+    await tester.tap(find.text('Approve & Send'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Confirm Send'));
     await tester.pumpAndSettle();
@@ -361,6 +378,8 @@ void main() {
             body: RecommendationQueuePanel(
                 trainer: true, repository: h.repository, clock: () => now))));
     await tester.pumpAndSettle();
+    await tester.tap(find.text('Queue maintenance'));
+    await tester.pumpAndSettle();
     now = queueNow.add(const Duration(minutes: 2));
     await tester.tap(find.text('Refresh queue'));
     await tester.pumpAndSettle();
@@ -378,10 +397,10 @@ void main() {
     expect(find.byType(LinearProgressIndicator), findsOneWidget);
     expect(
         tester
-            .widget<FilledButton>(find
+            .widget<OutlinedButton>(find
                 .ancestor(
                     of: find.text('Refresh queue'),
-                    matching: find.byWidgetPredicate((w) => w is FilledButton))
+                    matching: find.byWidgetPredicate((w) => w is OutlinedButton))
                 .first)
             .onPressed,
         isNull);
@@ -436,7 +455,7 @@ void main() {
       await show(tester, h);
       await tester.tap(find.byKey(const ValueKey('queue-status')));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('All statuses').last);
+      await tester.tap(find.text('All history').last);
       await tester.pumpAndSettle();
       expect(find.text('Expired'), findsNothing);
       expect(find.text(status == 'sent' ? 'Prepared locally' : 'Dismissed'),
@@ -451,10 +470,10 @@ void main() {
     (detail['ranking'] as Map)['origin'] = 'ai_reranked';
     final h = QueueTransportHarness()..freshDetail = detail;
     await show(tester, h);
-    await tester.tap(find.text('View details'));
+    await tester.tap(find.text('Review').last);
     await tester.pumpAndSettle();
-    expect(find.text('Rule-based relevance · educational review'),
-        findsOneWidget);
+    expect(
+        find.text('Rule-based relevance · educational review'), findsOneWidget);
     expect(find.textContaining('AI-assisted ranking'), findsNothing);
   });
   testWidgets(
@@ -480,9 +499,7 @@ void main() {
       };
     await show(tester, h);
     expect(find.textContaining('No eligible candidates: 1'), findsOneWidget);
-    expect(
-        find.text('No recommendations match these filters.'), findsOneWidget);
-    expect(find.text('Recommendation queue could not be loaded. Retry.'),
-        findsNothing);
+    expect(find.text('Permission withdrawn'), findsOneWidget);
+    expect(find.text('Recommendation queue could not be loaded. Retry.'), findsNothing);
   });
 }

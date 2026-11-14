@@ -1,3 +1,4 @@
+import '../di/canonical_admin_recommendation_factory.dart';
 import 'package:gainpath_data/gainpath_data.dart'
     show FypDatasetTransportFactory;
 import '../../infrastructure/firebase/firebase_fyp_dataset.dart';
@@ -75,8 +76,10 @@ class AdminShell extends StatefulWidget {
       {super.key,
       this.liveSession,
       this.datasetTransportFactory,
+      this.canonicalRecommendationFactory,
       this.allowContentRemoval =
           const bool.fromEnvironment('ADMIN_CONTENT_REMOVAL_ENABLED')});
+  final CanonicalAdminRecommendationFactory? canonicalRecommendationFactory;
   final bool allowContentRemoval;
   final AuthSession? liveSession;
   final FypDatasetTransportFactory? datasetTransportFactory;
@@ -108,6 +111,14 @@ class _AdminShellState extends State<AdminShell> {
                       mounted &&
                       context.read<AuthBloc>().state.session ==
                           widget.liveSession));
+  late final _canonicalRecommendations = widget.liveSession == null
+      ? null
+      : (widget.canonicalRecommendationFactory ??
+              createCanonicalAdminRecommendations)(
+          widget.liveSession!,
+          () =>
+              mounted &&
+              context.read<AuthBloc>().state.session == widget.liveSession);
   final _coachReviewGuard = CoachReviewDiscardGuard();
   int _index = 0;
   String? _scopedCoachIdForBookings;
@@ -172,13 +183,13 @@ class _AdminShellState extends State<AdminShell> {
         Icons.auto_awesome_outlined,
         Icons.auto_awesome_rounded,
         'Recommendations',
-        'Exercises needing attention and matched leads',
+        'Review suggestions and delivery history',
         RiskLeaderboardScreen(
             live: widget.liveSession != null,
             insightsRepository: _fypRecommendations?.insights,
-            queueRepository: _fypRecommendations?.queue)),
-    _NavGroup(
-        Icons.payments_outlined, Icons.payments_rounded, 'Payments', [
+            queueRepository: _fypRecommendations?.queue,
+            canonicalRepository: _canonicalRecommendations)),
+    _NavGroup(Icons.payments_outlined, Icons.payments_rounded, 'Payments', [
       _NavPage(
           Icons.receipt_long_outlined,
           Icons.receipt_long_rounded,
@@ -503,7 +514,8 @@ class _AdminShellState extends State<AdminShell> {
                         index: _index,
                         children: flatPages.asMap().entries.map((entry) {
                           final session = widget.liveSession, d = entry.value;
-                          if (session != null && !_visited.contains(entry.key)) {
+                          if (session != null &&
+                              !_visited.contains(entry.key)) {
                             return const SizedBox.shrink();
                           }
                           if (session != null && d.label == 'Coaches') {
@@ -525,7 +537,8 @@ class _AdminShellState extends State<AdminShell> {
                             }
                             return CoachesScreen(
                                 key: ValueKey(_notificationReviewGeneration),
-                                initialCoachId: _scopedCoachIdForReview ?? _notificationCoachId,
+                                initialCoachId: _scopedCoachIdForReview ??
+                                    _notificationCoachId,
                                 discardGuard: _coachReviewGuard,
                                 live: true,
                                 onOpenBookings: (id) => setState(() {
@@ -543,11 +556,13 @@ class _AdminShellState extends State<AdminShell> {
                           if (d.label == 'Transactions') {
                             return session == null
                                 ? PaymentsScreen(
-                                    key: const ValueKey('payments-transactions'),
+                                    key:
+                                        const ValueKey('payments-transactions'),
                                     mode: PaymentsMode.transactions,
                                     onNavigateMode: _navigateToPaymentMode)
                                 : AdminPaymentReviewRoute(
-                                    key: const ValueKey('payments-transactions'),
+                                    key:
+                                        const ValueKey('payments-transactions'),
                                     session: session,
                                     mode: PaymentsMode.transactions,
                                     onNavigateMode: _navigateToPaymentMode);
@@ -567,11 +582,13 @@ class _AdminShellState extends State<AdminShell> {
                           if (d.label == 'Reconciliation') {
                             return session == null
                                 ? PaymentsScreen(
-                                    key: const ValueKey('payments-reconciliation'),
+                                    key: const ValueKey(
+                                        'payments-reconciliation'),
                                     mode: PaymentsMode.reconciliation,
                                     onNavigateMode: _navigateToPaymentMode)
                                 : AdminPaymentReviewRoute(
-                                    key: const ValueKey('payments-reconciliation'),
+                                    key: const ValueKey(
+                                        'payments-reconciliation'),
                                     session: session,
                                     mode: PaymentsMode.reconciliation,
                                     onNavigateMode: _navigateToPaymentMode);

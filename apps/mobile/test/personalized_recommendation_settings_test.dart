@@ -30,14 +30,14 @@ void main() {
       'normal preview shows unavailable server state and four disabled off purposes',
       (tester) async {
     await show(tester);
-    expect(find.textContaining('Current server state unavailable'),
+    expect(find.textContaining('Your saved choices are unavailable'),
         findsOneWidget);
     final switches =
         tester.widgetList<SwitchListTile>(find.byType(SwitchListTile)).toList();
     expect(switches.length, 4);
     expect(switches.every((s) => !s.value && s.onChanged == null), isTrue);
     expect(
-        find.textContaining('Camera and backup permissions'), findsOneWidget);
+        find.textContaining('Each choice is optional'), findsOneWidget);
   });
 
   testWidgets('Privacy and Data opens only the disabled review preview',

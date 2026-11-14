@@ -1,6 +1,8 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:gainpath_identity/gainpath_identity.dart';
 import '../infrastructure/firebase/firebase_fyp_dataset.dart';
+import '../infrastructure/firebase/firebase_member_recommendations.dart';
+import '../features/recommendation/application/recommendation_consent_repository.dart';
 import '../infrastructure/firebase/firebase_demo_recommendation.dart';
 import 'package:flutter/material.dart';
 import '../features/recommendation/presentation/member/personalized_recommendation_settings_screen.dart';
@@ -19,14 +21,26 @@ Future<void> openRecommendationPrivacyPreview(
       ? null
       : FirebaseDemoMemberRepositories(
           firebaseFypDatasetTransport(session!.scope, isCurrent));
-  final notice = await repositories?.notice();
+  final canonical = session != null && session.datasetScope == null
+      ? FirebaseMemberRecommendations(
+          scope: session.scope, isCurrent: isCurrent)
+      : null;
+  RecommendationConsentNotice? notice;
+  try {
+    notice = repositories != null
+        ? await repositories.notice()
+        : await canonical?.notice();
+  } catch (_) {
+    // Existing grants can still be revoked when a reviewed new-grant notice is unavailable.
+  }
   if (!context.mounted || !isCurrent()) return;
   await Navigator.push<void>(
       context,
       MaterialPageRoute(
         builder: (_) => PersonalizedRecommendationSettingsScreen(
             isCurrent: isCurrent,
-            repository: repositories?.consent,
+            repository: repositories?.consent ??
+                (canonical?.enabled == true ? canonical!.consent : null),
             notice: notice),
       ));
 }
