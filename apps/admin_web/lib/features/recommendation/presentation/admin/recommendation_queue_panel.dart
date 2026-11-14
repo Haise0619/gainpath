@@ -1,4 +1,5 @@
 import 'recommendation_presentation_copy.dart';
+import 'recommendation_monitor.dart';
 import 'package:flutter/material.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
 import '../../application/recommendation_queue.dart';
@@ -9,10 +10,12 @@ class RecommendationQueuePanel extends StatefulWidget {
       {super.key,
       this.trainer = false,
       this.history = false,
+      this.tab,
       this.internalMaintenance = false,
       this.repository,
       this.clock});
   final bool trainer, history;
+  final RecommendationMonitorTab? tab;
 
   /// Internal diagnostics only; normal screens never expose generation.
   final bool internalMaintenance;
@@ -54,13 +57,15 @@ class _RecommendationQueuePanelState extends State<RecommendationQueuePanel> {
     super.initState();
     _kind = widget.trainer ? 'trainer' : 'content';
     _resetQuery();
-    _load();
+    if (widget.internalMaintenance) _load();
   }
 
   @override
   void didUpdateWidget(covariant RecommendationQueuePanel oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (!identical(oldWidget.repository, widget.repository) ||
+    if (!widget.internalMaintenance) return;
+    if (!oldWidget.internalMaintenance ||
+        !identical(oldWidget.repository, widget.repository) ||
         oldWidget.trainer != widget.trainer ||
         oldWidget.history != widget.history) {
       _working = false;
@@ -698,6 +703,16 @@ class _RecommendationQueuePanelState extends State<RecommendationQueuePanel> {
 
   @override
   Widget build(BuildContext context) {
+    if (!widget.internalMaintenance) {
+      return RecommendationMonitor(
+        repository: _repo,
+        tab: widget.tab ??
+            (widget.history
+                ? RecommendationMonitorTab.history
+                : RecommendationMonitorTab.overview),
+        clock: widget.clock ?? DateTime.now,
+      );
+    }
     final current = _repo.isCurrent;
     final page = current ? _page : null;
     final visible = _leads

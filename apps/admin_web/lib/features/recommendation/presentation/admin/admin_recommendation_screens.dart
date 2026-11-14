@@ -6,6 +6,7 @@ import '../../application/exercise_insights_repository.dart';
 import '../../application/recommendation_queue_repository.dart';
 import 'exercise_insights_panel.dart';
 import 'recommendation_queue_panel.dart';
+import 'recommendation_monitor.dart';
 
 /// Recommendations share the existing protected queue and session scope.
 class RiskLeaderboardScreen extends StatefulWidget {
@@ -27,7 +28,8 @@ class RiskLeaderboardScreen extends StatefulWidget {
 }
 
 class _RiskLeaderboardScreenState extends State<RiskLeaderboardScreen> {
-  bool _history = false, _insights = false;
+  var _tab = RecommendationMonitorTab.overview;
+  bool _insights = false;
   @override
   Widget build(BuildContext context) => Scaffold(
       backgroundColor: Colors.transparent,
@@ -55,20 +57,19 @@ class _RiskLeaderboardScreenState extends State<RiskLeaderboardScreen> {
           Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20),
               child: Wrap(spacing: 8, runSpacing: 8, children: [
-                ChoiceChip(
+                for (final (tab, label) in const [
+                  (RecommendationMonitorTab.overview, 'Overview'),
+                  (RecommendationMonitorTab.history, 'History'),
+                  (RecommendationMonitorTab.attention, 'Needs Attention'),
+                ])
+                  ChoiceChip(
                     selectedColor: AppColors.primaryTint,
                     checkmarkColor: AppColors.primary,
                     labelStyle: const TextStyle(color: AppColors.primary),
-                    label: const Text('Needs Review'),
-                    selected: !_history,
-                    onSelected: (_) => setState(() => _history = false)),
-                ChoiceChip(
-                    selectedColor: AppColors.primaryTint,
-                    checkmarkColor: AppColors.primary,
-                    labelStyle: const TextStyle(color: AppColors.primary),
-                    label: const Text('History'),
-                    selected: _history,
-                    onSelected: (_) => setState(() => _history = true)),
+                    label: Text(label),
+                    selected: _tab == tab,
+                    onSelected: (_) => setState(() => _tab = tab),
+                  ),
               ])),
         Expanded(
             child: _insights
@@ -78,10 +79,10 @@ class _RiskLeaderboardScreenState extends State<RiskLeaderboardScreen> {
                 : widget.canonicalRepository != null
                     ? CanonicalAdminRecommendationPanel(
                         repository: widget.canonicalRepository!,
-                        history: _history,
+                        tab: _tab,
                         clock: widget.queueClock)
                     : RecommendationQueuePanel(
-                        history: _history,
+                        tab: _tab,
                         repository: widget.queueRepository,
                         clock: widget.queueClock)),
       ]));

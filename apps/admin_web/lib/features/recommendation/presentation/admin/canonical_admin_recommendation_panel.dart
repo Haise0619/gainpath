@@ -1,13 +1,19 @@
 import 'package:flutter/material.dart';
+import 'recommendation_monitor.dart';
 import '../../application/canonical_admin_recommendation_repository.dart';
 import '../../application/recommendation_queue.dart'
     show malaysiaDate, malaysiaTime;
 
 class CanonicalAdminRecommendationPanel extends StatefulWidget {
   const CanonicalAdminRecommendationPanel(
-      {super.key, required this.repository, this.history = false, this.clock});
+      {super.key,
+      required this.repository,
+      this.history = false,
+      this.tab,
+      this.clock});
   final CanonicalAdminRecommendationRepository repository;
   final bool history;
+  final RecommendationMonitorTab? tab;
   final DateTime Function()? clock;
   @override
   State<CanonicalAdminRecommendationPanel> createState() =>
@@ -18,7 +24,7 @@ class _CanonicalAdminRecommendationPanelState
     extends State<CanonicalAdminRecommendationPanel> {
   final _records = <CanonicalAdminRecommendation>[];
   String _search = '', _kind = 'all', _status = 'all';
-  String? _next, _error, _notice;
+  String? _next, _error;
   bool _loading = false, _working = false, _accessChecked = false;
   int _generation = 0;
   DateTime get _now => (widget.clock ?? DateTime.now)().toUtc();
@@ -118,8 +124,8 @@ class _CanonicalAdminRecommendationPanelState
       r.status == 'pending' && !r.expiresAt.isAfter(_now)
           ? 'Expired'
           : const {
-              'pending': 'Needs review',
-              'prepared': 'Prepared · delivery unverified',
+              'pending': 'Awaiting delivery',
+              'prepared': 'Delivery unverified',
               'delivered': 'Delivered',
               'dismissed': 'Dismissed',
               'withdrawn': 'Withdrawn / no longer eligible'
@@ -156,7 +162,7 @@ class _CanonicalAdminRecommendationPanelState
                           mainAxisSize: MainAxisSize.min,
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text('Review recommendation',
+                            Text('Recommendation details',
                                 style: Theme.of(ctx).textTheme.titleLarge),
                             const SizedBox(height: 16),
                             Text(lead.title,
@@ -189,27 +195,6 @@ class _CanonicalAdminRecommendationPanelState
                                 ]),
                             const SizedBox(height: 12),
                             Wrap(spacing: 8, runSpacing: 8, children: [
-                              if (lead.actionable(_now)) ...[
-                                FilledButton(
-                                    onPressed: () {
-                                      Navigator.pop(ctx);
-                                      _confirm(lead, 'send');
-                                    },
-                                    child: const Text('Approve & Send')),
-                                OutlinedButton(
-                                    onPressed: () {
-                                      Navigator.pop(ctx);
-                                      _confirm(lead, 'dismiss');
-                                    },
-                                    child: const Text('Dismiss'))
-                              ],
-                              if (lead.status == 'prepared')
-                                FilledButton(
-                                    onPressed: () {
-                                      Navigator.pop(ctx);
-                                      _recover(lead);
-                                    },
-                                    child: const Text('Retry delivery')),
                               TextButton(
                                   onPressed: () => Navigator.pop(ctx),
                                   child: const Text('Close')),
@@ -230,118 +215,6 @@ class _CanonicalAdminRecommendationPanelState
     }
   }
 
-  Future<void> _recover(CanonicalAdminRecommendation lead) async {
-    final repo = widget.repository, generation = _generation;
-    setState(() => _working = true);
-    try {
-      await repo.deliver(lead);
-      if (!_current(repo, generation)) {
-        _lost();
-        return;
-      }
-      setState(() {
-        _working = false;
-        _notice = 'Delivery verified.';
-      });
-      await _load();
-    } catch (_) {
-      if (!_current(repo, generation)) {
-        _lost();
-        return;
-      }
-      setState(() {
-        _working = false;
-        _error =
-            'Delivery could not be verified. The recommendation remains prepared until confirmed.';
-      });
-    }
-  }
-
-  Future<void> _confirm(
-      CanonicalAdminRecommendation lead, String action) async {
-    final repo = widget.repository, generation = _generation;
-    final command = 'admin-${DateTime.now().microsecondsSinceEpoch}';
-    final saved = await showDialog<bool>(
-        context: context,
-        barrierDismissible: false,
-        builder: (ctx) {
-          bool saving = false;
-          String? error;
-          return StatefulBuilder(
-              builder: (ctx, update) => PopScope(
-                  canPop: !saving,
-                  child: AlertDialog(
-                      title: Text(action == 'send'
-                          ? 'Approve & Send?'
-                          : 'Dismiss recommendation?'),
-                      content: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(action == 'send'
-                                ? 'Current permission, evidence and destination will be checked again. Approval prepares the recommendation; delivery is only shown after verification.'
-                                : 'Record this Admin dismissal?'),
-                            if (error != null)
-                              Text(error!,
-                                  style: TextStyle(
-                                      color: Theme.of(ctx).colorScheme.error))
-                          ]),
-                      actions: [
-                        TextButton(
-                            onPressed:
-                                saving ? null : () => Navigator.pop(ctx, false),
-                            child: const Text('Cancel')),
-                        FilledButton(
-                            onPressed: saving
-                                ? null
-                                : () async {
-                                    update(() => saving = true);
-                                    try {
-                                      await repo.decide(lead, action, command);
-                                      if (!_current(repo, generation)) {
-                                        if (ctx.mounted) {
-                                          Navigator.pop(ctx, false);
-                                        }
-                                        _lost();
-                                        return;
-                                      }
-                                      if (ctx.mounted) {
-                                        Navigator.pop(ctx, true);
-                                      }
-                                    } catch (_) {
-                                      if (!ctx.mounted) {
-                                        return;
-                                      }
-                                      if (!_current(repo, generation)) {
-                                        Navigator.pop(ctx, false);
-                                        _lost();
-                                        return;
-                                      }
-                                      update(() {
-                                        saving = false;
-                                        error =
-                                            'Decision could not be saved. Retry or cancel.';
-                                      });
-                                    }
-                                  },
-                            child: Text(saving
-                                ? 'Saving…'
-                                : action == 'send'
-                                    ? 'Confirm approval'
-                                    : 'Confirm dismissal'))
-                      ])));
-        });
-    if (!_current(repo, generation)) {
-      return;
-    }
-    if (saved == true) {
-      setState(() => _notice = action == 'send'
-          ? 'Approved and prepared. Check History for verified delivery.'
-          : 'Dismissal saved.');
-      await _load();
-    }
-  }
-
   Widget _filter(String label, String value, List<(String, String)> choices,
           ValueChanged<String?> changed) =>
       SizedBox(
@@ -359,9 +232,18 @@ class _CanonicalAdminRecommendationPanelState
   Widget build(BuildContext context) => LayoutBuilder(builder: (context, c) {
         final current = widget.repository.isCurrent;
         final records = current ? _records : <CanonicalAdminRecommendation>[];
+        final tab = widget.tab ??
+            (widget.history
+                ? RecommendationMonitorTab.history
+                : RecommendationMonitorTab.overview);
         final visible = records
             .where((r) =>
-                (widget.history ? (!r.actionable(_now)) : r.actionable(_now)) &&
+                (tab != RecommendationMonitorTab.attention ||
+                    const [
+                      'Delivery unverified',
+                      'Expired',
+                      'Withdrawn / no longer eligible'
+                    ].contains(_label(r))) &&
                 (_kind == 'all' || r.kind == _kind) &&
                 (_status == 'all' || r.status == _status) &&
                 '${r.title} ${r.exerciseLabel} ${r.targetLabel}'
@@ -384,12 +266,12 @@ class _CanonicalAdminRecommendationPanelState
                 Text(
                     widget.history
                         ? 'Authorized recommendation history'
-                        : 'Review suggestions before approving them for delivery.',
+                        : 'Recent recommendation activity',
                     style: Theme.of(context).textTheme.bodyLarge),
                 const SizedBox(height: 12),
                 Wrap(spacing: 16, runSpacing: 8, children: [
                   Text(
-                      'Needs review: ${records.where((r) => r.actionable(_now)).length}'),
+                      'Awaiting delivery: ${records.where((r) => r.actionable(_now)).length}'),
                   Text(
                       'Delivered: ${records.where((r) => r.status == 'delivered').length}'),
                   Text(
@@ -419,7 +301,7 @@ class _CanonicalAdminRecommendationPanelState
                         ('trainer', 'Coach')
                       ],
                       (v) => setState(() => _kind = v ?? 'all')),
-                  if (widget.history)
+                  if (tab == RecommendationMonitorTab.history)
                     _filter(
                         'Status',
                         _status,
@@ -439,11 +321,6 @@ class _CanonicalAdminRecommendationPanelState
                 if (_loading || _working)
                   const LinearProgressIndicator(
                       semanticsLabel: 'Verifying recommendations'),
-                if (_notice != null)
-                  Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      child:
-                          Semantics(liveRegion: true, child: Text(_notice!))),
                 if (_error != null)
                   Padding(
                       padding: const EdgeInsets.symmetric(vertical: 12),
@@ -474,6 +351,7 @@ class _CanonicalAdminRecommendationPanelState
                                   child: Text(r.kind == 'trainer'
                                       ? 'Coach'
                                       : 'Tutorial')),
+                              Expanded(flex: 2, child: Text(r.targetLabel)),
                               Expanded(flex: 3, child: Text(r.summary)),
                               Expanded(flex: 2, child: Text(_label(r))),
                               Expanded(
@@ -483,7 +361,7 @@ class _CanonicalAdminRecommendationPanelState
                                   onPressed: _working || _loading
                                       ? null
                                       : () => _review(r),
-                                  child: const Text('Review'))
+                                  child: const Text('View'))
                             ])
                           : Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
@@ -495,6 +373,7 @@ class _CanonicalAdminRecommendationPanelState
                                   Text(
                                       '${r.exerciseLabel} · ${r.kind == 'trainer' ? 'Coach' : 'Tutorial'}'),
                                   const SizedBox(height: 6),
+                                  Text(r.targetLabel),
                                   Text(r.summary),
                                   Text(
                                       '${_label(r)} · ${malaysiaDate(r.createdAt)}'),
@@ -504,7 +383,7 @@ class _CanonicalAdminRecommendationPanelState
                                           onPressed: _working || _loading
                                               ? null
                                               : () => _review(r),
-                                          child: const Text('Review')))
+                                          child: const Text('View')))
                                 ])),
                 if (_next != null)
                   TextButton(

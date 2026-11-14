@@ -10,7 +10,6 @@ import 'package:gainpath_admin_web/features/recommendation/presentation/admin/ad
 import '../../../test_support/fyp_render_support.dart';
 import 'support/recommendation_queue_transport.dart';
 import 'support/recommendation_queue_fixture.dart';
-import 'support/canonical_admin_recommendation_fixture.dart';
 
 void main() {
   setUpAll(() async {
@@ -28,12 +27,11 @@ void main() {
       await loader.load();
     }
   });
-  for (final stage in ['after', 'canonical']) {
+  for (final stage in ['monitor']) {
     for (final scenario in [
-      ('desktop', 1440.0, 1.0),
-      ('320', 320.0, 1.0),
-      ('360', 360.0, 1.0),
-      ('360-200', 360.0, 2.0)
+      for (final width in [1920, 1440, 1024, 768, 390, 320])
+        for (final scale in [1, 2])
+          ('$width-${scale * 100}', width.toDouble(), scale.toDouble())
     ]) {
       testWidgets('$stage recommendation fixture ${scenario.$1}',
           (tester) async {
@@ -42,8 +40,8 @@ void main() {
         addTearDown(tester.view.reset);
         addTearDown(await installFypOfflineFonts());
         final key = GlobalKey();
-        final h = QueueTransportHarness();
-        final canonical = CanonicalAdminHarness();
+        final h = QueueTransportHarness()
+          ..freshDetail = queueLead(kind: 'content');
         final baseTheme = AppTheme.build();
         final theme = baseTheme.copyWith(
             textTheme: baseTheme.textTheme.apply(fontFamily: 'ReviewArial'),
@@ -54,23 +52,17 @@ void main() {
             child: MaterialApp(
                 debugShowCheckedModeBanner: false,
                 theme: theme,
+                builder: (context, child) => MediaQuery(
+                    data: MediaQuery.of(context)
+                        .copyWith(textScaler: TextScaler.linear(scenario.$3)),
+                    child: child!),
                 home: ColoredBox(
                     color: AppColors.bg,
-                    child: MediaQuery(
-                        data: MediaQueryData(
-                            textScaler: TextScaler.linear(scenario.$3)),
-                        child: RiskLeaderboardScreen(
-                            queueRepository: h.repository,
-                            queueClock: () => queueNow,
-                            canonicalRepository: stage == 'canonical'
-                                ? canonical.repository
-                                : null))))));
+                    child: RiskLeaderboardScreen(
+                        queueRepository: h.repository,
+                        queueClock: () => queueNow)))));
         await tester.pumpAndSettle();
-        if (stage == 'before') {
-          await tester.ensureVisible(find.text('Trainer Matching'));
-          await tester.tap(find.text('Trainer Matching'));
-          await tester.pumpAndSettle();
-        }
+
         expect(tester.takeException(), isNull);
         Future<void> capture(String suffix) async {
           await tester.runAsync(() async {
@@ -79,7 +71,7 @@ void main() {
                 .toImage();
             final data = await image.toByteData(format: ui.ImageByteFormat.png);
             final f = File(
-                '../../build/module13-consumer/admin/$stage-${scenario.$1}$suffix.png');
+                '../../build/module13-admin-performance/screenshots/$stage-${scenario.$1}$suffix.png');
             await f.parent.create(recursive: true);
             await f.writeAsBytes(data!.buffer.asUint8List());
             image.dispose();
@@ -87,14 +79,20 @@ void main() {
         }
 
         await capture('');
-        if (stage != 'before') {
-          await tester.ensureVisible(find.text('Review').last);
-          await tester.tap(find.text('Review').last);
+        {
+          final view = find.widgetWithText(TextButton, 'View').first;
+          await tester.scrollUntilVisible(view, 180,
+              scrollable: find.byType(Scrollable).first);
+          await tester.pumpAndSettle();
+          await tester.tap(view);
           await tester.pumpAndSettle();
           expect(tester.takeException(), isNull);
+          expect(find.text('Squat foundations'), findsWidgets);
+          expect(find.text('Recommendation details could not be verified.'),
+              findsNothing);
           await capture('-review');
-          await tester.ensureVisible(find.text('Approve & Send'));
-          expect(find.text('Approve & Send').hitTestable(), findsOneWidget);
+          await tester.ensureVisible(find.text('Close'));
+          expect(find.text('Close').hitTestable(), findsOneWidget);
           expect(tester.takeException(), isNull);
         }
       },

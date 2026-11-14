@@ -4,6 +4,23 @@ import 'package:gainpath_admin_web/features/recommendation/application/recommend
 import 'support/recommendation_queue_fixture.dart';
 
 void main() {
+  test('delivery proof belongs only to sent rows on this page', () {
+    final query = RecommendationQueueQuery.recent(
+            'synthetic-org', 'trainer', queueNow, 30)
+        .filtered(status: 'all');
+    final sent = queuePage(leads: [queueLead(status: 'sent')]);
+    expect(RecommendationQueuePage.parse(sent, query).deliveredIds, isEmpty);
+    sent['deliveredLeadIds'] = ['lead-1'];
+    expect(RecommendationQueuePage.parse(sent, query).deliveredIds, {'lead-1'});
+    sent['deliveredLeadIds'] = ['another-lead'];
+    expect(() => RecommendationQueuePage.parse(sent, query),
+        throwsFormatException);
+    final pending = queuePage(leads: [queueLead()]);
+    pending['deliveredLeadIds'] = ['lead-1'];
+    expect(() => RecommendationQueuePage.parse(pending, query),
+        throwsFormatException);
+  });
+
   test(
       'detail requests only the bound lead identity and uses the fresh server record',
       () async {

@@ -542,7 +542,8 @@ class RecommendationQueuePage {
       required this.categories,
       required this.specializations,
       required this.generation,
-      required this.capturedAt});
+      required this.capturedAt,
+      required this.deliveredIds});
   final List<RecommendationLead> leads;
   final String? nextAfterLeadId;
   final int pending, processed, unavailable;
@@ -550,6 +551,7 @@ class RecommendationQueuePage {
   final List<String> categories, specializations;
   final QueueGenerationSummary? generation;
   final DateTime capturedAt;
+  final Set<String> deliveredIds;
   factory RecommendationQueuePage.parse(
       Object? raw, RecommendationQueueQuery query) {
     query.toJson();
@@ -563,7 +565,8 @@ class RecommendationQueuePage {
       'nextAfterLeadId',
       'summary',
       'facets',
-      'generation'
+      'generation',
+      if (raw is Map && raw.containsKey('deliveredLeadIds')) 'deliveredLeadIds',
     ]);
     if (p['schemaVersion'] != 1 ||
         p['mode'] != 'synthetic_local' ||
@@ -615,6 +618,13 @@ class RecommendationQueuePage {
         generation: p['generation'] == null
             ? null
             : QueueGenerationSummary.parse(p['generation'], query.kind),
+        deliveredIds: Set.unmodifiable(
+            _strings(p['deliveredLeadIds'] ?? const [], 25, 128).map((id) {
+          if (!leads.any((lead) => lead.id == id && lead.status == 'sent')) {
+            throw const FormatException('Invalid delivery proof scope.');
+          }
+          return id;
+        })),
         capturedAt: DateTime.fromMillisecondsSinceEpoch(
             _integer(p['capturedAtMillis'], 1),
             isUtc: true));

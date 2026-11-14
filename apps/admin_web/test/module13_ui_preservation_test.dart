@@ -4,7 +4,6 @@ import 'package:gainpath_admin_web/features/recommendation/presentation/admin/ad
 import 'package:gainpath_admin_web/features/recommendation/application/exercise_insights.dart';
 import 'package:gainpath_admin_web/features/recommendation/presentation/admin/exercise_insights_panel.dart';
 import 'package:gainpath_admin_web/features/recommendation/presentation/admin/recommendation_queue_panel.dart';
-import 'package:gainpath_ui/gainpath_ui.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:syncfusion_flutter_charts/charts.dart';
 import 'admin_exercise_insights_test.dart' show FixtureInsightsRepository;
@@ -22,42 +21,32 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  testWidgets('desktop hub preserves the original equal-width three tabs',
+  testWidgets('desktop hub offers monitoring tabs and preserves Insights',
       (tester) async {
     await show(tester, const RiskLeaderboardScreen(), 1400);
-    expect(tester.widget<TabBar>(find.byType(TabBar)).isScrollable, isFalse);
-    expect(find.text('Exercise Insights'), findsOneWidget);
-    expect(find.text('Trainer Matching'), findsOneWidget);
-    expect(find.text('Content Recommendations'), findsOneWidget);
+    expect(find.text('Overview'), findsOneWidget);
+    expect(find.text('History'), findsOneWidget);
+    expect(find.text('Needs Attention'), findsOneWidget);
+    expect(find.text('Exercise Guidance Insights'), findsOneWidget);
   });
 
   for (final width in [1400.0, 600.0]) {
-    testWidgets('queue preserves compact original cards at $width',
-        (tester) async {
+    testWidgets('queue uses table or stacked cards at $width', (tester) async {
       final fixture = QueueTransportHarness();
       await show(
           tester,
           RecommendationQueuePanel(
-              trainer: true,
-              repository: fixture.repository,
-              clock: () => queueNow),
+              repository: fixture.repository, clock: () => queueNow),
           width);
-      final card = find.ancestor(
-          of: find.text('Sample Member'), matching: find.byType(Panel));
-      expect(tester.getSize(card.first).width, 380);
-      final target = find.byKey(const ValueKey('queue-target-lead-1'));
-      expect(target, findsOneWidget);
-      expect(
-          tester.widget<Container>(target).decoration,
-          isA<BoxDecoration>()
-              .having((d) => d.color, 'tint', AppColors.primaryTint));
-      expect(tester.getRect(find.text('Send')).top,
-          tester.getRect(find.text('Dismiss')).top);
-      expect(find.text('View details'), findsOneWidget);
+      expect(find.text('Sample Member'), findsNWidgets(2));
+      expect(find.text('Sample Coach'), findsOneWidget);
+      expect(find.text('Squat foundations'), findsOneWidget);
+      expect(find.byType(Card), width < 1080 ? findsNWidgets(2) : findsNothing);
+      expect(find.text('Approve & Send'), findsNothing);
+      expect(find.text('View'), findsNWidgets(2));
       expect(tester.takeException(), isNull);
     });
   }
-
   testWidgets('insights preserves score chart without clinical classification',
       (tester) async {
     await show(

@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
 import 'package:gainpath_admin_web/features/recommendation/application/recommendation_queue.dart';
+import 'package:gainpath_admin_web/features/recommendation/application/recommendation_queue_repository.dart';
 import 'package:gainpath_admin_web/features/recommendation/presentation/admin/admin_recommendation_screens.dart';
 import 'package:gainpath_admin_web/infrastructure/firebase/firebase_demo_recommendation.dart';
 import '../../../test_support/live_presentation_bridge.dart';
@@ -23,22 +24,26 @@ void main() {
     final bridge = LivePresentationBridge('admin');
     final repos =
         FirebaseDemoAdminRepositories(bridge.transport, readOnly: false);
+    final queue = RpcRecommendationQueueRepository(
+        organizationId: 'gainpath',
+        isCurrent: () => bridge.transport.isCurrent,
+        invoke: (method, data) =>
+            bridge.transport.map('admin.queue.$method', data));
     final now = DateTime.now().toUtc();
     final counts = <String, int>{};
     await t.runAsync(() async {
       for (final kind in ['content', 'trainer']) {
-        final page = await repos.queue
+        final page = await queue
             .list(RecommendationQueueQuery.recent('gainpath', kind, now, 30));
         counts[kind] = page.leads.length;
-        if (page.leads.isNotEmpty) await repos.queue.detail(page.leads.first);
+        if (page.leads.isNotEmpty) await queue.detail(page.leads.first);
       }
     });
     expect(bridge.failures, isEmpty);
     expect(counts.values.fold<int>(0, (a, b) => a + b), greaterThan(0),
         reason: 'Actual Firebase queue rows required; no fixtures allowed.');
-    final dir =
-        Directory('../../build/module13-presentation/live-renders/admin')
-          ..createSync(recursive: true);
+    final dir = Directory('../../build/module13-admin-performance/live-renders')
+      ..createSync(recursive: true);
     File('${dir.path}/evidence.json').writeAsStringSync(
         jsonEncode({'actualRows': counts, 'readRequests': bridge.requests}));
     for (final width in [1440.0, 360.0]) {
@@ -58,7 +63,7 @@ void main() {
                 home: ColoredBox(
                     color: AppColors.bg,
                     child: RiskLeaderboardScreen(
-                        queueRepository: repos.queue,
+                        queueRepository: queue,
                         queueClock: () => now,
                         insightsRepository: repos.insights)))));
         for (var attempt = 0; attempt < 180; attempt++) {
@@ -81,8 +86,11 @@ void main() {
               .writeAsBytes(bytes!.buffer.asUint8List());
           image.dispose();
         });
-        await t.ensureVisible(find.widgetWithText(TextButton, 'Review').first);
-        await t.tap(find.widgetWithText(TextButton, 'Review').first);
+        await t.scrollUntilVisible(
+            find.widgetWithText(TextButton, 'View').first, 180,
+            scrollable: find.byType(Scrollable).first);
+        await t.pumpAndSettle();
+        await t.tap(find.widgetWithText(TextButton, 'View').first);
         for (var attempt = 0; attempt < 180; attempt++) {
           await t.runAsync(
               () => Future<void>.delayed(const Duration(milliseconds: 100)));
@@ -92,7 +100,7 @@ void main() {
         await t.pumpAndSettle();
         expect(bridge.failures, isEmpty);
         expect(t.takeException(), isNull);
-        expect(find.text('Technical Details'), findsOneWidget);
+        expect(find.text('Technical details'), findsOneWidget);
         await t.runAsync(() async {
           final image = await (key.currentContext!.findRenderObject()!
                   as RenderRepaintBoundary)

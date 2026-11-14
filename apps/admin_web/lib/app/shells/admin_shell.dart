@@ -183,7 +183,7 @@ class _AdminShellState extends State<AdminShell> {
         Icons.auto_awesome_outlined,
         Icons.auto_awesome_rounded,
         'Recommendations',
-        'Review suggestions and delivery history',
+        'Monitor recommendations and delivery history',
         RiskLeaderboardScreen(
             live: widget.liveSession != null,
             insightsRepository: _fypRecommendations?.insights,

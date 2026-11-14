@@ -52,12 +52,23 @@ Module13DemoTransport createFirebaseDemoAdminTransport(
 class FirebaseDemoAdminRepositories {
   FirebaseDemoAdminRepositories(this.transport,{bool readOnly=false}) {
     insights = FirebaseDemoExerciseInsightsRepository(transport,readOnly:readOnly);
+    var legacyQueue = false;
     queue = RpcRecommendationQueueRepository(
         organizationId: transport.scope.organizationId,
         sendsToFictionalInbox: transport.scope.datasetScope != null,
         readOnly:readOnly,
         isCurrent: () => transport.isCurrent,
-        invoke: (method, data) => transport.map('admin.queue.$method', data));
+        invoke: (method, data) async {
+          if (method == 'list' && transport is FypDatasetTransport && !legacyQueue) {
+            try {
+              return await transport.map('admin.queue.monitor', data);
+            } on FirebaseFunctionsException catch (error) {
+              if (error.code != 'invalid-argument') rethrow;
+              legacyQueue = true;
+            }
+          }
+          return transport.map('admin.queue.$method', data);
+        });
   }
   final ScopedCommandTransport transport;
   late final ExerciseInsightsRepository insights;

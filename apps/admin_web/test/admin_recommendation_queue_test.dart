@@ -61,7 +61,7 @@ void main() {
     expect(find.text('Queue maintenance'), findsNothing);
     expect(find.text('Refresh queue'), findsNothing);
     expect(find.text('Fictional educational dataset'), findsNothing);
-    expect(find.text('Sample Member'), findsOneWidget);
+    expect(find.text('Sample Member'), findsNWidgets(2));
   });
   testWidgets(
       'normal hub needs no prototype provider and both queues fail closed',
@@ -72,7 +72,7 @@ void main() {
     await tester.pumpWidget(const MaterialApp(home: RiskLeaderboardScreen()));
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
-    await tester.tap(find.text('Needs Review'));
+    await tester.tap(find.text('Overview'));
     await tester.pumpAndSettle();
     expect(find.text('Recommendation queue is unavailable in this release.'),
         findsOneWidget);
@@ -209,7 +209,7 @@ void main() {
     }))));
     await tester.pumpAndSettle();
     old.detailPending = Completer<Map<String, Object?>>();
-    await tester.tap(find.text('Review').last);
+    await tester.tap(find.text('View').last);
     await tester.pump();
     replace(() => selected = fresh);
     await tester.pumpAndSettle();
@@ -221,8 +221,10 @@ void main() {
     });
     await tester.pumpAndSettle();
     expect(find.text('Old private label'), findsNothing);
-    expect(find.text('Review recommendation'), findsNothing);
-    expect(find.text('Sample Member'), findsOneWidget);
+    expect(find.text('Your Admin session changed.'), findsOneWidget);
+    await tester.tap(find.text('Close'));
+    await tester.pumpAndSettle();
+    expect(find.text('Sample Member'), findsNWidgets(2));
   });
   testWidgets(
       'dismiss rejects a trivial reason and persists a meaningful reason',
@@ -396,7 +398,7 @@ void main() {
         'Old session Member';
     old.pending!.complete(response);
     await tester.pumpAndSettle();
-    expect(find.text('Sample Member'), findsOneWidget);
+    expect(find.text('Sample Member'), findsNWidgets(2));
     expect(find.text('Old session Member'), findsNothing);
   });
   testWidgets(

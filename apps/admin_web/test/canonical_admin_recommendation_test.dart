@@ -61,23 +61,23 @@ void main() {
     final h = CanonicalAdminHarness()..enabled = false;
     await show(t, h);
     expect(find.textContaining('await review'), findsOneWidget);
-    expect(find.text('Review'), findsNothing);
+    expect(find.text('View'), findsNothing);
     expect(h.requests.length, 1);
   });
   testWidgets(
-      'canonical detail revalidates before evidence and approval; technical data collapsed',
+      'canonical detail revalidates before evidence and collapses technical data',
       (t) async {
     final h = CanonicalAdminHarness();
     await show(t, h);
-    expect(find.text('Needs review: 1'), findsOneWidget);
+    expect(find.text('Awaiting delivery: 1'), findsOneWidget);
     expect(find.text('Fictional educational dataset'), findsNothing);
     h.pendingDetail = Completer<Object?>();
-    await t.tap(find.text('Review'));
+    await t.tap(find.text('View'));
     await t.pump();
     expect(find.text('Approve & Send'), findsNothing);
     h.pendingDetail!.complete(h.record);
     await t.pumpAndSettle();
-    expect(find.text('Approve & Send'), findsOneWidget);
+    expect(find.text('Approve & Send'), findsNothing);
     expect(find.textContaining('Member account: member-1').hitTestable(),
         findsNothing);
     await t.tap(find.text('Technical Details'));
@@ -90,65 +90,34 @@ void main() {
       (t) async {
     final h = CanonicalAdminHarness()..failDetail = true;
     await show(t, h);
-    await t.tap(find.text('Review'));
+    await t.tap(find.text('View'));
     await t.pumpAndSettle();
     expect(find.text('Approve & Send'), findsNothing);
     expect(find.textContaining('Private revoked'), findsNothing);
     expect(find.textContaining('could not be verified'), findsOneWidget);
-    expect(find.text('Review'), findsNothing);
+    expect(find.text('View'), findsNothing);
   });
-  testWidgets('prepared approval stays unverified and recovery proves delivery',
+  testWidgets(
+      'prepared records appear in Needs Attention without delivery actions',
       (t) async {
     final h = CanonicalAdminHarness();
+    h.record['status'] = 'prepared';
     await show(t, h);
-    await t.tap(find.text('Review'));
+    await t.tap(find.text('Needs Attention'));
     await t.pumpAndSettle();
-    await t.tap(find.text('Approve & Send'));
+    expect(find.text('Delivery unverified'), findsOneWidget);
+    await t.tap(find.text('View'));
     await t.pumpAndSettle();
+    expect(find.text('Retry delivery'), findsNothing);
     expect(h.requests.where((r) => r['operation'] == 'admin.queue.decide'),
         isEmpty);
-    await t.tap(find.text('Confirm approval'));
-    await t.pumpAndSettle();
-    expect(find.text('Prepared: 1'), findsOneWidget);
-    expect(find.text('Delivered: 0'), findsOneWidget);
-    await t.tap(find.text('History'));
-    await t.pumpAndSettle();
-    expect(find.text('Prepared · delivery unverified'), findsOneWidget);
-    await t.tap(find.text('Review'));
-    await t.pumpAndSettle();
-    await t.tap(find.text('Retry delivery'));
-    await t.pumpAndSettle();
-    expect(find.text('Delivered: 1'), findsOneWidget);
-    expect(find.text('Delivery verified.'), findsOneWidget);
-  });
-  testWidgets('decision retry keeps command and sends expected revision',
-      (t) async {
-    final h = CanonicalAdminHarness()..failDecision = true;
-    await show(t, h);
-    await t.tap(find.text('Review'));
-    await t.pumpAndSettle();
-    await t.tap(find.text('Approve & Send'));
-    await t.pumpAndSettle();
-    await t.tap(find.text('Confirm approval'));
-    await t.pumpAndSettle();
-    expect(find.text('Decision could not be saved. Retry or cancel.'),
-        findsOneWidget);
-    h.failDecision = false;
-    await t.tap(find.text('Confirm approval'));
-    await t.pumpAndSettle();
-    final requests = h.requests
-        .where((r) => r['operation'] == 'admin.queue.decide')
-        .toList();
-    expect(requests.length, 2);
-    expect(requests[0]['commandId'], requests[1]['commandId']);
-    expect(requests[0]['expectedRevision'], 1);
   });
   testWidgets('account change drops a pending detail without evidence',
       (t) async {
     final h = CanonicalAdminHarness();
     await show(t, h);
     h.pendingDetail = Completer<Object?>();
-    await t.tap(find.text('Review'));
+    await t.tap(find.text('View'));
     await t.pump();
     h.current = false;
     h.pendingDetail!.complete(h.record);
@@ -158,18 +127,18 @@ void main() {
         findsOneWidget);
   });
   testWidgets(
-      'search and history omit pending records without fabricated matches',
+      'search and history include pending records without extra requests',
       (t) async {
     final h = CanonicalAdminHarness();
     await show(t, h);
     await t.enterText(find.byType(TextField), 'unmatched');
     await t.pumpAndSettle();
-    expect(find.text('Review'), findsNothing);
+    expect(find.text('View'), findsNothing);
     await t.enterText(find.byType(TextField), 'squat');
     await t.pumpAndSettle();
-    expect(find.text('Review'), findsOneWidget);
+    expect(find.text('View'), findsOneWidget);
     await t.tap(find.text('History'));
     await t.pumpAndSettle();
-    expect(find.text('Review'), findsNothing);
+    expect(find.text('View'), findsOneWidget);
   });
 }
