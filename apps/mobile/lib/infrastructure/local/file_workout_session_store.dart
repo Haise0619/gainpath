@@ -64,7 +64,8 @@ class FileWorkoutSessionStore implements WorkoutSessionStore {
     if (json is! List) throw const FormatException('Invalid workout outbox.');
     final records = json
         .map((item) => WorkoutSessionRecord.fromJson(
-            Map<String, Object?>.from(item as Map)))
+            Map<String, Object?>.from(item as Map),
+            scope: scope))
         .toList();
     _validate(records);
     return List.unmodifiable(records);

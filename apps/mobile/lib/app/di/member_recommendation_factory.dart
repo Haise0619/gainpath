@@ -95,6 +95,7 @@ class MemberRecommendationHost extends StatefulWidget {
       required this.isCurrent,
       this.datasetTransport,
       this.compact = false,
+      this.visible = true,
       this.coachDirectory,
       this.catalog,
       this.bookingFactory,
@@ -103,7 +104,7 @@ class MemberRecommendationHost extends StatefulWidget {
   final AuthSession session;
   final bool Function() isCurrent;
   final ScopedCommandTransport? datasetTransport;
-  final bool compact;
+  final bool compact, visible;
   final CoachDirectoryRepository? coachDirectory;
   final PublishedRoutineCatalogRepository? catalog;
   final BookingServicesFactory? bookingFactory;
@@ -229,5 +230,6 @@ class _RecommendationHostState extends State<MemberRecommendationHost> {
       onSettings: () =>
           openRecommendationPrivacyPreview(context, widget.isCurrent),
       onViewAll: _openAll,
-      compact: widget.compact);
+      compact: widget.compact,
+      visible: widget.visible);
 }

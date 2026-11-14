@@ -1,5 +1,5 @@
 import {getAuth} from 'firebase-admin/auth';
-import {getReviewedCanonicalRuntime} from '../recommendation/canonical-recommendation-runtime';
+import {getWorkoutBackupRuntime} from '../recommendation/workout-backup-recommendation-runtime';
 import {createCanonicalNoticeProjector} from '../recommendation/canonical-notice-projection';
 import type {InsightsRequest} from '../recommendation/exercise-insights-contracts';
 import { FieldPath, getFirestore } from 'firebase-admin/firestore';
@@ -7,11 +7,12 @@ import { onCall } from 'firebase-functions/v2/https';
 import { FirestoreStore } from '../../platform/firestore/firestore-store';
 import { coachCommandError } from './coach-profile-callables';
 import { module9MemberCommand } from './module9-member-service';
-export const module9MemberCommandCallable = onCall({ enforceAppCheck: true }, async request => {
+export const module9MemberCommandCallable = onCall({ region: 'asia-southeast1', enforceAppCheck: true,
+  memory: '256MiB', cpu: 1, concurrency: 80, timeoutSeconds: 60, maxInstances: 20 }, async request => {
   try {
     const db = getFirestore();
-    const runtime=getReviewedCanonicalRuntime();
-    const projectRecommendation=runtime?await createCanonicalNoticeProjector({runtime,store:new FirestoreStore(db),readAuthIdentity:async uid=>{
+    const runtime=getWorkoutBackupRuntime();
+    const projectRecommendation=runtime&&((request.data as {action?:string}|null)?.action==='inbox')?await createCanonicalNoticeProjector({runtime,store:new FirestoreStore(db),readAuthIdentity:async uid=>{
       const user=await getAuth().getUser(uid);return{uid:user.uid,email:user.email??'',emailVerified:user.emailVerified,disabled:user.disabled,tokensValidAfterMillis:user.tokensValidAfterTime?Date.parse(user.tokensValidAfterTime):0};
     }},request as unknown as InsightsRequest):undefined;
     return await module9MemberCommand(new FirestoreStore(db), request.auth, request.data, Date.now, {

@@ -54,7 +54,8 @@ class CanonicalAdminRecommendation {
       this.createdAt,
       this.expiresAt,
       this.deliveredAt,
-      [this.evidenceSummary]);
+      [this.evidenceSummary,
+      this.memberLabel]);
   final String id,
       organizationId,
       memberId,
@@ -71,7 +72,7 @@ class CanonicalAdminRecommendation {
   final List<String> explanations;
   final DateTime createdAt, expiresAt;
   final DateTime? deliveredAt;
-  final String? evidenceSummary;
+  final String? evidenceSummary, memberLabel;
   bool actionable(DateTime now) =>
       status == 'pending' && expiresAt.isAfter(now.toUtc());
   factory CanonicalAdminRecommendation.parse(Object? raw, String org) {
@@ -79,7 +80,7 @@ class CanonicalAdminRecommendation {
     final redacted = r['redacted'] == true;
     final s = redacted ? <String, Object?>{} : _map(r['suggestion']);
     if (r['schemaVersion'] != 1 ||
-        r['mode'] != 'accepted_workout' ||
+        !const ['accepted_workout', 'workout_backup'].contains(r['mode']) ||
         r['organizationId'] != org ||
         !['pending', 'prepared', 'delivered', 'dismissed', 'withdrawn']
             .contains(r['status'])) {
@@ -169,7 +170,8 @@ class CanonicalAdminRecommendation {
         delivered == null
             ? null
             : DateTime.fromMillisecondsSinceEpoch(delivered, isUtc: true),
-        evidenceSummary);
+        evidenceSummary,
+        r['memberLabel'] == null ? null : _text(r['memberLabel'], 120));
   }
 }
 
@@ -224,7 +226,7 @@ class CanonicalAdminRecommendationRepository {
     _enabled = false;
     final r = await _call('session.access', {});
     if (r['schemaVersion'] != 1 ||
-        r['mode'] != 'accepted_workout' ||
+        !const ['accepted_workout', 'workout_backup'].contains(r['mode']) ||
         r['organizationId'] != organizationId ||
         r['role'] != 'admin' ||
         r['enabled'] is! bool ||
@@ -249,7 +251,7 @@ class CanonicalAdminRecommendationRepository {
     if (afterId != null) _id(afterId);
     final r = await _call('admin.queue.list', {'afterId': afterId});
     if (r['schemaVersion'] != 1 ||
-        r['mode'] != 'accepted_workout' ||
+        !const ['accepted_workout', 'workout_backup'].contains(r['mode']) ||
         r['organizationId'] != organizationId ||
         r['records'] is! List ||
         (r['records'] as List).length > 25) {

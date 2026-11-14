@@ -26,7 +26,9 @@ class StoredWorkoutBackupLocal implements WorkoutBackupLocal {
     _check();
     final saved = await workouts.exclusive(() => workouts.read());
     _check();
-    final checkpoints = await routines.load();
+    final checkpoints = scope.datasetScope == null
+        ? await routines.load()
+        : <RoutineCheckpoint>[];
     _check();
     if (saved.any((s) => s.summary.scope != scope) ||
         checkpoints.any((c) => c.scope != scope)) {
@@ -60,7 +62,8 @@ class StoredWorkoutBackupLocal implements WorkoutBackupLocal {
                   record.digest;
         }
         if (expectedDigest != null) return false;
-        final summary = WorkoutSessionSummary.fromJson(validated.payload);
+        final summary =
+            WorkoutSessionSummary.fromJson(validated.payload, scope: scope);
         _check();
         await workouts.write([
           ...saved,

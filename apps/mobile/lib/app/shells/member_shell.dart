@@ -215,17 +215,25 @@ class _MemberShellState extends State<MemberShell> {
     return [
       MemberHomeScreen(
           liveSession: session,
-          recommendations: session == null ? null : MemberRecommendationHost(
-            key: ValueKey(session.scope), session: session, compact: true,
-            isCurrent: () => _activeScope() == session.scope,
-            datasetTransport: session.datasetScope == null ? null :
-                (widget.datasetTransportFactory ?? firebaseFypDatasetTransport)(session.scope,
-                    () => _activeScope() == session.scope),
-            coachDirectory: widget.coachDirectoryFactory?.call(session.scope,
-                () => _activeScope() == session.scope),
-            catalog: widget.routineCatalogFactory?.call(session.scope, _activeScope),
-            bookingFactory: widget.bookingFactory, bookingListFactory: widget.bookingListFactory,
-            availabilityFactory: widget.coachAvailabilityFactory),
+          recommendations: session == null
+              ? null
+              : MemberRecommendationHost(
+                  key: ValueKey(session.scope),
+                  session: session,
+                  compact: true,
+                  visible: _index == 0,
+                  isCurrent: () => _activeScope() == session.scope,
+                  datasetTransport: session.datasetScope == null
+                      ? null
+                      : (widget.datasetTransportFactory ?? firebaseFypDatasetTransport)(
+                          session.scope, () => _activeScope() == session.scope),
+                  coachDirectory: widget.coachDirectoryFactory?.call(
+                      session.scope, () => _activeScope() == session.scope),
+                  catalog: widget.routineCatalogFactory
+                      ?.call(session.scope, _activeScope),
+                  bookingFactory: widget.bookingFactory,
+                  bookingListFactory: widget.bookingListFactory,
+                  availabilityFactory: widget.coachAvailabilityFactory),
           onOpenRewards: () {
             setState(() => _index = 2);
             refreshCheckIn?.call();
@@ -238,11 +246,18 @@ class _MemberShellState extends State<MemberShell> {
               MaterialPageRoute(
                   builder: (_) => session != null
                       ? buildMemberRecommendationNotifications(session,
-                          datasetTransport: session.datasetScope == null ? null :
-                              (widget.datasetTransportFactory ?? firebaseFypDatasetTransport)(
-                                  session.scope, () => _activeScope() == session.scope),
-                          inbox: session.datasetScope == null ? FirebaseModule9Repository(
-                              scope: session.scope, isCurrent: () => _activeScope() == session.scope) : null,
+                          datasetTransport: session.datasetScope == null
+                              ? null
+                              : (widget.datasetTransportFactory ??
+                                      firebaseFypDatasetTransport)(
+                                  session.scope,
+                                  () => _activeScope() == session.scope),
+                          inbox: session.datasetScope == null
+                              ? FirebaseModule9Repository(
+                                  scope: session.scope,
+                                  isCurrent: () =>
+                                      _activeScope() == session.scope)
+                              : null,
                           coachDirectory: widget.coachDirectoryFactory?.call(
                               session.scope,
                               () => _activeScope() == session.scope),
@@ -288,23 +303,13 @@ class _MemberShellState extends State<MemberShell> {
           onRefreshAnnouncements: null,
           onOpenProgress:
               open == null ? null : () => open(MemberProgressView.dashboard),
-          onOpenHistory:
-              open == null ? null : () => open(MemberProgressView.history),
-          onOpenEquipment: session == null
-              ? null
-              : () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                      builder: (_) => buildMemberEquipmentScanner(session,
-                          factory: widget.equipmentReaderFactory))),
+          onOpenHistory: open == null ? null : () => open(MemberProgressView.history),
+          onOpenEquipment: session == null ? null : () => Navigator.push(context, MaterialPageRoute(builder: (_) => buildMemberEquipmentScanner(session, factory: widget.equipmentReaderFactory))),
           onOpenCoaches: () => setState(() {
                 _index = 3;
                 _directoryVisited = true;
               }),
-          onOpenBookings: session == null
-              ? null
-              : () => openBookingList(context, session,
-                  factory: widget.bookingListFactory),
+          onOpenBookings: session == null ? null : () => openBookingList(context, session, factory: widget.bookingListFactory),
           onOpenWorkout: openWorkout,
           onLoadUpcomingCoaching: session == null
               ? null

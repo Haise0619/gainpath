@@ -517,6 +517,7 @@ class FloorPushUpWorkoutSession extends ChangeNotifier
         summary = WorkoutSessionSummary(
             sessionId: sessionId,
             userId: scope.userId,
+            datasetScope: scope.datasetScope,
             organizationId: scope.organizationId,
             exerciseId: exerciseId,
             repetitions: u.repetitions,

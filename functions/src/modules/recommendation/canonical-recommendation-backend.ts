@@ -32,7 +32,7 @@ export function createCanonicalRecommendationBackend(deps: RecommendationCommand
       // No environment, scope, owner or capability selector is accepted here.
       const request: InsightsRequest = {...incoming, data};
       const auth = await authorizeRecommendationSession(request, deps);
-      await deps.store.transact(async tx => {if(await tx.get(`datasetAssignments/${auth.uid}`))throw new DomainError('permission-denied','Canonical account required.');
+      await deps.store.transact(async tx => {if(!deps.runtime?.scopedDataset && await tx.get(`datasetAssignments/${auth.uid}`))throw new DomainError('permission-denied','Canonical account required.');
         await requireRecommendationMember(tx, auth, org);});
       const operation = envelope.operation;
       if (operation === 'member.consent.set') {
@@ -83,7 +83,7 @@ export function createCanonicalRecommendationBackend(deps: RecommendationCommand
         const notice = deps.runtime.notices[0];
         return {schemaVersion: 1, organizationId: org, demoData: false, policyId: notice.policyId,
           noticeVersion: notice.noticeVersion, contentVersion: notice.contentVersion,
-          historyDescription: notice.history.mode === 'from_grant' ? 'Only qualifying accepted workouts captured after this permission was granted.' :
+          historyDescription: deps.runtime.backupSuggestions ? 'Uses recent synced workout summaries for exercise guidance. No camera footage is shared.' : notice.history.mode === 'from_grant' ? 'Only qualifying accepted workouts captured after this permission was granted.' :
             `Qualifying accepted workouts from ${new Date(notice.history.earliestAtMillis).toISOString()}.`};
       }
       if (deps.runtime && operation === 'member.recommendation.command') {

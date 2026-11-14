@@ -58,8 +58,11 @@ Module13DemoTransport createFirebaseDemoMemberTransport(
 }
 
 class FirebaseDemoMemberRepositories {
-  FirebaseDemoMemberRepositories(this.transport) {
+  final bool workoutConsent;
+  FirebaseDemoMemberRepositories(this.transport,
+      {this.workoutConsent = false}) {
     recommendation = RpcMemberRecommendationRepository(
+        fixtureOnly: transport is! FypDatasetTransport,
         scope: transport.scope,
         isCurrent: () => transport.isCurrent,
         invoke: (data) => transport.map('member.recommendation.command', data));
@@ -67,7 +70,11 @@ class FirebaseDemoMemberRepositories {
         scope: transport.scope,
         isCurrent: () => transport.isCurrent,
         read: (data) async {
-          final raw = await transport.call('member.consent.get', data);
+          final raw = await transport.call(
+              workoutConsent
+                  ? 'workout.member.consent.get'
+                  : 'member.consent.get',
+              data);
           if (raw == null) {
             return null;
           }
@@ -76,7 +83,11 @@ class FirebaseDemoMemberRepositories {
           }
           return Map<String, Object?>.from(raw);
         },
-        command: (data) => transport.map('member.consent.set', data));
+        command: (data) => transport.map(
+            workoutConsent
+                ? 'workout.member.consent.set'
+                : 'member.consent.set',
+            data));
     inbox = FirebaseDemoInboxRepository(transport);
     directory = FirebaseDemoCoachDirectory(transport);
     catalog = FirebaseDemoTutorialCatalog(transport);
@@ -92,7 +103,11 @@ class FirebaseDemoMemberRepositories {
   Future<Map<String, Object?>> access() =>
       transport.map('session.access', _scope);
   Future<RecommendationConsentNotice> notice() async {
-    final raw = await transport.map('member.consent.notice', _scope);
+    final raw = await transport.map(
+        workoutConsent
+            ? 'workout.member.consent.notice'
+            : 'member.consent.notice',
+        _scope);
     const keys = {
       'schemaVersion',
       'organizationId',
@@ -106,7 +121,7 @@ class FirebaseDemoMemberRepositories {
         !raw.keys.toSet().containsAll(keys) ||
         raw['schemaVersion'] != 1 ||
         raw['organizationId'] != transport.scope.organizationId ||
-        raw['demoData'] != true) {
+        raw['demoData'] != !workoutConsent) {
       throw const FormatException('Unrecognized reviewed demo notice.');
     }
     String text(String key, int max) {
@@ -132,6 +147,7 @@ class FirebaseDemoMemberRepositories {
         policyId: id('policyId'),
         noticeVersion: id('noticeVersion'),
         contentVersion: id('contentVersion'),
+        fictional: !workoutConsent,
         historyDescription: text('historyDescription', 1200));
   }
 
@@ -253,6 +269,7 @@ class FirebaseDemoInboxRepository implements Module9Repository {
       throw const FormatException('Invalid notification acknowledgement.');
     }
   }
+
   @override
   Future<CoachSharing> loadSharing() =>
       Future.error(const Module13DemoUnavailable());

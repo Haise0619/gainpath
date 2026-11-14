@@ -30,6 +30,7 @@ class RiskLeaderboardScreen extends StatefulWidget {
 class _RiskLeaderboardScreenState extends State<RiskLeaderboardScreen> {
   var _tab = RecommendationMonitorTab.overview;
   bool _insights = false;
+  bool _earlier = false;
   @override
   Widget build(BuildContext context) => Scaffold(
       backgroundColor: Colors.transparent,
@@ -44,6 +45,12 @@ class _RiskLeaderboardScreenState extends State<RiskLeaderboardScreen> {
                 children: [
                   Text('Recommendations',
                       style: Theme.of(context).textTheme.headlineMedium),
+                  if (widget.canonicalRepository != null &&
+                      widget.queueRepository != null)
+                    TextButton(
+                        onPressed: () => setState(() => _earlier = !_earlier),
+                        child: Text(
+                            _earlier ? 'Workout records' : 'Earlier records')),
                   TextButton.icon(
                       onPressed: () => setState(() => _insights = !_insights),
                       icon: Icon(_insights
@@ -76,9 +83,14 @@ class _RiskLeaderboardScreenState extends State<RiskLeaderboardScreen> {
                 ? ExerciseInsightsPanel(
                     repository: widget.insightsRepository,
                     clock: widget.insightsClock)
-                : widget.canonicalRepository != null
+                : widget.canonicalRepository != null && !_earlier
                     ? CanonicalAdminRecommendationPanel(
                         repository: widget.canonicalRepository!,
+                        onUnavailable: widget.queueRepository == null
+                            ? null
+                            : () {
+                                if (mounted) setState(() => _earlier = true);
+                              },
                         tab: _tab,
                         clock: widget.queueClock)
                     : RecommendationQueuePanel(

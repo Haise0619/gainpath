@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'recommendation_presentation_copy.dart';
 import 'package:flutter/material.dart';
 import 'package:gainpath_domain/coaching.dart';
@@ -16,7 +17,8 @@ class MemberRecommendationsView extends StatefulWidget {
       this.photoBuilder,
       this.onSettings,
       this.onViewAll,
-      this.compact = false});
+      this.compact = false,
+      this.visible = true});
 
   final MemberRecommendationRepository repository;
   final MemberRecommendationPageLoader loadPage;
@@ -24,7 +26,7 @@ class MemberRecommendationsView extends StatefulWidget {
   final MemberRecommendationOpener onOpenTarget;
   final MemberRecommendationPhotoBuilder? photoBuilder;
   final VoidCallback? onSettings, onViewAll;
-  final bool compact;
+  final bool compact, visible;
 
   @override
   State<MemberRecommendationsView> createState() => _RecommendationsState();
@@ -35,6 +37,7 @@ class _RecommendationsState extends State<MemberRecommendationsView> {
   bool _loading = true, _history = false, _enabled = true;
   String? _error, _next;
   int _generation = 0;
+  Timer? _afterWorkoutRefresh;
   bool get _current =>
       mounted && widget.isCurrent() && widget.repository.isCurrent;
 
@@ -51,10 +54,40 @@ class _RecommendationsState extends State<MemberRecommendationsView> {
       _records.clear();
       _next = null;
       _load();
+    } else if (!oldWidget.visible && widget.visible) {
+      _load();
+      _afterWorkoutRefresh?.cancel();
+      _refreshAfterReturn(0);
+    } else if (!widget.visible) {
+      _afterWorkoutRefresh?.cancel();
     }
   }
 
-  Future<void> _load({bool more = false}) async {
+  void _refreshAfterReturn(int attempt) {
+    const delays = [5, 10, 20, 30];
+    if (attempt >= delays.length) {
+      return;
+    }
+    _afterWorkoutRefresh = Timer(Duration(seconds: delays[attempt]), () async {
+      if (!_current || !widget.visible) {
+        return;
+      }
+      if (!_loading) {
+        await _load(quiet: true);
+      }
+      if (_current && widget.visible) {
+        _refreshAfterReturn(attempt + 1);
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _afterWorkoutRefresh?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _load({bool more = false, bool quiet = false}) async {
     final generation = ++_generation;
     if (!widget.repository.enabled || !widget.isCurrent()) {
       setState(() {
@@ -65,9 +98,9 @@ class _RecommendationsState extends State<MemberRecommendationsView> {
       return;
     }
     setState(() {
-      _loading = true;
+      _loading = !quiet;
       _error = null;
-      if (!more) _records.clear();
+      if (!more && !quiet) _records.clear();
     });
     try {
       final page = await widget.loadPage(
@@ -84,6 +117,9 @@ class _RecommendationsState extends State<MemberRecommendationsView> {
       setState(() {
         _enabled = page.enabled;
         _next = page.nextAfterId;
+        if (!more && quiet) {
+          _records.clear();
+        }
         for (final record in page.records) {
           if (_history ||
               record.available && record.expiresAt.isAfter(DateTime.now())) {
@@ -98,7 +134,9 @@ class _RecommendationsState extends State<MemberRecommendationsView> {
       if (!_current || generation != _generation) return;
       setState(() {
         _loading = false;
-        _error = 'We could not load your recommendations.';
+        if (!quiet) {
+          _error = 'We could not load your recommendations.';
+        }
       });
     }
   }

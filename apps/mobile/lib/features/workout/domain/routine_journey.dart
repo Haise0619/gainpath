@@ -104,7 +104,13 @@ class RoutineCheckpoint {
         'skipped': skipped.toList(),
       };
 
-  factory RoutineCheckpoint.fromJson(Map<String, dynamic> data) {
+  factory RoutineCheckpoint.fromJson(Map<String, dynamic> data,
+      {SessionScope? scope}) {
+    if (scope != null &&
+        (data['userId'] != scope.userId ||
+            data['organizationId'] != scope.organizationId)) {
+      throw const FormatException('Routine checkpoint scope mismatch.');
+    }
     String id(String key) {
       final value = data[key];
       if (value is! String ||
@@ -129,7 +135,8 @@ class RoutineCheckpoint {
     final attempt = data['attempt'] == null
         ? null
         : RoutineAttempt.fromJson(
-            Map<String, dynamic>.from(data['attempt'] as Map));
+            Map<String, dynamic>.from(data['attempt'] as Map),
+            scope: scope);
     if (attempt != null &&
         (attempt.id != data['id'] ||
             attempt.routine.id != data['routineId'] ||
@@ -246,8 +253,9 @@ class RoutineCheckpoint {
     }
     return RoutineCheckpoint(
         id: id('id'),
-        scope: SessionScope(
-            userId: id('userId'), organizationId: id('organizationId')),
+        scope: scope ??
+            SessionScope(
+                userId: id('userId'), organizationId: id('organizationId')),
         routineId: id('routineId'),
         planSignature: data['planSignature'] as String,
         day: data['day'] as int,

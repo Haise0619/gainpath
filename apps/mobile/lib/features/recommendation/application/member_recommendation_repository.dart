@@ -75,7 +75,8 @@ class MemberRecommendationDetail {
         raw.length != keys.length ||
         !raw.keys.toSet().containsAll(keys) ||
         raw['schemaVersion'] != 1 ||
-        !const ['synthetic_local', 'accepted_workout'].contains(raw['mode']) ||
+        !const ['synthetic_local', 'accepted_workout', 'workout_backup']
+            .contains(raw['mode']) ||
         raw['organizationId'] != org ||
         raw['recommendationId'] != id ||
         raw['revision'] is! int ||

@@ -13,7 +13,7 @@ export function createCanonicalRecommendationAdmin(deps: RecommendationCommandDe
       if(e.schemaVersion!==1||Buffer.byteLength(JSON.stringify(e))>16384||!['session.access','admin.queue.list','admin.queue.detail','admin.queue.decide','delivery.process'].includes(String(e.operation))) throw new DomainError('invalid-argument','Invalid canonical command.');
       const org=requiredIdentifier(q.organizationId,'organization'), request={...incoming,data:q};
       const auth=await authorizeRecommendationSession(request,deps);
-      await deps.store.transact(async tx=>{if(await tx.get(`datasetAssignments/${auth.uid}`))throw new DomainError('permission-denied','Canonical Admin required.');await requireQueueAdmin(tx,auth,org);});
+      await deps.store.transact(async tx=>{if(!deps.runtime?.scopedDataset && await tx.get(`datasetAssignments/${auth.uid}`))throw new DomainError('permission-denied','Canonical Admin required.');await requireQueueAdmin(tx,auth,org);});
       if(e.operation==='session.access') {keys(q,['schemaVersion','organizationId']);if(q.schemaVersion!==1)throw new DomainError('invalid-argument','Invalid version.');
         return{schemaVersion:1,mode:'accepted_workout',organizationId:org,role:'admin',enabled:!!deps.runtime,reason:deps.runtime?null:'review_required'};}
       if(!deps.runtime) throw new DomainError('failed-precondition','Canonical source and target policies require review.');

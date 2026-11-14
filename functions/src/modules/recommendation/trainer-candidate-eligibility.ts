@@ -122,7 +122,7 @@ function profileValid(d: DocumentData, now: number, org: string, coachId: string
     return true;
   } catch { return false; }
 }
-async function credentialFailure(tx: TransactionPort, root: string, coachId: string, profile: DocumentData, now: number): Promise<TrainerRejectionReason | number> {
+export async function credentialFailure(tx: TransactionPort, root: string, coachId: string, profile: DocumentData, now: number): Promise<TrainerRejectionReason | number> {
   const base = `${root}/coachProfiles/${coachId}`, state = await tx.get(`${base}/certificationState/current`);
   if (profile.certificationVerified !== true || state?.certificationVerified !== true || !positive(state.approvedCount)) return 'credentials_unavailable';
   if (state.schemaVersion !== 1 || !validTime(state.updatedAtMillis, now) || !Array.isArray(state.certificationIds) || !state.certificationIds.length || state.certificationIds.length > 100

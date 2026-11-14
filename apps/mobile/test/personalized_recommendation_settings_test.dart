@@ -27,6 +27,44 @@ void main() {
       find.byKey(ValueKey(purpose.name));
 
   testWidgets(
+      'a prior grant can acknowledge the new summary notice without revoking first',
+      (tester) async {
+    var writes = 0;
+    final repo = RpcRecommendationConsentRepository(
+        scope: consentScope,
+        isCurrent: () => true,
+        read: (_) async => consentWire(revision: 1, granted: true),
+        command: (_) async {
+          writes++;
+          throw StateError('No change before confirmation');
+        });
+    await show(tester,
+        repository: repo,
+        notice: const RecommendationConsentNotice(
+            policyId: 'workout-backup-guidance-v1',
+            noticeVersion: 'workout-backup-v1',
+            contentVersion: 'workout-backup-v1',
+            historyDescription: 'Uses recent synced workouts.',
+            fictional: false));
+    await tester.pumpAndSettle();
+    expect(find.text('Update permission'), findsOneWidget);
+    await tester.tap(find.text('Update permission'));
+    await tester.pumpAndSettle();
+    expect(
+        find.text('Allow Understand my exercise technique?'), findsOneWidget);
+    expect(writes, 0);
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    expect(
+        tester
+            .widget<SwitchListTile>(
+                toggle(RecommendationConsentPurpose.exerciseInsights))
+            .value,
+        isTrue);
+    expect(writes, 0);
+  });
+
+  testWidgets(
       'normal preview shows unavailable server state and four disabled off purposes',
       (tester) async {
     await show(tester);

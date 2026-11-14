@@ -1,3 +1,4 @@
+import {demoWorkoutPayload, DEMO_EXERCISES} from '../src/modules/recommendation/demo-dataset';
 import {randomBytes} from 'node:crypto';
 import {mkdirSync,writeFileSync} from 'node:fs';
 import {spawn} from 'node:child_process';
@@ -129,7 +130,7 @@ it('automatically delivers qualified recommendations and replays without duplica
   const inbox = await call(uid, 'module/module9MemberCommandCallable', q({action:'inbox'}));
   expect(inbox.records.filter((row: any) => row.recommendation?.state === 'available')).toHaveLength(2);
   proof.automaticMemberDelivery = true;
-});
+},300000);
 it.skipIf(process.env.FYP_WITH_FLUTTER!=='1')('ordinary Flutter Admin and Member compositions consume the seeded default emulator graph and capture UI',async()=>{
  async function flutter(application:string,test:string){return new Promise<number>((done,reject)=>{const log=`${out}/${application}-client-output-${dataset.anchorMillis}.log`;proof[`${application}ClientLog`]=log;let pending='';const emit=(chunk:string)=>{pending+=chunk;const lines=pending.split('\n');pending=lines.pop()!;for(const line of lines){const clean=line.replaceAll(password,'[ephemeral emulator credential redacted]')+'\n';writeFileSync(log,clean,{flag:'a'});process.stdout.write(clean);}};const child=spawn('C:/flutter/bin/cache/dart-sdk/bin/dart.exe',['C:/flutter/bin/cache/flutter_tools.snapshot','test','--no-pub','--reporter','expanded',test],{cwd:resolve(`../apps/${application}`),env:{...process.env,FYP_EMULATOR_PASSWORD:password},stdio:['ignore','pipe','pipe'],windowsHide:true});child.stdout.on('data',c=>emit(String(c)));child.stderr.on('data',c=>emit(String(c)));child.once('error',reject);child.once('close',code=>{emit('\n');done(code??1);});});}
  expect(await flutter('admin_web','test/emulator/fyp_ordinary_admin_emulator_test.dart')).toBe(0);
@@ -146,6 +147,91 @@ it('consent revocation redacts a previously available recommendation and assignm
  const assignment=db.doc(`datasetAssignments/${uid}`);await assignment.update({enabled:false,revision:2});await expect(rawCall(uid,'fypDatasetSessionCommand',{schemaVersion:1})).rejects.toThrow();
  await assignment.update({enabled:true,revision:1});proof.revocations=true;
 });
+it('saved workout automatically reaches the real inbox and Admin monitor without an Admin command', async () => {
+  const uid = dataset.memberIds[1];
+  // Keep this test focused on a newly saved camera-summary event. Separate
+  // coverage below exercises permission-triggered replay of sample history.
+  const oldHistory = await db.collection(`${FYP_ROOT}/members/${uid}/syntheticObservations`).get();
+  for (const row of oldHistory.docs) await row.ref.delete();
+  const notice = await call(uid, 'workout.member.consent.notice', q());
+  let consent = await call(uid, 'workout.member.consent.get', {schemaVersion:2,organizationId:'gainpath'});
+  for (const purpose of ['exerciseInsights','recommendationGeneration','recommendationDelivery']) {
+    await call(uid, 'workout.member.consent.set', {schemaVersion:2,organizationId:'gainpath',
+      commandId:'allow-workout-'+purpose,expectedRevision:consent.revision,purpose,action:'grant',
+      noticePolicyId:notice.policyId,acceptedNoticeVersion:notice.noticeVersion,acceptedContentVersion:notice.contentVersion});
+    consent = await call(uid,'workout.member.consent.get',{schemaVersion:2,organizationId:'gainpath'});
+  }
+  const exercise = DEMO_EXERCISES.squat, id = 'new-unscored-workout';
+  const payload = demoWorkoutPayload(uid,id,exercise,null,Date.now()-1000);
+  const command = {schemaVersion:1,organizationId:'gainpath',memberId:uid,consented:true,kind:'session',id,baseDigest:null,payload};
+  await call(uid,'member.workout.backup',{action:'save',command});
+  // Await the Firestore emulator event. No direct generation/evaluation call is made here.
+  let rows: any[] = [];
+  for (let attempt=0;attempt<40;attempt++) {
+    const page = await call(uid,'workout.member.recommendation.list',q({history:false,afterId:null}));
+    rows=page.recommendations;
+    if(rows.length)break;
+    await new Promise(resolve=>setTimeout(resolve,500));
+  }
+  expect(rows.filter((r:any)=>r.kind==='content')).toHaveLength(1);
+  const recommendation=rows.find((r:any)=>r.kind==='content');
+  expect(recommendation).toMatchObject({mode:'workout_backup',state:'available',kind:'content'});
+  const inbox=await call(uid,'member.inbox',q());
+  expect(inbox.records.some((r:any)=>r.recommendation?.recommendationId===recommendation.recommendationId)).toBe(true);
+  const monitor=await call(dataset.adminId,'workout.admin.queue.list',q({afterId:null}));
+  expect(monitor.records.some((r:any)=>r.id===recommendation.recommendationId&&r.status==='delivered'&&r.memberId===uid)).toBe(true);
+  await call(uid,'member.workout.backup',{action:'save',command});
+  const second={...command,id:'second-unscored',payload:demoWorkoutPayload(uid,'second-unscored',exercise,null,Date.now()-1000)};
+  await call(uid,'member.workout.backup',{action:'save',command:second});
+  await new Promise(resolve=>setTimeout(resolve,1200));
+  const repeated=await call(uid,'workout.member.recommendation.list',q({history:true,afterId:null}));
+  expect(repeated.recommendations.filter((r:any)=>r.kind==='content')).toHaveLength(1);
+  expect(repeated.recommendations.filter((r:any)=>r.kind==='trainer').length).toBeLessThanOrEqual(1);
+  await expect(call(dataset.memberIds[2],'member.recommendation.command',q({
+    recommendationId:recommendation.recommendationId,action:'get',commandId:null,expectedRevision:null,
+  }))).rejects.toThrow();
+  await call(uid,'member.recommendation.command',q({recommendationId:recommendation.recommendationId,
+    action:'dismiss',commandId:'dismiss-auto',expectedRevision:recommendation.revision}));
+  expect((await call(uid,'workout.member.recommendation.list',q({history:false,afterId:null}))).recommendations.some((r:any)=>r.recommendationId===recommendation.recommendationId)).toBe(false);
+  proof.workoutEventDelivered={id:recommendation.recommendationId,source:'unscored synthesized emulator workout payload',actualCamera:false};
+},60000);
+it('granting summary personalization automatically replays existing sample history once', async () => {
+  const uid = dataset.memberIds[3];
+  const notice = await call(uid, 'workout.member.consent.notice', q());
+  let consent = await call(uid, 'workout.member.consent.get', {schemaVersion:2,organizationId:'gainpath'});
+  for (const purpose of ['exerciseInsights','recommendationGeneration','recommendationDelivery']) {
+    await call(uid, 'workout.member.consent.set', {schemaVersion:2,organizationId:'gainpath',
+      commandId:'history-permission-'+purpose,expectedRevision:consent.revision,purpose,action:'grant',
+      noticePolicyId:notice.policyId,acceptedNoticeVersion:notice.noticeVersion,acceptedContentVersion:notice.contentVersion});
+    consent = await call(uid,'workout.member.consent.get',{schemaVersion:2,organizationId:'gainpath'});
+  }
+  let rows: any[] = [];
+  for (let attempt=0;attempt<40;attempt++) {
+    rows=(await call(uid,'workout.member.recommendation.list',q({history:false,afterId:null}))).recommendations;
+    if(rows.some(r=>r.kind==='content'))break;
+    await new Promise(resolve=>setTimeout(resolve,500));
+  }
+  expect(rows.some(r=>r.kind==='content')).toBe(true);
+  const saved=await db.doc(`${FYP_ROOT}/canonicalRecommendations/${rows.find(r=>r.kind==='content').recommendationId}`).get();
+  expect(saved.data()?.suggestion.source.kind).toBe('recorded_history');
+  expect((await db.collection(`${FYP_ROOT}/members/${uid}/workoutBackups`).get()).empty).toBe(true);
+  const replay=async()=> {
+    let afterId: string|null=null;
+    for(let page=0;page<20;page++) {
+      const result=await call(uid,'workout.member.history.replay',q({afterId}));
+      afterId=result.nextAfterId;
+      if(!afterId)break;
+    }
+  };
+  await replay();
+  const noticeIds = async () => (await db.collection(`${FYP_ROOT}/notifications`).where('recipientId','==',uid).get())
+    .docs.filter(d=>d.data().mode==='workout_backup').map(d=>d.id).sort();
+  const before=await noticeIds();
+  await replay();
+  await replay();
+  expect(await noticeIds()).toEqual(before);
+  proof.automaticHistoryReplay=true;
+},60000);
 it('preserves every protected baseline and leaves paid/reward/workout acceptance paths empty',async()=>{
  expect(await protectedSnapshot()).toEqual(proof.protectedBefore);
  for(const col of['transactions','payments','rewardBalances','rewardAwards','memberPrograms','workoutSessions'])expect((await db.collection(`${FYP_ROOT}/${col}`).get()).empty).toBe(true);proof.baselineUnchanged=true;

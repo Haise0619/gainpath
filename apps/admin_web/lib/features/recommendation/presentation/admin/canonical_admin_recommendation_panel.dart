@@ -10,10 +10,12 @@ class CanonicalAdminRecommendationPanel extends StatefulWidget {
       required this.repository,
       this.history = false,
       this.tab,
+      this.onUnavailable,
       this.clock});
   final CanonicalAdminRecommendationRepository repository;
   final bool history;
   final RecommendationMonitorTab? tab;
+  final VoidCallback? onUnavailable;
   final DateTime Function()? clock;
   @override
   State<CanonicalAdminRecommendationPanel> createState() =>
@@ -73,7 +75,7 @@ class _CanonicalAdminRecommendationPanelState
     });
     try {
       if (!_accessChecked) {
-        final enabled = await repo.access();
+        final enabled = repo.enabled || await repo.access();
         if (!_current(repo, generation)) {
           _lost();
           return;
@@ -81,6 +83,7 @@ class _CanonicalAdminRecommendationPanelState
         setState(() => _accessChecked = true);
         if (!enabled) {
           setState(() => _loading = false);
+          widget.onUnavailable?.call();
           return;
         }
       }
@@ -113,6 +116,10 @@ class _CanonicalAdminRecommendationPanelState
         _lost();
         return;
       }
+      if (!repo.enabled && widget.onUnavailable != null) {
+        widget.onUnavailable!();
+        return;
+      }
       setState(() {
         _loading = false;
         _error = 'Recommendations could not be verified. Retry.';
@@ -121,7 +128,8 @@ class _CanonicalAdminRecommendationPanelState
   }
 
   String _label(CanonicalAdminRecommendation r) =>
-      r.status == 'pending' && !r.expiresAt.isAfter(_now)
+      !['dismissed', 'withdrawn'].contains(r.status) &&
+              !r.expiresAt.isAfter(_now)
           ? 'Expired'
           : const {
               'pending': 'Awaiting delivery',
@@ -344,8 +352,9 @@ class _CanonicalAdminRecommendationPanelState
                                   color: Theme.of(context).dividerColor))),
                       child: wide
                           ? Row(children: [
-                              const Expanded(
-                                  flex: 2, child: Text('Member account')),
+                              Expanded(
+                                  flex: 2,
+                                  child: Text(r.memberLabel ?? r.memberId)),
                               Expanded(flex: 2, child: Text(r.exerciseLabel)),
                               Expanded(
                                   child: Text(r.kind == 'trainer'
@@ -366,6 +375,7 @@ class _CanonicalAdminRecommendationPanelState
                           : Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
+                                  Text(r.memberLabel ?? r.memberId),
                                   Text(r.title,
                                       style: Theme.of(context)
                                           .textTheme

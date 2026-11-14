@@ -263,6 +263,12 @@ class _SettingsState extends State<PersonalizedRecommendationSettingsScreen> {
         widget.repository != null &&
         (granted || widget.notice != null);
     final history = value?.historyStartAtMillis;
+    final notice = widget.notice;
+    final updateRequired = granted &&
+        notice != null &&
+        (value?.noticePolicyId != notice.policyId ||
+            value?.noticeVersion != notice.noticeVersion ||
+            value?.contentVersion != notice.contentVersion);
     return Panel(
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       SwitchListTile(
@@ -279,12 +285,18 @@ class _SettingsState extends State<PersonalizedRecommendationSettingsScreen> {
           : granted
               ? 'On'
               : 'Off'),
+      if (updateRequired)
+        TextButton(
+            onPressed: canChange ? () => _change(purpose, true) : null,
+            child: const Text('Update permission')),
       if (value?.noticeVersion != null)
         Text(
             'Accepted notice: ${value!.noticeVersion} · Content: ${value.contentVersion}'),
-      Text(history == null
-          ? 'History scope: no granted history scope.'
-          : '${granted ? 'History scope begins' : 'Previous grant history began'} ${DateTime.fromMillisecondsSinceEpoch(history, isUtc: true).toIso8601String()} (UTC).${granted ? '' : ' Revoked: no active history scope.'}'),
+      Text(history == 0
+          ? 'Uses recent synced workout history.'
+          : history == null
+              ? 'History scope: no granted history scope.'
+              : '${granted ? 'History scope begins' : 'Previous grant history began'} ${DateTime.fromMillisecondsSinceEpoch(history, isUtc: true).toIso8601String()} (UTC).${granted ? '' : ' Revoked: no active history scope.'}'),
     ]));
   }
 }
@@ -297,15 +309,15 @@ String _title(RecommendationConsentPurpose purpose) => switch (purpose) {
       RecommendationConsentPurpose.externalAiInference =>
         'Optional Gemini assistance',
       RecommendationConsentPurpose.recommendationDelivery =>
-        'Receive reviewed suggestions',
+        'Receive recommendations',
     };
 String _explanation(RecommendationConsentPurpose purpose) => switch (purpose) {
       RecommendationConsentPurpose.exerciseInsights =>
-        'Use eligible assessed sessions to identify where exercise guidance may help.',
+        'Use recent synced workout results to find relevant exercise guidance.',
       RecommendationConsentPurpose.recommendationGeneration =>
-        'Prepare relevant tutorials and optional Coach suggestions for your gym to review.',
+        'Suggest tutorials and optional Coaches based on your exercise activity and goals.',
       RecommendationConsentPurpose.externalAiInference =>
         'Let Gemini help rank eligible suggestions using minimal, anonymized context. Suggestions also work without Gemini.',
       RecommendationConsentPurpose.recommendationDelivery =>
-        'Show approved recommendations on Home and in your Notification Center.',
+        'Show your recommendations on Home and in your Notification Center.',
     };

@@ -55,8 +55,9 @@ class FileRoutineJourneyStore implements RevisionedRoutineJourneyStore {
     if (await file.length() > 1024 * 1024) {
       throw const FormatException('Routine checkpoint too large');
     }
-    final value = RoutineCheckpoint.fromJson(Map<String, dynamic>.from(
-        jsonDecode(await file.readAsString()) as Map));
+    final value = RoutineCheckpoint.fromJson(
+        Map<String, dynamic>.from(jsonDecode(await file.readAsString()) as Map),
+        scope: scope);
     if (value.scope != scope) {
       throw StateError('Routine checkpoint account mismatch');
     }
@@ -96,7 +97,8 @@ class FileRoutineJourneyStore implements RevisionedRoutineJourneyStore {
       _exclusive(() async {
         // Round-trip validation also bounds filenames before any filesystem write.
         final value = RoutineCheckpoint.fromJson(
-            Map<String, dynamic>.from(checkpoint.toJson()));
+            Map<String, dynamic>.from(checkpoint.toJson()),
+            scope: scope);
         if (value.scope != scope) {
           throw StateError('Routine checkpoint account mismatch');
         }

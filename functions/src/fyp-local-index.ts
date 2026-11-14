@@ -25,3 +25,23 @@ export {listAdminBookingPaymentsCommand} from './modules/commerce/booking-paymen
 export {getMembershipAccessCommand} from './modules/commerce/membership-access-callables';
 export {verifiedRewardsCommand} from './modules/gamification/verified-rewards-callables';
 export {miniGameRoundCommand} from './modules/gamification/mini-game-round-callable';
+import {onDocumentCreated} from 'firebase-functions/v2/firestore';
+import {processFypWorkoutBackup} from './modules/recommendation/fyp-workout-backup-events';
+export const module13FypWorkoutBackupCreated=onDocumentCreated({
+  region:'asia-southeast1',
+  document:'orgs/{organizationId}/cohorts/{cohortId}/members/{memberId}/workoutBackups/{key}',retry:true,
+},async event=>{
+  if(event.params.organizationId!=='gainpath'||event.params.cohortId!=='fyp-v1')return;
+  await processFypWorkoutBackup({db:getFirestore(),auth:getAuth()},event.params.memberId,event.params.key);
+});
+import {onDocumentWritten} from 'firebase-functions/v2/firestore';
+import {processFypWorkoutHistory} from './modules/recommendation/fyp-workout-backup-events';
+import {workoutSummaryConsentReady} from './modules/recommendation/workout-backup-recommendation-events';
+export const module13FypWorkoutConsentChanged=onDocumentWritten({
+  region:'asia-southeast1',
+  document:'orgs/{organizationId}/cohorts/{cohortId}/recommendationConsent/{memberId}',
+},async event=>{
+  if(event.params.organizationId!=='gainpath'||event.params.cohortId!=='fyp-v1'||
+    !workoutSummaryConsentReady(event.data?.after.data())||workoutSummaryConsentReady(event.data?.before.data()))return;
+  await processFypWorkoutHistory({db:getFirestore(),auth:getAuth()},event.params.memberId);
+});

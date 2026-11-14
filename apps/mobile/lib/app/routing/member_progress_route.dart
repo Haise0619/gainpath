@@ -165,7 +165,6 @@ class _MemberProgressHostState extends State<MemberProgressHost>
   }
 
   bool get _backupConfigured =>
-      widget.scope.datasetScope == null &&
       (workoutCloudBackupEnabled || widget.backupFactory != null);
   Future<void> _initializeBackup() async {
     if (!mounted ||

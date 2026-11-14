@@ -1,3 +1,8 @@
+import { backupWorkout, listWorkoutBackups, type BackupStore } from '../workouts/workout-backup';
+import { createWorkoutBackupRuntime } from '../recommendation/workout-backup-recommendation-runtime';
+import { createCanonicalRecommendationBackend } from '../recommendation/canonical-recommendation-backend';
+import { createCanonicalRecommendationAdmin } from '../recommendation/canonical-recommendation-admin';
+import { createCanonicalRecommendationLifecycle } from '../recommendation/canonical-recommendation-lifecycle';
 /** Local default-database composition. Not exported by the production entrypoint. */
 import {Firestore,FieldPath} from 'firebase-admin/firestore';
 import type {Auth} from 'firebase-admin/auth';
@@ -24,7 +29,7 @@ import {createRecommendationReadServices} from '../recommendation/recommendation
 import {createRecommendationNoticeProjector} from '../recommendation/module9-recommendation-projection';
 import {module9MemberCommand} from '../coaching/module9-member-service';
 const modules=['getCoachRatingsCommand','getMemberBookingOptionsCommand','getCoachAvailabilityCommand','getCoachRosterCommand','getBookingListCommand','module9MemberCommandCallable','adminReportingCommand','adminWorkoutReportingCommand','adminCheckInReportingCommand','workoutProgramCommand','getCoachCertificationsCommand','getCoachPublishedPhotoCommand'];
-const operations=new Set(['admin.insights','admin.configuration.get','admin.configuration.save','admin.configuration.choices','admin.queue.refresh','admin.queue.automatic','admin.queue.list','admin.queue.monitor','admin.queue.detail','admin.queue.decide','admin.queue.status','member.history','member.workoutHistory','member.consent.get','member.consent.set','member.consent.notice','member.recommendation.command','member.inbox','member.coach','member.routine','delivery.process',...modules.map(n=>`module/${n}`)]);
+const operations=new Set(['admin.insights','admin.configuration.get','admin.configuration.save','admin.configuration.choices','admin.queue.refresh','admin.queue.automatic','admin.queue.list','admin.queue.monitor','admin.queue.detail','admin.queue.decide','admin.queue.status','member.history','member.workoutHistory','member.workout.backup','workout.session.access','workout.admin.queue.list','workout.admin.queue.detail','workout.member.history.replay','workout.member.consent.get','workout.member.consent.set','workout.member.consent.notice','workout.member.recommendation.list','workout.member.recommendation.command','member.consent.get','member.consent.set','member.consent.notice','member.recommendation.command','member.inbox','member.coach','member.routine','delivery.process',...modules.map(n=>`module/${n}`)]);
 export function parseFypEnvelope(raw:unknown):{operation:string;data:DocumentData}{
   const q=object(raw);keys(q,['schemaVersion','operation','data']);
   if(q.schemaVersion!==1||!operations.has(String(q.operation))||Buffer.byteLength(JSON.stringify(q))>16384)throw new DomainError('invalid-argument','Unsupported bounded dataset command.');
@@ -79,6 +84,23 @@ export function createFypDatasetBackend(options:{db:Firestore;auth:Pick<Auth,'ge
     return{scope,store,fypCapability,readAuthIdentity,finalize};
   }
   return{
+    workoutSaved: async (incoming: InsightsRequest, key: string) => {
+      const c = await context(incoming);
+      if (c.scope.role !== 'member' || !/^session-[A-Za-z0-9_-]{1,128}$/.test(key)) throw deny();
+      const runtime = createWorkoutBackupRuntime(db, async uid => {
+        const user = await c.readAuthIdentity(uid);
+        return user.emailVerified && !user.disabled;
+      }, c.scope.rootPath);
+      try {
+        const ids = await createCanonicalRecommendationLifecycle({
+          store: c.store, runtime, readAuthIdentity: c.readAuthIdentity, clock,
+        }).backup('gainpath', c.scope.uid, key);
+        return await c.finalize(ids);
+      } catch (error) {
+        if (error instanceof DomainError && ['permission-denied','failed-precondition'].includes(error.code)) return [];
+        throw error;
+      }
+    },
     adminReadContext:async(incoming:InsightsRequest)=>{if(!options.canonicalAdminRead)throw deny();return context(incoming);},
     session:async(incoming:InsightsRequest)=>{
       if(options.canonicalAdminRead)throw deny();
@@ -94,6 +116,70 @@ export function createFypDatasetBackend(options:{db:Firestore;auth:Pick<Auth,'ge
         if((e.operation.startsWith('admin.')||e.operation==='delivery.process')&&scope.role!=='admin'||e.operation.startsWith('member.')&&scope.role!=='member')throw deny();
         const request:InsightsRequest={...incoming,data:{...e.data,organizationId:scope.organizationId}};
         const genericDeps={db,scope,store,clock,readAuthIdentity,fypCapability};
+        const workoutRuntime = createWorkoutBackupRuntime(db, async uid => {
+          const identity = await readAuthIdentity(uid);
+          return identity.emailVerified && !identity.disabled;
+        }, scope.rootPath);
+        const workoutDeps = {store, runtime: workoutRuntime, readAuthIdentity, clock};
+        if (e.operation.startsWith('workout.')) {
+          const operation = e.operation.slice('workout.'.length);
+          if (operation.startsWith('admin.') && scope.role !== 'admin' ||
+            operation.startsWith('member.') && scope.role !== 'member') throw deny();
+          if (operation === 'member.history.replay') {
+            const q = object(request.data);
+            keys(q, ['schemaVersion','organizationId','afterId']);
+            if (q.schemaVersion !== 1 || q.afterId !== null && typeof q.afterId !== 'string') throw deny();
+            const observed = q.afterId === 'observations' ||
+              typeof q.afterId === 'string' && q.afterId.startsWith('observations:');
+            const cursor = observed && q.afterId !== 'observations' ? String(q.afterId).slice('observations:'.length) :
+              observed ? null : q.afterId as string|null;
+            if (cursor !== null && !/^[A-Za-z0-9_-]{1,136}$/.test(cursor)) throw deny();
+            const collection = observed ? 'syntheticObservations' : 'workoutBackups';
+            let query = db.collection(`${scope.rootPath}/members/${scope.uid}/${collection}`)
+              .orderBy(FieldPath.documentId()).limit(5);
+            if (!observed) query = query.endAt('session-\uf8ff');
+            query = cursor ? query.startAfter(cursor) : observed ? query : query.startAt('session-');
+            const rows = await query.get();
+            const lifecycle = createCanonicalRecommendationLifecycle(workoutDeps);
+            let delivered = 0;
+            for (const row of rows.docs) delivered += (await lifecycle.backup('gainpath',scope.uid,
+              observed ? 'session-' + row.id : row.id)).length;
+            const nextAfterId = rows.size === 5 ? (observed ? 'observations:' : '') + rows.docs[4].id :
+              observed ? null : 'observations';
+            return await finalize({schemaVersion:1,checked:rows.size,delivered,
+              nextAfterId});
+          }
+          const backend = scope.role === 'admin' ? createCanonicalRecommendationAdmin(workoutDeps) :
+            createCanonicalRecommendationBackend(workoutDeps);
+          return await finalize(await backend({...incoming, data: {
+            schemaVersion: 1, operation, data: request.data,
+          }}));
+        }
+        if (e.operation === 'member.recommendation.command' && typeof request.data === 'object') {
+          const id = object(request.data).recommendationId;
+          if (typeof id === 'string' && /^[a-f0-9]{64}$/.test(id)) {
+            const saved = await store.transact(tx => tx.get(`orgs/gainpath/canonicalRecommendations/${id}`));
+            if (saved) return await finalize(await createCanonicalRecommendationBackend(workoutDeps)({
+              ...incoming, data: {schemaVersion: 1, operation: 'member.recommendation.command', data: request.data},
+            }));
+          }
+        }
+        if (e.operation === 'member.workout.backup') {
+          const q = object(request.data);
+          keys(q, ['organizationId', 'action', 'command']);
+          const backupStore: BackupStore = {...store, list: async (_prefix, after, limit, kind) => {
+            let query = db.collection(`${scope.rootPath}/members/${scope.uid}/workoutBackups`)
+              .orderBy(FieldPath.documentId()).endAt(kind + '-\uf8ff').limit(limit);
+            query = after ? query.startAfter(after) : query.startAt(kind + '-');
+            return (await query.get()).docs.map(d => d.data());
+          }};
+          const command = object(q.command);
+          if (command.memberId !== scope.uid || command.organizationId !== scope.organizationId) throw deny();
+          const result = q.action === 'save' ? await backupWorkout(backupStore, incoming.auth, command) :
+            q.action === 'list' ? await listWorkoutBackups(backupStore, incoming.auth, command) : undefined;
+          if (!result) throw deny();
+          return await finalize(result);
+        }
         if(e.operation.startsWith('module/')&&!['module/adminWorkoutReportingCommand','module/module9MemberCommandCallable'].includes(e.operation))return await finalize(await fypModuleRead(e.operation,request,genericDeps));
         const {source,run}=await store.transact(async tx=>({source:await tx.get('module13DemoSource/current'),run:await tx.get(`orgs/gainpath/seedRuns/${scope.seedId}`)}));
         if(!source||source.schemaVersion!==1||source.seedId!==scope.seedId||source.rootPath!==scope.rootPath||!run||run.status!=='complete'||run.seedId!==scope.seedId||!Array.isArray(run.sourcePaths)||run.sourcePaths.length>1000||!Array.isArray(source.members)||source.members.length>20||!Array.isArray(source.noticePolicies))throw new DomainError('failed-precondition','The current dataset source requires review.');
@@ -129,7 +215,24 @@ export function createFypDatasetBackend(options:{db:Firestore;auth:Pick<Auth,'ge
         }
         const memberIds=(source.members as {memberId:string}[]).map(m=>m.memberId),coachIds=source.coachIds as string[];
         const adapters=await createModule13DemoDataAdapters({db,queryRoot:scope.rootPath,manifest:{seedId:scope.seedId,memberIds,coachIds,recordPaths:(run.sourcePaths as string[]).map(logical),noticePolicies},store,deps,readAuthIdentity,clock,observations:evidence});
-        const deliveryDeps={...deps,resolveTarget:adapters.resolveTarget},reads=createRecommendationReadServices({...deliveryDeps,validateTarget:adapters.validateTarget});
+        const deliveryDeps={...deps,resolveTarget:adapters.resolveTarget};
+        let oldProject: Awaited<ReturnType<typeof createRecommendationNoticeProjector>>|undefined;
+        const projectRecommendation: NonNullable<import('../coaching/module9-member-service').NotificationReader['projectRecommendation']> =
+          async (org, uid, id, data) => {
+            if (data.mode !== 'workout_backup') {
+              oldProject ??= await createRecommendationNoticeProjector(deliveryDeps, request);
+              return oldProject(org, uid, id, data);
+            }
+            if (scope.role !== 'member' || uid !== scope.uid || data.recipientId !== uid ||
+              typeof data.recommendationId !== 'string' || id !== digestOf({canonicalRecommendation: data.recommendationId})) throw deny();
+            const detail = await createCanonicalRecommendationLifecycle(workoutDeps)
+              .member(incoming.auth!, org, data.recommendationId, 'get', null, null);
+            return {title: detail.title, message: detail.summary, recommendation: {
+              schemaVersion: 1, recommendationId: detail.recommendationId, kind: detail.kind,
+              state: detail.state, expiresAtMillis: detail.expiresAtMillis, target: detail.target,
+            }};
+          };
+        const reads=createRecommendationReadServices({...deliveryDeps,validateTarget:adapters.validateTarget});
         let result:unknown;
         switch(e.operation){
           case'admin.insights':result=await adapters.insights(request);break;
@@ -163,9 +266,19 @@ export function createFypDatasetBackend(options:{db:Firestore;auth:Pick<Auth,'ge
           case'member.consent.get':result=await reads.consent(request);break;
           case'member.consent.set':result=await createRecommendationConsentV2Command(deps)(request);break;
           case'member.consent.notice':{const q=object(request.data);keys(q,['schemaVersion','organizationId']);if(q.schemaVersion!==1||!noticePolicies[0])throw deny();const n=noticePolicies[0];result={schemaVersion:1,organizationId:scope.organizationId,policyId:n.policyId,noticeVersion:n.noticeVersion,contentVersion:n.contentVersion,historyDescription:'Only manifest-owned fictional synthetic observations in this FYP cohort are processed. Real Member histories are excluded.',demoData:true};break;}
-          case'member.recommendation.command':result=await createMemberRecommendationService(deliveryDeps)(request);break;
-          case'module/module9MemberCommandCallable':result=await fypModuleRead(e.operation,request,{...genericDeps,projectRecommendation:await createRecommendationNoticeProjector(deliveryDeps,request)});break;
-          case'member.inbox':{const q=object(request.data);keys(q,['schemaVersion','organizationId','afterId'],['schemaVersion','organizationId']);result=await module9MemberCommand(store,incoming.auth,{...q,action:'inbox'},clock,{...adapters.inboxReader,projectRecommendation:await createRecommendationNoticeProjector(deliveryDeps,request)});break;}
+          case'member.recommendation.command':{
+            const id = object(request.data).recommendationId;
+            if (typeof id !== 'string' || !/^[a-f0-9]{64}$/.test(id)) throw deny();
+            const saved = await store.transact(tx => tx.get(`orgs/gainpath/canonicalRecommendations/${id}`));
+            if (saved) {
+              result = await createCanonicalRecommendationBackend(workoutDeps)({...incoming, data: {
+                schemaVersion: 1, operation: 'member.recommendation.command', data: request.data,
+              }});
+            } else result = await createMemberRecommendationService(deliveryDeps)(request);
+            break;
+          }
+          case'module/module9MemberCommandCallable':result=await fypModuleRead(e.operation,request,{...genericDeps,projectRecommendation});break;
+          case'member.inbox':{const q=object(request.data);keys(q,['schemaVersion','organizationId','afterId'],['schemaVersion','organizationId']);result=await module9MemberCommand(store,incoming.auth,{...q,action:'inbox'},clock,{...adapters.inboxReader,projectRecommendation});break;}
           case'member.coach':case'member.routine':{const q=object(request.data),coach=e.operation==='member.coach',field=coach?'coachId':'routineId';keys(q,['schemaVersion','organizationId',field]);if(q.schemaVersion!==1||typeof q[field]!=='string'||!(coach?coachIds:source.publicationIds as string[]).includes(String(q[field])))throw deny();result=await store.transact(tx=>tx.get(`orgs/gainpath/${coach?'coaches':'content'}/${q[field]}`));if(!result||(result as DocumentData).status!=='published')throw deny();break;}
           default:throw deny();
         }

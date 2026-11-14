@@ -231,7 +231,13 @@ class RoutineAttempt {
         'updatedAtMicros': updatedAtMicros,
         'entries': entries.map((e) => e.toJson()).toList()
       };
-  factory RoutineAttempt.fromJson(Map<String, dynamic> data) {
+  factory RoutineAttempt.fromJson(Map<String, dynamic> data,
+      {SessionScope? scope}) {
+    if (scope != null &&
+        (data['userId'] != scope.userId ||
+            data['organizationId'] != scope.organizationId)) {
+      throw const FormatException('Routine result scope mismatch.');
+    }
     for (final key in ['id', 'organizationId', 'userId', 'routineId']) {
       if (data[key] is! String ||
           !(data[key] as String).isNotEmpty ||
@@ -303,9 +309,10 @@ class RoutineAttempt {
     }
     return RoutineAttempt(
         id: data['id'] as String,
-        scope: SessionScope(
-            userId: data['userId'] as String,
-            organizationId: data['organizationId'] as String),
+        scope: scope ??
+            SessionScope(
+                userId: data['userId'] as String,
+                organizationId: data['organizationId'] as String),
         routine: routine,
         day: day,
         finished: data['finished'] as bool,

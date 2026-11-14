@@ -9,7 +9,7 @@ export async function createCanonicalNoticeProjector(deps:CanonicalLifecycleDepe
  const initial=await authorizeRecommendationSession(request,deps);
  return async(org,uid,id,data)=>{
   const auth=await authorizeRecommendationSession(request,deps);
-  if(auth.uid!==initial.uid||uid!==auth.uid||data.recipientId!==uid||data.mode!=='accepted_workout'||data.type!=='recommendation'||typeof data.recommendationId!=='string'||id!==digestOf({canonicalRecommendation:data.recommendationId}))throw new DomainError('permission-denied','Recommendation unavailable.');
+  if(auth.uid!==initial.uid||uid!==auth.uid||data.recipientId!==uid||!['accepted_workout','workout_backup'].includes(String(data.mode))||data.type!=='recommendation'||typeof data.recommendationId!=='string'||id!==digestOf({canonicalRecommendation:data.recommendationId}))throw new DomainError('permission-denied','Recommendation unavailable.');
   const detail=await createCanonicalRecommendationLifecycle(deps).member(auth,org,data.recommendationId,'get',null,null);
   await authorizeRecommendationSession(request,deps);
   return{title:detail.title,message:detail.summary,recommendation:{schemaVersion:1,recommendationId:detail.recommendationId,kind:detail.kind,state:detail.state,expiresAtMillis:detail.expiresAtMillis,target:detail.target}};

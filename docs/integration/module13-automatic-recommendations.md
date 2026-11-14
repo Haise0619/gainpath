@@ -1,5 +1,7 @@
 # Module 13 automatic recommendations and Admin monitoring
 
+The [workout-triggered integration](module13-workout-automatic.md) now defines the prepared automatic Member workflow. The batch command below remains a legacy maintenance operation.
+
 The FYP workflow runs eligible evidence through the existing generation, consent, target validation and delivery services. An authorized operator starts a source batch through `admin.queue.automatic`. Each qualifying recommendation is sent automatically after the batch completes. The operator does not select recipients or approve individual records. Reuse the batch ID after interruption. The existing delivery transaction verifies or creates the inbox notification and receipt together.
 
 The Admin page uses Overview, History and Needs Attention. Both recommendation types load concurrently. Search, date range and tab changes use the pages already in memory. Details open immediately with a loading state and fetch fresh authorization and target evidence. The monitor distinguishes delivery receipts from legacy sent records. The legacy server does not supply delivery proof, so its records show Delivery unverified. The existing FYP API has no authorized Admin withdrawal operation. Coach and tutorial details use the available published matching fields and an icon fallback.

@@ -10,7 +10,7 @@ import {resolveFypRuntimeRelease} from './modules/dataset/fyp-runtime-release';
 import {recommendationCommandError} from './modules/recommendation/recommendation-configuration';
 import {createUnifiedAdminBackend} from './modules/dataset/unified-admin-backend';
 if(!getApps().length)initializeApp();
-const options={region:'asia-southeast1',enforceAppCheck:true,timeoutSeconds:540,maxInstances:1,concurrency:4} as const;
+const options={region:'asia-southeast1',enforceAppCheck:true,memory:'512MiB',cpu:1,timeoutSeconds:540,maxInstances:1,concurrency:4} as const;
 const callable=(method:'session'|'command')=>onCall(options,async request=>{
   try{
     if(!request.auth||!request.app)throw new HttpsError('unauthenticated','Verified Auth and App Check are required.');
@@ -22,3 +22,4 @@ const callable=(method:'session'|'command')=>onCall(options,async request=>{
 });
 export const fypDatasetSessionCommand=callable('session');
 export const fypDatasetCommand=callable('command');
+export {module13FypWorkoutBackupCreated,module13FypWorkoutConsentChanged} from './modules/recommendation/fyp-workout-backup-events';

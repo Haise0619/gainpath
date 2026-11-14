@@ -49,7 +49,7 @@ class WorkoutBackupRecord {
     }
     Map<String, dynamic> payload;
     if (kind == 'session') {
-      final s = WorkoutSessionSummary.fromJson(raw);
+      final s = WorkoutSessionSummary.fromJson(raw, scope: scope);
       if (s.scope != scope ||
           s.sessionId != id ||
           s.provenance != WorkoutProvenance.realCamera ||

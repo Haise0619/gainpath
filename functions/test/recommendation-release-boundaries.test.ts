@@ -57,6 +57,9 @@ describe('Module 13 release boundaries and truthful catalog coverage', () => {
     expect(canonicalExports).toEqual([
       "export {module13MemberCommand,module13AdminCommand} from './modules/recommendation/canonical-recommendation-callables';",
       "export {module13AcceptedWorkoutCreated,module13RecoverDeliveries} from './modules/recommendation/canonical-recommendation-events';",
+      "export {module13WorkoutBackupCreated,module13WorkoutConsentChanged} from './modules/recommendation/workout-backup-recommendation-events';",
+      "export {module13ReplayWorkoutHistory} from './modules/recommendation/workout-backup-history-callable';",
+      "export {module13FypWorkoutBackupCreated,module13FypWorkoutConsentChanged} from './modules/recommendation/fyp-workout-backup-events';",
     ]);
     const withoutReviewedBoundaries = canonicalExports.reduce((source,line)=>source.replace(line,''),entry);
     expect(withoutReviewedBoundaries).not.toMatch(/(?:from\s*|import\s*\()\s*['"][^'"]*modules\/recommendation\//);

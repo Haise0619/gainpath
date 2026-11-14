@@ -2,7 +2,7 @@ import { initializeApp } from 'firebase-admin/app';
 
 initializeApp();
 
-// Prepared canonical Member boundary; admission remains disabled in code.
+// Accepted-workout admission remains separately gated. Summary guidance uses its own runtime.
 export {module13MemberCommand,module13AdminCommand} from './modules/recommendation/canonical-recommendation-callables';
 export {module13AcceptedWorkoutCreated,module13RecoverDeliveries} from './modules/recommendation/canonical-recommendation-events';
 
@@ -74,3 +74,6 @@ export { miniGameContentCommand } from './modules/content/mini-game-content-call
 export { workoutProgramCommand } from './modules/content/workout-program-callable';
 
 export {exerciseCatalogCommand} from './modules/content/exercise-catalog-callable';
+export {module13WorkoutBackupCreated,module13WorkoutConsentChanged} from './modules/recommendation/workout-backup-recommendation-events';
+export {module13ReplayWorkoutHistory} from './modules/recommendation/workout-backup-history-callable';
+export {module13FypWorkoutBackupCreated,module13FypWorkoutConsentChanged} from './modules/recommendation/fyp-workout-backup-events';

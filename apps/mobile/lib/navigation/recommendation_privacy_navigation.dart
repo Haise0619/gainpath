@@ -20,7 +20,8 @@ Future<void> openRecommendationPrivacyPreview(
   final repositories = session?.datasetScope == null
       ? null
       : FirebaseDemoMemberRepositories(
-          firebaseFypDatasetTransport(session!.scope, isCurrent));
+          firebaseFypDatasetTransport(session!.scope, isCurrent),
+          workoutConsent: true);
   final canonical = session != null && session.datasetScope == null
       ? FirebaseMemberRecommendations(
           scope: session.scope, isCurrent: isCurrent)

@@ -34,7 +34,8 @@ class FirebaseMemberRecommendations {
             invoke: (data) async {
               final result =
                   _map(await call('member.recommendation.command', data));
-              if (result['mode'] != 'accepted_workout') {
+              if (!const ['accepted_workout', 'workout_backup']
+                  .contains(result['mode'])) {
                 throw const FormatException('Invalid recommendation source');
               }
               return result;
@@ -103,7 +104,8 @@ class FirebaseMemberRecommendations {
     final records = <MemberRecommendationDetail>[];
     for (final row in response['recommendations'] as List) {
       final data = _map(row);
-      if (data['mode'] != 'accepted_workout' ||
+      if (!const ['accepted_workout', 'workout_backup']
+              .contains(data['mode']) ||
           data['recommendationId'] is! String) {
         throw const FormatException('Invalid recommendation scope');
       }

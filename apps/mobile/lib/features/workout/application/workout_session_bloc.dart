@@ -219,6 +219,7 @@ class WorkoutSessionBloc
     _saving = true;
     final summary = _pendingSummary ??= WorkoutSessionSummary(
       userId: _repository.scope.userId,
+      datasetScope: _repository.scope.datasetScope,
       organizationId: _repository.scope.organizationId,
       sessionId: state.sessionId!,
       exerciseId: state.plan.exercises.first.id,

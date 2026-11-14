@@ -1,3 +1,4 @@
+import '../../infrastructure/firebase/firebase_fyp_dataset.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:gainpath_domain/gainpath_domain.dart' show AuthSession, AppRole;
 import '../../features/recommendation/application/canonical_admin_recommendation_repository.dart';
@@ -16,10 +17,16 @@ CanonicalAdminRecommendationRepository? createCanonicalAdminRecommendations(
   CanonicalAdminInvoke? invoke,
   String? Function()? currentUid,
 }) {
-  if (!enabled ||
-      session.datasetScope != null ||
-      session.role != AppRole.admin) {
+  if (!enabled || session.role != AppRole.admin) {
     return null;
+  }
+  if (session.datasetScope != null && enabled) {
+    final transport = firebaseFypDatasetTransport(session.scope, isCurrent);
+    return CanonicalAdminRecommendationRepository(
+        organizationId: session.scope.organizationId,
+        isCurrent: isCurrent,
+        invoke: invoke ??
+            (operation, data) => transport.call('workout.$operation', data));
   }
   final uid = currentUid ?? () => FirebaseAuth.instance.currentUser?.uid;
   return CanonicalAdminRecommendationRepository(

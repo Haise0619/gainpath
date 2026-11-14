@@ -62,7 +62,7 @@ class _WorkoutCloudSaveStatusState extends State<WorkoutCloudSaveStatus>
     if (!widget.localResult ||
         _auth != null ||
         (!workoutCloudBackupEnabled && widget.factory == null) ||
-        widget.scope.datasetScope != null) {
+        false) {
       return;
     }
     try {

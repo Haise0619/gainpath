@@ -44,6 +44,43 @@ void main() {
         'Guidance for your exercise practice.');
   });
   setUpAll(() => GoogleFonts.config.allowRuntimeFetching = false);
+  testWidgets('returning Home discovers a delayed automatic delivery',
+      (t) async {
+    var visible = false, calls = 0;
+    final repo = RpcMemberRecommendationRepository(
+        scope: scope,
+        isCurrent: () => true,
+        invoke: (_) async => memberDetail());
+    Widget screen() => MaterialApp(
+            home: Scaffold(
+                body: SingleChildScrollView(
+          child: MemberRecommendationsView(
+              repository: repo,
+              visible: visible,
+              isCurrent: () => true,
+              onOpenTarget: (_, __) async {},
+              loadPage: ({required bool history, String? afterId}) async {
+                calls++;
+                return MemberRecommendationPage(
+                    records: calls < 3
+                        ? []
+                        : [
+                            MemberRecommendationDetail.parse(
+                                memberDetail(), 'gym1', 'r1'),
+                          ]);
+              }),
+        )));
+    await t.pumpWidget(screen());
+    await t.pumpAndSettle();
+    visible = true;
+    await t.pumpWidget(screen());
+    await t.pumpAndSettle();
+    expect(find.text('Coach Alex'), findsNothing);
+    await t.pump(const Duration(seconds: 5));
+    await t.pumpAndSettle();
+    expect(find.text('Coach Alex'), findsOneWidget);
+    await t.pumpWidget(const SizedBox.shrink());
+  });
   test('disabled client never calls Firebase or seeds recommendations',
       () async {
     var calls = 0;

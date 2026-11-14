@@ -1,4 +1,5 @@
-import 'package:gainpath_domain/gainpath_domain.dart' show SessionScope;
+import 'package:gainpath_domain/gainpath_domain.dart'
+    show SessionScope, VerifiedDatasetScope;
 import 'workout_pose_metrics.dart';
 export 'workout_pose_metrics.dart';
 
@@ -60,6 +61,7 @@ class WorkoutSessionSummary {
   const WorkoutSessionSummary({
     this.userId = 'demo-user',
     this.organizationId = 'demo-org',
+    this.datasetScope,
     required this.sessionId,
     required this.exerciseId,
     required this.repetitions,
@@ -73,8 +75,11 @@ class WorkoutSessionSummary {
   final String sessionId;
   final String userId;
   final String organizationId;
-  SessionScope get scope =>
-      SessionScope(userId: userId, organizationId: organizationId);
+  final VerifiedDatasetScope? datasetScope;
+  SessionScope get scope => SessionScope(
+      userId: userId,
+      organizationId: organizationId,
+      datasetScope: datasetScope);
   final String exerciseId;
   final int repetitions;
   final int accuracy;
@@ -101,10 +106,13 @@ class WorkoutSessionSummary {
         accuracy < 0 ||
         accuracy > 100 ||
         (metrics.scoringVersion == 'standard-floor-push-up-side-v1' &&
-            (organizationId != 'gainpath' || exerciseId != 'standard-floor-push-up-side-v1' ||
+            (organizationId != 'gainpath' ||
+                exerciseId != 'standard-floor-push-up-side-v1' ||
                 accuracy != (metrics.formScorePercent?.round() ?? 0) ||
-                metrics.floorPushUp!.issueCounts.values.any((v) => v > attempts))) ||
-        (exerciseId == 'standard-floor-push-up-side-v1' && metrics.scoringVersion != 'standard-floor-push-up-side-v1') ||
+                metrics.floorPushUp!.issueCounts.values
+                    .any((v) => v > attempts))) ||
+        (exerciseId == 'standard-floor-push-up-side-v1' &&
+            metrics.scoringVersion != 'standard-floor-push-up-side-v1') ||
         (metrics.scoringVersion == 'standing-lateral-raise-front-v1' &&
             (accuracy != 0 ||
                 organizationId != 'gainpath' ||
@@ -171,7 +179,8 @@ class WorkoutSessionSummary {
     };
   }
 
-  factory WorkoutSessionSummary.fromJson(Map<String, Object?> json) {
+  factory WorkoutSessionSummary.fromJson(Map<String, Object?> json,
+      {SessionScope? scope}) {
     final version = json['summarySchemaVersion'];
     if (version != null && version != 2 && version != 3) {
       throw const FormatException('Unsupported local workout summary version.');
@@ -196,7 +205,13 @@ class WorkoutSessionSummary {
         (rawMetrics is! Map || rawMetrics.keys.any((key) => key is! String))) {
       throw const FormatException('Measured workout metrics are required.');
     }
+    if (scope != null &&
+        (json['userId'] != scope.userId ||
+            json['organizationId'] != scope.organizationId)) {
+      throw const FormatException('Workout scope mismatch.');
+    }
     final summary = WorkoutSessionSummary(
+      datasetScope: scope?.datasetScope,
       sessionId: _requiredString(json, 'sessionId'),
       userId: _requiredString(json, 'userId'),
       organizationId: _requiredString(json, 'organizationId'),
@@ -301,7 +316,8 @@ class WorkoutSessionRecord {
     };
   }
 
-  factory WorkoutSessionRecord.fromJson(Map<String, Object?> json) {
+  factory WorkoutSessionRecord.fromJson(Map<String, Object?> json,
+      {SessionScope? scope}) {
     final status = json['status'];
     final acceptedAt = json['acceptedAt'];
     final serverReference = json['serverReference'];
@@ -322,8 +338,9 @@ class WorkoutSessionRecord {
         throw const FormatException('Invalid workout acceptance timestamp.');
       }
     }
-    final parsedSummary =
-        WorkoutSessionSummary.fromJson(Map<String, Object?>.from(summary));
+    final parsedSummary = WorkoutSessionSummary.fromJson(
+        Map<String, Object?>.from(summary),
+        scope: scope);
     if ((parsedSummary.poseMetrics != null ||
             parsedSummary.provenance == WorkoutProvenance.realCamera ||
             parsedSummary.provenance == WorkoutProvenance.recordedFixture) &&

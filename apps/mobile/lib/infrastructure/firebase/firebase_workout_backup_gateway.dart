@@ -1,3 +1,4 @@
+import 'firebase_fyp_dataset.dart';
 import 'dart:async';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -15,6 +16,10 @@ class FirebaseWorkoutBackupGateway implements WorkoutBackupGateway {
             FirebaseAuth.instance.currentUser?.emailVerified == true;
     _invoke = invoke ??
         (payload) async {
+          if (scope.datasetScope != null) {
+            return firebaseFypDatasetTransport(scope, _active)
+                .call('member.workout.backup', payload);
+          }
           final functions =
               FirebaseFunctions.instanceFor(region: 'asia-southeast1');
           if (const bool.fromEnvironment('USE_FIREBASE_EMULATORS')) {
