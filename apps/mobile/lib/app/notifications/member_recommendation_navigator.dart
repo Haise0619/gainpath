@@ -124,7 +124,9 @@ class MemberRecommendationNavigator {
                         onOpenBooking: () {
                           if (!bookingNavigationEnabled) {
                             ScaffoldMessenger.of(routeContext).showSnackBar(
-                                const SnackBar(content: Text('Booking and payment are outside this controlled demonstration.')));
+                                const SnackBar(
+                                    content: Text(
+                                        'Booking is currently unavailable. Please contact the gym.')));
                             return;
                           }
                           if (active()) {

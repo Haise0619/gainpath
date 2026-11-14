@@ -25,9 +25,11 @@ class MemberBookingFlow extends StatefulWidget {
       required this.onOpenBookings,
       this.payments,
       this.cancellation,
-      this.suggestion});
+      this.suggestion,
+      this.checkoutEnabled = true});
   final MemberBookingOptionsRepository options;
   final BookingRepository writer;
+  final bool checkoutEnabled;
   final BookingPaymentRepository? payments;
   final BookingCancellationRepository? cancellation;
   final BookingSuggestionAttachment? suggestion;
@@ -215,6 +217,7 @@ class _MemberBookingFlowState extends State<MemberBookingFlow>
   }
 
   Future<BookingPaymentQuote?> _loadQuote() async {
+    if (!widget.checkoutEnabled) return null;
     final repo = widget.payments, state = controller.state;
     final branch = state.intent?.branchId.value ??
         state.options?.permittedBranchIds.firstOrNull;
@@ -272,7 +275,11 @@ class _MemberBookingFlowState extends State<MemberBookingFlow>
   }
 
   Future<void> _review() async {
-    if (controller.state.intent == null || _quoteBusy) return;
+    if (!widget.checkoutEnabled ||
+        controller.state.intent == null ||
+        _quoteBusy) {
+      return;
+    }
     _interacted = true;
     final old = _quote;
     final quote = await _loadQuote();
@@ -306,7 +313,7 @@ class _MemberBookingFlowState extends State<MemberBookingFlow>
   }
 
   Future<void> _reserve() async {
-    if (_opening || _quoteBusy || !_current) return;
+    if (!widget.checkoutEnabled || _opening || _quoteBusy || !_current) return;
     if (_priceChanged && !_priceAccepted) {
       setState(() => _priceAccepted = true);
       return;
@@ -440,7 +447,8 @@ class _MemberBookingFlowState extends State<MemberBookingFlow>
         }
         final options = state.options, selected = state.intent;
         final busy = state.busy || _quoteBusy || _opening;
-        final canReview = selected != null &&
+        final canReview = widget.checkoutEnabled &&
+            selected != null &&
             !busy &&
             !state.uncertain &&
             (widget.payments == null || _quote != null);
@@ -480,31 +488,38 @@ class _MemberBookingFlowState extends State<MemberBookingFlow>
                             border: Border(
                                 top: BorderSide(color: AppColors.hairline))),
                         child: FilledButton(
-                            onPressed: _reviewing
-                                ? (busy ||
-                                        selected == null ||
-                                        (widget.payments != null &&
-                                            _quote == null)
-                                    ? null
-                                    : _reserve)
-                                : (canReview ? _review : null),
-                            child: Text(busy
-                                ? 'Please wait…'
+                            onPressed: !widget.checkoutEnabled
+                                ? null
                                 : _reviewing
-                                    ? (state.uncertain
-                                        ? 'Retry reservation'
-                                        : (_priceChanged && !_priceAccepted
-                                            ? 'Accept updated price'
-                                            : held
-                                                ? 'Continue reservation'
-                                                : 'Continue to payment'))
-                                    : 'Review Booking')))),
+                                    ? (busy ||
+                                            selected == null ||
+                                            (widget.payments != null &&
+                                                _quote == null)
+                                        ? null
+                                        : _reserve)
+                                    : (canReview ? _review : null),
+                            child: Text(!widget.checkoutEnabled
+                                ? 'Online booking unavailable'
+                                : busy
+                                    ? 'Please wait…'
+                                    : _reviewing
+                                        ? (state.uncertain
+                                            ? 'Retry reservation'
+                                            : (_priceChanged && !_priceAccepted
+                                                ? 'Accept updated price'
+                                                : held
+                                                    ? 'Continue reservation'
+                                                    : 'Continue to payment'))
+                                        : 'Review Booking')))),
                 body: SingleChildScrollView(
                     controller: _scroll,
                     padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
                     child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
+                          if (!widget.checkoutEnabled)
+                            _notice(
+                                'Explore available sessions below. Contact the gym to arrange a booking for this account.'),
                           if (busy) const LinearProgressIndicator(),
                           if (_message != null || state.message != null)
                             _notice(_message ?? _friendly(state.message!),

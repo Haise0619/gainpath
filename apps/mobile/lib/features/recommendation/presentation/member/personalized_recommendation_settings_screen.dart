@@ -103,15 +103,15 @@ class _SettingsState extends State<PersonalizedRecommendationSettingsScreen> {
                       mainAxisSize: MainAxisSize.min,
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        if (widget.notice?.fictional == true)
-                          const Text('Fictional demonstration data'),
                         const SizedBox(height: 12),
                         Text(granted
                             ? _explanation(purpose)
                             : 'Stop future use for this purpose. Revoking does not promise deletion of existing records; retention and deletion rules still require review.'),
                         if (granted) ...[
                           const SizedBox(height: 12),
-                          Text(notice!.historyDescription),
+                          Text(notice!.fictional
+                              ? 'Use the assessment history available for your account to suggest relevant guidance.'
+                              : notice.historyDescription),
                           const SizedBox(height: 8),
                           Text(
                               'Notice ${notice.noticeVersion} · Content ${notice.contentVersion}'),
@@ -207,9 +207,7 @@ class _SettingsState extends State<PersonalizedRecommendationSettingsScreen> {
                         style: heading),
                     const SizedBox(height: 8),
                     Text(injected
-                        ? widget.notice?.fictional == true
-                            ? 'Fictional demonstration data'
-                            : 'Control how eligible exercise assessments help personalize your suggestions.'
+                        ? 'Control how eligible exercise assessments help personalize your suggestions.'
                         : 'Personalization is not available for your account yet.'),
                     const SizedBox(height: 8),
                     const Text(
@@ -238,7 +236,9 @@ class _SettingsState extends State<PersonalizedRecommendationSettingsScreen> {
                     tilePadding: EdgeInsets.zero,
                     title: const Text('Privacy details'),
                     children: [
-                      Text(widget.notice!.historyDescription),
+                      Text(widget.notice!.fictional
+                          ? 'Use the assessment history available for your account to suggest relevant guidance.'
+                          : widget.notice!.historyDescription),
                       Text(
                           'Notice ${widget.notice!.noticeVersion} · ${widget.notice!.contentVersion}')
                     ]),

@@ -1,3 +1,4 @@
+import 'recommendation_presentation_copy.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -297,13 +298,6 @@ class _MemberRecommendationSheetState extends State<MemberRecommendationSheet> {
                             onPressed: () => Navigator.pop(context),
                             icon: const Icon(Icons.close_rounded))
                       ]),
-                      if (widget.repository.fixtureOnly)
-                        const Padding(
-                            padding: EdgeInsets.only(bottom: 12),
-                            child: Text('Fictional demonstration data',
-                                style: TextStyle(
-                                    color: AppColors.primary,
-                                    fontWeight: FontWeight.w700))),
                       if (!widget.isCurrent() || !widget.repository.isCurrent)
                         const Text('Your session changed. Return to sign in.')
                       else ...[
@@ -352,7 +346,9 @@ class _MemberRecommendationSheetState extends State<MemberRecommendationSheet> {
                                     style: const TextStyle(
                                         color: AppColors.inkSoft))),
                           const SizedBox(height: 12),
-                          Text(detail.summary,
+                          Text(
+                              recommendationPresentationReason(
+                                  detail.summary, detail.exerciseLabel),
                               style: Theme.of(context).textTheme.bodyLarge),
                           if (detail.exerciseLabel != null)
                             Padding(
@@ -363,7 +359,22 @@ class _MemberRecommendationSheetState extends State<MemberRecommendationSheet> {
                           for (final reason in detail.explanations)
                             Padding(
                                 padding: const EdgeInsets.only(top: 8),
-                                child: Text(reason)),
+                                child: Text(recommendationPresentationReason(
+                                    reason, detail.exerciseLabel))),
+                          if (detail.explanations.any((reason) =>
+                                  recommendationPresentationReason(
+                                      reason, detail.exerciseLabel) !=
+                                  reason) ||
+                              recommendationPresentationReason(
+                                      detail.summary, detail.exerciseLabel) !=
+                                  detail.summary)
+                            ExpansionTile(
+                                tilePadding: EdgeInsets.zero,
+                                title: const Text('Technical Details'),
+                                children: [
+                                  Text(detail.summary),
+                                  ...detail.explanations.map(Text.new)
+                                ]),
                           const SizedBox(height: 20),
                           if (!detail.available) ...[
                             Semantics(

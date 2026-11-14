@@ -1,3 +1,4 @@
+import 'package:gainpath_admin_web/features/recommendation/presentation/admin/recommendation_presentation_copy.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -8,6 +9,23 @@ import 'support/recommendation_queue_fixture.dart';
 import 'support/recommendation_queue_transport.dart';
 
 void main() {
+  test('legacy ranking reasons use exercise context and preserve useful goals',
+      () {
+    const source =
+        'Reviewed educational mapping supports the selected learning objective.';
+    expect(recommendationPresentationReason(source, 'Squat'),
+        'Guidance for your Squat practice.');
+    expect(source,
+        'Reviewed educational mapping supports the selected learning objective.');
+    expect(
+        recommendationPresentationReason(
+            'Build confidence with your strength goal.', 'Squat'),
+        'Build confidence with your strength goal.');
+    expect(
+        recommendationPresentationReason(
+            'Deterministic eligible candidate order', null),
+        'Guidance for your exercise practice.');
+  });
   setUpAll(() => GoogleFonts.config.allowRuntimeFetching = false);
   Future<void> show(WidgetTester tester, QueueTransportHarness h,
       {bool trainer = true, double width = 1400, double scale = 1}) async {
@@ -20,6 +38,7 @@ void main() {
             child: Scaffold(
                 body: RecommendationQueuePanel(
                     trainer: trainer,
+                    internalMaintenance: true,
                     history: h.status != 'pending',
                     repository: h.repository,
                     clock: () => queueNow)))));
@@ -29,6 +48,21 @@ void main() {
     await tester.pumpAndSettle();
   }
 
+  testWidgets('normal queue hides development controls and source banners',
+      (tester) async {
+    final h = QueueTransportHarness();
+    await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+            body: RecommendationQueuePanel(
+                trainer: true,
+                repository: h.repository,
+                clock: () => queueNow))));
+    await tester.pumpAndSettle();
+    expect(find.text('Queue maintenance'), findsNothing);
+    expect(find.text('Refresh queue'), findsNothing);
+    expect(find.text('Fictional educational dataset'), findsNothing);
+    expect(find.text('Sample Member'), findsOneWidget);
+  });
   testWidgets(
       'normal hub needs no prototype provider and both queues fail closed',
       (tester) async {
@@ -53,7 +87,7 @@ void main() {
       (tester) async {
     final h = QueueTransportHarness();
     await show(tester, h);
-    expect(find.text('Fictional educational dataset'), findsOneWidget);
+    expect(find.text('Fictional educational dataset'), findsNothing);
     expect(find.text('Sample Member'), findsOneWidget);
 
     await tester.tap(find.text('Review').last);
@@ -376,7 +410,10 @@ void main() {
     await tester.pumpWidget(MaterialApp(
         home: Scaffold(
             body: RecommendationQueuePanel(
-                trainer: true, repository: h.repository, clock: () => now))));
+                trainer: true,
+                internalMaintenance: true,
+                repository: h.repository,
+                clock: () => now))));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Queue maintenance'));
     await tester.pumpAndSettle();
@@ -400,7 +437,8 @@ void main() {
             .widget<OutlinedButton>(find
                 .ancestor(
                     of: find.text('Refresh queue'),
-                    matching: find.byWidgetPredicate((w) => w is OutlinedButton))
+                    matching:
+                        find.byWidgetPredicate((w) => w is OutlinedButton))
                 .first)
             .onPressed,
         isNull);
@@ -463,7 +501,8 @@ void main() {
       expect(find.text('Send'), findsNothing);
     });
   }
-  testWidgets('mock semantic provider is labeled explicitly in current details',
+  testWidgets(
+      'ranking source stays friendly and provider identity remains in technical details',
       (tester) async {
     final detail = queueLead();
     (detail['ranking'] as Map)['model'] = 'gainpath-demo-structured-mock-v1';
@@ -472,9 +511,16 @@ void main() {
     await show(tester, h);
     await tester.tap(find.text('Review').last);
     await tester.pumpAndSettle();
-    expect(
-        find.text('Rule-based relevance · educational review'), findsOneWidget);
+    expect(find.text('Matched using your gym recommendation criteria'),
+        findsOneWidget);
     expect(find.textContaining('AI-assisted ranking'), findsNothing);
+    expect(
+        find.textContaining('gainpath-demo-structured-mock-v1').hitTestable(),
+        findsNothing);
+    await tester.tap(find.text('Technical Details'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('gainpath-demo-structured-mock-v1'),
+        findsOneWidget);
   });
   testWidgets(
       'generation explains insufficient evidence without exposing internal reason codes',
@@ -500,6 +546,7 @@ void main() {
     await show(tester, h);
     expect(find.textContaining('No eligible candidates: 1'), findsOneWidget);
     expect(find.text('Permission withdrawn'), findsOneWidget);
-    expect(find.text('Recommendation queue could not be loaded. Retry.'), findsNothing);
+    expect(find.text('Recommendation queue could not be loaded. Retry.'),
+        findsNothing);
   });
 }

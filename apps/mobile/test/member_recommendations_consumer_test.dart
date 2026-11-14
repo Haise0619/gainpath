@@ -1,3 +1,4 @@
+import 'package:gainpath_mobile/features/recommendation/presentation/member/recommendation_presentation_copy.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -25,6 +26,23 @@ Map<String, Object?> page(Map<String, Object?> detail) => {
       'nextAfterId': null,
     };
 void main() {
+  test('legacy ranking reasons use exercise context and preserve useful goals',
+      () {
+    const source =
+        'Reviewed educational mapping supports the selected learning objective.';
+    expect(recommendationPresentationReason(source, 'Squat'),
+        'Guidance for your Squat practice.');
+    expect(source,
+        'Reviewed educational mapping supports the selected learning objective.');
+    expect(
+        recommendationPresentationReason(
+            'Build confidence with your strength goal.', 'Squat'),
+        'Build confidence with your strength goal.');
+    expect(
+        recommendationPresentationReason(
+            'Deterministic eligible candidate order', null),
+        'Guidance for your exercise practice.');
+  });
   setUpAll(() => GoogleFonts.config.allowRuntimeFetching = false);
   test('disabled client never calls Firebase or seeds recommendations',
       () async {

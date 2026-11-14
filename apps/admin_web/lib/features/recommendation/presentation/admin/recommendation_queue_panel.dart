@@ -1,3 +1,4 @@
+import 'recommendation_presentation_copy.dart';
 import 'package:flutter/material.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
 import '../../application/recommendation_queue.dart';
@@ -8,9 +9,13 @@ class RecommendationQueuePanel extends StatefulWidget {
       {super.key,
       this.trainer = false,
       this.history = false,
+      this.internalMaintenance = false,
       this.repository,
       this.clock});
   final bool trainer, history;
+
+  /// Internal diagnostics only; normal screens never expose generation.
+  final bool internalMaintenance;
   final RecommendationQueueRepository? repository;
   final DateTime Function()? clock;
   @override
@@ -389,12 +394,13 @@ class _RecommendationQueuePanelState extends State<RecommendationQueuePanel> {
                               style: Theme.of(ctx).textTheme.titleMedium),
                           ...lead.explanations.map((e) => Padding(
                               padding: const EdgeInsets.only(top: 4),
-                              child: Text(e))),
+                              child: Text(recommendationPresentationReason(
+                                  e, lead.exerciseLabel)))),
                           const SizedBox(height: 12),
                           Text(_origin(lead)),
                           if (lead.origin == 'deterministic_fallback')
                             const Text(
-                                'AI ranking was unavailable or not accepted. The eligible deterministic order was retained.'),
+                                'Additional ranking was unavailable. This suggestion uses the eligible options matched to the Member.'),
                           ExpansionTile(
                               tilePadding: EdgeInsets.zero,
                               title: const Text('Technical Details'),
@@ -474,7 +480,7 @@ class _RecommendationQueuePanelState extends State<RecommendationQueuePanel> {
                             const SizedBox(height: 12),
                             Text(action == 'send'
                                 ? _sendsToFictionalInbox
-                                    ? 'Confirm Send prepares and delivers this recommendation to the fictional Member inbox through the protected dataset service.'
+                                    ? 'Confirm Send prepares and delivers this recommendation to the Member inbox through the protected delivery service.'
                                     : 'Confirm Send prepares this recommendation. No notification is sent by this confirmation; delivery is a separate checked operation.'
                                 : 'Record a meaningful reason for this Admin decision. It will be retained in the local queue history.'),
                             if (action == 'dismiss')
@@ -592,7 +598,7 @@ class _RecommendationQueuePanelState extends State<RecommendationQueuePanel> {
       if (receipt != null) {
         _notice = receipt.outcome == 'prepared'
             ? _sendsToFictionalInbox
-                ? 'Prepared for the fictional Member inbox. Delivery must be verified separately.'
+                ? 'Prepared for the Member inbox. Delivery must be verified separately.'
                 : 'Prepared locally. No notification or Member inbox delivery occurred.'
             : receipt.outcome == 'dismissed'
                 ? 'Dismissed. The decision is retained in local queue history.'
@@ -604,13 +610,13 @@ class _RecommendationQueuePanelState extends State<RecommendationQueuePanel> {
 
   String _origin(RecommendationLead lead) =>
       lead.model == 'gainpath-demo-structured-mock-v1'
-          ? 'Rule-based relevance · educational review'
+          ? 'Matched using your gym recommendation criteria'
           : switch (lead.origin) {
               'ai_reranked' =>
                 'AI-assisted ranking · reviewed eligible candidates',
               'deterministic_single_candidate' =>
                 'One eligible candidate · AI ranking not needed',
-              _ => 'Deterministic fallback · eligible candidate order'
+              _ => 'Matched using available exercise and profile information'
             };
   Widget _select(
           String key,
@@ -652,7 +658,8 @@ class _RecommendationQueuePanelState extends State<RecommendationQueuePanel> {
         child: const Text('Review'));
     final reason = lead.explanations.isEmpty
         ? queueObjectiveLabel(lead.objective)
-        : lead.explanations.first;
+        : recommendationPresentationReason(
+            lead.explanations.first, lead.exerciseLabel);
     if (wide) {
       return Container(
           padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
@@ -708,9 +715,6 @@ class _RecommendationQueuePanelState extends State<RecommendationQueuePanel> {
                 16, constraints.maxWidth < 600 ? 16 : 20, 32),
             child:
                 Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              if (_repo.fixtureOnly)
-                const Text('Fictional educational dataset',
-                    style: TextStyle(fontWeight: FontWeight.w600)),
               if (_readOnly)
                 const Text(
                     'Read-only · You can review suggestions and history. Approval is unavailable for this account.'),
@@ -810,7 +814,7 @@ class _RecommendationQueuePanelState extends State<RecommendationQueuePanel> {
                         .textTheme
                         .bodyMedium
                         ?.copyWith(fontSize: 12)),
-                if (!_readOnly)
+                if (widget.internalMaintenance && !_readOnly)
                   ExpansionTile(
                       tilePadding: EdgeInsets.zero,
                       title: const Text('Queue maintenance'),

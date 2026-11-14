@@ -54,8 +54,7 @@ Widget buildBookingListContent(
             : () => FirebaseBookingPaymentRepository(
                 scope: session.scope, isCurrent: current),
         loadCoachName: (id) async =>
-            (await FirebaseCoachDirectoryRepository(scope: session.scope, isCurrent: current)
-                    .loadPublished(id))
+            (await FirebaseCoachDirectoryRepository(scope: session.scope, isCurrent: current).loadPublished(id))
                 ?.fields
                 .displayName,
         loadCoachProfile: (id) =>
@@ -99,6 +98,7 @@ Future<void> openMemberBooking(
               builder: (routeContext, current) {
                 final services = (factory ?? _services)(session.scope, current);
                 return LiveMemberBookingView(
+                    checkoutEnabled: session.datasetScope == null,
                     cancellation: factory == null
                         ? FirebaseBookingRepository(
                             scope: session.scope, isCurrent: current)

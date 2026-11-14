@@ -1,3 +1,4 @@
+import 'recommendation_presentation_copy.dart';
 import 'package:flutter/material.dart';
 import 'package:gainpath_domain/coaching.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
@@ -181,11 +182,6 @@ class _RecommendationsState extends State<MemberRecommendationsView> {
                   style: text.titleLarge)),
           _headerAction(),
         ]),
-      if (widget.repository.fixtureOnly)
-        const Padding(
-            padding: EdgeInsets.only(bottom: 8),
-            child: Text('Fictional demonstration data',
-                style: TextStyle(color: AppColors.inkSoft, fontSize: 12))),
       if (!widget.compact) ...[
         const SizedBox(height: 12),
         Wrap(spacing: 8, children: [
@@ -381,7 +377,11 @@ class RecommendationCard extends StatelessWidget {
 }
 
 String recommendationFriendlyReason(MemberRecommendationDetail detail) =>
-    detail.explanations.isNotEmpty ? detail.explanations.first : detail.summary;
+    recommendationPresentationReason(
+        detail.explanations.isNotEmpty
+            ? detail.explanations.first
+            : detail.summary,
+        detail.exerciseLabel);
 
 String recommendationStateLabel(MemberRecommendationState state) =>
     switch (state) {

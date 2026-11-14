@@ -141,6 +141,29 @@ Future<void> selection(WidgetTester tester, SelectionOptions options,
 
 void main() {
   testWidgets(
+      'unavailable checkout still shows session dates without financial requests',
+      (tester) async {
+    final payments = SelectionPayments(), writer = Writer();
+    await tester.pumpWidget(MaterialApp(
+        home: BookSessionScreen(
+            options: SelectionOptions(),
+            writer: writer,
+            payments: payments,
+            coachId: 'coach',
+            isCurrent: () => true,
+            onOpenBookings: () {},
+            checkoutEnabled: false)));
+    await tester.pumpAndSettle();
+    expect(find.text('Book a session'), findsOneWidget);
+    expect(find.text('Online booking unavailable'), findsOneWidget);
+    expect(find.textContaining('Explore available sessions'), findsOneWidget);
+    expect(payments.quoteCalls, 0);
+    expect(writer.requests, isEmpty);
+    final button = tester.widget<FilledButton>(
+        find.widgetWithText(FilledButton, 'Online booking unavailable'));
+    expect(button.onPressed, isNull);
+  });
+  testWidgets(
       'uncertain reservation keeps review retry reachable and blocks toolbar back',
       (tester) async {
     final writer = Writer();

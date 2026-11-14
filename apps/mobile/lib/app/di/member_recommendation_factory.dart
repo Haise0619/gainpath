@@ -184,7 +184,7 @@ class _RecommendationHostState extends State<MemberRecommendationHost> {
         bookingFactory: widget.bookingFactory,
         bookingListFactory: widget.bookingListFactory,
         availabilityFactory: widget.availabilityFactory,
-        bookingNavigationEnabled: session.datasetScope == null);
+        bookingNavigationEnabled: true);
   }
 
   void _openAll() {

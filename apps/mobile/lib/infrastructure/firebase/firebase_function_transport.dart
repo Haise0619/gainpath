@@ -17,9 +17,11 @@ HttpsCallable firebaseCallable(
   if (name == 'fypDatasetCommand' || name == 'fypDatasetSessionCommand') {
     final client = FirebaseFunctions.instanceFor(region: 'asia-southeast1');
     if (const bool.fromEnvironment('USE_FIREBASE_EMULATORS')) {
-      client.useFunctionsEmulator(const String.fromEnvironment('FIREBASE_EMULATOR_HOST',
-        defaultValue: '10.0.2.2'),
-        const int.fromEnvironment('FIREBASE_FUNCTIONS_EMULATOR_PORT', defaultValue: 5001));
+      client.useFunctionsEmulator(
+          const String.fromEnvironment('FIREBASE_EMULATOR_HOST',
+              defaultValue: '10.0.2.2'),
+          const int.fromEnvironment('FIREBASE_FUNCTIONS_EMULATOR_PORT',
+              defaultValue: 5001));
     }
     return client.httpsCallable(name, options: options);
   }
@@ -68,11 +70,16 @@ class ScopedFirebaseCallable {
   final HttpsCallableOptions? options;
   Future<ScopedCallableResult<T>> call<T>([Object? parameters]) async {
     final operation = fypScopedOperations[name];
-    if (scope.datasetScope == null || operation == null) {
+    if (scope.datasetScope == null) {
       final response =
           await firebaseCallable(name, functions: functions, options: options)
               .call<T>(parameters);
       return ScopedCallableResult(response.data);
+    }
+    if (operation == null) {
+      throw FirebaseFunctionsException(
+          code: 'failed-precondition',
+          message: 'This action is unavailable for this account.');
     }
     if (parameters is! Map ||
         parameters.keys.any((k) => k is! String) ||

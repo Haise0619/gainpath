@@ -36,10 +36,28 @@ void main() {
         tester.widgetList<SwitchListTile>(find.byType(SwitchListTile)).toList();
     expect(switches.length, 4);
     expect(switches.every((s) => !s.value && s.onChanged == null), isTrue);
-    expect(
-        find.textContaining('Each choice is optional'), findsOneWidget);
+    expect(find.textContaining('Each choice is optional'), findsOneWidget);
   });
 
+  testWidgets(
+      'dataset notice uses account history wording while retaining notice identity',
+      (tester) async {
+    final repo = RpcRecommendationConsentRepository(
+        scope: consentScope,
+        isCurrent: () => true,
+        read: (_) async => consentWire(),
+        command: (_) async => throw StateError('No mutation expected'));
+    await show(tester, repository: repo);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Privacy details'));
+    await tester.pumpAndSettle();
+    expect(
+        find.text(
+            'Use the assessment history available for your account to suggest relevant guidance.'),
+        findsOneWidget);
+    expect(find.text(consentNotice.historyDescription), findsNothing);
+    expect(find.textContaining(consentNotice.noticeVersion), findsWidgets);
+  });
   testWidgets('Privacy and Data opens only the disabled review preview',
       (tester) async {
     await tester.pumpWidget(MaterialApp(

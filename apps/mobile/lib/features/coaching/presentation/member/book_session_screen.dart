@@ -19,6 +19,7 @@ import 'widgets/booking_selection_page.dart';
 /// over one shared list, not separate data.
 class BookSessionScreen extends StatefulWidget {
   final BookingSuggestionAttachment? suggestion;
+  final bool checkoutEnabled;
   final Coach? coach;
   final BookingPaymentRepository? payments;
   final persisted.BookingCancellationRepository? cancellation;
@@ -37,7 +38,8 @@ class BookSessionScreen extends StatefulWidget {
       this.coachId,
       this.isCurrent,
       this.onOpenBookings,
-      this.suggestion});
+      this.suggestion,
+      this.checkoutEnabled = true});
 
   @override
   State<BookSessionScreen> createState() => _BookSessionScreenState();
@@ -54,6 +56,7 @@ class _BookSessionScreenState extends State<BookSessionScreen> {
     if (widget.options != null) {
       return MemberBookingFlow(
           options: widget.options!,
+          checkoutEnabled: widget.checkoutEnabled,
           writer: widget.writer!,
           payments: widget.payments,
           cancellation: widget.cancellation,

@@ -144,7 +144,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(actions, ['get', 'read']);
     expect(find.text('Acknowledged'), findsNothing);
-    expect(find.text('Fictional demonstration data'), findsOneWidget);
+    expect(find.text('Fictional demonstration data'), findsNothing);
     expect(find.text('r1'), findsNothing);
     expect(find.text('c1'), findsNothing);
     await tester.ensureVisible(find.text('Acknowledge'));

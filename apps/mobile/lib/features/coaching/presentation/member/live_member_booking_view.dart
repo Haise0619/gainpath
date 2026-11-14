@@ -13,9 +13,11 @@ class LiveMemberBookingView extends StatelessWidget {
       this.payments,
       this.cancellation,
       this.suggestion,
+      this.checkoutEnabled = true,
       required this.coachId,
       required this.isCurrent,
       required this.onOpenBookings});
+  final bool checkoutEnabled;
   final MemberBookingOptionsRepository options;
   final BookingRepository writer;
   final BookingPaymentRepository? payments;
@@ -27,6 +29,7 @@ class LiveMemberBookingView extends StatelessWidget {
   @override
   Widget build(BuildContext context) => BookSessionScreen(
       options: options,
+      checkoutEnabled: checkoutEnabled,
       writer: writer,
       payments: payments,
       cancellation: cancellation,

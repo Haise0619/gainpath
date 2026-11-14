@@ -1,0 +1,452 @@
+{
+  "date": "2026-11-14",
+  "projectId": "gainpath-0619",
+  "databaseId": "(default)",
+  "scope": "orgs/gainpath/cohorts/fyp-v1",
+  "baselineCommit": "57c2732",
+  "sourcePlan": {
+    "anchorMillis": 1794614400000,
+    "digest": "423956efc4bfb535e2a416a5084455905ca1f640130742dadf6d490d79d3e009"
+  },
+  "liveSeedValidated": true,
+  "idempotentApply": true,
+  "newSyntheticObservations": 52,
+  "newAvailabilityDays": 24,
+  "reusedAuthAccounts": 27,
+  "approvedPasswordResets": [
+    "demo-m13-admin",
+    "demo-m13-member-01"
+  ],
+  "otherAuthAccountsChanged": 0,
+  "generation": [
+    {
+      "kind": "content",
+      "summary": {
+        "runId": "e2eba9e16be004391372ddb503390181c28836c88d540dbdd39f55a6e6267f89",
+        "kind": "content",
+        "status": "complete",
+        "processed": 18,
+        "candidateCount": 24,
+        "generated": 7,
+        "abstained": 11,
+        "fallbackCount": 1,
+        "nextCursor": null,
+        "failureCode": null,
+        "algorithmVersion": "experimental-40-baseline-60-semantic-v1",
+        "model": "gainpath-demo-structured-mock-v1",
+        "updatedAtMillis": 1794642133053,
+        "abstentionReasons": {
+          "insufficient_evidence": 6,
+          "unsupported_evidence": 1,
+          "missing_consent": 4,
+          "no_eligible_candidates": 0,
+          "semantic_abstention": 0
+        }
+      }
+    },
+    {
+      "kind": "trainer",
+      "summary": {
+        "runId": "0f7c437de6b9e6a590eed734fcd888a007023eb25d1f71dbbe9fb67fe7626b79",
+        "kind": "trainer",
+        "status": "complete",
+        "processed": 18,
+        "candidateCount": 22,
+        "generated": 7,
+        "abstained": 11,
+        "fallbackCount": 1,
+        "nextCursor": null,
+        "failureCode": null,
+        "algorithmVersion": "experimental-40-baseline-60-semantic-v1",
+        "model": "gainpath-demo-structured-mock-v1",
+        "updatedAtMillis": 1794642294579,
+        "abstentionReasons": {
+          "insufficient_evidence": 6,
+          "unsupported_evidence": 1,
+          "missing_consent": 4,
+          "no_eligible_candidates": 0,
+          "semantic_abstention": 0
+        }
+      }
+    }
+  ],
+  "walkthrough": {
+    "at": "2026-11-14T07:48:25.853Z",
+    "projectId": "gainpath-0619",
+    "rootPath": "orgs/gainpath/cohorts/fyp-v1",
+    "mode": "walkthrough",
+    "realAuth": true,
+    "authMethod": "Firebase email/password login for two explicitly approved sample actors",
+    "passwordsChanged": true,
+    "realAppCheck": true,
+    "syntheticEvidenceOnly": true,
+    "geminiRequests": 0,
+    "ordinaryPolicyActivation": false,
+    "operations": [
+      {
+        "uid": "demo-m13-admin",
+        "operation": "admin.queue.list"
+      },
+      {
+        "uid": "demo-m13-admin",
+        "operation": "admin.queue.list"
+      },
+      {
+        "uid": "demo-m13-admin",
+        "operation": "admin.queue.decide"
+      },
+      {
+        "uid": "demo-m13-admin",
+        "operation": "admin.queue.decide"
+      },
+      {
+        "uid": "demo-m13-member-01",
+        "operation": "member.recommendation.command"
+      },
+      {
+        "uid": "demo-m13-member-01",
+        "operation": "member.routine"
+      },
+      {
+        "uid": "demo-m13-member-01",
+        "operation": "module/module9MemberCommandCallable"
+      },
+      {
+        "uid": "demo-m13-member-01",
+        "operation": "member.recommendation.command"
+      },
+      {
+        "uid": "demo-m13-admin",
+        "operation": "admin.queue.decide"
+      },
+      {
+        "uid": "demo-m13-admin",
+        "operation": "admin.queue.decide"
+      },
+      {
+        "uid": "demo-m13-member-01",
+        "operation": "member.recommendation.command"
+      },
+      {
+        "uid": "demo-m13-member-01",
+        "operation": "member.coach"
+      },
+      {
+        "uid": "demo-m13-member-01",
+        "operation": "module/module9MemberCommandCallable"
+      },
+      {
+        "uid": "demo-m13-member-01",
+        "operation": "member.recommendation.command"
+      },
+      {
+        "uid": "demo-m13-admin",
+        "operation": "admin.queue.decide"
+      },
+      {
+        "uid": "demo-m13-admin",
+        "operation": "admin.queue.decide"
+      },
+      {
+        "uid": "demo-m13-member-01",
+        "operation": "member.recommendation.command"
+      },
+      {
+        "uid": "demo-m13-member-01",
+        "operation": "member.recommendation.command"
+      },
+      {
+        "uid": "demo-m13-member-01",
+        "operation": "member.recommendation.command"
+      }
+    ],
+    "results": [
+      {
+        "kind": "content",
+        "total": 13,
+        "pending": 7,
+        "statuses": [
+          {
+            "leadId": "06538ffd7c849d6fe6a7dc6cd8a99927e747ec69fd4f7f15550df9022656eca8",
+            "memberId": "demo-m13-member-03",
+            "status": "pending",
+            "model": null,
+            "origin": "deterministic_fallback"
+          },
+          {
+            "leadId": "1f6ca32116ce0b379e5c2b5d552007ad0c010fd0c70a28fc7133f9470c8fdca2",
+            "memberId": "demo-m13-member-06",
+            "status": "pending",
+            "model": "gainpath-demo-structured-mock-v1",
+            "origin": "ai_reranked"
+          },
+          {
+            "leadId": "2acdb8c2ccc9261e2620f289a954b5eeeee9b1f9e07f188668e26b254a31aa9d",
+            "memberId": "demo-m13-member-04",
+            "status": "pending",
+            "model": "gainpath-demo-structured-mock-v1",
+            "origin": "ai_reranked"
+          },
+          {
+            "leadId": "3ac823157e3833f884196c722831ae4562197a3cf41925ee305a27e3dbde14fd",
+            "memberId": "demo-m13-member-06",
+            "status": "expired",
+            "model": "gainpath-demo-structured-mock-v1",
+            "origin": "ai_reranked"
+          },
+          {
+            "leadId": "3c8c03ceaf389287b93640ddaeb60fbba1b73b6e77eaacebf19c542b992b777f",
+            "memberId": "demo-m13-member-03",
+            "status": "expired",
+            "model": null,
+            "origin": "deterministic_fallback"
+          },
+          {
+            "leadId": "5ce1033e506b63e4293f7597addf21dd5a53b1313abc2a3ff06cf8062e028924",
+            "memberId": "demo-m13-member-02",
+            "status": "sent",
+            "model": "gainpath-demo-structured-mock-v1",
+            "origin": "ai_reranked"
+          },
+          {
+            "leadId": "7ff948447198c61b09269fe8700d1f3bffcf7f871ccd5353e19ab7cfa4b0f6f5",
+            "memberId": "demo-m13-member-01",
+            "status": "pending",
+            "model": "gainpath-demo-structured-mock-v1",
+            "origin": "ai_reranked"
+          },
+          {
+            "leadId": "c0f78519a6f567810bc9994b43e8d201315d5654d3fa92ffd1814df07c27619f",
+            "memberId": "demo-m13-member-02",
+            "status": "pending",
+            "model": "gainpath-demo-structured-mock-v1",
+            "origin": "ai_reranked"
+          },
+          {
+            "leadId": "d62c141a75ee361e165701286ea314f90f2564da52f7140ab0716a70a1157ee5",
+            "memberId": "demo-m13-member-05",
+            "status": "pending",
+            "model": "gainpath-demo-structured-mock-v1",
+            "origin": "ai_reranked"
+          },
+          {
+            "leadId": "dc491b809bda7f05cecf08eba6c393a562ed974023961d24d35bb6bd912b1bef",
+            "memberId": "demo-m13-member-01",
+            "status": "sent",
+            "model": "gainpath-demo-structured-mock-v1",
+            "origin": "ai_reranked"
+          },
+          {
+            "leadId": "dd5d263897bb34ef95751f19b3269bff6b80a7b4b080daeb0cbd9fed7b842e1d",
+            "memberId": "demo-m13-member-04",
+            "status": "expired",
+            "model": "gainpath-demo-structured-mock-v1",
+            "origin": "ai_reranked"
+          },
+          {
+            "leadId": "eb9556b26fd652989408fae2acb9ee96e96b702a0c881aa613ebe4f79ff826bc",
+            "memberId": "demo-m13-member-05",
+            "status": "expired",
+            "model": "gainpath-demo-structured-mock-v1",
+            "origin": "ai_reranked"
+          },
+          {
+            "leadId": "f0c06eb7b796406dd69de16b0e7af7d9821ebab177cafa7508b539bcd767140f",
+            "memberId": "demo-m13-member-17",
+            "status": "pending",
+            "model": "gainpath-demo-structured-mock-v1",
+            "origin": "ai_reranked"
+          }
+        ]
+      },
+      {
+        "kind": "trainer",
+        "total": 13,
+        "pending": 7,
+        "statuses": [
+          {
+            "leadId": "08d52f02d6d07b59d7c1f922f567362c4a7c79b51d52434543ecfce38fd70352",
+            "memberId": "demo-m13-member-03",
+            "status": "expired",
+            "model": null,
+            "origin": "deterministic_fallback"
+          },
+          {
+            "leadId": "0c4266c2859a9d12dc35c93ba4cc63b87dd9eb2a3892ec2112296589936aeb18",
+            "memberId": "demo-m13-member-02",
+            "status": "sent",
+            "model": "gainpath-demo-structured-mock-v1",
+            "origin": "ai_reranked"
+          },
+          {
+            "leadId": "3e51ddead6c15641f8b82009ead14ac3eb58f8836685e86368b75df6d971c57a",
+            "memberId": "demo-m13-member-05",
+            "status": "pending",
+            "model": "gainpath-demo-structured-mock-v1",
+            "origin": "ai_reranked"
+          },
+          {
+            "leadId": "57dff7795403b5476163bc3de50848ae3c4f720efbd8998a60e4f693ace92c0f",
+            "memberId": "demo-m13-member-03",
+            "status": "pending",
+            "model": null,
+            "origin": "deterministic_fallback"
+          },
+          {
+            "leadId": "5c826f27ee08024df2390c8986e7621fc526bd3225cb80592ba62249ab6813a3",
+            "memberId": "demo-m13-member-06",
+            "status": "pending",
+            "model": "gainpath-demo-structured-mock-v1",
+            "origin": "ai_reranked"
+          },
+          {
+            "leadId": "5f0129265d870e74816cc3cb7a4028ce5e642f88527e9a4cbda9ba9ba66adbfb",
+            "memberId": "demo-m13-member-02",
+            "status": "pending",
+            "model": "gainpath-demo-structured-mock-v1",
+            "origin": "ai_reranked"
+          },
+          {
+            "leadId": "685fe430cd882f3cb378983f159a317e991b100ffd7608cf4a83609f710e4f21",
+            "memberId": "demo-m13-member-04",
+            "status": "pending",
+            "model": "gainpath-demo-structured-mock-v1",
+            "origin": "ai_reranked"
+          },
+          {
+            "leadId": "6ec5f01315e827d76645f01ea5ed8c473588418387f2915beb167c222d09ea6f",
+            "memberId": "demo-m13-member-05",
+            "status": "expired",
+            "model": "gainpath-demo-structured-mock-v1",
+            "origin": "ai_reranked"
+          },
+          {
+            "leadId": "79c20ee1f46bd126198e85bcce913dbdb2c7eec59fb14311cb23df85457d3ee6",
+            "memberId": "demo-m13-member-17",
+            "status": "pending",
+            "model": "gainpath-demo-structured-mock-v1",
+            "origin": "ai_reranked"
+          },
+          {
+            "leadId": "94f659c0d62243a495fc1538150148e7803834cf9ad418998cd853ac4419a963",
+            "memberId": "demo-m13-member-06",
+            "status": "expired",
+            "model": "gainpath-demo-structured-mock-v1",
+            "origin": "ai_reranked"
+          },
+          {
+            "leadId": "9925a807ef3eac632c9372f2344977674663e918f85aa6caa6c4979b1c0b780b",
+            "memberId": "demo-m13-member-01",
+            "status": "pending",
+            "model": "gainpath-demo-structured-mock-v1",
+            "origin": "ai_reranked"
+          },
+          {
+            "leadId": "9cebf225a633be98a2167c26040ff90ee0f8c561f6fb97ee091fc5b75b473ea6",
+            "memberId": "demo-m13-member-04",
+            "status": "expired",
+            "model": "gainpath-demo-structured-mock-v1",
+            "origin": "ai_reranked"
+          },
+          {
+            "leadId": "f3b7219cafcc4be2a0a56b512a4fda28f133b8ca6b9ce2db6a75efe37cbc6b2f",
+            "memberId": "demo-m13-member-01",
+            "status": "sent",
+            "model": "gainpath-demo-structured-mock-v1",
+            "origin": "ai_reranked"
+          }
+        ]
+      },
+      {
+        "leadId": "7ff948447198c61b09269fe8700d1f3bffcf7f871ccd5353e19ab7cfa4b0f6f5",
+        "recommendationId": "ed942d9bf8e39ce74586fb7335a01cb18ec2bb73624c8cb8ba7bf1fc181ed61e",
+        "memberId": "demo-m13-member-01",
+        "kind": "content",
+        "delivered": true,
+        "currentDestination": true,
+        "peerDenied": true
+      },
+      {
+        "leadId": "9925a807ef3eac632c9372f2344977674663e918f85aa6caa6c4979b1c0b780b",
+        "recommendationId": "aa434f25c5099201783dd866b4f703d0ef42b4051c3cb9f6da8dfebe3d40a720",
+        "memberId": "demo-m13-member-01",
+        "kind": "trainer",
+        "delivered": true,
+        "currentDestination": true,
+        "peerDenied": true
+      }
+    ],
+    "memberId": "demo-m13-member-01",
+    "adminDismissal": true,
+    "memberDismissal": true,
+    "passed": true
+  },
+  "read": {
+    "passed": true,
+    "memberId": "demo-m13-member-01",
+    "recommendationId": "aa434f25c5099201783dd866b4f703d0ef42b4051c3cb9f6da8dfebe3d40a720",
+    "read": true,
+    "acknowledged": false,
+    "booked": false,
+    "replayEqual": true
+  },
+  "bookingOptions": {
+    "realAuth": true,
+    "memberId": "demo-m13-member-01",
+    "coachId": "demo-m13-coach-02",
+    "localDate": "2026-11-15",
+    "availableOptions": 7,
+    "readOnly": true,
+    "bookingsCreated": 0,
+    "paymentCalls": 0
+  },
+  "renders": {
+    "admin": {
+      "actualRows": {
+        "content": 5,
+        "trainer": 6
+      },
+      "readRequests": 4
+    },
+    "member": {
+      "actualDeliveredRows": 1,
+      "readRequests": 5
+    }
+  },
+  "verification": {
+    "backendUnit": 2165,
+    "seedOperator": 5,
+    "fypEmulator": 31,
+    "fypEmulatorSkipped": 1,
+    "mobileRegression": 87,
+    "adminRegression": 39,
+    "liveFlutterRenderTests": 2,
+    "androidDebug": true,
+    "adminRelease": true,
+    "generatedLiveImages": 26,
+    "visualReview": "Representative desktop, narrow and large-text screenshots inspected"
+  },
+  "deployed": {
+    "functions": false,
+    "rules": false,
+    "ordinaryWorkoutPoliciesActivated": false,
+    "billableGeminiCalls": 0
+  },
+  "preparedFunctionZip": {
+    "path": "build/module13-presentation/fyp-function-prepared.zip",
+    "sha256": "0dcc3e7e3c5da54903b9db4a1453c871a29a31dd539e888f14e7026c23d4785b"
+  },
+  "artifacts": {
+    "androidApkSha256": "c83f1a07db34a7835b79137d30075a61bb32f9e7d790296bc6492255a18d46d0",
+    "adminMainDartJsSha256": "e97b640a631d41f518ada3dbf023460ae7272de8d982bf401ca96faab638abdb",
+    "privatePreviewMatchesBuild": true,
+    "privatePreview": "http://localhost:7364/"
+  },
+  "limits": [
+    "Live FYP deployed ranking remains historical40/60 structured fixture ranking; prepared source is deterministic by default with optional bounded assistant.",
+    "Actual-camera ordinary recommendation admission remains disabled.",
+    "Browser CUA stopped because it could not reliably determine current Windows browser URL.",
+    "Screenshots are actual Flutter widgets supplied by real authenticated Firebase reads, not whole-browser/device acceptance.",
+    "FYP booking reads available; new holds and payments remain unavailable in that scope."
+  ]
+}
