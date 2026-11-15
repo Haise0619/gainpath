@@ -103,6 +103,31 @@ describe('bounded recommendation pages and merged history API', () => {
 });
 
 describe('automatic workout guidance', () => {
+  it('automatically delivers published routine_v2 tutorials and revalidates withdrawal',async()=>{
+    const f=fixture();
+    for(const difficulty of ['Beginner','Advanced']){
+      const publication=f.store.documents.get(root+'/content/'+difficulty)!;
+      f.store.documents.set(root+'/content/'+difficulty,{...publication,schemaVersion:2,kind:'routine_v2'});
+    }
+    const key=f.add('v2-workout',null),[id]=await f.deliver(key);
+    expect(id).toBeTruthy();
+    expect(await f.lifecycle.member(auth,org,id,'resolve',null,null)).toMatchObject({
+      kind:'content',state:'available',targetLabel:'Beginner Squat',
+      target:{destination:{routineId:'Beginner',exerciseId:DEMO_EXERCISES.squat,exerciseIndex:0,dayNumber:1}},
+    });
+    expect(await f.deliver(key)).toEqual([]);
+    f.store.documents.get(root+'/content/Beginner')!.status='draft';
+    expect(await f.lifecycle.member(auth,org,id,'resolve',null,null)).toMatchObject({state:'unavailable',target:null});
+  });
+  it.each([{schemaVersion:1},{schemaVersion:99},{status:'draft'},{archived:true},{isActive:false}])(
+    'excludes malformed or withdrawn v2 tutorials %j',async flags=>{
+      const f=fixture();
+      for(const difficulty of ['Beginner','Advanced']){
+        const publication=f.store.documents.get(root+'/content/'+difficulty)!;
+        f.store.documents.set(root+'/content/'+difficulty,{...publication,schemaVersion:2,kind:'routine_v2',...flags});
+      }
+      expect(await f.deliver(f.add('invalid-v2',null))).toEqual([]);
+    });
   it('offers an available verified goal-matched Coach after repeated practice and revalidates credentials',async()=>{
     const f=fixture(async()=>true),seed=await buildModule13DemoDataset({nowMillis:now});
     for(const [path,data] of Object.entries(seed.documents)) {

@@ -1,5 +1,12 @@
 import { DomainError } from '../../platform/errors';
 
+/** Both published content contracts expose a flat instructional exercise list.
+ * Legacy routine reads retain their existing compatibility; v2 requires its
+ * explicit schema. Publication/activity and exact target checks stay at callers. */
+export function supportsRoutineTutorial(source: Record<string, unknown>|undefined): boolean {
+  return source?.kind === 'routine' || source?.kind === 'routine_v2' && source.schemaVersion === 2;
+}
+
 function imageUrl(value: unknown): string | undefined {
   if (typeof value !== 'string') return undefined;
   const text = value.trim();

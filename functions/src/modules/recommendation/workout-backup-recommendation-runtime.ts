@@ -5,7 +5,7 @@ import { getAuth } from 'firebase-admin/auth';
 import type { TransactionPort } from '../../platform/firestore/store';
 import { DomainError } from '../../platform/errors';
 import { digestOf, object, validateBackupPayload, validateFictionalSessionPayload } from '../workouts/workout-backup-validation';
-import { exerciseTutorialProjection } from '../content/exercise-tutorial';
+import { exerciseTutorialProjection, supportsRoutineTutorial } from '../content/exercise-tutorial';
 import { tutorialMediaUrl } from '../content/tutorial-media';
 import { bookingCoachScope, bookingDaySnapshot, currentBookingMembership, currentBookingPolicy } from '../coaching/booking-validation';
 import { localDate, plusDate, SLOT } from '../coaching/coach-availability-contracts';
@@ -85,7 +85,7 @@ async function tutorial(tx: TransactionPort, org: string, target: Extract<QueueT
   const [publication, catalog] = await Promise.all([
     tx.get(`orgs/${org}/content/${d.routineId}`), tx.get(`orgs/${org}/exerciseVideos/${d.exerciseId}`),
   ]);
-  if (publication?.status !== 'published' || publication.kind !== 'routine' ||
+  if (publication?.status !== 'published' || !supportsRoutineTutorial(publication) ||
     publication.archived === true || publication.isActive === false ||
     catalog?.isActive !== true || catalog.archived === true || !Array.isArray(publication.exercises)) return null;
   const entry = publication.exercises[d.exerciseIndex];
@@ -206,7 +206,7 @@ export function createWorkoutBackupRuntime(db: Firestore, coachIsVerified: (uid:
       const tutorials: Awaited<ReturnType<typeof tutorial>>[] = [];
       for (const row of publications.docs) {
         const entries = row.data().exercises;
-        if (!identifier(row.id) || !Array.isArray(entries) || row.data().kind !== 'routine') continue;
+        if (!identifier(row.id) || !Array.isArray(entries) || !supportsRoutineTutorial(row.data())) continue;
         if (tutorials.length >= 20) break;
         for (const [index, entry] of entries.slice(0, 50).entries()) {
           if (tutorials.length >= 20) break;

@@ -22,6 +22,19 @@ it('resolves the exact current instructional tutorial and rejects changed or wit
   const id=f.lead.target.kind==='content'?f.lead.target.destination.routineId:'';
   f.store.documents.get(`orgs/synthetic-org/content/${id}`)!.status='draft';expect(await f.store.transact(tx=>f.resolve(tx,f.lead))).toBeNull();
 });
+it('supports v2 target metadata only behind the existing current eligibility check',async()=>{
+  const f=await fixture('content');
+  const id=f.lead.target.kind==='content'?f.lead.target.destination.routineId:'';
+  const publication=f.store.documents.get(`orgs/synthetic-org/content/${id}`)!;
+  Object.assign(publication,{kind:'routine_v2',schemaVersion:2});
+  const resolve=createCurrentRecommendationTargetResolver({revalidateEligibility:async()=> 'valid'});
+  expect(await f.store.transact(tx=>resolve(tx,f.lead))).toMatchObject({target:f.lead.target});
+  f.store.documents.get(`orgs/synthetic-org/content/${id}`)!.schemaVersion=1;
+  expect(await f.store.transact(tx=>resolve(tx,f.lead))).toBeNull();
+  f.store.documents.get(`orgs/synthetic-org/content/${id}`)!.schemaVersion=2;
+  const stale=createCurrentRecommendationTargetResolver({revalidateEligibility:async()=> 'stale'});
+  expect(await f.store.transact(tx=>stale(tx,f.lead))).toBeNull();
+});
 it('does not swallow source failures or resolve foreign organization targets',async()=>{
   const f=await fixture('content');await expect(f.store.transact(tx=>f.resolve(tx,{...f.lead,organizationId:'foreign'}))).rejects.toThrow();
   const resolve=createCurrentRecommendationTargetResolver({revalidateEligibility:async()=>{throw Error('private source error');}});

@@ -167,9 +167,10 @@ class RecommendationVideoPlayer extends TutorialPlayer {
 
 void main() {
   setUpAll(() => GoogleFonts.config.allowRuntimeFetching = false);
-  for (final content in [false, true]) {
+  for (final scenario in [(false, 1), (true, 1), (true, 2)]) {
+    final content = scenario.$1, version = scenario.$2;
     testWidgets(
-        'fresh ${content ? 'Tutorial' : 'Coach'} resolve opens actual existing widget without booking',
+        'fresh ${content ? 'Tutorial v$version' : 'Coach'} resolve opens actual existing widget without booking',
         (tester) async {
       final source = RecommendationTestAuth(routeMember);
       final auth = AuthBloc(repository: source);
@@ -186,6 +187,34 @@ void main() {
           });
       final directory = RecommendationDirectory(routeMember.scope),
           catalog = RecommendationCatalog(routeMember.scope);
+      if (content && version == 2) {
+        catalog.routine = PublishedRoutine.fromDocument('routine1', {
+          'schemaVersion': 2,
+          'kind': 'routine_v2',
+          'status': 'published',
+          'sourceBlueprintId': 'bp1',
+          'title': 'Current authored Routine',
+          'estimatedMinutes': 10,
+          'exercises': <Map<String, dynamic>>[
+            {
+              'entryId': 'squat-entry',
+              'executionMode': 'legacyManual',
+              'exerciseId': 'squat',
+              'dayNumber': 1,
+              'name': 'Current Squat Tutorial',
+              'sets': 3,
+              'reps': 8,
+              'restSeconds': 60,
+              'tutorialSteps': [
+                {
+                  'title': 'Start position',
+                  'description': 'Stand with feet comfortably apart.'
+                }
+              ],
+            }
+          ],
+        });
+      }
       final navigator = MemberRecommendationNavigator(
           session: routeMember,
           repository: repo,

@@ -280,7 +280,14 @@ it('ordinary authenticated Member backup event delivers, replays, dismisses and 
  // Explicit synthetic emulator inputs. This is not a camera or live account acceptance test.
  for(const collection of ['exerciseVideos','content']){
   const rows=await db.collection(`${FYP_ROOT}/${collection}`).get();
-  for(const row of rows.docs)await db.doc(`orgs/gainpath/${collection}/${row.id}`).set(row.data());
+  for(const row of rows.docs){
+   const data=row.data();
+   if(collection==='content'&&data.kind==='routine'){
+    await db.doc(`orgs/gainpath/content/routine_v2_${row.id}`).set({...data,schemaVersion:2,kind:'routine_v2',
+     sourceBlueprintId:row.id,exercises:data.exercises.map((entry:any,index:number)=>({...entry,
+      entryId:'entry-'+index,executionMode:'legacyManual'}))});
+   }else await db.doc(`orgs/gainpath/${collection}/${row.id}`).set(data);
+  }
  }
  const member=(operation:string,data:unknown)=>rawCall(uid,'module13MemberCommand',{schemaVersion:1,operation,data});
  const notice=await member('member.consent.notice',q());
@@ -302,6 +309,10 @@ it('ordinary authenticated Member backup event delivers, replays, dismisses and 
  }
  expect(rows).toHaveLength(1);const recommendation=rows[0];
  expect(recommendation).toMatchObject({mode:'workout_backup',kind:'content',state:'available'});
+ expect(recommendation.target.destination.routineId.startsWith('routine_v2_')).toBe(true);
+ const resolved=await member('member.recommendation.command',q({recommendationId:recommendation.recommendationId,
+  action:'resolve',commandId:null,expectedRevision:null}));
+ expect(resolved.target).toEqual(recommendation.target);
  const saved=await db.doc(`orgs/gainpath/members/${uid}/workoutBackups/session-${id}`).get();expect(saved.exists).toBe(true);
  const inbox=(await db.collection('orgs/gainpath/notifications').where('recipientId','==',uid).get()).docs;
  expect(inbox).toHaveLength(1);expect(inbox[0].data().recommendationId).toBe(recommendation.recommendationId);
