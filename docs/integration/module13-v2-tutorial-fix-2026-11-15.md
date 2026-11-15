@@ -17,3 +17,13 @@ Verification before release:
 Private evidence and reviewed source package: `build/module13-v2-tutorial-fix-20261115/`. The source archive exports the same eight endpoints with unchanged declared settings. SHA-256: `c9ba2c934f8c8de5904cd034ea2f3b8aab9cd93cb2b216645aeaa4986e7659b2`.
 
 No production Flutter code change is needed for this compatibility fix; the current Tutorial route and SDK catalog already support v2. Unrelated in-progress Workout UI/assets are excluded. Source-only deployment and the identified workout's normal service reevaluation are recorded separately after verification. No source change authorizes fabricated delivery or bypassing privacy/cooldown checks.
+
+## Source-only release and identified-workout recovery
+
+The owner's instruction to directly fix the workflow followed the proposed compatibility fix, deployment and reevaluation steps. The same eight previously approved Module 13 endpoints were updated using `buildConfig.source` only. All eight are ACTIVE and their downloaded source hashes match the reviewed archive. Runtime/event settings, IAM and Firestore Rules are unchanged; all 71 unrelated Functions retain their exact metadata. Previous sources for all eight endpoints were captured for rollback. Code commit: `5e7aaf5`.
+
+After source verification, the existing `evaluateSavedWorkout` lifecycle reevaluated only the identified Member's already-stored Squat. The maintenance wrapper allowed writes only to that exact source/owner/consent-bound recommendation, receipt, Inbox and cooldown paths. Current identity, consent, content eligibility, cooldown and idempotency were still enforced by the normal service; no hand-authored recommendation or delivered status was inserted.
+
+Result: one content recommendation was created with a matching canonical delivery receipt and the same owner's Inbox notification. A second evaluation returned no new recommendation and produced no duplicate notification. Full before/after hashes confirm the original Workout backup and purpose-consent record are unchanged. Gemini calls: zero. This is verified in-app Inbox delivery, not a claim that the Member has opened it or that an operating-system push was displayed.
+
+Private verification: `deployment-verified.json`, `owner-reevaluation-verified.private.json`, per-endpoint operation/status records, rollback ZIPs and `owner-reevaluation-intent.private.json` under the evidence directory. Personal identities and Workout payloads are not committed. A new camera workout exercising the newly deployed trigger remains a physical acceptance step; the updated automatic v2 event flow is covered by the authenticated Emulator test.
