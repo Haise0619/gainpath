@@ -9,7 +9,9 @@ import 'workout_store_factory.dart';
 import 'workout_backup_store_factory.dart';
 
 const workoutCloudBackupEnabled =
-    bool.fromEnvironment('WORKOUT_CLOUD_BACKUP_ENABLED') ||
+    // The backend is deployed. Normal builds expose the opt-in settings;
+    // the member's persisted choice still controls every upload.
+    bool.fromEnvironment('WORKOUT_CLOUD_BACKUP_ENABLED', defaultValue: true) ||
         bool.fromEnvironment('USE_FIREBASE_EMULATORS');
 
 typedef WorkoutBackupFactory = Future<WorkoutBackupLease> Function(
