@@ -33,6 +33,11 @@ public final class AudioStartDeadlineCheck {
         deadline.arm(1000000, 500L, 1100000L);
         check(deadline.remainingMillis(1050000) == 50);
         check(deadline.start(1099999));
-        System.out.println("18 native deadline/epoch assertions passed");
+        check(!deadline.canFallback(1099999)); // Never replay a word already started.
+        check(!deadline.canFallback(2000000));
+        deadline.arm(1000, 250L);
+        check(deadline.canFallback(250999));
+        check(!deadline.canFallback(251000));
+        System.out.println("22 native deadline/epoch assertions passed");
     }
 }

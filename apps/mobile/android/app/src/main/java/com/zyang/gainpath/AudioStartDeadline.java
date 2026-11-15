@@ -28,6 +28,10 @@ final class AudioStartDeadline {
         return bounded && !started && nowMicros >= deadlineMicros;
     }
 
+    boolean canFallback(long nowMicros) {
+        return !started && !expired(nowMicros);
+    }
+
     boolean start(long nowMicros) {
         if (expired(nowMicros)) return false;
         started = true;

@@ -12,6 +12,7 @@ import '../domain/workout_audio_port.dart';
 import 'pose_preview_controller.dart';
 import 'squat_processing_controller.dart';
 import 'workout_audio_controller.dart';
+import 'coach_voice_policy.dart';
 import 'guided_workout_progress.dart';
 import 'measured_workout_session.dart';
 import '../../../infrastructure/pose/real_squat_performance.dart';
@@ -51,6 +52,7 @@ class RealSquatSessionController extends ChangeNotifier
           'Measured session requires explicit input provenance');
     }
     processing = SquatProcessingController(
+        voiceProgress: (total) => CoachRepProgress.guided(total, guidance),
         scope: scope,
         activeScope: activeScope,
         audio: WorkoutAudioController(

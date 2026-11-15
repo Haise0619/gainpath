@@ -6,6 +6,12 @@ import android.content.Context;
 import android.media.AudioAttributes;
 import android.media.AudioFocusRequest;
 import android.media.AudioManager;
+import android.media.MediaPlayer;
+import android.content.res.AssetFileDescriptor;
+import java.io.InputStream;
+import java.io.IOException;
+import org.json.JSONObject;
+import org.json.JSONArray;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -29,7 +35,7 @@ import io.flutter.embedding.engine.plugins.activity.ActivityPluginBinding;
 import io.flutter.plugin.common.MethodCall;
 import io.flutter.plugin.common.MethodChannel;
 
-/** Session-scoped offline TTS. No camera, analytics, network or persistence. */
+/** Session-scoped recorded coach and offline TTS fallback. No camera/network/persistence. */
 public final class WorkoutAudioPlugin implements FlutterPlugin,
         MethodChannel.MethodCallHandler, ActivityAware {
     private final Handler main = new Handler(Looper.getMainLooper());
@@ -40,6 +46,8 @@ public final class WorkoutAudioPlugin implements FlutterPlugin,
     private Activity activity;
     private Application application;
     private boolean foreground;
+    private FlutterPlugin.FlutterAssets flutterAssets;
+    private SpeechSession activeOwner;
 
     private final Application.ActivityLifecycleCallbacks lifecycle =
         new Application.ActivityLifecycleCallbacks() {
@@ -61,6 +69,7 @@ public final class WorkoutAudioPlugin implements FlutterPlugin,
     @Override public void onAttachedToEngine(@NonNull FlutterPluginBinding binding) {
         context = binding.getApplicationContext();
         messenger = binding.getBinaryMessenger();
+        flutterAssets = binding.getFlutterAssets();
         channel = new MethodChannel(binding.getBinaryMessenger(), "gainpath/workout_audio");
         channel.setMethodCallHandler(this);
     }
@@ -113,7 +122,8 @@ public final class WorkoutAudioPlugin implements FlutterPlugin,
                     return;
                 }
                 session = new SpeechSession(id, result,
-                    Boolean.TRUE.equals(call.argument("trace")));
+                    Boolean.TRUE.equals(call.argument("trace")),
+                    Boolean.TRUE.equals(call.argument("coachAssets")));
                 sessions.put(id, session);
                 session.initialize();
                 return;
@@ -123,6 +133,7 @@ public final class WorkoutAudioPlugin implements FlutterPlugin,
                 Number deadline = call.argument("startDeadlineMicros");
                 session.play(generation.longValue(), call.argument("text"),
                     call.argument("cueId"), call.argument("requestId"),
+                    call.argument("asset"),
                     delay == null ? null : delay.longValue(),
                     deadline == null ? null : deadline.longValue(), result);
                 return;
@@ -151,6 +162,11 @@ public final class WorkoutAudioPlugin implements FlutterPlugin,
             .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH).build();
         final AudioFocusRequest focus;
         TextToSpeech tts;
+        MediaPlayer player;
+        boolean ttsReady, initializingTts;
+        Runnable afterTtsReady;
+        final boolean coachAssets;
+        final Map<String, String> assets = new HashMap<>();
         MethodChannel.Result readyResult;
         MethodChannel.Result playbackResult;
         boolean ready;
@@ -164,8 +180,9 @@ public final class WorkoutAudioPlugin implements FlutterPlugin,
         String requestId;
         String cueId;
 
-        SpeechSession(String id, MethodChannel.Result result, boolean trace) {
+        SpeechSession(String id, MethodChannel.Result result, boolean trace, boolean coachAssets) {
             this.id = id;
+            this.coachAssets = coachAssets;
             readyResult = result;
             traceChannel = trace ? new MethodChannel(messenger,
                 "gainpath/workout_audio/events/" + id) : null;
@@ -178,21 +195,51 @@ public final class WorkoutAudioPlugin implements FlutterPlugin,
         }
 
         void initialize() {
-            initializationTimeout = () -> { completeReady(false); shutdownEngine(); };
+            if (coachAssets) {
+                try (InputStream input = context.getAssets().open(flutterAssets.getAssetFilePathByName(
+                        "assets/audio/coach_en/default_v1/manifest.json"))) {
+                    java.io.ByteArrayOutputStream bytes = new java.io.ByteArrayOutputStream();
+                    byte[] buffer = new byte[4096]; int count;
+                    while ((count = input.read(buffer)) != -1) bytes.write(buffer, 0, count);
+                    JSONArray clips = new JSONObject(bytes.toString("UTF-8")).getJSONArray("clips");
+                    for (int i = 0; i < clips.length(); i++) {
+                        JSONObject clip = clips.getJSONObject(i);
+                        String file = clip.getString("file");
+                        if (!file.contains("..") && !file.startsWith("/")) {
+                            assets.put(clip.getString("id"), "assets/audio/coach_en/default_v1/" + file);
+                        }
+                    }
+                    if (!assets.isEmpty()) {
+                        completeReady(true);
+                        // Do not gate assets on TTS. Warm the offline fallback
+                        // silently in this enabled session so31 need not wait
+                        // for a cold engine; it never acquires focus or speaks.
+                        initializeTts();
+                        return;
+                    }
+                } catch (Exception ignored) { /* Offline TTS fallback. */ }
+            }
+            initializeTts();
+        }
+
+        void initializeTts() {
+            if (initializingTts || closed) return;
+            initializingTts = true;
+            initializationTimeout = () -> { finishTts(false); shutdownEngine(); };
             main.postDelayed(initializationTimeout, 10000);
             try {
                 tts = new TextToSpeech(context, status -> main.post(() -> onInit(status)));
             } catch (RuntimeException error) {
-                completeReady(false);
+                finishTts(false);
                 shutdownEngine();
             }
         }
 
         void onInit(int status) {
-            if (closed || readyResult == null) return;
+            if (closed || !initializingTts) return;
             try {
                 if (status != TextToSpeech.SUCCESS || tts == null) {
-                    completeReady(false); shutdownEngine(); return;
+                    finishTts(false); shutdownEngine(); return;
                 }
                 Set<Voice> voices = tts.getVoices();
                 List<Voice> offline = new ArrayList<>();
@@ -214,7 +261,7 @@ public final class WorkoutAudioPlugin implements FlutterPlugin,
                     }
                 }
                 if (!voiceSelected) {
-                    completeReady(false); shutdownEngine(); return;
+                    finishTts(false); shutdownEngine(); return;
                 }
                 tts.setAudioAttributes(attributes);
                 tts.setOnUtteranceProgressListener(new UtteranceProgressListener() {
@@ -247,10 +294,20 @@ public final class WorkoutAudioPlugin implements FlutterPlugin,
                         main.post(() -> completePlayback(utteranceId, "cancelled", at));
                     }
                 });
-                completeReady(true);
+                finishTts(true);
             } catch (RuntimeException error) {
-                completeReady(false); shutdownEngine();
+                finishTts(false); shutdownEngine();
             }
+        }
+
+        void finishTts(boolean available) {
+            initializingTts = false;
+            ttsReady = available && !closed;
+            if (initializationTimeout != null) main.removeCallbacks(initializationTimeout);
+            if (readyResult != null) completeReady(available);
+            Runnable pending = afterTtsReady;
+            afterTtsReady = null;
+            if (pending != null) pending.run();
         }
 
         void completeReady(boolean available) {
@@ -264,13 +321,16 @@ public final class WorkoutAudioPlugin implements FlutterPlugin,
         }
 
         void play(long generation, String text, String nextCueId, String nextRequestId,
+                  String asset,
                   Long maximumStartDelayMillis, Long absoluteExpiryMicros, MethodChannel.Result result) {
-            if (closed || !foreground || !ready || tts == null || text == null ||
+            if (closed || !foreground || !ready || text == null ||
                     text.trim().isEmpty() || text.length() > 240) {
                 result.success("unavailable"); return;
             }
             if (!epoch.cancel(generation)) { result.success("cancelled"); return; }
             cancelPlayback();
+            if (activeOwner != null && activeOwner != this) activeOwner.stop(activeOwner.epoch.generation());
+            activeOwner = this;
             requestId = nextRequestId;
             cueId = nextCueId;
             String utteranceId = id + ":" + (++sequence);
@@ -295,20 +355,83 @@ public final class WorkoutAudioPlugin implements FlutterPlugin,
             }
             playbackTimeout = () -> {
                 completePlayback(utteranceId, "unavailable");
+                releasePlayer();
                 if (tts != null) tts.stop();
             };
             main.postDelayed(playbackTimeout, 20000);
             try {
-                trace("native_tts_request", SystemClock.elapsedRealtimeNanos() / 1000);
                 if (audioManager == null || audioManager.requestAudioFocus(focus) !=
-                        AudioManager.AUDIOFOCUS_REQUEST_GRANTED ||
-                        tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, utteranceId) !=
-                        TextToSpeech.SUCCESS) {
+                        AudioManager.AUDIOFOCUS_REQUEST_GRANTED) {
                     completePlayback(utteranceId, "unavailable");
+                    return;
                 }
+                if (asset != null && asset.equals(assets.get(nextCueId))) playAsset(asset, text, utteranceId);
+                else playTts(text, utteranceId);
             } catch (RuntimeException error) {
                 completePlayback(utteranceId, "unavailable");
             }
+        }
+
+        void playAsset(String asset, String fallback, String utteranceId) {
+            try (AssetFileDescriptor file = context.getAssets().openFd(
+                    flutterAssets.getAssetFilePathByName(asset))) {
+                final MediaPlayer media = new MediaPlayer();
+                player = media;
+                media.setAudioAttributes(attributes);
+                media.setDataSource(file.getFileDescriptor(), file.getStartOffset(), file.getLength());
+                media.setOnPreparedListener(value -> {
+                    if (!epoch.isActive(utteranceId) || player != value) return;
+                    long at = SystemClock.elapsedRealtimeNanos() / 1000;
+                    if (!foreground || !startDeadline.start(at)) { stop(epoch.generation()); return; }
+                    if (startTimeout != null) main.removeCallbacks(startTimeout);
+                    try { value.start(); trace("playback_start", at); }
+                    catch (RuntimeException error) { completePlayback(utteranceId, "unavailable"); }
+                });
+                media.setOnCompletionListener(value -> completePlayback(utteranceId, "completed"));
+                media.setOnErrorListener((value, what, extra) -> {
+                    if (epoch.isActive(utteranceId) && player == value) {
+                        releasePlayer();
+                        if (startDeadline.canFallback(SystemClock.elapsedRealtimeNanos() / 1000)) {
+                            playTts(fallback, utteranceId);
+                        } else { completePlayback(utteranceId, "unavailable"); }
+                    }
+                    return true;
+                });
+                trace("native_asset_request", SystemClock.elapsedRealtimeNanos() / 1000);
+                media.prepareAsync();
+            } catch (IOException | RuntimeException error) {
+                releasePlayer(); playTts(fallback, utteranceId);
+            }
+        }
+
+        void playTts(String text, String utteranceId) {
+            if (!epoch.isActive(utteranceId) || closed) return;
+            if (startDeadline.expired(SystemClock.elapsedRealtimeNanos() / 1000)) {
+                stop(epoch.generation()); return;
+            }
+            if (!ttsReady) {
+                if (initializingTts) { afterTtsReady = () -> playTts(text, utteranceId); return; }
+                if (tts != null) { completePlayback(utteranceId, "unavailable"); return; }
+                afterTtsReady = () -> {
+                    if (ttsReady) playTts(text, utteranceId);
+                    else completePlayback(utteranceId, "unavailable");
+                };
+                initializeTts();
+                return;
+            }
+            try {
+                trace("native_tts_request", SystemClock.elapsedRealtimeNanos() / 1000);
+                if (tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, utteranceId) != TextToSpeech.SUCCESS) {
+                    completePlayback(utteranceId, "unavailable");
+                }
+            } catch (RuntimeException error) { completePlayback(utteranceId, "unavailable"); }
+        }
+
+        void releasePlayer() {
+            if (player == null) return;
+            MediaPlayer old = player; player = null;
+            old.setOnPreparedListener(null); old.setOnCompletionListener(null); old.setOnErrorListener(null);
+            try { old.release(); } catch (RuntimeException ignored) {}
         }
 
         void completePlayback(String utteranceId, String outcome) {
@@ -322,6 +445,9 @@ public final class WorkoutAudioPlugin implements FlutterPlugin,
             resolvePlayback(outcome, SystemClock.elapsedRealtimeNanos() / 1000);
         }
         void resolvePlayback(String outcome, long atMicros) {
+            releasePlayer();
+            afterTtsReady = null;
+            if (activeOwner == this) activeOwner = null;
             if (playbackResult != null) trace("playback_" + outcome, atMicros);
             if (startTimeout != null) main.removeCallbacks(startTimeout);
             startTimeout = null;
@@ -355,11 +481,13 @@ public final class WorkoutAudioPlugin implements FlutterPlugin,
             if (epoch.cancel(generation)) cancelPlayback();
         }
         void shutdownEngine() {
+            ttsReady = false;
+            initializingTts = false;
             if (tts != null) {
                 try { tts.shutdown(); } catch (RuntimeException ignored) {}
                 tts = null;
             }
-            ready = false;
+            if (assets.isEmpty()) ready = false;
         }
         void close() {
             if (closed) return;

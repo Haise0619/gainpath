@@ -17,6 +17,7 @@ import 'guided_workout_progress.dart';
 import 'measured_workout_session.dart';
 import 'pose_preview_controller.dart';
 import 'workout_audio_controller.dart';
+import 'coach_voice_policy.dart';
 
 /// Local-only floor push-up session. Never constructs an upload submission.
 class FloorPushUpWorkoutSession extends ChangeNotifier
@@ -327,6 +328,7 @@ class FloorPushUpWorkoutSession extends ChangeNotifier
     }
     _lastAttemptOutcome = outcome;
     audio.consume(update.cues.where((c) => !_attemptCueIds.contains(c.id)),
+        progress: CoachRepProgress.guided(update.repetitions, guidance),
         events: events,
         nowMicros: now,
         observedAtMicros: frame.capturedAtMicros,

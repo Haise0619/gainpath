@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:gainpath_domain/gainpath_domain.dart';
 import 'package:gainpath_pose/gainpath_pose.dart';
 import 'workout_audio_controller.dart';
+import 'coach_voice_policy.dart';
 import '../domain/workout_feedback_event.dart';
 import '../../../infrastructure/pose/real_squat_performance.dart';
 import '../../../infrastructure/pose/squat_decision_diagnostics.dart';
@@ -18,6 +19,7 @@ class SquatProcessingController extends ChangeNotifier {
     required this.audio,
     required this.clockMicros,
     this.performance,
+    this.voiceProgress,
     required bool sideViewConfirmed,
     required bool uprightCameraConfirmed,
     SquatAnalyzer? analyzer,
@@ -32,6 +34,7 @@ class SquatProcessingController extends ChangeNotifier {
   final SessionScope scope;
   final SessionScope? Function() activeScope;
   final WorkoutAudioController audio;
+  final CoachRepProgress Function(int)? voiceProgress;
   final int Function() clockMicros;
   final RealSquatPerformance? performance;
   final SquatAnalyzer _analyzer;
@@ -141,6 +144,10 @@ class SquatProcessingController extends ChangeNotifier {
             priority: CuePriority.warning),
     ],
         nowMicros: now,
+        observedAtMicros: next.capturedAtMicros,
+        progress: voiceProgress?.call(next.repetitions) ??
+            CoachRepProgress(
+                total: next.repetitions, spoken: next.repetitions, scope: '1'),
         events: events,
         invalidateFeedback: next.health == TrackingStatus.lost,
         trackingAvailable:

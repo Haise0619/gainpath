@@ -28,6 +28,9 @@ class GuidedWorkoutProgress {
   bool _suspended = false;
   int get currentSet =>
       stage == GuidedWorkoutStage.complete ? sets : completedSets + 1;
+
+  /// Read-only baseline for UI/voice projection of accepted cumulative reps.
+  int get repetitionBaseline => _setStart;
   int get setRepetitions =>
       (_lastRepetitions - _setStart).clamp(0, repetitions);
   int get remainingRestSeconds => (_remainingRestMicros / 1000000).ceil();

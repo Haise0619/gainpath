@@ -37,6 +37,21 @@ void main() {
     messenger.setMockMethodCallHandler(channel, null);
   });
 
+  test('recorded coach asset and fallback text share the native owner',
+      () async {
+    await port.play(const CueRequest(
+        id: 'number_012',
+        text: 'Twelve.',
+        priority: CuePriority.encouragement));
+    expect((calls.first.arguments as Map)['coachAssets'], true);
+    expect((calls.last.arguments as Map)['asset'],
+        'assets/audio/coach_en/default_v1/numbers/number_012.wav');
+    await port.play(const CueRequest(
+        id: 'number_dynamic', text: '31', priority: CuePriority.encouragement));
+    expect((calls.last.arguments as Map)['asset'], isNull);
+    expect((calls.last.arguments as Map)['text'], '31');
+  });
+
   test('explicit retry retires failed engine and uses a fresh native identity',
       () async {
     var attempts = 0;

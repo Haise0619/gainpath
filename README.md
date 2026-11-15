@@ -489,3 +489,8 @@ The phone called an undeployed payment-method endpoint while read/create handler
 ## All-progress Git handoff — 13 November 2026
 
 Owner requested committing all current source/docs progress and pushing to main. Fresh checks, outstanding Admin suite failures and provider/device acceptance limits are recorded in [checkpoint handoff](docs/qa/progress-checkpoint-2026-11-13.md). No deployment or real-data change for this checkpoint.
+
+
+## AI coach voice V1 —15 November2026
+
+77 locally generated af_heart1.15 clips replace ordinary Android TTS with offline assets plus offline dynamic fallback. Accepted-number freshness, semantic corrections, sparse encouragement and lifecycle/native ownership are covered by96 voice tests; broader208 pass/1 reproduced pre-existing Curl UI failure,22 native assertions and Android Debug build. Owner heard phone playback; normal APK restored with matching signer/identity and workout records preserved. Physical camera FPS/all9 physical performances remain unmeasured. [Implementation and evidence](docs/integration/module2-ai-coach-voice-v1-implementation.md).

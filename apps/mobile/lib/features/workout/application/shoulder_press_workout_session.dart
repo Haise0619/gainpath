@@ -16,6 +16,7 @@ import 'guided_workout_progress.dart';
 import 'measured_workout_session.dart';
 import 'pose_preview_controller.dart';
 import 'workout_audio_controller.dart';
+import 'coach_voice_policy.dart';
 
 /// Local-only bilateral front-view dumbbell shoulder press session. Never constructs an upload submission.
 class ShoulderPressWorkoutSession extends ChangeNotifier
@@ -312,6 +313,8 @@ class ShoulderPressWorkoutSession extends ChangeNotifier
                 generatedAtMicros: clockMicros())
         ],
         invalidateFeedback: update.health == TrackingStatus.lost,
+        observedAtMicros: frame.capturedAtMicros,
+        progress: CoachRepProgress.guided(update.repetitions, guidance),
         nowMicros: clockMicros(),
         trackingAvailable: update.health == TrackingStatus.healthy &&
             !update.needsCalibration);

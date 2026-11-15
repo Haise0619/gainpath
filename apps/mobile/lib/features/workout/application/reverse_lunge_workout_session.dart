@@ -12,10 +12,14 @@ import 'guided_workout_progress.dart';
 import 'measured_workout_session.dart';
 import 'pose_preview_controller.dart';
 import 'workout_audio_controller.dart';
+import 'coach_voice_policy.dart';
+import 'workout_voice_session.dart';
 
 /// Local-only selected-front-leg reverse lunge session. Never constructs an upload submission.
 class ReverseLungeWorkoutSession extends ChangeNotifier
-    implements MeasuredWorkoutSession {
+    implements MeasuredWorkoutSession, WorkoutVoiceSession {
+  @override
+  WorkoutAudioController get voiceFeedback => audio;
   ReverseLungeWorkoutSession(
       {required this.scope,
       required LungeSide side,
@@ -359,12 +363,14 @@ class ReverseLungeWorkoutSession extends ChangeNotifier
       return;
     }
     audio.consume(update.cues,
+        observedAtMicros: frame.capturedAtMicros,
+        progress: CoachRepProgress.guided(update.repetitions, guidance),
         nowMicros: clockMicros(),
         trackingAvailable: update.health == TrackingStatus.healthy &&
             !update.needsCalibration);
     final previous = guidance.stage;
     guidance.observe(update.repetitions, nowMicros: clockMicros());
-    if (previous != guidance.stage) _suspendAnalysis();
+    if (previous != guidance.stage) _suspendAnalysis(preserveFeedback: true);
     _notify();
   }
 
@@ -377,10 +383,17 @@ class ReverseLungeWorkoutSession extends ChangeNotifier
     _notify();
   }
 
-  void _suspendAnalysis() {
+  void _suspendAnalysis({bool preserveFeedback = false}) {
     _resetCountdown();
     _analyzer.pause();
-    audio.pause();
+    if (preserveFeedback && audio.usesRecordedCoach) {
+      audio.finishSet(
+          transition: guidance.stage == GuidedWorkoutStage.resting
+              ? 'Set complete. Rest.'
+              : 'Exercise complete.');
+    } else {
+      audio.pause();
+    }
   }
 
   @override
@@ -562,13 +575,21 @@ class ReverseLungeWorkoutSession extends ChangeNotifier
       viewPhase = MeasuredWorkoutPhase.saving;
       _error = null;
       _timer?.cancel();
-      _suspendAnalysis();
+      if (audio.usesRecordedCoach &&
+          guidance.stage != GuidedWorkoutStage.working) {
+        _analyzer.pause();
+      } else {
+        _suspendAnalysis();
+      }
       _notify();
-      await audio.close();
+      if (!audio.usesRecordedCoach) await audio.close();
       await preview.close().catchError((Object _) {});
       if (!_authorized) return null;
       await repository.saveLocal(summary!);
       if (!_authorized) return null;
+      if (audio.usesRecordedCoach) {
+        await audio.settleFeedback();
+      }
       viewPhase = MeasuredWorkoutPhase.saved;
       return summary;
     } catch (_) {
@@ -579,6 +600,7 @@ class ReverseLungeWorkoutSession extends ChangeNotifier
       }
       return null;
     } finally {
+      if (audio.usesRecordedCoach) await audio.close();
       _saving = null;
       _notify();
     }

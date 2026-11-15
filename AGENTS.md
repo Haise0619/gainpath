@@ -334,3 +334,8 @@ Clean application source `6573957`: 775 affected Mobile tests (30 existing gated
 ## Training Report and Rewards & Check-in — 12 November 2026
 
 Training Report now has a compact mixed-mode summary, one expandable workout activity list, separate compatible AI assessments and optional technical evidence. Rewards owns the live Rewards & Check-in route with explicit guarded claims, independent balance fallback and scoped refresh/retry. Progress retains a secondary link. Clean source: 839 Mobile tests passed (33 default skips), Domain192/Pose759 passed, 20-file analysis clean and arm64 Debug APK built. Actual baseline/final Flutter renders reviewed. No installation, Firebase deployment or live reward mutation; physical Android PDF/Firebase/check-in acceptance is pending. [Report and evidence](docs/ux/workout-report-rewards-checkin-consumer-redesign.md).
+
+
+## AI coach voice V1 —15 November2026
+
+77 locally generated af_heart1.15 clips replace ordinary Android TTS with offline assets plus offline dynamic fallback. Accepted-number freshness, semantic corrections, sparse encouragement and lifecycle/native ownership are covered by96 voice tests; broader208 pass/1 reproduced pre-existing Curl UI failure,22 native assertions and Android Debug build. Owner heard phone playback; normal APK restored with matching signer/identity and workout records preserved. Physical camera FPS/all9 physical performances remain unmeasured. [Implementation and evidence](docs/integration/module2-ai-coach-voice-v1-implementation.md).

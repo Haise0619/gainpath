@@ -26,6 +26,9 @@ abstract interface class WorkoutAudioPort {
   Future<void> close();
 }
 
+/// Recorded-coach capability; custom/legacy ports retain their existing policy.
+abstract interface class CoachWorkoutAudioPort implements WorkoutAudioPort {}
+
 /// Engines with asynchronous initialization can be warmed without speaking.
 /// The controller revalidates a waiting cue before invoking playback.
 abstract interface class PreparedWorkoutAudioPort implements WorkoutAudioPort {

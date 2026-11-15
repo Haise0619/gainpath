@@ -17,6 +17,7 @@ import 'guided_workout_progress.dart';
 import 'measured_workout_session.dart';
 import 'pose_preview_controller.dart';
 import 'workout_audio_controller.dart';
+import 'coach_voice_policy.dart';
 
 /// Local-only single-arm curl session. Never constructs an upload submission.
 class CurlWorkoutSession extends ChangeNotifier
@@ -345,6 +346,12 @@ class CurlWorkoutSession extends ChangeNotifier
     final update = _analyzer.update(frame, nowMicros: clockMicros());
     _watchdogLost = update.health == TrackingStatus.lost;
     audio.consume(update.cues.where((c) => !isRetainedOutcomeCue(c)),
+        observedAtMicros: frame.capturedAtMicros,
+        progress: CoachRepProgress(
+            total: _totalReps,
+            spoken: update.repetitions - _setBaselines[_currentSide]!,
+            scope: '${guidance.currentSet}-${_currentSide.name}',
+            target: guidance.repetitions),
         events: _feedback.observe(update.cues,
             outcome: _totalReps + _totalPartial,
             capturedAtMicros: frame.capturedAtMicros,
@@ -382,7 +389,14 @@ class CurlWorkoutSession extends ChangeNotifier
   void _suspendAnalysis({bool preserveFeedback = false}) {
     _analyzer.pause();
     if (preserveFeedback) {
-      setContinuation.finishBoundary();
+      if (audio.usesRecordedCoach && _switchPending) {
+        audio.finishSet(
+            transition: _currentSide == CurlSide.left
+                ? 'Switch to your right arm.'
+                : 'Switch to your left arm.');
+      } else {
+        setContinuation.finishBoundary();
+      }
     } else {
       setContinuation.cancel();
       audio.pause();

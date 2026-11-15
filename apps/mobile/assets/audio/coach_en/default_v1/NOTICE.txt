@@ -1,0 +1,15 @@
+GainPath AI Coach — English Voice Pack V1
+77 clips, locally synthesized with Kokoro af_heart (US female), speed1.15.
+Scripts: GainPath Module2 voice manifest (70V1 plus7 encouragement variants).
+24kHz mono:30 PCM16 WAV numbers and47 OGG Vorbis phrases.
+Trim:25ms leading/65ms trailing padding. RMS target0.12, peak cap0.89.
+
+Kokoro-82M / hexgrad: https://huggingface.co/hexgrad/Kokoro-82M
+Official implementation/license: https://github.com/hexgrad/kokoro
+Development conversion/runtime: https://github.com/thewh1teagle/kokoro-onnx
+Model release: model-files-v1.1 (kokoro-v1.0.onnx, voices-v1.0.bin).
+Full upstream license texts are included alongside this notice.
+
+No synthesis model, Python package or ONNX runtime is shipped in this voice pack.
+No live voice API, voice cloning, cloud synthesis or Firebase change is used.
+See tools/workouts/voice_pack/README.md for reproducibility and model hashes.

@@ -96,7 +96,8 @@ void main() {
       await tester.pump(const Duration(milliseconds: 100));
       final play = calls.singleWhere((call) => call.method == 'play');
       final payload = play.arguments as Map;
-      expect(payload['text'], contains(_upcomingExercise.name));
+      expect(payload['text'], 'Next exercise. Get into position.');
+      expect(payload['asset'], endsWith('/lifecycle/next_exercise_v1.ogg'));
       expect(payload['startDeadlineMicros'], greaterThan(1000000));
       expect(calls.where((call) => call.method == 'stop'), isEmpty);
 

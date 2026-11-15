@@ -82,6 +82,13 @@ flutter:
         - asset: assets/fonts/Barlow-ExtraBold.ttf
           weight: 800
   assets:
+    - assets/audio/coach_en/default_v1/
+    - assets/audio/coach_en/default_v1/numbers/
+    - assets/audio/coach_en/default_v1/lifecycle/
+    - assets/audio/coach_en/default_v1/setup/
+    - assets/audio/coach_en/default_v1/tracking/
+    - assets/audio/coach_en/default_v1/correction/
+    - assets/audio/coach_en/default_v1/encouragement/
     - assets/images/ai_coach_mascot.png
     - assets/images/workout_hero_gym.png
     - assets/images/home_workout_gym.webp

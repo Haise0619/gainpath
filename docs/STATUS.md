@@ -532,3 +532,8 @@ Commits0c7164e/da31559 provide grouped bank/wallet/card preferences, branded ico
 ## Checkout loading fix — ACTIVE,13November2026
 
 The phone called an undeployed payment-method endpoint while read/create handlers still used38234a4. Committed54e23e9 reuses the existing protected payment-read callable for selection discovery. Seven existing matching handlers are now source-only updated; deployed archives, runtime/environment/secrets/IAM and unrelated Functions verified.225 backend/30 focused Mobile tests, type checks, scoped analysis, sealed-artifact review and clean Debug build pass. Same-signer APK installed/launched in place; hash/UID/data-directory/first-install preserved and prior APK retained. Owner confirms payment methods load. No provider payment/configuration or automated booking/bill creation; actual hosted-payment UAT remains pending. Admin bundle unchanged. [Fix, acceptance and rollback evidence](ux/member-coach-booking-commercial-checkout.md).
+
+
+## AI coach voice V1 —15 November2026
+
+77 locally generated af_heart1.15 clips replace ordinary Android TTS with offline assets plus offline dynamic fallback. Accepted-number freshness, semantic corrections, sparse encouragement and lifecycle/native ownership are covered by96 voice tests; broader208 pass/1 reproduced pre-existing Curl UI failure,22 native assertions and Android Debug build. Owner heard phone playback; normal APK restored with matching signer/identity and workout records preserved. Physical camera FPS/all9 physical performances remain unmeasured. [Implementation and evidence](integration/module2-ai-coach-voice-v1-implementation.md).

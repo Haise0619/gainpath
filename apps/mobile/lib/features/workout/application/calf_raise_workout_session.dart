@@ -16,6 +16,7 @@ import 'guided_workout_progress.dart';
 import 'measured_workout_session.dart';
 import 'pose_preview_controller.dart';
 import 'workout_audio_controller.dart';
+import 'coach_voice_policy.dart';
 
 /// Local-only standing calf raise session. Never constructs an upload submission.
 class CalfRaiseWorkoutSession extends ChangeNotifier
@@ -296,6 +297,8 @@ class CalfRaiseWorkoutSession extends ChangeNotifier
     final update = _analyzer.update(frame, nowMicros: clockMicros());
     _watchdogLost = update.health == TrackingStatus.lost;
     audio.consume(update.cues.where((c) => !isRetainedOutcomeCue(c)),
+        observedAtMicros: frame.capturedAtMicros,
+        progress: CoachRepProgress.guided(update.repetitions, guidance),
         events: _feedback.observe(update.cues,
             outcome: update.repetitions + update.partialRepetitions,
             capturedAtMicros: frame.capturedAtMicros,

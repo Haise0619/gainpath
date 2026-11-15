@@ -7,6 +7,7 @@ import 'package:gainpath_pose/gainpath_pose.dart';
 import '../domain/workout_audio_port.dart';
 import '../domain/workout_feedback_event.dart';
 import '../domain/workout_audio_trace.dart';
+import 'coach_voice_policy.dart';
 
 /// Session-scoped audio policy. Consume only current analyzed pose batches;
 /// this controller never queues corrections from previous frames.
@@ -23,6 +24,10 @@ class WorkoutAudioController {
         _arbiter = arbiter ?? AudioCueArbiter();
 
   final WorkoutAudioPort _port;
+  final _coach = CoachVoicePolicy();
+  bool get _usesCoach => _port is CoachWorkoutAudioPort;
+  bool get usesRecordedCoach => _usesCoach;
+  String? _coachBoundary;
   final AudioCueArbiter _arbiter;
   final _boundaryArbiter = AudioCueArbiter(cooldownMicros: 0);
   WorkoutAudioTrace? trace;
@@ -68,6 +73,23 @@ class WorkoutAudioController {
 
   /// Analysis stops at a set boundary; only the completed observation survives.
   void finishSet({String? transition, bool restScoped = false}) {
+    if (_usesCoach) {
+      _coach.invalidate();
+      if (_voiceMode != WorkoutVoiceMode.fullCoaching || !_canPlay) return;
+      final text = transition ?? 'Set complete.';
+      if (_activeEvent != null &&
+          _activeCue != null &&
+          CoachVoicePolicy.isNumber(_activeCue!)) {
+        // One phase continuation, never a rep queue. Lifecycle cancellation
+        // clears it and durable-save settlement remains bounded to1.5s.
+        _coachBoundary = text;
+      } else {
+        _cancel(reason: 'coach_boundary');
+        announceTransition('boundary-${++_requestSequence}', text,
+            nowMicros: _lastInputMicros ?? 0);
+      }
+      return;
+    }
     final outcome = _recentOutcome;
     _recentOutcome = null;
     if (_activeEvent != null &&
@@ -124,8 +146,15 @@ class WorkoutAudioController {
           WorkoutFeedbackEvent(
               id: 'transition-$id',
               cue: CueRequest(
-                  id: 'workout_transition',
-                  text: text,
+                  id: _usesCoach
+                      ? CoachVoicePolicy.transitionId(text)
+                      : 'workout_transition',
+                  text: _usesCoach
+                      ? CoachVoicePolicy.clip(
+                              CoachVoicePolicy.transitionId(text),
+                              CuePriority.encouragement)
+                          .text
+                      : text,
                   priority: CuePriority.encouragement),
               observedAtMicros: nowMicros,
               generatedAtMicros: nowMicros)
@@ -136,6 +165,7 @@ class WorkoutAudioController {
   }
 
   void cancelTransition() {
+    if (_usesCoach) _coachBoundary = null;
     if ((_activeRestBoundary && _activeCue != null) ||
         _activeEvent?.id.startsWith('transition-') == true) {
       _cancel(reason: 'transition_ended');
@@ -233,6 +263,7 @@ class WorkoutAudioController {
     Iterable<WorkoutFeedbackEvent> events = const [],
     bool invalidateFeedback = false,
     int? observedAtMicros,
+    CoachRepProgress? progress,
   }) {
     if (_closed ||
         nowMicros < 0 ||
@@ -240,12 +271,89 @@ class WorkoutAudioController {
       return;
     }
     _lastInputMicros = nowMicros;
+    if (_usesCoach) {
+      _consumeCoach(cues,
+          nowMicros: nowMicros,
+          trackingAvailable: trackingAvailable,
+          events: events,
+          invalidateFeedback: invalidateFeedback,
+          observedAtMicros: observedAtMicros ?? nowMicros,
+          progress: progress);
+      return;
+    }
     _consume(cues,
         nowMicros: nowMicros,
         trackingAvailable: trackingAvailable,
         events: events,
         invalidateFeedback: invalidateFeedback,
         observedAtMicros: observedAtMicros);
+  }
+
+  void _consumeCoach(Iterable<CueRequest> cues,
+      {required int nowMicros,
+      required bool trackingAvailable,
+      required Iterable<WorkoutFeedbackEvent> events,
+      required bool invalidateFeedback,
+      required int observedAtMicros,
+      CoachRepProgress? progress}) {
+    if (_trackingAvailable != trackingAvailable &&
+        _activeCue != null &&
+        !CoachVoicePolicy.isNumber(_activeCue!)) {
+      _cancel(reason: 'coach_tracking_transition');
+    }
+    if (invalidateFeedback) {
+      _coach.invalidate();
+      if (_activeCue?.priority != CuePriority.warning) {
+        _cancel(reason: 'coach_source_invalidated');
+      }
+    }
+    final batch = <CueRequest>[...cues];
+    for (final event in events) {
+      if (_seenEvents.contains(event.id)) continue;
+      _seenEvents.add(event.id);
+      if (_seenEvents.length > 64) _seenEvents.remove(_seenEvents.first);
+      if (!invalidateFeedback && event.isFresh(nowMicros)) batch.add(event.cue);
+    }
+    final selected = _coach.select(batch,
+        nowMicros: nowMicros,
+        observedAtMicros: observedAtMicros,
+        trackingAvailable: trackingAvailable && !invalidateFeedback,
+        fullCoaching: _voiceMode == WorkoutVoiceMode.fullCoaching && _canPlay,
+        progress: progress,
+        idle: _activeCue == null);
+    if (selected == null || !_canPlay) {
+      _consume(const [],
+          nowMicros: nowMicros,
+          trackingAvailable: trackingAvailable,
+          arbiter: _boundaryArbiter);
+      return;
+    }
+    final active = _activeCue;
+    if (active != null) {
+      final replaceNumber =
+          selected.isNumber && CoachVoicePolicy.isNumber(active);
+      if (!replaceNumber && selected.rank <= CoachVoicePolicy.rank(active)) {
+        return;
+      }
+      _cancel(
+          reason: replaceNumber ? 'newer_rep' : 'coach_priority',
+          invalidateCoach: !replaceNumber);
+    }
+    _coach.didSelect(selected, nowMicros);
+    _consume(const [],
+        nowMicros: nowMicros,
+        trackingAvailable: trackingAvailable,
+        arbiter: _boundaryArbiter,
+        events: [
+          WorkoutFeedbackEvent(
+              id: 'coach-${++_requestSequence}',
+              cue: selected.cue,
+              observedAtMicros: selected.observedAtMicros,
+              generatedAtMicros: nowMicros)
+        ]);
+    if (selected.isNumber && _activeCue != null) {
+      _eventBudgetMicros = 250000 - (nowMicros - selected.observedAtMicros);
+    }
   }
 
   void _consume(
@@ -482,6 +590,17 @@ class WorkoutAudioController {
     _activeEvent = null;
     _recentOutcome = null;
     _activeRequestId = null;
+    final boundary = _coachBoundary;
+    _coachBoundary = null;
+    if (_usesCoach &&
+        boundary != null &&
+        outcome == AudioPlaybackOutcome.completed &&
+        _canPlay) {
+      if (announceTransition('boundary-${++_requestSequence}', boundary,
+          nowMicros: _lastInputMicros ?? 0)) {
+        await _playback;
+      }
+    }
   }
 
   Future<bool> _warm({bool retry = false}) {
@@ -513,7 +632,11 @@ class WorkoutAudioController {
     }();
   }
 
-  void _cancel({String reason = 'lifecycle_or_preference'}) {
+  void _cancel(
+      {String reason = 'lifecycle_or_preference',
+      bool invalidateCoach = true}) {
+    _coachBoundary = null;
+    if (invalidateCoach) _coach.invalidate();
     _recentOutcome = null;
     if (_activeCue != null) {
       trace?.record('cancelled',

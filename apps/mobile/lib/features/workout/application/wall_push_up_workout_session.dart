@@ -12,10 +12,14 @@ import 'guided_workout_progress.dart';
 import 'measured_workout_session.dart';
 import 'pose_preview_controller.dart';
 import 'workout_audio_controller.dart';
+import 'coach_voice_policy.dart';
+import 'workout_voice_session.dart';
 
 /// Local-only wall push-up session. Never constructs an upload submission.
 class WallPushUpWorkoutSession extends ChangeNotifier
-    implements MeasuredWorkoutSession {
+    implements MeasuredWorkoutSession, WorkoutVoiceSession {
+  @override
+  WorkoutAudioController get voiceFeedback => audio;
   WallPushUpWorkoutSession(
       {required this.scope,
       required this.activeScope,
@@ -217,12 +221,14 @@ class WallPushUpWorkoutSession extends ChangeNotifier
     _hasFrame = true;
     final update = _analyzer.update(frame, nowMicros: clockMicros());
     audio.consume(update.cues,
+        observedAtMicros: frame.capturedAtMicros,
+        progress: CoachRepProgress.guided(update.repetitions, guidance),
         nowMicros: clockMicros(),
         trackingAvailable: update.health == TrackingStatus.healthy &&
             !update.needsCalibration);
     final previous = guidance.stage;
     guidance.observe(update.repetitions, nowMicros: clockMicros());
-    if (previous != guidance.stage) _suspendAnalysis();
+    if (previous != guidance.stage) _suspendAnalysis(preserveFeedback: true);
     _notify();
   }
 
@@ -235,9 +241,16 @@ class WallPushUpWorkoutSession extends ChangeNotifier
     _notify();
   }
 
-  void _suspendAnalysis() {
+  void _suspendAnalysis({bool preserveFeedback = false}) {
     _analyzer.pause();
-    audio.pause();
+    if (preserveFeedback && audio.usesRecordedCoach) {
+      audio.finishSet(
+          transition: guidance.stage == GuidedWorkoutStage.resting
+              ? 'Set complete. Rest.'
+              : 'Exercise complete.');
+    } else {
+      audio.pause();
+    }
   }
 
   @override
@@ -412,13 +425,21 @@ class WallPushUpWorkoutSession extends ChangeNotifier
       viewPhase = MeasuredWorkoutPhase.saving;
       _error = null;
       _timer?.cancel();
-      _suspendAnalysis();
+      if (audio.usesRecordedCoach &&
+          guidance.stage != GuidedWorkoutStage.working) {
+        _analyzer.pause();
+      } else {
+        _suspendAnalysis();
+      }
       _notify();
-      await audio.close();
+      if (!audio.usesRecordedCoach) await audio.close();
       await preview.close().catchError((Object _) {});
       if (!_authorized) return null;
       await repository.saveLocal(summary!);
       if (!_authorized) return null;
+      if (audio.usesRecordedCoach) {
+        await audio.settleFeedback();
+      }
       viewPhase = MeasuredWorkoutPhase.saved;
       return summary;
     } catch (_) {
@@ -429,6 +450,7 @@ class WallPushUpWorkoutSession extends ChangeNotifier
       }
       return null;
     } finally {
+      if (audio.usesRecordedCoach) await audio.close();
       _saving = null;
       _notify();
     }

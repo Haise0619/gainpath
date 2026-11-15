@@ -2,15 +2,17 @@ import 'package:flutter/services.dart';
 import 'package:gainpath_pose/gainpath_pose.dart';
 
 import '../../features/workout/domain/workout_audio_port.dart';
+import '../../features/workout/domain/coach_voice_catalog.dart';
 import '../../features/workout/domain/workout_audio_trace.dart';
 import '../../features/workout/domain/workout_performance_diagnostics.dart';
 
-/// Offline Android TTS, lazily initialized only after voice coaching is enabled.
-/// Native futures complete on utterance done/stop/error. Each cancellation epoch
-/// invalidates playback still waiting for engine initialization.
+/// Offline coach assets and Android TTS fallback, opened only when enabled.
+/// Native futures complete on playback done/stop/error. Each cancellation epoch
+/// invalidates playback still waiting for preparation.
 class AndroidWorkoutAudio
     implements
         RetryableWorkoutAudioPort,
+        CoachWorkoutAudioPort,
         TimedWorkoutAudioPort,
         TracedWorkoutAudioPort {
   AndroidWorkoutAudio(
@@ -62,6 +64,7 @@ class AndroidWorkoutAudio
           final stage = row['stage'];
           const allowed = {
             'native_tts_request',
+            'native_asset_request',
             'playback_start',
             'playback_completed',
             'playback_cancelled',
@@ -77,6 +80,7 @@ class AndroidWorkoutAudio
       }
       final ready = await _channel.invokeMethod<bool>('create', {
             ..._identity,
+            'coachAssets': true,
             if (trace != null) 'trace': true,
           }) ==
           true;
@@ -179,6 +183,7 @@ class AndroidWorkoutAudio
         ..._identity,
         'cueId': cue.id,
         'text': cue.text,
+        if (coachVoiceCatalog[cue.id] case final clip?) 'asset': clip.asset,
         if (requestId != null) 'requestId': requestId,
         if (remainingMicros != null)
           'maxStartDelayMs': (remainingMicros ~/ 1000).clamp(1, 500),
