@@ -71,6 +71,7 @@ class MemberProgressHost extends StatefulWidget {
       {super.key,
       required this.scope,
       required this.builder,
+      this.initialView,
       this.backupFactory,
       this.programProgressBuilder,
       this.goalSummaryBuilder,
@@ -80,6 +81,7 @@ class MemberProgressHost extends StatefulWidget {
   final ProgressGoalSummaryBuilder? goalSummaryBuilder;
   final Widget Function(SessionScope, Object)? programProgressBuilder;
   final MemberProgressBuilder builder;
+  final MemberProgressView? initialView;
   final WorkoutBackupFactory? backupFactory;
   @override
   State<MemberProgressHost> createState() => _MemberProgressHostState();
@@ -342,6 +344,21 @@ class _MemberProgressHostState extends State<MemberProgressHost>
               _open,
               _openWorkout);
         }
+        final initialView = widget.initialView;
+        if (initialView != null) {
+          return _ScopedProgressPage(
+              scope: widget.scope,
+              auth: _auth!,
+              cubit: cubit,
+              view: initialView,
+              refresh: _refresh,
+              open: _open,
+              openWorkout: _openWorkout,
+              backupState: _backupPresentation,
+              retryBackup: _backupConfigured ? _initializeBackup : null,
+              programProgressBuilder: widget.programProgressBuilder,
+              goalSummaryBuilder: widget.goalSummaryBuilder);
+        }
         return BlocBuilder<MemberProgressCubit, MemberProgressState>(
             bloc: cubit,
             builder: (context, state) =>
@@ -353,6 +370,7 @@ class MemberProgressRoute extends StatelessWidget {
   const MemberProgressRoute(
       {super.key,
       required this.scope,
+      this.backupFactory,
       this.view = MemberProgressView.dashboard,
       this.repositoryFactory = createLocalMemberProgressRepository,
       this.programProgressBuilder,
@@ -363,14 +381,18 @@ class MemberProgressRoute extends StatelessWidget {
           SessionScope, MemberLocalProgress, RoutineProgress?, VoidCallback)?
       goalSummaryBuilder;
   final SessionScope scope;
+  final WorkoutBackupFactory? backupFactory;
   final MemberProgressView view;
   final LocalMemberProgressRepositoryFactory repositoryFactory;
   @override
   Widget build(BuildContext context) => MemberProgressHost(
       key: ValueKey(scope),
       scope: scope,
+      backupFactory: backupFactory,
+      initialView: view,
       repositoryFactory: repositoryFactory,
       programProgressBuilder: programProgressBuilder,
+      goalSummaryBuilder: goalSummaryBuilder,
       builder: (context, state, refresh, open, openWorkout) => _progressContent(
           context, state, view, refresh, open, openWorkout,
           programProgressBuilder: programProgressBuilder,

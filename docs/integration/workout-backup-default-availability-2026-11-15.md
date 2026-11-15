@@ -14,3 +14,11 @@ Verification:
 - ADB reported no connected devices. No phone installation or real cloud workout acceptance is claimed.
 
 To load the fix, stop the existing run and select **GainPath Member — Android → Run** in Android Studio. Hot Reload/Hot Restart do not replace compile-time build values in the installed binary. Then navigate **Workout → Settings → Data & backup → Workout backup**, turn on **Automatic workout sync**, and confirm **Enable backup**. Recommendation-purpose permission remains a separate Member choice.
+
+## Follow-up: direct settings route lost backup state
+
+The owner still observed the same message after the build-default correction. Further inspection established an independent navigation bug: Workout Settings opens `MemberProgressRoute(view: backup)`. Its builder called `_progressContent` without the Host's coordinator, initialization error or retry callback. Consequently even an initialized, authorized coordinator was rendered as missing. This is a client route defect shared by ordinary/FYP Member entrypoints, not evidence of an account permission denial. The earlier default-flag fix alone was insufficient.
+
+Direct progress routes now reuse `_ScopedProgressPage`, the existing reactive projection used by nested navigation. It observes the same backup-state notifier and preserves Auth/cubit isolation, loading errors and retry. Added an optional backup-factory injection seam to exercise the actual direct route, without changing production authorization or synchronization logic. Goal/program builders remain forwarded.
+
+The actual direct-route test reproduced the screenshot's exact unavailable message with an already initialized coordinator before the route fix. Afterward, both direct-success/logout and delayed-loading/failure/retry tests pass. Fresh affected regression: 34 tests passed, focused analysis has no issues, and an isolated Android Debug build passed (14.7 seconds). Evidence: `build/workout-backup-route-20261115/`. The isolated build contains only the prior default fix and this route change, with unrelated dirty Workout sources/assets excluded. No Firebase deployment, account change, consent grant, device installation or live workout acceptance was performed.

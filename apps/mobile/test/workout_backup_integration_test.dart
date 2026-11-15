@@ -23,6 +23,101 @@ import 'support/mock_app_scope.dart';
 void main() {
   setUpAll(() => GoogleFonts.config.allowRuntimeFetching = false);
   testWidgets(
+      'direct backup route shows loading, storage failure and successful retry',
+      (tester) async {
+    late AuthBloc auth;
+    await tester.runAsync(() async {
+      auth = AuthBloc(repository: InMemoryAuthRepository());
+      await Future<void>.delayed(Duration.zero);
+      auth.add(const LoginSubmitted(
+          email: 'member@example.com', password: 'password123'));
+      await auth.stream.firstWhere((s) => s.status == AuthStatus.signedIn);
+    });
+    final scope = auth.state.session!.scope;
+    final opening = Completer<WorkoutBackupLease>();
+    var attempts = 0;
+    final coordinator = WorkoutBackupCoordinator(
+        scope: scope,
+        activeScope: () => auth.state.session?.scope,
+        local: backup.Local(),
+        gateway: backup.Remote(),
+        store: backup.Metadata(scope));
+    await tester.pumpWidget(BlocProvider.value(
+        value: auth,
+        child: MaterialApp(
+            home: MemberProgressRoute(
+                scope: scope,
+                view: MemberProgressView.backup,
+                repositoryFactory: (_, __) async =>
+                    progress.TestRepository(scope),
+                backupFactory: (_, __) {
+                  attempts++;
+                  return attempts == 1
+                      ? opening.future
+                      : Future.value(WorkoutBackupLease(coordinator, () {}));
+                }))));
+    await tester.pumpAndSettle();
+    expect(find.text('Opening backup…'), findsOneWidget);
+    expect(find.text('Cloud sync is unavailable in this build'), findsNothing);
+    opening.completeError(StateError('unavailable local store'));
+    await tester.pumpAndSettle();
+    expect(
+        find.textContaining('Backup storage is unavailable'), findsOneWidget);
+    await tester.tap(find.text('Retry'));
+    await tester.pumpAndSettle();
+    expect(find.text('Automatic workout sync'), findsOneWidget);
+    expect(find.byType(Switch), findsOneWidget);
+    expect(attempts, 2);
+    await tester.pumpWidget(const SizedBox());
+    coordinator.dispose();
+    await tester.runAsync(auth.close);
+  });
+  testWidgets(
+      'direct Workout settings backup route receives the initialized coordinator',
+      (tester) async {
+    late AuthBloc auth;
+    await tester.runAsync(() async {
+      auth = AuthBloc(repository: InMemoryAuthRepository());
+      await Future<void>.delayed(Duration.zero);
+      auth.add(const LoginSubmitted(
+          email: 'member@example.com', password: 'password123'));
+      await auth.stream.firstWhere((s) => s.status == AuthStatus.signedIn);
+    });
+    final scope = auth.state.session!.scope;
+    final remote = backup.Remote(), metadata = backup.Metadata(scope);
+    final coordinator = WorkoutBackupCoordinator(
+        scope: scope,
+        activeScope: () => auth.state.session?.scope,
+        local: backup.Local(),
+        gateway: remote,
+        store: metadata);
+    await tester.pumpWidget(BlocProvider.value(
+        value: auth,
+        child: MaterialApp(
+            home: MemberProgressRoute(
+                scope: scope,
+                view: MemberProgressView.backup,
+                repositoryFactory: (_, __) async =>
+                    progress.TestRepository(scope),
+                backupFactory: (_, __) async =>
+                    WorkoutBackupLease(coordinator, () {})))));
+    await tester.pumpAndSettle();
+    expect(find.text('Cloud sync is unavailable in this build'), findsNothing);
+    expect(find.text('Automatic workout sync'), findsOneWidget);
+    expect(find.byType(Switch), findsOneWidget);
+    expect(metadata.state.enabled, isFalse);
+    expect(remote.saves, 0);
+    await tester.runAsync(() async {
+      auth.add(const LoggedOut());
+      await auth.stream.firstWhere((s) => s.status == AuthStatus.signedOut);
+    });
+    await tester.pumpAndSettle();
+    expect(find.byType(Switch), findsNothing);
+    await tester.pumpWidget(const SizedBox());
+    coordinator.dispose();
+    await tester.runAsync(auth.close);
+  });
+  testWidgets(
       'full member shell backs up saves without visiting Progress and respects opt-out',
       (tester) async {
     tester.view.physicalSize = const Size(1000, 2400);
