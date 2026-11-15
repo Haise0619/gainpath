@@ -3,6 +3,21 @@ import 'package:gainpath_data/gainpath_data.dart';
 import 'package:test/test.dart';
 
 void main() {
+  test('new Module 13 callables use their only deployed Singapore region', () {
+    for (final routes in [
+      const FunctionEndpointSelector(),
+      const FunctionEndpointSelector(callablesRegion: 'us-central1'),
+    ]) {
+      for (final name in ['module13MemberCommand', 'module13AdminCommand']) {
+        final endpoint = routes.forCommand(name);
+        expect(endpoint.name, name);
+        expect(endpoint.region, 'asia-southeast1',
+            reason: 'Module 13 has no US deployment to fall back to.');
+      }
+      expect(routes.forCommand('unreleasedRecommendationCommand').region,
+          'us-central1');
+    }
+  });
   test(
       'explicit CSV routes only opted-in deployed commands with original names',
       () {

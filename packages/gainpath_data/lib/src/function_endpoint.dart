@@ -96,6 +96,12 @@ class FunctionEndpointSelector {
       throw ArgumentError.value(callablesRegion, 'FUNCTIONS_REGION');
     }
     final singaporeCommands = _singaporeCommands();
+    // These new Module 13 APIs have no legacy US deployment. Global rollback
+    // switches for older callables must not send their clients to a 404.
+    if (const {'module13MemberCommand', 'module13AdminCommand'}
+        .contains(name)) {
+      return FunctionEndpoint(name, 'asia-southeast1');
+    }
     const replacements = {
       'getBookingListCommand': 'getBookingListReadCommand',
       'getCoachAvailabilityCommand': 'getCoachAvailabilityReadCommand',
