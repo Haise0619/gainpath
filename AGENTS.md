@@ -339,3 +339,8 @@ Training Report now has a compact mixed-mode summary, one expandable workout act
 ## AI coach voice V1 —15 November2026
 
 77 locally generated af_heart1.15 clips replace ordinary Android TTS with offline assets plus offline dynamic fallback. Accepted-number freshness, semantic corrections, sparse encouragement and lifecycle/native ownership are covered by96 voice tests; broader208 pass/1 reproduced pre-existing Curl UI failure,22 native assertions and Android Debug build. Owner heard phone playback; normal APK restored with matching signer/identity and workout records preserved. Physical camera FPS/all9 physical performances remain unmeasured. [Implementation and evidence](docs/integration/module2-ai-coach-voice-v1-implementation.md).
+
+
+## Exercise completion handoff —16 November2026
+
+Completed guided Single/Routine exercises now show a short purple/mint celebration and wait for completion speech before navigation. Durable saving remains first; coach settlement is bounded4s, repeated boundary speech is idempotent, and muted/failure/background/disposal behavior is guarded.140 affected tests,10-file analysis,8 Flutter renders and arm64 Debug build pass. Same-signer Xiaomi update installed/launched; exact APK/identity and47 saved-file hashes verified. Physical final-rep/FPS retest remains unclaimed. [Evidence and scope](docs/superpowers/plans/2026-11-16-workout-completion-handoff.md).

@@ -16,6 +16,7 @@ import '../../domain/routine_workout_context.dart';
 import 'widgets/workout_session_sheet.dart';
 import 'widgets/workout_alignment_guide.dart';
 import 'widgets/workout_camera_feedback.dart';
+import 'widgets/workout_completion_feedback.dart';
 import 'workout_ai_consent_guard.dart';
 
 class RealWorkoutView extends StatefulWidget {
@@ -41,9 +42,14 @@ class RealWorkoutView extends StatefulWidget {
   State<RealWorkoutView> createState() => _RealWorkoutViewState();
 }
 
-class _RealWorkoutViewState extends State<RealWorkoutView> {
+class _RealWorkoutViewState extends State<RealWorkoutView>
+    with WidgetsBindingObserver {
   bool _ending = false, _leaving = false;
   bool _completionScheduled = false;
+  bool _completionVisible = false, _foreground = true;
+  Completer<void>? _foregroundWait;
+  Timer? _visualTimer;
+  Completer<void>? _visualWait;
   int? _announcedReadySet;
   final _sheetController = DraggableScrollableController();
   WorkoutPreferencesController? _preferences;
@@ -54,6 +60,11 @@ class _RealWorkoutViewState extends State<RealWorkoutView> {
           : null;
 
   WorkoutSetContinuation? get _continuation => _continuationFor(widget.session);
+  bool get _finishesWholeWorkout {
+    final routine = widget.routineContext;
+    // Ordinal is display-only: routines may be performed out of order.
+    return routine == null || routine.nextExerciseName == null;
+  }
 
   void _applySetPreference() {
     final preferences = _preferences;
@@ -65,21 +76,35 @@ class _RealWorkoutViewState extends State<RealWorkoutView> {
   }
 
   void _applyCompletionCopy() {
+    final copy =
+        _finishesWholeWorkout ? 'Workout complete.' : 'Exercise complete.';
+    if (widget.session case final WorkoutVoiceSession voice) {
+      voice.voiceFeedback.completionAnnouncement = copy;
+    }
     final continuation = _continuation;
     if (continuation != null) {
-      continuation.completionAnnouncement =
-          widget.routineContext?.nextExerciseName == null
-              ? 'Workout complete.'
-              : 'Exercise complete.';
+      continuation.completionAnnouncement = copy;
     }
   }
 
   @override
   void initState() {
     super.initState();
+    final lifecycle = WidgetsBinding.instance.lifecycleState;
+    _foreground = lifecycle == null || lifecycle == AppLifecycleState.resumed;
+    WidgetsBinding.instance.addObserver(this);
     widget.session.addListener(_sessionChanged);
     _applyCompletionCopy();
     _sessionChanged();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    _foreground = state == AppLifecycleState.resumed;
+    if (_foreground) {
+      _foregroundWait?.complete();
+      _foregroundWait = null;
+    }
   }
 
   @override
@@ -134,8 +159,7 @@ class _RealWorkoutViewState extends State<RealWorkoutView> {
               nowMicros: session.preview.clockMicros());
       if (announced) _announcedReadySet = set;
     }
-    if (widget.routineContext == null ||
-        _completionScheduled ||
+    if (_completionScheduled ||
         _ending ||
         _leaving ||
         widget.session.isManuallyPaused ||
@@ -147,7 +171,6 @@ class _RealWorkoutViewState extends State<RealWorkoutView> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _completionScheduled = false;
       if (mounted &&
-          widget.routineContext != null &&
           !widget.session.isManuallyPaused &&
           widget.session.viewPhase == MeasuredWorkoutPhase.active &&
           widget.session.guidance?.stage == GuidedWorkoutStage.complete) {
@@ -158,10 +181,21 @@ class _RealWorkoutViewState extends State<RealWorkoutView> {
 
   @override
   void dispose() {
+    _cancelVisualDelay();
+    WidgetsBinding.instance.removeObserver(this);
+    _foregroundWait?.complete();
+    _foregroundWait = null;
     _preferences?.removeListener(_applySetPreference);
     widget.session.removeListener(_sessionChanged);
     _sheetController.dispose();
     super.dispose();
+  }
+
+  void _cancelVisualDelay() {
+    _visualTimer?.cancel();
+    _visualTimer = null;
+    _visualWait?.complete();
+    _visualWait = null;
   }
 
   Future<void> _end({bool automatic = false}) async {
@@ -178,10 +212,23 @@ class _RealWorkoutViewState extends State<RealWorkoutView> {
     try {
       final c = widget.session;
       final wasManuallyPaused = c.isManuallyPaused;
-      final completedRoutineExercise = widget.routineContext != null &&
+      final completedExercise =
           c.guidance?.stage == GuidedWorkoutStage.complete;
+      final Future<void> celebration;
+      if (completedExercise) {
+        setState(() => _completionVisible = true);
+        final presented = _visualWait = Completer<void>();
+        _visualTimer = Timer(WorkoutCompletionFeedback.minimumPresentation, () {
+          _visualTimer = null;
+          _visualWait = null;
+          presented.complete();
+        });
+        celebration = presented.future;
+      } else {
+        celebration = Future.value();
+      }
       if (!automatic &&
-          !completedRoutineExercise &&
+          !completedExercise &&
           c.viewPhase != MeasuredWorkoutPhase.saveFailed) {
         // Counting pauses synchronously. Do not hide the confirmation behind
         // a slow native camera shutdown; still await it before resume/save.
@@ -213,10 +260,16 @@ class _RealWorkoutViewState extends State<RealWorkoutView> {
         return;
       }
       if (!mounted ||
+          !identical(c, widget.session) ||
           result == null ||
           c.viewPhase != MeasuredWorkoutPhase.saved) {
         return;
       }
+      await celebration;
+      if (!_foreground) {
+        await (_foregroundWait ??= Completer<void>()).future;
+      }
+      if (!mounted || !identical(c, widget.session)) return;
       _leaving = true;
       if (widget.routineContext != null) {
         Navigator.pop(context, result);
@@ -236,6 +289,10 @@ class _RealWorkoutViewState extends State<RealWorkoutView> {
       }
     } finally {
       _ending = false;
+      if (!_leaving) _cancelVisualDelay();
+      if (mounted && !_leaving && _completionVisible) {
+        setState(() => _completionVisible = false);
+      }
     }
   }
 
@@ -592,6 +649,12 @@ class _RealWorkoutViewState extends State<RealWorkoutView> {
                     child: _controls(c),
                   ),
                 ],
+                if (_completionVisible)
+                  Positioned.fill(
+                      child: WorkoutCompletionFeedback(
+                          key: const ValueKey('workout-completion-overlay'),
+                          exerciseName: widget.exerciseName,
+                          workoutComplete: _finishesWholeWorkout)),
               ]);
             }),
           ),

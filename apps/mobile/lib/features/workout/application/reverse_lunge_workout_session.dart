@@ -390,7 +390,7 @@ class ReverseLungeWorkoutSession extends ChangeNotifier
       audio.finishSet(
           transition: guidance.stage == GuidedWorkoutStage.resting
               ? 'Set complete. Rest.'
-              : 'Exercise complete.');
+              : audio.completionAnnouncement);
     } else {
       audio.pause();
     }

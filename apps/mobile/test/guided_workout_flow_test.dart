@@ -56,7 +56,7 @@ void main() {
     Future<void> send(double angle) async {
       now += 100000;
       detector.angle = angle;
-      camera.receive!(PoseInput(timestampMicros: now));
+      camera.receive?.call(PoseInput(timestampMicros: now));
       await tester.pump();
     }
 
@@ -120,11 +120,9 @@ void main() {
     expect(c.guidance!.stage, GuidedWorkoutStage.complete);
     expect(c.latest!.repetitions, 2);
     expect(c.processing.isPaused, true);
-    final end = find.byTooltip('End session');
-    await tester.ensureVisible(end);
-    await tester.tap(end);
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Save result').hitTestable());
+    expect(find.byKey(const ValueKey('workout-completion-overlay')),
+        findsOneWidget);
+    await tester.pump(const Duration(milliseconds: 1700));
     await tester.pumpAndSettle();
     expect(find.text('Saved on this device'), findsOneWidget);
     expect((await store.read()).single.summary.repetitions, 2);

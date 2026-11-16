@@ -28,6 +28,9 @@ class WorkoutAudioController {
   bool get _usesCoach => _port is CoachWorkoutAudioPort;
   bool get usesRecordedCoach => _usesCoach;
   String? _coachBoundary;
+  int? _lastCoachBoundaryInput;
+  String? _lastCoachBoundaryText;
+  String completionAnnouncement = 'Workout complete.';
   final AudioCueArbiter _arbiter;
   final _boundaryArbiter = AudioCueArbiter(cooldownMicros: 0);
   WorkoutAudioTrace? trace;
@@ -77,11 +80,18 @@ class WorkoutAudioController {
       _coach.invalidate();
       if (_voiceMode != WorkoutVoiceMode.fullCoaching || !_canPlay) return;
       final text = transition ?? 'Set complete.';
+      if (_lastCoachBoundaryInput == _lastInputMicros &&
+          _lastCoachBoundaryText != null &&
+          (transition == null || _lastCoachBoundaryText == text)) {
+        return;
+      }
+      _lastCoachBoundaryInput = _lastInputMicros;
+      _lastCoachBoundaryText = text;
       if (_activeEvent != null &&
           _activeCue != null &&
           CoachVoicePolicy.isNumber(_activeCue!)) {
         // One phase continuation, never a rep queue. Lifecycle cancellation
-        // clears it and durable-save settlement remains bounded to1.5s.
+        // clears it and durable-save settlement remains bounded to4s.
         _coachBoundary = text;
       } else {
         _cancel(reason: 'coach_boundary');
@@ -176,7 +186,13 @@ class WorkoutAudioController {
   Future<void> settleFeedback() async {
     final pending = _activeEvent == null ? null : _playback;
     if (pending == null) return;
-    await pending.timeout(const Duration(milliseconds: 1500), onTimeout: () {
+    // One final number plus the completion clip can exceed1.5s. Persist first,
+    // then let the existing playback future (including its phase continuation)
+    // settle. A failed engine must still never hold navigation indefinitely.
+    final budget = _usesCoach
+        ? const Duration(seconds: 4)
+        : const Duration(milliseconds: 1500);
+    await pending.timeout(budget, onTimeout: () {
       _cancel(reason: 'completion_deadline');
     });
   }

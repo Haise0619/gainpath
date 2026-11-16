@@ -8,6 +8,60 @@ import 'workout_audio_controller_test.dart' show FakeAudio, flush;
 class CoachAudio extends FakeAudio implements CoachWorkoutAudioPort {}
 
 void main() {
+  testWidgets('failed completion playback has a bounded escape',
+      (tester) async {
+    final port = CoachAudio();
+    final audio = WorkoutAudioController(port: port)..setVoiceEnabled(true);
+    audio.announceTransition('boundary-stalled', 'Workout complete.',
+        nowMicros: 1);
+    await tester.pump();
+    final settling = audio.settleFeedback();
+    await tester.pump(const Duration(milliseconds: 4100));
+    await settling;
+    expect(audio.activeCue, isNull);
+    await audio.close();
+  });
+  testWidgets('final number and completion finish beyond old1.5s deadline',
+      (tester) async {
+    final port = CoachAudio();
+    final audio = WorkoutAudioController(port: port)..setVoiceEnabled(true);
+    audio.consume([],
+        nowMicros: 1,
+        trackingAvailable: true,
+        progress: const CoachRepProgress(total: 1, spoken: 1, scope: '1'));
+    await tester.pump();
+    audio.finishSet(transition: 'Workout complete.');
+    final settling = audio.settleFeedback();
+    await tester.pump(const Duration(milliseconds: 750));
+    port.completions.last.complete(AudioPlaybackOutcome.completed);
+    await tester.pump();
+    expect(port.played.last.id, 'workout_complete_v1');
+    await tester.pump(const Duration(milliseconds: 950));
+    expect(audio.activeCue?.id, 'workout_complete_v1');
+    port.completions.last.complete(AudioPlaybackOutcome.completed);
+    await tester.pump();
+    await settling;
+    await audio.close();
+  });
+  test('repeated save boundary preserves pending and playing completion',
+      () async {
+    final port = CoachAudio();
+    final audio = WorkoutAudioController(port: port)..setVoiceEnabled(true);
+    audio.consume([],
+        nowMicros: 1,
+        trackingAvailable: true,
+        progress: const CoachRepProgress(total: 1, spoken: 1, scope: '1'));
+    await flush();
+    audio.finishSet(transition: 'Workout complete.');
+    audio.finishSet(); // Save teardown must not replace it with Set complete.
+    port.completions.last.complete(AudioPlaybackOutcome.completed);
+    await flush();
+    expect(port.played.last.id, 'workout_complete_v1');
+    audio.finishSet(transition: 'Workout complete.');
+    await flush();
+    expect(port.played, hasLength(2));
+    await audio.close();
+  });
   test('leaving rest drops a pending rest announcement behind final number',
       () async {
     final port = CoachAudio();
