@@ -26,6 +26,10 @@ The Debug APK is `build/chatbot-reply-presentation/gainpath-ai-assistant-replies
 
 ## Release scope
 
-The change is prepared locally. The optional coach-list projection and prompt wording require a later scoped source update to the existing `fitnessAssistantCommand`. The UI can read older response shapes. This presentation task performed no deployment or live inference.
+Following the owner's execution instruction, implementation commit `5a86f88` was released to the existing Singapore `fitnessAssistantCommand`. Active revision `fitnessassistantcommand-00004-yup` has verified archive SHA-256 `1d61ad772f234777779002adda55237a46749f3004b15bda22765acf01bd8765`. The source update overlays the two committed Chatbot modules on the captured deployment archive. Runtime, environment, secret binding, service settings, IAM, Rules, indexes and 78 unrelated Functions passed comparison.
+
+Nine live read-only acceptance checks passed for ordinary and FYP Assistant bootstrap, missing Auth/App Check, organization isolation, FYP account isolation, membership and existing recommendations. These checks made zero Gemini requests. Rollback source, prior APK and private acceptance evidence are retained under `build/chatbot-replies-release-5a86f88/`.
+
+The reviewed Debug APK was installed in place on Xiaomi `7c4cbff`. Its installed hash matches the artifact, and the signer, package user ID, data directory and first-install timestamp passed comparison. GainPath launched successfully to the existing signed-in Home. Interactive card navigation remains pending because Android rejected ADB input injection with `INJECT_EVENTS` permission denial. No device security setting was changed.
 
 The existing workout, membership, recommendation and booking data services and controlled routes supply the facts and actions. Screenshots use fixture data. Real provider response wording and physical-device interaction require their respective acceptance checks.
