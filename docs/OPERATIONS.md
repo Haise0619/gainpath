@@ -640,3 +640,7 @@ The phone called an undeployed payment-method endpoint while read/create handler
 ## Exercise completion handoff —16 November2026
 
 Completed guided Single/Routine exercises now show a short purple/mint celebration and wait for completion speech before navigation. Durable saving remains first; coach settlement is bounded4s, repeated boundary speech is idempotent, and muted/failure/background/disposal behavior is guarded.140 affected tests,10-file analysis,8 Flutter renders and arm64 Debug build pass. Same-signer Xiaomi update installed/launched; exact APK/identity and47 saved-file hashes verified. Physical final-rep/FPS retest remains unclaimed. [Evidence and scope](superpowers/plans/2026-11-16-workout-completion-handoff.md).
+
+## Admin Reports analytics — 16 November 2026
+
+Three scoped reporting Functions now share current backup compatibility and explicit partial-source states. The five-tab private Admin is active at localhost:7359 with served hash verified and rollback artifacts retained. Backend60, Emulator13, Admin58 and Domain198 checks pass. Real signed-in browser acceptance, production latency baselines and the remaining advanced metrics are documented in [the acceptance record](integration/admin-reports-analytics-final.md).
