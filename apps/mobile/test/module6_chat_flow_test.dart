@@ -106,8 +106,8 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.textContaining('Not reserved or paid'), findsOneWidget);
     expect(reviews, 0);
-    await tester.ensureVisible(find.text('Review in checkout'));
-    await tester.tap(find.text('Review in checkout'));
+    await tester.ensureVisible(find.text('Book session'));
+    await tester.tap(find.text('Book session'));
     expect(reviews, 1);
   });
   test('bookmark refreshes changed notice and retries only after acceptance',

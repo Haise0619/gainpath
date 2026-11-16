@@ -8,6 +8,39 @@ import 'package:gainpath_mobile/infrastructure/firebase/firebase_chat_repository
 void main() {
   final scope = SessionScope(userId: 'member', organizationId: 'org');
   test(
+      'trusted coach suggestions become typed cards and reject malformed prices',
+      () async {
+    Map<String, dynamic> row = {
+      'coachId': 'coach-1',
+      'name': 'Coach Jo',
+      'branchName': 'Main',
+      'amountMinor': 12500,
+      'durationMinutes': 60,
+      'currency': 'MYR'
+    };
+    final repository = FirebaseChatRepository(
+        scope: scope,
+        activeScope: () => scope,
+        currentUid: () => scope.userId,
+        transport: (_) async => {
+              'text': 'Choose a coach for your next session.',
+              'responseId': 'r',
+              'coachSuggestions': [row]
+            });
+    final reply =
+        await repository.generateReply(text: 'Find a coach', history: []);
+    expect(
+        (reply.attachment as CoachDirectoryAttachment)
+            .coaches
+            .single
+            .amountMinor,
+        12500);
+    row = {...row, 'amountMinor': -1};
+    await expectLater(
+        repository.generateReply(text: 'Find a coach', history: []),
+        throwsA(isA<FormatException>()));
+  });
+  test(
       'booking follow-up context is ephemeral and a late reply cannot restore it after clear',
       () async {
     final calls = <Map<String, dynamic>>[];

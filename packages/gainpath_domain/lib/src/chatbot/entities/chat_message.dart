@@ -17,6 +17,53 @@ sealed class ChatAttachment {
   const ChatAttachment();
 }
 
+class CoachDirectoryAttachment extends ChatAttachment {
+  const CoachDirectoryAttachment(this.coaches);
+  final List<AssistantCoachOption> coaches;
+  factory CoachDirectoryAttachment.fromJson(Object? raw) {
+    if (raw is! List || raw.length > 20) {
+      throw const FormatException('Invalid coach suggestions');
+    }
+    final coaches = raw.map((row) {
+      if (row is! Map ||
+          row['coachId'] is! String ||
+          !RegExp(r'^[\w-]{1,128}$').hasMatch(row['coachId'] as String) ||
+          row['name'] is! String ||
+          (row['name'] as String).trim().isEmpty ||
+          (row['name'] as String).length > 160 ||
+          row['branchName'] is! String ||
+          (row['branchName'] as String).length > 160 ||
+          row['amountMinor'] is! int ||
+          (row['amountMinor'] as int) <= 0 ||
+          (row['amountMinor'] as int) > 100000000 ||
+          row['durationMinutes'] != 60 ||
+          row['currency'] != 'MYR') {
+        throw const FormatException('Invalid coach suggestion facts');
+      }
+      return AssistantCoachOption(
+          coachId: row['coachId'] as String,
+          name: row['name'] as String,
+          branchName: row['branchName'] as String,
+          amountMinor: row['amountMinor'] as int);
+    }).toList();
+    if (coaches.map((c) => c.coachId).toSet().length != coaches.length) {
+      throw const FormatException('Duplicate coach suggestions');
+    }
+    return CoachDirectoryAttachment(List.unmodifiable(coaches));
+  }
+}
+
+class AssistantCoachOption {
+  const AssistantCoachOption(
+      {required this.coachId,
+      required this.name,
+      required this.branchName,
+      required this.amountMinor});
+  final String coachId, name, branchName;
+  final int amountMinor;
+  int get durationMinutes => 60;
+}
+
 /// Facts assembled by authorized repositories, never parsed from model output.
 class FitnessFactsAttachment extends ChatAttachment {
   const FitnessFactsAttachment(

@@ -7,11 +7,20 @@ function fixture() {
     'orgs/g/chatbotDisclaimer/config': { text: 'Education only.', revision: 2, isActive: true },
   };
   const set = vi.fn((path: string, data: any) => { records[path] = data; });
-  const db = { doc: (p: string) => p, runTransaction: async (fn: any) => fn({ getAll: async (...paths: string[]) => paths.map(p => ({ data: () => records[p] })), set }), collection: vi.fn(() => ({ where: () => ({ limit: () => ({ get: async () => ({ docs: [], size: 0 }) }) }) })) } as any;
+  const db = { doc: (p: string) => p, runTransaction: async (fn: any) => fn({ get: async (p: string) => ({data: () => records[p]}), getAll: async (...paths: string[]) => paths.map(p => ({ data: () => records[p] })), set }), collection: vi.fn(() => ({ where: () => ({ limit: () => ({ get: async () => ({ docs: [], size: 0 }) }) }) })) } as any;
   const request = (data: any) => ({ app: { appId: 'app' }, auth: { uid: 'u', token: { email_verified: true } }, data: { organizationId: 'g', ...data } }) as any;
   return { records, set, db, request };
 }
 describe('fitness assistant actual handler', () => {
+  it('returns concise coach empty state with a trusted structured result', async () => {
+    const f = fixture();
+    f.records['orgs/g/members/u/chatbot/state'] = {acknowledgedRevision:2};
+    f.db.collection = () => ({where:()=>({orderBy:()=>({limit:()=>({get:async()=>({docs:[]})})})})});
+    const fetcher = vi.fn().mockResolvedValue({ok:true,json:async()=>({candidates:[{content:{parts:[{functionCall:{name:'list_coaches',args:{}}}]}}]})});
+    const reply:any = await fitnessAssistantHandler(f.request({action:'reply',text:'Find a coach'}),{db:f.db,apiKey:'fixture',fetcher});
+    expect(reply.coachSuggestions).toEqual([]);
+    expect(reply.text).toBe('No coaches are available here right now. Browse the directory for other options.');
+  });
   it('binds secret and rejects missing App Check/auth', async () => {
     expect(fitnessAssistantCommand.__endpoint.secretEnvironmentVariables).toContainEqual(expect.objectContaining({ key: 'GEMINI_API_KEY' }));
     await expect(fitnessAssistantHandler({ data: {} } as any)).rejects.toMatchObject({ code: 'unauthenticated' });

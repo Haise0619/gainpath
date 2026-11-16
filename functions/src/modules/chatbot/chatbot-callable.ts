@@ -76,6 +76,7 @@ export async function fitnessAssistantHandler(request: CallableRequest, dependen
     let requestedProgress: Awaited<ReturnType<typeof progress>> | undefined;
     const sources = new Set<string>();
     let bookingReadReply:string|undefined;
+    let coachSuggestions: unknown[]|undefined;
     const bookingTools = new AssistantBookingTools(new FirestoreStore(db),request.auth,org,async after=>{
       let query=db.collection(`orgs/${org}/coaches`).where('status','==','published').orderBy(FieldPath.documentId()).limit(21);
       if(after)query=query.startAfter(after);
@@ -86,9 +87,15 @@ export async function fitnessAssistantHandler(request: CallableRequest, dependen
       sources.add(name);
       if(['list_coaches','get_coaching_options','propose_booking'].includes(name)){
         await reauthorize();const value=await bookingTools.execute(name,args) as any;
-        if(name==='list_coaches')bookingReadReply=value.items.length
-          ? `Eligible Coaches on this page:\n${value.items.map((c:any)=>`${c.name} · ${c.branchName} · RM ${(c.amountMinor/100).toFixed(2)}`).join('\n')}\nAsk for a Coach, date and 60-minute session.${value.nextAfterCoachId?' More Coaches are available on another page.':''}`
-          : 'No eligible Coaches were found on this page. Use the Coach directory to browse current published Coaches.';
+        if(name==='list_coaches'){
+          coachSuggestions=value.items.map((coach:any)=>({
+            coachId:coach.coachId,name:coach.name,branchName:coach.branchName,
+            amountMinor:coach.amountMinor,durationMinutes:60,currency:'MYR',
+          }));
+          bookingReadReply=value.items.length
+            ? 'Choose a coach for your next session. Review available times and the final price before booking.'
+            : 'No coaches are available here right now. Browse the directory for other options.';
+        }
         if(name==='get_coaching_options')bookingReadReply=value.items.length
           ? `Available times for ${value.localDate} (${value.timeZone}), ${value.durationMinutes} minutes:\n${value.items.slice(0,12).map((s:any)=>`${s.coachName}: ${s.startLabel} – ${s.endLabel} · ${s.branchName} · RM ${(s.amountMinor/100).toFixed(2)}`).join('\n')}${value.items.length>12?'\nMore times are available; specify your preferred time.':''}\nNothing is reserved. Ask for an exact time to review a suggestion in checkout.`
           : `No eligible times are available on ${value.localDate} (${value.timeZone}). Choose another date or check My bookings for an existing session or hold.`;
@@ -139,7 +146,7 @@ export async function fitnessAssistantHandler(request: CallableRequest, dependen
     if(bookingSuggestion)text='Here is an available session suggestion. Nothing has been booked or charged. Review it in checkout; availability and price will be checked again before you continue.';
     else if(bookingReadReply)text=bookingReadReply;
     else if(!requestedProgress&&bookingActionClaim(text))text=noBookingAction;
-    return { responseId: randomUUID(), text, telemetry:{...metrics,responseTimeMillis:Math.max(0,Date.now()-started)}, ...(bookingTools.context?{bookingContext:bookingTools.context}:{}), ...(bookingSuggestion?{bookingSuggestion}:{}), ...(sources.size ? { sources: [...sources] } : {}) };
+    return { responseId: randomUUID(), text, ...(coachSuggestions?{coachSuggestions}:{}), telemetry:{...metrics,responseTimeMillis:Math.max(0,Date.now()-started)}, ...(bookingTools.context?{bookingContext:bookingTools.context}:{}), ...(bookingSuggestion?{bookingSuggestion}:{}), ...(sources.size ? { sources: [...sources] } : {}) };
   } catch (error) {
     if (error instanceof HttpsError) throw error;
     if (error instanceof DomainError) throw new HttpsError(error.code, error.message);

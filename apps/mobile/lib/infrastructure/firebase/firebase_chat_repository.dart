@@ -42,9 +42,16 @@ class FirebaseChatRepository extends ChatRepository {
   bool _invalidated = false;
   Map<String, dynamic>? _bookingContext;
   int _contextVersion = 0;
+  final Set<String> _suggestedCoachIds = {};
+  bool hasCoachSuggestion(String id) {
+    _check();
+    return _suggestedCoachIds.contains(id);
+  }
+
   @override
   void clearSessionContext() {
     _contextVersion++;
+    _suggestedCoachIds.clear();
     _bookingContext = null;
   }
 
@@ -230,10 +237,16 @@ class FirebaseChatRepository extends ChatRepository {
       throw const ChatFailure('unavailable',
           'The assistant returned no usable answer. Please retry.');
     }
+    final coachDirectory = data['coachSuggestions'] == null
+        ? null
+        : CoachDirectoryAttachment.fromJson(data['coachSuggestions']);
+    if (contextVersion == _contextVersion && coachDirectory != null) {
+      _suggestedCoachIds.addAll(coachDirectory.coaches.map((c) => c.coachId));
+    }
     return ChatMessage(answer, false,
         id: id,
         attachment: data['bookingSuggestion'] == null
-            ? null
+            ? coachDirectory
             : BookingSuggestionAttachment.fromJson(
                 Map<String, dynamic>.from(data['bookingSuggestion'] as Map)),
         sources: data['sources'] is List

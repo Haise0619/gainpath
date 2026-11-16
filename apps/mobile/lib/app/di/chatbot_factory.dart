@@ -114,7 +114,14 @@ class _MemberChatHostState extends State<_MemberChatHost> {
         case FitnessFactTarget.membership:
           page = const MembershipDashboardScreen(connected: true);
         case FitnessFactTarget.coaches:
-          page = buildFirebaseCoachDirectory(widget.expected);
+          if (action.id == null) {
+            page = buildFirebaseCoachDirectory(widget.expected);
+          } else {
+            if (_repository?.hasCoachSuggestion(action.id!) != true) {
+              throw const MemberRecommendationUnavailable();
+            }
+            await openMemberBooking(context, widget.expected, action.id!);
+          }
         case FitnessFactTarget.recommendation:
           final detail = _facts!.recommendationTargets[action.id];
           if (detail == null) throw const MemberRecommendationUnavailable();

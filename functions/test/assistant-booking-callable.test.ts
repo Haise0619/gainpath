@@ -15,6 +15,16 @@ function fixture(){
  const request={app:{appId:'fixture'},auth:{uid:'member-1',token:{email_verified:true}},data:{organizationId:'org-1',action:'reply',text:'Suggest a coaching session'}} as any;
  return{store,db,request};
 }
+it('projects coach card facts from the authorized directory and quote',async()=>{
+ const f=fixture();
+ f.db.collection=()=>({where:()=>({orderBy:()=>({limit:()=>({get:async()=>({docs:[{id:'coach-1'}]})})})})});
+ const fetcher=vi.fn().mockResolvedValue({ok:true,json:async()=>({candidates:[{content:{parts:[{functionCall:{name:'list_coaches',args:{}}}]}}]})});
+ const result:any=await fitnessAssistantHandler(f.request,{db:f.db,clock:()=>now,apiKey:'fixture',fetcher,readIdentity:eligibleCoach});
+ expect(result.coachSuggestions).toHaveLength(1);
+ expect(result.coachSuggestions[0]).toMatchObject({coachId:'coach-1',name:'Fixture Coach',amountMinor:12500,currency:'MYR',durationMinutes:60});
+ expect(result.text).not.toContain('Eligible Coaches on this page');
+ expect(result.bookingSuggestion).toBeUndefined();
+});
 it('actual handler attaches only trusted current slot/price and never executes a booking from a model tool',async()=>{
  const f=fixture();
  const args={coachId:'coach-1',localDate:'2026-10-02',durationMinutes:60,branchId:'branch-1',startAtMillis:start};

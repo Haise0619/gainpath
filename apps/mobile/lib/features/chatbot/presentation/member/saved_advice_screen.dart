@@ -3,6 +3,8 @@ import 'package:gainpath_ui/gainpath_ui.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:gainpath_domain/chatbot.dart';
 import '../../application/chat_bloc.dart';
+import 'assistant_reply_view.dart';
+import 'assistant_reply_view_model.dart';
 
 /// Advice library shared with the active chat, with a standalone mock route.
 class SavedAdviceScreen extends StatefulWidget {
@@ -36,11 +38,13 @@ class _SavedAdviceScreenState extends State<SavedAdviceScreen> {
         if (state?.isLoading == true || state?.pendingAdvice.isNotEmpty == true)
           const LinearProgressIndicator(),
         if (state?.error != null)
-          MaterialBanner(content: Text(state!.error!), actions: [
-            TextButton(
-                onPressed: () => bloc!.add(const ChatRetried()),
-                child: const Text('Retry'))
-          ]),
+          Padding(
+              padding: const EdgeInsets.all(16),
+              child: AssistantReplyView(
+                  reply: AssistantReplyViewModel.error(state!.error!,
+                      retryLabel: 'Retry',
+                      title: 'Saved advice was not updated'),
+                  onRetry: () => bloc!.add(const ChatRetried()))),
         Expanded(
             child: items.isEmpty
                 ? Center(

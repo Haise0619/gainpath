@@ -1,3 +1,5 @@
+import 'assistant_reply_view.dart';
+import 'assistant_reply_view_model.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../application/chat_bloc.dart';
@@ -25,6 +27,14 @@ Widget _networkHero(String url, {BoxFit fit = BoxFit.cover}) {
 }
 
 String _adviceText(String text, ChatAttachment? attachment) {
+  if (attachment is CoachDirectoryAttachment) {
+    final value = [
+      text,
+      ...attachment.coaches.map((coach) =>
+          '${coach.name} · ${coach.branchName} · RM ${(coach.amountMinor / 100).toStringAsFixed(2)} · ${coach.durationMinutes} minutes')
+    ].join('\n');
+    return value.length > 6000 ? value.substring(0, 6000) : value;
+  }
   if (attachment is! FitnessFactsAttachment) return text;
   final value = [
     text,
@@ -237,19 +247,19 @@ class _ChatbotViewState extends State<_ChatbotView> {
         children: [
           if (chat.isLoading) const LinearProgressIndicator(),
           if (chat.error != null)
-            MaterialBanner(content: Text(chat.error!), actions: [
-              if (chat.failedText != null)
-                TextButton(
-                    onPressed: () {
-                      _controller.text = chat.failedText!;
-                      _controller.selection = TextSelection.collapsed(
-                          offset: _controller.text.length);
-                    },
-                    child: const Text('Edit question')),
-              TextButton(
-                  onPressed: () => bloc.add(const ChatRetried()),
-                  child: const Text('Retry'))
-            ]),
+            Padding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+                child: AssistantReplyView(
+                    reply: AssistantReplyViewModel.error(chat.error!,
+                        retryLabel: 'Retry'),
+                    onRetry: () => bloc.add(const ChatRetried()),
+                    onEdit: chat.failedText == null
+                        ? null
+                        : () {
+                            _controller.text = chat.failedText!;
+                            _controller.selection = TextSelection.collapsed(
+                                offset: _controller.text.length);
+                          })),
           if (!chat.acknowledged && !chat.isLoading && chat.notice != null)
             TextButton(
                 onPressed: () => _showFirstOpenDisclaimer(),
@@ -343,7 +353,14 @@ class _ChatbotViewState extends State<_ChatbotView> {
                             onStop: () => bloc.add(const ReplyCancelled()));
                       }
                       final m = chat.messages[i];
+                      final questions = chat.messages
+                          .take(i)
+                          .where((row) => row.fromUser)
+                          .toList();
                       return _Bubble(
+                        onRetry: questions.isEmpty
+                            ? null
+                            : () => bloc.add(MessageSent(questions.last.text)),
                         onOpenFact: widget.onOpenFact,
                         sources: m.sources,
                         onReviewBooking: widget.onReviewBooking,
@@ -408,205 +425,120 @@ class _ChatbotViewState extends State<_ChatbotView> {
 }
 
 class _Bubble extends StatelessWidget {
+  const _Bubble(
+      {this.onOpenFact,
+      this.onRetry,
+      this.sources = const [],
+      this.onReviewBooking,
+      required this.text,
+      required this.fromUser,
+      this.attachment,
+      this.isBookmarked = false,
+      this.onToggleBookmark,
+      this.helpful,
+      this.onRate});
   final ValueChanged<FitnessFactAction>? onOpenFact;
-  final List<String> sources;
   final ValueChanged<BookingSuggestionAttachment>? onReviewBooking;
+  final List<String> sources;
   final String text;
-  final bool fromUser;
+  final bool fromUser, isBookmarked;
+  final VoidCallback? onRetry;
   final ChatAttachment? attachment;
-  final bool isBookmarked;
   final VoidCallback? onToggleBookmark;
   final bool? helpful;
   final ValueChanged<bool>? onRate;
-  const _Bubble({
-    this.onOpenFact,
-    this.sources = const [],
-    this.onReviewBooking,
-    required this.text,
-    required this.fromUser,
-    this.attachment,
-    this.isBookmarked = false,
-    this.onToggleBookmark,
-    this.helpful,
-    this.onRate,
-  });
-
   @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
+  Widget build(BuildContext context) => Padding(
+      padding: const EdgeInsets.only(bottom: 20),
       child: Column(
-        crossAxisAlignment:
-            fromUser ? CrossAxisAlignment.end : CrossAxisAlignment.start,
-        children: [
-          Container(
-            constraints: BoxConstraints(
-                maxWidth: MediaQuery.of(context).size.width *
-                    (fromUser ? 0.80 : 0.92)),
-            padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 12),
-            decoration: BoxDecoration(
-              color: fromUser ? AppColors.primary : AppColors.surface,
-              borderRadius: BorderRadius.only(
-                topLeft: const Radius.circular(16),
-                topRight: const Radius.circular(16),
-                bottomLeft: Radius.circular(fromUser ? 16 : 4),
-                bottomRight: Radius.circular(fromUser ? 4 : 16),
-              ),
-              border: fromUser ? null : Border.all(color: AppColors.hairline),
-            ),
-            child: SelectableText(text,
-                style: TextStyle(
-                    fontSize: 15.5,
-                    height: 1.5,
-                    color: fromUser ? Colors.white : AppColors.ink)),
-          ),
-          if (attachment != null)
-            Padding(
-              padding: const EdgeInsets.only(top: 8),
-              child: switch (attachment!) {
-                FitnessFactsAttachment facts => Panel(
-                      child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                        Text(facts.title,
-                            style: Theme.of(context)
-                                .textTheme
-                                .titleMedium
-                                ?.copyWith(fontWeight: FontWeight.w700)),
-                        const SizedBox(height: 6),
-                        Text(facts.subtitle,
-                            style: const TextStyle(
-                                color: AppColors.inkSoft, height: 1.4)),
-                        const SizedBox(height: 12),
-                        ...facts.facts.map((fact) => Padding(
-                            padding: const EdgeInsets.only(bottom: 10),
-                            child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(fact.label,
-                                      style: const TextStyle(
-                                          fontSize: 12,
-                                          color: AppColors.inkSoft)),
-                                  SelectableText(fact.value,
-                                      style: const TextStyle(
-                                          fontSize: 15,
-                                          height: 1.4,
-                                          fontWeight: FontWeight.w600))
-                                ]))),
-                        Wrap(
-                            spacing: 8,
-                            runSpacing: 8,
-                            children: facts.actions
-                                .map((action) => OutlinedButton(
-                                    onPressed: onOpenFact == null
-                                        ? null
-                                        : () => onOpenFact!(action),
-                                    child: Text(action.label)))
-                                .toList())
-                      ])),
-                BookingSuggestionAttachment suggestion => Panel(
-                      child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                        Text(
-                            '${suggestion.data['coachName']} · ${suggestion.durationMinutes} minutes',
-                            style:
-                                const TextStyle(fontWeight: FontWeight.w700)),
-                        Text(
-                            '${suggestion.localDate}\n${suggestion.data['startLabel']} – ${suggestion.data['endLabel']}\n${suggestion.data['timeZone']}\n${suggestion.data['branchName']}'),
-                        Text(
-                            'RM ${((suggestion.data['amountMinor'] as int) / 100).toStringAsFixed(2)}'),
-                        const Text(
-                            'Suggestion only. Not reserved or paid. Availability and price are checked again in checkout.'),
-                        FilledButton(
-                            onPressed:
-                                onReviewBooking == null || suggestion.expired
-                                    ? null
-                                    : () => onReviewBooking!(suggestion),
-                            child: Text(suggestion.expired
-                                ? 'Suggestion expired · ask for current times'
-                                : 'Review in checkout')),
-                      ])),
-                EquipmentAttachment(:final equipment) =>
-                  _EquipmentCard(equipment: equipment),
-                ProgressChartAttachment(
+          crossAxisAlignment:
+              fromUser ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+          children: [
+            if (fromUser)
+              Container(
+                  constraints: BoxConstraints(
+                      maxWidth: MediaQuery.sizeOf(context).width * .80),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  decoration: const BoxDecoration(
+                      color: AppColors.primary,
+                      borderRadius: BorderRadius.only(
+                          topLeft: Radius.circular(18),
+                          topRight: Radius.circular(18),
+                          bottomLeft: Radius.circular(18),
+                          bottomRight: Radius.circular(5))),
+                  child: SelectableText(text,
+                      style: const TextStyle(
+                          fontSize: 16, height: 1.5, color: Colors.white)))
+            else
+              AssistantReplyView(
+                  reply: AssistantReplyViewModel.fromMessage(ChatMessage(
+                      text, false,
+                      attachment: attachment, sources: sources)),
+                  onRetry: onRetry,
+                  onOpenFact: onOpenFact,
+                  onReviewBooking: onReviewBooking),
+            if (attachment case EquipmentAttachment(:final equipment))
+              Padding(
+                  padding: const EdgeInsets.only(top: 12),
+                  child: _EquipmentCard(equipment: equipment)),
+            if (attachment
+                case ProgressChartAttachment(
                   :final title,
                   :final unit,
                   :final values,
                   :final delta
-                ) =>
-                  _ChartCard(
-                      title: title, unit: unit, values: values, delta: delta),
-              },
-            ),
-          if (sources.isNotEmpty)
-            Padding(
-                padding: const EdgeInsets.only(top: 8),
-                child: Text(
-                    'Source: ${sources.join(' · ').replaceAll('_', ' ')}',
-                    style: const TextStyle(
-                        fontSize: 11.5, color: AppColors.inkSoft))),
-          if (onToggleBookmark != null)
-            Padding(
-              padding: const EdgeInsets.only(top: 4, left: 4),
-              child: Wrap(
-                spacing: 4,
-                children: [
-                  _tinyAction(
-                      Icons.copy_rounded,
-                      'Copy',
-                      () => Clipboard.setData(
-                          ClipboardData(text: _adviceText(text, attachment)))),
-                  _tinyAction(
-                    isBookmarked
-                        ? Icons.bookmark_rounded
-                        : Icons.bookmark_border_rounded,
-                    isBookmarked ? 'Saved' : 'Save',
-                    onToggleBookmark!,
-                  ),
-                  const SizedBox(width: 12),
-                  _tinyAction(
-                      helpful == true
-                          ? Icons.thumb_up
-                          : Icons.thumb_up_outlined,
-                      'Helpful',
-                      () => onRate?.call(true)),
-                  const SizedBox(width: 12),
-                  _tinyAction(
-                      helpful == false
-                          ? Icons.thumb_down
-                          : Icons.thumb_down_outlined,
-                      'Not helpful',
-                      () => onRate?.call(false)),
-                ],
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-
-  Widget _tinyAction(IconData icon, String label, VoidCallback onTap) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(6),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 14, color: AppColors.inkSoft),
-            const SizedBox(width: 4),
-            Text(label,
-                style: const TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.inkSoft)),
-          ],
-        ),
-      ),
-    );
-  }
+                ))
+              Padding(
+                  padding: const EdgeInsets.only(top: 12),
+                  child: _ChartCard(
+                      title: title, unit: unit, values: values, delta: delta)),
+            if (onToggleBookmark != null)
+              Padding(
+                  padding: const EdgeInsets.only(top: 6),
+                  child: Wrap(spacing: 2, runSpacing: 2, children: [
+                    _action(
+                        Icons.copy_rounded,
+                        'Copy',
+                        () => Clipboard.setData(ClipboardData(
+                            text: _adviceText(text, attachment)))),
+                    _action(
+                        isBookmarked
+                            ? Icons.bookmark_rounded
+                            : Icons.bookmark_border_rounded,
+                        isBookmarked ? 'Saved' : 'Save',
+                        onToggleBookmark!),
+                    _action(
+                        helpful == true
+                            ? Icons.thumb_up_rounded
+                            : Icons.thumb_up_outlined,
+                        'Helpful',
+                        () => onRate?.call(true)),
+                    _action(
+                        helpful == false
+                            ? Icons.thumb_down_rounded
+                            : Icons.thumb_down_outlined,
+                        'Not helpful',
+                        () => onRate?.call(false)),
+                  ])),
+          ]));
+  Widget _action(IconData icon, String label, VoidCallback onTap) => Semantics(
+      button: true,
+      label: label,
+      child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(10),
+          child: ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: 48),
+              child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  child: Row(mainAxisSize: MainAxisSize.min, children: [
+                    Icon(icon, size: 15, color: AppColors.inkSoft),
+                    const SizedBox(width: 5),
+                    Text(label,
+                        style: const TextStyle(
+                            fontSize: 11.5, color: AppColors.inkSoft))
+                  ])))));
 }
 
 /// Equipment attachment — a photo card with the essentials, tapping
