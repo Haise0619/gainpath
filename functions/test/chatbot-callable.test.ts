@@ -16,15 +16,49 @@ describe('fitness assistant actual handler', () => {
     ['Which equipment works my chest?','Your chest is targeted by the chest press. Adjust the seat before exercising.'],
     ['what can i eat healthy','Choose vegetables, whole grains and protein. Your body is supported by a varied diet.'],
     ['Which equipment works my chest?','Your chest muscles are worked by the chest press; you need a comfortable load.'],
+    ['What gym machines are good for chest day?','Try a chest press or cable fly. Dumbbell presses are another option.'],
+    ['Can I train my chest with a dumbbell at home?','Yes. A dumbbell floor press is a simple option.'],
   ])('answers generic %s without substituting private progress',async(question,answer)=>{
     const f=fixture();f.records['orgs/g/members/u/chatbot/state']={acknowledgedRevision:2};
     const fetcher=vi.fn().mockResolvedValue({ok:true,json:async()=>({candidates:[{content:{parts:[{text:answer}]}}]})});
     for(const mode of ['public','private-approved']){
       vi.stubEnv('GEMINI_CHAT_DATA_MODE',mode);
       try{const result:any=await fitnessAssistantHandler(f.request({action:'reply',text:question}),{db:f.db,apiKey:'fixture',fetcher});
-      expect(result.text).toBe(answer);expect(result.sources??[]).not.toContain('get_my_progress');expect(f.db.collection).not.toHaveBeenCalled();}
+      expect(result.text).toBe(answer);expect(result.sources??[]).not.toContain('get_my_progress');expect(f.db.collection).not.toHaveBeenCalled();
+      const payload = JSON.parse(fetcher.mock.lastCall![1].body);
+      expect(payload.tools[0].functionDeclarations.map((t: any) => t.name)).not.toContain('find_equipment');
+      expect(payload.systemInstruction.parts[0].text).toContain('general equipment recommendations');}
       finally{vi.unstubAllEnvs();}
     }
+  });
+  it.each(['What equipment does GainPath have?', 'What chest machines are available at my gym?', 'Do you have a bench?', 'Show me your equipment inventory'])(
+    'answers explicit inventory from the scoped active catalog for %s', async question => {
+      const f = fixture();
+      f.records['orgs/g/members/u/chatbot/state'] = { acknowledgedRevision: 2 };
+      const get = vi.fn().mockResolvedValue({
+        docs: [{ data: () => ({ name: 'Cable station', muscleGroup: 'Chest and back' }) }],
+        size: 1,
+      });
+      const limit = vi.fn(() => ({ get }));
+      const where = vi.fn(() => ({ limit }));
+      f.db.collection.mockReturnValue({ where });
+      const fetcher = vi.fn();
+      const reply: any = await fitnessAssistantHandler(f.request({ action: 'reply', text: question }), { db: f.db, fetcher });
+      expect(reply.text).toContain('Cable station');
+      expect(reply.text).toContain('Chest and back');
+      expect(reply.sources).toEqual(['find_equipment']);
+      expect(f.db.collection.mock.calls).toEqual([['orgs/g/gymEquipment']]);
+      expect(where.mock.calls).toEqual([['isActive', '==', true]]);
+      expect(fetcher).not.toHaveBeenCalled();
+    },
+  );
+  it('distinguishes an empty equipment catalog from current branch availability', async () => {
+    const f = fixture();
+    f.records['orgs/g/members/u/chatbot/state'] = { acknowledgedRevision: 2 };
+    const reply: any = await fitnessAssistantHandler(f.request({ action: 'reply', text: 'What equipment is available at GainPath?' }), { db: f.db });
+    expect(reply.text).toContain('couldn’t find any active equipment entries');
+    expect(reply.text).toContain('confirm what’s available at your branch');
+    expect(reply.telemetry.providerRequests).toBe(0);
   });
   it('does not consult private progress when a generic provider answer invents a personal fact or fails',async()=>{
     const f=fixture();f.records['orgs/g/members/u/chatbot/state']={acknowledgedRevision:2};
@@ -115,7 +149,7 @@ describe('fitness assistant actual handler', () => {
       f.records['orgs/g/members/u/chatbot/state'] = { acknowledgedRevision: 2 };
       const fetcher = vi.fn().mockImplementation(async () => {
         f.records['orgs/g/members/u'].status = 'pendingDeletion';
-        return { ok: true, json: async () => ({ candidates: [{ content: { parts: tool ? [{ functionCall: { name: 'find_equipment', args: {} } }] : [{ text: 'Here is your advice.' }] } }] }) };
+        return { ok: true, json: async () => ({ candidates: [{ content: { parts: tool ? [{ functionCall: { name: 'list_coaches', args: {} } }] : [{ text: 'Here is your advice.' }] } }] }) };
       });
       await expect(fitnessAssistantHandler(f.request({ action: 'reply', text: 'Tell me about equipment' }), { db: f.db, apiKey: 'key', fetcher })).rejects.toMatchObject({ code: 'permission-denied' });
       expect(f.db.collection).not.toHaveBeenCalled();

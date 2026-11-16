@@ -10,7 +10,7 @@ import 'package:gainpath_mobile/features/workout/domain/routine_workout_context.
 import 'package:gainpath_mobile/features/workout/presentation/member/real_workout_view.dart';
 import 'package:gainpath_pose/gainpath_pose.dart';
 import 'real_squat_session_test.dart' show Camera, FailingStore;
-import 'row_workout_session_test.dart' show RowDetector;
+import 'support/replay_pose_detector.dart';
 import 'retained_voice_boundary_test.dart' show trajectory;
 import 'coach_workout_audio_test.dart' show CoachAudio;
 
@@ -38,7 +38,7 @@ void main() {
             store: store,
             uploadGateway: UnavailableWorkoutUploadGateway(),
             activeScope: () => scope);
-        final camera = Camera(), detector = RowDetector(), port = CoachAudio();
+        final camera = Camera(), detector = ReplayPoseDetector(), port = CoachAudio();
         port.failPlay = voice == 'unavailable';
         var now = 0;
         final frames = await trajectory('squat');

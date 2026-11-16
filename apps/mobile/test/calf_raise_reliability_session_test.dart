@@ -6,7 +6,7 @@ import 'package:gainpath_mobile/features/workout/application/guided_workout_prog
 import 'package:gainpath_mobile/features/workout/data/workout_session_repository.dart';
 import 'support/calf_raise_trajectory.dart';
 import 'real_squat_session_test.dart' show Camera, FailingStore;
-import 'row_workout_session_test.dart' show RowDetector;
+import 'support/replay_pose_detector.dart';
 import 'squat_processing_controller_test.dart' show AudioSink;
 
 class CalfHarness {
@@ -36,7 +36,7 @@ class CalfHarness {
   static final scope =
       SessionScope(userId: 'member', organizationId: 'gainpath');
   final camera = Camera(),
-      detector = RowDetector(),
+      detector = ReplayPoseDetector(),
       store = FailingStore(scope: scope);
   late WorkoutSessionRepository repo;
   late CalfRaiseWorkoutSession session;

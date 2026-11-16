@@ -48,6 +48,11 @@ class ExercisePresentation {
     }
     final reps = (target as RepetitionPrescription).repetitions;
     final base = workoutRepetitionTarget(target.sets, reps);
+    if (tracking.retired) {
+      return ExercisePresentation._(
+          WorkoutExerciseMode.manual, '$base · Self-reported', rest,
+          detail: tracking.description);
+    }
     if (exercise.executionMode == ExerciseExecutionMode.legacyManual &&
             tracking.registeredCapability.hasPoseTracking ||
         exercise.executionMode == ExerciseExecutionMode.aiTracked &&
@@ -59,8 +64,6 @@ class ExercisePresentation {
     if (tracking.tracker != null) {
       final qualifier = switch (tracking.tracker) {
         ExerciseTracker.sideViewCurl => ' · per arm',
-        ExerciseTracker.sideViewRow => ' · per selected arm',
-        ExerciseTracker.sideViewReverseLunge => ' · per selected leg',
         ExerciseTracker.frontViewShoulderPress ||
         ExerciseTracker.frontViewLateralRaise =>
           ' · both arms together',
@@ -102,8 +105,9 @@ class ExercisePresentation {
           'Camera-based tracking with supported repetition and movement feedback.',
         WorkoutExerciseMode.videoTimed =>
           'Follow the video and timer. Repetitions and form are not measured.',
-        WorkoutExerciseMode.manual =>
-          'Log your completed sets. Results are self-reported.',
+        WorkoutExerciseMode.manual => detail.isEmpty
+            ? 'Log your completed sets. Results are self-reported.'
+            : detail,
         WorkoutExerciseMode.unavailable => detail.isEmpty
             ? 'This exercise is unavailable. Review its targets before continuing.'
             : detail,

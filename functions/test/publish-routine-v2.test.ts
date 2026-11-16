@@ -7,3 +7,21 @@ const request={schemaVersion:2,organizationId:'gainpath',blueprintId:'b',request
 it('publishes isolated v2 timer snapshot and idempotent receipt preserving legacy destination',async()=>{const s=setup();s.documents.set('orgs/gainpath/content/routine_b',{preserved:true});const result=await publishRoutineV2(s,auth,request,{media,clock:()=>1000});expect(result.contentId).toBe('routine_v2_b');const row=(s.documents.get('orgs/gainpath/content/routine_v2_b')!.exercises as any[])[0];expect(row.durationSeconds).toBe(45);expect(row).not.toHaveProperty('reps');expect(s.documents.get('orgs/gainpath/content/routine_b')).toEqual({preserved:true});expect(await publishRoutineV2(s,auth,request,{media:{verify:async()=>{throw Error();}}})).toEqual(result);});
 it('rejects missing media and source changes between preflight and transaction',async()=>{for(const changed of [false,true]){const s=setup();await expect(publishRoutineV2(s,auth,request,{media:{verify:async()=>{if(!changed)throw Error();s.documents.set('orgs/gainpath/exerciseVideos/custom',{...s.documents.get('orgs/gainpath/exerciseVideos/custom')!,exerciseName:'Changed'});return media.verify();}}})).rejects.toThrow();expect(s.documents.has('orgs/gainpath/content/routine_v2_b')).toBe(false);}});
 it.each(['cohort','source','role','userId'])('v2 publication denies conflicting canonical binding %s',async kind=>{const s=setup();if(kind==='cohort')s.documents.get('users/a')!.cohortId='fyp';if(kind==='source')s.documents.get('users/a')!.dataSource='fypSimulation';if(kind==='role')s.documents.get('users/a')!.role='member';if(kind==='userId')s.documents.get('orgs/gainpath/members/a')!.userId='other';await expect(publishRoutineV2(s,auth,request,{media})).rejects.toMatchObject({code:'permission-denied'});});
+
+it('publishes retired AI tutorials as manual while leaving the source and historical publication intact',async()=>{
+ const store=setup(),id='wall-push-up-side-v1';
+ const source={schemaVersion:1,exerciseName:'Wall Push-Up',muscleCategory:'Chest',isActive:true,executionMode:'aiTracked'};
+ store.documents.set(`orgs/gainpath/exerciseVideos/${id}`,source);
+ const blueprint=store.documents.get('orgs/gainpath/routineBlueprintsV2/b')!;
+ const row={entryId:'wall',exerciseId:id,executionMode:'aiTracked',sets:2,reps:8,restSeconds:30};
+ blueprint.days=[{dayNumber:1,exercises:[row]}];
+ const historical={preserved:true,exercises:[{...row}]};
+ store.documents.set('orgs/gainpath/content/routine_b',historical);
+ await expect(publishRoutineV2(store,auth,request,{media})).rejects.toMatchObject({code:'failed-precondition'});
+ row.executionMode='legacyManual';
+ await publishRoutineV2(store,auth,request,{media});
+ expect(store.documents.get('orgs/gainpath/content/routine_v2_b')!.exercises)
+  .toMatchObject([{exerciseId:id,executionMode:'legacyManual',sets:2,reps:8}]);
+ expect(store.documents.get(`orgs/gainpath/exerciseVideos/${id}`)).toEqual(source);
+ expect(store.documents.get('orgs/gainpath/content/routine_b')).toEqual(historical);
+});

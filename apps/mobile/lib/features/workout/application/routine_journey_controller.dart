@@ -237,12 +237,6 @@ class RoutineJourneyController extends ChangeNotifier {
         trackingFor(index).tracker == ExerciseTracker.frontViewLateralRaise)) {
       return '${e.sets} sets · ${e.reps} reps per set · both arms together';
     }
-    if (trackingFor(index).tracker == ExerciseTracker.sideViewRow) {
-      return '${e.sets} sets · ${e.reps} reps per selected arm per set';
-    }
-    if (trackingFor(index).tracker == ExerciseTracker.sideViewReverseLunge) {
-      return '${e.sets} sets · ${e.reps} reps per selected front leg per set';
-    }
     return '${e.sets} sets · ${e.reps} reps${perArmTargetsFor(index) ? ' per arm' : ''} per set';
   }
 

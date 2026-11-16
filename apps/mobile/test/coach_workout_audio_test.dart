@@ -85,10 +85,10 @@ void main() {
     final audio = WorkoutAudioController(port: port)..setVoiceEnabled(true);
     audio.consume([
       const CueRequest(
-          id: 'wall_body', text: 'line', priority: CuePriority.correction)
+          id: 'floor_sag', text: 'line', priority: CuePriority.correction)
     ], nowMicros: 1000000, trackingAvailable: true);
     await flush();
-    expect(audio.activeCue!.id, 'wall_line_v1');
+    expect(audio.activeCue!.id, 'floor_sag_v1');
     audio.consume([], nowMicros: 1100000, trackingAvailable: false);
     await flush();
     expect(audio.activeCue, isNull);

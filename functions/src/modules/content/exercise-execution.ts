@@ -1,12 +1,31 @@
 import {DomainError} from '../../platform/errors';
 import type {DocumentData} from '../../platform/firestore/store';
-/** Exact mirror of ExerciseTrackingRegistry; organization is part of identity. */
-export const AI_EXERCISE_IDS = Object.freeze(['standing-lateral-raise-front-v1','bodyweight-reverse-lunge-side-v1','dumbbell-shoulder-press-front-v1','F3b8xIr8ynBDd3gEICKX','standing-single-arm-curl-side-v1','standing-calf-raise-side-v1','wall-push-up-side-v1','standard-floor-push-up-side-v1','single-arm-dumbbell-row-side-v1']);
+const activeAiExerciseIds = Object.freeze([
+ 'standing-lateral-raise-front-v1',
+ 'dumbbell-shoulder-press-front-v1',
+ 'F3b8xIr8ynBDd3gEICKX',
+ 'standing-single-arm-curl-side-v1',
+ 'standing-calf-raise-side-v1',
+ 'standard-floor-push-up-side-v1',
+]);
+const retiredAiExerciseIds = Object.freeze([
+ 'wall-push-up-side-v1',
+ 'single-arm-dumbbell-row-side-v1',
+ 'bodyweight-reverse-lunge-side-v1',
+]);
+/** Historical backup allowlist. Retired IDs remain valid for old snapshots. */
+export const AI_EXERCISE_IDS = Object.freeze([...activeAiExerciseIds,...retiredAiExerciseIds]);
 export type ExerciseExecutionMode = 'aiTracked'|'videoGuidedTimed'|'legacyManual';
 export type ExercisePrescription = {executionMode:'videoGuidedTimed';sets:number;durationSeconds:number;restSeconds:number}|{executionMode:'aiTracked'|'legacyManual';sets:number;reps:number;restSeconds:number};
 const invalid=()=>new DomainError('failed-precondition','Exercise execution prescription is invalid.');
 export function resolveExerciseExecution(org:string,id:string,data:DocumentData):ExerciseExecutionMode {
- const registered=org==='gainpath'&&AI_EXERCISE_IDS.includes(id), mode=data.executionMode;
+ const mode=data.executionMode;
+ const registered=org==='gainpath'&&activeAiExerciseIds.includes(id);
+ if(org==='gainpath'&&retiredAiExerciseIds.includes(id)){
+  // Source documents may still carry the original immutable AI mode.
+  if(mode===undefined||mode==='aiTracked'||mode==='legacyManual')return 'legacyManual';
+  throw invalid();
+ }
  if(registered){if(mode!==undefined&&mode!=='aiTracked')throw invalid();return 'aiTracked';}
  if(mode==='aiTracked')throw invalid();
  if(mode===undefined||mode==='legacyManual')return 'legacyManual';

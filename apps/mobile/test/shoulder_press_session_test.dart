@@ -12,7 +12,7 @@ import 'support/shoulder_press_trajectory.dart';
 import 'support/shoulder_press_projection.dart';
 import 'real_squat_session_test.dart' show Camera, FailingStore;
 import 'squat_processing_controller_test.dart' show AudioSink;
-import 'row_workout_session_test.dart' show RowDetector;
+import 'support/replay_pose_detector.dart';
 
 class PressHarness {
   PressHarness(
@@ -46,7 +46,7 @@ class PressHarness {
   final scope =
       SessionScope(userId: 'press-member', organizationId: 'gainpath');
   late SessionScope? active;
-  final camera = Camera(), detector = RowDetector();
+  final camera = Camera(), detector = ReplayPoseDetector();
   late FailingStore store;
   late WorkoutSessionRepository repo;
   late ShoulderPressWorkoutSession session;

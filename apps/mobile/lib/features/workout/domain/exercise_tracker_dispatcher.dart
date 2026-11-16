@@ -8,24 +8,25 @@ enum ExerciseTracker {
   sideViewSquat,
   sideViewCurl,
   sideViewCalfRaise,
-  sideViewWallPushUp,
   sideViewFloorPushUp,
-  sideViewRow,
-  sideViewReverseLunge
 }
 
 class ExerciseTrackerResolution {
-  const ExerciseTrackerResolution._(this.registeredCapability, this.tracker);
+  const ExerciseTrackerResolution._(this.registeredCapability, this.tracker,
+      {this.retired = false});
   final ExerciseTrackingCapability registeredCapability;
   final ExerciseTracker? tracker;
+  final bool retired;
   ExerciseTrackingCapability get capability => tracker == null
       ? ExerciseTrackingCapability.guidedOnly
       : registeredCapability;
   bool get unavailable =>
       registeredCapability.hasPoseTracking && tracker == null;
-  String get description => unavailable
-      ? 'AI tracking is unavailable for this exercise. Follow the tutorial and mark sets as done yourself.'
-      : capability.description;
+  String get description => retired
+      ? 'Log your completed sets. Camera tracking is no longer available for this exercise.'
+      : unavailable
+          ? 'AI tracking is unavailable for this exercise. Follow the tutorial and mark sets as done yourself.'
+          : capability.description;
 }
 
 /// Intersects exact catalog identity with implementations installed in this app.
@@ -38,10 +39,7 @@ class ExerciseTrackerDispatcher {
         ExerciseTracker.sideViewSquat,
         ExerciseTracker.sideViewCurl,
         ExerciseTracker.sideViewCalfRaise,
-        ExerciseTracker.sideViewWallPushUp,
         ExerciseTracker.sideViewFloorPushUp,
-        ExerciseTracker.sideViewRow,
-        ExerciseTracker.sideViewReverseLunge,
       }});
   final Set<ExerciseTracker> availableTrackers;
   static const _implementations = {
@@ -53,13 +51,8 @@ class ExerciseTrackerDispatcher {
     ExerciseTracker.sideViewCurl: ExerciseTrackingCapability.sideViewCurl,
     ExerciseTracker.sideViewCalfRaise:
         ExerciseTrackingCapability.sideViewCalfRaise,
-    ExerciseTracker.sideViewWallPushUp:
-        ExerciseTrackingCapability.sideViewWallPushUp,
     ExerciseTracker.sideViewFloorPushUp:
         ExerciseTrackingCapability.sideViewFloorPushUp,
-    ExerciseTracker.sideViewRow: ExerciseTrackingCapability.sideViewRow,
-    ExerciseTracker.sideViewReverseLunge:
-        ExerciseTrackingCapability.sideViewReverseLunge,
   };
 
   ExerciseTrackerResolution resolve(
@@ -73,6 +66,8 @@ class ExerciseTrackerDispatcher {
         return ExerciseTrackerResolution._(registered, implementation.key);
       }
     }
-    return ExerciseTrackerResolution._(registered, null);
+    return ExerciseTrackerResolution._(registered, null,
+        retired: ExerciseTrackingRegistry.isRetired(
+            organizationId: organizationId, exerciseId: exerciseId));
   }
 }

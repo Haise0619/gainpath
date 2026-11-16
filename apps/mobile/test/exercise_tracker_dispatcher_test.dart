@@ -28,23 +28,21 @@ void main() {
             .tracker,
         isNull);
   });
-  test('wall push-up uses only its exact supported organization and variant',
-      () {
-    final wall = installed.resolve(
-        organizationId: 'gainpath', exerciseId: 'wall-push-up-side-v1');
-    expect(wall.tracker, ExerciseTracker.sideViewWallPushUp);
-    expect(wall.description, contains('wall push-up'));
-    expect(
-        installed
-            .resolve(
-                organizationId: 'other', exerciseId: 'wall-push-up-side-v1')
-            .tracker,
-        isNull);
-    expect(
-        installed
-            .resolve(organizationId: 'gainpath', exerciseId: 'Wall push-up')
-            .tracker,
-        isNull);
+  test('retired trackers cannot dispatch for any catalog or alias', () {
+    for (final id in [
+      'wall-push-up-side-v1',
+      'single-arm-dumbbell-row-side-v1',
+      'bodyweight-reverse-lunge-side-v1',
+    ]) {
+      final resolution =
+          installed.resolve(organizationId: 'gainpath', exerciseId: id);
+      expect(resolution.retired, isTrue);
+      expect(resolution.tracker, isNull);
+      expect(resolution.capability.hasPoseTracking, isFalse);
+      expect(resolution.description, contains('Log your completed sets'));
+      expect(installed.resolve(organizationId: 'other', exerciseId: id).retired,
+          isFalse);
+    }
   });
   test('single-arm curl resolves only its exact catalog identity', () {
     final result = installed.resolve(

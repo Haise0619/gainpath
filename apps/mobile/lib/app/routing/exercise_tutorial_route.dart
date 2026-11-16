@@ -70,11 +70,6 @@ class _ExerciseTutorialRouteState extends State<ExerciseTutorialRoute> {
           : null,
       playerFactory: widget.playerFactory,
       perArmTargets: tracking.tracker == ExerciseTracker.sideViewCurl,
-      targetLabel: switch (tracking.tracker) {
-        ExerciseTracker.sideViewRow => 'Reps per selected arm per set',
-        ExerciseTracker.sideViewReverseLunge => 'Reps per selected leg per set',
-        _ => null,
-      },
       trackingLabel: tracking.capability.displayLabel,
       trackingDescription: tracking.description,
       authorized: _authorized,

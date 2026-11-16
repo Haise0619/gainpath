@@ -18,16 +18,18 @@ describe('fitness assistant boundaries', () => {
     expect(TOOL_REGISTRY.every(tool => tool.readOnly)).toBe(true);
   });
   it('preserves signed model parts while returning scoped function responses', async () => {
-    const content = { role: 'model', parts: [{ thoughtSignature: 'opaque', functionCall: { name: 'find_equipment', args: {} } }] };
+    const content = { role: 'model', parts: [{ thoughtSignature: 'opaque', functionCall: { name: 'list_coaches', args: {} } }] };
     const fetcher = vi.fn().mockResolvedValueOnce({ ok: true, json: async () => ({ candidates: [{ content }] }) })
       .mockResolvedValueOnce({ ok: true, json: async () => ({ candidates: [{ content: { parts: [{ text: 'Keep going.' }] } }] }) });
     expect(await runGemini('key', 'Hello', [], async () => ({ sessions: 2 }), fetcher)).toBe('Keep going.');
     expect(JSON.parse(fetcher.mock.calls[1][1].body).contents[1]).toEqual(content);
   });
   it('rejects unknown tools, injected identifiers, and upstream failures safely', async () => {
-    for (const functionCall of [{ name: 'delete_account', args: {} }, { name: 'get_my_progress', args: { uid: 'other' } }]) {
+    for (const functionCall of [{ name: 'delete_account', args: {} }, { name: 'find_equipment', args: {} }, { name: 'get_my_progress', args: { uid: 'other' } }]) {
       const fetcher = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ candidates: [{ content: { parts: [{ functionCall }] } }] }) });
-      await expect(runGemini('key', 'Hi', [], async () => ({}), fetcher)).rejects.toThrow('Assistant is temporarily unavailable');
+      const execute = vi.fn(async () => ({}));
+      await expect(runGemini('key', 'Hi', [], execute, fetcher)).rejects.toThrow('Assistant is temporarily unavailable');
+      expect(execute).not.toHaveBeenCalled();
     }
   });
   it('maps quota/billing failures and sanitizes empty, blocked and timed-out output', async () => {
@@ -49,7 +51,7 @@ describe('fitness assistant boundaries', () => {
     await runGemini('key', 'Explain a warm-up', [{ role: 'assistant', text: 'PRIVATE: you completed 456 sessions' }], async () => ({ privateDeviceFact: 999 }), fetcher);
     const payload = fetcher.mock.calls[0][1].body;
     expect(payload).not.toContain('PRIVATE'); expect(payload).not.toContain('456'); expect(payload).not.toContain('privateDeviceFact');
-    expect(JSON.parse(payload).tools[0].functionDeclarations.map((t: any) => t.name)).toEqual(['find_equipment', 'list_coaches', 'get_coaching_options', 'propose_booking']);
+    expect(JSON.parse(payload).tools[0].functionDeclarations.map((t: any) => t.name)).toEqual(['list_coaches', 'get_coaching_options', 'propose_booking']);
     vi.unstubAllEnvs();
   });
   it('rejects personal tools before execution or a second provider turn in public mode', async () => {

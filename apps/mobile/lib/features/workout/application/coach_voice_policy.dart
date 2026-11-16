@@ -98,24 +98,12 @@ class CoachVoicePolicy {
     'floor_pike': 'floor_pike_v1',
     'floor_depth': 'floor_depth_v1',
     'floor_extension': 'floor_extension_v1',
-    'wall_body': 'wall_line_v1',
-    'wall_partial': 'partial_general_v1',
-    'row_partial': 'partial_general_v1',
-    'reverse_lunge_partial': 'partial_general_v1',
     'floor_tracking': 'camera_adjust_v1',
     'squat_tracking_lost': 'tracking_lost_v1',
-    'lunge_begin': 'start_v1',
   };
   CueRequest? _rewrite(CueRequest cue) {
     if (cue.id.endsWith('_rep') || cue.id == 'floor_good') return null;
     String? id = _mapping[cue.id];
-    if (cue.id.startsWith('lunge_start_')) {
-      final number = int.tryParse(cue.text);
-      if (number != null && number >= 1 && number <= 3) {
-        return clip('number_${number.toString().padLeft(3, '0')}',
-            CuePriority.encouragement);
-      }
-    }
     if (cue.id == 'press_setup') {
       final text = cue.text.toLowerCase();
       // Unpackaged joint/framing reasons retain their actual observed detail.

@@ -44,14 +44,92 @@ class AssistantReplyView extends StatelessWidget {
 class _NormalReply extends StatelessWidget {
   const _NormalReply({required this.reply});
   final AssistantReplyViewModel reply;
+
   @override
-  Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.symmetric(vertical: 6),
-        child: SelectableText(reply.conclusion,
-            style: const TextStyle(
-                fontSize: 16, height: 1.6, color: AppColors.ink)),
+  Widget build(BuildContext context) => ConstrainedBox(
+        constraints: BoxConstraints(
+          maxWidth: (MediaQuery.sizeOf(context).width * .9).clamp(0.0, 600.0),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const SizedBox(
+              width: 28,
+              height: 28,
+              child: CircleAvatar(
+                backgroundColor: AppColors.primaryTint,
+                child: Padding(
+                  padding: EdgeInsets.all(3),
+                  child: Image(
+                    image: ResizeImage(
+                      AssetImage('assets/images/ai_coach_mascot.png'),
+                      width: 96,
+                    ),
+                    excludeFromSemantics: true,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Flexible(
+              child: Container(
+                key: const ValueKey('assistant-text-bubble'),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+                decoration: const BoxDecoration(
+                  color: AppColors.surface,
+                  border: Border.fromBorderSide(
+                      BorderSide(color: AppColors.hairline)),
+                  borderRadius: BorderRadius.only(
+                    topLeft: Radius.circular(5),
+                    topRight: Radius.circular(18),
+                    bottomLeft: Radius.circular(18),
+                    bottomRight: Radius.circular(18),
+                  ),
+                ),
+                child: SelectableText(
+                  reply.conclusion.replaceAllMapped(
+                    RegExp(r'^([ \t]*)[-*] +', multiLine: true),
+                    (match) => '${match[1]}• ',
+                  ),
+                  style: const TextStyle(
+                    fontSize: 15.5,
+                    height: 1.48,
+                    color: AppColors.ink,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
       );
 }
+
+// Accent pairs are also used on category badges so their labels remain legible.
+(Color, Color) _cardColors(AssistantReplyKind kind) => switch (kind) {
+      AssistantReplyKind.membership => (
+          const Color(0xFF7B390B),
+          const Color(0xFFFFEAD1)
+        ),
+      AssistantReplyKind.workoutSummary => (
+          const Color(0xFF116049),
+          const Color(0xFFDDF5EA)
+        ),
+      AssistantReplyKind.trainingInsight => (
+          const Color(0xFF234C88),
+          const Color(0xFFE4EFFF)
+        ),
+      AssistantReplyKind.coachAction => (
+          const Color(0xFF793044),
+          const Color(0xFFFBE5EB)
+        ),
+      AssistantReplyKind.errorRetry => (
+          const Color(0xFF962C24),
+          const Color(0xFFFDE7E4)
+        ),
+      _ => (AppColors.primary, AppColors.primaryTint),
+    };
 
 class _ReplyFrame extends StatelessWidget {
   const _ReplyFrame(
@@ -66,51 +144,50 @@ class _ReplyFrame extends StatelessWidget {
   final List<Widget> children;
   final Widget? primary;
   @override
-  Widget build(BuildContext context) => Container(
+  Widget build(BuildContext context) {
+    final (accent, tint) = _cardColors(reply.kind);
+    return FilledButtonTheme(
+      data: FilledButtonThemeData(
+        style: FilledButton.styleFrom(
+            backgroundColor: accent, foregroundColor: Colors.white),
+      ),
+      child: Container(
+        key: ValueKey('assistant-card-${reply.kind.name}'),
         width: double.infinity,
-        padding: const EdgeInsets.all(18),
+        padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-            color: reply.kind == AssistantReplyKind.recommendation
-                ? AppColors.primaryTint.withValues(alpha: .65)
-                : AppColors.surface,
-            gradient: reply.kind == AssistantReplyKind.membership
-                ? const LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [AppColors.primaryTint, AppColors.surface],
-                    stops: [0, .65])
-                : null,
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: AppColors.hairline),
-            boxShadow: [
-              BoxShadow(
-                  color: AppColors.primary.withValues(alpha: .035),
-                  blurRadius: 14,
-                  offset: const Offset(0, 4))
-            ]),
+          color: AppColors.surface,
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [tint.withValues(alpha: .55), AppColors.surface],
+            stops: const [0, .67],
+          ),
+          borderRadius: BorderRadius.circular(20),
+          border:
+              Border.all(color: Color.lerp(AppColors.hairline, accent, .18)!),
+        ),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Row(children: [
-            Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                    color: reply.kind == AssistantReplyKind.trainingInsight
-                        ? AppColors.primary
-                        : AppColors.primaryTint,
-                    borderRadius: BorderRadius.circular(12)),
-                child: Icon(icon,
-                    color: reply.kind == AssistantReplyKind.trainingInsight
-                        ? Colors.white
-                        : AppColors.primary,
-                    size: 19)),
-            const SizedBox(width: 10),
+            DecoratedBox(
+              decoration: BoxDecoration(
+                  color: tint, borderRadius: BorderRadius.circular(10)),
+              child: Padding(
+                padding: const EdgeInsets.all(7),
+                child: Icon(icon, color: accent, size: 18),
+              ),
+            ),
+            const SizedBox(width: 9),
             Expanded(
-                child: Text(category,
-                    style: const TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.primary)))
+              child: Text(category,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: accent,
+                  )),
+            ),
           ]),
-          const SizedBox(height: 14),
+          const SizedBox(height: 10),
           Text(reply.title,
               style: const TextStyle(
                   fontSize: 20,
@@ -125,19 +202,15 @@ class _ReplyFrame extends StatelessWidget {
           ],
           ...children,
           if (primary != null) ...[
-            const SizedBox(height: 18),
+            const SizedBox(height: 14),
             SizedBox(width: double.infinity, child: primary)
-          ],
-          if (reply.sources.isNotEmpty) ...[
-            const SizedBox(height: 12),
-            Text(_sourceLabel(reply.sources, reply.kind),
-                style: const TextStyle(
-                    fontSize: 11.5, height: 1.4, color: AppColors.inkSoft))
           ],
           if (reply.details.isNotEmpty || reply.sources.isNotEmpty)
             _Details(reply: reply),
         ]),
-      );
+      ),
+    );
+  }
 }
 
 String _sourceLabel(List<String> sources, AssistantReplyKind kind) {
@@ -164,11 +237,13 @@ String _sourceLabel(List<String> sources, AssistantReplyKind kind) {
 }
 
 class _Stats extends StatelessWidget {
-  const _Stats(this.stats);
+  const _Stats(this.stats, {required this.kind});
   final List<AssistantReplyStat> stats;
+  final AssistantReplyKind kind;
   @override
   Widget build(BuildContext context) =>
       LayoutBuilder(builder: (context, constraints) {
+        final (accent, tint) = _cardColors(kind);
         final columns = constraints.maxWidth >= 260 &&
                 MediaQuery.textScalerOf(context).scale(14) <= 21
             ? 2
@@ -185,16 +260,16 @@ class _Stats extends StatelessWidget {
                         width: width,
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
-                            color: AppColors.bg,
+                            color: Color.lerp(AppColors.surface, tint, .6),
                             borderRadius: BorderRadius.circular(13)),
                         child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(stat.label,
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                       fontSize: 12,
                                       height: 1.4,
-                                      color: AppColors.inkSoft)),
+                                      color: accent)),
                               const SizedBox(height: 6),
                               SelectableText(stat.value.replaceAll('→', ' to '),
                                   style: const TextStyle(
@@ -227,7 +302,7 @@ class _MembershipReply extends StatelessWidget {
           category: 'YOUR MEMBERSHIP',
           primary: _primary(reply, onOpenFact),
           children: [
-            if (reply.stats.isNotEmpty) _Stats(reply.stats),
+            if (reply.stats.isNotEmpty) _Stats(reply.stats, kind: reply.kind),
             if (reply.highlights.isNotEmpty) ...[
               const SizedBox(height: 18),
               Text(reply.benefitsLabel ?? 'Core benefits',
@@ -285,7 +360,7 @@ class _WorkoutReply extends StatelessWidget {
                               fontSize: 12,
                               fontWeight: FontWeight.w600,
                               color: AppColors.primary)))),
-            if (reply.stats.isNotEmpty) _Stats(reply.stats),
+            if (reply.stats.isNotEmpty) _Stats(reply.stats, kind: reply.kind),
             if (reply.highlights.isNotEmpty) ...[
               const SizedBox(height: 14),
               ...reply.highlights.take(2).map((line) => Text(line,
@@ -306,7 +381,7 @@ class _InsightReply extends StatelessWidget {
           category: 'TRAINING INSIGHT',
           primary: _primary(reply, onOpenFact),
           children: [
-            if (reply.stats.isNotEmpty) _Stats(reply.stats),
+            if (reply.stats.isNotEmpty) _Stats(reply.stats, kind: reply.kind),
             if (reply.highlights.isNotEmpty) ...[
               const SizedBox(height: 14),
               const Text('Estimated form · same measurement group',
@@ -377,7 +452,7 @@ class _CoachReply extends StatelessWidget {
                   child: OutlinedButton(
                       onPressed: onRetry, child: const Text('Refresh times'))),
           ],
-          if (reply.stats.isNotEmpty) _Stats(reply.stats),
+          if (reply.stats.isNotEmpty) _Stats(reply.stats, kind: reply.kind),
           ...reply.coaches.take(3).map(tile),
           if (reply.coaches.length > 3)
             ExpansionTile(
@@ -524,7 +599,7 @@ class _RecommendationReply extends StatelessWidget {
               _Highlight(reply.highlights.first,
                   icon: Icons.arrow_forward_rounded)
             ],
-            if (reply.stats.isNotEmpty) _Stats(reply.stats),
+            if (reply.stats.isNotEmpty) _Stats(reply.stats, kind: reply.kind),
             if (reply.actions.length > 1 || reply.highlights.length > 1)
               ExpansionTile(
                   tilePadding: EdgeInsets.zero,
@@ -642,7 +717,16 @@ class _Details extends StatelessWidget {
                                   height: 1.5,
                                   color: AppColors.inkSoft))
                         ])))),
-            if (reply.sources.isNotEmpty)
+            if (reply.sources.isNotEmpty) ...[
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Text(_sourceLabel(reply.sources, reply.kind),
+                    style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.inkSoft)),
+              ),
+              const SizedBox(height: 4),
               Align(
                   alignment: Alignment.centerLeft,
                   child: SelectableText(reply.sources.join('\n'),
@@ -650,6 +734,7 @@ class _Details extends StatelessWidget {
                           fontSize: 12,
                           height: 1.5,
                           color: AppColors.inkSoft))),
+            ],
           ]));
 }
 
@@ -664,13 +749,14 @@ class _IssueReply extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-          color: AppColors.surface,
+          color: const Color(0xFFFFF6F5),
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: AppColors.hairline)),
+          border: Border.all(color: _cardColors(reply.kind).$2)),
+      key: ValueKey('assistant-card-${reply.kind.name}'),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [
-          const Icon(Icons.cloud_off_rounded,
-              color: AppColors.inkSoft, size: 20),
+          Icon(Icons.cloud_off_rounded,
+              color: _cardColors(reply.kind).$1, size: 20),
           const SizedBox(width: 9),
           Expanded(
               child: Text(reply.title,
@@ -694,9 +780,14 @@ class _IssueReply extends StatelessWidget {
           if (onRetry != null)
             FilledButton(
                 onPressed: onRetry,
+                style: FilledButton.styleFrom(
+                    backgroundColor: _cardColors(reply.kind).$1,
+                    foregroundColor: Colors.white),
                 child: Text(reply.retryLabel ?? 'Try again')),
           if (onEdit != null)
             TextButton(onPressed: onEdit, child: const Text('Edit question'))
         ]),
+        if (reply.sources.isNotEmpty || reply.details.isNotEmpty)
+          _Details(reply: reply),
       ]));
 }

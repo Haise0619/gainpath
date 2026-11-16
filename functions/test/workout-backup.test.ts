@@ -1,7 +1,8 @@
 import { beforeEach, expect, it } from 'vitest';
 import { MemoryStore } from './memory-store';
 import { backupWorkout, listWorkoutBackups, type BackupStore } from '../src/modules/workouts/workout-backup';
-import {actor,payload,command} from './workout-backup-fixture';
+import {validateBackupPayload} from '../src/modules/workouts/workout-backup-validation';
+import {actor,payload,command,routinePayload} from './workout-backup-fixture';
 it.each([0, 75, 600])('backs up optional Program exercise restSeconds %s without changing evidence classification', async restSeconds => {
  const {routinePayload} = await import('./workout-backup-fixture');
  const next = {...routinePayload, attempt: {...routinePayload.attempt, routine: {...routinePayload.attempt.routine,
@@ -59,3 +60,14 @@ it('uses a cross-runtime numeric digest representation without losing precision'
  expect(canonical({small:0.000001,zero:-0,integer:90})).toBe('{"integer":n4056800000000000,"small":n3eb0c6f7a0b5ed8d,"zero":n0000000000000000}');
  expect(digestOf({small:0.000001,zero:-0,integer:90})).toBe('429d8008002cd9d4cfef0cf6bfd58828fd43d35034c83fc24748257d93d1907f');
 });
+
+it.each(['wall-push-up-side-v1','single-arm-dumbbell-row-side-v1','bodyweight-reverse-lunge-side-v1'])(
+ 'accepts a manual continuation of the original signed AI routine row %s',exerciseId=>{
+  const row={entryId:'retired',exerciseId,dayNumber:1,name:'Retired camera exercise',sets:1,reps:5,restSeconds:0,executionMode:'aiTracked'};
+  const routine={...routinePayload.attempt.routine,schemaVersion:2,kind:'routine_v2',exercises:[row]};
+  const entries=[{...routinePayload.attempt.entries[0],status:'selfReportedCompleted',manualSets:1}];
+  const attempt={...routinePayload.attempt,schemaVersion:2,routine,entries};
+  const planSignature=JSON.stringify(['routine','blueprint',2,['retired',exerciseId,'aiTracked',1,{sets:1,reps:5,restSeconds:0},null,null,null]]);
+  const snapshot={...routinePayload,schemaVersion:2,planSignature,attempt,manualSets:{0:1},guidedProgress:{}};
+  expect(validateBackupPayload('routine','r1','gainpath','member',snapshot)).toEqual(snapshot);
+ });

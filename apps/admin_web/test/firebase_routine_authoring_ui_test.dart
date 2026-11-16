@@ -166,6 +166,55 @@ void main() {
     expect(row.reps, isNull);
     expect(routines.publishedId, isNull);
   });
+  testWidgets('a retired AI catalog entry is authored as a manual routine row',
+      (tester) async {
+    GoogleFonts.config.allowRuntimeFetching = false;
+    tester.view.physicalSize = const Size(1600, 1200);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final catalog = _ExerciseCatalog()
+      ..entries.add(TutorialVideo(
+        id: 'wall-push-up-side-v1',
+        title: 'Wall Push-Up',
+        category: 'Chest',
+        status: TutorialStatus.active,
+        executionMode: ExerciseExecutionMode.aiTracked,
+        defaultPrescription: const RepetitionPrescription(
+            sets: 2, repetitions: 8, restSeconds: 30),
+      ));
+    final routines = _RoutineRepository();
+    await tester.pumpWidget(MultiRepositoryProvider(
+        providers: [
+          RepositoryProvider<TutorialRepository>.value(value: catalog),
+          RepositoryProvider<RoutineTemplateRepository>.value(value: routines),
+        ],
+        child: MaterialApp(
+            theme: AppTheme.build(), home: const RoutineTemplatesScreen())));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('New template'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).first, 'Push routine');
+    await tester.tap(find.text('Structure'));
+    await tester.pumpAndSettle();
+    final picker = find.byType(DropdownButtonFormField<String>).last;
+    await tester.ensureVisible(picker);
+    await tester.tap(picker);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Wall Push-Up').last);
+    await tester.pumpAndSettle();
+    expect(find.text('Self-reported sets'), findsOneWidget);
+    expect(find.text('AI tracking'), findsNothing);
+    await tester.tap(find.text('Review'));
+    await tester.pumpAndSettle();
+    final save = find.widgetWithText(FilledButton, 'Create template');
+    await tester.ensureVisible(save);
+    await tester.tap(save);
+    await tester.pumpAndSettle();
+    final row = routines.entries.single.days.single.exercises.single;
+    expect(row.executionMode, ExerciseExecutionMode.legacyManual);
+    expect(row.prescription!.toJson(), {'sets': 2, 'reps': 8, 'restSeconds': 30});
+    expect(catalog.entries.last.executionMode, ExerciseExecutionMode.aiTracked);
+  });
   testWidgets('catalog authors overview and ordered tutorial steps',
       (tester) async {
     GoogleFonts.config.allowRuntimeFetching = false;

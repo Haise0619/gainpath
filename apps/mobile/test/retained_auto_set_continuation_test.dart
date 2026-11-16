@@ -18,7 +18,7 @@ import 'package:gainpath_pose/gainpath_pose.dart';
 
 import 'real_squat_session_test.dart' show Camera, FailingStore;
 import 'retained_voice_boundary_test.dart' show trajectory;
-import 'row_workout_session_test.dart' show RowDetector;
+import 'support/replay_pose_detector.dart';
 import 'shoulder_press_session_test.dart' show PressHarness;
 import 'squat_processing_controller_test.dart' show AudioSink;
 import 'support/shoulder_press_trajectory.dart';
@@ -132,7 +132,7 @@ void main() {
       final frames = await trajectory(kind);
       final scope =
           SessionScope(userId: 'auto-set-fixture', organizationId: 'gainpath');
-      final camera = Camera(), detector = RowDetector();
+      final camera = Camera(), detector = ReplayPoseDetector();
       final store = FailingStore(scope: scope)..fail = false;
       final repo = WorkoutSessionRepository(
           scope: scope,

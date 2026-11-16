@@ -57,6 +57,10 @@ class ExerciseExecutionResolver {
     if (target is! RepetitionPrescription) {
       return invalid;
     }
+    if (tracked.retired) {
+      return ResolvedExerciseExecution(ExerciseExecutionKind.legacyManual,
+          description: tracked.description);
+    }
     if (exercise.executionMode == ExerciseExecutionMode.legacyManual) {
       if (tracked.registeredCapability.hasPoseTracking) return invalid;
       return const ResolvedExerciseExecution(ExerciseExecutionKind.legacyManual,

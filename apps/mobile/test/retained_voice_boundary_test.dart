@@ -22,7 +22,7 @@ import 'support/floor_push_up_trajectory.dart';
 import 'real_squat_session_test.dart' show Camera, FailingStore;
 import 'squat_processing_controller_test.dart' as squat;
 import 'calf_raise_workout_session_test.dart' show CalfDetector;
-import 'row_workout_session_test.dart' show RowDetector;
+import 'support/replay_pose_detector.dart';
 
 PoseFrame curl(int t, double a) {
   final r = a * math.pi / 180;
@@ -171,7 +171,7 @@ void main() {
             (tester) async {
           final frames = await trajectory(kind),
               camera = Camera(),
-              d = RowDetector(),
+              d = ReplayPoseDetector(),
               audio = sets == 1 && target == 1
                   ? HoldingOutcomeAudio()
                   : squat.AudioSink();

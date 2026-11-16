@@ -275,10 +275,7 @@ class _RoutineJourneyScreenState extends State<RoutineJourneyScreen> {
           'Floor side view · Place device on floor 2-3m away facing your side',
         ExerciseTracker.sideViewSquat ||
         ExerciseTracker.sideViewCurl ||
-        ExerciseTracker.sideViewCalfRaise ||
-        ExerciseTracker.sideViewWallPushUp ||
-        ExerciseTracker.sideViewRow ||
-        ExerciseTracker.sideViewReverseLunge =>
+        ExerciseTracker.sideViewCalfRaise =>
           'Side camera view · Place device 2m away facing your profile',
         _ => null,
       };

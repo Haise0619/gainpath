@@ -158,7 +158,7 @@ void main() {
             .resolve(
                 organizationId: 'gainpath', exerciseId: 'wall-push-up-side-v1')
             .tracker,
-        ExerciseTracker.sideViewWallPushUp);
+        null);
     expect(
         ExerciseTrackingRegistry.resolve(
                 organizationId: 'other',

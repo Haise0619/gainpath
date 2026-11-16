@@ -102,18 +102,18 @@ void main() {
         throwsFormatException);
   });
   testWidgets(
-      'result labels front planted leg and holds form score and rewards',
+      'historical result shows the selected leg and an unavailable form assessment',
       (tester) async {
     await tester.pumpWidget(MaterialApp(
         home: WorkoutResultScreen.measured(summary: lungeSummary())));
     await tester.pumpAndSettle();
-    expect(find.text('MEASURED REVERSE LUNGE RESULT'), findsOneWidget);
-    expect(find.text('Form score is not assessed for reverse lunges'),
+    expect(find.text('Reverse Lunge'), findsOneWidget);
+    expect(find.text('Form assessment not available for this exercise.'),
         findsOneWidget);
     expect(
         find.textContaining('Front planted working leg: Left'), findsOneWidget);
-    expect(
-        find.textContaining('No rewards have been awarded.'), findsOneWidget);
+    expect(find.text('Full reps'), findsOneWidget);
+    expect(find.textContaining('Reward awarded'), findsNothing);
     expect(find.textContaining('estimated form'), findsNothing);
     expect(tester.takeException(), isNull);
   });

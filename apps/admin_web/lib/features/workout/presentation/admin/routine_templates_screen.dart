@@ -573,12 +573,16 @@ class _TemplateFormPageState extends State<_TemplateFormPage> {
     });
   }
 
+  ExerciseExecutionMode _catalogMode(TutorialVideo item) =>
+      item.executionMode == ExerciseExecutionMode.videoGuidedTimed
+          ? ExerciseExecutionMode.videoGuidedTimed
+          : item.trackingCapability.hasPoseTracking
+              ? ExerciseExecutionMode.aiTracked
+              : ExerciseExecutionMode.legacyManual;
+
   void _copyDefaults(_ExerciseDraft row, TutorialVideo item) {
     row.selectedExerciseId = item.id;
-    row.mode = item.executionMode ??
-        (item.trackingCapability.hasPoseTracking
-            ? ExerciseExecutionMode.aiTracked
-            : ExerciseExecutionMode.legacyManual);
+    row.mode = _catalogMode(item);
     row.sourceRevision = item.editRevision;
     final defaults = item.defaultPrescription;
     row.sets.text = '${defaults?.sets ?? 3}';
@@ -605,10 +609,23 @@ class _TemplateFormPageState extends State<_TemplateFormPage> {
     try {
       final entries = await context.read<TutorialRepository>().load();
       if (mounted) {
-        setState(() => _catalog = entries
-            .where((entry) =>
-                !entry.archived && entry.status == TutorialStatus.active)
-            .toList());
+        setState(() {
+          _catalog = entries
+              .where((entry) =>
+                  !entry.archived && entry.status == TutorialStatus.active)
+              .toList();
+          final byId = {for (final entry in _catalog) entry.id: entry};
+          for (final day in _days) {
+            for (final row in day.exercises) {
+              final item = byId[row.selectedExerciseId];
+              if (item != null &&
+                  row.mode == ExerciseExecutionMode.aiTracked &&
+                  _catalogMode(item) == ExerciseExecutionMode.legacyManual) {
+                row.mode = ExerciseExecutionMode.legacyManual;
+              }
+            }
+          }
+        });
       }
     } catch (_) {
       if (mounted) {
@@ -719,6 +736,7 @@ class _TemplateFormPageState extends State<_TemplateFormPage> {
               'Day ${i + 1}: select an active exercise from the catalog.');
           return;
         }
+        final mode = _isV2 ? _catalogMode(selected!) : null;
         final name = _usesCatalog ? selected!.title : ex.name.text.trim();
         if (name.isEmpty) continue;
         final sets = int.tryParse(ex.sets.text.trim());
@@ -730,7 +748,7 @@ class _TemplateFormPageState extends State<_TemplateFormPage> {
             (_usesCatalog &&
                 (sets > 50 ||
                     reps >
-                        (ex.mode == ExerciseExecutionMode.videoGuidedTimed
+                        (mode == ExerciseExecutionMode.videoGuidedTimed
                             ? 3600
                             : 100)))) {
           setState(() => _error = _usesCatalog
@@ -745,7 +763,7 @@ class _TemplateFormPageState extends State<_TemplateFormPage> {
             setState(() => _error = 'Use whole rest seconds.');
             return;
           }
-          target = ex.mode == ExerciseExecutionMode.videoGuidedTimed
+          target = mode == ExerciseExecutionMode.videoGuidedTimed
               ? TimedPrescription(
                   sets: sets, durationSeconds: reps, restSeconds: rest)
               : RepetitionPrescription(
@@ -761,12 +779,7 @@ class _TemplateFormPageState extends State<_TemplateFormPage> {
             name, sets, target is TimedPrescription ? null : reps,
             exerciseId: selected?.id ?? '',
             entryId: ex.entryId,
-            executionMode: _isV2
-                ? ex.mode ??
-                    (selected!.trackingCapability.hasPoseTracking
-                        ? ExerciseExecutionMode.aiTracked
-                        : ExerciseExecutionMode.legacyManual)
-                : null,
+            executionMode: mode,
             prescription: target,
             sourceCatalogRevision: ex.sourceRevision));
       }
@@ -895,11 +908,9 @@ class _TemplateFormPageState extends State<_TemplateFormPage> {
                                       .where(
                                           (e) => e.id == row.selectedExerciseId)
                                       .firstOrNull;
-                                  row.mode = item?.trackingCapability
-                                              .hasPoseTracking ==
-                                          true
-                                      ? ExerciseExecutionMode.aiTracked
-                                      : ExerciseExecutionMode.legacyManual;
+                                  row.mode = item == null
+                                      ? ExerciseExecutionMode.legacyManual
+                                      : _catalogMode(item);
                                 }
                               }
                             }

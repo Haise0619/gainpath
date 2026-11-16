@@ -6,7 +6,6 @@ import 'package:gainpath_mobile/app/routing/exercise_tutorial_route.dart';
 import 'package:gainpath_mobile/app/routing/real_squat_route.dart';
 import 'package:gainpath_mobile/app/routing/curl_workout_route.dart';
 import 'package:gainpath_mobile/app/routing/calf_raise_workout_route.dart';
-import 'package:gainpath_mobile/app/routing/wall_push_up_workout_route.dart';
 import 'package:gainpath_mobile/features/workout/domain/published_routine_view.dart';
 import 'package:gainpath_mobile/features/workout/domain/routine_workout_context.dart';
 import 'package:gainpath_mobile/features/workout/domain/exercise_tracker_dispatcher.dart';
@@ -49,7 +48,7 @@ void main() {
     expect(
         identical((destination as CalfRaiseWorkoutRoute).launch, launch), true);
   });
-  testWidgets('wall route retains the exact consent targets and routine launch',
+  testWidgets('retired wall push-up camera route opens its original tutorial',
       (tester) async {
     const exercise = PublishedRoutineExercise(
         exerciseId: 'wall-push-up-side-v1',
@@ -75,8 +74,8 @@ void main() {
       destination = ExerciseTrackerRoute(launch: launch).build(context);
       return const SizedBox();
     }));
-    expect(destination, isA<WallPushUpWorkoutRoute>());
-    expect(identical((destination as WallPushUpWorkoutRoute).launch, launch),
+    expect(destination, isA<ExerciseTutorialRoute>());
+    expect(identical((destination as ExerciseTutorialRoute).exercise, exercise),
         true);
   });
   testWidgets(

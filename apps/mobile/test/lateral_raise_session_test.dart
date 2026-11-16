@@ -11,7 +11,7 @@ import 'package:gainpath_mobile/features/workout/presentation/member/workout_res
 import 'support/lateral_raise_trajectory.dart';
 import 'real_squat_session_test.dart' show Camera, FailingStore;
 import 'squat_processing_controller_test.dart' show AudioSink;
-import 'row_workout_session_test.dart' show RowDetector;
+import 'support/replay_pose_detector.dart';
 
 class LateralHarness {
   LateralHarness(
@@ -45,7 +45,7 @@ class LateralHarness {
   final scope =
       SessionScope(userId: 'lateral-member', organizationId: 'gainpath');
   late SessionScope? active;
-  final camera = Camera(), detector = RowDetector();
+  final camera = Camera(), detector = ReplayPoseDetector();
   late FailingStore store;
   late WorkoutSessionRepository repo;
   late LateralRaiseWorkoutSession session;

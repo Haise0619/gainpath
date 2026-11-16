@@ -28,7 +28,7 @@ void main() {
     expect(
         ExerciseTrackingRegistry.resolve(
             organizationId: 'gainpath', exerciseId: 'wall-push-up-side-v1'),
-        ExerciseTrackingCapability.sideViewWallPushUp);
+        ExerciseTrackingCapability.guidedOnly);
     expect(
         ExerciseTrackingRegistry.resolve(
                 organizationId: 'foreign',

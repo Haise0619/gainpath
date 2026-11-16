@@ -171,7 +171,8 @@ void main() {
     'squat',
     'membership',
     'tomorrow',
-    'tutorial'
+    'tutorial',
+    'error',
   ]) {
     for (final large in [false, true]) {
       testWidgets(
@@ -225,13 +226,40 @@ void main() {
                     body: SingleChildScrollView(
                         padding: const EdgeInsets.all(16),
                         child: AssistantReplyView(
-                            reply: AssistantReplyViewModel.fromMessage(
-                                accuracyFixture(kind)),
+                            reply: kind == 'error'
+                                ? AssistantReplyViewModel.error(
+                                    'The assistant could not connect. Try again shortly.')
+                                : AssistantReplyViewModel.fromMessage(
+                                    accuracyFixture(kind)),
                             onOpenFact: (_) {},
                             onReviewBooking: (_) {},
                             onRetry: () {}))))));
         await tester.pumpAndSettle();
         expect(tester.takeException(), isNull);
+        final isGeneral = kind == 'equipment' || kind == 'nutrition';
+        final bubble = find.byKey(const ValueKey('assistant-text-bubble'));
+        expect(bubble, isGeneral ? findsOneWidget : findsNothing);
+        if (isGeneral) {
+          expect(tester.getSize(bubble).width,
+              lessThanOrEqualTo(tester.view.physicalSize.width * .92));
+          expect(find.byType(Image), findsOneWidget);
+          expect(find.byType(SelectableText), findsOneWidget);
+        }
+        final category = switch (kind) {
+          'last-workout' => 'WORKOUT SUMMARY',
+          'membership' => 'YOUR MEMBERSHIP',
+          'squat' => 'TRAINING INSIGHT',
+          'tomorrow' => 'COACHING',
+          'tutorial' => 'FOR YOUR TRAINING',
+          _ => null,
+        };
+        if (category != null) {
+          final accent = tester.widget<Text>(find.text(category)).style!.color!;
+          final white = Colors.white.computeLuminance();
+          expect((white + .05) / (accent.computeLuminance() + .05),
+              greaterThanOrEqualTo(4.5));
+        }
+        if (kind == 'error') expect(find.text('Try again'), findsOneWidget);
         if (kind == 'tutorial') {
           expect(find.text('View Squat tutorial'), findsOneWidget);
           expect(find.byType(Image), findsOneWidget);
@@ -243,8 +271,9 @@ void main() {
                 .toImage(pixelRatio: 1.5);
             final bytes =
                 await image.toByteData(format: ui.ImageByteFormat.png);
-            final dir = Directory('../../build/chatbot-accuracy/screenshots')
-              ..createSync(recursive: true);
+            final dir =
+                Directory('../../build/chatbot-message-refinement/screenshots')
+                  ..createSync(recursive: true);
             await File('${dir.path}/$kind-${large ? '320-large' : '390'}.png')
                 .writeAsBytes(bytes!.buffer.asUint8List());
             image.dispose();

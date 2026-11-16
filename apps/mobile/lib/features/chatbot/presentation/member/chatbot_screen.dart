@@ -107,6 +107,7 @@ class _ChatbotViewState extends State<_ChatbotView> {
 
   final _controller = TextEditingController();
   final _scroll = ScrollController();
+  final _latestReply = GlobalKey();
   bool _disclaimerShown = false;
   bool _savedAdviceOpened = false;
   int _lastMessageCount = 0;
@@ -174,11 +175,23 @@ class _ChatbotViewState extends State<_ChatbotView> {
     context.read<ChatBloc>().add(MessageSent(text));
   }
 
-  void _jump() {
+  void _jump({required bool showReplyStart}) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (_scroll.hasClients) {
+      if (!mounted || !_scroll.hasClients) return;
+      final duration = MediaQuery.disableAnimationsOf(context)
+          ? Duration.zero
+          : const Duration(milliseconds: 250);
+      final replyContext = showReplyStart ? _latestReply.currentContext : null;
+      if (replyContext != null &&
+          (replyContext.size?.height ?? 0) >
+              _scroll.position.viewportDimension * .75) {
+        Scrollable.ensureVisible(replyContext,
+            duration: duration, curve: Curves.easeOut);
+      } else if (duration == Duration.zero) {
+        _scroll.jumpTo(_scroll.position.maxScrollExtent);
+      } else {
         _scroll.animateTo(_scroll.position.maxScrollExtent,
-            duration: const Duration(milliseconds: 250), curve: Curves.easeOut);
+            duration: duration, curve: Curves.easeOut);
       }
     });
   }
@@ -191,7 +204,10 @@ class _ChatbotViewState extends State<_ChatbotView> {
           if (!_scroll.hasClients ||
               _scroll.position.extentAfter < 160 ||
               chat.isReplying) {
-            _jump();
+            _jump(
+                showReplyStart: chat.messages.length == _lastMessageCount + 1 &&
+                    chat.messages.isNotEmpty &&
+                    !chat.messages.last.fromUser);
           }
           _lastMessageCount = chat.messages.length;
         }
@@ -363,14 +379,23 @@ class _ChatbotViewState extends State<_ChatbotView> {
                             onStop: () => bloc.add(const ReplyCancelled()));
                       }
                       final m = chat.messages[i];
-                      final questions = chat.messages
-                          .take(i)
-                          .where((row) => row.fromUser)
-                          .toList();
                       return _Bubble(
-                        onRetry: questions.isEmpty
+                        key: !m.fromUser && i == chat.messages.length - 1
+                            ? _latestReply
+                            : null,
+                        onRetry: m.fromUser || i == 0
                             ? null
-                            : () => bloc.add(MessageSent(questions.last.text)),
+                            : () {
+                                for (var previous = i - 1;
+                                    previous >= 0;
+                                    previous--) {
+                                  final question = chat.messages[previous];
+                                  if (question.fromUser) {
+                                    bloc.add(MessageSent(question.text));
+                                    return;
+                                  }
+                                }
+                              },
                         onOpenFact: widget.onOpenFact,
                         sources: m.sources,
                         onReviewBooking: widget.onReviewBooking,
@@ -404,7 +429,8 @@ class _ChatbotViewState extends State<_ChatbotView> {
                   child: TextField(
                     enabled: chat.acknowledged && !chat.isLoading,
                     minLines: 1,
-                    maxLines: 5,
+                    maxLines:
+                        MediaQuery.textScalerOf(context).scale(16) > 24 ? 3 : 5,
                     maxLength: 2000,
                     textCapitalization: TextCapitalization.sentences,
                     controller: _controller,
@@ -436,7 +462,8 @@ class _ChatbotViewState extends State<_ChatbotView> {
 
 class _Bubble extends StatelessWidget {
   const _Bubble(
-      {this.onOpenFact,
+      {super.key,
+      this.onOpenFact,
       this.onRetry,
       this.sources = const [],
       this.onReviewBooking,
@@ -458,97 +485,136 @@ class _Bubble extends StatelessWidget {
   final bool? helpful;
   final ValueChanged<bool>? onRate;
   @override
-  Widget build(BuildContext context) => Padding(
-      padding: const EdgeInsets.only(bottom: 20),
-      child: Column(
-          crossAxisAlignment:
-              fromUser ? CrossAxisAlignment.end : CrossAxisAlignment.start,
-          children: [
-            if (fromUser)
-              Container(
-                  constraints: BoxConstraints(
-                      maxWidth: MediaQuery.sizeOf(context).width * .80),
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                  decoration: const BoxDecoration(
-                      color: AppColors.primary,
-                      borderRadius: BorderRadius.only(
-                          topLeft: Radius.circular(18),
-                          topRight: Radius.circular(18),
-                          bottomLeft: Radius.circular(18),
-                          bottomRight: Radius.circular(5))),
-                  child: SelectableText(text,
-                      style: const TextStyle(
-                          fontSize: 16, height: 1.5, color: Colors.white)))
-            else
-              AssistantReplyView(
-                  reply: AssistantReplyViewModel.fromMessage(ChatMessage(
-                      text, false,
-                      attachment: attachment, sources: sources)),
-                  onRetry: onRetry,
-                  onOpenFact: onOpenFact,
-                  onReviewBooking: onReviewBooking),
-            if (attachment case EquipmentAttachment(:final equipment))
-              Padding(
-                  padding: const EdgeInsets.only(top: 12),
-                  child: _EquipmentCard(equipment: equipment)),
-            if (attachment
-                case ProgressChartAttachment(
-                  :final title,
-                  :final unit,
-                  :final values,
-                  :final delta
-                ))
-              Padding(
-                  padding: const EdgeInsets.only(top: 12),
-                  child: _ChartCard(
-                      title: title, unit: unit, values: values, delta: delta)),
-            if (onToggleBookmark != null)
-              Padding(
-                  padding: const EdgeInsets.only(top: 6),
-                  child: Wrap(spacing: 2, runSpacing: 2, children: [
-                    _action(
-                        Icons.copy_rounded,
-                        'Copy',
-                        () => Clipboard.setData(ClipboardData(
-                            text: _adviceText(text, attachment)))),
-                    _action(
-                        isBookmarked
-                            ? Icons.bookmark_rounded
-                            : Icons.bookmark_border_rounded,
-                        isBookmarked ? 'Saved' : 'Save',
-                        onToggleBookmark!),
-                    _action(
-                        helpful == true
-                            ? Icons.thumb_up_rounded
-                            : Icons.thumb_up_outlined,
-                        'Helpful',
-                        () => onRate?.call(true)),
-                    _action(
-                        helpful == false
-                            ? Icons.thumb_down_rounded
-                            : Icons.thumb_down_outlined,
-                        'Not helpful',
-                        () => onRate?.call(false)),
-                  ])),
-          ]));
-  Widget _action(IconData icon, String label, VoidCallback onTap) => Semantics(
-      button: true,
-      label: label,
-      child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(10),
-          child: ConstrainedBox(
-              constraints: const BoxConstraints(minHeight: 48),
-              child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 8),
-                  child: Row(mainAxisSize: MainAxisSize.min, children: [
-                    Icon(icon, size: 15, color: AppColors.inkSoft),
-                    const SizedBox(width: 5),
-                    Text(label,
+  Widget build(BuildContext context) {
+    final compactActions = MediaQuery.textScalerOf(context).scale(16) > 24;
+    final reply = fromUser
+        ? null
+        : AssistantReplyViewModel.fromMessage(
+            ChatMessage(text, false, attachment: attachment, sources: sources));
+    return Padding(
+        padding: const EdgeInsets.only(bottom: 16),
+        child: Column(
+            crossAxisAlignment:
+                fromUser ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+            children: [
+              if (fromUser)
+                Container(
+                    constraints: BoxConstraints(
+                        maxWidth: MediaQuery.sizeOf(context).width * .80),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 12),
+                    decoration: const BoxDecoration(
+                        color: AppColors.primary,
+                        borderRadius: BorderRadius.only(
+                            topLeft: Radius.circular(18),
+                            topRight: Radius.circular(18),
+                            bottomLeft: Radius.circular(18),
+                            bottomRight: Radius.circular(5))),
+                    child: SelectableText(text,
                         style: const TextStyle(
-                            fontSize: 11.5, color: AppColors.inkSoft))
-                  ])))));
+                            fontSize: 16, height: 1.5, color: Colors.white)))
+              else
+                AssistantReplyView(
+                    reply: reply!,
+                    onRetry: onRetry,
+                    onOpenFact: onOpenFact,
+                    onReviewBooking: onReviewBooking),
+              if (attachment case EquipmentAttachment(:final equipment))
+                Padding(
+                    padding: const EdgeInsets.only(top: 12),
+                    child: _EquipmentCard(equipment: equipment)),
+              if (attachment
+                  case ProgressChartAttachment(
+                    :final title,
+                    :final unit,
+                    :final values,
+                    :final delta
+                  ))
+                Padding(
+                    padding: const EdgeInsets.only(top: 12),
+                    child: _ChartCard(
+                        title: title,
+                        unit: unit,
+                        values: values,
+                        delta: delta)),
+              if (onToggleBookmark != null)
+                Padding(
+                    padding: EdgeInsets.only(
+                      left:
+                          reply?.kind == AssistantReplyKind.normalText ? 36 : 0,
+                    ),
+                    child: Wrap(spacing: 2, children: [
+                      _action(
+                          Icons.copy_rounded,
+                          'Copy',
+                          compactActions,
+                          () => Clipboard.setData(ClipboardData(
+                              text: _adviceText(text, attachment)))),
+                      _action(
+                          isBookmarked
+                              ? Icons.bookmark_rounded
+                              : Icons.bookmark_border_rounded,
+                          isBookmarked ? 'Saved' : 'Save',
+                          compactActions,
+                          onToggleBookmark!,
+                          selected: isBookmarked),
+                      _action(
+                          helpful == true
+                              ? Icons.thumb_up_rounded
+                              : Icons.thumb_up_outlined,
+                          'Helpful',
+                          compactActions,
+                          () => onRate?.call(true),
+                          selected: helpful == true),
+                      _action(
+                          helpful == false
+                              ? Icons.thumb_down_rounded
+                              : Icons.thumb_down_outlined,
+                          'Not helpful',
+                          compactActions,
+                          () => onRate?.call(false),
+                          selected: helpful == false),
+                    ])),
+            ]));
+  }
+
+  Widget _action(IconData icon, String label, bool compact, VoidCallback onTap,
+      {bool? selected}) {
+    final content = InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(10),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8),
+          child: Row(
+              mainAxisSize: MainAxisSize.min,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(icon,
+                    size: compact ? 20 : 15,
+                    color: selected == true
+                        ? AppColors.primary
+                        : AppColors.inkSoft),
+                if (!compact) ...[
+                  const SizedBox(width: 5),
+                  Text(label,
+                      style: const TextStyle(
+                          fontSize: 11.5, color: AppColors.inkSoft)),
+                ],
+              ]),
+        ),
+      ),
+    );
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: label,
+      child: compact
+          ? Tooltip(message: label, excludeFromSemantics: true, child: content)
+          : content,
+    );
+  }
 }
 
 /// Equipment attachment — a photo card with the essentials, tapping
@@ -620,11 +686,12 @@ class _EquipmentCard extends StatelessWidget {
                   const SizedBox(height: 8),
                   const Row(
                     children: [
-                      Text('View full guide',
-                          style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w700,
-                              color: AppColors.primary)),
+                      Flexible(
+                          child: Text('View full guide',
+                              style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w700,
+                                  color: Color(0xFF7B390B)))),
                       SizedBox(width: 4),
                       Icon(Icons.arrow_forward_rounded,
                           size: 13, color: AppColors.primary),
@@ -664,15 +731,16 @@ class _ChartCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
+            Wrap(
+              spacing: 8,
+              runSpacing: 4,
+              crossAxisAlignment: WrapCrossAlignment.center,
               children: [
-                Expanded(
-                  child: Text(title,
-                      style: Theme.of(context)
-                          .textTheme
-                          .titleMedium
-                          ?.copyWith(fontSize: 13.5)),
-                ),
+                Text(title,
+                    style: Theme.of(context)
+                        .textTheme
+                        .titleMedium
+                        ?.copyWith(fontSize: 13.5)),
                 Container(
                   padding:
                       const EdgeInsets.symmetric(horizontal: 7, vertical: 3),

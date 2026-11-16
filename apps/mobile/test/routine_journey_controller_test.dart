@@ -102,6 +102,51 @@ void main() {
         activeScope: () => active);
   });
 
+  test('old AI routine continues manually without rewriting its saved plan',
+      () async {
+    final routine = PublishedRoutine.fromDocument('routine', {
+      'schemaVersion': 2,
+      'kind': 'routine_v2',
+      'status': 'published',
+      'sourceBlueprintId': 'blueprint',
+      'title': 'Saved routine',
+      'estimatedMinutes': 10,
+      'exercises': [
+        for (final id in [
+          'wall-push-up-side-v1',
+          'single-arm-dumbbell-row-side-v1',
+          'bodyweight-reverse-lunge-side-v1',
+        ])
+          {
+            'entryId': id,
+            'exerciseId': id,
+            'name': id,
+            'executionMode': 'aiTracked',
+            'sets': 1,
+            'reps': 5,
+            'restSeconds': 0,
+            'dayNumber': 1,
+          }
+      ]
+    });
+    final c = controller(routine: routine);
+    addTearDown(c.dispose);
+    await c.openDay(1);
+    final signature = c.checkpoint!.planSignature;
+    for (var i = 0; i < routine.exercises.length; i++) {
+      expect(c.selectedIndex, i);
+      expect(c.supportsTracking(i), isFalse);
+      await expectLater(c.prepareCapture(i), throwsStateError);
+      await c.markManualSet(i);
+      expect(c.statusFor(i), RoutineExerciseStatus.selfReportedCompleted);
+    }
+    await c.refresh(completeRoutine: true);
+    expect(c.checkpoint!.finished, isTrue);
+    expect(c.checkpoint!.planSignature, signature);
+    expect(c.measuredSessions, isEmpty);
+    expect(c.selfReportedSets, 3);
+  });
+
   test(
       'routine completion reconciles a saved exercise and finishes only after every target',
       () async {

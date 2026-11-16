@@ -30,15 +30,9 @@ import '../../features/workout/presentation/member/workout_prep_screen.dart'
         lateralRaiseCaptureInstruction,
         lateralRaiseSetupConfirmation,
         curlCaptureInstruction,
-        rowCaptureInstruction,
-        reverseLungeCaptureInstruction,
-        reverseLungeSetupConfirmation,
         shoulderPressCaptureInstruction,
         shoulderPressSetupConfirmation,
-        rowSetupConfirmation,
         calfRaiseCaptureInstruction,
-        wallPushUpCaptureInstruction,
-        wallPushUpSetupConfirmation,
         floorPushUpCaptureInstruction,
         floorPushUpSetupConfirmation;
 import '../../navigation/membership_access_gate.dart';
@@ -315,17 +309,12 @@ class _RoutineJourneyRouteState extends State<RoutineJourneyRoute>
         // Calf Raise confirms floor contact in its own setup. Floor Push-up
         // confirms a stable phone and clear floor space here.
         requireSetup: !const {
-              ExerciseTracker.sideViewSquat,
-              ExerciseTracker.sideViewCurl,
-              ExerciseTracker.sideViewCalfRaise,
-              ExerciseTracker.frontViewLateralRaise,
-              ExerciseTracker.frontViewShoulderPress,
-            }.contains(tracker) &&
-            !(automatic &&
-                const {
-                  ExerciseTracker.sideViewRow,
-                  ExerciseTracker.sideViewReverseLunge,
-                }.contains(tracker)),
+          ExerciseTracker.sideViewSquat,
+          ExerciseTracker.sideViewCurl,
+          ExerciseTracker.sideViewCalfRaise,
+          ExerciseTracker.frontViewLateralRaise,
+          ExerciseTracker.frontViewShoulderPress,
+        }.contains(tracker),
         allowUpload: tracker == ExerciseTracker.sideViewSquat,
         exerciseInstruction: switch (tracker) {
           ExerciseTracker.frontViewLateralRaise =>
@@ -333,27 +322,18 @@ class _RoutineJourneyRouteState extends State<RoutineJourneyRoute>
           ExerciseTracker.frontViewShoulderPress =>
             shoulderPressCaptureInstruction,
           ExerciseTracker.sideViewCurl => curlCaptureInstruction,
-          ExerciseTracker.sideViewRow => rowCaptureInstruction,
-          ExerciseTracker.sideViewReverseLunge =>
-            reverseLungeCaptureInstruction,
           ExerciseTracker.sideViewCalfRaise => calfRaiseCaptureInstruction,
-          ExerciseTracker.sideViewWallPushUp => wallPushUpCaptureInstruction,
           ExerciseTracker.sideViewFloorPushUp => floorPushUpCaptureInstruction,
           _ => null,
         },
-        setupConfirmationLabel: tracker == ExerciseTracker.sideViewFloorPushUp
-            ? floorPushUpSetupConfirmation
-            : tracker == ExerciseTracker.sideViewWallPushUp
-                ? wallPushUpSetupConfirmation
-                : tracker == ExerciseTracker.frontViewLateralRaise
-                    ? lateralRaiseSetupConfirmation
-                    : tracker == ExerciseTracker.frontViewShoulderPress
-                        ? shoulderPressSetupConfirmation
-                        : tracker == ExerciseTracker.sideViewRow
-                            ? rowSetupConfirmation
-                            : tracker == ExerciseTracker.sideViewReverseLunge
-                                ? reverseLungeSetupConfirmation
-                                : null,
+        setupConfirmationLabel: switch (tracker) {
+          ExerciseTracker.sideViewFloorPushUp => floorPushUpSetupConfirmation,
+          ExerciseTracker.frontViewLateralRaise =>
+            lateralRaiseSetupConfirmation,
+          ExerciseTracker.frontViewShoulderPress =>
+            shoulderPressSetupConfirmation,
+          _ => null,
+        },
         onUploadChanged: (value) => upload = value);
     if (consented != true ||
         launchEpoch != _interruptionEpoch ||

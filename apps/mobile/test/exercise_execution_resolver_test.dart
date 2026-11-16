@@ -45,8 +45,7 @@ PublishedRoutineExercise row(
 void main() {
   final scope = SessionScope(userId: 'member', organizationId: 'gainpath');
   const resolver = ExerciseExecutionResolver();
-  test(
-      'all nine exact registry identities retain their measured implementation',
+  test('all six exact registry identities retain their measured implementation',
       () {
     const identities = {
       'standing-lateral-raise-front-v1': ExerciseTracker.frontViewLateralRaise,
@@ -55,11 +54,9 @@ void main() {
       'F3b8xIr8ynBDd3gEICKX': ExerciseTracker.sideViewSquat,
       'standing-single-arm-curl-side-v1': ExerciseTracker.sideViewCurl,
       'standing-calf-raise-side-v1': ExerciseTracker.sideViewCalfRaise,
-      'wall-push-up-side-v1': ExerciseTracker.sideViewWallPushUp,
       'standard-floor-push-up-side-v1': ExerciseTracker.sideViewFloorPushUp,
-      'single-arm-dumbbell-row-side-v1': ExerciseTracker.sideViewRow,
-      'bodyweight-reverse-lunge-side-v1': ExerciseTracker.sideViewReverseLunge,
     };
+    expect(ExerciseTracker.values, unorderedEquals(identities.values));
     for (final pair in identities.entries) {
       final result =
           resolver.resolve(scope: scope, exercise: row(id: pair.key));
@@ -76,6 +73,33 @@ void main() {
                       duration: 45,
                       video: 'https://storage.example/video.mp4',
                       generation: '123'))
+              .kind,
+          ExerciseExecutionKind.unavailable);
+    }
+  });
+  test('retired AI routine rows stay playable as self-reported repetitions',
+      () {
+    for (final id in [
+      'wall-push-up-side-v1',
+      'single-arm-dumbbell-row-side-v1',
+      'bodyweight-reverse-lunge-side-v1',
+    ]) {
+      for (final mode in [
+        null,
+        ExerciseExecutionMode.aiTracked,
+        ExerciseExecutionMode.legacyManual
+      ]) {
+        final result =
+            resolver.resolve(scope: scope, exercise: row(id: id, mode: mode));
+        expect(result.kind, ExerciseExecutionKind.legacyManual);
+        expect(result.tracker, isNull);
+      }
+      expect(
+          resolver
+              .resolve(
+                  scope:
+                      SessionScope(userId: 'member', organizationId: 'other'),
+                  exercise: row(id: id, mode: ExerciseExecutionMode.aiTracked))
               .kind,
           ExerciseExecutionKind.unavailable);
     }

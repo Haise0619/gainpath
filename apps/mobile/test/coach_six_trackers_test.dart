@@ -8,21 +8,15 @@ import 'package:gainpath_mobile/features/workout/application/calf_raise_workout_
 import 'package:gainpath_mobile/features/workout/application/lateral_raise_workout_session.dart';
 import 'package:gainpath_mobile/features/workout/application/shoulder_press_workout_session.dart';
 import 'package:gainpath_mobile/features/workout/application/floor_push_up_workout_session.dart';
-import 'package:gainpath_mobile/features/workout/application/row_workout_session.dart';
-import 'package:gainpath_mobile/features/workout/application/wall_push_up_workout_session.dart';
-import 'package:gainpath_mobile/features/workout/application/reverse_lunge_workout_session.dart';
 import 'package:gainpath_mobile/features/workout/application/guided_workout_progress.dart';
 import 'package:gainpath_mobile/features/workout/application/measured_workout_session.dart';
 import 'package:gainpath_mobile/features/workout/domain/curl_arm_metrics.dart';
 import 'package:gainpath_mobile/features/workout/domain/workout_audio_port.dart';
 import 'package:gainpath_mobile/features/workout/data/workout_session_repository.dart';
 import 'real_squat_session_test.dart' show Camera, FailingStore;
-import 'row_workout_session_test.dart' show RowDetector;
-import 'wall_push_up_workout_session_test.dart' show WallDetector;
+import 'support/replay_pose_detector.dart';
 import 'squat_processing_controller_test.dart' show AudioSink;
 import 'retained_voice_boundary_test.dart' show trajectory;
-import 'support/row_trajectory.dart';
-import 'support/reverse_lunge_trajectory.dart';
 
 class RecordedCoachSink extends AudioSink implements CoachWorkoutAudioPort {
   final finalRep = Completer<AudioPlaybackOutcome>();
@@ -51,9 +45,6 @@ void main() {
     'lateral': LateralRaiseWorkoutSession.new,
     'press': ShoulderPressWorkoutSession.new,
     'floor': FloorPushUpWorkoutSession.new,
-    'row': RowWorkoutSession.new,
-    'wall': WallPushUpWorkoutSession.new,
-    'lunge': ReverseLungeWorkoutSession.new,
   };
   const ids = {
     'squat': 'F3b8xIr8ynBDd3gEICKX',
@@ -62,51 +53,14 @@ void main() {
     'lateral': 'standing-lateral-raise-front-v1',
     'press': 'dumbbell-shoulder-press-front-v1',
     'floor': 'standard-floor-push-up-side-v1',
-    'row': 'single-arm-dumbbell-row-side-v1',
-    'wall': 'wall-push-up-side-v1',
-    'lunge': 'bodyweight-reverse-lunge-side-v1'
   };
-  for (final scenario in [
-    ...constructors.keys,
-    'row-failure',
-    'wall-failure',
-    'lunge-failure',
-    'curl-both'
-  ]) {
+  for (final scenario in [...constructors.keys, 'squat-failure', 'curl-both']) {
     final kind = scenario.split('-').first;
     final failSave = scenario.endsWith('-failure');
     testWidgets(
         '$scenario speaks actual accepted1,2 through the real session boundary',
         (tester) async {
-      List<PoseFrame> frames;
-      if (kind == 'row') {
-        frames = rowTrajectory().toList();
-      } else if (kind == 'lunge') {
-        frames = reverseLungeTrajectory().toList();
-      } else if (kind == 'wall') {
-        final wall = WallDetector();
-        frames = [];
-        var t = 0;
-        for (final angle in [
-          ...List<double>.filled(12, 170),
-          160.0,
-          140.0,
-          120.0,
-          100.0,
-          ...List<double>.filled(8, 85),
-          100.0,
-          120.0,
-          140.0,
-          160.0,
-          ...List<double>.filled(12, 170)
-        ]) {
-          wall.angle = angle;
-          t += 100000;
-          frames.add(await wall.detect(PoseInput(timestampMicros: t)));
-        }
-      } else {
-        frames = await trajectory(kind);
-      }
+      final frames = await trajectory(kind);
       final scope =
           SessionScope(userId: 'coach-test', organizationId: 'gainpath');
       final store = FailingStore(scope: scope)..fail = failSave;
@@ -116,7 +70,7 @@ void main() {
           uploadGateway: UnavailableWorkoutUploadGateway(),
           activeScope: () => scope);
       final camera = Camera(),
-          detector = RowDetector(),
+          detector = ReplayPoseDetector(),
           sink = RecordedCoachSink();
       var now = 0;
       final args = <Symbol, dynamic>{
@@ -144,11 +98,6 @@ void main() {
       if (kind == 'curl') {
         args[#armMode] =
             scenario == 'curl-both' ? CurlArmMode.both : CurlArmMode.leftOnly;
-      }
-      if (kind == 'row') args[#side] = RowSide.left;
-      if (kind == 'lunge') {
-        args[#side] = LungeSide.left;
-        args[#requireCameraCheck] = false;
       }
       final session = Function.apply(constructors[kind]!, [], args)
           as MeasuredWorkoutSession;

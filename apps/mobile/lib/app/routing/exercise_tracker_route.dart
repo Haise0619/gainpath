@@ -5,10 +5,7 @@ import 'exercise_tutorial_route.dart';
 import 'real_squat_route.dart';
 import 'curl_workout_route.dart';
 import 'calf_raise_workout_route.dart';
-import 'wall_push_up_workout_route.dart';
 import 'floor_push_up_workout_route.dart';
-import 'row_workout_route.dart';
-import 'reverse_lunge_workout_route.dart';
 import 'shoulder_press_workout_route.dart';
 import 'lateral_raise_workout_route.dart';
 
@@ -32,11 +29,6 @@ class ExerciseTrackerRoute extends StatelessWidget {
         LateralRaiseWorkoutRoute(launch: launch),
       ExerciseTracker.frontViewShoulderPress =>
         ShoulderPressWorkoutRoute(launch: launch),
-      ExerciseTracker.sideViewRow => RowWorkoutRoute(launch: launch),
-      ExerciseTracker.sideViewReverseLunge =>
-        ReverseLungeWorkoutRoute(launch: launch),
-      ExerciseTracker.sideViewWallPushUp =>
-        WallPushUpWorkoutRoute(launch: launch),
       ExerciseTracker.sideViewFloorPushUp =>
         FloorPushUpWorkoutRoute(launch: launch),
       ExerciseTracker.sideViewCalfRaise =>

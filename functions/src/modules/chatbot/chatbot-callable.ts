@@ -8,7 +8,7 @@ import { defineSecret } from 'firebase-functions/params';
 import { HttpsError, onCall, type CallableRequest } from 'firebase-functions/v2/https';
 import { requireActiveMembership, requireVerifiedEmail } from '../../platform/auth-context';
 import { DomainError } from '../../platform/errors';
-import { personalMetricsIntent, runGemini, SAFETY_REPLY, unsafeRequest, unsupportedPersonalMetrics, validateInput, type AssistantMetrics, privateProviderApproved, PERSONAL_FACTS_UNVERIFIED_REPLY, coachAvailabilityRequest, withinAssistantDeadline } from './chatbot-service';
+import { equipmentInventoryIntent, personalMetricsIntent, runGemini, SAFETY_REPLY, unsafeRequest, unsupportedPersonalMetrics, validateInput, type AssistantMetrics, privateProviderApproved, PERSONAL_FACTS_UNVERIFIED_REPLY, coachAvailabilityRequest, withinAssistantDeadline } from './chatbot-service';
 const key = defineSecret('GEMINI_API_KEY');
 const bookingActionClaim=(text:string)=>/\b(booked|reserved|emailed|scheduled)\b|\b(?:booking|session|payment|email|calendar)\b.{0,35}\b(?:confirmed|created|sent|taken|updated|completed)\b/i.test(text);
 const noBookingAction='I have not booked, paid, emailed or changed your calendar. Ask me for available coaching times, then review a suggestion in checkout.';
@@ -105,14 +105,7 @@ export async function fitnessAssistantHandler(request: CallableRequest, dependen
         return value;
       }
       if (name === 'get_my_progress') { requestedProgress = await progress(); return { ...requestedProgress, deviceUnavailable: input.deviceProgress?.unavailable ?? !input.deviceProgress, deviceTruncated: input.deviceProgress?.truncated ?? false }; }
-      if (name !== 'find_equipment') throw new HttpsError('invalid-argument', 'Unknown read tool.');
-      await reauthorize();
-      const rows = await db.collection(`orgs/${org}/gymEquipment`).where('isActive', '==', true).limit(51).get();
-      return { items: rows.docs.slice(0, 50).map(d => {
-        const data = d.data();
-        const steps = (raw: unknown) => Array.isArray(raw) ? raw.filter((s: unknown) => typeof s === 'string').slice(0, 10).map((s: string) => s.slice(0, 400)) : [];
-        return { name: String(data.name ?? '').slice(0, 160), description: String(data.description ?? '').slice(0, 600), category: String(data.category ?? '').slice(0, 80), muscleGroup: String(data.muscleGroup ?? '').slice(0, 80), howToUse: steps(data.howToUse), safetyTips: steps(data.safetyTips) };
-      }), truncated: rows.size > 50 };
+      throw new HttpsError('invalid-argument', 'Unknown read tool.');
     };
     let text: string;
     if (unsafeRequest(input.text!)) text = SAFETY_REPLY;
@@ -131,6 +124,28 @@ export async function fitnessAssistantHandler(request: CallableRequest, dependen
       const facts = await progress();
       sources.add('get_my_progress');
       text = progressText(facts);
+    } else if (equipmentInventoryIntent(input.text!)) {
+      await reauthorize();
+      const rows = await withinAssistantDeadline(
+        db.collection(`orgs/${org}/gymEquipment`).where('isActive', '==', true).limit(51).get(),
+        15000,
+      );
+      const field = (value: unknown, limit: number) => typeof value === 'string'
+        ? value.replace(/\s+/g, ' ').trim().slice(0, limit) : '';
+      const words = (value: string) => value.toLowerCase().match(/[a-z0-9]+/g) ?? [];
+      const questionWords = new Set(words(input.text!));
+      const items = rows.docs.slice(0, 50).map(doc => {
+        const data = doc.data();
+        return { name: field(data.name, 120), group: field(data.muscleGroup, 80) };
+      }).filter(item => item.name);
+      const matches = ({ name, group }: typeof items[number]) => [...new Set(words(`${name} ${group}`))]
+        .filter(word => word.length > 3 && !['equipment', 'machine', 'machines'].includes(word) && questionWords.has(word)).length;
+      const shown = items.sort((a, b) => matches(b) - matches(a)).slice(0, 10);
+      sources.add('find_equipment');
+      metrics.toolCalls++;
+      text = shown.length
+        ? `Here’s what your gym lists in its equipment catalog:\n\n${shown.map(({ name, group }) => `• ${name}${group ? ` — ${group}` : ''}`).join('\n')}\n\n${items.length > shown.length || rows.size > 50 ? 'This is a selection from the catalog. ' : ''}Ask gym staff if you need to confirm what’s free or available at your branch.`
+        : 'I couldn’t find any active equipment entries in your gym’s catalog. Ask gym staff to confirm what’s available at your branch.';
     } else {
       let publicBookingContext:unknown;
       const hint=input.bookingContext;
@@ -159,7 +174,7 @@ export async function fitnessAssistantHandler(request: CallableRequest, dependen
     const bookingSuggestion=bookingTools.suggestion;
     if(bookingSuggestion)text='Here is an available session suggestion. Nothing has been booked or charged. Review it in checkout; availability and price will be checked again before you continue.';
     else if(bookingReadReply)text=bookingReadReply;
-    else if(!requestedProgress&&!coachAvailability&&bookingActionClaim(text))text=noBookingAction;
+    else if(!requestedProgress&&!coachAvailability&&!sources.has('find_equipment')&&bookingActionClaim(text))text=noBookingAction;
     return { responseId: randomUUID(), text, ...(coachAvailability?{coachAvailability}:{}), ...(coachSuggestions?{coachSuggestions}:{}), telemetry:{...metrics,responseTimeMillis:Math.max(0,Date.now()-started)}, ...(bookingTools.context?{bookingContext:bookingTools.context}:{}), ...(bookingSuggestion?{bookingSuggestion}:{}), ...(sources.size ? { sources: [...sources] } : {}) };
   } catch (error) {
     if (error instanceof HttpsError) throw error;

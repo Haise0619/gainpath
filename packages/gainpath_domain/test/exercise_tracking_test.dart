@@ -35,39 +35,29 @@ void main() {
           false);
     }
   });
-  test('only the exact single-arm row variant enables selected-arm tracking',
-      () {
-    final row = ExerciseTrackingRegistry.resolve(
-        organizationId: 'gainpath',
-        exerciseId: 'single-arm-dumbbell-row-side-v1');
-    expect(row.hasPoseTracking, true);
-    expect(row.trackerId, 'single_arm_row_side_v1');
-    expect(row.cameraView, 'side');
-    expect(row.description, contains('selected-arm'));
-    expect(row.description, contains('provisional'));
-    for (final identity in [
-      ('other', 'single-arm-dumbbell-row-side-v1'),
-      ('gainpath', 'single-arm-dumbbell-row-side-v2'),
-      ('gainpath', 'Single-arm dumbbell row'),
-      ('gainpath', 'single-arm-dumbbell-row-side-v1 '),
+  test('retired identities resolve as guided only', () {
+    for (final id in [
+      'wall-push-up-side-v1',
+      'single-arm-dumbbell-row-side-v1',
+      'bodyweight-reverse-lunge-side-v1',
     ]) {
       expect(
           ExerciseTrackingRegistry.resolve(
-                  organizationId: identity.$1, exerciseId: identity.$2)
-              .hasPoseTracking,
-          false);
+              organizationId: 'gainpath', exerciseId: id),
+          ExerciseTrackingCapability.guidedOnly);
+      expect(
+          ExerciseTrackingRegistry.isRetired(
+              organizationId: 'gainpath', exerciseId: id),
+          isTrue);
+      expect(
+          ExerciseTrackingRegistry.isRetired(
+              organizationId: 'other', exerciseId: id),
+          isFalse);
+      expect(
+          ExerciseTrackingRegistry.isRetired(
+              organizationId: 'gainpath', exerciseId: '$id '),
+          isFalse);
     }
-  });
-  test('wall push-up binding is exact and describes the visible-arm limit', () {
-    final wall = ExerciseTrackingRegistry.resolve(
-        organizationId: 'gainpath', exerciseId: 'wall-push-up-side-v1');
-    expect(wall, ExerciseTrackingCapability.sideViewWallPushUp);
-    expect(wall.description, contains('visible arm'));
-    expect(
-        ExerciseTrackingRegistry.resolve(
-                organizationId: 'other', exerciseId: 'wall-push-up-side-v1')
-            .hasPoseTracking,
-        false);
   });
   test('calf raise binding is exact and names the visible-leg limitation', () {
     final calf = ExerciseTrackingRegistry.resolve(
