@@ -1,6 +1,21 @@
 # GainPath AI Chatbot optimization — local implementation
 
-Date: 2026-11-16, Asia/Kuala_Lumpur. Implements the three phases requested after [the audit](ai-chatbot-comprehensive-audit.md). No cloud deployment, Rules/index/config mutation, paid inference, phone installation or billing change was performed. Existing unrelated dirty work is preserved.
+Date: 2026-11-16, Asia/Kuala_Lumpur. Implements the three phases requested after [the audit](ai-chatbot-comprehensive-audit.md). The local implementation evidence below predates the separately approved deployment recorded here.
+
+## 2026-11-16 approved deployment and acceptance
+
+The owner approved deployment of implementation commit `7847de3`. The two existing Singapore Functions in `gainpath-0619` were updated through `buildConfig.source`:
+
+| Function | Verified active revision |
+|---|---|
+| `fypDatasetCommand` | `fypdatasetcommand-00011-tuz` |
+| `fitnessAssistantCommand` | `fitnessassistantcommand-00003-naw` |
+
+Both downloaded deployment archives match the prepared SHA-256 hashes. The release overlays the committed Chatbot modules and required dependencies on the captured deployed sources. Existing runtime, environment, secret binding, service configuration, IAM, Firestore Rules, indexes and 77 other Functions passed comparison. The prior source archives and release evidence are retained privately in `build/chatbot-release-7847de3/`.
+
+Nine authenticated and negative live checks passed. Ordinary and FYP Members loaded the current Assistant disclaimer in public mode. Missing Auth or App Check and foreign organization access were rejected. The FYP-scoped Assistant rejected an ordinary Member, and the FYP test Member read existing recommendations and membership overview. These checks made zero Gemini calls. A fresh offline rerun passed 76 backend tests.
+
+The Xiaomi Debug APK was updated in place and launched successfully. Its installed SHA-256 matches the reviewed artifact. The signer, package user ID, data directory and first-install timestamp matched the pre-update values. The prior APK is retained privately. Interactive Android acceptance requires an unlocked device. Live model response quality and checkout completion were outside these read-only probes.
 
 ## Phase 1 — reliability and performance
 
