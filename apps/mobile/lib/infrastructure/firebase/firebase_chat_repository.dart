@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:gainpath_domain/chatbot.dart';
@@ -16,6 +17,7 @@ class FirebaseChatRepository extends ChatRepository {
       AssistantTransport? transport,
       String? Function()? currentUid,
       this.progressLoader,
+      this.contextualReply,
       FirebaseFunctions? functions})
       : _transport = transport ??
             ((data) async {
@@ -33,6 +35,9 @@ class FirebaseChatRepository extends ChatRepository {
   final AssistantTransport _transport;
   final String? Function() _currentUid;
   final Future<LocalMemberProgressSnapshot> Function()? progressLoader;
+  final Future<ChatMessage?> Function(String text)? contextualReply;
+  bool _privateContext = false;
+  final Map<String, num> lastMetrics = {};
   final List<String> _saved = [];
   bool _invalidated = false;
   Map<String, dynamic>? _bookingContext;
@@ -70,14 +75,28 @@ class FirebaseChatRepository extends ChatRepository {
       [Map<String, dynamic> data = const {}]) async {
     _check();
     try {
-      final response = await _transport(
-          {'organizationId': scope.organizationId, 'action': action, ...data});
+      final response = await _transport({
+        'organizationId': scope.organizationId,
+        'action': action,
+        ...data
+      }).timeout(const Duration(seconds: 50));
       _check();
       return response;
+    } on TimeoutException {
+      throw const ChatFailure('deadline-exceeded',
+          'The assistant took too long. Your question can be retried.');
     } on ChatFailure {
       rethrow;
     } on FirebaseFunctionsException catch (e) {
       _check();
+      final noticeRequired = e.code == 'failed-precondition' &&
+          RegExp(r'acknowledge|current disclaimer|review.*disclaimer',
+                  caseSensitive: false)
+              .hasMatch(e.message ?? '');
+      if (e.code == 'failed-precondition' && !noticeRequired) {
+        throw const ChatFailure('configuration-unavailable',
+            'The requested service or option is unavailable. Check the selection or retry later.');
+      }
       final message = switch (e.code) {
         'resource-exhausted' =>
           'The assistant has reached its request limit. Wait a minute and retry.',
@@ -101,6 +120,7 @@ class FirebaseChatRepository extends ChatRepository {
   Future<ChatSessionInfo> initialize() async {
     final data = await _call('bootstrap');
     try {
+      _privateContext = data['contextMode'] == 'private-approved';
       final notice = Map<String, dynamic>.from(data['disclaimer'] as Map);
       final text = notice['text'] as String,
           revision = notice['revision'] as int;
@@ -129,52 +149,40 @@ class FirebaseChatRepository extends ChatRepository {
   Future<ChatMessage> generateReply(
       {required String text, required List<ChatMessage> history}) async {
     final contextVersion = _contextVersion;
-    Map<String, dynamic>? progress;
-    if (progressLoader != null) {
-      try {
-        final snapshot = await progressLoader!();
-        _check();
-        if (snapshot.records.any((r) => r.scope != scope)) {
-          throw const ChatFailure('permission-denied',
-              'Progress belongs to a different account. Reopen the assistant.');
-        }
-        final cutoff =
-            DateTime.now().toUtc().subtract(const Duration(days: 90));
-        final records = snapshot.records
-            .where((r) => r.scope == scope && !r.startedAt.isBefore(cutoff))
-            .toList()
-          ..sort((a, b) => b.endedAt.compareTo(a.endedAt));
-        progress = {
-          'sessions': records
-              .take(30)
-              .map((r) => {
-                    'sessionId': r.sessionId,
-                    'startedAtMillis': r.startedAt.millisecondsSinceEpoch,
-                    'endedAtMillis': r.endedAt.millisecondsSinceEpoch,
-                    'repetitions': r.repetitions,
-                    'formScorePercent': r.formScorePercent
-                  })
-              .toList(),
-          'truncated': records.length > 30
-        };
-      } on ChatFailure {
-        rethrow;
-      } catch (_) {
-        progress = {'sessions': <Object>[], 'unavailable': true};
+    _check();
+    final watch = Stopwatch()..start();
+    if (contextualReply != null) {
+      final answer =
+          await contextualReply!(text).timeout(const Duration(seconds: 15));
+      _check();
+      if (answer != null) {
+        lastMetrics
+          ..clear()
+          ..addAll({
+            'responseTimeMillis': watch.elapsedMilliseconds,
+            'providerRequests': 0,
+            'toolCalls': 0,
+            'inputTokens': 0,
+            'outputTokens': 0
+          });
+        return ChatMessage(answer.text, false,
+            id: 'local-${DateTime.now().microsecondsSinceEpoch}',
+            attachment: answer.attachment,
+            sources: answer.sources);
       }
     }
     final recent = history.where((m) => m.text.trim().isNotEmpty).toList();
     final data = await _call('reply', {
       'text': text,
-      'history': recent
-          .skip(recent.length > 12 ? recent.length - 12 : 0)
-          .map((m) => {
-                'role': m.fromUser ? 'user' : 'assistant',
-                'text':
-                    m.text.length > 2000 ? m.text.substring(0, 2000) : m.text
-              })
-          .toList(),
-      if (progress != null) 'deviceProgress': progress,
+      if (_privateContext)
+        'history': recent
+            .skip(recent.length > 12 ? recent.length - 12 : 0)
+            .map((m) => {
+                  'role': m.fromUser ? 'user' : 'assistant',
+                  'text':
+                      m.text.length > 2000 ? m.text.substring(0, 2000) : m.text
+                })
+            .toList(),
       if (_bookingContext != null) 'bookingContext': _bookingContext
     });
     if (contextVersion == _contextVersion) {
@@ -196,6 +204,21 @@ class FirebaseChatRepository extends ChatRepository {
           [30, 60].contains(value['durationMinutes']) &&
           value['expiresAtMillis'] is int) {
         _bookingContext = Map.unmodifiable(Map<String, dynamic>.from(value));
+      }
+    }
+    final metrics = data['telemetry'];
+    lastMetrics
+      ..clear()
+      ..addAll({'responseTimeMillis': watch.elapsedMilliseconds});
+    if (metrics is Map) {
+      for (final key in [
+        'providerRequests',
+        'toolCalls',
+        'inputTokens',
+        'outputTokens',
+        'thinkingTokens'
+      ]) {
+        if (metrics[key] is num) lastMetrics[key] = metrics[key] as num;
       }
     }
     final answer = data['text'], id = data['responseId'];

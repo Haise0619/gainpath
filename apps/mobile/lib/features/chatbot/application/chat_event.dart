@@ -59,3 +59,7 @@ class AdviceRated extends ChatEvent {
   @override
   List<Object?> get props => [message, helpful];
 }
+
+class ReplyCancelled extends ChatEvent {
+  const ReplyCancelled();
+}

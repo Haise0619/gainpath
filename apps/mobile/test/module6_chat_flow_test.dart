@@ -101,6 +101,7 @@ void main() {
             home: ChatbotScreen(
                 connected: true, onReviewBooking: (_) => reviews++))));
     await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Training help'));
     await tester.tap(find.text('Training help'));
     await tester.pumpAndSettle();
     expect(find.textContaining('Not reserved or paid'), findsOneWidget);
@@ -183,6 +184,7 @@ void main() {
     expect(tester.widget<TextField>(find.byType(TextField)).enabled, isFalse);
     await tester.tap(find.text('Got it'));
     await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Training help'));
     await tester.tap(find.text('Training help'));
     await tester.pumpAndSettle();
     expect(find.text('Server advice'), findsOneWidget);

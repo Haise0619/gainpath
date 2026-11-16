@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:equatable/equatable.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:gainpath_domain/analytics.dart';
@@ -39,14 +40,25 @@ class ChatBloc extends Bloc<ChatEvent, ChatState> {
     on<HistoryCleared>((_, emit) {
       _chat.clearSessionContext();
       _generation++;
+      _operationVersion++;
       _historyVersion++;
       _lastText = null;
       _failedAction = null;
       emit(_with(
           messages: const [],
+          clearFailedText: true,
           isReplying: false,
           ratings: const {},
           clearError: true));
+    });
+    on<ReplyCancelled>((_, emit) {
+      _generation++;
+      _chat.clearSessionContext();
+      emit(_with(
+          isReplying: false,
+          failedText: _lastText,
+          error:
+              'Stopped waiting. The request may still finish on the server.'));
     });
     on<ChatRetried>((_, emit) async {
       if (_failedAction != null && state.acknowledged) {
@@ -69,6 +81,7 @@ class ChatBloc extends Bloc<ChatEvent, ChatState> {
   final ReplyGenerator _generator;
   final Duration replyDelay;
   int _generation = 0;
+  int _operationVersion = 0;
   int _historyVersion = 0;
   String? _lastText;
   ChatEvent? _failedAction;
@@ -89,7 +102,9 @@ class ChatBloc extends Bloc<ChatEvent, ChatState> {
           ChatDisclaimer? notice,
           String? error,
           bool clearError = false,
-          Map<String, bool>? ratings}) =>
+          Map<String, bool>? ratings,
+          String? failedText,
+          bool clearFailedText = false}) =>
       ChatState(
           messages: messages ?? state.messages,
           savedAdvice: List.unmodifiable(_chat.savedAdvice),
@@ -99,6 +114,8 @@ class ChatBloc extends Bloc<ChatEvent, ChatState> {
           notice: notice ?? state.notice,
           error: clearError ? null : error ?? state.error,
           ratings: ratings ?? state.ratings,
+          failedText: clearFailedText ? null : failedText ?? state.failedText,
+          pendingAdvice: Set.unmodifiable(_saving),
           revision: state.revision + 1);
 
   String _error(Object error) => error is ChatFailure
@@ -142,20 +159,43 @@ class ChatBloc extends Bloc<ChatEvent, ChatState> {
       {ChatMessage? mockReply}) async {
     final text = value.trim();
     if (text.isEmpty || !state.canSend) return;
+    if (text.length > 2000) {
+      emit(_with(
+          error:
+              'Use at most 2,000 characters. Edit your question and send again.'));
+      return;
+    }
+    final retrying = state.failedText == text &&
+        state.messages.isNotEmpty &&
+        state.messages.last.fromUser &&
+        state.messages.last.text == text;
+    _failedAction = null;
+    _operationVersion++;
     final generation = ++_generation;
-    final history = state.messages.length > 12
-        ? state.messages.sublist(state.messages.length - 12)
+    final previous = retrying
+        ? state.messages.sublist(0, state.messages.length - 1)
         : state.messages;
+    final history = previous.length > 12
+        ? previous.sublist(previous.length - 12)
+        : previous;
     _lastText = text;
     emit(_with(
-        messages: [...state.messages, ChatMessage(text, true)],
+        messages: retrying
+            ? state.messages
+            : [...state.messages, ChatMessage(text, true)],
+        clearFailedText: true,
         isReplying: true,
         clearError: true));
     try {
       final ChatMessage reply;
       if (_chat.isLive) {
-        reply = await _chat.generateReply(
-            text: text, history: List.unmodifiable(history));
+        reply = await _chat
+            .generateReply(text: text, history: List.unmodifiable(history))
+            .timeout(const Duration(seconds: 50), onTimeout: () {
+          _chat.clearSessionContext();
+          throw const ChatFailure('deadline-exceeded',
+              'The reply took too long. Your question is kept; retry when ready.');
+        });
       } else {
         reply = mockReply ??
             _generator.replyFor(text,
@@ -168,10 +208,9 @@ class ChatBloc extends Bloc<ChatEvent, ChatState> {
       emit(_with(messages: [...state.messages, reply], isReplying: false));
     } catch (error) {
       if (!emit.isDone && generation == _generation) {
-        emit(_with(
-            messages: state.messages.sublist(0, state.messages.length - 1),
-            isReplying: false,
-            error: _error(error)));
+        _failedAction = null;
+        _operationVersion++;
+        emit(_with(failedText: text, isReplying: false, error: _error(error)));
         if (error is ChatFailure && error.code == 'failed-precondition') {
           emit(_with(acknowledged: false));
           await _initialize(const ChatStarted(), emit);
@@ -183,12 +222,14 @@ class ChatBloc extends Bloc<ChatEvent, ChatState> {
   Future<void> _bookmark(
       AdviceBookmarkToggled e, Emitter<ChatState> emit) async {
     if (!state.acknowledged || !_saving.add(e.text)) return;
+    final operation = ++_operationVersion;
+    emit(_with(clearError: true));
     try {
       await _chat.setBookmarked(e.text, !_chat.savedAdvice.contains(e.text));
-      if (!emit.isDone) emit(_with(clearError: true));
+      if (!emit.isDone) emit(_with(clearError: operation == _operationVersion));
     } catch (error) {
-      _failedAction = e;
-      if (!emit.isDone) {
+      if (operation == _operationVersion) _failedAction = e;
+      if (!emit.isDone && operation == _operationVersion) {
         emit(_with(error: _error(error)));
         if (error is ChatFailure && error.code == 'failed-precondition') {
           emit(_with(acknowledged: false));
@@ -197,6 +238,7 @@ class ChatBloc extends Bloc<ChatEvent, ChatState> {
       }
     } finally {
       _saving.remove(e.text);
+      if (!emit.isDone) emit(_with());
     }
   }
 
@@ -204,16 +246,18 @@ class ChatBloc extends Bloc<ChatEvent, ChatState> {
     if (!state.acknowledged || e.message.fromUser) return;
     final key = e.message.id ?? e.message.text;
     if (!_rating.add(key)) return;
+    final operation = ++_operationVersion;
     final historyVersion = _historyVersion;
     try {
       await _chat.rateAdvice(e.message, e.helpful);
       if (!emit.isDone && historyVersion == _historyVersion) {
         emit(_with(
-            ratings: {...state.ratings, key: e.helpful}, clearError: true));
+            ratings: {...state.ratings, key: e.helpful},
+            clearError: operation == _operationVersion));
       }
     } catch (error) {
-      _failedAction = e;
-      if (!emit.isDone) {
+      if (operation == _operationVersion) _failedAction = e;
+      if (!emit.isDone && operation == _operationVersion) {
         emit(_with(error: _error(error)));
         if (error is ChatFailure && error.code == 'failed-precondition') {
           emit(_with(acknowledged: false));

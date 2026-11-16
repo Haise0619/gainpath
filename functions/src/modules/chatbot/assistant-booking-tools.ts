@@ -7,6 +7,12 @@ import { getBookingPaymentQuote } from '../commerce/booking-payment-service';
 import type { CoachIdentityReader } from '../coaching/coach-profile-service';
 
 const id=(v:unknown)=>typeof v==='string'&&/^[\w-]{1,128}$/.test(v);
+/** Request-local bounded work; preserves the canonical directory order. */
+export async function mapAssistantCandidates<T,R>(values:readonly T[],read:(value:T)=>Promise<R>):Promise<R[]> {
+ const results:R[]=[];
+ for(let i=0;i<values.length;i+=4)results.push(...await Promise.all(values.slice(i,i+4).map(read)));
+ return results;
+}
 export function validBookingToolArgs(name:string,raw:unknown):raw is Record<string,unknown>{
  if(!raw||typeof raw!=='object'||Array.isArray(raw))return false;
  const a=raw as Record<string,unknown>;
@@ -14,7 +20,7 @@ export function validBookingToolArgs(name:string,raw:unknown):raw is Record<stri
  if(!['get_coaching_options','propose_booking'].includes(name))return false;
  const proposal=name==='propose_booking';
  if(Object.keys(a).some(k=>!['coachId','localDate','durationMinutes',...(proposal?['branchId','startAtMillis']:[])].includes(k)))return false;
- return id(a.coachId)&&[30,60].includes(Number(a.durationMinutes))&&typeof a.durationMinutes==='number'
+ return id(a.coachId)&&a.durationMinutes===60
    &&(a.localDate===undefined?!proposal:typeof a.localDate==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(a.localDate))
    &&(!proposal||id(a.branchId)&&Number.isSafeInteger(a.startAtMillis)&&Number(a.startAtMillis)>0&&Number(a.startAtMillis)%1800000===0);
 }
@@ -41,15 +47,15 @@ export class AssistantBookingTools {
    if(name==='list_coaches'){
      const ids=await this.listIds(args.afterCoachId as string|undefined);
      if(ids.length>21||ids.some(v=>!id(v))||new Set(ids).size!==ids.length)throw new DomainError('failed-precondition','Coach directory needs review.');
-     const items=[];
-     for(const coachId of ids.slice(0,20)){
+     const candidates=await mapAssistantCandidates(ids.slice(0,20),async coachId=>{
        try{
          const failure=await coachEligibilityFailure(this.identity,coachId);if(failure)throw failure;
          const branches=await this.store.transact(async tx=>{const m=await currentBookingMembership(tx,this.org,this.auth!.uid);return (await bookingCoachScope(tx,this.org,coachId,m.branchIds)).permitted;});
          const quote=await getBookingPaymentQuote(this.store,this.auth,{schemaVersion:1,organizationId:this.org,coachId,branchId:branches[0],durationMinutes:60});
-         items.push({coachId,name:quote.coachName,branchId:branches[0],branchName:quote.branchName,amountMinor:quote.amountMinor,currency:quote.currency});
+         return {coachId,name:quote.coachName,branchId:branches[0],branchName:quote.branchName,amountMinor:quote.amountMinor,currency:quote.currency};
        }catch(e){if(!(e instanceof DomainError)||!['permission-denied','failed-precondition','not-found'].includes(e.code))throw e;}
-     }
+     });
+     const items=candidates.filter((value):value is NonNullable<typeof value>=>value!==undefined);
      await this.scope();
      return {items,...(ids.length>20?{nextAfterCoachId:ids[19]}:{}),bookingCreated:false};
    }

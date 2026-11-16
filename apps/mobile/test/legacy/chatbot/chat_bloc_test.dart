@@ -108,7 +108,8 @@ void main() {
     verify: (b) {
       expect(chat.savedAdvice, ['Brace your core.']);
       expect(b.state.isBookmarked(const ChatMessage('Brace your core.', false)), isTrue);
-      expect(b.state.revision, 2);
+      expect(b.state.pendingAdvice, isEmpty);
+      expect(b.state.error, isNull);
     },
   );
 

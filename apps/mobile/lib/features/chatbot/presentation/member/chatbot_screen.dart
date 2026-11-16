@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../../application/chat_bloc.dart';
 import 'package:syncfusion_flutter_charts/charts.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
@@ -23,6 +24,17 @@ Widget _networkHero(String url, {BoxFit fit = BoxFit.cover}) {
   );
 }
 
+String _adviceText(String text, ChatAttachment? attachment) {
+  if (attachment is! FitnessFactsAttachment) return text;
+  final value = [
+    text,
+    attachment.title,
+    attachment.subtitle,
+    ...attachment.facts.map((fact) => '${fact.label}: ${fact.value}')
+  ].join('\n');
+  return value.length > 6000 ? value.substring(0, 6000) : value;
+}
+
 /// AD-M6.1 — Consult AI Fitness Coach. Provides a [ChatBloc] scoped to this
 /// screen; the view below renders [ChatState] and dispatches events.
 class ChatbotScreen extends StatelessWidget {
@@ -30,7 +42,9 @@ class ChatbotScreen extends StatelessWidget {
       {super.key,
       this.connected = false,
       this.openSavedAdvice = false,
+      this.onOpenFact,
       this.onReviewBooking});
+  final ValueChanged<FitnessFactAction>? onOpenFact;
   final ValueChanged<BookingSuggestionAttachment>? onReviewBooking;
   final bool connected;
   final bool openSavedAdvice;
@@ -44,13 +58,17 @@ class ChatbotScreen extends StatelessWidget {
         analytics: connected ? null : context.read<AnalyticsRepository>(),
       ),
       child: _ChatbotView(
-          openSavedAdvice: openSavedAdvice, onReviewBooking: onReviewBooking),
+          onOpenFact: onOpenFact,
+          openSavedAdvice: openSavedAdvice,
+          onReviewBooking: onReviewBooking),
     );
   }
 }
 
 class _ChatbotView extends StatefulWidget {
-  const _ChatbotView({this.openSavedAdvice = false, this.onReviewBooking});
+  const _ChatbotView(
+      {this.openSavedAdvice = false, this.onReviewBooking, this.onOpenFact});
+  final ValueChanged<FitnessFactAction>? onOpenFact;
   final ValueChanged<BookingSuggestionAttachment>? onReviewBooking;
   final bool openSavedAdvice;
 
@@ -61,13 +79,17 @@ class _ChatbotView extends StatefulWidget {
 class _ChatbotViewState extends State<_ChatbotView> {
   static const _demoPrompts = [
     'Which equipment works my chest?',
-    'How is my workout progress trending?',
+    'How was my last workout?',
+    'Show me tutorials for my exercises.',
+    'What benefits does Premium offer?',
+    'Why was this coach recommended to me?',
   ];
 
   final _controller = TextEditingController();
   final _scroll = ScrollController();
   bool _disclaimerShown = false;
   bool _savedAdviceOpened = false;
+  int _lastMessageCount = 0;
 
   void _openSavedAdvice() {
     if (!mounted || !widget.openSavedAdvice || _savedAdviceOpened) return;
@@ -122,6 +144,12 @@ class _ChatbotViewState extends State<_ChatbotView> {
     if (!context.read<ChatBloc>().state.canSend) return;
     final text = _controller.text.trim();
     if (text.isEmpty) return;
+    if (text.length > 2000) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content:
+              Text('Your question is too long. Shorten it before sending.')));
+      return;
+    }
     _controller.clear();
     context.read<ChatBloc>().add(MessageSent(text));
   }
@@ -139,7 +167,14 @@ class _ChatbotViewState extends State<_ChatbotView> {
   Widget build(BuildContext context) {
     return BlocConsumer<ChatBloc, ChatState>(
       listener: (_, chat) {
-        _jump();
+        if (chat.messages.length != _lastMessageCount) {
+          if (!_scroll.hasClients ||
+              _scroll.position.extentAfter < 160 ||
+              chat.isReplying) {
+            _jump();
+          }
+          _lastMessageCount = chat.messages.length;
+        }
         _openSavedAdvice();
         if (chat.notice != null &&
             !chat.acknowledged &&
@@ -156,50 +191,61 @@ class _ChatbotViewState extends State<_ChatbotView> {
     final bloc = context.read<ChatBloc>();
     return Scaffold(
       appBar: AppBar(
-        title: const Text('AI coach'),
+        title: const Text('GainPath Assistant',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
         actions: [
           IconButton(
-            icon: const Icon(Icons.help_outline_rounded),
-            tooltip: 'About this assistant',
-            onPressed: () =>
-                showChatbotAboutSheet(context, notice: chat.notice),
-          ),
-          IconButton(
-            icon: const Icon(Icons.auto_awesome_rounded),
-            tooltip: 'Progress audit',
-            onPressed: chat.canSend
-                ? () => bloc.add(const ProgressAuditRequested())
-                : null,
-          ),
-          IconButton(
-            icon: const Icon(Icons.bookmark_border_rounded),
-            tooltip: 'Saved advice',
-            onPressed: () => Navigator.push(
-                context,
-                MaterialPageRoute(
-                    builder: (_) => BlocProvider.value(
-                        value: bloc, child: const SavedAdviceScreen()))),
-          ),
-          IconButton(
-            icon: const Icon(Icons.delete_outline_rounded),
-            tooltip: 'Clear chat',
-            onPressed: () async {
-              final ok = await confirmSheet(context,
-                  title: 'Clear this conversation?',
-                  message:
-                      'Messages disappear from this screen. Anything you bookmarked stays saved.',
-                  confirmLabel: 'Clear',
-                  destructive: true);
-              if (ok) bloc.add(const HistoryCleared());
-            },
-          ),
+              icon: const Icon(Icons.bookmark_border_rounded),
+              tooltip: 'Saved advice',
+              onPressed: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                      builder: (_) => BlocProvider.value(
+                          value: bloc, child: const SavedAdviceScreen())))),
+          PopupMenuButton<String>(
+              tooltip: 'Assistant options',
+              onSelected: (value) async {
+                if (value == 'about') {
+                  showChatbotAboutSheet(context, notice: chat.notice);
+                }
+                if (value == 'progress' && chat.canSend) {
+                  bloc.add(const ProgressAuditRequested());
+                }
+                if (value == 'clear') {
+                  final ok = await confirmSheet(context,
+                      title: 'Clear this conversation?',
+                      message:
+                          'Messages disappear from this screen. Anything you bookmarked stays saved.',
+                      confirmLabel: 'Clear',
+                      destructive: true);
+                  if (ok) bloc.add(const HistoryCleared());
+                }
+              },
+              itemBuilder: (_) => const [
+                    PopupMenuItem(
+                        value: 'about', child: Text('About this assistant')),
+                    PopupMenuItem(
+                        value: 'progress', child: Text('My progress')),
+                    PopupMenuItem(value: 'clear', child: Text('Clear chat'))
+                  ]),
         ],
       ),
+      backgroundColor: AppColors.bg,
       body: Column(
         children: [
           if (chat.isLoading) const LinearProgressIndicator(),
           if (chat.error != null)
             MaterialBanner(content: Text(chat.error!), actions: [
+              if (chat.failedText != null)
+                TextButton(
+                    onPressed: () {
+                      _controller.text = chat.failedText!;
+                      _controller.selection = TextSelection.collapsed(
+                          offset: _controller.text.length);
+                    },
+                    child: const Text('Edit question')),
               TextButton(
                   onPressed: () => bloc.add(const ChatRetried()),
                   child: const Text('Retry'))
@@ -210,16 +256,36 @@ class _ChatbotViewState extends State<_ChatbotView> {
                 child: const Text('Review and accept the notice')),
           Expanded(
             child: chat.messages.isEmpty
-                ? Center(
+                ? SingleChildScrollView(
                     child: Padding(
                       padding: const EdgeInsets.all(32),
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          const Icon(Icons.chat_bubble_outline_rounded,
-                              size: 40, color: AppColors.hairline),
+                          Container(
+                              width: 104,
+                              height: 104,
+                              padding: const EdgeInsets.all(4),
+                              decoration: const BoxDecoration(
+                                  color: AppColors.primaryTint,
+                                  shape: BoxShape.circle),
+                              child: ClipOval(
+                                  child: Image.asset(
+                                      'assets/images/ai_coach_mascot.png',
+                                      excludeFromSemantics: true))),
+                          const SizedBox(height: 20),
+                          Text('A stronger you starts here.',
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(
+                                  inherit: false,
+                                  fontFamily: 'BarlowCondensed',
+                                  fontSize: 28,
+                                  height: 1.2,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppColors.ink)),
                           const SizedBox(height: 14),
-                          Text('Ask about form, programming, or nutrition.',
+                          Text(
+                              'Explore your workouts, find your next tutorial, or ask a fitness question.',
                               textAlign: TextAlign.center,
                               style: Theme.of(context).textTheme.bodyMedium),
                           const SizedBox(height: 20),
@@ -233,11 +299,11 @@ class _ChatbotViewState extends State<_ChatbotView> {
                                     avatar: const Icon(
                                         Icons.auto_awesome_rounded,
                                         size: 15,
-                                        color: AppColors.accent),
-                                    backgroundColor: AppColors.accentTint,
+                                        color: AppColors.primary),
+                                    backgroundColor: AppColors.primaryTint,
                                     side: BorderSide.none,
                                     labelStyle: const TextStyle(
-                                        color: AppColors.accentDark,
+                                        color: AppColors.primary,
                                         fontWeight: FontWeight.w600,
                                         fontSize: 12.5),
                                     onPressed: chat.canSend
@@ -266,28 +332,34 @@ class _ChatbotViewState extends State<_ChatbotView> {
                     ),
                   )
                 : ListView.builder(
+                    keyboardDismissBehavior:
+                        ScrollViewKeyboardDismissBehavior.onDrag,
                     controller: _scroll,
                     padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
                     itemCount: chat.messages.length + (chat.isReplying ? 1 : 0),
                     itemBuilder: (ctx, i) {
                       if (i == chat.messages.length) {
-                        return const _Bubble(
-                            text: 'Thinking...', fromUser: false);
+                        return _Thinking(
+                            onStop: () => bloc.add(const ReplyCancelled()));
                       }
                       final m = chat.messages[i];
                       return _Bubble(
+                        onOpenFact: widget.onOpenFact,
+                        sources: m.sources,
                         onReviewBooking: widget.onReviewBooking,
                         text: m.text,
                         fromUser: m.fromUser,
                         attachment: m.attachment,
-                        isBookmarked: chat.isBookmarked(m),
+                        isBookmarked: chat.savedAdvice
+                            .contains(_adviceText(m.text, m.attachment)),
                         helpful: chat.ratings[m.id ?? m.text],
                         onRate: m.fromUser
                             ? null
                             : (helpful) => bloc.add(AdviceRated(m, helpful)),
                         onToggleBookmark: m.fromUser
                             ? null
-                            : () => bloc.add(AdviceBookmarkToggled(m.text)),
+                            : () => bloc.add(AdviceBookmarkToggled(
+                                _adviceText(m.text, m.attachment))),
                       );
                     },
                   ),
@@ -303,12 +375,18 @@ class _ChatbotViewState extends State<_ChatbotView> {
               children: [
                 Expanded(
                   child: TextField(
-                    enabled: chat.canSend,
+                    enabled: chat.acknowledged && !chat.isLoading,
+                    minLines: 1,
+                    maxLines: 5,
+                    maxLength: 2000,
+                    textCapitalization: TextCapitalization.sentences,
                     controller: _controller,
-                    textInputAction: TextInputAction.send,
+                    textInputAction: TextInputAction.newline,
                     onSubmitted: (_) => _send(),
                     decoration: const InputDecoration(
-                      hintText: 'Ask a question',
+                      hintText: 'Ask GainPath…',
+                      labelText: 'Your question',
+                      counterText: '',
                       contentPadding:
                           EdgeInsets.symmetric(horizontal: 16, vertical: 13),
                     ),
@@ -316,6 +394,7 @@ class _ChatbotViewState extends State<_ChatbotView> {
                 ),
                 const SizedBox(width: 8),
                 IconButton.filled(
+                  tooltip: 'Send message',
                   onPressed: chat.canSend ? _send : null,
                   icon: const Icon(Icons.arrow_upward_rounded),
                 ),
@@ -329,6 +408,8 @@ class _ChatbotViewState extends State<_ChatbotView> {
 }
 
 class _Bubble extends StatelessWidget {
+  final ValueChanged<FitnessFactAction>? onOpenFact;
+  final List<String> sources;
   final ValueChanged<BookingSuggestionAttachment>? onReviewBooking;
   final String text;
   final bool fromUser;
@@ -338,6 +419,8 @@ class _Bubble extends StatelessWidget {
   final bool? helpful;
   final ValueChanged<bool>? onRate;
   const _Bubble({
+    this.onOpenFact,
+    this.sources = const [],
     this.onReviewBooking,
     required this.text,
     required this.fromUser,
@@ -358,7 +441,8 @@ class _Bubble extends StatelessWidget {
         children: [
           Container(
             constraints: BoxConstraints(
-                maxWidth: MediaQuery.of(context).size.width * 0.80),
+                maxWidth: MediaQuery.of(context).size.width *
+                    (fromUser ? 0.80 : 0.92)),
             padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 12),
             decoration: BoxDecoration(
               color: fromUser ? AppColors.primary : AppColors.surface,
@@ -370,16 +454,56 @@ class _Bubble extends StatelessWidget {
               ),
               border: fromUser ? null : Border.all(color: AppColors.hairline),
             ),
-            child: Text(text,
+            child: SelectableText(text,
                 style: TextStyle(
-                    fontSize: 14.5,
-                    height: 1.45,
+                    fontSize: 15.5,
+                    height: 1.5,
                     color: fromUser ? Colors.white : AppColors.ink)),
           ),
           if (attachment != null)
             Padding(
               padding: const EdgeInsets.only(top: 8),
               child: switch (attachment!) {
+                FitnessFactsAttachment facts => Panel(
+                      child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                        Text(facts.title,
+                            style: Theme.of(context)
+                                .textTheme
+                                .titleMedium
+                                ?.copyWith(fontWeight: FontWeight.w700)),
+                        const SizedBox(height: 6),
+                        Text(facts.subtitle,
+                            style: const TextStyle(
+                                color: AppColors.inkSoft, height: 1.4)),
+                        const SizedBox(height: 12),
+                        ...facts.facts.map((fact) => Padding(
+                            padding: const EdgeInsets.only(bottom: 10),
+                            child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(fact.label,
+                                      style: const TextStyle(
+                                          fontSize: 12,
+                                          color: AppColors.inkSoft)),
+                                  SelectableText(fact.value,
+                                      style: const TextStyle(
+                                          fontSize: 15,
+                                          height: 1.4,
+                                          fontWeight: FontWeight.w600))
+                                ]))),
+                        Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            children: facts.actions
+                                .map((action) => OutlinedButton(
+                                    onPressed: onOpenFact == null
+                                        ? null
+                                        : () => onOpenFact!(action),
+                                    child: Text(action.label)))
+                                .toList())
+                      ])),
                 BookingSuggestionAttachment suggestion => Panel(
                       child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -415,11 +539,24 @@ class _Bubble extends StatelessWidget {
                       title: title, unit: unit, values: values, delta: delta),
               },
             ),
+          if (sources.isNotEmpty)
+            Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text(
+                    'Source: ${sources.join(' · ').replaceAll('_', ' ')}',
+                    style: const TextStyle(
+                        fontSize: 11.5, color: AppColors.inkSoft))),
           if (onToggleBookmark != null)
             Padding(
               padding: const EdgeInsets.only(top: 4, left: 4),
-              child: Row(
+              child: Wrap(
+                spacing: 4,
                 children: [
+                  _tinyAction(
+                      Icons.copy_rounded,
+                      'Copy',
+                      () => Clipboard.setData(
+                          ClipboardData(text: _adviceText(text, attachment)))),
                   _tinyAction(
                     isBookmarked
                         ? Icons.bookmark_rounded
@@ -454,8 +591,9 @@ class _Bubble extends StatelessWidget {
       onTap: onTap,
       borderRadius: BorderRadius.circular(6),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
         child: Row(
+          mainAxisSize: MainAxisSize.min,
           children: [
             Icon(icon, size: 14, color: AppColors.inkSoft),
             const SizedBox(width: 4),
@@ -654,4 +792,26 @@ class _Point {
   final String label;
   final int value;
   const _Point(this.label, this.value);
+}
+
+class _Thinking extends StatelessWidget {
+  const _Thinking({required this.onStop});
+  final VoidCallback onStop;
+  @override
+  Widget build(BuildContext context) => Semantics(
+      liveRegion: true,
+      label: 'Preparing a reply',
+      child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 16),
+          child: Row(children: [
+            const SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(strokeWidth: 2)),
+            const SizedBox(width: 12),
+            const Expanded(
+                child: Text('Preparing your reply…',
+                    style: TextStyle(color: AppColors.inkSoft))),
+            TextButton(onPressed: onStop, child: const Text('Stop waiting')),
+          ])));
 }

@@ -17,6 +17,42 @@ sealed class ChatAttachment {
   const ChatAttachment();
 }
 
+/// Facts assembled by authorized repositories, never parsed from model output.
+class FitnessFactsAttachment extends ChatAttachment {
+  const FitnessFactsAttachment(
+      {required this.title,
+      required this.subtitle,
+      required this.facts,
+      this.actions = const []});
+  final String title, subtitle;
+  final List<FitnessFact> facts;
+  final List<FitnessFactAction> actions;
+}
+
+class FitnessFact {
+  const FitnessFact(this.label, this.value);
+  final String label, value;
+}
+
+enum FitnessFactTarget {
+  progress,
+  workoutReport,
+  tutorial,
+  routine,
+  recommendation,
+  membership,
+  coaches
+}
+
+class FitnessFactAction {
+  const FitnessFactAction(this.label, this.target, {this.id});
+  final String label;
+  final FitnessFactTarget target;
+
+  /// A repository-owned opaque lookup key, not a model-generated route or URL.
+  final String? id;
+}
+
 /// Ephemeral navigation hint. Existing checkout revalidates every field.
 class BookingSuggestionAttachment extends ChatAttachment {
   BookingSuggestionAttachment._(this.data);

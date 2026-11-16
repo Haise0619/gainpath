@@ -1,3 +1,4 @@
+import {membershipOverview} from '../commerce/membership-payment-service';
 import {AggregateField, FieldPath, type Firestore, type Query, type QueryDocumentSnapshot} from 'firebase-admin/firestore';
 import {DomainError} from '../../platform/errors';
 import type {DocumentData, DocumentStore} from '../../platform/firestore/store';
@@ -26,7 +27,7 @@ export interface FypModuleReadDependencies {
   projectRecommendation?: NotificationReader['projectRecommendation'];
 }
 
-const operations = new Set(['getCoachRatingsCommand', 'getCoachAvailabilityCommand', 'getCoachRosterCommand',
+const operations = new Set(['getMembershipOverviewCommand', 'getCoachRatingsCommand', 'getCoachAvailabilityCommand', 'getCoachRosterCommand',
   'getBookingListCommand', 'getMemberBookingOptionsCommand', 'module9MemberCommandCallable', 'adminReportingCommand', 'adminCheckInReportingCommand',
   'workoutProgramCommand', 'getCoachCertificationsCommand', 'getCoachPublishedPhotoCommand'].map(name => `module/${name}`));
 const unavailable = () => new DomainError('failed-precondition', 'This action is unavailable for the fictional dataset.');
@@ -92,6 +93,11 @@ export async function fypModuleRead(operation: string, request: InsightsRequest,
 
   let result: unknown;
   switch (operation) {
+    case 'module/getMembershipOverviewCommand':
+      result=await membershipOverview(store,auth,d,{
+        plans:async organization=>{checkOrg(organization);return checkedRows(`${root}/membershipPlans`,(await deps.db.collection(`${root}/membershipPlans`).limit(100).get()).docs);},
+        payments:async(organization,uid)=>{checkOrg(organization);if(uid!==auth.uid)throw denied();return checkedRows(`${root}/transactions`,(await deps.db.collection(`${root}/transactions`).where('memberId','==',uid).limit(100).get()).docs);},
+      },deps.clock,async uid=>{const identity=await deps.readAuthIdentity(uid);return{exists:true,disabled:identity.disabled,emailVerified:identity.emailVerified};});break;
     case 'module/getCoachRatingsCommand':
       result = await coachRatings(store, auth, d, {latestReviews:async(organizationId,coachId)=>{checkOrg(organizationId);return (await deps.db.collection(`${root}/coaches/${coachId}/reviews`).orderBy('reviewedAtMillis','desc').limit(10).get()).docs.map(d=>({id:d.id,data:d.data()}));},countCompleted: async (organizationId, coachId) => { checkOrg(organizationId); return (await deps.db.collection(`${root}/bookings`).where('coachId','==',coachId).where('status','==','completed').count().get()).data().count; }, aggregate: async (organizationId, coachId) => {
         checkOrg(organizationId); requiredIdentifier(coachId, 'coachId');

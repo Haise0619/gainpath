@@ -1,5 +1,3 @@
-import 'package:gainpath_domain/analytics.dart';
-import 'package:gainpath_mobile/features/analytics/domain/local_member_progress_repository.dart';
 import 'dart:async';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:cloud_functions/cloud_functions.dart';
@@ -86,7 +84,8 @@ void main() {
         history: List.generate(20, (i) => ChatMessage('$i', i.isEven)));
     expect(message.id, 'r1');
     expect(message.sources, ['find_equipment']);
-    expect((calls.last['history'] as List).length, 12);
+    expect(calls.last.containsKey('history'), isFalse);
+    expect(calls.last.containsKey('deviceProgress'), isFalse);
     await repo.setBookmarked(message.text, true);
     expect(repo.savedAdvice, contains(message.text));
     await repo.setBookmarked(message.text, false);
@@ -148,52 +147,69 @@ void main() {
     expect(repo.savedAdvice, isNot(contains('tip0')));
   });
 
-  test(
-      'progress context uses actual account-owned local measurements and labels read failure unknown',
-      () async {
-    final now = DateTime.now().toUtc();
-    final record = LocalWorkoutProgressRecord(
-        scope: scope,
-        sessionId: 'real_session',
-        exerciseId: 'squat',
-        startedAt: now.subtract(const Duration(minutes: 2)),
-        endedAt: now.subtract(const Duration(minutes: 1)),
-        repetitions: 7,
-        partialRepetitions: 1,
-        trackedDurationMicros: 30000000,
-        rejectedDurationMicros: 1000000,
-        formScorePercent: 80,
-        scoringVersion: 'v1',
-        detectorId: 'blazepose',
-        detectorVersion: 'v1',
-        cameraView: 'side',
-        status: LocalWorkoutRecordStatus.localOnly);
+  test('generic replies never load or transmit personal progress', () async {
+    var progressReads = 0;
     Map<String, dynamic>? sent;
     final repo = FirebaseChatRepository(
         scope: scope,
         activeScope: () => scope,
         currentUid: () => scope.userId,
-        progressLoader: () async =>
-            LocalMemberProgressSnapshot(records: [record]),
+        progressLoader: () async {
+          progressReads++;
+          throw StateError('must not read');
+        },
         transport: (data) async {
           sent = data;
-          return {'responseId': 'reply', 'text': 'Your tracked measurements.'};
+          return {'responseId': 'r', 'text': 'Warm up gently.'};
         });
-    await repo.generateReply(text: 'My progress?', history: []);
-    final sessions = ((sent!['deviceProgress'] as Map)['sessions'] as List);
-    expect(sessions.single['repetitions'], 7);
-    expect(sessions.single['formScorePercent'], 80);
-    expect(sessions.single.containsKey('userId'), false);
-    final unknown = FirebaseChatRepository(
+    await repo.generateReply(
+        text: 'Explain warming up',
+        history: [const ChatMessage('PRIVATE', true)]);
+    expect(progressReads, 0);
+    expect(sent!.containsKey('deviceProgress'), false);
+    expect(sent!.containsKey('history'), false);
+  });
+  test('deterministic authorized facts make zero provider calls', () async {
+    var calls = 0;
+    final repo = FirebaseChatRepository(
         scope: scope,
         activeScope: () => scope,
         currentUid: () => scope.userId,
-        progressLoader: () async => throw StateError('Private path'),
+        contextualReply: (text) async => const ChatMessage(
+            'No saved workout records.', false,
+            attachment: FitnessFactsAttachment(
+                title: 'Your workout', subtitle: 'Device records', facts: [])),
+        transport: (data) async {
+          calls++;
+          throw StateError('must not send');
+        });
+    final reply = await repo.generateReply(text: 'Last workout', history: []);
+    expect(reply.id, startsWith('local-'));
+    expect(calls, 0);
+    expect(repo.lastMetrics['providerRequests'], 0);
+  });
+  test('history is bounded only for explicitly reviewed private mode',
+      () async {
+    Map<String, dynamic>? sent;
+    final repo = FirebaseChatRepository(
+        scope: scope,
+        activeScope: () => scope,
+        currentUid: () => scope.userId,
         transport: (data) async {
           sent = data;
-          return {'responseId': 'reply', 'text': 'Local data unavailable.'};
+          return data['action'] == 'bootstrap'
+              ? {
+                  'contextMode': 'private-approved',
+                  'disclaimer': {'text': 'Notice', 'revision': 1},
+                  'bookmarks': [],
+                  'acknowledged': true
+                }
+              : {'responseId': 'r', 'text': 'Advice'};
         });
-    await unknown.generateReply(text: 'My progress?', history: []);
-    expect((sent!['deviceProgress'] as Map)['unavailable'], true);
+    await repo.initialize();
+    await repo.generateReply(
+        text: 'Advice',
+        history: List.generate(20, (i) => ChatMessage('$i', i.isEven)));
+    expect((sent!['history'] as List).length, 12);
   });
 }

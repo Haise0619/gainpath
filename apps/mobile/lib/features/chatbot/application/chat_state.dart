@@ -10,6 +10,8 @@ class ChatState extends Equatable {
       this.notice,
       this.error,
       this.ratings = const {},
+      this.failedText,
+      this.pendingAdvice = const {},
       this.revision = 0});
   final List<ChatMessage> messages;
   final List<String> savedAdvice;
@@ -19,6 +21,8 @@ class ChatState extends Equatable {
   final ChatDisclaimer? notice;
   final String? error;
   final Map<String, bool> ratings;
+  final String? failedText;
+  final Set<String> pendingAdvice;
   final int revision;
   bool get canSend => acknowledged && !isLoading && !isReplying;
   bool isBookmarked(ChatMessage m) =>
@@ -33,6 +37,8 @@ class ChatState extends Equatable {
         notice,
         error,
         ratings,
-        revision
+        revision,
+        failedText,
+        pendingAdvice
       ];
 }

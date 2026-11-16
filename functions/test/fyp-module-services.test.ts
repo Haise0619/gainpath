@@ -78,6 +78,14 @@ it('uses real published Coach rating aggregates only inside the cohort namespace
   expect(await f.call('getCoachRatingsCommand', {coachIds: [coachId]})).toEqual({schemaVersion: 1, records: [{coachId, reviewCount: 2, averageRating: 4.5}]});
   expect(f.paths).toEqual([`${FYP_ROOT}/coaches/${coachId}/reviews`]);
 });
+it('reads FYP membership from the scoped settlement records without changing financial data',async()=>{
+ const f=await fixture(),before=structuredClone([...f.store.documents]);
+ const result=await f.call('getMembershipOverviewCommand',{}) as any;
+ expect(result).toMatchObject({schemaVersion:1,organizationId:'gainpath',memberId:f.uid});
+ expect(result.entitlement.effectiveTier).toBe('basic');
+ expect(f.paths.every(path=>path.startsWith(FYP_ROOT+'/'))).toBe(true);
+ expect([...f.store.documents]).toEqual(before);
+});
 it('reuses existing availability, Program and photo contracts against scoped source records', async () => {
   const f = await fixture(), coachId = dataset.coachIds[0];
   expect(await f.call('getCoachAvailabilityCommand', {coachId, dayCount: 7})).toMatchObject({schemaVersion: 1, coachId, todayLocalDate: '2026-11-03'});

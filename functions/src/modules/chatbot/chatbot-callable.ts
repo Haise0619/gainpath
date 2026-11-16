@@ -8,16 +8,26 @@ import { defineSecret } from 'firebase-functions/params';
 import { HttpsError, onCall, type CallableRequest } from 'firebase-functions/v2/https';
 import { requireActiveMembership, requireVerifiedEmail } from '../../platform/auth-context';
 import { DomainError } from '../../platform/errors';
-import { personalMetricsIntent, runGemini, SAFETY_REPLY, unsafeRequest, unsupportedPersonalMetrics, validateInput } from './chatbot-service';
+import { personalMetricsIntent, runGemini, SAFETY_REPLY, unsafeRequest, unsupportedPersonalMetrics, validateInput, type AssistantMetrics, privateProviderApproved } from './chatbot-service';
 const key = defineSecret('GEMINI_API_KEY');
 const bookingActionClaim=(text:string)=>/\b(booked|reserved|emailed|scheduled)\b|\b(?:booking|session|payment|email|calendar)\b.{0,35}\b(?:confirmed|created|sent|taken|updated|completed)\b/i.test(text);
 const noBookingAction='I have not booked, paid, emailed or changed your calendar. Ask me for available coaching times, then review a suggestion in checkout.';
 
-export async function fitnessAssistantHandler(request: CallableRequest, dependencies: { db?: Firestore; apiKey?: string; fetcher?: typeof fetch; clock?: () => number; readIdentity?:CoachIdentityReader } = {}): Promise<unknown> {
+export async function fitnessAssistantHandler(request: CallableRequest, dependencies: { db?: Firestore; apiKey?: string; fetcher?: typeof fetch; clock?: () => number; readIdentity?:CoachIdentityReader; fypScopeHandled?:boolean } = {}): Promise<unknown> {
+  const started=Date.now();
+  const metrics:AssistantMetrics={providerRequests:0,toolCalls:0,inputTokens:0,outputTokens:0,thinkingTokens:0,usageComplete:true};
   try {
     if (!request.app) throw new HttpsError('unauthenticated', 'App verification is required.');
     requireVerifiedEmail(request.auth);
     const input = validateInput(request.data), uid = request.auth!.uid, org = input.organizationId;
+    if(request.auth!.token.fypAuthCreatedAtMillis!==undefined&&!dependencies.fypScopeHandled){
+      const {createFypDatasetBackend}=await import('../dataset/fyp-backend');
+      const {resolveFypRuntimeRelease}=await import('../dataset/fyp-runtime-release');
+      const {getAuth}=await import('firebase-admin/auth');
+      const db=dependencies.db??getFirestore();
+      const release=await resolveFypRuntimeRelease(db);
+      return await createFypDatasetBackend({db,auth:getAuth(),release,assistant:{apiKey:dependencies.apiKey??key.value(),fetcher:dependencies.fetcher}}).command({app:{appId:request.app!.appId},auth:request.auth,data:{schemaVersion:1,operation:'member.assistant',data:request.data}});
+    }
     const db = dependencies.db ?? getFirestore(), now = (dependencies.clock ?? Date.now)();
     const stateRef = db.doc(`orgs/${org}/members/${uid}/chatbot/state`);
     const requireCanonical = (u: any, m: any, organization: any) => {
@@ -36,7 +46,7 @@ export async function fitnessAssistantHandler(request: CallableRequest, dependen
       if (!disclaimer || disclaimer.isActive !== true || typeof disclaimer.text !== 'string' || !disclaimer.text.trim() || disclaimer.text.length > 10000 || !Number.isSafeInteger(disclaimer.revision) || disclaimer.revision < 1) throw new HttpsError('failed-precondition', 'The organization disclaimer is unavailable.');
       const previous = stateDoc.data() ?? {};
       const state = { schemaVersion: 1, acknowledgedRevision: Number(previous.acknowledgedRevision ?? 0), bookmarks: Array.isArray(previous.bookmarks) ? previous.bookmarks.filter((v: unknown) => typeof v === 'string' && v.length <= 6000).slice(-50) : [], ratings: Array.isArray(previous.ratings) ? previous.ratings.slice(-100) : [], rateWindowMillis: Number(previous.rateWindowMillis ?? 0), rateCount: Number(previous.rateCount ?? 0) };
-      if (input.action === 'bootstrap') return { disclaimer: { text: disclaimer.text, revision: disclaimer.revision }, acknowledged: state.acknowledgedRevision === disclaimer.revision, bookmarks: state.bookmarks };
+      if (input.action === 'bootstrap') return { disclaimer: { text: disclaimer.text, revision: disclaimer.revision }, acknowledged: state.acknowledgedRevision === disclaimer.revision, bookmarks: state.bookmarks, contextMode:privateProviderApproved()?'private-approved':'public' };
       if (input.action === 'acknowledge') {
         if (input.disclaimerRevision !== disclaimer.revision) throw new HttpsError('failed-precondition', 'Please review the current disclaimer.');
         state.acknowledgedRevision = disclaimer.revision;
@@ -52,7 +62,7 @@ export async function fitnessAssistantHandler(request: CallableRequest, dependen
         if (input.action === 'rate') state.ratings = [...state.ratings.filter((r: any) => r.responseId !== input.responseId), { responseId: input.responseId!, helpful: input.helpful!, atMillis: now }].slice(-100);
       }
       tx.set(stateRef, state);
-      return { ok: true, bookmarks: state.bookmarks };
+      return { ok: true, bookmarks: state.bookmarks, contextMode:privateProviderApproved()?'private-approved':'public' };
     });
     if (input.action !== 'reply') return result;
     const progress = async () => {
@@ -77,7 +87,7 @@ export async function fitnessAssistantHandler(request: CallableRequest, dependen
       if(['list_coaches','get_coaching_options','propose_booking'].includes(name)){
         await reauthorize();const value=await bookingTools.execute(name,args) as any;
         if(name==='list_coaches')bookingReadReply=value.items.length
-          ? `Eligible Coaches on this page:\n${value.items.map((c:any)=>`${c.name} · ${c.branchName} · RM ${(c.amountMinor/100).toFixed(2)}`).join('\n')}\nAsk for a Coach, date and 30- or 60-minute session.${value.nextAfterCoachId?' More Coaches are available on another page.':''}`
+          ? `Eligible Coaches on this page:\n${value.items.map((c:any)=>`${c.name} · ${c.branchName} · RM ${(c.amountMinor/100).toFixed(2)}`).join('\n')}\nAsk for a Coach, date and 60-minute session.${value.nextAfterCoachId?' More Coaches are available on another page.':''}`
           : 'No eligible Coaches were found on this page. Use the Coach directory to browse current published Coaches.';
         if(name==='get_coaching_options')bookingReadReply=value.items.length
           ? `Available times for ${value.localDate} (${value.timeZone}), ${value.durationMinutes} minutes:\n${value.items.slice(0,12).map((s:any)=>`${s.coachName}: ${s.startLabel} – ${s.endLabel} · ${s.branchName} · RM ${(s.amountMinor/100).toFixed(2)}`).join('\n')}${value.items.length>12?'\nMore times are available; specify your preferred time.':''}\nNothing is reserved. Ask for an exact time to review a suggestion in checkout.`
@@ -116,7 +126,7 @@ export async function fitnessAssistantHandler(request: CallableRequest, dependen
           await reauthorize();publicBookingContext=undefined;bookingTools.context=undefined;
         }
       }
-      text = await runGemini(dependencies.apiKey ?? key.value(), input.text!, input.history ?? [], execute, dependencies.fetcher,publicBookingContext);
+      text = await runGemini(dependencies.apiKey ?? key.value(), input.text!, input.history ?? [], execute, dependencies.fetcher,publicBookingContext,{metrics,terminalReply:()=>bookingTools.suggestion?'Here is an available session suggestion. Nothing has been booked or charged.':bookingReadReply??(requestedProgress?progressText(requestedProgress):undefined)});
       if(!bookingReadReply&&!bookingTools.suggestion&&bookingActionClaim(text))text=noBookingAction;
       else if (!requestedProgress && !bookingReadReply && !bookingTools.suggestion && unsupportedPersonalMetrics(text)) {
         requestedProgress = await progress(); sources.add('get_my_progress');
@@ -129,11 +139,16 @@ export async function fitnessAssistantHandler(request: CallableRequest, dependen
     if(bookingSuggestion)text='Here is an available session suggestion. Nothing has been booked or charged. Review it in checkout; availability and price will be checked again before you continue.';
     else if(bookingReadReply)text=bookingReadReply;
     else if(!requestedProgress&&bookingActionClaim(text))text=noBookingAction;
-    return { responseId: randomUUID(), text, ...(bookingTools.context?{bookingContext:bookingTools.context}:{}), ...(bookingSuggestion?{bookingSuggestion}:{}), ...(sources.size ? { sources: [...sources] } : {}) };
+    return { responseId: randomUUID(), text, telemetry:{...metrics,responseTimeMillis:Math.max(0,Date.now()-started)}, ...(bookingTools.context?{bookingContext:bookingTools.context}:{}), ...(bookingSuggestion?{bookingSuggestion}:{}), ...(sources.size ? { sources: [...sources] } : {}) };
   } catch (error) {
     if (error instanceof HttpsError) throw error;
     if (error instanceof DomainError) throw new HttpsError(error.code, error.message);
     throw new HttpsError('unavailable', 'Assistant is temporarily unavailable. Please retry.');
   }
 }
-export const fitnessAssistantCommand = onCall({ enforceAppCheck: true, secrets: [key], timeoutSeconds: 60, maxInstances: 2, concurrency: 10 }, request => fitnessAssistantHandler(request));
+export const fitnessAssistantCommand = onCall({ enforceAppCheck: true, secrets: [key], timeoutSeconds: 60, maxInstances: 2, concurrency: 10 }, async request => {
+  const result=await fitnessAssistantHandler(request) as {telemetry?:AssistantMetrics&{responseTimeMillis:number}};
+  // Only server-constructed counters; never prompts, replies, identity or tool arguments.
+  if(result.telemetry)console.info('fitness_assistant_metrics',result.telemetry);
+  return result;
+});

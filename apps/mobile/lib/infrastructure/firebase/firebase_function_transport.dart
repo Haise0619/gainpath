@@ -42,6 +42,7 @@ HttpsCallable firebaseCallable(
 
 /// Explicit operation map preserves canonical behavior for ordinary accounts.
 const fypScopedOperations = <String, String>{
+  'getMembershipOverviewCommand': 'module/getMembershipOverviewCommand',
   'getMemberBookingOptionsCommand': 'module/getMemberBookingOptionsCommand',
   'getCoachAccountSettingsCommand': 'module/getCoachAccountSettingsCommand',
   'getCoachRatingsCommand': 'module/getCoachRatingsCommand',
