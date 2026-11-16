@@ -240,13 +240,16 @@ class FirebaseChatRepository extends ChatRepository {
     final coachDirectory = data['coachSuggestions'] == null
         ? null
         : CoachDirectoryAttachment.fromJson(data['coachSuggestions']);
+    final availability = data['coachAvailability'] == null
+        ? null
+        : CoachAvailabilityAttachment.fromJson(data['coachAvailability']);
     if (contextVersion == _contextVersion && coachDirectory != null) {
       _suggestedCoachIds.addAll(coachDirectory.coaches.map((c) => c.coachId));
     }
     return ChatMessage(answer, false,
         id: id,
         attachment: data['bookingSuggestion'] == null
-            ? coachDirectory
+            ? availability ?? coachDirectory
             : BookingSuggestionAttachment.fromJson(
                 Map<String, dynamic>.from(data['bookingSuggestion'] as Map)),
         sources: data['sources'] is List

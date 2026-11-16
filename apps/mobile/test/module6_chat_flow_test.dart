@@ -12,6 +12,7 @@ class LiveChat extends ChatRepository {
   int revision = 7;
   Completer<ChatMessage>? pending;
   int calls = 0;
+  String? lastQuestion;
   final ratings = <bool>[];
   ChatMessage? reply;
   @override
@@ -42,6 +43,7 @@ class LiveChat extends ChatRepository {
   Future<ChatMessage> generateReply(
       {required String text, required List<ChatMessage> history}) async {
     calls++;
+    lastQuestion = text;
     expect(history.length, lessThanOrEqualTo(12));
     return pending == null
         ? reply ?? const ChatMessage('Server advice', false, id: 'reply-1')
@@ -67,6 +69,29 @@ class LiveChat extends ChatRepository {
 }
 
 void main() {
+  for (final question in const [
+    'Which equipment works my chest?',
+    'How was my last workout?',
+    'Show me tutorials for my exercises.',
+    'What benefits does Premium offer?',
+    'Why was this coach recommended to me?',
+  ]) {
+    testWidgets('quick action sends the complete question: $question',
+        (tester) async {
+      final repo = LiveChat()..accepted = true;
+      await tester.pumpWidget(RepositoryProvider<ChatRepository>.value(
+          value: repo,
+          child: const MaterialApp(home: ChatbotScreen(connected: true))));
+      await tester.pumpAndSettle();
+      final chip = find.text(question);
+      await tester.ensureVisible(chip);
+      await tester.tap(chip);
+      await tester.pumpAndSettle();
+      expect(repo.lastQuestion, question);
+      expect(repo.calls, 1);
+      expect(find.text('Server advice'), findsOneWidget);
+    });
+  }
   testWidgets(
       'shared chat renders a reviewable booking suggestion without executing an action until tapped',
       (tester) async {

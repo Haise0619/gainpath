@@ -30,3 +30,24 @@ it('rejects unavailable slots, foreign ownership/scope and stale branch assignme
  store.documents.get('users/member-1')!.organizationId='elsewhere';
  await expect(make().execute('list_coaches',{})).rejects.toMatchObject({code:'permission-denied'});
 });
+it('finds actual tomorrow slots in the organization timezone without reserving anything',async()=>{
+ const before=structuredClone([...store.documents]);
+ const result=await make().availableCoaches({dayOffset:1});
+ expect(result).toMatchObject({schemaVersion:1,localDate:'2026-10-02',timeZone:'Asia/Kuala_Lumpur',durationMinutes:60});
+ expect(result.items[0]).toMatchObject({coachId:'coach-1',name:'Fixture Coach',branchId:'branch-1',amountMinor:12500,startAtMillis:start});
+ expect([...store.documents]).toEqual(before);
+});
+it('uses the organization calendar across UTC midnight and month-end, not the client date',async()=>{
+ const late=Date.parse('2026-10-31T20:00:00Z');
+ const tools=new AssistantBookingTools(store,auth,'org-1',async()=>[],eligibleCoach,()=>late);
+ const result=await tools.availableCoaches({dayOffset:1});
+ expect(result).toMatchObject({localDate:'2026-11-02',timeZone:'Asia/Kuala_Lumpur',items:[]});
+ expect(Number.isFinite(result.expiresAtMillis)).toBe(true);expect(result.expiresAtMillis).toBe(late+300000);
+});
+it('does not call an eligible Coach available when that Coach has no actual slots',async()=>{
+ for(const [path,value] of [...store.documents])if(path.includes('coach-1'))store.documents.set(path.replaceAll('coach-1','coach-2'),structuredClone(value));
+ store.documents.delete('orgs/org-1/coachAvailability/coach-2/days/2026-10-02');
+ const tools=new AssistantBookingTools(store,auth,'org-1',async()=>['coach-1','coach-2'],eligibleCoach,()=>now);
+ const result=await tools.availableCoaches({dayOffset:1});
+ expect(result.items.length).toBeGreaterThan(0);expect(result.items.every(row=>row.coachId==='coach-1')).toBe(true);
+});

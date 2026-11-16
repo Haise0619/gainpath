@@ -8,6 +8,7 @@ import '../../analytics/domain/member_workout_report.dart';
 import '../../recommendation/application/member_recommendation_repository.dart';
 import '../../workout/domain/published_routine_view.dart';
 import '../../workout/domain/workout_contracts.dart';
+import 'package:gainpath_domain/workout.dart' show exerciseImageUri;
 
 /// Small, read-only contextual assistant. No personal facts reach the provider.
 /// Dependencies retain their existing Auth, consent and publication guards.
@@ -33,12 +34,14 @@ class FitnessAssistantContext {
   final Map<String, PublishedRoutineExercise> tutorialTargets = {};
   final Map<String, PublishedRoutine> routineTargets = {};
   final Map<String, MemberRecommendationDetail> recommendationTargets = {};
+  List<PublishedRoutine> _catalogSnapshot = const [];
 
   void _check() {
     if (!isCurrent()) {
       tutorialTargets.clear();
       routineTargets.clear();
       recommendationTargets.clear();
+      _catalogSnapshot = const [];
       throw const ChatFailure(
           'permission-denied', 'Your account changed. Reopen the assistant.');
     }
@@ -52,13 +55,16 @@ class FitnessAssistantContext {
   }
 
   ChatMessage _facts(String text, String title, List<FitnessFact> facts,
-          {List<FitnessFactAction> actions = const [], String? source}) =>
+          {List<FitnessFactAction> actions = const [],
+          List<FitnessContentPreview> contentPreviews = const [],
+          String? source}) =>
       ChatMessage(text, false,
           attachment: FitnessFactsAttachment(
               title: title,
               subtitle:
                   source ?? 'Authorized GainPath records · not sent to Gemini',
               facts: List.unmodifiable(facts),
+              contentPreviews: List.unmodifiable(contentPreviews),
               actions: List.unmodifiable(actions)),
           sources: [source ?? 'GainPath records']);
 
@@ -67,6 +73,12 @@ class FitnessAssistantContext {
     if (RegExp(r'\b(membership|premium|basic|free plan|my plan benefits)\b')
         .hasMatch(q)) {
       return 'membership';
+    }
+    if (RegExp(r'\b(protein|food|nutrition|recipes?|calories|equipment|machines?)\b')
+            .hasMatch(q) &&
+        !RegExp(r'\b(my workout progress|my workout history|last workout)\b')
+            .hasMatch(q)) {
+      return null;
     }
     if (RegExp(r'\b(recommendations?|recommended)\b').hasMatch(q) &&
         RegExp(r'\b(why|coach|tutorial|my|existing)\b').hasMatch(q)) {
@@ -85,12 +97,17 @@ class FitnessAssistantContext {
         .hasMatch(q)) {
       return 'progress';
     }
+    if (RegExp(r'\b(unfinished|in progress|incomplete)\b').hasMatch(q) &&
+        RegExp(r'\b(routine|workout|attempt)\b').hasMatch(q)) {
+      return 'latest';
+    }
     if (RegExp(r'\b(last|latest|recent|previous)\b').hasMatch(q) &&
-        RegExp(r'\b(workout|exercise|training|session)\b').hasMatch(q)) {
+        RegExp(r'\b(workout|exercise|training|session|capture|record)\b')
+            .hasMatch(q)) {
       return 'latest';
     }
     if (RegExp(r'\b(my|me)\b').hasMatch(q) &&
-        RegExp(r'\b(form score|pose feedback|squats?|repetitions|reps|completed workouts?)\b')
+        RegExp(r'\b(progress|form score|pose feedback|squats?|repetitions|reps|completed workouts?|history)\b')
             .hasMatch(q)) {
       return 'progress';
     }
@@ -112,12 +129,12 @@ class FitnessAssistantContext {
     if (kind == null) return null;
     try {
       return switch (kind) {
-        'membership' => await _membership(),
+        'membership' => await _membership(text),
         'recommendations' => await _recommendations(),
         'tutorials' ||
         'routines' =>
           await _catalog(text, tutorial: kind == 'tutorials'),
-        _ => await _workouts(latest: kind == 'latest'),
+        _ => await _workouts(text, latest: kind == 'latest'),
       };
     } on ChatFailure {
       rethrow;
@@ -147,8 +164,15 @@ class FitnessAssistantContext {
     // their existing, validated nullable score.
     final records = snapshot.records.map((r) {
       final summary = snapshot.summaries[r.sessionId];
-      if (scope.datasetScope == null ||
-          summary?.provenance == WorkoutProvenance.realCamera) {
+      final unscored = const {
+        'single-arm-row-side-v1',
+        'reverse-lunge-side-v1',
+        'dumbbell-shoulder-press-front-v1',
+        'standing-lateral-raise-front-v1'
+      }.contains(r.scoringVersion);
+      if (!unscored &&
+          (scope.datasetScope == null ||
+              summary?.provenance == WorkoutProvenance.realCamera)) {
         return r;
       }
       return LocalWorkoutProgressRecord(
@@ -178,16 +202,100 @@ class FitnessAssistantContext {
         routineHistoryAvailable: snapshot.routineHistoryAvailable);
   }
 
-  String _exercise(String id) => id.replaceAll(RegExp(r'[-_]'), ' ');
-  Future<ChatMessage> _workouts({required bool latest}) async {
+  String _exercise(String id, Map<String, String> names) =>
+      names[id] ??
+      (RegExp(r'^[a-z]{2,18}(?:[-_][a-z]{2,18}){0,3}$').hasMatch(id)
+          ? id
+              .split(RegExp(r'[-_]'))
+              .map((w) => '${w[0].toUpperCase()}${w.substring(1)}')
+              .join(' ')
+          : 'Saved exercise');
+
+  Set<String> _words(String text) => text
+      .toLowerCase()
+      .split(RegExp(r'[^a-z]+'))
+      .where((w) => w.length > 2)
+      .map((w) => w.endsWith('s') && !w.endsWith('ss')
+          ? w.substring(0, w.length - 1)
+          : w)
+      .toSet();
+  String _malaysiaTime(DateTime date) =>
+      '${date.toUtc().add(const Duration(hours: 8)).toIso8601String().substring(0, 16).replaceFirst('T', ' ')} MYT (UTC+08:00)';
+  Future<ChatMessage> _workouts(String query, {required bool latest}) async {
     final snapshot = await _progress();
+    // Reuse names already fetched for this session's content requests. A
+    // history question must not wait for another catalogue network request.
+    final catalog = _catalogSnapshot;
+    _check();
+    final names = <String, String>{
+      for (final a in snapshot.attempts)
+        for (final e in a.routine.exercises) e.exerciseId: e.name,
+      for (final r in catalog)
+        for (final e in r.exercises) e.exerciseId: e.name
+    };
+    final queryWords = _words(query);
+    final requested = <String>{};
+    for (final id in {
+      ...names.keys,
+      ...snapshot.records.map((r) => r.exerciseId)
+    }) {
+      final terms =
+          _words('${names[id] ?? ''} ${id.replaceAll(RegExp(r'[-_]'), ' ')}')
+            ..removeAll({
+              'bodyweight',
+              'standing',
+              'standard',
+              'dumbbell',
+              'barbell',
+              'front',
+              'side',
+              'left',
+              'right',
+              'published',
+              'exercise',
+              'workout',
+              'routine',
+              'training',
+              'progress',
+              'form',
+              'session',
+              'capture',
+              'history'
+            });
+      if (terms.any(queryWords.contains)) requested.add(id);
+    }
+    if (requested.isEmpty &&
+        queryWords.intersection({
+          'squat',
+          'curl',
+          'calf',
+          'lunge',
+          'row',
+          'press',
+          'raise',
+          'pushup'
+        }).isNotEmpty) {
+      requested.add('__requested_exercise_unavailable__');
+    }
+    final lower = query.toLowerCase();
+    final explicitCapture = RegExp(r'\bcapture\b').hasMatch(lower);
+    final explicitSaved = RegExp(r'\bsaved\b').hasMatch(lower) &&
+        RegExp(r'\b(record|workout|routine|attempt)\b').hasMatch(lower);
+    final unfinished =
+        RegExp(r'\b(unfinished|in progress|incomplete)\b').hasMatch(lower);
+    final completed = RegExp(r'\bcompleted\b').hasMatch(lower) && latest;
     final now = clock();
     final records = snapshot.records
-        .where((r) => !r.endedAt.isAfter(now))
+        .where((r) =>
+            !r.endedAt.isAfter(now) &&
+            (requested.isEmpty || requested.contains(r.exerciseId)))
         .toList()
       ..sort((a, b) => b.endedAt.compareTo(a.endedAt));
     final attempts = snapshot.attempts
         .where((a) =>
+            (requested.isEmpty ||
+                a.routine.exercises
+                    .any((e) => requested.contains(e.exerciseId))) &&
             a.startedAtMicros != null &&
             a.startedAtMicros! <= now.microsecondsSinceEpoch &&
             (a.finishedAtMicros ?? a.updatedAtMicros) <=
@@ -195,48 +303,111 @@ class FitnessAssistantContext {
         .toList()
       ..sort((a, b) => (b.finishedAtMicros ?? b.updatedAtMicros)
           .compareTo(a.finishedAtMicros ?? a.updatedAtMicros));
+    final eligibleAttempts = attempts
+        .where((a) => explicitSaved
+            ? true
+            : unfinished
+                ? !a.finished
+                : a.isComplete && a.finishedAtMicros != null)
+        .toList();
+    final routineSessionIds =
+        attempts.expand((a) => a.entries.expand((e) => e.sessionIds)).toSet();
+    final independentRecords =
+        records.where((r) => !routineSessionIds.contains(r.sessionId)).toList();
+    final selectedRoutine = latest &&
+            !explicitCapture &&
+            (requested.isEmpty || records.isEmpty || completed || unfinished) &&
+            eligibleAttempts.isNotEmpty &&
+            (completed ||
+                unfinished ||
+                independentRecords.isEmpty ||
+                (eligibleAttempts.first.finishedAtMicros ??
+                        eligibleAttempts.first.updatedAtMicros) >=
+                    independentRecords.first.endedAt.microsecondsSinceEpoch)
+        ? eligibleAttempts.first
+        : null;
     final source = scope.datasetScope != null
         ? 'FYP recorded history · not physical camera evidence'
         : 'Saved device records / synced summaries · not server-accepted evidence';
     final facts = <FitnessFact>[];
     String message;
-    if (records.isEmpty && attempts.isEmpty) {
+    if (latest &&
+        (unfinished || completed || records.isEmpty && attempts.isNotEmpty) &&
+        selectedRoutine == null) {
+      message = unfinished
+          ? 'No unfinished routine is available in the saved records.'
+          : 'No completed routine workout is available in the saved records. Individual exercise captures are not proof of a completed routine.';
+      facts.add(const FitnessFact(
+          'Form Score', 'Not assessed — no matching routine record'));
+    } else if (records.isEmpty && attempts.isEmpty ||
+        latest && explicitCapture && records.isEmpty) {
       message =
           'No saved workout records are available here. This does not mean you have never trained.';
       facts.add(
           const FitnessFact('Form Score', 'Not assessed — no eligible record'));
-    } else if (latest &&
-        attempts.isNotEmpty &&
-        (records.isEmpty ||
-            (attempts.first.finishedAtMicros ??
-                    attempts.first.updatedAtMicros) >
-                records.first.endedAt.microsecondsSinceEpoch)) {
-      final a = attempts.first;
+    } else if (selectedRoutine != null) {
+      final a = selectedRoutine;
       message =
           'Here is your latest saved routine attempt. Completed, partial and self-reported activity stay separate.';
       facts.add(FitnessFact('Routine', a.routine.title));
+      facts.add(FitnessFact('Saved record type',
+          a.isComplete ? 'Completed routine' : 'Unfinished routine'));
+      facts.add(FitnessFact('Status', a.statusLabel));
+      final matchingEntries = a.entries
+          .where((e) =>
+              requested.isEmpty ||
+              requested.contains(a.routine.exercises[e.index].exerciseId))
+          .toList();
+      final full =
+              matchingEntries.fold<int>(0, (n, e) => n + e.fullRepetitions),
+          partial =
+              matchingEntries.fold<int>(0, (n, e) => n + e.partialRepetitions),
+          manual = matchingEntries.fold<int>(0, (n, e) => n + e.manualSets);
+      facts.add(FitnessFact('Repetitions', '$full full · $partial partial'));
+      facts.add(FitnessFact('Completed exercises',
+          '${matchingEntries.where((e) => e.completed).length} / ${matchingEntries.length}${requested.isEmpty ? '' : ' matching exercises'}'));
       facts.add(FitnessFact(
-          'Status', a.finished ? 'Finished attempt' : 'Partial / in progress'));
-      for (final entry in a.entries.take(8)) {
+          'Self-reported sets', '$manual · separate from camera repetitions'));
+      if (a.finishedAtMicros != null) {
+        facts.add(FitnessFact(
+            'Completed',
+            _malaysiaTime(DateTime.fromMicrosecondsSinceEpoch(
+                a.finishedAtMicros!,
+                isUtc: true))));
+      }
+      for (final entry in matchingEntries.take(8)) {
         final ex = a.routine.exercises[entry.index];
         facts.add(FitnessFact(
             ex.name,
             '${entry.status.name} · ${entry.fullRepetitions} tracked reps · ${entry.partialRepetitions} partial reps'
             '${entry.manualSets > 0 ? ' · ${entry.manualSets} self-reported sets' : ''}'));
       }
-      if (a.startedAtMicros != null && a.finishedAtMicros != null) {
+      if (requested.isNotEmpty) {
+        final tracked = matchingEntries.fold<int>(
+            0,
+            (n, e) =>
+                n +
+                e.trackedDurationMicros +
+                (e.guided?.totalActiveMicroseconds ?? 0));
+        facts.add(FitnessFact(
+            'Duration',
+            tracked == 0
+                ? 'Not recorded for this exercise'
+                : '${reportDuration(tracked)} tracked for this exercise'));
+      } else if (a.startedAtMicros != null && a.finishedAtMicros != null) {
         facts.add(FitnessFact('Duration',
             reportDuration(a.finishedAtMicros! - a.startedAtMicros!)));
       }
       facts.add(const FitnessFact('Form Score',
           'Open the report for qualified per-exercise scores; no routine-wide score is inferred.'));
-    } else if (latest) {
+    } else if (latest && records.isNotEmpty) {
       final r = records.first;
       message =
           'Here is your latest saved exercise capture. Estimated form is guidance, not a medical assessment.';
       facts.addAll([
-        FitnessFact('Exercise', _exercise(r.exerciseId)),
-        FitnessFact('Completed', reportDate(r.endedAt)),
+        FitnessFact('Exercise', _exercise(r.exerciseId, names)),
+        const FitnessFact('Saved record type', 'Saved exercise capture'),
+        FitnessFact('Completed', _malaysiaTime(r.endedAt)),
         FitnessFact('Repetitions',
             '${r.repetitions} full · ${r.partialRepetitions} partial'),
         FitnessFact('Sets', 'Not recorded for an individual capture'),
@@ -280,7 +451,7 @@ class FitnessAssistantContext {
       ]);
       for (final group in progress.formSeries.take(3)) {
         facts.add(FitnessFact(
-            '${_exercise(group.exerciseId)} · ${group.cameraView}',
+            '${_exercise(group.exerciseId, names)} · ${group.cameraView}',
             group.meanScore == null
                 ? 'Not assessed'
                 : '${group.meanScore!.toStringAsFixed(1)}% estimated mean · ${group.records.length} comparable captures'));
@@ -313,6 +484,7 @@ class FitnessAssistantContext {
           'Tutorials & routines', const []);
     }
     final routines = await _read(catalog);
+    _catalogSnapshot = List.unmodifiable(routines);
     final profile = loadProfile == null ? null : await _read(loadProfile!);
     final snapshot = await _progress();
     final recent = snapshot.records.toList()
@@ -385,6 +557,7 @@ class FitnessAssistantContext {
               : 'Recent saved exercise context and stated experience; no weakness or medical need inferred')
     ];
     final actions = <FitnessFactAction>[];
+    final previews = <FitnessContentPreview>[];
     for (final row in selected) {
       final ex = row.$2, routine = row.$1;
       final key =
@@ -393,12 +566,23 @@ class FitnessAssistantContext {
       routineTargets[routine.id] = routine;
       facts.add(FitnessFact(routine.title,
           '${ex.name} · ${ex.sets} prescribed sets · ${ex.reps == null ? '${ex.durationSeconds}s' : '${ex.reps} reps'} · ${routine.estimatedMinutes} estimated minutes'));
-      actions.add(tutorial
+      final action = tutorial
           ? FitnessFactAction(
               'View ${ex.name} tutorial', FitnessFactTarget.tutorial, id: key)
           : FitnessFactAction(
               'View ${routine.title}', FitnessFactTarget.routine,
-              id: routine.id));
+              id: routine.id);
+      actions.add(action);
+      for (final candidate in [ex.tutorial.coverImageUrl, ex.imageUrl]) {
+        final uri = exerciseImageUri(candidate);
+        if (uri != null) {
+          previews.add(FitnessContentPreview(
+              title: tutorial ? ex.name : routine.title,
+              imageUrl: uri.toString(),
+              action: action));
+          break;
+        }
+      }
     }
     return _facts(
         selected.isEmpty
@@ -407,6 +591,7 @@ class FitnessAssistantContext {
         tutorial ? 'Tutorials for your training' : 'Options for today',
         facts,
         actions: actions,
+        contentPreviews: previews,
         source:
             'Published GainPath catalog · bounded first page · personal context stays in GainPath');
   }
@@ -449,7 +634,7 @@ class FitnessAssistantContext {
             : 'Existing Module 13 recommendations · permission-scoped');
   }
 
-  Future<ChatMessage> _membership() async {
+  Future<ChatMessage> _membership(String query) async {
     if (loadMembership == null) {
       return _facts(
           'Membership details are unavailable. Open Membership for your current plan.',
@@ -464,31 +649,104 @@ class FitnessAssistantContext {
       throw const ChatFailure(
           'permission-denied', 'Membership belongs to a different account.');
     }
-    final entitlement = MembershipEntitlement.fromOverview(data);
+    final rawEntitlement = data['entitlement'];
+    final entitlement = rawEntitlement is Map
+        ? MembershipEntitlement.fromJson(
+            Map<String, dynamic>.from(rawEntitlement),
+            expectedOrganizationId: scope.organizationId,
+            expectedMemberId: scope.userId,
+            historicalOnly: data['cached'] == true)
+        : MembershipEntitlement.fromOverview(data);
+    final expiry = entitlement.paidExpiresAtMillis;
+    final staleExpiry = entitlement.paidStatus == PaidMembershipStatus.active &&
+        expiry != null &&
+        expiry <= clock().millisecondsSinceEpoch;
+    final current =
+        entitlement.isResolved && !entitlement.historicalOnly && !staleExpiry;
+    final requestedPlans = ['Free', 'Basic', 'Premium']
+        .where((tier) =>
+            RegExp('\\b${tier.toLowerCase()}\\b').hasMatch(query.toLowerCase()))
+        .toList();
+    List<String> uniqueBenefits(Iterable<String> values) {
+      final seen = <String>{};
+      return values
+          .map((s) => s.trim())
+          .where((s) => s.isNotEmpty && seen.add(s.toLowerCase()))
+          .toList();
+    }
+
     final facts = <FitnessFact>[
+      if (requestedPlans.isNotEmpty)
+        FitnessFact(
+            'Requested plan',
+            requestedPlans.length > 1
+                ? 'Compare plans'
+                : requestedPlans.single),
       FitnessFact(
           'Current effective plan',
-          !entitlement.isResolved || entitlement.historicalOnly
+          !current
               ? 'Unknown — current entitlement could not be verified'
               : entitlement.effectiveTier!.label),
       const FitnessFact('Free digital fitness',
           'Digital fitness is available to Members; a paid plan is not required to ask the assistant.'),
-      if (entitlement.benefits.isNotEmpty)
-        FitnessFact('Your verified benefits', entitlement.benefits.join('\n')),
+      FitnessFact(
+          'Paid plan status',
+          staleExpiry
+              ? 'Needs refresh — recorded expiry has passed'
+              : entitlement.historicalOnly
+                  ? 'Historical snapshot — not current access'
+                  : entitlement.paidStatus.name),
+      FitnessFact(
+          'Paid plan expiry',
+          expiry == null
+              ? (entitlement.isResolved &&
+                      entitlement.paidStatus == PaidMembershipStatus.none
+                  ? 'Not applicable — no paid plan'
+                  : 'Unknown')
+              : _malaysiaTime(
+                  DateTime.fromMillisecondsSinceEpoch(expiry, isUtc: true))),
+      if (current && entitlement.benefits.isNotEmpty)
+        FitnessFact('Your verified benefits',
+            uniqueBenefits(entitlement.benefits).join('\n')),
       if (entitlement.historicalOnly)
         const FitnessFact('Source',
             'Cached historical snapshot — not proof of current access'),
     ];
     final plans = data['plans'];
     if (plans is List) {
+      final published = <(String, List<String>)>[];
       for (final plan in plans.take(10)) {
         if (plan is Map &&
             plan['name'] is String &&
             plan['benefits'] is List &&
             (plan['benefits'] as List).every((v) => v is String)) {
-          facts.add(FitnessFact(
-              plan['name'] as String, (plan['benefits'] as List).join('\n')));
+          published.add((
+            plan['name'] as String,
+            uniqueBenefits((plan['benefits'] as List).cast<String>())
+          ));
         }
+      }
+      final common = published.length < 2
+          ? <String>[]
+          : published.first.$2
+              .where((benefit) => published.skip(1).every((p) =>
+                  p.$2.any((b) => b.toLowerCase() == benefit.toLowerCase())))
+              .toList();
+      if (common.isNotEmpty) {
+        facts.add(FitnessFact('Shared published benefits', common.join('\n')));
+      }
+      for (final plan in published) {
+        final extra = plan.$2
+            .where(
+                (b) => !common.any((c) => c.toLowerCase() == b.toLowerCase()))
+            .toList();
+        facts.add(FitnessFact(
+            common.isEmpty
+                ? plan.$1
+                : '${plan.$1} — additional published benefits',
+            extra.isEmpty
+                ? 'No additional benefit is listed beyond the shared published benefits.'
+                : extra.join('\n')));
       }
     }
     return _facts(

@@ -1,7 +1,8 @@
 import type { DocumentStore } from '../../platform/firestore/store';
 import { requireVerifiedEmail } from '../../platform/auth-context';
 import { DomainError } from '../../platform/errors';
-import { currentBookingMembership, requireBookingOrganization, bookingCoachScope, coachEligibilityFailure } from '../coaching/booking-validation';
+import { currentBookingMembership, requireBookingOrganization, bookingCoachScope, coachEligibilityFailure, currentBookingPolicy } from '../coaching/booking-validation';
+import {localDate,dateEpoch} from '../coaching/coach-availability-contracts';
 import { getMemberBookingOptionsService } from '../coaching/member-booking-options-service';
 import { getBookingPaymentQuote } from '../commerce/booking-payment-service';
 import type { CoachIdentityReader } from '../coaching/coach-profile-service';
@@ -29,7 +30,12 @@ export interface AssistantBookingSuggestion {
  startAtMillis:number;endAtMillis:number;startLabel:string;endLabel:string;durationMinutes:30|60;amountMinor:number;currency:'MYR';
  expiresAtMillis:number;requiresConfirmation:true;
 }
+export interface AssistantCoachAvailability {
+ schemaVersion:1;localDate:string;timeZone:string;durationMinutes:60;expiresAtMillis:number;truncated:boolean;nextAfterCoachId?:string;
+ items:{coachId:string;name:string;branchId:string;branchName:string;startAtMillis:number;endAtMillis:number;startLabel:string;endLabel:string;amountMinor:number;currency:'MYR'}[];
+}
 export class AssistantBookingTools {
+ availabilityToolCalls=0;
  suggestion?:AssistantBookingSuggestion;
   context?:{coachId:string;localDate:string;durationMinutes:30|60;expiresAtMillis:number};
  constructor(private store:DocumentStore,private auth:{uid:string;token:Record<string,unknown>}|undefined,private org:string,
@@ -40,6 +46,33 @@ export class AssistantBookingTools {
      const m=await currentBookingMembership(tx,this.org,this.auth!.uid);await requireBookingOrganization(tx,this.org);
      if(m.role!=='member')throw new DomainError('permission-denied','Current Member access is required.');return m;
    });
+ }
+ /** Explicit date intent is resolved without an AI-generated date or slot.
+  * All candidates on this bounded directory page are checked; never call an
+  * eligible directory entry "available" before the existing slot service. */
+ async availableCoaches(request:{dayOffset?:0|1;localDate?:string}):Promise<AssistantCoachAvailability>{
+   await this.scope();
+   const policy=await this.store.transact(async tx=>{
+     await currentBookingMembership(tx,this.org,this.auth!.uid);await requireBookingOrganization(tx,this.org);
+     return currentBookingPolicy(await tx.get(`orgs/${this.org}/settings/booking`));
+   });
+   const now=this.clock(),today=localDate(now,policy.timeZone);
+   const day=request.localDate??new Date(dateEpoch(today)+(request.dayOffset??0)*86400000).toISOString().slice(0,10);
+   dateEpoch(day);
+   this.availabilityToolCalls=1;
+   const directory=await this.execute('list_coaches',{}) as {items:{coachId:string}[];nextAfterCoachId?:string};
+   const pages=await mapAssistantCandidates(directory.items,async coach=>{
+     this.availabilityToolCalls++;
+     const value=await this.execute('get_coaching_options',{coachId:coach.coachId,localDate:day,durationMinutes:60}) as {items:({coachName:string;branchName:string;branchId:string;startAtMillis:number;endAtMillis:number;startLabel:string;endLabel:string;amountMinor:number;currency:'MYR'})[]};
+     return value.items.map(slot=>({coachId:coach.coachId,name:slot.coachName,branchId:slot.branchId,branchName:slot.branchName,startAtMillis:slot.startAtMillis,endAtMillis:slot.endAtMillis,startLabel:slot.startLabel,endLabel:slot.endLabel,amountMinor:slot.amountMinor,currency:slot.currency}));
+   });
+   this.context=undefined;
+   await this.scope();
+   const selected=pages.flatMap(slots=>slots.slice(0,3)).slice(0,20);
+   return{schemaVersion:1,localDate:day,timeZone:policy.timeZone,durationMinutes:60,
+     expiresAtMillis:Math.min(now+300000,...selected.map(slot=>slot.startAtMillis)),items:selected,
+     truncated:!!directory.nextAfterCoachId||pages.reduce((sum,slots)=>sum+slots.length,0)>selected.length,
+     ...(directory.nextAfterCoachId?{nextAfterCoachId:directory.nextAfterCoachId}:{})};
  }
  async execute(name:string,args:Record<string,unknown>):Promise<unknown>{
    if(!validBookingToolArgs(name,args))throw new DomainError('invalid-argument','Invalid booking read tool.');

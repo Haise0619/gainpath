@@ -27,6 +27,16 @@ Widget _networkHero(String url, {BoxFit fit = BoxFit.cover}) {
 }
 
 String _adviceText(String text, ChatAttachment? attachment) {
+  if (attachment is CoachAvailabilityAttachment) {
+    final value = [
+      text,
+      '${attachment.localDate} (${attachment.timeZone})',
+      ...attachment.items.map((slot) =>
+          '${slot.name} · ${slot.branchName} · ${slot.startLabel} – ${slot.endLabel} · RM ${(slot.amountMinor / 100).toStringAsFixed(2)} · 60 min'),
+      if (attachment.truncated) 'More times may exist.'
+    ].join('\n');
+    return value.length > 6000 ? value.substring(0, 6000) : value;
+  }
   if (attachment is CoachDirectoryAttachment) {
     final value = [
       text,

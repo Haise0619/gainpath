@@ -1,5 +1,5 @@
 import {expect,it,vi} from 'vitest';
-import {runGemini, withinAssistantDeadline, type AssistantMetrics} from '../src/modules/chatbot/chatbot-service';
+import {runGemini, withinAssistantDeadline, coachAvailabilityRequest, personalMetricsIntent, type AssistantMetrics} from '../src/modules/chatbot/chatbot-service';
 import {validBookingToolArgs, mapAssistantCandidates} from '../src/modules/chatbot/assistant-booking-tools';
 
 it('only permits fixed 60-minute new coaching suggestions',()=>{
@@ -31,4 +31,12 @@ it('returns trusted terminal tool facts without paying for a discarded continuat
  expect(result).toBe('Trusted current Coaches');expect(fetcher).toHaveBeenCalledOnce();
  expect(metrics).toMatchObject({providerRequests:1,toolCalls:1,inputTokens:120,outputTokens:20,thinkingTokens:3,usageComplete:true,model:'fixture-model'});
  expect(JSON.stringify(metrics)).not.toContain('Find a coach');
+});
+it('understands concise booking-date questions and common tomorrow shorthand without treating old bookings as availability',()=>{
+ for(const text of ['available coach in tomorrow','Which coach can I book tomorrow?','coaching tomorrow','any coaches available tmr?','find a trainer tmrw','avaliable coach tommorow'])expect(coachAvailabilityRequest(text)).toEqual({dayOffset:1});
+ for(const text of ['I booked a coach tomorrow','cancel my booking tomorrow','reschedule my coach tomorrow','What is progressive overload?'])expect(coachAvailabilityRequest(text)).toBeUndefined();
+});
+it('only routes genuine personal training-record intent to metrics, never arbitrary history or trends',()=>{
+ for(const text of ['What did I eat yesterday?','I ate healthy yesterday, what can I eat today?','What benefits did I have last month?','What about my diet?','What about my chest equipment?','nutrition trends','Which equipment works my chest?','How many reps should I do?','How do I track progress?'])expect(personalMetricsIntent(text),text).toBe(false);
+ for(const text of ['How many workouts have I completed?','How was my last workout?','Show my progress','What about my last session?','How far did I run yesterday?','Give me a summary of my progress.'])expect(personalMetricsIntent(text),text).toBe(true);
 });

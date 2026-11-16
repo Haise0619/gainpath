@@ -7,6 +7,60 @@ import 'package:gainpath_mobile/infrastructure/firebase/firebase_chat_repository
 
 void main() {
   final scope = SessionScope(userId: 'member', organizationId: 'org');
+  test('verified tomorrow slots take priority over an eligible directory',
+      () async {
+    final start = ((DateTime.now()
+                    .toUtc()
+                    .add(const Duration(days: 1))
+                    .millisecondsSinceEpoch ~/
+                1800000) +
+            1) *
+        1800000;
+    final localDate = DateTime.fromMillisecondsSinceEpoch(start, isUtc: true)
+        .add(const Duration(hours: 8))
+        .toIso8601String()
+        .substring(0, 10);
+    final availability = <String, dynamic>{
+      'schemaVersion': 1,
+      'localDate': localDate,
+      'timeZone': 'Asia/Kuala_Lumpur',
+      'durationMinutes': 60,
+      'expiresAtMillis': DateTime.now().millisecondsSinceEpoch + 60000,
+      'truncated': false,
+      'items': [
+        {
+          'coachId': 'coach-1',
+          'name': 'Coach Jo',
+          'branchId': 'branch-1',
+          'branchName': 'Main',
+          'startAtMillis': start,
+          'endAtMillis': start + 3600000,
+          'startLabel': '10:00',
+          'endLabel': '11:00',
+          'amountMinor': 12500,
+          'currency': 'MYR'
+        }
+      ]
+    };
+    final repository = FirebaseChatRepository(
+        scope: scope,
+        activeScope: () => scope,
+        currentUid: () => scope.userId,
+        transport: (_) async => {
+              'text': 'Here are the available times for tomorrow.',
+              'responseId': 'slot-r',
+              'coachAvailability': availability,
+              'coachSuggestions': []
+            });
+    final reply = await repository
+        .generateReply(text: 'available coach in tomorrow', history: []);
+    expect(reply.attachment, isA<CoachAvailabilityAttachment>());
+    expect(repository.lastMetrics['providerRequests'], isNull);
+    availability['durationMinutes'] = 30;
+    await expectLater(
+        repository.generateReply(text: 'tomorrow coaching', history: []),
+        throwsA(isA<FormatException>()));
+  });
   test(
       'trusted coach suggestions become typed cards and reject malformed prices',
       () async {

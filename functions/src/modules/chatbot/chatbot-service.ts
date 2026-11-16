@@ -36,22 +36,48 @@ export function unsafeRequest(text: string): boolean {
   return /diagnos|chest pain|suicid|self.harm|overdose|steroid|ignore.{0,30}pain|train.{0,20}(injur|faint)|prescri|extreme.{0,15}(diet|weight)|starv/i.test(text);
 }
 export function personalMetricsIntent(text: string): boolean {
-  if(/\b(book(?:ing|ings)?|reschedul\w*|coaching sessions?|coach availability)\b/i.test(text)&&!/\b(workout progress|repetitions|form score)\b/i.test(text))return false;
-  // Plans and general explanations are not records of completed activity.
-  const historical = /\b(did|have|completed|tracked|logged|yesterday|last|previous|history|ago)\b/i.test(text);
-  if (!historical && /\b(should|could|plan|suggest|recommend|explain|what is|what are|how does|how to)\b/i.test(text)) return false;
-  return /\bprogress\b|\btrend\b|my (reps|repetitions|session count|records|stats|statistics|totals)|how (am i|have i) (doing|improv)|\b(how many|how much|total|number of)\b.{0,80}\b(workouts?|sessions?|reps|repetitions|exercise|training|completed|tracked|performed|done)\b|\b(i|i've|i have|my)\b.{0,40}\b(completed|tracked|performed|logged|recorded)\b|summari[sz]e.{0,30}(workout|session)|\b(and|what about)\b.{0,30}\b(my|total|last|this)\b|\b(did i|have i|was i|were my)\b|\b(i|i've|my|me)\b.{0,80}\b(yesterday|last|previous|ago|earlier|history|historical|distance|calories|weight|ran|walked|burned|lost|averaged)\b|\b(yesterday|last week|last month|previously)\b.{0,80}\b(i|my|me)\b/i.test(text);
+  const question = text.toLowerCase().replace(/[’]/g, "'");
+  const trainingTopic = /\b(workouts?|training|exercise|reps|repetitions|form scores?|pose feedback|squats?|sessions?|progress)\b/;
+  const historicalActivity = /\b(did i|have i|i)\s+(run|ran|walk|walked|lift|lifted|train|trained|exercise|exercised|work out|worked out|burn|burned)\b/;
+  if (/\b(book(?:ing|ings)?|reschedul\w*|coaching|coach availability)\b/.test(question) &&
+      !/\b(workout progress|repetitions|form score)\b/.test(question)) return false;
+  if (!trainingTopic.test(question) && !historicalActivity.test(question)) return false;
+  if (/\b(should|could|plan|suggest|recommend|explain|what is|what are|how does|how to|how do i)\b/.test(question) &&
+      !/\b(completed|tracked|logged|last workout|previous session|yesterday)\b/.test(question)) return false;
+  const ownedMetric = /\bmy\s+(?:(?:last|latest|recent|previous|saved|completed|squat|weekly|training|workout)\s+){0,3}(?:workouts?|training|exercise (?:captures?|records?)|reps|repetitions|form scores?|pose feedback|sessions?|progress|history|records?)\b/;
+  return historicalActivity.test(question) || ownedMetric.test(question) ||
+      /\b(workouts?|exercises?|reps|repetitions|sessions?)\b.{0,50}\b(i've|did i|have i|i have|i completed|i logged|i tracked)\b/.test(question);
+}
+/** Only explicit availability/date questions use deterministic slot discovery. */
+export function coachAvailabilityRequest(text:string):{dayOffset?:0|1;localDate?:string}|undefined{
+ const q=text.toLowerCase().replace(/\b(tomm?or+ow|tmr|tmrw)\b/g,'tomorrow').replace(/\bcoachs\b/g,'coaches');
+ const concise=/^\s*(?:coach(?:es|ing)?|(?:personal )?trainers?)\s+(?:(?:on|for)\s+)?(?:today|tomorrow|\d{4}-\d{2}-\d{2})\s*\??\s*$/.test(q);
+ if(!/\b(coach(?:es|ing)?|trainers?)\b/.test(q)||!concise&&!/\b(available|availability|avaliable|availble|open|free|find|show|any|which|book|booking|slots?|times?)\b/.test(q)
+   ||/\b(cancel|reschedule|booked|my bookings|did i book)\b/.test(q))return undefined;
+ const date=q.match(/\b\d{4}-\d{2}-\d{2}\b/)?.[0];
+ if(date)return{localDate:date};
+ if(/\btomorrow\b/.test(q))return{dayOffset:1};
+ if(/\btoday\b/.test(q))return{dayOffset:0};
+ return undefined;
 }
 export function unsupportedPersonalMetrics(text: string): boolean {
-  // A present-tense personal quantity is also a factual claim; prospective
-  // exercise suggestions remain allowed. This is deliberately conservative.
-  const statements = text.split(/[.!?\n]+/);
   const quantity = /\d|\b(zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|hundred|thousand)\b/i;
-  if (statements.some(line => /\b(you|your|you've)\b/i.test(line) && quantity.test(line) && !/\b(should|could|can|may|might|try|suggest|recommend|example|aim)\b/i.test(line))) return true;
-  // Past personal assertions require scoped evidence even with no digit tokens.
-  // Generic proposed sets/reps remain educational advice.
-  return /\b(you|you've|you have|your)\b.{0,80}\b(completed|tracked|performed|logged|recorded|averaged|improved|achieved|ran|walked|lost|burned|gained|lifted|trained|exercised|finished|was|were|had|did|used to|[a-z]{3,}ed)\b|\b(you|your)\b.{0,100}\b(yesterday|previously|ago|earlier|last week|last month|last session)\b|\b(you|you've|you have|your)\b.{0,80}\b(accuracy|score|total|sessions?|workouts?|repetitions|reps)\b.{0,50}\d|\b(you|you've|you have)\b.{0,30}\d.{0,40}\b(sessions?|workouts?)\b|\byour\b.{0,50}\d.{0,30}\b(score|accuracy|progress|record|total)\b/i.test(text);
+  return text.split(/[.!?\n]+/).some(line=>{
+    if(!/\b(you|your|you've)\b/i.test(line))return false;
+    if(/\byou(?:'ve| have)?\s+(?:already\s+)?used\b/i.test(line))return true;
+    // Specific completed personal events, not arbitrary words ending in "ed"
+    // (e.g. "your chest is targeted" or "your body is supported").
+    if(/\b(you|you've|you have|your)\b.{0,80}\b(completed|tracked|performed|logged|recorded|averaged|improved|achieved|ran|walked|lost|burned|gained|lifted|trained|exercised|finished|was|were|had|did|used to)\b/i.test(line))return true;
+    if(/\b(you|your)\b.{0,100}\b(yesterday|previously|ago|earlier|last week|last month|last session)\b/i.test(line))return true;
+    if(!quantity.test(line))return false;
+    if(/\b(should|could|can|may|might|try|suggest|recommend|example|aim)\b/i.test(line))return false;
+    // A numeric claim must describe a personal metric, not generic nutrition,
+    // equipment explanations, or a proposed exercise prescription.
+    return /\byour\b.{0,65}\b(best|total|accuracy|score|weight|body fat|bmi|records?|repetitions|reps|sessions?|workouts?)\b/i.test(line)
+      || /\byou(?:'ve| have)?\b.{0,30}(?:\d+|zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|hundred|thousand).{0,35}\b(reps|repetitions|sessions?|workouts?|kg|lbs?|kilograms?|pounds?|km|miles?)\b/i.test(line);
+  });
 }
+export const PERSONAL_FACTS_UNVERIFIED_REPLY = 'I cannot verify that personal claim from this conversation, so I will not guess your results. Ask about your saved workout records for a factual summary, or rephrase this as a general fitness question.';
 export const PRIVACY_REPLY = 'Please ask a general fitness question without personal identifiers, medical details, or personal measurements. Personal progress summaries can be viewed here without sending them to the AI provider.';
 // Default free/public mode omits history and personal tools. This heuristic
 // disclosure guard is not a complete PII filter. Production use still requires

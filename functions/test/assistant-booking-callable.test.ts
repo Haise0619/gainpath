@@ -25,6 +25,26 @@ it('projects coach card facts from the authorized directory and quote',async()=>
  expect(result.text).not.toContain('Eligible Coaches on this page');
  expect(result.bookingSuggestion).toBeUndefined();
 });
+it('answers available coach in tomorrow with verified slots and no Gemini request',async()=>{
+ const f=fixture(),before=structuredClone([...f.store.documents]);f.request.data.text='available coach in tomorrow';
+ f.db.collection=()=>({where:()=>({orderBy:()=>({limit:()=>({get:async()=>({docs:[{id:'coach-1'}]})})})})});
+ const fetcher=vi.fn();
+ const result:any=await fitnessAssistantHandler(f.request,{db:f.db,clock:()=>now,apiKey:'fixture',fetcher,readIdentity:eligibleCoach});
+ expect(fetcher).not.toHaveBeenCalled();
+ expect(result.coachAvailability).toMatchObject({schemaVersion:1,localDate:'2026-10-02',timeZone:'Asia/Kuala_Lumpur',durationMinutes:60});
+ expect(result.coachAvailability.items[0]).toMatchObject({coachId:'coach-1',name:'Fixture Coach',startAtMillis:start,amountMinor:12500});
+ expect(result.text).toContain('2026-10-02');expect(result.text).toContain('Asia/Kuala_Lumpur');
+ expect(result.telemetry.providerRequests).toBe(0);expect(result.bookingSuggestion).toBeUndefined();
+ const withoutChat=(rows:any[])=>rows.filter(([p])=>!p.includes('/chatbot/'));
+ expect(withoutChat([...f.store.documents])).toEqual(withoutChat(before));
+});
+it('reports a failed availability read as an error, never as no availability or progress',async()=>{
+ const f=fixture();f.request.data.text='any coaches available tmr?';
+ f.db.collection=()=>({where:()=>({orderBy:()=>({limit:()=>({get:async()=>{throw Error('transport failed');}})})})});
+ const fetcher=vi.fn();
+ await expect(fitnessAssistantHandler(f.request,{db:f.db,clock:()=>now,apiKey:'fixture',fetcher,readIdentity:eligibleCoach})).rejects.toMatchObject({code:'unavailable'});
+ expect(fetcher).not.toHaveBeenCalled();
+});
 it('actual handler attaches only trusted current slot/price and never executes a booking from a model tool',async()=>{
  const f=fixture();
  const args={coachId:'coach-1',localDate:'2026-10-02',durationMinutes:60,branchId:'branch-1',startAtMillis:start};

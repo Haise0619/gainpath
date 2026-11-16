@@ -70,11 +70,26 @@ void main() {
       FitnessFact('Sets', 'Not recorded for an individual capture'),
     ]));
     expect(view, isA<WorkoutSummaryReply>());
-    expect(view.stats.length, 4);
-    expect(view.stats.any((s) => s.value == 'Not assessed'), isTrue);
+    expect(view.stats.length, 2);
+    expect(view.highlights, contains('Form score not assessed.'));
     expect(view.statusLabel, 'Saved exercise capture');
     expect(view.conclusion, 'Your latest saved exercise is Squat.');
     expect(view.details.any((f) => f.label == 'Sync status'), isTrue);
+  });
+  test('unfinished routine is never presented as a completed workout', () {
+    final view =
+        AssistantReplyViewModel.fromMessage(facts('Your last workout', const [
+      FitnessFact('Routine', 'Full Body Foundations'),
+      FitnessFact('Saved record type', 'Unfinished routine'),
+      FitnessFact('Status', 'In progress'),
+      FitnessFact('Repetitions', '12 full · 2 partial'),
+      FitnessFact('Duration', '3m 10s'),
+      FitnessFact('Completed exercises', '1 / 3')
+    ]));
+    expect(view.conclusion, contains('unfinished'));
+    expect(view.conclusion, isNot(contains('completed workout')));
+    expect(view.stats.map((s) => s.label),
+        ['Repetitions', 'Duration', 'Completed exercises']);
   });
   test('insight never invents improvement or merges separate score groups', () {
     final view = AssistantReplyViewModel.fromMessage(

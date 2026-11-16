@@ -28,6 +28,7 @@ class AssistantReplyView extends StatelessWidget {
           _InsightReply(reply: reply, onOpenFact: onOpenFact),
         AssistantReplyKind.coachAction => _CoachReply(
             reply: reply,
+            onRetry: onRetry,
             onOpenFact: onOpenFact,
             onReviewBooking: onReviewBooking),
         AssistantReplyKind.recommendation =>
@@ -261,10 +262,35 @@ class _WorkoutReply extends StatelessWidget {
           category: 'WORKOUT SUMMARY',
           primary: _primary(reply, onOpenFact),
           children: [
+            if (reply.caption != null)
+              Padding(
+                  padding: const EdgeInsets.only(top: 10),
+                  child: Text(
+                      'Completed ${reply.caption!.replaceFirst(' (UTC+08:00)', '')}',
+                      style: const TextStyle(
+                          fontSize: 12,
+                          height: 1.4,
+                          color: AppColors.inkSoft))),
+            if (reply.statusLabel != null)
+              Padding(
+                  padding: const EdgeInsets.only(top: 12),
+                  child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 6),
+                      decoration: BoxDecoration(
+                          color: AppColors.primaryTint,
+                          borderRadius: BorderRadius.circular(20)),
+                      child: Text(reply.statusLabel!,
+                          style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.primary)))),
             if (reply.stats.isNotEmpty) _Stats(reply.stats),
             if (reply.highlights.isNotEmpty) ...[
               const SizedBox(height: 14),
-              ...reply.highlights.take(2).map((line) => _Highlight(line))
+              ...reply.highlights.take(2).map((line) => Text(line,
+                  style: const TextStyle(
+                      fontSize: 12, height: 1.4, color: AppColors.inkSoft)))
             ],
           ]);
 }
@@ -292,10 +318,14 @@ class _InsightReply extends StatelessWidget {
 
 class _CoachReply extends StatelessWidget {
   const _CoachReply(
-      {required this.reply, this.onOpenFact, this.onReviewBooking});
+      {required this.reply,
+      this.onOpenFact,
+      this.onReviewBooking,
+      this.onRetry});
   final AssistantReplyViewModel reply;
   final ValueChanged<FitnessFactAction>? onOpenFact;
   final ValueChanged<BookingSuggestionAttachment>? onReviewBooking;
+  final VoidCallback? onRetry;
   @override
   Widget build(BuildContext context) {
     final booking = reply.booking;
@@ -314,6 +344,39 @@ class _CoachReply extends StatelessWidget {
                 child: Text(
                     booking.expired ? 'Suggestion expired' : 'Book session')),
         children: [
+          if (reply.availability case final availability?) ...[
+            ...availability.items.take(3).map((slot) => _AvailableSlotTile(
+                availability: availability,
+                slot: slot,
+                onReviewBooking: onReviewBooking,
+                onExpired: onRetry)),
+            if (availability.items.length > 3)
+              ExpansionTile(
+                  tilePadding: EdgeInsets.zero,
+                  title: Text('More times (${availability.items.length - 3})'),
+                  children: availability.items
+                      .skip(3)
+                      .map((slot) => _AvailableSlotTile(
+                          availability: availability,
+                          slot: slot,
+                          onReviewBooking: onReviewBooking,
+                          onExpired: onRetry))
+                      .toList()),
+            if (availability.truncated)
+              const Padding(
+                  padding: EdgeInsets.only(top: 12),
+                  child: Text(
+                      'More times may be available. Ask for a specific coach or date.',
+                      style: TextStyle(
+                          fontSize: 12,
+                          height: 1.4,
+                          color: AppColors.inkSoft))),
+            if (availability.expired || availability.items.isEmpty)
+              Padding(
+                  padding: const EdgeInsets.only(top: 12),
+                  child: OutlinedButton(
+                      onPressed: onRetry, child: const Text('Refresh times'))),
+          ],
           if (reply.stats.isNotEmpty) _Stats(reply.stats),
           ...reply.coaches.take(3).map(tile),
           if (reply.coaches.length > 3)
@@ -333,6 +396,71 @@ class _CoachReply extends StatelessWidget {
           ],
         ]);
   }
+}
+
+class _AvailableSlotTile extends StatelessWidget {
+  const _AvailableSlotTile(
+      {required this.availability,
+      required this.slot,
+      this.onReviewBooking,
+      this.onExpired});
+  final VoidCallback? onExpired;
+  final CoachAvailabilityAttachment availability;
+  final AssistantCoachSlot slot;
+  final ValueChanged<BookingSuggestionAttachment>? onReviewBooking;
+  @override
+  Widget build(BuildContext context) => Container(
+      margin: const EdgeInsets.only(top: 12),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+          color: AppColors.bg, borderRadius: BorderRadius.circular(14)),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text(slot.name,
+            style: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
+                color: AppColors.ink)),
+        const SizedBox(height: 4),
+        Text(slot.branchName,
+            style: const TextStyle(fontSize: 13, color: AppColors.inkSoft)),
+        const SizedBox(height: 10),
+        Wrap(spacing: 10, runSpacing: 6, children: [
+          Text('${slot.startLabel} – ${slot.endLabel}',
+              style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.ink)),
+          Text('RM ${(slot.amountMinor / 100).toStringAsFixed(2)} · 60 min',
+              style: const TextStyle(fontSize: 14, color: AppColors.primary))
+        ]),
+        const SizedBox(height: 12),
+        SizedBox(
+            width: double.infinity,
+            child: FilledButton(
+                onPressed: availability.expired || onReviewBooking == null
+                    ? null
+                    : () {
+                        if (availability.expired) {
+                          onExpired?.call();
+                          return;
+                        }
+                        BookingSuggestionAttachment suggestion;
+                        try {
+                          suggestion = availability.suggestionFor(slot);
+                        } on FormatException {
+                          onExpired?.call();
+                          return;
+                        }
+                        if (suggestion.expired) {
+                          onExpired?.call();
+                          return;
+                        }
+                        onReviewBooking!(suggestion);
+                      },
+                child: Text(availability.expired
+                    ? 'Times expired'
+                    : 'Review session'))),
+      ]));
 }
 
 class _CoachOptionTile extends StatelessWidget {
@@ -388,6 +516,9 @@ class _RecommendationReply extends StatelessWidget {
           category: 'FOR YOUR TRAINING',
           primary: _primary(reply, onOpenFact),
           children: [
+            if (reply.contentPreviews.isNotEmpty)
+              _PublishedPreview(
+                  preview: reply.contentPreviews.first, onOpenFact: onOpenFact),
             if (reply.highlights.isNotEmpty) ...[
               const SizedBox(height: 16),
               _Highlight(reply.highlights.first,
@@ -411,6 +542,44 @@ class _RecommendationReply extends StatelessWidget {
                             child: Text(action.label))))
                   ]),
           ]);
+}
+
+class _PublishedPreview extends StatelessWidget {
+  const _PublishedPreview({required this.preview, this.onOpenFact});
+  final FitnessContentPreview preview;
+  final ValueChanged<FitnessFactAction>? onOpenFact;
+  @override
+  Widget build(BuildContext context) {
+    final uri = Uri.tryParse(preview.imageUrl);
+    if (uri == null || uri.scheme != 'https' || uri.host.isEmpty) {
+      return const SizedBox.shrink();
+    }
+    return Padding(
+        padding: const EdgeInsets.only(top: 14),
+        child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: Image.network(preview.imageUrl,
+                  width: 68,
+                  height: 68,
+                  cacheWidth: 204,
+                  fit: BoxFit.cover,
+                  excludeFromSemantics: true,
+                  errorBuilder: (_, __, ___) => const SizedBox(
+                      width: 68,
+                      height: 68,
+                      child: Icon(Icons.ondemand_video_outlined,
+                          color: AppColors.primary)))),
+          const SizedBox(width: 12),
+          Expanded(
+              child: Text(preview.title,
+                  style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                      height: 1.4,
+                      color: AppColors.ink))),
+        ]));
+  }
 }
 
 class _Highlight extends StatelessWidget {

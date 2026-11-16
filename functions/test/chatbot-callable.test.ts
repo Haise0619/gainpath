@@ -12,6 +12,36 @@ function fixture() {
   return { records, set, db, request };
 }
 describe('fitness assistant actual handler', () => {
+  it.each([
+    ['Which equipment works my chest?','Your chest is targeted by the chest press. Adjust the seat before exercising.'],
+    ['what can i eat healthy','Choose vegetables, whole grains and protein. Your body is supported by a varied diet.'],
+    ['Which equipment works my chest?','Your chest muscles are worked by the chest press; you need a comfortable load.'],
+  ])('answers generic %s without substituting private progress',async(question,answer)=>{
+    const f=fixture();f.records['orgs/g/members/u/chatbot/state']={acknowledgedRevision:2};
+    const fetcher=vi.fn().mockResolvedValue({ok:true,json:async()=>({candidates:[{content:{parts:[{text:answer}]}}]})});
+    for(const mode of ['public','private-approved']){
+      vi.stubEnv('GEMINI_CHAT_DATA_MODE',mode);
+      try{const result:any=await fitnessAssistantHandler(f.request({action:'reply',text:question}),{db:f.db,apiKey:'fixture',fetcher});
+      expect(result.text).toBe(answer);expect(result.sources??[]).not.toContain('get_my_progress');expect(f.db.collection).not.toHaveBeenCalled();}
+      finally{vi.unstubAllEnvs();}
+    }
+  });
+  it('does not consult private progress when a generic provider answer invents a personal fact or fails',async()=>{
+    const f=fixture();f.records['orgs/g/members/u/chatbot/state']={acknowledgedRevision:2};
+    const fetcher=vi.fn().mockResolvedValue({ok:true,json:async()=>({candidates:[{content:{parts:[{text:'You completed 999 workouts.'}]}}]})});
+    const result:any=await fitnessAssistantHandler(f.request({action:'reply',text:'Which equipment works my chest?'}),{db:f.db,apiKey:'fixture',fetcher});
+    expect(result.text).toContain('cannot verify');expect(result.text).not.toContain('999');expect(f.db.collection).not.toHaveBeenCalled();
+    fetcher.mockRejectedValue(Error('offline'));
+    await expect(fitnessAssistantHandler(f.request({action:'reply',text:'what can i eat healthy'}),{db:f.db,apiKey:'fixture',fetcher})).rejects.toMatchObject({code:'unavailable'});
+    expect(f.db.collection).not.toHaveBeenCalled();
+  });
+  it('does not read personal metrics for an unrelated question even if a private-mode model requests the tool',async()=>{
+    const f=fixture();f.records['orgs/g/members/u/chatbot/state']={acknowledgedRevision:2};vi.stubEnv('GEMINI_CHAT_DATA_MODE','private-approved');
+    const fetcher=vi.fn().mockResolvedValue({ok:true,json:async()=>({candidates:[{content:{parts:[{functionCall:{name:'get_my_progress',args:{}}}]}}]})});
+    try{const result:any=await fitnessAssistantHandler(f.request({action:'reply',text:'Which equipment works my chest?'}),{db:f.db,apiKey:'fixture',fetcher});
+    expect(result.text).toContain('cannot verify');expect(f.db.collection).not.toHaveBeenCalled();expect(fetcher).toHaveBeenCalledOnce();expect(result.sources??[]).not.toContain('get_my_progress');}
+    finally{vi.unstubAllEnvs();}
+  });
   it('returns concise coach empty state with a trusted structured result', async () => {
     const f = fixture();
     f.records['orgs/g/members/u/chatbot/state'] = {acknowledgedRevision:2};
@@ -19,7 +49,7 @@ describe('fitness assistant actual handler', () => {
     const fetcher = vi.fn().mockResolvedValue({ok:true,json:async()=>({candidates:[{content:{parts:[{functionCall:{name:'list_coaches',args:{}}}]}}]})});
     const reply:any = await fitnessAssistantHandler(f.request({action:'reply',text:'Find a coach'}),{db:f.db,apiKey:'fixture',fetcher});
     expect(reply.coachSuggestions).toEqual([]);
-    expect(reply.text).toBe('No coaches are available here right now. Browse the directory for other options.');
+    expect(reply.text).toContain('No eligible published Coaches');expect(reply.text).toContain('Availability has not been checked');
   });
   it('binds secret and rejects missing App Check/auth', async () => {
     expect(fitnessAssistantCommand.__endpoint.secretEnvironmentVariables).toContainEqual(expect.objectContaining({ key: 'GEMINI_API_KEY' }));
@@ -98,7 +128,7 @@ describe('fitness assistant actual handler', () => {
     const direct: any = await fitnessAssistantHandler(f.request({ action: 'reply', text: 'How many workouts have I completed?' }), { db: f.db, apiKey: 'key', fetcher });
     expect(fetcher).not.toHaveBeenCalled(); expect(direct.text).toContain('0 accepted workout sessions');
     const invented: any = await fitnessAssistantHandler(f.request({ action: 'reply', text: 'Encourage me today' }), { db: f.db, apiKey: 'key', fetcher });
-    expect(invented.text).not.toContain('999'); expect(invented.sources).toContain('get_my_progress');
+    expect(invented.text).not.toContain('999'); expect(invented.text).toContain('cannot verify');expect(invented.sources??[]).not.toContain('get_my_progress');
     fetcher.mockResolvedValue({ ok: true, json: async () => ({ candidates: [{ content: { parts: [{ text: 'Try 3 sets of 12 repetitions with a comfortable load.' }] } }] }) });
     const plan: any = await fitnessAssistantHandler(f.request({ action: 'reply', text: 'Plan my workout' }), { db: f.db, apiKey: 'key', fetcher });
     expect(plan.text).toContain('3 sets of 12');
@@ -113,7 +143,7 @@ describe('fitness assistant actual handler', () => {
     for (const claim of ['You ran 5 km yesterday.', 'You completed twelve sessions.', 'You walked five miles.', 'You burned many calories.', 'Your recovery improved last week.']) {
       fetcher.mockResolvedValue({ ok: true, json: async () => ({ candidates: [{ content: { parts: [{ text: claim }] } }] }) });
       const result: any = await fitnessAssistantHandler(f.request({ action: 'reply', text: 'Encourage me today' }), { db: f.db, apiKey: 'key', fetcher });
-      expect(result.text).not.toBe(claim); expect(result.sources).toContain('get_my_progress');
+      expect(result.text).not.toBe(claim); expect(result.text).toContain('cannot verify');expect(result.sources??[]).not.toContain('get_my_progress');
     }
   });
 });

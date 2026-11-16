@@ -17,6 +17,119 @@ sealed class ChatAttachment {
   const ChatAttachment();
 }
 
+class CoachAvailabilityAttachment extends ChatAttachment {
+  CoachAvailabilityAttachment._(
+      {required this.localDate,
+      required this.timeZone,
+      required this.expiresAtMillis,
+      required this.items,
+      required this.truncated,
+      int Function()? clock})
+      : _clock = clock ?? (() => DateTime.now().millisecondsSinceEpoch);
+  final int Function() _clock;
+  final String localDate, timeZone;
+  final int expiresAtMillis;
+  final List<AssistantCoachSlot> items;
+  final bool truncated;
+  bool get expired => _clock() >= expiresAtMillis;
+  factory CoachAvailabilityAttachment.fromJson(Object? raw,
+      {int Function()? clock}) {
+    if (raw is! Map ||
+        raw['schemaVersion'] != 1 ||
+        raw['durationMinutes'] != 60 ||
+        raw['localDate'] is! String ||
+        !RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(raw['localDate'] as String) ||
+        DateTime.tryParse('${raw['localDate']}T00:00:00Z')
+                ?.toIso8601String()
+                .substring(0, 10) !=
+            raw['localDate'] ||
+        raw['timeZone'] is! String ||
+        !RegExp(r'^[A-Za-z][A-Za-z0-9_+\-]*(/[A-Za-z0-9_+\-]+)*$')
+            .hasMatch(raw['timeZone'] as String) ||
+        raw['expiresAtMillis'] is! int ||
+        (raw['expiresAtMillis'] as int) <= 0 ||
+        raw['truncated'] is! bool ||
+        raw['items'] is! List ||
+        (raw['items'] as List).length > 20) {
+      throw const FormatException('Invalid coaching availability');
+    }
+    final items = (raw['items'] as List).map((row) {
+      if (row is! Map) throw const FormatException('Invalid coaching slot');
+      for (final key in ['coachId', 'branchId']) {
+        if (row[key] is! String ||
+            !RegExp(r'^[\w-]{1,128}$').hasMatch(row[key] as String))
+          throw const FormatException('Invalid coaching slot identity');
+      }
+      for (final key in ['name', 'branchName', 'startLabel', 'endLabel']) {
+        if (row[key] is! String ||
+            (row[key] as String).trim().isEmpty ||
+            (row[key] as String).length > 160)
+          throw const FormatException('Invalid coaching slot label');
+      }
+      if (row['startAtMillis'] is! int ||
+          row['endAtMillis'] is! int ||
+          (row['startAtMillis'] as int) <= 0 ||
+          (row['endAtMillis'] as int) - (row['startAtMillis'] as int) !=
+              3600000 ||
+          (row['startAtMillis'] as int) % 1800000 != 0 ||
+          row['amountMinor'] is! int ||
+          (row['amountMinor'] as int) <= 0 ||
+          (row['amountMinor'] as int) > 100000000 ||
+          row['currency'] != 'MYR')
+        throw const FormatException('Invalid coaching slot values');
+      return AssistantCoachSlot._(
+          Map<String, dynamic>.unmodifiable(Map<String, dynamic>.from(row)));
+    }).toList();
+    if (items
+            .map((slot) =>
+                '${slot.coachId}/${slot.data['branchId']}/${slot.data['startAtMillis']}')
+            .toSet()
+            .length !=
+        items.length) throw const FormatException('Duplicate coaching slots');
+    return CoachAvailabilityAttachment._(
+        localDate: raw['localDate'] as String,
+        timeZone: raw['timeZone'] as String,
+        expiresAtMillis: raw['expiresAtMillis'] as int,
+        items: List.unmodifiable(items),
+        truncated: raw['truncated'] as bool,
+        clock: clock);
+  }
+  BookingSuggestionAttachment suggestionFor(AssistantCoachSlot slot) {
+    if (expired || !items.contains(slot))
+      throw const FormatException('Coaching availability expired');
+    final start = slot.data['startAtMillis'] as int;
+    return BookingSuggestionAttachment.fromJson({
+      'schemaVersion': 1,
+      'coachId': slot.coachId,
+      'coachName': slot.name,
+      'branchId': slot.data['branchId'],
+      'branchName': slot.data['branchName'],
+      'localDate': localDate,
+      'timeZone': timeZone,
+      'startAtMillis': start,
+      'endAtMillis': slot.data['endAtMillis'],
+      'startLabel': slot.data['startLabel'],
+      'endLabel': slot.data['endLabel'],
+      'durationMinutes': 60,
+      'amountMinor': slot.data['amountMinor'],
+      'currency': 'MYR',
+      'expiresAtMillis': expiresAtMillis < start ? expiresAtMillis : start,
+      'requiresConfirmation': true
+    });
+  }
+}
+
+class AssistantCoachSlot {
+  const AssistantCoachSlot._(this.data);
+  final Map<String, dynamic> data;
+  String get coachId => data['coachId'] as String;
+  String get name => data['name'] as String;
+  String get branchName => data['branchName'] as String;
+  String get startLabel => data['startLabel'] as String;
+  String get endLabel => data['endLabel'] as String;
+  int get amountMinor => data['amountMinor'] as int;
+}
+
 class CoachDirectoryAttachment extends ChatAttachment {
   const CoachDirectoryAttachment(this.coaches);
   final List<AssistantCoachOption> coaches;
@@ -70,10 +183,20 @@ class FitnessFactsAttachment extends ChatAttachment {
       {required this.title,
       required this.subtitle,
       required this.facts,
-      this.actions = const []});
+      this.actions = const [],
+      this.contentPreviews = const []});
   final String title, subtitle;
   final List<FitnessFact> facts;
   final List<FitnessFactAction> actions;
+  final List<FitnessContentPreview> contentPreviews;
+}
+
+/// A cover already present on the current published content projection.
+class FitnessContentPreview {
+  const FitnessContentPreview(
+      {required this.title, required this.imageUrl, required this.action});
+  final String title, imageUrl;
+  final FitnessFactAction action;
 }
 
 class FitnessFact {
