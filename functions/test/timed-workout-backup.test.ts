@@ -15,6 +15,25 @@ export function timedBackupFixture():Record<string,any>{
  return {...routinePayload,schemaVersion:2,finished:true,updatedAtMicros:end,planSignature:JSON.stringify(['routine','blueprint',2,['entry1','mobility','videoGuidedTimed',1,guided.prescription,1,'123',row.videoUrl]]),guidedProgress:{'0':guided},attempt:{...routinePayload.attempt,schemaVersion:2,routine,finished:true,finishedAtMicros:end,updatedAtMicros:end,entries:[{kind:'timed',index:0,status:'timerCompleted',guided}]}};
 }
 it('validates truthful timer result without fabricating measurements',()=>{const p=timedBackupFixture();expect(validateBackupPayload('routine','r1','gainpath','member',p)).toEqual(p);expect(p.attempt.entries[0]).not.toHaveProperty('fullRepetitions');});
+it('compares signed target values independently of JSON object key order',()=>{
+ const p=timedBackupFixture(),signature=JSON.parse(p.planSignature);
+ signature[3][4]={restSeconds:30,durationSeconds:45,sets:1};
+ p.planSignature=JSON.stringify(signature);
+ expect(()=>validateBackupPayload('routine','r1','gainpath','member',p)).not.toThrow();
+ signature[3][4].durationSeconds=46;p.planSignature=JSON.stringify(signature);
+ expect(()=>validateBackupPayload('routine','r1','gainpath','member',p)).toThrow();
+});
+it('accepts Dart null optional video signature with empty serialized AI video',()=>{
+ const p=timedBackupFixture(),row={entryId:'ai-entry',exerciseId:'F3b8xIr8ynBDd3gEICKX',dayNumber:1,name:'Squat',sets:1,reps:3,restSeconds:60,executionMode:'aiTracked',videoUrl:''};
+ p.attempt.routine.exercises.push(row);
+ p.attempt.entries.push({index:1,status:'notStarted',sessionIds:[],fullRepetitions:0,partialRepetitions:0,trackedDurationMicros:0,manualSets:0});
+ const signature=JSON.parse(p.planSignature);
+ signature.push(['ai-entry',row.exerciseId,'aiTracked',1,{sets:1,reps:3,restSeconds:60},null,null,null]);
+ p.planSignature=JSON.stringify(signature);
+ expect(()=>validateBackupPayload('routine','r1','gainpath','member',p)).not.toThrow();
+ signature[4][4].reps=4;p.planSignature=JSON.stringify(signature);
+ expect(()=>validateBackupPayload('routine','r1','gainpath','member',p)).toThrow();
+});
 it.each(['fullRepetitions','poseMetrics','formScorePercent','manualSets'])('rejects timer measurement injection %s',key=>{const p=timedBackupFixture();p.attempt.entries[0][key]=0;expect(()=>validateBackupPayload('routine','r1','gainpath','member',p)).toThrow();});
 it('rejects inconsistent derived projection and early completed duration',()=>{for(const mutate of [(p:any)=>p.attempt.entries[0].guided={...p.attempt.entries[0].guided,runId:'other'},(p:any)=>{p.guidedProgress['0'].completedSetActiveMicroseconds=[44000000];}]){const p=timedBackupFixture();mutate(p);expect(()=>validateBackupPayload('routine','r1','gainpath','member',p)).toThrow();}});
 it('preserves Dart microsecond timestamps when validating actual active duration',()=>{

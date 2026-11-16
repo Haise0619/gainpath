@@ -58,6 +58,15 @@ export function validateTimedRoutineBackup(raw:unknown,id:string,org:string,uid:
  if(new Set(captures).size!==captures.length)throw invalid();
  for(const [key,ids]of Object.entries(sessions)){const values=list(ids,1000).map(v=>requiredIdentifier(v,'sessionId'));const entry=entries.find(e=>e.index===Number(key))!;if(canonical(values)!==canonical(entry.sessionIds))throw invalid();}
  for(const v of Object.values(pending))requiredIdentifier(v,'sessionId');for(const [key,v]of Object.entries(manual))integer(v,0,Number(rows[Number(key)].sets));
- const signature=JSON.stringify([p.routineId,r.sourceBlueprintId,2,...rows.map(row=>[row.entryId,row.exerciseId,row.executionMode,row.dayNumber,targetOf(row),row.mediaRevision??null,row.mediaGeneration??null,row.videoUrl??null])]);if(p.planSignature!==signature)throw invalid();
+ const signature=[p.routineId,r.sourceBlueprintId,2,...rows.map(row=>[row.entryId,row.exerciseId,row.executionMode,row.dayNumber,targetOf(row),row.mediaRevision??null,row.mediaGeneration??null,row.videoUrl||null])];
+ // Dart signs absent optional videos as null but snapshots serialize them as
+ // empty strings. Object key order is also not part of a prescription's value.
+ // Preserve the original payload/digest; normalize only comparison copies.
+ if(typeof p.planSignature!=='string'||p.planSignature.length>32768)throw invalid();
+ let signed:unknown;try{signed=JSON.parse(p.planSignature);}catch{throw invalid();}
+ if(!Array.isArray(signed))throw invalid();
+ const normalized=signed.map((value,index)=>index>=3&&Array.isArray(value)&&value.length===8
+  ? [...value.slice(0,7),value[7]===''?null:value[7]] : value);
+ if(canonical(normalized)!==canonical(signature))throw invalid();
  if(Buffer.byteLength(canonical(p),'utf8')>850000)throw invalid();return p;
 }

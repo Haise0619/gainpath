@@ -26,10 +26,17 @@ class UnifiedBusinessSection extends StatelessWidget {
         exportEnabled: true,
         exportRows: m.csv,
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Wrap(spacing: 32, runSpacing: 16, children: [
-            StatTile(money(m.revenueMinor), 'Recorded revenue'),
-            StatTile(money(m.membershipMinor), 'Membership Revenue'),
-            StatTile(money(m.coachingMinor), 'Coaching Revenue')
+          Wrap(spacing: 12, runSpacing: 12, children: [
+            SizedBox(
+                width: 190,
+                child: StatTile(money(m.revenueMinor), 'Recorded revenue')),
+            SizedBox(
+                width: 190,
+                child:
+                    StatTile(money(m.membershipMinor), 'Membership Revenue')),
+            SizedBox(
+                width: 190,
+                child: StatTile(money(m.coachingMinor), 'Coaching Revenue')),
           ]),
           const SizedBox(height: 20),
           const Text('Monthly Revenue Trend',
@@ -37,11 +44,14 @@ class UnifiedBusinessSection extends StatelessWidget {
           SizedBox(
               height: 230,
               child: SfCartesianChart(
-                  primaryXAxis: const CategoryAxis(),
+                  primaryXAxis: const CategoryAxis(
+                      labelIntersectAction: AxisLabelIntersectAction.hide),
+                  tooltipBehavior: TooltipBehavior(
+                      enable: true, format: 'point.x · MYR point.y'),
                   primaryYAxis:
                       const NumericAxis(title: AxisTitle(text: 'MYR')),
                   series: <CartesianSeries<UnifiedRevenueMonth, String>>[
-                    ColumnSeries<UnifiedRevenueMonth, String>(
+                    LineSeries<UnifiedRevenueMonth, String>(
                         animationDuration: 0,
                         dataSource: m.monthly,
                         xValueMapper: (r, _) => r.month,
@@ -53,15 +63,20 @@ class UnifiedBusinessSection extends StatelessWidget {
           const SizedBox(height: 20),
           Wrap(spacing: 24, runSpacing: 12, children: [
             Text('Active Subscriptions: ${m.activeSubscriptions ?? '—'}'),
-            if (m.tiers != null)
-              for (final e in m.tiers!.entries) Text('${e.key}: ${e.value}'),
             Text('Booking activity: ${m.bookings}'),
             Text('Completed: ${m.completed}'),
             Text('Cancelled: ${m.cancelled}')
           ]),
+          if (m.tiers != null) ...[
+            const SizedBox(height: 12),
+            const Text('Plan distribution'),
+            Wrap(spacing: 16, runSpacing: 8, children: [
+              for (final e in m.tiers!.entries) Text('${e.key}: ${e.value}'),
+            ]),
+          ],
           const SizedBox(height: 10),
           const Text(
-              'Subscriptions reflect current plan records; expired and unknown plans are excluded from active subscriptions. Appointment outcomes use current recorded status within the selected period.'),
+              'Plan distribution includes expired FYP scenario subscriptions and unknown canonical plans. Active subscriptions count recognized canonical plans and active FYP scenario subscriptions. Appointment outcomes use current recorded status for bookings created in this period.'),
         ]));
   }
 }

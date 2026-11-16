@@ -173,7 +173,21 @@ AdminCheckInReport parseAdminCheckInReport(
       throw const FormatException('Check-in earning source mismatch');
     }
   }
+  final sourceErrors = m['sourceErrors'];
+  if (sourceErrors != null &&
+      (sourceErrors is! Map ||
+          sourceErrors.entries.any((entry) =>
+              !['extensions', 'observations'].contains(entry.key) ||
+              !['failed-precondition', 'resource-exhausted']
+                  .contains(entry.value) ||
+              m[entry.key] != null))) {
+    throw const FormatException('Invalid engagement source status');
+  }
   return AdminCheckInReport(
+      extensionsFailed:
+          sourceErrors is Map && sourceErrors.containsKey('extensions'),
+      observationsFailed:
+          sourceErrors is Map && sourceErrors.containsKey('observations'),
       query: query,
       observations: m['observations'] == null
           ? null

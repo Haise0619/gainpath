@@ -72,7 +72,9 @@ class _AdminObservedSectionState extends State<AdminObservedSection> {
                   Text(s.error ??
                       (s.loading
                           ? 'Loading recorded activity…'
-                          : 'Recorded activity analytics awaits compatible server activation.')),
+                          : s.report?.observationsFailed == true
+                              ? 'Recorded activity sources could not be verified. Retry this report.'
+                              : 'Recorded activity analytics awaits compatible server activation.')),
                 if (r == null || s.error != null)
                   TextButton(
                       onPressed: () => _cubit!.load(),
@@ -290,7 +292,11 @@ class _AdminPostureSectionState extends State<AdminPostureSection> {
               subtitle:
                   'Provisional session estimates · not validated biomechanical accuracy',
               live: true,
-              tagLabel: 'Provisional backups',
+              tagLabel: r?.fypSourceUnavailable == true
+                  ? 'Partial'
+                  : r == null
+                      ? (s.loading ? 'Loading' : 'Unavailable')
+                      : 'Provisional backups',
               exportFilename: 'estimated-form-scores.csv',
               exportEnabled: r != null,
               exportRows: r == null
@@ -298,7 +304,9 @@ class _AdminPostureSectionState extends State<AdminPostureSection> {
                   : () => [
                         [
                           'GainPath Estimated Form Scores',
-                          'Provisional; not validated accuracy'
+                          r.fypSourceUnavailable
+                              ? 'Partial: canonical backups only; FYP source unavailable'
+                              : 'Provisional; not validated accuracy'
                         ],
                         [
                           'Start inclusive UTC',
@@ -446,105 +454,143 @@ class _AdminPostureSectionState extends State<AdminPostureSection> {
   }
 }
 
-class AdminCoachActivitySection extends StatelessWidget {
+class AdminCoachActivitySection extends StatefulWidget {
   const AdminCoachActivitySection(
       {super.key, required this.anchorKey, required this.report});
   final GlobalKey anchorKey;
   final AdminCommerceReport report;
   @override
-  Widget build(BuildContext context) => ReportSection(
-      anchorKey: anchorKey,
-      title: 'Coach Booking Utilization',
-      subtitle:
-          'Per-Coach recorded activity · available-time utilization unavailable',
-      live: true,
-      tagLabel: 'Booking activity',
-      exportFilename: 'coach-booking-activity.csv',
-      exportRows: () => [
-            [
-              'GainPath Coach activity',
-              'No trustworthy historical availability denominator'
-            ],
-            [
-              'Start inclusive UTC',
-              report.query.range.start.toUtc().toIso8601String()
-            ],
-            [
-              'End exclusive UTC',
-              report.query.range.end.toUtc().toIso8601String()
-            ],
-            ['Timezone', 'Asia/Kuala_Lumpur'],
-            [
-              'Coach',
-              'Created bookings',
-              'Confirmed outcomes',
-              'Scheduled starts',
-              'Published consultations',
-              'Utilization %'
-            ],
-            for (final c in report.coaches)
+  State<AdminCoachActivitySection> createState() =>
+      _AdminCoachActivitySectionState();
+}
+
+class _AdminCoachActivitySectionState extends State<AdminCoachActivitySection> {
+  static const _columns = <(String, String?)>[
+    ('Coach', null),
+    ('Created bookings', 'bookings'),
+    ('Confirmed outcomes', 'confirmed'),
+    ('Completed', 'completed'),
+    ('Cancelled', 'cancelled'),
+    ('Scheduled starts', 'scheduledStarts'),
+    ('Consultations', 'consultations'),
+  ];
+  int _column = 1;
+  bool _ascending = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final report = widget.report;
+    final key = _columns[_column].$2;
+    final coaches = [...report.coaches]..sort((a, b) {
+        final order =
+            key == null ? a.name.compareTo(b.name) : a[key].compareTo(b[key]);
+        if (order != 0) return _ascending ? order : -order;
+        return a.name.compareTo(b.name);
+      });
+    return ReportSection(
+        anchorKey: widget.anchorKey,
+        title: 'Coach Booking Activity',
+        subtitle:
+            'Per-Coach recorded activity · available-time utilization unavailable',
+        live: true,
+        tagLabel: 'Booking activity',
+        exportFilename: 'coach-booking-activity.csv',
+        exportRows: () => [
               [
-                _safe(c.name),
-                c['bookings'],
-                c['confirmed'],
-                c['scheduledStarts'],
-                c['consultations'],
-                null
-              ]
-          ],
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        const Text(
-            'Bookings use creation time; scheduled starts use appointment time and may be upcoming. Consultations use publication time. Current rosters are not applied retrospectively: utilization percentage is unavailable without evidenced capacity for the selected period.'),
-        if (report.coaches.isEmpty)
-          const Padding(
-              padding: EdgeInsets.all(18),
-              child: Text('No Coach activity records available.'))
-        else ...[
-          SizedBox(
-              height: 250,
-              child: SfCartesianChart(
-                  primaryXAxis: const CategoryAxis(
-                      labelIntersectAction: AxisLabelIntersectAction.wrap),
-                  primaryYAxis: const NumericAxis(minimum: 0, decimalPlaces: 0),
-                  legend: const Legend(
-                      isVisible: true,
-                      position: LegendPosition.bottom,
-                      overflowMode: LegendItemOverflowMode.wrap),
-                  tooltipBehavior: TooltipBehavior(enable: true),
-                  series: <CartesianSeries<CommerceRow, String>>[
-                    ColumnSeries<CommerceRow, String>(
-                        name: 'Bookings created',
-                        dataSource: report.coaches,
-                        xValueMapper: (c, _) => c.name,
-                        yValueMapper: (c, _) => c['bookings']),
-                    ColumnSeries<CommerceRow, String>(
-                        name: 'Consultations published',
-                        dataSource: report.coaches,
-                        xValueMapper: (c, _) => c.name,
-                        yValueMapper: (c, _) => c['consultations'])
-                  ])),
-          SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: DataTable(columns: const [
-                DataColumn(label: Text('Coach')),
-                DataColumn(label: Text('Created bookings')),
-                DataColumn(label: Text('Confirmed outcomes')),
-                DataColumn(label: Text('Scheduled starts')),
-                DataColumn(label: Text('Consultations')),
-                DataColumn(label: Text('Utilization'))
-              ], rows: [
-                for (final c in report.coaches)
-                  DataRow(cells: [
-                    DataCell(Text(c.name)),
-                    DataCell(Text('${c['bookings']}')),
-                    DataCell(Text('${c['confirmed']}')),
-                    DataCell(Text('${c['scheduledStarts']}')),
-                    DataCell(Text('${c['consultations']}')),
-                    const DataCell(Text('Unavailable'))
-                  ])
-              ])),
-        ]
-      ]));
+                'GainPath Coach activity',
+                'No trustworthy historical availability denominator'
+              ],
+              [
+                'Start inclusive UTC',
+                report.query.range.start.toUtc().toIso8601String()
+              ],
+              [
+                'End exclusive UTC',
+                report.query.range.end.toUtc().toIso8601String()
+              ],
+              ['Timezone', 'Asia/Kuala_Lumpur'],
+              [
+                'Coach',
+                'Created bookings',
+                'Confirmed outcomes',
+                'Completed',
+                'Cancelled',
+                'Scheduled starts',
+                'Published consultations'
+              ],
+              for (final c in report.coaches)
+                [
+                  _safe(c.name),
+                  c['bookings'],
+                  c['confirmed'],
+                  c['completed'],
+                  c['cancelled'],
+                  c['scheduledStarts'],
+                  c['consultations']
+                ]
+            ],
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          const Text(
+              'Bookings use creation time; scheduled starts use appointment time and may be upcoming. Consultations use publication time. Current rosters are not applied retrospectively: utilization percentage is unavailable without evidenced capacity for the selected period.'),
+          if (report.coaches.isEmpty)
+            const Padding(
+                padding: EdgeInsets.all(18),
+                child: Text('No Coach activity records available.'))
+          else ...[
+            SizedBox(
+                height: 250,
+                child: SfCartesianChart(
+                    primaryXAxis: const CategoryAxis(
+                        labelIntersectAction: AxisLabelIntersectAction.wrap),
+                    primaryYAxis:
+                        const NumericAxis(minimum: 0, decimalPlaces: 0),
+                    legend: const Legend(
+                        isVisible: true,
+                        position: LegendPosition.bottom,
+                        overflowMode: LegendItemOverflowMode.wrap),
+                    tooltipBehavior: TooltipBehavior(enable: true),
+                    series: <CartesianSeries<CommerceRow, String>>[
+                      ColumnSeries<CommerceRow, String>(
+                          name: 'Bookings created',
+                          dataSource: report.coaches,
+                          xValueMapper: (c, _) => c.name,
+                          yValueMapper: (c, _) => c['bookings']),
+                      ColumnSeries<CommerceRow, String>(
+                          name: 'Consultations published',
+                          dataSource: report.coaches,
+                          xValueMapper: (c, _) => c.name,
+                          yValueMapper: (c, _) => c['consultations'])
+                    ])),
+            SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: DataTable(
+                  sortColumnIndex: _column,
+                  sortAscending: _ascending,
+                  columns: [
+                    for (final (label, key) in _columns)
+                      DataColumn(
+                        label: Text(label),
+                        numeric: key != null,
+                        onSort: (index, ascending) => setState(() {
+                          _column = index;
+                          _ascending = ascending;
+                        }),
+                      ),
+                  ],
+                  rows: [
+                    for (final coach in coaches)
+                      DataRow(cells: [
+                        DataCell(Tooltip(
+                            message: coach.name, child: Text(coach.name))),
+                        for (final (_, key) in _columns.skip(1))
+                          DataCell(Text(coach[key!].toString())),
+                      ]),
+                  ],
+                )),
+          ]
+        ]));
+  }
+
   String _safe(String v) => RegExp(r'^\s*[=+@\-]').hasMatch(v) ? "'$v" : v;
 }
 

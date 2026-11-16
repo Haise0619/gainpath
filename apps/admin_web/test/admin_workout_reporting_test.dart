@@ -82,6 +82,24 @@ class PendingWorkouts implements AdminWorkoutReportingGateway {
 
 void main() {
   test(
+      'unified workout may disclose canonical-only coverage without synthetic totals',
+      () {
+    final raw = workoutResponse()..['fypSourceUnavailable'] = true;
+    final report = parseAdminWorkoutReport(
+        raw, support.reportingScope, support.reportingQuery,
+        allowUnified: true);
+    expect(report.fypSourceUnavailable, isTrue);
+    expect(report.mixedSources, isFalse);
+    expect(report.totals.sessions, 2);
+    expect(report.toCsv().expand((row) => row),
+        contains('Partial: canonical backups only; FYP source unavailable'));
+    expect(
+        () => parseAdminWorkoutReport(
+            raw, support.reportingScope, support.reportingQuery),
+        throwsFormatException);
+  });
+
+  test(
       'Firebase workout gateway sends exact scoped query and rejects session changes after the response',
       () async {
     var current = true;

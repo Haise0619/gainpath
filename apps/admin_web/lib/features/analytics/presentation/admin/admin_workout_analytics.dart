@@ -63,7 +63,11 @@ class _AdminWorkoutAnalyticsState extends State<AdminWorkoutAnalytics> {
               crossAxisAlignment: WrapCrossAlignment.center,
               children: [
                 Chip(
-                    label: Text(report?.mixedSources == true ? 'Workout observations' : report?.fictional == true ? 'Workout observations' : 'Provisional backups'),
+                    label: Text(report?.mixedSources == true
+                        ? 'Workout observations'
+                        : report?.fictional == true
+                            ? 'Workout observations'
+                            : 'Provisional backups'),
                     visualDensity: VisualDensity.compact),
                 IconButton(
                     tooltip: 'Refresh workout analytics',
@@ -122,13 +126,21 @@ class _AdminWorkoutAnalyticsState extends State<AdminWorkoutAnalytics> {
           return ReportSection(
               anchorKey: widget.anchorKey ?? _fallbackAnchor,
               title: 'Workout activity',
-              subtitle: report?.mixedSources == true ? 'Recorded workout activity · performance estimates are not physical verification' : report?.fictional == true
-                  ? 'Recorded workout activity'
-                  : 'Saved device measurements and routine attempt outcomes · organization-wide',
+              subtitle: report?.mixedSources == true
+                  ? 'Recorded workout activity · performance estimates are not physical verification'
+                  : report?.fictional == true
+                      ? 'Recorded workout activity'
+                      : 'Saved device measurements and routine attempt outcomes · organization-wide',
               live: true,
-              tagLabel: report?.mixedSources == true ? 'Workout activity' : report?.fictional == true
-                  ? 'Recorded observations'
-                  : 'Provisional backups',
+              tagLabel: report == null
+                  ? (state.loading ? 'Loading' : 'Unavailable')
+                  : report.fypSourceUnavailable
+                      ? 'Partial'
+                      : report.mixedSources
+                          ? 'Workout activity'
+                          : report.fictional
+                              ? 'Recorded observations'
+                              : 'Provisional backups',
               exportFilename: 'gainpath-workout-activity.csv',
               exportEnabled: report != null,
               exportRows: report?.toCsv,
@@ -152,14 +164,24 @@ class _AdminWorkoutAnalyticsState extends State<AdminWorkoutAnalytics> {
     Widget stat(String value, String label) => SizedBox(
         width: widget.compact ? 175 : 210, child: StatTile(value, label));
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      if (r.fypSourceUnavailable)
+        const Text(
+            'Partial report. Canonical backups are available. Refresh to retry the FYP source.'),
       Wrap(spacing: 10, runSpacing: 10, children: [
-        stat('${t.sessions}',
-            r.sessionLabel),
+        stat('${t.sessions}', r.sessionLabel),
         stat('${t.completedRoutineDays}', 'Completed routine attempts'),
-        stat('${t.fullReps}', r.mixedSources || r.fictional ? 'Recorded full reps' : 'Measured full reps'),
+        stat(
+            '${t.fullReps}',
+            r.mixedSources || r.fictional
+                ? 'Recorded full reps'
+                : 'Measured full reps'),
         stat(_duration(t.trackedMicros), 'Tracked duration'),
         if (!widget.compact) ...[
-          stat('${t.partialReps}', r.mixedSources || r.fictional ? 'Recorded partial reps' : 'Measured partial reps'),
+          stat(
+              '${t.partialReps}',
+              r.mixedSources || r.fictional
+                  ? 'Recorded partial reps'
+                  : 'Measured partial reps'),
           stat('${t.manualSets}', 'Manual sets')
         ],
       ]),
@@ -170,9 +192,11 @@ class _AdminWorkoutAnalyticsState extends State<AdminWorkoutAnalytics> {
           style: text.bodySmall),
       const SizedBox(height: 6),
       Text(
-          r.mixedSources ? 'Recorded observations do not establish verified camera performance, attendance or rewards.' : r.fictional
-              ? 'Recorded observations from recorded fixtures. These are read-only educational data, not physical camera captures, accepted workouts or rewards.'
-              : 'Backup coverage only. Missing or device-only workouts are excluded. Counts are provisional; manual sets are self-reported. Backup presence does not mean backup is currently enabled.',
+          r.mixedSources
+              ? 'Recorded observations do not establish verified camera performance, attendance or rewards.'
+              : r.fictional
+                  ? 'Recorded observations from recorded fixtures. These are read-only educational data, not physical camera captures, accepted workouts or rewards.'
+                  : 'Backup coverage only. Missing or device-only workouts are excluded. Counts are provisional; manual sets are self-reported. Backup presence does not mean backup is currently enabled.',
           style: text.bodySmall),
       if (t.sessions == 0 && t.routineAttempts == 0)
         const Padding(
@@ -277,9 +301,11 @@ class _AdminWorkoutAnalyticsState extends State<AdminWorkoutAnalytics> {
         ])),
         const SizedBox(height: 12),
         Text(
-            r.mixedSources ? 'Current active membership is not attendance. Records use the latest eligible revisions within the selected dates.' : r.fictional
-                ? 'Recorded dates do not prove physical camera activity or attendance.'
-                : 'Latest backups only; archived revisions are excluded. Current active Member census is not historical attendance. Source scan ${r.scanStartedAt.toUtc().toIso8601String()} to ${r.capturedAt.toUtc().toIso8601String()}; these bounded reads are not one atomic snapshot.',
+            r.mixedSources
+                ? 'Current active membership is not attendance. Records use the latest eligible revisions within the selected dates.'
+                : r.fictional
+                    ? 'Recorded dates do not prove physical camera activity or attendance.'
+                    : 'Latest backups only; archived revisions are excluded. Current active Member census is not historical attendance. Source scan ${r.scanStartedAt.toUtc().toIso8601String()} to ${r.capturedAt.toUtc().toIso8601String()}; these bounded reads are not one atomic snapshot.',
             style: text.bodySmall),
       ],
     ]);
@@ -293,7 +319,14 @@ class _AdminWorkoutAnalyticsState extends State<AdminWorkoutAnalytics> {
               primaryXAxis: const CategoryAxis(
                   majorGridLines: MajorGridLines(width: 0),
                   labelIntersectAction: AxisLabelIntersectAction.rotate45),
-              primaryYAxis: const NumericAxis(minimum: 0, decimalPlaces: 0),
+              primaryYAxis: NumericAxis(
+                  minimum: 0,
+                  decimalPlaces: 0,
+                  interval: days.every((day) =>
+                          day.sessions <= 5 &&
+                          day.totals.completedRoutineDays <= 5)
+                      ? 1
+                      : null),
               legend: const Legend(
                   isVisible: true,
                   position: LegendPosition.bottom,
@@ -301,7 +334,9 @@ class _AdminWorkoutAnalyticsState extends State<AdminWorkoutAnalytics> {
               tooltipBehavior: TooltipBehavior(enable: true),
               series: <CartesianSeries<WorkoutReportDay, String>>[
                 ColumnSeries<WorkoutReportDay, String>(
-                    name: sessionLabel == 'Saved camera sessions' ? 'Camera sessions' : sessionLabel,
+                    name: sessionLabel == 'Saved camera sessions'
+                        ? 'Camera sessions'
+                        : sessionLabel,
                     dataSource: days,
                     xValueMapper: (d, _) => d.date,
                     yValueMapper: (d, _) => d.sessions,

@@ -61,6 +61,17 @@ class PendingCheckIns implements AdminCheckInReportingGateway {
 }
 
 void main() {
+  test('optional source failure retains confirmed check-in totals', () {
+    final raw = checkInResponse()
+      ..['sourceErrors'] = {'extensions': 'failed-precondition'};
+    final report = parseAdminCheckInReport(
+        raw, support.reportingScope, support.reportingQuery);
+    expect(report.extensionsFailed, isTrue);
+    expect(report.observationsFailed, isFalse);
+    expect(report.claims, 2);
+    expect(report.extensions, isNull);
+  });
+
   test(
       'Firebase check-in gateway sends scoped query and rejects auth-session drift after await',
       () async {

@@ -30,7 +30,8 @@ class StatTile extends StatelessWidget {
     final labelStyle = compact
         ? Theme.of(context).textTheme.bodyMedium?.copyWith(fontSize: 11.5)
         : Theme.of(context).textTheme.bodyMedium;
-    final lineHeight = (labelStyle?.fontSize ?? 14) * (labelStyle?.height ?? 1.45);
+    final lineHeight =
+        (labelStyle?.fontSize ?? 14) * (labelStyle?.height ?? 1.45);
     return Panel(
       padding: compact
           ? const EdgeInsets.symmetric(horizontal: 12, vertical: 10)
@@ -45,8 +46,11 @@ class StatTile extends StatelessWidget {
                   ?.copyWith(color: valueColor ?? AppColors.ink)),
           SizedBox(height: compact ? 1 : 2),
           SizedBox(
-            height: lineHeight * 2,
-            child: Text(label, style: labelStyle, maxLines: 2, overflow: TextOverflow.ellipsis),
+            height: MediaQuery.textScalerOf(context).scale(lineHeight) * 2,
+            child: Text(label,
+                style: labelStyle,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis),
           ),
           if (delta != null) ...[
             const SizedBox(height: 6),

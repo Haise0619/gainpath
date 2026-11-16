@@ -52,21 +52,34 @@ WorkoutTotals _totals(Object? v) {
 }
 
 AdminWorkoutReport parseAdminWorkoutReport(
-    Object? raw, SessionScope scope, AdminReportQuery query, {bool allowUnified=false}) {
+    Object? raw, SessionScope scope, AdminReportQuery query,
+    {bool allowUnified = false}) {
   final m = _map(raw),
       start = query.range.start.millisecondsSinceEpoch,
       end = query.range.end.millisecondsSinceEpoch;
+  final partial = m['fypSourceUnavailable'] == true;
+  if (partial &&
+      (!allowUnified ||
+          m['classification'] != 'provisional_member_backup' ||
+          m['fictional'] == true ||
+          m['containsFictional'] == true)) {
+    throw const FormatException('Invalid partial workout scope');
+  }
   if (query.branchId != null ||
       m['schemaVersion'] != 1 ||
       m['organizationId'] != scope.organizationId ||
       m['startAtMillis'] != start ||
       m['endAtMillis'] != end ||
       m['timezone'] != 'Asia/Kuala_Lumpur' ||
-      (allowUnified ? m['classification']!='mixed_descriptive_sources'||m['containsFictional']!=true||scope.datasetScope!=null : scope.datasetScope == null
-          ? m['classification'] != 'provisional_member_backup' ||
-              m['fictional'] == true
-          : m['classification'] != 'fictional_synthetic_observation' ||
-              m['fictional'] != true)) {
+      (allowUnified && !partial
+          ? m['classification'] != 'mixed_descriptive_sources' ||
+              m['containsFictional'] != true ||
+              scope.datasetScope != null
+          : scope.datasetScope == null
+              ? m['classification'] != 'provisional_member_backup' ||
+                  m['fictional'] == true
+              : m['classification'] != 'fictional_synthetic_observation' ||
+                  m['fictional'] != true)) {
     throw const FormatException('Workout report scope mismatch');
   }
   final scan = _int(m['sourceReadStartedAtMillis'], 8640000000000000),
@@ -218,8 +231,14 @@ AdminWorkoutReport parseAdminWorkoutReport(
     }
   }
   return AdminWorkoutReport(
-      mixedSources:allowUnified,
-      sourceSessionCounts:allowUnified?{for(final e in _map(m['sourceBreakdown']).entries)e.key:_int(_map(e.value)['sessions'])}:const {},
+      fypSourceUnavailable: partial,
+      mixedSources: allowUnified && !partial,
+      sourceSessionCounts: allowUnified && !partial
+          ? {
+              for (final e in _map(m['sourceBreakdown']).entries)
+                e.key: _int(_map(e.value)['sessions'])
+            }
+          : const {},
       fictional: scope.datasetScope != null,
       query: query,
       capturedAt: DateTime.fromMillisecondsSinceEpoch(captured, isUtc: true),

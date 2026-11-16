@@ -33,6 +33,8 @@ class AdminCheckInReport {
       required this.pointsAwarded,
       this.extensions,
       this.observations,
+      this.extensionsFailed = false,
+      this.observationsFailed = false,
       required Map<String, int> coverage,
       required List<CheckInReportPeriod> daily,
       required List<CheckInReportPeriod> weekly,
@@ -50,6 +52,7 @@ class AdminCheckInReport {
     'threeSix': '3–6 days',
     'sevenPlus': '7+ days'
   };
+  final bool extensionsFailed, observationsFailed;
   final AdminObservedActivity? observations;
   final AdminEngagementExtension? extensions;
   final AdminReportQuery query;
@@ -65,6 +68,11 @@ class AdminCheckInReport {
               : 'GainPath gamification engagement analytics',
           policyVersion
         ],
+        if (extensionsFailed)
+          [
+            'Coverage',
+            'Check-ins only. Rewards and game sources could not be verified.'
+          ],
         ['Timezone', 'Asia/Kuala_Lumpur UTC+08:00'],
         ['Start inclusive UTC', query.range.start.toUtc().toIso8601String()],
         ['End exclusive UTC', query.range.end.toUtc().toIso8601String()],

@@ -40,18 +40,40 @@ class WorkoutUiGateway extends original.OriginalLayoutGateway
     raw['sourceReadStartedAtMillis'] = DateTime.now()
         .subtract(const Duration(seconds: 1))
         .millisecondsSinceEpoch;
-    if(mixed){raw['classification']='mixed_descriptive_sources';raw['containsFictional']=true;raw['sourceBreakdown']={'existing':{'sessions':0},'fyp':{'sessions':2}};}
-    return parseAdminWorkoutReport(raw, support.reportingScope, q,allowUnified:mixed);
+    if (mixed) {
+      raw['classification'] = 'mixed_descriptive_sources';
+      raw['containsFictional'] = true;
+      raw['sourceBreakdown'] = {
+        'existing': {'sessions': 0},
+        'fyp': {'sessions': 2}
+      };
+    }
+    return parseAdminWorkoutReport(raw, support.reportingScope, q,
+        allowUnified: mixed);
   }
 }
 
 void main() {
   setUpAll(() => GoogleFonts.config.allowRuntimeFetching = false);
-  testWidgets('mixed report with only FYP activity never labels observations as camera captures',(t)async{
-    t.view.physicalSize=const Size(1200,1100);t.view.devicePixelRatio=1;addTearDown(t.view.reset);
-    await t.pumpWidget(original.originalLayoutApp(const ReportsScreen(live:true),WorkoutUiGateway()..mixed=true));await t.pumpAndSettle();
-    final labels=t.widgetList<Text>(find.byType(Text)).map((w)=>w.data??'').join(' ');
-    expect(labels,contains('Mixed descriptive observations'));expect(labels,isNot(contains('saved camera sessions')));expect(labels,isNot(contains('Backup coverage only.')));expect(labels,isNot(contains('Latest backups only;')));
+  testWidgets(
+      'mixed report with only FYP activity never labels observations as camera captures',
+      (t) async {
+    t.view.physicalSize = const Size(1200, 1100);
+    t.view.devicePixelRatio = 1;
+    addTearDown(t.view.reset);
+    await t.pumpWidget(original.originalLayoutApp(
+        const ReportsScreen(live: true), WorkoutUiGateway()..mixed = true));
+    await t.pumpAndSettle();
+    await t.tap(find.text('Fitness'));
+    await t.pumpAndSettle();
+    final labels = t
+        .widgetList<Text>(find.byType(Text))
+        .map((w) => w.data ?? '')
+        .join(' ');
+    expect(labels, contains('Mixed descriptive observations'));
+    expect(labels, isNot(contains('saved camera sessions')));
+    expect(labels, isNot(contains('Backup coverage only.')));
+    expect(labels, isNot(contains('Latest backups only;')));
   });
   testWidgets(
       'original dashboard adds compact backup workout metrics without replacing its layout',
@@ -67,8 +89,7 @@ void main() {
     expect(g.calls, 1);
     expect(t.takeException(), isNull);
   });
-  testWidgets(
-      'reports retain original header and section anchors, provide workout details and refresh both sources',
+  testWidgets('Fitness loads on demand and refreshes its workout sections',
       (t) async {
     t.view.physicalSize = const Size(1200, 1100);
     t.view.devicePixelRatio = 1;
@@ -78,12 +99,18 @@ void main() {
         original.originalLayoutApp(const ReportsScreen(live: true), g));
     await t.pumpAndSettle();
     expect(find.text('Reports & analytics'), findsOneWidget);
-    expect(find.text('Workouts'), findsOneWidget);
+    expect(g.calls, 0);
+    await t.tap(find.text('Fitness'));
+    await t.pumpAndSettle();
+    expect(g.calls, 2);
+    await t.tap(find.text('Overview'));
+    await t.pumpAndSettle();
+    await t.tap(find.text('Fitness'));
+    await t.pumpAndSettle();
+    expect(g.calls, 2);
     await t.tap(find.byTooltip('Refresh reports'));
     await t.pumpAndSettle();
     expect(g.calls, 4);
-    await t.tap(find.text('Workouts'));
-    await t.pumpAndSettle();
     expect(find.text('Most-used exercises'), findsOneWidget);
     expect(find.text('Manual sets'), findsOneWidget);
     expect(find.text('Estimated form by compatible version'), findsOneWidget);
@@ -97,6 +124,8 @@ void main() {
         original.originalLayoutApp(const ReportsScreen(live: true), g));
     await t.pumpAndSettle();
     expect(find.text('MYR 139.00'), findsWidgets);
+    await t.tap(find.text('Fitness'));
+    await t.pumpAndSettle();
     expect(find.text('Workout analytics is awaiting server activation.'),
         findsNWidgets(2));
     expect(find.text('Retry workout analytics'), findsOneWidget);

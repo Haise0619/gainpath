@@ -104,6 +104,15 @@ class _AdminCheckInAnalyticsState extends State<AdminCheckInAnalytics> {
                 ] else ...[
                   if (state.loading) const LinearProgressIndicator(),
                   if (state.error != null) Text(state.error!),
+                  if (report.extensionsFailed) ...[
+                    Text(widget.redemptionsOnly
+                        ? 'Voucher records could not be verified.'
+                        : 'Partial report. Confirmed check-ins are available. Rewards and game sources could not be verified.'),
+                    TextButton(
+                      onPressed: state.loading ? null : () => _cubit!.load(),
+                      child: const Text('Retry rewards and game sources'),
+                    ),
+                  ],
                   _data(context, report),
                 ],
               ]));
@@ -122,9 +131,11 @@ class _AdminCheckInAnalyticsState extends State<AdminCheckInAnalytics> {
       tagLabel: report == null ||
               (widget.redemptionsOnly && report.extensions == null)
           ? 'Unavailable'
-          : widget.redemptionsOnly
-              ? 'Voucher records'
-              : 'Confirmed records',
+          : report.extensionsFailed
+              ? 'Partial'
+              : widget.redemptionsOnly
+                  ? 'Voucher records'
+                  : 'Confirmed records',
       exportFilename: widget.redemptionsOnly
           ? 'gainpath-reward-redemptions.csv'
           : 'gainpath-gamification-engagement.csv',
@@ -281,4 +292,3 @@ class _AdminCheckInAnalyticsState extends State<AdminCheckInAnalytics> {
               '${counts[e.key]} Members'),
       ]));
 }
-

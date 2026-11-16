@@ -141,12 +141,15 @@ void main() {
     expect(find.byType(AdminOperationalReport), findsNothing);
     expect(find.text('Reports & analytics'), findsOneWidget);
     expect(find.text('Overview'), findsWidgets);
-    expect(find.byType(RevenueSection), findsOneWidget);
+    expect(find.byType(RevenueSection), findsNothing);
     expect(find.text('All branches'), findsOneWidget);
     expect(find.text('MYR 89.00'), findsWidgets);
     expect(find.text('MYR 50.00'), findsWidgets);
     expect(find.text('Export overview CSV'), findsOneWidget);
     expect(find.text('Custom dates'), findsOneWidget);
+    await tester.tap(find.text('Financial'));
+    await tester.pumpAndSettle();
+    expect(find.byType(RevenueSection), findsOneWidget);
     final revenue = tester
         .widgetList<ReportSection>(find.byType(ReportSection))
         .firstWhere((s) => s.exportFilename == 'membership_revenue.csv');

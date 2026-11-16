@@ -49,8 +49,7 @@ class CheckInUiGateway extends workouts.WorkoutUiGateway
 
 void main() {
   setUpAll(() => GoogleFonts.config.allowRuntimeFetching = false);
-  testWidgets(
-      'original Reports Gamification section binds check-in data and global refresh without replacing the page',
+  testWidgets('Engagement loads on demand and refreshes only its sources',
       (t) async {
     t.view.physicalSize = const Size(1200, 1100);
     t.view.devicePixelRatio = 1;
@@ -60,6 +59,11 @@ void main() {
         original.originalLayoutApp(const ReportsScreen(live: true), g));
     await t.pumpAndSettle();
     expect(find.text('Reports & analytics'), findsOneWidget);
+    expect(g.checkInCalls, 0);
+    expect(g.calls, 0);
+    await t.tap(find.text('Engagement'));
+    await t.pumpAndSettle();
+    expect(g.checkInCalls, 4);
     expect(find.text('Gamification Engagement'), findsOneWidget);
     expect(find.text('Confirmed check-ins'), findsOneWidget);
     expect(find.text('Unique claiming Members'), findsOneWidget);
@@ -67,15 +71,7 @@ void main() {
     await t.pumpAndSettle();
     expect(g.checkInCalls,
         8); // Four sections request updates; Firebase coalesces the shared scan.
-    expect(g.calls, 4);
-    await t.drag(
-        find.byWidgetPredicate(
-            (w) => w is ListView && w.scrollDirection == Axis.horizontal),
-        const Offset(-400, 0));
-    await t.pumpAndSettle();
-    expect(find.text('Gamification').hitTestable(), findsOneWidget);
-    await t.tap(find.text('Gamification'));
-    await t.pumpAndSettle();
+    expect(g.calls, 0);
     expect(find.textContaining('Current as of'), findsOneWidget);
     expect(t.takeException(), isNull);
   });
@@ -87,7 +83,11 @@ void main() {
         original.originalLayoutApp(const ReportsScreen(live: true), g));
     await t.pumpAndSettle();
     expect(find.text('MYR 139.00'), findsWidgets);
+    await t.tap(find.text('Fitness'));
+    await t.pumpAndSettle();
     expect(find.text('Saved camera sessions'), findsOneWidget);
+    await t.tap(find.text('Engagement'));
+    await t.pumpAndSettle();
     expect(find.text('Check-in analytics is awaiting server activation.'),
         findsNWidgets(4));
     expect(find.text('Retry check-in analytics'), findsOneWidget);

@@ -93,7 +93,10 @@ class WorkoutFormGroup {
 
 class AdminWorkoutReport {
   AdminWorkoutReport(
-      {this.fictional = false, this.mixedSources=false, this.sourceSessionCounts=const {},
+      {this.fypSourceUnavailable = false,
+      this.fictional = false,
+      this.mixedSources = false,
+      this.sourceSessionCounts = const {},
       required this.query,
       required this.capturedAt,
       required this.scanStartedAt,
@@ -106,10 +109,15 @@ class AdminWorkoutReport {
         daily = List.unmodifiable(daily),
         exercises = List.unmodifiable(exercises),
         forms = List.unmodifiable(forms);
+  final bool fypSourceUnavailable;
   final bool fictional;
   final bool mixedSources;
-  final Map<String,int> sourceSessionCounts;
-  String get sessionLabel=>mixedSources?'Mixed descriptive observations':fictional?'Fictional observations':'Saved camera sessions';
+  final Map<String, int> sourceSessionCounts;
+  String get sessionLabel => mixedSources
+      ? 'Mixed descriptive observations'
+      : fictional
+          ? 'Fictional observations'
+          : 'Saved camera sessions';
   final AdminReportQuery query;
   final DateTime capturedAt, scanStartedAt;
   final WorkoutTotals totals;
@@ -142,14 +150,25 @@ class AdminWorkoutReport {
     final rows = <List<Object?>>[
       [
         'GainPath workout analytics',
-        mixedSources ? 'mixed_descriptive_sources · includes fictional synthetic observations' : fictional
-            ? 'fictional_synthetic_observation'
-            : 'provisional_member_backup'
+        mixedSources
+            ? 'mixed_descriptive_sources · includes fictional synthetic observations'
+            : fictional
+                ? 'fictional_synthetic_observation'
+                : 'provisional_member_backup'
       ],
       ['Timezone', 'Asia/Kuala_Lumpur UTC+08:00'],
-      if(mixedSources) ...[
-        ['Provenance','Combined descriptive records include FYP simulation; not verified physical-camera results'],
-        for(final e in sourceSessionCounts.entries)['${e.key} source sessions',e.value],
+      if (fypSourceUnavailable)
+        [
+          'Source status',
+          'Partial: canonical backups only; FYP source unavailable'
+        ],
+      if (mixedSources) ...[
+        [
+          'Provenance',
+          'Combined descriptive records include FYP simulation; not verified physical-camera results'
+        ],
+        for (final e in sourceSessionCounts.entries)
+          ['${e.key} source sessions', e.value],
       ],
       ['Start inclusive UTC', query.range.start.toUtc().toIso8601String()],
       ['End exclusive UTC', query.range.end.toUtc().toIso8601String()],
@@ -157,15 +176,19 @@ class AdminWorkoutReport {
       ['Captured UTC', capturedAt.toIso8601String()],
       [
         'Basis',
-        mixedSources ? 'Mixed descriptive sources: eligible latest canonical backups and FYP synthetic observations. Not physical camera acceptance, attendance or rewards.' : fictional
-            ? 'Fictional synthetic observations of current active fictional Members. Recorded fixtures; not physical camera captures, accepted workouts or rewards.'
-            : 'Latest backups of current active Member accounts only; not all workouts, gym attendance, accepted results or rewards.'
+        mixedSources
+            ? 'Mixed descriptive sources: eligible latest canonical backups and FYP synthetic observations. Not physical camera acceptance, attendance or rewards.'
+            : fictional
+                ? 'Fictional synthetic observations of current active fictional Members. Recorded fixtures; not physical camera captures, accepted workouts or rewards.'
+                : 'Latest backups of current active Member accounts only; not all workouts, gym attendance, accepted results or rewards.'
       ],
       [
         'Dates',
-        mixedSources ? 'Source sessions by declared end time; routine attempts by finish time or last-update fallback. Includes fictional observation dates.' : fictional
-            ? 'Fictional observations by their declared end time.'
-            : 'Camera sessions by end time; routine attempts by finish time or last-update fallback. Counts can move between windows after resume.'
+        mixedSources
+            ? 'Source sessions by declared end time; routine attempts by finish time or last-update fallback. Includes fictional observation dates.'
+            : fictional
+                ? 'Fictional observations by their declared end time.'
+                : 'Camera sessions by end time; routine attempts by finish time or last-update fallback. Counts can move between windows after resume.'
       ],
       [
         'Manual sets',

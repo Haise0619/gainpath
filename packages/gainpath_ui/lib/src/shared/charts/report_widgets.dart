@@ -125,8 +125,11 @@ class _ProvenanceTag extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = live ? AppColors.success : AppColors.inkSoft;
-    final bg = live ? AppColors.successTint : AppColors.surfaceAlt;
+    final confirmed = live &&
+        !const {'Unavailable', 'Partial', 'Error', 'Loading', 'Empty'}
+            .contains(label);
+    final color = confirmed ? AppColors.success : AppColors.inkSoft;
+    final bg = confirmed ? AppColors.successTint : AppColors.surfaceAlt;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration:
@@ -134,7 +137,7 @@ class _ProvenanceTag extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(live ? Icons.bolt_rounded : Icons.info_outline_rounded,
+          Icon(confirmed ? Icons.bolt_rounded : Icons.info_outline_rounded,
               size: 11, color: color),
           const SizedBox(width: 3),
           Flexible(

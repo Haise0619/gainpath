@@ -1,3 +1,4 @@
+import {warn} from 'firebase-functions/logger';
 import {DomainError} from '../../platform/errors';
 import {requireVerifiedEmail} from '../../platform/auth-context';
 import {InputValidationError, requiredIdentifier} from '../../platform/validation';
@@ -93,10 +94,19 @@ export async function adminWorkoutReport(store: DocumentStore, auth: Auth | unde
     if (!exercises.has(id)) exercises.set(id, {exerciseId: id, name: id, sessions: 0, fullReps: 0, partialReps: 0, trackedMicros: 0, manualSets: 0});
     return exercises.get(id)!;
   };
-  for (const uid of eligible) {
+  // Query at most four member collections concurrently. Validate and aggregate
+  // in document order so shared bounds and pagination remain deterministic.
+  async function* firstBackupPages() {
+    for (let offset = 0; offset < eligible.length; offset += 4) {
+      const batch = eligible.slice(offset, offset + 4);
+      const pages = await Promise.all(batch.map(uid => reader.backups(uid, undefined, 25)));
+      for (const [index, uid] of batch.entries()) yield {uid, firstPage: pages[index]};
+    }
+  }
+  for await (const {uid, firstPage} of firstBackupPages()) {
     let cursor: string | undefined, hasBackups = false, hasActivity = false;
     do {
-      const rows = await reader.backups(uid, cursor, 25);
+      const rows = cursor === undefined ? firstPage : await reader.backups(uid, cursor, 25);
       checkPage(rows, cursor, 25, /^(session|routine)-[A-Za-z0-9_-]{1,128}$/);
       for (const row of rows) {
         const b = row.data;
@@ -111,7 +121,10 @@ export async function adminWorkoutReport(store: DocumentStore, auth: Auth | unde
           if(fictional){if(b.kind!=='session')throw fail();extractFypObservationEvidence({organizationId:org,memberId:uid},row,now,fypCapability!);p=validateFictionalSessionPayload(String(b.id),org,uid,JSON.parse(b.payloadJson));}
           else p = validateBackupPayload(String(b.kind), String(b.id), org, uid, JSON.parse(b.payloadJson));
           if (digestOf(p) !== b.digest) throw fail();
-        } catch (_) {throw fail();}
+        } catch (_) {
+          warn('Admin workout backup failed contract validation', {kind: b.kind, fictional});
+          throw fail();
+        }
         hasBackups = true;
         if (b.kind === 'session') {
           const ended = Date.parse(String(p.endedAt));

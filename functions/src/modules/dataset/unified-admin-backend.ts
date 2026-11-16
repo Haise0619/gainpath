@@ -1,3 +1,4 @@
+import {warn} from 'firebase-functions/logger';
 import {createCanonicalRecommendationAdmin} from '../recommendation/canonical-recommendation-admin';
 import {getWorkoutBackupRuntime} from '../recommendation/workout-backup-recommendation-runtime';
 import {FieldPath,type Firestore} from 'firebase-admin/firestore';
@@ -128,7 +129,25 @@ export function createUnifiedAdminBackend(options:{db:Firestore;auth:Pick<Auth,'
     const publishedRoutines=(rows:typeof existingContent)=>rows.filter(r=>r.record.kind==='routine'&&r.record.status==='published'&&r.record.archived!==true).length;
     result={...merged,unified:{...merged.unified,catalogCounts:{existingPrograms:canonicalPrograms.programs.length,fypPrograms:fypPrograms.programs.length,existingTutorials:publishedRoutines(existingContent),fypTutorials:publishedRoutines(fypContent)},directoryTotals:{existingMembers:existingMembers.filter(r=>r.record.role==='member').length,fypMembers:fypMembers.filter(r=>r.record.role==='member').length,existingCoaches:existingMembers.filter(r=>r.record.role==='coach').length,fypCoaches:fypMembers.filter(r=>r.record.role==='coach').length},recordCreationTrend:[...growth.values()].sort((a,b)=>a.date.localeCompare(b.date)),definition:'Current eligible account census combines sources; directory totals include inactive administrative records. Record-creation trend includes fictional provisioning, not login activity. Existing financial/booking metrics retain their original source definitions.'}};
    }else{
-    const [existing,fyp]=await Promise.all([adminWorkoutReport(canonical,request.auth,input,{members:(after,limit)=>page('orgs/gainpath/members',after,limit),backups:(uid,after,limit)=>page(`orgs/gainpath/members/${uid}/workoutBackups`,after,limit)},clock),call('module/adminWorkoutReportingCommand',input) as Promise<WorkoutReport>]);result=mergeUnifiedWorkoutReports(existing,fyp);
+    const readFyp = async (): Promise<WorkoutReport | undefined> => {
+      try {
+        return await call('module/adminWorkoutReportingCommand', input) as WorkoutReport;
+      } catch (error) {
+        if (!(error instanceof DomainError) ||
+            (error.code !== 'failed-precondition' && error.code !== 'resource-exhausted')) throw error;
+        warn('FYP workout source unavailable for unified report', {code: error.code});
+        return undefined;
+      }
+    };
+    const [existing, fyp] = await Promise.all([
+      adminWorkoutReport(canonical, request.auth, input, {
+        members: (after, limit) => page('orgs/gainpath/members', after, limit),
+        backups: (uid, after, limit) => page(`orgs/gainpath/members/${uid}/workoutBackups`, after, limit),
+      }, clock),
+      readFyp(),
+    ]);
+    result = fyp ? mergeUnifiedWorkoutReports(existing, fyp) : {...existing, fypSourceUnavailable: true};
+
    }
   }else throw deny();
   return await c.finalize(result);

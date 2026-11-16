@@ -16,13 +16,17 @@ import 'original_report_data_widgets.dart';
 import 'admin_workout_analytics.dart';
 import '../../application/business_dashboard_metrics.dart';
 
-/// AD-M12.1/M12.2 — Admin Dashboard & Reporting. One continuous analytics
-/// page instead of eight separate pushed screens each showing a single
-/// chart: a jump-nav strip at the top scrolls straight to any section (no
-/// push, no back button), a real date/branch filter bar reacts live
-/// across the sections whose data can honestly support it, and every
-/// section carries multiple Syncfusion charts plus a real CSV export
-/// instead of one lonely graph and a toast.
+enum _ReportsTab {
+  overview('Overview'),
+  financial('Financial'),
+  fitness('Fitness'),
+  coaching('Coaching'),
+  engagement('Engagement');
+
+  const _ReportsTab(this.label);
+  final String label;
+}
+
 class ReportsScreen extends StatefulWidget {
   final bool live;
   const ReportsScreen({super.key, this.live = false});
@@ -35,7 +39,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
   bool _operational = false;
   static const _dateOptions = [null, 7, 30, 90];
   static const _dateLabels = {
-    null: 'All time',
+    null: 'All recorded dates',
     7: '7 days',
     30: '30 days',
     90: '90 days'
@@ -45,7 +49,14 @@ class _ReportsScreenState extends State<ReportsScreen> {
   DateTimeRange? _customDates;
   String? _branch;
   AdminReportingCubit? _reportingCubit;
-  int _workoutRefresh = 0;
+  final _scrollController = ScrollController();
+  final _scrollOffsets = <_ReportsTab, double>{};
+  final _visitedTabs = <_ReportsTab>{_ReportsTab.overview};
+  final _sectionQueries = <_ReportsTab, AdminReportQuery>{};
+  final _refreshTokens = <_ReportsTab, int>{};
+  final _lastVisited = <_ReportsTab, DateTime>{};
+  static const _tabFreshness = Duration(seconds: 30);
+  AdminReportQuery? _query;
 
   final _overviewKey = GlobalKey();
   final _usageKey = GlobalKey();
@@ -58,29 +69,29 @@ class _ReportsScreenState extends State<ReportsScreen> {
   final _gamificationKey = GlobalKey();
   final _coachPerfKey = GlobalKey();
 
-  late final _anchors = [
-    ('Overview', _overviewKey),
-    ('Workouts', _workoutsKey),
-    ('Usage', _usageKey),
-    ('Estimated form', _postureKey),
-    ('Booking', _bookingKey),
-    ('Engagement', _retentionKey),
-    ('Rewards', _rewardsKey),
-    ('Revenue', _revenueKey),
-    ('Gamification', _gamificationKey),
-    ('Coaches', _coachPerfKey),
-  ];
+  _ReportsTab _tab = _ReportsTab.overview;
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    if (_reportingCubit == null && widget.live) {
+    if (widget.live) {
       try {
-        final gateway = context.read<AdminReportingGateway>();
+        final gateway = context.watch<AdminReportingGateway>();
+        if (identical(_reportingCubit?.gateway, gateway)) return;
+        _reportingCubit?.close();
+        _visitedTabs
+          ..clear()
+          ..add(_ReportsTab.overview);
+        _sectionQueries.clear();
+        _refreshTokens.clear();
+        _lastVisited.clear();
+        _scrollOffsets.clear();
+        _tab = _ReportsTab.overview;
         _operational = gateway is OperationalAdminReportingGateway;
+        _query = _filterQuery();
+        _lastVisited[_ReportsTab.overview] = DateTime.now();
         _reportingCubit =
-            AdminReportingCubit(gateway: gateway, initialQuery: _filterQuery())
-              ..load();
+            AdminReportingCubit(gateway: gateway, initialQuery: _query)..load();
       } catch (_) {}
     }
   }
@@ -88,6 +99,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
   @override
   void dispose() {
     _reportingCubit?.close();
+    _scrollController.dispose();
     super.dispose();
   }
 
@@ -104,15 +116,40 @@ class _ReportsScreenState extends State<ReportsScreen> {
         range: DateTimeRange(start: start, end: now), branchId: _branch);
   }
 
-  void _onFilterChanged() => _reportingCubit?.load(_filterQuery());
+  void _onFilterChanged() {
+    _query = _filterQuery();
+    _sectionQueries[_tab] = _query!;
+    if (_usesBusinessReport) _reportingCubit?.load(_query);
+  }
 
-  void _jumpTo(GlobalKey key) {
-    final ctx = key.currentContext;
-    if (ctx == null) return;
-    Scrollable.ensureVisible(ctx,
-        duration: const Duration(milliseconds: 320),
-        curve: Curves.easeOut,
-        alignment: 0.02);
+  void _selectTab(_ReportsTab tab) {
+    if (_tab == tab) return;
+    if (_scrollController.hasClients) {
+      _scrollOffsets[_tab] = _scrollController.offset;
+    }
+    final lastVisited = _lastVisited[tab];
+    final gateway = _reportingCubit?.gateway;
+    final accessChanged = gateway is AdminReportingSessionGuard &&
+        !(gateway as AdminReportingSessionGuard).canRetainSnapshot;
+    final expired = accessChanged ||
+        lastVisited != null &&
+            DateTime.now().difference(lastVisited) > _tabFreshness;
+    setState(() {
+      _tab = tab;
+      _visitedTabs.add(tab);
+      if (_query != null) _sectionQueries[tab] = _query!;
+      if (expired) _refreshTokens[tab] = (_refreshTokens[tab] ?? 0) + 1;
+      _lastVisited[tab] = DateTime.now();
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_scrollController.hasClients) return;
+      _scrollController.jumpTo((_scrollOffsets[tab] ?? 0)
+          .clamp(0.0, _scrollController.position.maxScrollExtent));
+    });
+    if (_usesBusinessReport &&
+        (expired || _reportingCubit?.state.query != _query)) {
+      _reportingCubit?.load(_query);
+    }
   }
 
   @override
@@ -159,7 +196,10 @@ class _ReportsScreenState extends State<ReportsScreen> {
     final totalRev = snapshot?.totalRevenue;
     final membershipRevenue = widget.live
         ? (_operational
-            ? reportMoney(ops==null?null:ops.membershipMinor+(snapshot?.unified?.membershipMinor??0))
+            ? reportMoney(ops == null
+                ? null
+                : ops.membershipMinor +
+                    (snapshot?.unified?.membershipMinor ?? 0))
             : totalRev != null
                 ? '${totalRev.currency} ${(totalRev.minorUnits / 100).toStringAsFixed(0)}'
                 : '—')
@@ -169,177 +209,375 @@ class _ReportsScreenState extends State<ReportsScreen> {
       backgroundColor: Colors.transparent,
       body: LayoutBuilder(
         builder: (context, constraints) {
-          final wide = constraints.maxWidth >= 1100;
-          return SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(28, 24, 28, 40),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if (reportingState != null)
-                  AdminReportingFeedback(
-                      state: reportingState, onRetry: _reportingCubit!.refresh),
-                _header(context),
-                const SizedBox(height: 20),
-                _toolbar(
-                    snapshot: snapshot,
-                    loading: reportingState?.isLoading ?? false),
-                if(snapshot?.unified!=null)const Padding(padding:EdgeInsets.only(top:12),child:Text(BusinessDashboardMetrics.revenueDefinition,style:TextStyle(fontSize:12,color:AppColors.inkSoft))),
-                if (ops != null) OriginalReportContext(snapshot: snapshot!),
-                const SizedBox(height: 26),
-                Container(key: _overviewKey, child: const Eyebrow('Overview')),
-                Wrap(
-                  spacing: 14,
-                  runSpacing: 14,
-                  children: [
-                    SizedBox(
-                        width: 220,
-                        child: StatTile(
-                            membershipRevenue,
-                            _operational
-                                ? 'Membership Revenue'
-                                : 'Membership revenue / month')),
-                    SizedBox(
-                        width: 220,
-                        child: StatTile(
-                            _operational
-                                ? reportMoney(ops==null?null:ops.coachingMinor+(snapshot?.unified?.coachingMinor??0))
-                                : widget.live
-                                    ? (completed.isEmpty
-                                        ? '—'
-                                        : 'RM ${coachingRevenue.toStringAsFixed(0)}')
-                                    : 'RM ${coachingRevenue.toStringAsFixed(0)}',
-                            _operational
-                                ? 'Coaching Revenue'
-                                : 'Coaching revenue, all completed sessions')),
-                    SizedBox(
-                        width: 220,
-                        child: StatTile(
-                            _operational
-                                ? reportMoney(snapshot?.unified?.illustrativeMinor??totalRev?.minorUnits)
-                                : widget.live
-                                    ? (completed.isEmpty
-                                        ? '—'
-                                        : 'RM ${avgSession.toStringAsFixed(0)}')
-                                    : 'RM ${avgSession.toStringAsFixed(0)}',
-                            _operational
-                                ? 'Recorded revenue'
-                                : 'Avg. revenue per session')),
-                    SizedBox(
-                        width: 220,
-                        child: StatTile(
-                            _operational
-                                ? (snapshot?.unified!=null?BusinessDashboardMetrics(snapshot!,null).bookings.toString():snapshot?.totalBookingsCount?.toString()) ??
-                                    '—'
-                                : widget.live
-                                    ? (completed.isEmpty
-                                        ? '—'
-                                        : '${completed.length}')
-                                    : '${completed.length}',
-                            _operational
-                                ? 'Booking Activity'
-                                : 'Completed sessions tracked')),
-                  ],
-                ),
-                const SizedBox(height: 20),
-                wide
-                    ? IntrinsicHeight(
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+          final wide = constraints.maxWidth >= 960;
+          final kpiWidth =
+              (220 * MediaQuery.textScalerOf(context).scale(1).clamp(1.0, 1.5))
+                  .clamp(0.0, constraints.maxWidth - 24)
+                  .toDouble();
+          final gutter = constraints.maxWidth < 600 ? 12.0 : 24.0;
+          return Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 1500),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Padding(
+                    padding: EdgeInsets.fromLTRB(gutter, 20, gutter, 0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _header(context),
+                        const SizedBox(height: 16),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
                           children: [
-                            Expanded(
-                                flex: 3,
-                                child: _salesColumn(
-                                    context,
-                                    topCoaches,
-                                    revenueByCoach,
-                                    sessionsByCoach,
-                                    maxCoachRevenue,
-                                    snapshot: snapshot)),
-                            const SizedBox(width: 20),
-                            Expanded(
-                                flex: 2,
-                                child:
-                                    _branchColumn(context, snapshot: snapshot)),
+                            for (final tab in _ReportsTab.values)
+                              ChoiceChip(
+                                label: Text(tab.label),
+                                selected: _tab == tab,
+                                selectedColor: AppColors.primary,
+                                labelStyle: TextStyle(
+                                    color: _tab == tab
+                                        ? Colors.white
+                                        : AppColors.ink,
+                                    fontWeight: FontWeight.w600),
+                                onSelected: (_) => _selectTab(tab),
+                              ),
                           ],
                         ),
-                      )
-                    : Column(
+                        const SizedBox(height: 20),
+                      ],
+                    ),
+                  ),
+                  Expanded(
+                    child: SingleChildScrollView(
+                      controller: _scrollController,
+                      padding: EdgeInsets.fromLTRB(gutter, 0, gutter, 24),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          _salesColumn(context, topCoaches, revenueByCoach,
-                              sessionsByCoach, maxCoachRevenue,
-                              snapshot: snapshot),
-                          const SizedBox(height: 20),
-                          _branchColumn(context, snapshot: snapshot),
+                          if (_usesBusinessReport && reportingState != null)
+                            AdminReportingFeedback(
+                                state: reportingState,
+                                onRetry: _reportingCubit!.refresh),
+                          _toolbar(
+                              snapshot: _usesBusinessReport ? snapshot : null,
+                              loading: _usesBusinessReport &&
+                                  (reportingState?.isLoading ?? false)),
+                          if (_usesBusinessReport && snapshot?.unified != null)
+                            const Padding(
+                                padding: EdgeInsets.only(top: 12),
+                                child: Text(
+                                    BusinessDashboardMetrics.revenueDefinition,
+                                    style: TextStyle(
+                                        fontSize: 12,
+                                        color: AppColors.inkSoft))),
+                          if (_usesBusinessReport && ops != null)
+                            OriginalReportContext(snapshot: snapshot!),
+                          const SizedBox(height: 26),
+                          if (_visitedTabs.contains(_ReportsTab.overview))
+                            Offstage(
+                              key: const ValueKey(_ReportsTab.overview),
+                              offstage: _tab != _ReportsTab.overview,
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Container(
+                                      key: _overviewKey,
+                                      child: const Eyebrow('Overview')),
+                                  Wrap(
+                                    spacing: 14,
+                                    runSpacing: 14,
+                                    children: [
+                                      SizedBox(
+                                          width: kpiWidth,
+                                          child: StatTile(
+                                              membershipRevenue,
+                                              _operational
+                                                  ? 'Membership Revenue'
+                                                  : 'Membership revenue / month')),
+                                      SizedBox(
+                                          width: kpiWidth,
+                                          child: StatTile(
+                                              _operational
+                                                  ? reportMoney(ops == null
+                                                      ? null
+                                                      : ops.coachingMinor +
+                                                          (snapshot?.unified
+                                                                  ?.coachingMinor ??
+                                                              0))
+                                                  : widget.live
+                                                      ? (completed.isEmpty
+                                                          ? '—'
+                                                          : 'RM ${coachingRevenue.toStringAsFixed(0)}')
+                                                      : 'RM ${coachingRevenue.toStringAsFixed(0)}',
+                                              _operational
+                                                  ? 'Coaching Revenue'
+                                                  : 'Coaching revenue, all completed sessions')),
+                                      SizedBox(
+                                          width: kpiWidth,
+                                          child: StatTile(
+                                              _operational
+                                                  ? reportMoney(snapshot
+                                                          ?.unified
+                                                          ?.illustrativeMinor ??
+                                                      totalRev?.minorUnits)
+                                                  : widget.live
+                                                      ? (completed.isEmpty
+                                                          ? '—'
+                                                          : 'RM ${avgSession.toStringAsFixed(0)}')
+                                                      : 'RM ${avgSession.toStringAsFixed(0)}',
+                                              _operational
+                                                  ? snapshot?.unified == null
+                                                      ? 'Confirmed Sandbox receipts'
+                                                      : 'Recorded revenue'
+                                                  : 'Avg. revenue per session')),
+                                      SizedBox(
+                                          width: kpiWidth,
+                                          child: StatTile(
+                                              _operational
+                                                  ? (snapshot?.unified != null
+                                                          ? BusinessDashboardMetrics(
+                                                                  snapshot!,
+                                                                  null)
+                                                              .bookings
+                                                              .toString()
+                                                          : snapshot
+                                                              ?.totalBookingsCount
+                                                              ?.toString()) ??
+                                                      '—'
+                                                  : widget.live
+                                                      ? (completed.isEmpty
+                                                          ? '—'
+                                                          : '${completed.length}')
+                                                      : '${completed.length}',
+                                              _operational
+                                                  ? 'Booking Activity'
+                                                  : 'Completed sessions tracked')),
+                                      if (_operational)
+                                        SizedBox(
+                                          width: kpiWidth,
+                                          child: StatTile(
+                                              snapshot?.activeMembersCount
+                                                      ?.toString() ??
+                                                  '—',
+                                              'Active members · current'),
+                                        ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 20),
+                                  if (ops != null) ...[
+                                    const Eyebrow('Recent membership receipts'),
+                                    Panel(
+                                        child: OriginalReceiptTrend(
+                                            snapshot: snapshot!,
+                                            membershipOnly: true)),
+                                    const SizedBox(height: 20),
+                                    const Eyebrow('Insights & attention'),
+                                    Panel(
+                                        child: ListTile(
+                                      contentPadding: EdgeInsets.zero,
+                                      leading:
+                                          const Icon(Icons.event_busy_outlined),
+                                      title: Text(
+                                          '${snapshot.unified == null ? ops.statuses['cancelled'] : BusinessDashboardMetrics(snapshot, null).cancelled} cancelled bookings'),
+                                      subtitle: const Text(
+                                          'Current outcomes for bookings created in the selected period.'),
+                                      trailing: const Icon(Icons.chevron_right),
+                                      onTap: () =>
+                                          _selectTab(_ReportsTab.coaching),
+                                    )),
+                                  ],
+                                ],
+                              ),
+                            ),
+                          if (_visitedTabs.contains(_ReportsTab.financial))
+                            Offstage(
+                              key: const ValueKey(_ReportsTab.financial),
+                              offstage: _tab != _ReportsTab.financial,
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  wide
+                                      ? IntrinsicHeight(
+                                          child: Row(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: [
+                                              Expanded(
+                                                  flex: 3,
+                                                  child: _salesColumn(
+                                                      context,
+                                                      topCoaches,
+                                                      revenueByCoach,
+                                                      sessionsByCoach,
+                                                      maxCoachRevenue,
+                                                      snapshot: snapshot)),
+                                              const SizedBox(width: 20),
+                                              Expanded(
+                                                  flex: 2,
+                                                  child: _branchColumn(context,
+                                                      snapshot: snapshot)),
+                                            ],
+                                          ),
+                                        )
+                                      : Column(
+                                          children: [
+                                            _salesColumn(
+                                                context,
+                                                topCoaches,
+                                                revenueByCoach,
+                                                sessionsByCoach,
+                                                maxCoachRevenue,
+                                                snapshot: snapshot),
+                                            const SizedBox(height: 20),
+                                            _branchColumn(context,
+                                                snapshot: snapshot),
+                                          ],
+                                        ),
+                                  const SizedBox(height: 12),
+                                  const Divider(height: 1),
+                                  const SizedBox(height: 28),
+                                  RevenueSection(
+                                      anchorKey: _revenueKey,
+                                      live: widget.live,
+                                      snapshot: snapshot),
+                                ],
+                              ),
+                            ),
+                          if (_visitedTabs.contains(_ReportsTab.fitness))
+                            Offstage(
+                              key: const ValueKey(_ReportsTab.fitness),
+                              offstage: _tab != _ReportsTab.fitness,
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  if (_operational && _reportingCubit != null)
+                                    AdminWorkoutAnalytics(
+                                        query: _sectionQueries[
+                                                _ReportsTab.fitness] ??
+                                            _query!,
+                                        refreshToken: _refreshTokens[
+                                                _ReportsTab.fitness] ??
+                                            0,
+                                        anchorKey: _workoutsKey),
+                                  if (_operational && _reportingCubit != null)
+                                    AdminPostureSection(
+                                        query: _sectionQueries[
+                                                _ReportsTab.fitness] ??
+                                            _query!,
+                                        anchorKey: _postureKey,
+                                        refreshToken: _refreshTokens[
+                                                _ReportsTab.fitness] ??
+                                            0)
+                                  else
+                                    PostureAccuracySection(
+                                        anchorKey: _postureKey,
+                                        live: widget.live),
+                                ],
+                              ),
+                            ),
+                          if (_visitedTabs.contains(_ReportsTab.coaching))
+                            Offstage(
+                              key: const ValueKey(_ReportsTab.coaching),
+                              offstage: _tab != _ReportsTab.coaching,
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  if (snapshot?.commerce != null)
+                                    AdminCoachActivitySection(
+                                        anchorKey: _bookingKey,
+                                        report: snapshot!.commerce!)
+                                  else
+                                    CoachBookingUtilizationSection(
+                                        anchorKey: _bookingKey,
+                                        filter: filter,
+                                        live: widget.live,
+                                        snapshot: snapshot),
+                                  CoachPerformanceSection(
+                                      anchorKey: _coachPerfKey,
+                                      snapshot: snapshot,
+                                      filter: filter,
+                                      live: widget.live),
+                                ],
+                              ),
+                            ),
+                          if (_visitedTabs.contains(_ReportsTab.engagement))
+                            Offstage(
+                              key: const ValueKey(_ReportsTab.engagement),
+                              offstage: _tab != _ReportsTab.engagement,
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  if (_operational && _reportingCubit != null)
+                                    AdminObservedSection(
+                                        query: _sectionQueries[
+                                                _ReportsTab.engagement] ??
+                                            _query!,
+                                        anchorKey: _usageKey,
+                                        refreshToken: _refreshTokens[
+                                                _ReportsTab.engagement] ??
+                                            0)
+                                  else
+                                    UsageEngagementSection(
+                                        anchorKey: _usageKey,
+                                        filter: filter,
+                                        live: widget.live),
+                                  if (_operational && _reportingCubit != null)
+                                    AdminObservedSection(
+                                        query: _sectionQueries[
+                                                _ReportsTab.engagement] ??
+                                            _query!,
+                                        anchorKey: _retentionKey,
+                                        retention: true,
+                                        refreshToken: _refreshTokens[
+                                                _ReportsTab.engagement] ??
+                                            0)
+                                  else
+                                    RetentionRiskSection(
+                                        anchorKey: _retentionKey,
+                                        live: widget.live),
+                                  RewardsSection(
+                                      anchorKey: _rewardsKey,
+                                      live: widget.live,
+                                      query: _operational
+                                          ? (_sectionQueries[
+                                                  _ReportsTab.engagement] ??
+                                              _query)
+                                          : null,
+                                      refreshToken: _refreshTokens[
+                                              _ReportsTab.engagement] ??
+                                          0),
+                                  GamificationSection(
+                                      anchorKey: _gamificationKey,
+                                      live: widget.live,
+                                      query: _operational
+                                          ? (_sectionQueries[
+                                                  _ReportsTab.engagement] ??
+                                              _query)
+                                          : null,
+                                      refreshToken: _refreshTokens[
+                                              _ReportsTab.engagement] ??
+                                          0),
+                                ],
+                              ),
+                            ),
                         ],
                       ),
-                const SizedBox(height: 12),
-                const Divider(height: 1),
-                const SizedBox(height: 28),
-                if (_operational && _reportingCubit != null)
-                  AdminWorkoutAnalytics(
-                      query: _reportingCubit!.state.query,
-                      refreshToken: _workoutRefresh,
-                      anchorKey: _workoutsKey),
-                if (_operational && _reportingCubit != null)
-                  AdminObservedSection(
-                      query: _reportingCubit!.state.query,
-                      anchorKey: _usageKey,
-                      refreshToken: _workoutRefresh)
-                else
-                  UsageEngagementSection(
-                      anchorKey: _usageKey, filter: filter, live: widget.live),
-                if (_operational && _reportingCubit != null)
-                  AdminPostureSection(
-                      query: _reportingCubit!.state.query,
-                      anchorKey: _postureKey,
-                      refreshToken: _workoutRefresh)
-                else
-                  PostureAccuracySection(
-                      anchorKey: _postureKey, live: widget.live),
-                if (snapshot?.commerce != null)
-                  AdminCoachActivitySection(
-                      anchorKey: _bookingKey, report: snapshot!.commerce!)
-                else
-                  CoachBookingUtilizationSection(
-                      anchorKey: _bookingKey,
-                      filter: filter,
-                      live: widget.live,
-                      snapshot: snapshot),
-                if (_operational && _reportingCubit != null)
-                  AdminObservedSection(
-                      query: _reportingCubit!.state.query,
-                      anchorKey: _retentionKey,
-                      retention: true,
-                      refreshToken: _workoutRefresh)
-                else
-                  RetentionRiskSection(
-                      anchorKey: _retentionKey, live: widget.live),
-                RewardsSection(
-                    anchorKey: _rewardsKey,
-                    live: widget.live,
-                    query: _operational ? _reportingCubit?.state.query : null,
-                    refreshToken: _workoutRefresh),
-                RevenueSection(
-                    anchorKey: _revenueKey,
-                    live: widget.live,
-                    snapshot: snapshot),
-                GamificationSection(
-                    anchorKey: _gamificationKey,
-                    live: widget.live,
-                    query: _operational ? _reportingCubit?.state.query : null,
-                    refreshToken: _workoutRefresh),
-                CoachPerformanceSection(
-                    anchorKey: _coachPerfKey,
-                    snapshot: snapshot,
-                    filter: filter,
-                    live: widget.live),
-              ],
+                    ),
+                  ),
+                ],
+              ),
             ),
           );
         },
       ),
     );
   }
+
+  bool get _usesBusinessReport =>
+      _tab != _ReportsTab.fitness && _tab != _ReportsTab.engagement;
 
   Widget _header(BuildContext context) {
     return Row(
@@ -362,10 +600,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
               Text('Reports & analytics',
                   style: Theme.of(context).textTheme.headlineMedium),
               const SizedBox(height: 2),
-              Text(
-                  widget.live
-                      ? 'Membership, appointment and financial performance.'
-                      : 'Sales, operations, and engagement — one page, always live.',
+              Text('Membership, coaching, fitness and member engagement.',
                   style: Theme.of(context).textTheme.bodyLarge),
             ],
           ),
@@ -398,10 +633,6 @@ class _ReportsScreenState extends State<ReportsScreen> {
     );
   }
 
-  /// Filter controls and the anchor-jump chips used to sit in two
-  /// separate floating rows; grouped into one bordered toolbar so the
-  /// header reads as a single control surface instead of two unrelated
-  /// pieces stacked on top of each other.
   Widget _toolbar({AdminReportingSnapshot? snapshot, bool loading = false}) {
     return Container(
       decoration: BoxDecoration(
@@ -426,13 +657,11 @@ class _ReportsScreenState extends State<ReportsScreen> {
                   return ChoiceChip(
                     label: Text(_dateLabels[d]!),
                     selected: selected,
-                    onSelected: loading
-                        ? null
-                        : (_) => setState(() {
-                              _customDates = null;
-                              _days = d;
-                              _onFilterChanged();
-                            }),
+                    onSelected: (_) => setState(() {
+                      _customDates = null;
+                      _days = d;
+                      _onFilterChanged();
+                    }),
                     backgroundColor: AppColors.surfaceAlt,
                     selectedColor: AppColors.primary,
                     labelStyle: TextStyle(
@@ -478,31 +707,30 @@ class _ReportsScreenState extends State<ReportsScreen> {
                   TextButton.icon(
                       icon: const Icon(Icons.date_range_outlined, size: 16),
                       label: const Text('Custom dates'),
-                      onPressed: loading
-                          ? null
-                          : () async {
-                              final day =
-                                  DateTime.now().toUtc().add(adminReportZone);
-                              final range = await showDateRangePicker(
-                                  context: context,
-                                  firstDate: DateTime(1970),
-                                  lastDate:
-                                      DateTime(day.year, day.month, day.day),
-                                  initialDateRange: _customDates);
-                              if (range != null && mounted) {
-                                setState(() {
-                                  _customDates = range;
-                                  _onFilterChanged();
-                                });
-                              }
-                            }),
+                      onPressed: () async {
+                        final day = DateTime.now().toUtc().add(adminReportZone);
+                        final range = await showDateRangePicker(
+                            context: context,
+                            firstDate: DateTime(1970),
+                            lastDate: DateTime(day.year, day.month, day.day),
+                            initialDateRange: _customDates);
+                        if (range != null && mounted) {
+                          setState(() {
+                            _customDates = range;
+                            _onFilterChanged();
+                          });
+                        }
+                      }),
                   IconButton(
                       tooltip: 'Refresh reports',
                       onPressed: loading
                           ? null
                           : () {
-                              setState(() => _workoutRefresh++);
-                              _reportingCubit?.refresh();
+                              setState(() => _refreshTokens[_tab] =
+                                  (_refreshTokens[_tab] ?? 0) + 1);
+                              if (_usesBusinessReport) {
+                                _reportingCubit?.refresh();
+                              }
                             },
                       icon: const Icon(Icons.refresh_rounded, size: 18)),
                   TextButton.icon(
@@ -510,45 +738,13 @@ class _ReportsScreenState extends State<ReportsScreen> {
                       label: const Text('Export overview CSV'),
                       onPressed: loading || snapshot?.operations == null
                           ? null
-                          : () => downloadCsv('gainpath-operational-report.csv',
-                              snapshot!.unified!=null?BusinessDashboardMetrics(snapshot,null).csv():snapshot.operations!.toCsv(snapshot))),
+                          : () => downloadCsv(
+                              'gainpath-operational-report.csv',
+                              snapshot!.unified != null
+                                  ? BusinessDashboardMetrics(snapshot, null)
+                                      .csv()
+                                  : snapshot.operations!.toCsv(snapshot))),
                 ],
-              ],
-            ),
-          ),
-          const Divider(height: 1),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
-            child: Row(
-              children: [
-                const Icon(Icons.explore_outlined,
-                    size: 15, color: AppColors.inkSoft),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: SizedBox(
-                    height: 30,
-                    child: ListView.separated(
-                      scrollDirection: Axis.horizontal,
-                      itemCount: _anchors.length,
-                      separatorBuilder: (_, __) => const SizedBox(width: 8),
-                      itemBuilder: (context, i) {
-                        final (label, key) = _anchors[i];
-                        return ActionChip(
-                          label: Text(label),
-                          onPressed: () => _jumpTo(key),
-                          backgroundColor: AppColors.primaryTint,
-                          labelStyle: const TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w700,
-                              color: AppColors.primary),
-                          side: BorderSide.none,
-                          shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(999)),
-                        );
-                      },
-                    ),
-                  ),
-                ),
               ],
             ),
           ),

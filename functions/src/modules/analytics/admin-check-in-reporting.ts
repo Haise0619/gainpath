@@ -1,5 +1,6 @@
 import {observedActivity,type ObservationEvent,type ObservationReader} from './admin-observed-activity';
 import {engagementExtensions, type EngagementPage} from './admin-engagement-extensions';
+import {warn} from 'firebase-functions/logger';
 import {isDeepStrictEqual} from 'node:util';
 import {DomainError} from '../../platform/errors';
 import {requireVerifiedEmail} from '../../platform/auth-context';
@@ -28,6 +29,9 @@ export interface CheckInReport {
   sourceReadStartedAtMillis: number; capturedAtMillis: number; timezone: string; policyVersion: string; pointsPerClaim: number;
   coverage: {membersScanned: number; activeMembers: number; profiles: number; claimsScanned: number};
   totals: Count; daily: ({date: string} & Count)[]; weekly: ({date: string} & Count)[];
+  extensions?: Awaited<ReturnType<typeof engagementExtensions>>;
+  observations?: Awaited<ReturnType<typeof observedActivity>>;
+  sourceErrors?: Partial<Record<'extensions' | 'observations', 'failed-precondition' | 'resource-exhausted'>>;
   streaks: {asOfDate: string; current: ReturnType<typeof buckets>; longest: ReturnType<typeof buckets>};
 }
 function checkPage(rows: ReportRow[], after: string | undefined, limit: number, pattern: RegExp) {
@@ -117,8 +121,33 @@ export async function adminCheckInReport(store: DocumentStore, auth: Auth | unde
   result.totals.claimingMembers = claimants.size; result.totals.pointsAwarded = result.totals.claims * APP_CHECK_IN_POLICY.points;
   result.daily = [...daily].sort(([a], [b]) => a.localeCompare(b)).map(([date, members]) => ({date, claims: members.size, claimingMembers: members.size, pointsAwarded: members.size * APP_CHECK_IN_POLICY.points}));
   result.weekly = [...weekly].sort(([a], [b]) => a.localeCompare(b)).map(([date, week]) => ({date, claims: week.claims, claimingMembers: week.members.size, pointsAwarded: week.claims * APP_CHECK_IN_POLICY.points}));
-  if(q.schemaVersion===2||q.schemaVersion===3){if(!reader.page)throw new DomainError('failed-precondition','Extended engagement sources are unavailable.');(result as CheckInReport & {extensions:unknown}).extensions=await engagementExtensions(org,result.startAtMillis,result.endAtMillis,now,reader.page,authorize,badgeUnlocks,result.totals.claims,result.totals.pointsAwarded);}
-  if(q.schemaVersion===3){if(!reader.observations)throw fail();(result as CheckInReport & {observations:unknown}).observations=await observedActivity(org,result.startAtMillis,result.endAtMillis,now,eligible,activityClaims,reader.observations,authorize);}
+  const readSource = async <T>(source: 'extensions' | 'observations', read: () => Promise<T>): Promise<T | undefined> => {
+    try {
+      return await read();
+    } catch (error) {
+      if (q.schemaVersion !== 3 || !(error instanceof DomainError) ||
+          (error.code !== 'failed-precondition' && error.code !== 'resource-exhausted')) throw error;
+      (result.sourceErrors ??= {})[source] = error.code;
+      warn('Optional admin engagement source unavailable', {source, code: error.code});
+      return undefined;
+    }
+  };
+  if (q.schemaVersion === 2 || q.schemaVersion === 3) {
+    const page = reader.page;
+    if (!page) throw new DomainError('failed-precondition', 'Extended engagement sources are unavailable.');
+    const extensions = await readSource('extensions', () => engagementExtensions(
+      org, result.startAtMillis, result.endAtMillis, now, page, authorize,
+      badgeUnlocks, result.totals.claims, result.totals.pointsAwarded));
+    if (extensions !== undefined) result.extensions = extensions;
+  }
+  if (q.schemaVersion === 3) {
+    const observationsReader = reader.observations;
+    if (!observationsReader) throw fail();
+    const observations = await readSource('observations', () => observedActivity(
+      org, result.startAtMillis, result.endAtMillis, now, eligible,
+      activityClaims, observationsReader, authorize));
+    if (observations !== undefined) result.observations = observations;
+  }
   await authorize(); result.capturedAtMillis = clock();
   if (!integer(result.capturedAtMillis) || result.capturedAtMillis < now || result.capturedAtMillis > 8640000000000000) throw fail();
   return result;

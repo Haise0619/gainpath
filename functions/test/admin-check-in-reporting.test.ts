@@ -94,3 +94,19 @@ it('schema two negotiates extra read-only sources without changing schema one re
 it('non Admin schema two never reads extra sources',async()=>{
  let pages=0;await expect(adminCheckInReport(store,{uid:'member',token:actor.token},{...query,schemaVersion:2},{...reader,page:async()=>{pages++;return[];}},()=>now)).rejects.toMatchObject({code:'permission-denied'});expect(pages).toBe(0);
 });
+
+it('keeps validated activity and check-ins when rewards sources fail', async () => {
+  const r = await adminCheckInReport(store, actor, {...query, schemaVersion: 3}, {
+    ...reader,
+    page: async () => [{id: 'bad-source', data: {organizationId: 'other'}}],
+    observations: {
+      page: async () => [],
+      backups: async () => [{id: 'routine-old', data: {kind: 'routine'}}],
+    },
+  }, () => now);
+  expect(r).toMatchObject({
+    sourceErrors: {extensions: 'failed-precondition'},
+    observations: {sourceCounts: {workoutBackups: 0}},
+  });
+  expect(r).not.toHaveProperty('extensions');
+});

@@ -37,7 +37,9 @@ void main() {
   setUpAll(() => GoogleFonts.config.allowRuntimeFetching = false);
 
   group('AdminReportingCubit', () {
-    test('concurrent identical loads share one request; completed refresh is fresh', () async {
+    test(
+        'concurrent identical loads share one request; completed refresh is fresh',
+        () async {
       final gateway = _ControlledReportingGateway();
       final cubit = AdminReportingCubit(gateway: gateway);
       final first = cubit.load();
@@ -155,7 +157,8 @@ void main() {
       );
 
       // Voucher processing shows unavailable text
-      expect(find.text('Verify and collect an existing reward voucher'), findsOneWidget);
+      expect(find.text('Verify and collect an existing reward voucher'),
+          findsOneWidget);
 
       // Tapping voucher shows toast rather than pushing screen
       await tester.tap(find.text('Process a voucher'));
@@ -187,6 +190,10 @@ void main() {
 
       // Revenue overview should show '—'
       expect(find.text('—'), findsWidgets);
+
+      await tester.tap(find.text('Financial'));
+      await tester.pumpAndSettle();
+
       expect(find.text('RM —'), findsOneWidget);
 
       // Revenue trend honest message

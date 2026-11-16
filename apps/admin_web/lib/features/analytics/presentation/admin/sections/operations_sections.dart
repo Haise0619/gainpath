@@ -210,7 +210,6 @@ class CoachBookingUtilizationSection extends StatelessWidget {
         .map((b) => b.start)
         .toList();
     final cutoff = filter.cutoff(allDates);
-    final rangeDays = filter.rangeDays(allDates);
     var coaches = context.read<CoachRepository>().coaches.toList();
     if (filter.branch != null) {
       coaches = coaches.where((c) => c.branch == filter.branch).toList();
@@ -225,49 +224,36 @@ class CoachBookingUtilizationSection extends StatelessWidget {
               b.start.isAfter(cutoff) &&
               b.status != BookingStatus.cancelled)
           .length;
-      final capacity =
-          context.read<AvailabilityRepository>().dailyBookingCap * rangeDays;
-      final utilization =
-          capacity == 0 ? 0.0 : (sessions / capacity).clamp(0.0, 1.0);
-      return (coach: c, sessions: sessions, utilization: utilization);
+      return (coach: c, sessions: sessions);
     }).toList();
 
     return ReportSection(
       anchorKey: anchorKey,
-      title: 'Coach Booking Utilization',
-      subtitle: 'How full the roster is',
+      title: 'Coach Booking Activity',
+      subtitle: 'Scheduled bookings by coach',
       live: !live || rows.isNotEmpty,
       tagLabel: live && rows.isEmpty ? 'Unavailable' : null,
-      exportFilename: 'coach_booking_utilization.csv',
+      exportFilename: 'coach_booking_activity.csv',
       exportEnabled: !(live && rows.isEmpty),
       exportRows: live && rows.isEmpty
           ? null
           : () => [
-                ['Coach', 'Branch', 'Sessions', 'Utilization %'],
-                ...rows.map((r) => [
-                      r.coach.name,
-                      r.coach.branch,
-                      r.sessions,
-                      (r.utilization * 100).round()
-                    ]),
+                ['Coach', 'Branch', 'Sessions'],
+                ...rows.map((r) => [r.coach.name, r.coach.branch, r.sessions]),
               ],
       child: rows.isEmpty
           ? NoFilteredData(
               message: live
-                  ? 'No coach booking utilization data available in this release.'
+                  ? 'No coach booking activity data available.'
                   : 'No coaches match this branch filter.')
           : Panel(
               child: Column(
                 children: rows
-                    .map((r) => ProgressRow(
-                          r.coach.name,
-                          r.utilization,
-                          '${(r.utilization * 100).round()}%  ·  ${r.sessions} sessions',
-                          color: r.utilization >= 0.75
-                              ? AppColors.success
-                              : r.utilization >= 0.4
-                                  ? AppColors.warning
-                                  : AppColors.danger,
+                    .map((r) => ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          title: Text(r.coach.name),
+                          subtitle: Text(r.coach.branch),
+                          trailing: Text('${r.sessions}'),
                         ))
                     .toList(),
               ),
