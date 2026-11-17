@@ -1,6 +1,6 @@
 # GainPath Module 13 AI 个性化推荐
 
-2026-11-17 · `codex/module13-ai-personalization` · 实现提交 `042f29de3aaf`。截图、构建和生产部署包已准备。真实 Gemini 结果来自一笔虚构输入测试。Firebase 事件、站内投递和权限流程在隔离模拟器验收。
+2026-11-17 · `codex/module13-ai-personalization` · 实现提交 `042f29de3aaf`。八个既有生产入口已上线。真实 Gemini 结果来自一笔虚构输入测试。新训练事件和站内投递流程在隔离模拟器验收，生产接口另有已授权账号的只读验证。
 
 ## 功能
 
@@ -62,6 +62,10 @@
 - 再更新四个事件入口 `module13WorkoutBackupCreated`、`module13WorkoutConsentChanged`、`module13FypWorkoutBackupCreated`、`module13FypWorkoutConsentChanged`。这四个入口和两个支持历史回放的 callable 需要绑定同一个既有 `GEMINI_API_KEY`。已确认 runtime service account 有现成读取权限。
 - 回滚优先保留理解 Routine 的投影端。需要关闭推理时，恢复六个入口的原密钥绑定配置并保留规则回退。需要回滚生成行为时，先恢复四个事件入口的原版本，再按需处理两个历史回放入口。线上已有 Routine 记录时，读取服务仍需支持第三种类型。保留现有站内记录和回执。每个入口的原源包、配置及源哈希已归档。
 
-生产发布需要确认将现有 Secret 绑定到六个入口。此变更涉及仓库 `AGENTS.md` 单独列出的凭证配置范围。当前发布包和回滚包已通过加载和范围校验。
+用户批准后，八个函数于 **2026-11-17 20:35 MYT** 完成生产部署及校验。下载回来的源包均与部署清单哈希一致，六个入口已绑定现有 Secret。其他 71 个函数、既有运行服务设置、事件过滤器、IAM、Rules 和索引经对比验证。 [部署证据](../../build/module13-ai/release/activated-v5/deployment-verified.json)
+
+新版 Admin 在本机 [localhost:7362](http://localhost:7362/) 提供，已核对服务文件哈希与构建产物，并验证四个 callable 的 CORS。 [本机 Admin 证据](../../build/module13-ai/release/activated-v5/admin-local.json)
+
+上线后 11 项生产只读检查通过，覆盖普通会员新旧版本推荐读取、Inbox、FYP 推荐和已发布内容发现、FYP Admin 监控，以及 Auth、App Check 和角色拒绝。 [线上只读验证](../../build/module13-ai/release/activated-v5/smoke-final.json)
 
 真实 Android/Firebase 验收仍包括用新版 app 完成新拍摄训练、验证独立的 Gemini 授权开关、离线重连、打开真实三类目标、查看 Admin 投递与保存理由，以及量测线上页面延迟和调用次数。普通与 FYP 两种账号在验收中用各自授权的现有路径。
