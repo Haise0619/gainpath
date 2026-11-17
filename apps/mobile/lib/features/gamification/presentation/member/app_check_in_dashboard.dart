@@ -5,6 +5,7 @@ import 'package:gainpath_identity/gainpath_identity.dart';
 import 'package:gainpath_domain/gainpath_domain.dart' show AppRole;
 import 'package:gainpath_ui/gainpath_ui.dart';
 import '../../application/app_check_in_cubit.dart';
+import '../../application/member_achievements_controller.dart';
 import '../../application/rewards_feature_host.dart';
 import '../../application/reward_goal_host.dart';
 import '../../application/share_check_in_badge_button.dart';
@@ -16,6 +17,7 @@ import 'reward_shop_screen.dart';
 import 'my_rewards_screen.dart';
 import 'leaderboard_screen.dart';
 import 'points_history_screen.dart';
+import 'member_achievements_screen.dart';
 
 /// P1A: composition only; existing check-in/earning/game/redemption services own state.
 class AppCheckInDashboard extends StatefulWidget {
@@ -24,11 +26,13 @@ class AppCheckInDashboard extends StatefulWidget {
       required this.state,
       required this.onClaim,
       required this.onRefresh,
+      this.achievements,
       this.gamesSection,
       this.weeklyRankSection,
       this.rewardGoalSection});
   final AppCheckInState state;
   final Future<void> Function() onClaim, onRefresh;
+  final MemberAchievementsController? achievements;
   final Widget? gamesSection, weeklyRankSection, rewardGoalSection;
   @override
   State<AppCheckInDashboard> createState() => _AppCheckInDashboardState();
@@ -44,7 +48,11 @@ class _AppCheckInDashboardState extends State<AppCheckInDashboard> {
   AppCheckInState get state => widget.state;
   Future<void> _refresh() async {
     final scope = state.snapshot?.scope;
-    await _walletRefresh();
+    final achievements = widget.achievements;
+    await Future.wait<void>([
+      _walletRefresh(),
+      if (achievements != null) achievements.refresh(),
+    ]);
     if (mounted && state.snapshot?.scope == scope) {
       setState(() {
         _gamesRevision++;
@@ -84,6 +92,11 @@ class _AppCheckInDashboardState extends State<AppCheckInDashboard> {
               builder: (repo) =>
                   LeaderboardScreen(connected: true, repository: repo))));
   void _badges(BuildContext context) {
+    if (widget.achievements case final controller?) {
+      Navigator.push(context, MaterialPageRoute<void>(
+          builder: (_) => MemberAchievementsScreen(controller: controller)));
+      return;
+    }
     final snapshot = state.snapshot;
     final auth = context.read<AuthBloc?>();
     final captured = auth?.state.session;
@@ -235,10 +248,24 @@ class _AppCheckInDashboardState extends State<AppCheckInDashboard> {
                                     MaterialPageRoute<void>(
                                         builder: (_) =>
                                             const MyRewardsScreen()))),
-                            _Shortcut(
-                                icon: Icons.military_tech_outlined,
-                                title: 'Badges',
-                                onTap: () => _badges(context)),
+                            if (widget.achievements case final achievements?)
+                              ListenableBuilder(
+                                  listenable: achievements,
+                                  builder: (_, __) {
+                                    final collection = achievements.snapshot;
+                                    return _Shortcut(
+                                        icon: Icons.military_tech_outlined,
+                                        title: 'Badges',
+                                        subtitle: collection == null
+                                            ? 'View your achievements'
+                                            : '${collection.unlockedCount} / ${collection.badges.length} unlocked',
+                                        onTap: () => _badges(context));
+                                  })
+                            else
+                              _Shortcut(
+                                  icon: Icons.military_tech_outlined,
+                                  title: 'Badges',
+                                  onTap: () => _badges(context)),
                             _Shortcut(
                                 icon: Icons.history_rounded,
                                 title: 'Points History',
@@ -254,14 +281,16 @@ class _AppCheckInDashboardState extends State<AppCheckInDashboard> {
 
 class _Shortcut extends StatelessWidget {
   const _Shortcut(
-      {required this.icon, required this.title, required this.onTap});
+      {required this.icon, required this.title, required this.onTap, this.subtitle});
   final IconData icon;
   final String title;
+  final String? subtitle;
   final VoidCallback onTap;
   @override
   Widget build(BuildContext context) => ListTile(
       leading: Icon(icon, color: AppColors.primary),
       title: Text(title),
+      subtitle: subtitle == null ? null : Text(subtitle!),
       trailing: const Icon(Icons.chevron_right),
       onTap: onTap);
 }
@@ -293,7 +322,6 @@ class _BadgeProgress extends StatelessWidget {
           if (!unlocked)
             LinearProgressIndicator(value: progress / badge.requiredStreak),
           if (unlocked) ...[
-            const Text('No additional points'),
             ShareCheckInBadgeButton(badge: badge)
           ],
         ])));

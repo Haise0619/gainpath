@@ -1,6 +1,7 @@
 import 'package:flutter_svg/flutter_svg.dart';
 import 'dart:math' as math;
 import '../../application/app_check_in_cubit.dart';
+import '../../application/member_achievements_controller.dart';
 import 'app_check_in_dashboard.dart';
 import 'package:flutter/material.dart';
 import '../../application/gamification_bloc.dart';
@@ -19,9 +20,11 @@ class GamificationDashboardScreen extends StatelessWidget {
       {super.key,
       this.live = false,
       this.checkIn,
+      this.achievements,
       this.onClaim,
       this.onRefreshCheckIn});
   final AppCheckInState? checkIn;
+  final MemberAchievementsController? achievements;
   final Future<void> Function()? onClaim, onRefreshCheckIn;
   final bool live;
 
@@ -51,6 +54,7 @@ class GamificationDashboardScreen extends StatelessWidget {
     if (live && checkIn != null) {
       return AppCheckInDashboard(
           state: checkIn!,
+          achievements: achievements,
           onClaim: onClaim ?? () async {},
           onRefresh: onRefreshCheckIn ?? () async {});
     }

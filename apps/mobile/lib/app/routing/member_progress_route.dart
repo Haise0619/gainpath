@@ -73,6 +73,7 @@ class MemberProgressHost extends StatefulWidget {
       required this.builder,
       this.initialView,
       this.backupFactory,
+      this.onWorkoutBackupChanged,
       this.programProgressBuilder,
       this.goalSummaryBuilder,
       this.repositoryFactory = createLocalMemberProgressRepository});
@@ -83,6 +84,7 @@ class MemberProgressHost extends StatefulWidget {
   final MemberProgressBuilder builder;
   final MemberProgressView? initialView;
   final WorkoutBackupFactory? backupFactory;
+  final VoidCallback? onWorkoutBackupChanged;
   @override
   State<MemberProgressHost> createState() => _MemberProgressHostState();
 }
@@ -102,6 +104,7 @@ class _MemberProgressHostState extends State<MemberProgressHost>
   Timer? _weekTimer;
   WorkoutBackupScheduler? _backupScheduler;
   WorkoutBackupLease? _backupLease;
+  Map<String, String> _backupDigests = const {};
   final _backupPresentation =
       ValueNotifier(const _BackupPresentation(null, null));
   String? _backupError;
@@ -199,8 +202,11 @@ class _MemberProgressHostState extends State<MemberProgressHost>
       }
       if (mounted) setState(() => _backupError = null);
       _backupPresentation.value = _BackupPresentation(lease.coordinator, null);
+      _backupDigests = lease.coordinator.state.baselines;
+      lease.coordinator.addListener(_onBackupChanged);
       await _syncBackup();
     } catch (_) {
+      _backupLease?.coordinator.removeListener(_onBackupChanged);
       if (_backupLease?.scheduler == null) _backupScheduler?.dispose();
       _backupScheduler = null;
       _backupLease?.release();
@@ -213,6 +219,16 @@ class _MemberProgressHostState extends State<MemberProgressHost>
     } finally {
       _backupOpening = false;
     }
+  }
+
+  void _onBackupChanged() {
+    final backup = _backupLease?.coordinator;
+    if (backup == null || !backup.authorized || backup.busy) return;
+    final next = backup.state.baselines;
+    final changed = next.length != _backupDigests.length ||
+        next.entries.any((entry) => _backupDigests[entry.key] != entry.value);
+    _backupDigests = next;
+    if (changed) widget.onWorkoutBackupChanged?.call();
   }
 
   Future<void> _syncBackup() async {
@@ -314,6 +330,7 @@ class _MemberProgressHostState extends State<MemberProgressHost>
     WidgetsBinding.instance.removeObserver(this);
     _weekTimer?.cancel();
     if (_backupLease?.scheduler == null) _backupScheduler?.dispose();
+    _backupLease?.coordinator.removeListener(_onBackupChanged);
     _backupLease?.release();
     _backupPresentation.dispose();
     _authSubscription?.cancel();

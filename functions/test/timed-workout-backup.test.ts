@@ -1,19 +1,11 @@
 import {expect,it} from 'vitest';
 import {validateBackupPayload} from '../src/modules/workouts/workout-backup-validation';
-import {routinePayload} from './workout-backup-fixture';
+import {timedBackupFixture} from './workout-backup-fixture';
 import {backupWorkout,listWorkoutBackups,type BackupStore} from '../src/modules/workouts/workout-backup';
 import {MemoryStore} from './memory-store';
 import {actor} from './workout-backup-fixture';
 import {extractWorkoutEvidence} from '../src/modules/recommendation/workout-evidence';
 
-export function timedBackupFixture():Record<string,any>{
- const start=1792879990000000,end=start+45000000;
- const mediaValidation={schemaVersion:1,videoUrl:'https://example.com/video.mp4',generation:'123',sourceRevision:1,contentType:'video/mp4'};
- const row={entryId:'entry1',exerciseId:'mobility',dayNumber:1,name:'Mobility',category:'Core',sets:1,durationSeconds:45,restSeconds:30,executionMode:'videoGuidedTimed',cue:'',imageUrl:'',muscleGroup:'Core',videoUrl:mediaValidation.videoUrl,description:'',coverImageUrl:'',difficulty:'Beginner',equipment:'',tutorialSteps:[],mediaRevision:1,mediaGeneration:'123',mediaValidation};
- const guided={runId:'run1',entryId:'entry1',entryIndex:0,exerciseId:'mobility',prescription:{sets:1,durationSeconds:45,restSeconds:30},mediaIdentity:JSON.stringify([row.videoUrl,1,'123']),completionProvenance:'timerElapsed',startedAt:new Date(start/1000).toISOString(),updatedAt:new Date(end/1000).toISOString(),endedAt:new Date(end/1000).toISOString(),phase:'completed',phaseBeforePause:'working',restKind:'betweenSets',completedSetActiveMicroseconds:[45000000],currentSetActiveMicroseconds:0,remainingRestMicroseconds:0};
- const routine={...routinePayload.attempt.routine,schemaVersion:2,kind:'routine_v2',exercises:[row]};
- return {...routinePayload,schemaVersion:2,finished:true,updatedAtMicros:end,planSignature:JSON.stringify(['routine','blueprint',2,['entry1','mobility','videoGuidedTimed',1,guided.prescription,1,'123',row.videoUrl]]),guidedProgress:{'0':guided},attempt:{...routinePayload.attempt,schemaVersion:2,routine,finished:true,finishedAtMicros:end,updatedAtMicros:end,entries:[{kind:'timed',index:0,status:'timerCompleted',guided}]}};
-}
 it('validates truthful timer result without fabricating measurements',()=>{const p=timedBackupFixture();expect(validateBackupPayload('routine','r1','gainpath','member',p)).toEqual(p);expect(p.attempt.entries[0]).not.toHaveProperty('fullRepetitions');});
 it('compares signed target values independently of JSON object key order',()=>{
  const p=timedBackupFixture(),signature=JSON.parse(p.planSignature);

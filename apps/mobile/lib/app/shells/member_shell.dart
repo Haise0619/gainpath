@@ -5,6 +5,13 @@ import '../di/member_recommendation_factory.dart';
 import '../../infrastructure/firebase/firebase_module9_repository.dart';
 import '../notifications/member_notifications_screen.dart';
 import '../routing/app_check_in_host.dart';
+import '../di/app_check_in_factory.dart';
+import '../di/workout_backup_network_opportunities.dart';
+import '../../infrastructure/firebase/firebase_app_check_in_repository.dart';
+import '../../infrastructure/local/member_achievements_cache.dart';
+import '../../features/gamification/application/member_achievements_controller.dart';
+import '../../features/gamification/presentation/member/achievement_celebration_host.dart';
+import '../../features/gamification/presentation/member/member_achievements_screen.dart';
 import '../routing/workout_program_route.dart';
 import '../../features/gamification/application/app_check_in_cubit.dart';
 import 'package:flutter/material.dart';
@@ -90,7 +97,7 @@ class MemberShell extends StatefulWidget {
   State<MemberShell> createState() => _MemberShellState();
 }
 
-class _MemberShellState extends State<MemberShell> {
+class _MemberShellState extends State<MemberShell> with WidgetsBindingObserver {
   int _index = 0;
   bool _directoryVisited = false;
   PublishedRoutineCatalogCubit? _catalog;
@@ -98,19 +105,26 @@ class _MemberShellState extends State<MemberShell> {
   AnnouncementReader? _announcements;
   AuthBloc? _auth;
   StreamSubscription<AuthState>? _authSubscription;
+  StreamSubscription<void>? _achievementNetworkSubscription;
+  MemberAchievementsController? _achievements;
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     if (widget.liveSession == null || _auth != null) return;
     _auth = context.read<AuthBloc>();
+    WidgetsBinding.instance.addObserver(this);
     _authSubscription = _auth!.stream.listen((state) {
       if (state.session?.scope != widget.liveSession?.scope ||
           !AuthRolePolicy.canEnter(state, allowed: const {AppRole.member})) {
         _catalog?.invalidate();
+        _achievements?.invalidate();
+      } else if (appCheckInEnabled) {
+        unawaited(_achievements?.loadIfNeeded());
       }
     });
     _createCatalog();
+    _createAchievements();
   }
 
   SessionScope? _activeScope() => _auth != null &&
@@ -143,6 +157,47 @@ class _MemberShellState extends State<MemberShell> {
             _activeScope() == session.scope);
   }
 
+  void _createAchievements() {
+    final scope = widget.liveSession?.scope;
+    if (scope == null) return;
+    final repository = FirebaseAppCheckInRepository(
+        scope: scope, activeScope: _activeScope);
+    final cache = MemberAchievementsCache(scope);
+    _achievements = MemberAchievementsController(
+        load: repository.achievements,
+        isCurrent: () => scope.datasetScope == null && _activeScope() == scope,
+        readCache: cache.read,
+        saveCache: cache.save);
+    if (appCheckInEnabled) unawaited(_achievements!.loadIfNeeded());
+    _achievementNetworkSubscription ??=
+        workoutBackupNetworkOpportunities().listen((_) {
+      final achievements = _achievements;
+      if (achievements != null && (achievements.stale || achievements.failed)) {
+        unawaited(achievements.refresh());
+      }
+    }, onError: (Object _) {});
+  }
+
+  void _refreshAchievementsAfterEvent() {
+    final achievements = _achievements;
+    if (achievements != null) unawaited(achievements.refresh(changed: true));
+  }
+
+  void _openAchievements() {
+    final controller = _achievements;
+    if (controller == null) return;
+    Navigator.push(context, MaterialPageRoute<void>(
+        builder: (_) => MemberAchievementsScreen(controller: controller)));
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed &&
+        (appCheckInEnabled || _index == 2 || _index == 4)) {
+      unawaited(_achievements?.loadIfNeeded());
+    }
+  }
+
   @override
   void didUpdateWidget(MemberShell oldWidget) {
     super.didUpdateWidget(oldWidget);
@@ -151,7 +206,12 @@ class _MemberShellState extends State<MemberShell> {
       _catalog = null;
       _membership = null;
       _announcements = null;
-      if (widget.liveSession != null && _auth != null) _createCatalog();
+      _achievements?.dispose();
+      _achievements = null;
+      if (widget.liveSession != null && _auth != null) {
+        _createCatalog();
+        _createAchievements();
+      }
       _index = 0;
       _directoryVisited = false;
     } else if (!identical(oldWidget.liveSession, widget.liveSession) &&
@@ -162,6 +222,9 @@ class _MemberShellState extends State<MemberShell> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    unawaited(_achievementNetworkSubscription?.cancel());
+    _achievements?.dispose();
     unawaited(_authSubscription?.cancel());
     unawaited(_catalog?.close());
     super.dispose();
@@ -177,6 +240,7 @@ class _MemberShellState extends State<MemberShell> {
               key: ValueKey(widget.liveSession!.scope),
               scope: widget.liveSession!.scope,
               backupFactory: widget.backupFactory,
+              onWorkoutBackupChanged: _refreshAchievementsAfterEvent,
               goalSummaryBuilder: widget.progressGoalSummaryBuilder,
               repositoryFactory: widget.progressRepositoryFactory ??
                   createLocalMemberProgressRepository,
@@ -189,13 +253,22 @@ class _MemberShellState extends State<MemberShell> {
                                   progress: progress,
                                   checkIn: checkIn,
                                   refreshCheckIn: refreshCheckIn,
-                                  claimCheckIn: claimCheckIn,
+                                  claimCheckIn: () async {
+                                    final achievements = _achievements;
+                                    await claimCheckIn();
+                                    if (achievements != null && achievements.current) {
+                                      unawaited(achievements.refresh(changed: true));
+                                    }
+                                  },
                                   refresh: refresh,
                                   open: open,
                                   openWorkout: openWorkout,
                                   catalog: catalog), onTabChanged: (index) {
                             if (index == 0) refresh();
                             if (index == 0 || index == 2) refreshCheckIn();
+                            if (index == 2 || index == 4) {
+                              unawaited(_achievements?.loadIfNeeded());
+                            }
                           })),
             ));
   }
@@ -237,6 +310,7 @@ class _MemberShellState extends State<MemberShell> {
           onOpenRewards: () {
             setState(() => _index = 2);
             refreshCheckIn?.call();
+            unawaited(_achievements?.loadIfNeeded());
           },
           appCheckIn: checkIn,
           onAppClaim: claimCheckIn,
@@ -390,6 +464,7 @@ class _MemberShellState extends State<MemberShell> {
           GamificationDashboardScreen(
               live: connected,
               checkIn: checkIn,
+              achievements: _achievements,
               onClaim: claimCheckIn,
               onRefreshCheckIn: refreshCheckIn),
       session == null
@@ -419,6 +494,7 @@ class _MemberShellState extends State<MemberShell> {
               : (_) => const MembershipDashboardScreen(connected: true),
           onOpenProgress:
               open == null ? null : () => open(MemberProgressView.dashboard),
+          onOpenAchievements: _achievements == null ? null : _openAchievements,
           memberSettingsBuilder: widget.memberSettingsBuilder),
     ];
   }
@@ -436,8 +512,12 @@ class _MemberShellState extends State<MemberShell> {
             };
 
   Widget _scaffold(List<Widget> pages, {void Function(int)? onTabChanged}) {
+    final achievements = _achievements;
+    final tabs = IndexedStack(index: _index, children: pages);
     return Scaffold(
-      body: IndexedStack(index: _index, children: pages),
+      body: achievements == null
+          ? tabs
+          : AchievementCelebrationHost(controller: achievements, child: tabs),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _index,
         onDestinationSelected: (i) {

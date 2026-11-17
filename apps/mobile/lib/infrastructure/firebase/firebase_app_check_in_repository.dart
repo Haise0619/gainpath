@@ -3,6 +3,7 @@ import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:gainpath_domain/gainpath_domain.dart' show SessionScope;
 import '../../features/gamification/domain/app_check_in.dart';
+import '../../features/gamification/domain/member_achievements.dart';
 
 class FirebaseAppCheckInRepository implements AppCheckInRepository {
   FirebaseAppCheckInRepository(
@@ -25,7 +26,9 @@ class FirebaseAppCheckInRepository implements AppCheckInRepository {
           return (await functions
                   .httpsCallable('appCheckInCommand',
                       options: HttpsCallableOptions(
-                          timeout: const Duration(seconds: 20)))
+                          timeout: Duration(
+                              seconds:
+                                  data['action'] == 'achievements' ? 34 : 20)))
                   .call<Object?>(data))
               .data;
         };
@@ -34,14 +37,19 @@ class FirebaseAppCheckInRepository implements AppCheckInRepository {
   final SessionScope scope;
   final SessionScope? Function() activeScope;
   late final Future<Object?> Function(Map<String, Object?>) _invoke;
-  Future<AppCheckInResult> _call(String action) async {
+  Future<Object?> _request(String action) async {
     if (activeScope() != scope) throw StateError('Check-in account changed');
     final raw = await _invoke({
       'schemaVersion': 1,
       'organizationId': scope.organizationId,
       'action': action
-    }).timeout(const Duration(seconds: 25));
+    }).timeout(Duration(seconds: action == 'achievements' ? 36 : 25));
     if (activeScope() != scope) throw StateError('Check-in account changed');
+    return raw;
+  }
+
+  Future<AppCheckInResult> _call(String action) async {
+    final raw = await _request(action);
     if (raw is! Map ||
         raw.length != 2 ||
         raw['awarded'] is! bool ||
@@ -59,4 +67,11 @@ class FirebaseAppCheckInRepository implements AppCheckInRepository {
   Future<AppCheckInResult> overview() => _call('overview');
   @override
   Future<AppCheckInResult> claim() => _call('claim');
+
+  Future<MemberAchievements> achievements() async {
+    if (scope.datasetScope != null) {
+      throw StateError('Achievements are unavailable in this dataset.');
+    }
+    return MemberAchievements.fromJson(await _request('achievements'));
+  }
 }

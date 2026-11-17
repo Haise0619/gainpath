@@ -34,7 +34,7 @@ function receipt(raw:DocumentData|undefined,org:string,uid:string,day:string):Re
 }
 // Pure validators reused by read-only analytics; earning behavior stays unchanged.
 export {parseProfile as parseAppCheckInProfile, receipt as parseAppCheckInReceipt};
-async function member(tx:TransactionPort,auth:NonNullable<Auth>,org:string){
+export async function requireCheckInMember(tx:TransactionPort,auth:NonNullable<Auth>,org:string){
  const [user,membership,organization]=await readAll(tx,[`users/${auth.uid}`,`orgs/${org}/members/${auth.uid}`,`orgs/${org}`]);
  if(user?.organizationId!==org||membership?.organizationId!==org||requireActiveMembership(membership).role!=='member'||(membership.userId!==undefined&&membership.userId!==auth.uid)||organization?.status!=='active')throw new DomainError('permission-denied','An active canonical Member is required.');
  if(user.accountLifecycle!==undefined){const l=user.accountLifecycle as DocumentData;if(!l||l.schemaVersion!==1||l.state!=='active'||l.revocationPending!==false||!integer(l.sessionNotBeforeSeconds)||!integer(auth.token.auth_time)||auth.token.auth_time<l.sessionNotBeforeSeconds)throw new DomainError('permission-denied','Your account session changed.');}
@@ -46,7 +46,7 @@ export async function appCheckInCommand(store:DocumentStore,auth:Auth,raw:unknow
  const org=requiredIdentifier(data.organizationId,'organizationId'),uid=requiredIdentifier(auth!.uid,'member');if(org!==APP_CHECK_IN_POLICY.organizationId)throw new DomainError('permission-denied','Check-in is unavailable for this organization.');
  const profilePath=`orgs/${org}/appCheckInProfiles/${uid}`,balancePath=`orgs/${org}/rewardBalances/${uid}`;
  return store.transact(async tx=>{
-  await member(tx,auth!,org);
+  await requireCheckInMember(tx,auth!,org);
   const now=clock();if(!integer(now,8639999996400000)||now===0)throw fail();const todayOrdinal=Math.floor((now+OFFSET)/DAY),today=date(todayOrdinal),claimPath=profilePath+'/claims/'+today;
   const [rawProfile,rawBalance,todayReceipt]=await readAll(tx,[profilePath,balancePath,claimPath]);
   const previous=parseProfile(rawProfile,org,uid,todayOrdinal);let p=previous,balance=parseBalance(rawBalance,org,uid,p),awarded=false;

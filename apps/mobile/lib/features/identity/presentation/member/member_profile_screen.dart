@@ -21,6 +21,7 @@ class MemberProfileScreen extends StatefulWidget {
       this.liveSession,
       this.liveProfile,
       this.onOpenProgress,
+      this.onOpenAchievements,
       this.bodyMetricsBuilder,
       this.membershipBuilder,
       this.membershipRepository,
@@ -29,6 +30,7 @@ class MemberProfileScreen extends StatefulWidget {
   final AuthSession? liveSession;
   final FitnessProfile? liveProfile;
   final VoidCallback? onOpenProgress;
+  final VoidCallback? onOpenAchievements;
   final WidgetBuilder? bodyMetricsBuilder, membershipBuilder;
   final WidgetBuilder? memberSettingsBuilder;
   final MembershipCommerceRepository? membershipRepository;
@@ -373,6 +375,15 @@ class _MemberProfileScreenState extends State<MemberProfileScreen>
                             ? onOpenProgress!()
                             : Navigator.pushNamed(
                                 context, FeatureNavigation.progress)),
+                    if (widget.onOpenAchievements case final onOpen?) ...[
+                      const _ProfileDivider(),
+                      _row(
+                          context,
+                          Icons.military_tech_outlined,
+                          'View Achievements',
+                          'Check-ins and workout milestones',
+                          onOpen),
+                    ],
                     const _ProfileDivider(),
                     _row(
                         context,
