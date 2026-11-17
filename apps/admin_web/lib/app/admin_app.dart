@@ -1,3 +1,4 @@
+import 'routing/admin_console_navigation.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -92,7 +93,7 @@ class GainPathAdminWebApp extends StatelessWidget {
         child: BlocBuilder<AuthBloc, AuthState>(
           buildWhen: (previous, current) => previous.session != current.session,
           builder: (context, state) {
-            final app = MaterialApp(
+            final app = AdminConsoleApp(
               title: 'GainPath Admin Console',
               debugShowCheckedModeBanner: false,
               theme: AppTheme.build(),

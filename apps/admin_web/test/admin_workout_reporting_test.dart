@@ -82,6 +82,30 @@ class PendingWorkouts implements AdminWorkoutReportingGateway {
 
 void main() {
   test(
+      'score distribution validates counts and older aggregates remain readable',
+      () {
+    final raw = workoutResponse();
+    final group = (raw['forms'] as List).first as Map;
+    group['scoreBands'] = {'below60': 0, 'from60To79': 1, 'from80To100': 1};
+    final report = parseAdminWorkoutReport(
+        raw, support.reportingScope, support.reportingQuery);
+    expect(report.forms.single.scoreBands!['from80To100'], 1);
+    group['scoreBands'] = {'below60': 0, 'from60To79': 1, 'from80To100': 2};
+    expect(
+        () => parseAdminWorkoutReport(
+            raw, support.reportingScope, support.reportingQuery),
+        throwsFormatException);
+    group.remove('scoreBands');
+    expect(
+        parseAdminWorkoutReport(
+                raw, support.reportingScope, support.reportingQuery)
+            .forms
+            .single
+            .scoreBands,
+        isNull);
+  });
+
+  test(
       'unified workout may disclose canonical-only coverage without synthetic totals',
       () {
     final raw = workoutResponse()..['fypSourceUnavailable'] = true;

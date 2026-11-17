@@ -1,4 +1,6 @@
+import 'report_metric_grid.dart';
 import 'admin_report_presentation.dart';
+import 'admin_workout_summary.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
@@ -105,9 +107,9 @@ class _AdminObservedSectionState extends State<AdminObservedSection> {
   Widget _data(AdminObservedActivity r) {
     final periods = _weekly ? r.weekly : r.daily;
     Widget stat(String label, String value) =>
-        SizedBox(width: 210, child: StatTile(value, label));
+        SizedBox(width: 210, child: StatTile(value, label, compact: true));
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Wrap(spacing: 10, runSpacing: 10, children: [
+      ReportMetricGrid(children: [
         stat('Current Member cohort', '${r.cohort}'),
         if (widget.retention) ...[
           stat('Observed within 7 days', '${r.recency['within7Days']}'),
@@ -226,8 +228,10 @@ class AdminPostureSection extends StatefulWidget {
   const AdminPostureSection(
       {super.key,
       required this.query,
+      this.controller,
       required this.anchorKey,
       this.refreshToken = 0});
+  final AdminWorkoutReportingCubit? controller;
   final AdminReportQuery query;
   final GlobalKey anchorKey;
   final int refreshToken;
@@ -248,6 +252,10 @@ class _AdminPostureSectionState extends State<AdminPostureSection> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    if (widget.controller != null) {
+      _cubit = widget.controller;
+      return;
+    }
     final g = context.read<AdminReportingGateway>();
     if (g is AdminWorkoutReportingGateway && !identical(_cubit?.gateway, g)) {
       _cubit?.close();
@@ -260,6 +268,10 @@ class _AdminPostureSectionState extends State<AdminPostureSection> {
   @override
   void didUpdateWidget(AdminPostureSection old) {
     super.didUpdateWidget(old);
+    if (widget.controller != null) {
+      _cubit = widget.controller;
+      return;
+    }
     if (widget.query != old.query || widget.refreshToken != old.refreshToken) {
       _cubit?.load(widget.query);
     }
@@ -267,7 +279,7 @@ class _AdminPostureSectionState extends State<AdminPostureSection> {
 
   @override
   void dispose() {
-    _cubit?.close();
+    if (widget.controller == null) _cubit?.close();
     super.dispose();
   }
 
@@ -332,6 +344,14 @@ class _AdminPostureSectionState extends State<AdminPostureSection> {
                           r.coverage['membersWithBackups']
                         ],
                         ['Current active Members', r.coverage['activeMembers']],
+                        if (group?.scoreBands != null) ...[
+                          ['Estimated score range', 'Scored sessions'],
+                          for (final band in group!.scoreBands!.entries)
+                            [
+                              WorkoutFormGroup.scoreBandLabels[band.key],
+                              band.value
+                            ],
+                        ],
                         ['Date', 'Estimated mean %', 'Scored samples'],
                         for (final p in points)
                           [
@@ -366,7 +386,10 @@ class _AdminPostureSectionState extends State<AdminPostureSection> {
                                 const InputDecoration(labelText: 'Exercise'),
                             items: [
                               for (final id in ids)
-                                DropdownMenuItem(value: id, child: Text(id))
+                                DropdownMenuItem(
+                                    value: id,
+                                    child: Text(reportExerciseName(id, r),
+                                        overflow: TextOverflow.ellipsis))
                             ],
                             onChanged: (v) => setState(() {
                                   _exercise = v;
@@ -377,22 +400,25 @@ class _AdminPostureSectionState extends State<AdminPostureSection> {
                             key: ValueKey('group-${group?.label}'),
                             initialValue: group?.label,
                             isExpanded: true,
-                            decoration: const InputDecoration(
-                                labelText:
-                                    'Compatible scoring / model / view group'),
+                            decoration:
+                                const InputDecoration(labelText: 'Score group'),
                             items: [
                               for (final g in groups)
                                 DropdownMenuItem(
                                     value: g.label,
-                                    child: Text(g.label,
+                                    child: Text(
+                                        'Group ${groups.indexOf(g) + 1} · ${reportExerciseName(g.exerciseId, r)} · ${g.cameraView == 'front' ? 'Front view' : g.cameraView == 'side' ? 'Side view' : g.cameraView}',
                                         overflow: TextOverflow.ellipsis))
                             ],
                             onChanged: (v) => setState(() => _version = v)),
-                        const SizedBox(height: 12),
+                        const SizedBox(height: 8),
+                        AdminReportDetails(
+                            title: 'Scoring details',
+                            child: Text(group!.label)),
                         Text(
                             'Exercise overall: ${groups.fold<int>(0, (n, g) => n + g.scoredSessions)} scored samples across compatible groups / ${r.exercises.where((e) => e.exerciseId == selected).fold<int>(0, (n, e) => n + e.sessions)} saved camera captures. Unscored capture versions are unknown.'),
                         Text(
-                            '${group!.scoredSessions} scored samples · session-weighted mean ${group.average.toStringAsFixed(1)}%'),
+                            '${group.scoredSessions} scored samples · session-weighted mean ${group.average.toStringAsFixed(1)}%'),
                         SizedBox(
                             height: 250,
                             child: SfCartesianChart(
@@ -415,6 +441,8 @@ class _AdminPostureSectionState extends State<AdminPostureSection> {
                                 ])),
                         const Text(
                             'Each point averages scored sessions in this exact exercise, scoring rule, detector/model, camera view and arm group. Missing dates remain gaps; no score is inferred.'),
+                        const SizedBox(height: 16),
+                        WorkoutScoreDistribution(group: group),
                         ExpansionTile(
                             title: const Text('View score samples'),
                             children: [

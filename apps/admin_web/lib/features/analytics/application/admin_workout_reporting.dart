@@ -66,6 +66,11 @@ class WorkoutFormDay {
 }
 
 class WorkoutFormGroup {
+  static const scoreBandLabels = {
+    'below60': '0–<60%',
+    'from60To79': '60–<80%',
+    'from80To100': '80–100%',
+  };
   WorkoutFormGroup(
       {required this.exerciseId,
       required this.scoringVersion,
@@ -75,6 +80,7 @@ class WorkoutFormGroup {
       required this.armMode,
       required this.scoredSessions,
       required this.scoreSum,
+      this.scoreBands,
       required List<WorkoutFormDay> daily})
       : daily = List.unmodifiable(daily);
   final String exerciseId,
@@ -86,6 +92,7 @@ class WorkoutFormGroup {
   final int scoredSessions;
   final double scoreSum;
   final List<WorkoutFormDay> daily;
+  final Map<String, int>? scoreBands;
   double get average => scoreSum / scoredSessions;
   String get label =>
       '$exerciseId · $scoringVersion · $detectorId/$detectorVersion · $cameraView · $armMode';
@@ -267,6 +274,24 @@ class AdminWorkoutReport {
             d.date
           ],
     ];
+    rows.addAll([
+      [],
+      [
+        'Exercise ID',
+        'Compatible group',
+        'Estimated score range',
+        'Scored sessions'
+      ],
+      for (final group in forms)
+        if (group.scoreBands != null)
+          for (final band in group.scoreBands!.entries)
+            [
+              group.exerciseId,
+              group.label,
+              WorkoutFormGroup.scoreBandLabels[band.key],
+              band.value
+            ],
+    ]);
     // Snapshot names/rule labels are untrusted text, including in spreadsheet exports.
     return [
       for (final row in rows) [for (final v in row) _csvCell(v)]
@@ -282,11 +307,16 @@ Object? _csvCell(Object? value) {
 
 class AdminWorkoutReportingState {
   const AdminWorkoutReportingState(
-      {required this.query, this.report, this.loading = false, this.error});
+      {required this.query,
+      this.report,
+      this.loading = false,
+      this.error,
+      this.receivedAt});
   final AdminReportQuery query;
   final AdminWorkoutReport? report;
   final bool loading;
   final String? error;
+  final DateTime? receivedAt;
 }
 
 class AdminWorkoutReportingCubit extends Cubit<AdminWorkoutReportingState> {
@@ -315,7 +345,8 @@ class AdminWorkoutReportingCubit extends Cubit<AdminWorkoutReportingState> {
       if (report.query != query) {
         throw const FormatException('Workout report query mismatch');
       }
-      emit(AdminWorkoutReportingState(query: query, report: report));
+      emit(AdminWorkoutReportingState(
+          query: query, report: report, receivedAt: DateTime.now()));
     } catch (error) {
       if (isClosed || generation != _generation) return;
       emit(AdminWorkoutReportingState(

@@ -53,7 +53,37 @@ class WorkoutUiGateway extends original.OriginalLayoutGateway
   }
 }
 
+class ScenarioWorkoutUiGateway extends WorkoutUiGateway {
+  @override
+  Future<AdminWorkoutReport> loadWorkouts(q) async {
+    final report = await super.loadWorkouts(q);
+    return AdminWorkoutReport(
+        fictional: true,
+        query: report.query,
+        capturedAt: report.capturedAt,
+        scanStartedAt: report.scanStartedAt,
+        totals: report.totals,
+        coverage: report.coverage,
+        daily: report.daily,
+        exercises: report.exercises,
+        forms: report.forms);
+  }
+}
+
 void main() {
+  testWidgets('Overview discloses direct FYP scenario provenance',
+      (tester) async {
+    tester.view.physicalSize = const Size(1200, 1100);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(original.originalLayoutApp(
+        const ReportsScreen(live: true), ScenarioWorkoutUiGateway()));
+    await tester.pumpAndSettle();
+    expect(find.text('FYP scenario observations.'), findsOneWidget);
+    expect(find.text('Scenario workout sessions'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   setUpAll(() => GoogleFonts.config.allowRuntimeFetching = false);
   testWidgets(
       'mixed report with only FYP activity never labels observations as camera captures',
@@ -64,7 +94,7 @@ void main() {
     await t.pumpWidget(original.originalLayoutApp(
         const ReportsScreen(live: true), WorkoutUiGateway()..mixed = true));
     await t.pumpAndSettle();
-    await t.tap(find.text('Fitness'));
+    t.state<ReportsScreenState>(find.byType(ReportsScreen)).selectCategory(ReportsCategory.fitness);
     await t.pumpAndSettle();
     final labels = t
         .widgetList<Text>(find.byType(Text))
@@ -98,20 +128,22 @@ void main() {
     await t.pumpWidget(
         original.originalLayoutApp(const ReportsScreen(live: true), g));
     await t.pumpAndSettle();
-    expect(find.text('Reports & analytics'), findsOneWidget);
-    expect(g.calls, 0);
-    await t.tap(find.text('Fitness'));
+    expect(find.text('Overview Analytics'), findsOneWidget);
+    expect(g.calls, 1);
+    expect(find.text('Active workout members'), findsOneWidget);
+    expect(find.text('Completed workout attempts'), findsOneWidget);
+    t.state<ReportsScreenState>(find.byType(ReportsScreen)).selectCategory(ReportsCategory.fitness);
     await t.pumpAndSettle();
-    expect(g.calls, 2);
-    await t.tap(find.text('Overview'));
+    expect(g.calls, 1);
+    t.state<ReportsScreenState>(find.byType(ReportsScreen)).selectCategory(ReportsCategory.overview);
     await t.pumpAndSettle();
-    await t.tap(find.text('Fitness'));
+    t.state<ReportsScreenState>(find.byType(ReportsScreen)).selectCategory(ReportsCategory.fitness);
     await t.pumpAndSettle();
-    expect(g.calls, 2);
+    expect(g.calls, 1);
     await t.tap(find.byTooltip('Refresh reports'));
     await t.pumpAndSettle();
-    expect(g.calls, 4);
-    expect(find.text('Most-used exercises'), findsOneWidget);
+    expect(g.calls, 2);
+    expect(find.text('Six AI tracking exercises'), findsOneWidget);
     expect(find.text('Manual sets'), findsOneWidget);
     expect(find.text('Estimated form by compatible version'), findsOneWidget);
     expect(t.takeException(), isNull);
@@ -124,7 +156,7 @@ void main() {
         original.originalLayoutApp(const ReportsScreen(live: true), g));
     await t.pumpAndSettle();
     expect(find.text('MYR 139.00'), findsWidgets);
-    await t.tap(find.text('Fitness'));
+    t.state<ReportsScreenState>(find.byType(ReportsScreen)).selectCategory(ReportsCategory.fitness);
     await t.pumpAndSettle();
     expect(find.text('Workout analytics is awaiting server activation.'),
         findsNWidgets(2));
@@ -156,7 +188,7 @@ void main() {
     await t.ensureVisible(find.byTooltip('Refresh workout analytics'));
     await t.tap(find.byTooltip('Refresh workout analytics'));
     await t.pump();
-    expect(find.text('Most-used exercises'), findsOneWidget);
+    expect(find.text('Six AI tracking exercises'), findsOneWidget);
     g.pendingWorkouts!.completeError(StateError('offline'));
     await t.pumpAndSettle();
     expect(find.text('Retry workout analytics'), findsOneWidget);

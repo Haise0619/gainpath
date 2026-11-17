@@ -58,10 +58,10 @@ void main() {
     await t.pumpWidget(
         original.originalLayoutApp(const ReportsScreen(live: true), g));
     await t.pumpAndSettle();
-    expect(find.text('Reports & analytics'), findsOneWidget);
+    expect(find.text('Overview Analytics'), findsOneWidget);
     expect(g.checkInCalls, 0);
-    expect(g.calls, 0);
-    await t.tap(find.text('Engagement'));
+    expect(g.calls, 1);
+    t.state<ReportsScreenState>(find.byType(ReportsScreen)).selectCategory(ReportsCategory.engagement);
     await t.pumpAndSettle();
     expect(g.checkInCalls, 4);
     expect(find.text('Gamification Engagement'), findsOneWidget);
@@ -71,7 +71,7 @@ void main() {
     await t.pumpAndSettle();
     expect(g.checkInCalls,
         8); // Four sections request updates; Firebase coalesces the shared scan.
-    expect(g.calls, 0);
+    expect(g.calls, 1);
     expect(find.textContaining('Current as of'), findsOneWidget);
     expect(t.takeException(), isNull);
   });
@@ -83,10 +83,10 @@ void main() {
         original.originalLayoutApp(const ReportsScreen(live: true), g));
     await t.pumpAndSettle();
     expect(find.text('MYR 139.00'), findsWidgets);
-    await t.tap(find.text('Fitness'));
+    t.state<ReportsScreenState>(find.byType(ReportsScreen)).selectCategory(ReportsCategory.fitness);
     await t.pumpAndSettle();
     expect(find.text('Saved camera sessions'), findsOneWidget);
-    await t.tap(find.text('Engagement'));
+    t.state<ReportsScreenState>(find.byType(ReportsScreen)).selectCategory(ReportsCategory.engagement);
     await t.pumpAndSettle();
     expect(find.text('Check-in analytics is awaiting server activation.'),
         findsNWidgets(4));

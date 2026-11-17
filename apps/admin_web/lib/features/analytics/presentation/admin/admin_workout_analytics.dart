@@ -1,17 +1,21 @@
+import 'report_metric_grid.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
 import 'package:syncfusion_flutter_charts/charts.dart';
 import '../../application/admin_reporting_gateway.dart';
 import '../../application/admin_workout_reporting.dart';
+import 'admin_workout_summary.dart';
 
 class AdminWorkoutAnalytics extends StatefulWidget {
   const AdminWorkoutAnalytics(
       {super.key,
       required this.query,
+      this.controller,
       this.compact = false,
       this.refreshToken = 0,
       this.anchorKey});
+  final AdminWorkoutReportingCubit? controller;
   final AdminReportQuery query;
   final bool compact;
   final int refreshToken;
@@ -26,6 +30,10 @@ class _AdminWorkoutAnalyticsState extends State<AdminWorkoutAnalytics> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    if (widget.controller != null) {
+      _cubit = widget.controller;
+      return;
+    }
     final gateway = context.read<AdminReportingGateway>();
     if (gateway is AdminWorkoutReportingGateway &&
         !identical(_cubit?.gateway, gateway)) {
@@ -39,6 +47,10 @@ class _AdminWorkoutAnalyticsState extends State<AdminWorkoutAnalytics> {
   @override
   void didUpdateWidget(AdminWorkoutAnalytics oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (widget.controller != null) {
+      _cubit = widget.controller;
+      return;
+    }
     if (widget.query != oldWidget.query ||
         widget.refreshToken != oldWidget.refreshToken) {
       _cubit?.load(widget.query);
@@ -47,7 +59,7 @@ class _AdminWorkoutAnalyticsState extends State<AdminWorkoutAnalytics> {
 
   @override
   void dispose() {
-    _cubit?.close();
+    if (widget.controller == null) _cubit?.close();
     super.dispose();
   }
 
@@ -162,12 +174,13 @@ class _AdminWorkoutAnalyticsState extends State<AdminWorkoutAnalytics> {
   Widget _data(BuildContext context, AdminWorkoutReport r) {
     final t = r.totals, text = Theme.of(context).textTheme;
     Widget stat(String value, String label) => SizedBox(
-        width: widget.compact ? 175 : 210, child: StatTile(value, label));
+        width: widget.compact ? 175 : 210,
+        child: StatTile(value, label, compact: true));
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       if (r.fypSourceUnavailable)
         const Text(
             'Partial report. Canonical backups are available. Refresh to retry the FYP source.'),
-      Wrap(spacing: 10, runSpacing: 10, children: [
+      ReportMetricGrid(children: [
         stat('${t.sessions}', r.sessionLabel),
         stat('${t.completedRoutineDays}', 'Completed routine attempts'),
         stat(
@@ -256,7 +269,9 @@ class _AdminWorkoutAnalyticsState extends State<AdminWorkoutAnalytics> {
         Panel(
             child:
                 Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text('Most-used exercises', style: text.titleMedium),
+          CurrentAiExerciseUsage(report: r),
+          const SizedBox(height: 16),
+          Text('Other exercise details', style: text.titleMedium),
           Text(
               'Ranked by ${r.sessionLabel.toLowerCase()}. Snapshot names may differ from the current catalog. Top ${r.exercises.length > 10 ? 10 : r.exercises.length} of ${r.exercises.length}; CSV includes all.',
               style: text.bodySmall),
@@ -279,6 +294,13 @@ class _AdminWorkoutAnalyticsState extends State<AdminWorkoutAnalytics> {
             child:
                 Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text('Estimated form by compatible version', style: text.titleMedium),
+          const SizedBox(height: 8),
+          Wrap(spacing: 12, runSpacing: 8, children: [
+            Text(
+                'Eligible scored sessions: ${r.forms.fold<int>(0, (count, group) => count + group.scoredSessions)}'),
+            Text(
+                'Not assessed: ${t.sessions - r.forms.fold<int>(0, (count, group) => count + group.scoredSessions)}'),
+          ]),
           Text(
               'Mean of scored session estimates within each exercise/rule/model/view/arm group. No platform-wide accuracy or clinical assessment is inferred.',
               style: text.bodySmall),
@@ -316,9 +338,15 @@ class _AdminWorkoutAnalyticsState extends State<AdminWorkoutAnalytics> {
           height: 250,
           child: SfCartesianChart(
               plotAreaBorderWidth: 0,
-              primaryXAxis: const CategoryAxis(
-                  majorGridLines: MajorGridLines(width: 0),
-                  labelIntersectAction: AxisLabelIntersectAction.rotate45),
+              primaryXAxis: CategoryAxis(
+                  maximumLabels: 5,
+                  majorGridLines: const MajorGridLines(width: 0),
+                  labelIntersectAction: AxisLabelIntersectAction.hide,
+                  axisLabelFormatter: (details) => ChartAxisLabel(
+                      details.text.length == 10
+                          ? details.text.substring(5)
+                          : details.text,
+                      details.textStyle)),
               primaryYAxis: NumericAxis(
                   minimum: 0,
                   decimalPlaces: 0,

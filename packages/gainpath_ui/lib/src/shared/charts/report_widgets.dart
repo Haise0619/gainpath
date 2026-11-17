@@ -166,7 +166,8 @@ class NoFilteredData extends StatelessWidget {
       child: SizedBox(
         height: 120,
         child: Center(
-          child: Column(
+          child: SingleChildScrollView(
+              child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               const Icon(Icons.filter_alt_off_rounded,
@@ -174,7 +175,7 @@ class NoFilteredData extends StatelessWidget {
               const SizedBox(height: 8),
               Text(message, style: Theme.of(context).textTheme.bodyMedium),
             ],
-          ),
+          )),
         ),
       ),
     );

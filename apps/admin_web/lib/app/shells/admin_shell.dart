@@ -1,3 +1,4 @@
+import '../routing/admin_console_navigation.dart';
 import '../di/canonical_admin_recommendation_factory.dart';
 import 'package:gainpath_data/gainpath_data.dart'
     show FypDatasetTransportFactory;
@@ -60,7 +61,9 @@ class _NavGroup {
   final IconData iconFilled;
   final String label;
   final List<_NavPage> children;
-  const _NavGroup(this.icon, this.iconFilled, this.label, this.children);
+  final bool opensFirstChild;
+  const _NavGroup(this.icon, this.iconFilled, this.label, this.children,
+      {this.opensFirstChild = false});
 }
 
 /// Persistent left-sidebar shell for the Admin / Staff Web Console, per
@@ -129,6 +132,48 @@ class _AdminShellState extends State<AdminShell> {
   final Set<int> _visited = {0};
   final Set<String> _expanded = {'Users & Coaches', 'Payments'};
   final _scaffoldKey = GlobalKey<ScaffoldState>();
+  AdminConsoleNavigation? _reportRoutes;
+  ReportsCategory _lastReportCategory = ReportsCategory.overview;
+  int get _reportsIndex => _firstChildIndexOfGroup('Reports');
+  bool get _inReports => _groupLabelFor(_index) == 'Reports';
+  ReportsCategory get _reportCategory =>
+      ReportsCategory.values[_index - _reportsIndex];
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final routes = AdminConsoleNavigation.maybeOf(context);
+    if (!identical(routes, _reportRoutes)) {
+      _reportRoutes?.removeListener(_readReportRoute);
+      _reportRoutes = routes;
+      _readReportRoute();
+      routes?.addListener(_readReportRoute);
+    }
+  }
+
+  void _readReportRoute() {
+    final segments = _reportRoutes?.uri.pathSegments ?? <String>[];
+    if (segments.isNotEmpty && segments.first == 'reports') {
+      final name = segments.length > 1 ? segments[1] : 'overview';
+      final category =
+          ReportsCategory.values.where((c) => c.name == name).firstOrNull ??
+              ReportsCategory.overview;
+      _select(_reportsIndex + category.index, updateHistory: false);
+    } else if (segments.length == 2 && segments.first == 'console') {
+      final index =
+          _flatPages.indexWhere((page) => _pageSlug(page) == segments[1]);
+      if (index >= 0) _select(index, updateHistory: false);
+    } else if (segments.isEmpty || _inReports) {
+      _select(0, updateHistory: false);
+    }
+  }
+
+  String _pageSlug(_NavPage page) =>
+      page.label.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]+'), '-');
+  @override
+  void dispose() {
+    _reportRoutes?.removeListener(_readReportRoute);
+    super.dispose();
+  }
 
   void _openRewardCollection() {
     final source = context.read<AdminMemberDirectoryRepository>();
@@ -290,12 +335,16 @@ class _AdminShellState extends State<AdminShell> {
           'The safety notice shown before first use',
           ChatbotDisclaimerScreen(live: widget.liveSession != null)),
     ]),
-    _NavPage(
+    _NavGroup(
         Icons.bar_chart_outlined,
         Icons.bar_chart_rounded,
         'Reports',
-        'Sales, branch performance, and analytics',
-        ReportsScreen(live: widget.liveSession != null)),
+        [
+          for (final category in ReportsCategory.values)
+            _NavPage(Icons.analytics_outlined, Icons.analytics_rounded,
+                category.label, '', const SizedBox.shrink()),
+        ],
+        opensFirstChild: true),
     _NavPage(
         Icons.tune_outlined,
         Icons.tune_rounded,
@@ -412,7 +461,7 @@ class _AdminShellState extends State<AdminShell> {
     return crumbs;
   }
 
-  void _select(int flatIndex) async {
+  void _select(int flatIndex, {bool updateHistory = true}) async {
     if (flatIndex < 0) return;
     if (flatIndex != _index && !await _coachReviewGuard.canLeave()) return;
     if (!mounted) return;
@@ -425,6 +474,16 @@ class _AdminShellState extends State<AdminShell> {
       _visited.add(flatIndex);
       if (owner != null) _expanded.add(owner);
     });
+    if (owner == 'Reports') _lastReportCategory = _reportCategory;
+    if (updateHistory) {
+      _reportRoutes?.go(
+          context,
+          Uri.parse(owner == 'Reports'
+              ? '/reports/${_reportCategory.name}'
+              : flatIndex == 0
+                  ? '/'
+                  : '/console/${_pageSlug(_flatPages[flatIndex])}'));
+    }
   }
 
   void _toggleGroup(String label) {
@@ -507,13 +566,27 @@ class _AdminShellState extends State<AdminShell> {
                         onOpenCoachAlert: _openCoachAlert,
                         liveSession: widget.liveSession,
                         breadcrumbs: _breadcrumbs(),
-                        subtitle: current.subtitle,
+                        subtitle: _inReports ? '' : current.subtitle,
                         onSignOut: _signOut),
                     Expanded(
                       child: IndexedStack(
-                        index: _index,
+                        index: _inReports ? _reportsIndex : _index,
                         children: flatPages.asMap().entries.map((entry) {
                           final session = widget.liveSession, d = entry.value;
+                          if (_groupLabelFor(entry.key) == 'Reports') {
+                            if (entry.key != _reportsIndex ||
+                                !_visited.any(
+                                    (i) => _groupLabelFor(i) == 'Reports')) {
+                              return const SizedBox.shrink();
+                            }
+                            return ReportsScreen(
+                                key: const ValueKey('retained-reports'),
+                                live: session != null,
+                                active: _inReports,
+                                category: _lastReportCategory,
+                                onCategoryChanged: (category) =>
+                                    _select(_reportsIndex + category.index));
+                          }
                           if (session != null &&
                               !_visited.contains(entry.key)) {
                             return const SizedBox.shrink();
@@ -671,14 +744,15 @@ class _TopBar extends StatelessWidget {
                     ],
                   ],
                 ),
-                const SizedBox(height: 2),
-                Text(subtitle,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context)
-                        .textTheme
-                        .bodyMedium
-                        ?.copyWith(fontSize: 12)),
+                if (subtitle.isNotEmpty) const SizedBox(height: 2),
+                if (subtitle.isNotEmpty)
+                  Text(subtitle,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context)
+                          .textTheme
+                          .bodyMedium
+                          ?.copyWith(fontSize: 12)),
               ],
             ),
           ),
@@ -980,7 +1054,9 @@ class _Sidebar extends StatelessWidget {
                     : Icons.expand_more_rounded,
                 size: 18,
                 color: AppColors.inkSoft),
-            onTap: () => onToggleGroup(d.label)));
+            onTap: () => d.opensFirstChild
+                ? onSelect(firstChildIndex)
+                : onToggleGroup(d.label)));
 
         if (expanded) {
           for (var i = 0; i < d.children.length; i++) {

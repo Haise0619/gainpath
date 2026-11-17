@@ -191,7 +191,9 @@ void main() {
       // Revenue overview should show '—'
       expect(find.text('—'), findsWidgets);
 
-      await tester.tap(find.text('Financial'));
+      tester
+          .state<ReportsScreenState>(find.byType(ReportsScreen))
+          .selectCategory(ReportsCategory.financial);
       await tester.pumpAndSettle();
 
       expect(find.text('RM —'), findsOneWidget);
@@ -206,8 +208,8 @@ void main() {
         findsOneWidget,
       );
 
-      // Header indicates live console
-      expect(find.text('Live console'), findsOneWidget);
+      // Header identifies the current category
+      expect(find.text('Financial Analytics'), findsOneWidget);
     });
   });
 }

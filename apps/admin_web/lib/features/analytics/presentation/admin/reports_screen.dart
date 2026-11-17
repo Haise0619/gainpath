@@ -1,3 +1,4 @@
+import '../../application/admin_check_in_reporting.dart';
 import 'admin_remaining_analytics.dart';
 import 'package:flutter/material.dart';
 import 'package:gainpath_domain/coaching.dart';
@@ -14,29 +15,42 @@ import '../../application/admin_reporting_gateway.dart';
 import '../../application/admin_operational_metrics.dart';
 import 'original_report_data_widgets.dart';
 import 'admin_workout_analytics.dart';
+import 'admin_workout_summary.dart';
+import '../../application/admin_workout_reporting.dart';
 import '../../application/business_dashboard_metrics.dart';
 
-enum _ReportsTab {
+enum ReportsCategory {
   overview('Overview'),
   financial('Financial'),
   fitness('Fitness'),
   coaching('Coaching'),
   engagement('Engagement');
 
-  const _ReportsTab(this.label);
+  const ReportsCategory(this.label);
   final String label;
 }
 
 class ReportsScreen extends StatefulWidget {
   final bool live;
-  const ReportsScreen({super.key, this.live = false});
+  const ReportsScreen(
+      {super.key,
+      this.live = false,
+      this.category = ReportsCategory.overview,
+      this.active = true,
+      this.now = DateTime.now,
+      this.onCategoryChanged});
+  final ReportsCategory category;
+  final bool active;
+  final DateTime Function() now;
+  final ValueChanged<ReportsCategory>? onCategoryChanged;
 
   @override
-  State<ReportsScreen> createState() => _ReportsScreenState();
+  State<ReportsScreen> createState() => ReportsScreenState();
 }
 
-class _ReportsScreenState extends State<ReportsScreen> {
+class ReportsScreenState extends State<ReportsScreen> {
   bool _operational = false;
+  bool _exporting = false;
   static const _dateOptions = [null, 7, 30, 90];
   static const _dateLabels = {
     null: 'All recorded dates',
@@ -49,12 +63,14 @@ class _ReportsScreenState extends State<ReportsScreen> {
   DateTimeRange? _customDates;
   String? _branch;
   AdminReportingCubit? _reportingCubit;
+  AdminWorkoutReportingCubit? _workoutCubit;
+  DateTime? _lastWorkoutRequestAt;
   final _scrollController = ScrollController();
-  final _scrollOffsets = <_ReportsTab, double>{};
-  final _visitedTabs = <_ReportsTab>{_ReportsTab.overview};
-  final _sectionQueries = <_ReportsTab, AdminReportQuery>{};
-  final _refreshTokens = <_ReportsTab, int>{};
-  final _lastVisited = <_ReportsTab, DateTime>{};
+  final _scrollOffsets = <ReportsCategory, double>{};
+  final _visitedTabs = <ReportsCategory>{ReportsCategory.overview};
+  final _sectionQueries = <ReportsCategory, AdminReportQuery>{};
+  final _refreshTokens = <ReportsCategory, int>{};
+  final _lastVisited = <ReportsCategory, DateTime>{};
   static const _tabFreshness = Duration(seconds: 30);
   AdminReportQuery? _query;
 
@@ -69,7 +85,25 @@ class _ReportsScreenState extends State<ReportsScreen> {
   final _gamificationKey = GlobalKey();
   final _coachPerfKey = GlobalKey();
 
-  _ReportsTab _tab = _ReportsTab.overview;
+  ReportsCategory _tab = ReportsCategory.overview;
+
+  @override
+  void initState() {
+    super.initState();
+    _tab = widget.category;
+    _visitedTabs
+      ..clear()
+      ..add(_tab);
+  }
+
+  @override
+  void didUpdateWidget(covariant ReportsScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.category != widget.category ||
+        (!oldWidget.active && widget.active)) {
+      selectCategory(widget.category, resume: true);
+    }
+  }
 
   @override
   void didChangeDependencies() {
@@ -79,19 +113,28 @@ class _ReportsScreenState extends State<ReportsScreen> {
         final gateway = context.watch<AdminReportingGateway>();
         if (identical(_reportingCubit?.gateway, gateway)) return;
         _reportingCubit?.close();
+        _workoutCubit?.close();
+        _workoutCubit = null;
+        _lastWorkoutRequestAt = null;
         _visitedTabs
           ..clear()
-          ..add(_ReportsTab.overview);
+          ..add(widget.category);
         _sectionQueries.clear();
         _refreshTokens.clear();
         _lastVisited.clear();
         _scrollOffsets.clear();
-        _tab = _ReportsTab.overview;
+        _tab = widget.category;
         _operational = gateway is OperationalAdminReportingGateway;
         _query = _filterQuery();
-        _lastVisited[_ReportsTab.overview] = DateTime.now();
+        _lastVisited[_tab] = widget.now();
+        if (gateway is AdminWorkoutReportingGateway) {
+          _workoutCubit = AdminWorkoutReportingCubit(
+              gateway: gateway as AdminWorkoutReportingGateway, query: _query!);
+          if (_usesWorkoutReport) _ensureWorkouts();
+        }
         _reportingCubit =
-            AdminReportingCubit(gateway: gateway, initialQuery: _query)..load();
+            AdminReportingCubit(gateway: gateway, initialQuery: _query);
+        if (_usesBusinessReport) _reportingCubit!.load();
       } catch (_) {}
     }
   }
@@ -99,6 +142,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
   @override
   void dispose() {
     _reportingCubit?.close();
+    _workoutCubit?.close();
     _scrollController.dispose();
     super.dispose();
   }
@@ -108,7 +152,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
       return operationalDateQuery(DateTime.now(),
           days: _days, calendarRange: _customDates);
     }
-    final now = DateTime.now();
+    final now = widget.now();
     final start = _days == null
         ? DateTime.fromMillisecondsSinceEpoch(0)
         : now.subtract(Duration(days: _days!));
@@ -120,10 +164,37 @@ class _ReportsScreenState extends State<ReportsScreen> {
     _query = _filterQuery();
     _sectionQueries[_tab] = _query!;
     if (_usesBusinessReport) _reportingCubit?.load(_query);
+    if (_usesWorkoutReport) _ensureWorkouts(force: true);
   }
 
-  void _selectTab(_ReportsTab tab) {
-    if (_tab == tab) return;
+  bool get _usesWorkoutReport =>
+      _tab == ReportsCategory.overview || _tab == ReportsCategory.fitness;
+
+  void _ensureWorkouts({bool force = false}) {
+    final cubit = _workoutCubit;
+    final query = _query;
+    if (cubit == null || query == null) return;
+    final lastRead = cubit.state.receivedAt ?? _lastWorkoutRequestAt;
+    final fresh =
+        lastRead != null && widget.now().difference(lastRead) < _tabFreshness;
+    if (!force &&
+        fresh &&
+        cubit.state.query == query &&
+        cubit.state.error == null &&
+        (cubit.state.report != null || cubit.state.loading)) {
+      assert(() {
+        debugPrint('gainpath_report_cache_hit: workouts');
+        return true;
+      }());
+      return;
+    }
+    _lastWorkoutRequestAt = widget.now();
+    cubit.load(query);
+  }
+
+  void selectCategory(ReportsCategory tab, {bool resume = false}) {
+    if (_tab == tab && !resume) return;
+    if (widget.category != tab) widget.onCategoryChanged?.call(tab);
     if (_scrollController.hasClients) {
       _scrollOffsets[_tab] = _scrollController.offset;
     }
@@ -133,21 +204,24 @@ class _ReportsScreenState extends State<ReportsScreen> {
         !(gateway as AdminReportingSessionGuard).canRetainSnapshot;
     final expired = accessChanged ||
         lastVisited != null &&
-            DateTime.now().difference(lastVisited) > _tabFreshness;
+            widget.now().difference(lastVisited) > _tabFreshness;
     setState(() {
       _tab = tab;
       _visitedTabs.add(tab);
       if (_query != null) _sectionQueries[tab] = _query!;
       if (expired) _refreshTokens[tab] = (_refreshTokens[tab] ?? 0) + 1;
-      _lastVisited[tab] = DateTime.now();
+      _lastVisited[tab] = widget.now();
     });
+    if (_usesWorkoutReport) _ensureWorkouts(force: accessChanged);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || !_scrollController.hasClients) return;
       _scrollController.jumpTo((_scrollOffsets[tab] ?? 0)
           .clamp(0.0, _scrollController.position.maxScrollExtent));
     });
     if (_usesBusinessReport &&
-        (expired || _reportingCubit?.state.query != _query)) {
+        (expired ||
+            _reportingCubit?.state.query != _query ||
+            _reportingCubit?.state.snapshot == null)) {
       _reportingCubit?.load(_query);
     }
   }
@@ -210,11 +284,18 @@ class _ReportsScreenState extends State<ReportsScreen> {
       body: LayoutBuilder(
         builder: (context, constraints) {
           final wide = constraints.maxWidth >= 960;
-          final kpiWidth =
-              (220 * MediaQuery.textScalerOf(context).scale(1).clamp(1.0, 1.5))
-                  .clamp(0.0, constraints.maxWidth - 24)
-                  .toDouble();
-          final gutter = constraints.maxWidth < 600 ? 12.0 : 24.0;
+          final gutter = constraints.maxWidth < 600 ? 12.0 : 20.0;
+          final available = constraints.maxWidth - gutter * 2;
+          final minimum =
+              190 * MediaQuery.textScalerOf(context).scale(1).clamp(1.0, 2.0);
+          final columns = available >= minimum * 5 + 56
+              ? 5
+              : available >= minimum * 3 + 28
+                  ? 3
+                  : available >= minimum * 2 + 14
+                      ? 2
+                      : 1;
+          final kpiWidth = (available - (columns - 1) * 14) / columns;
           return Center(
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 1500),
@@ -222,31 +303,12 @@ class _ReportsScreenState extends State<ReportsScreen> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   Padding(
-                    padding: EdgeInsets.fromLTRB(gutter, 20, gutter, 0),
+                    padding: EdgeInsets.fromLTRB(gutter, 16, gutter, 0),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         _header(context),
-                        const SizedBox(height: 16),
-                        Wrap(
-                          spacing: 8,
-                          runSpacing: 8,
-                          children: [
-                            for (final tab in _ReportsTab.values)
-                              ChoiceChip(
-                                label: Text(tab.label),
-                                selected: _tab == tab,
-                                selectedColor: AppColors.primary,
-                                labelStyle: TextStyle(
-                                    color: _tab == tab
-                                        ? Colors.white
-                                        : AppColors.ink,
-                                    fontWeight: FontWeight.w600),
-                                onSelected: (_) => _selectTab(tab),
-                              ),
-                          ],
-                        ),
-                        const SizedBox(height: 20),
+                        const SizedBox(height: 12),
                       ],
                     ),
                   ),
@@ -261,25 +323,25 @@ class _ReportsScreenState extends State<ReportsScreen> {
                             AdminReportingFeedback(
                                 state: reportingState,
                                 onRetry: _reportingCubit!.refresh),
-                          _toolbar(
-                              snapshot: _usesBusinessReport ? snapshot : null,
-                              loading: _usesBusinessReport &&
-                                  (reportingState?.isLoading ?? false)),
-                          if (_usesBusinessReport && snapshot?.unified != null)
-                            const Padding(
-                                padding: EdgeInsets.only(top: 12),
-                                child: Text(
-                                    BusinessDashboardMetrics.revenueDefinition,
-                                    style: TextStyle(
-                                        fontSize: 12,
-                                        color: AppColors.inkSoft))),
+                          if (_tab == ReportsCategory.fitness &&
+                              _workoutCubit != null)
+                            BlocBuilder<AdminWorkoutReportingCubit,
+                                    AdminWorkoutReportingState>(
+                                bloc: _workoutCubit,
+                                builder: (_, state) =>
+                                    _toolbar(loading: state.loading))
+                          else
+                            _toolbar(
+                                snapshot: _usesBusinessReport ? snapshot : null,
+                                loading: _usesBusinessReport &&
+                                    (reportingState?.isLoading ?? false)),
                           if (_usesBusinessReport && ops != null)
                             OriginalReportContext(snapshot: snapshot!),
-                          const SizedBox(height: 26),
-                          if (_visitedTabs.contains(_ReportsTab.overview))
-                            Offstage(
-                              key: const ValueKey(_ReportsTab.overview),
-                              offstage: _tab != _ReportsTab.overview,
+                          const SizedBox(height: 14),
+                          if (_visitedTabs.contains(ReportsCategory.overview))
+                            _ReportTabBody(
+                              key: const ValueKey(ReportsCategory.overview),
+                              visible: _tab == ReportsCategory.overview,
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
@@ -367,6 +429,14 @@ class _ReportsScreenState extends State<ReportsScreen> {
                                     ],
                                   ),
                                   const SizedBox(height: 20),
+                                  if (_workoutCubit != null) ...[
+                                    AdminWorkoutSummary(
+                                      controller: _workoutCubit!,
+                                      onDetails: () => selectCategory(
+                                          ReportsCategory.fitness),
+                                    ),
+                                    const SizedBox(height: 20),
+                                  ],
                                   if (ops != null) ...[
                                     const Eyebrow('Recent membership receipts'),
                                     Panel(
@@ -376,26 +446,47 @@ class _ReportsScreenState extends State<ReportsScreen> {
                                     const SizedBox(height: 20),
                                     const Eyebrow('Insights & attention'),
                                     Panel(
-                                        child: ListTile(
-                                      contentPadding: EdgeInsets.zero,
-                                      leading:
-                                          const Icon(Icons.event_busy_outlined),
-                                      title: Text(
-                                          '${snapshot.unified == null ? ops.statuses['cancelled'] : BusinessDashboardMetrics(snapshot, null).cancelled} cancelled bookings'),
-                                      subtitle: const Text(
-                                          'Current outcomes for bookings created in the selected period.'),
-                                      trailing: const Icon(Icons.chevron_right),
-                                      onTap: () =>
-                                          _selectTab(_ReportsTab.coaching),
-                                    )),
+                                        child: Column(children: [
+                                      ListTile(
+                                        contentPadding: EdgeInsets.zero,
+                                        leading: const Icon(
+                                            Icons.event_busy_outlined),
+                                        title: Text(
+                                            '${snapshot.unified == null ? ops.statuses['cancelled'] : BusinessDashboardMetrics(snapshot, null).cancelled} cancelled bookings'),
+                                        subtitle: const Text(
+                                            'Current outcomes for bookings created in the selected period.'),
+                                        trailing:
+                                            const Icon(Icons.chevron_right),
+                                        onTap: () => selectCategory(
+                                            ReportsCategory.coaching),
+                                      ),
+                                      const Divider(),
+                                      ListTile(
+                                        contentPadding: EdgeInsets.zero,
+                                        leading: Icon(
+                                            Icons.receipt_long_outlined,
+                                            color: ops.reviewCount > 0
+                                                ? AppColors.warning
+                                                : AppColors.inkSoft),
+                                        title: Text(ops.reviewCount == 0
+                                            ? 'No payment records awaiting review'
+                                            : '${ops.reviewCount} payment records awaiting review'),
+                                        subtitle: const Text(
+                                            'Payment states in the selected period.'),
+                                        trailing:
+                                            const Icon(Icons.chevron_right),
+                                        onTap: () => selectCategory(
+                                            ReportsCategory.financial),
+                                      ),
+                                    ])),
                                   ],
                                 ],
                               ),
                             ),
-                          if (_visitedTabs.contains(_ReportsTab.financial))
-                            Offstage(
-                              key: const ValueKey(_ReportsTab.financial),
-                              offstage: _tab != _ReportsTab.financial,
+                          if (_visitedTabs.contains(ReportsCategory.financial))
+                            _ReportTabBody(
+                              key: const ValueKey(ReportsCategory.financial),
+                              visible: _tab == ReportsCategory.financial,
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
@@ -446,30 +537,32 @@ class _ReportsScreenState extends State<ReportsScreen> {
                                 ],
                               ),
                             ),
-                          if (_visitedTabs.contains(_ReportsTab.fitness))
-                            Offstage(
-                              key: const ValueKey(_ReportsTab.fitness),
-                              offstage: _tab != _ReportsTab.fitness,
+                          if (_visitedTabs.contains(ReportsCategory.fitness))
+                            _ReportTabBody(
+                              key: const ValueKey(ReportsCategory.fitness),
+                              visible: _tab == ReportsCategory.fitness,
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   if (_operational && _reportingCubit != null)
                                     AdminWorkoutAnalytics(
+                                        controller: _workoutCubit,
                                         query: _sectionQueries[
-                                                _ReportsTab.fitness] ??
+                                                ReportsCategory.fitness] ??
                                             _query!,
                                         refreshToken: _refreshTokens[
-                                                _ReportsTab.fitness] ??
+                                                ReportsCategory.fitness] ??
                                             0,
                                         anchorKey: _workoutsKey),
                                   if (_operational && _reportingCubit != null)
                                     AdminPostureSection(
+                                        controller: _workoutCubit,
                                         query: _sectionQueries[
-                                                _ReportsTab.fitness] ??
+                                                ReportsCategory.fitness] ??
                                             _query!,
                                         anchorKey: _postureKey,
                                         refreshToken: _refreshTokens[
-                                                _ReportsTab.fitness] ??
+                                                ReportsCategory.fitness] ??
                                             0)
                                   else
                                     PostureAccuracySection(
@@ -478,10 +571,10 @@ class _ReportsScreenState extends State<ReportsScreen> {
                                 ],
                               ),
                             ),
-                          if (_visitedTabs.contains(_ReportsTab.coaching))
-                            Offstage(
-                              key: const ValueKey(_ReportsTab.coaching),
-                              offstage: _tab != _ReportsTab.coaching,
+                          if (_visitedTabs.contains(ReportsCategory.coaching))
+                            _ReportTabBody(
+                              key: const ValueKey(ReportsCategory.coaching),
+                              visible: _tab == ReportsCategory.coaching,
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
@@ -503,21 +596,21 @@ class _ReportsScreenState extends State<ReportsScreen> {
                                 ],
                               ),
                             ),
-                          if (_visitedTabs.contains(_ReportsTab.engagement))
-                            Offstage(
-                              key: const ValueKey(_ReportsTab.engagement),
-                              offstage: _tab != _ReportsTab.engagement,
+                          if (_visitedTabs.contains(ReportsCategory.engagement))
+                            _ReportTabBody(
+                              key: const ValueKey(ReportsCategory.engagement),
+                              visible: _tab == ReportsCategory.engagement,
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   if (_operational && _reportingCubit != null)
                                     AdminObservedSection(
                                         query: _sectionQueries[
-                                                _ReportsTab.engagement] ??
+                                                ReportsCategory.engagement] ??
                                             _query!,
                                         anchorKey: _usageKey,
                                         refreshToken: _refreshTokens[
-                                                _ReportsTab.engagement] ??
+                                                ReportsCategory.engagement] ??
                                             0)
                                   else
                                     UsageEngagementSection(
@@ -527,12 +620,12 @@ class _ReportsScreenState extends State<ReportsScreen> {
                                   if (_operational && _reportingCubit != null)
                                     AdminObservedSection(
                                         query: _sectionQueries[
-                                                _ReportsTab.engagement] ??
+                                                ReportsCategory.engagement] ??
                                             _query!,
                                         anchorKey: _retentionKey,
                                         retention: true,
                                         refreshToken: _refreshTokens[
-                                                _ReportsTab.engagement] ??
+                                                ReportsCategory.engagement] ??
                                             0)
                                   else
                                     RetentionRiskSection(
@@ -543,22 +636,22 @@ class _ReportsScreenState extends State<ReportsScreen> {
                                       live: widget.live,
                                       query: _operational
                                           ? (_sectionQueries[
-                                                  _ReportsTab.engagement] ??
+                                                  ReportsCategory.engagement] ??
                                               _query)
                                           : null,
                                       refreshToken: _refreshTokens[
-                                              _ReportsTab.engagement] ??
+                                              ReportsCategory.engagement] ??
                                           0),
                                   GamificationSection(
                                       anchorKey: _gamificationKey,
                                       live: widget.live,
                                       query: _operational
                                           ? (_sectionQueries[
-                                                  _ReportsTab.engagement] ??
+                                                  ReportsCategory.engagement] ??
                                               _query)
                                           : null,
                                       refreshToken: _refreshTokens[
-                                              _ReportsTab.engagement] ??
+                                              ReportsCategory.engagement] ??
                                           0),
                                 ],
                               ),
@@ -577,60 +670,33 @@ class _ReportsScreenState extends State<ReportsScreen> {
   }
 
   bool get _usesBusinessReport =>
-      _tab != _ReportsTab.fitness && _tab != _ReportsTab.engagement;
+      _tab != ReportsCategory.fitness && _tab != ReportsCategory.engagement;
 
-  Widget _header(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Container(
-          width: 44,
-          height: 44,
-          decoration: BoxDecoration(
-              gradient: AppColors.heroGradient,
-              borderRadius: BorderRadius.circular(12)),
-          child: const Icon(Icons.query_stats_rounded,
-              color: Colors.white, size: 22),
-        ),
-        const SizedBox(width: 14),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('Reports & analytics',
-                  style: Theme.of(context).textTheme.headlineMedium),
-              const SizedBox(height: 2),
-              Text('Membership, coaching, fitness and member engagement.',
-                  style: Theme.of(context).textTheme.bodyLarge),
-            ],
-          ),
-        ),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-          decoration: BoxDecoration(
-              color: widget.live ? AppColors.surfaceAlt : AppColors.successTint,
-              borderRadius: BorderRadius.circular(999)),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                widget.live ? Icons.info_outline_rounded : Icons.bolt_rounded,
-                size: 13,
-                color: widget.live ? AppColors.inkSoft : AppColors.success,
-              ),
-              const SizedBox(width: 4),
-              Text(
-                widget.live ? 'Live console' : 'Live data',
-                style: TextStyle(
-                    fontSize: 11.5,
-                    fontWeight: FontWeight.w700,
-                    color: widget.live ? AppColors.inkSoft : AppColors.success),
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
+  Widget _header(BuildContext context) => Text('${_tab.label} Analytics',
+      style: Theme.of(context)
+          .textTheme
+          .titleLarge
+          ?.copyWith(fontWeight: FontWeight.w700));
+
+  Future<void> _exportEngagement() async {
+    final gateway = _reportingCubit?.gateway;
+    final query = _query;
+    if (gateway is! AdminCheckInReportingGateway || query == null) return;
+    setState(() => _exporting = true);
+    try {
+      final report =
+          await (gateway as AdminCheckInReportingGateway).loadCheckIns(query);
+      if (mounted && _query == query && _tab == ReportsCategory.engagement) {
+        downloadCsv('gainpath-engagement.csv', report.toCsv());
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Export unavailable. Please retry.')));
+      }
+    } finally {
+      if (mounted) setState(() => _exporting = false);
+    }
   }
 
   Widget _toolbar({AdminReportingSnapshot? snapshot, bool loading = false}) {
@@ -643,7 +709,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
       child: Column(
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             child: Wrap(
               crossAxisAlignment: WrapCrossAlignment.center,
               spacing: 8,
@@ -678,31 +744,32 @@ class _ReportsScreenState extends State<ReportsScreen> {
                     height: 20,
                     color: AppColors.hairline,
                     margin: const EdgeInsets.symmetric(horizontal: 4)),
-                DropdownButtonHideUnderline(
-                  child: DropdownButton<String?>(
-                    value: _branch,
-                    hint: const Text('All branches',
-                        style: TextStyle(fontSize: 12.5)),
-                    isDense: true,
-                    style: const TextStyle(
-                        fontSize: 12.5,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.ink),
-                    items: [
-                      const DropdownMenuItem(
-                          value: null, child: Text('All branches')),
-                      ...context.read<UserAccountRepository>().branches.map(
-                          (b) => DropdownMenuItem(
-                              value: b.name, child: Text(b.name))),
-                    ],
-                    onChanged: _operational
-                        ? null
-                        : (v) => setState(() {
-                              _branch = v;
-                              _onFilterChanged();
-                            }),
+                if (!_operational)
+                  DropdownButtonHideUnderline(
+                    child: DropdownButton<String?>(
+                      value: _branch,
+                      hint: const Text('All branches',
+                          style: TextStyle(fontSize: 12.5)),
+                      isDense: true,
+                      style: const TextStyle(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.ink),
+                      items: [
+                        const DropdownMenuItem(
+                            value: null, child: Text('All branches')),
+                        ...context.read<UserAccountRepository>().branches.map(
+                            (b) => DropdownMenuItem(
+                                value: b.name, child: Text(b.name))),
+                      ],
+                      onChanged: _operational
+                          ? null
+                          : (v) => setState(() {
+                                _branch = v;
+                                _onFilterChanged();
+                              }),
+                    ),
                   ),
-                ),
                 if (_operational) ...[
                   TextButton.icon(
                       icon: const Icon(Icons.date_range_outlined, size: 16),
@@ -728,6 +795,9 @@ class _ReportsScreenState extends State<ReportsScreen> {
                           : () {
                               setState(() => _refreshTokens[_tab] =
                                   (_refreshTokens[_tab] ?? 0) + 1);
+                              if (_usesWorkoutReport) {
+                                _ensureWorkouts(force: true);
+                              }
                               if (_usesBusinessReport) {
                                 _reportingCubit?.refresh();
                               }
@@ -735,15 +805,30 @@ class _ReportsScreenState extends State<ReportsScreen> {
                       icon: const Icon(Icons.refresh_rounded, size: 18)),
                   TextButton.icon(
                       icon: const Icon(Icons.download_rounded, size: 17),
-                      label: const Text('Export overview CSV'),
-                      onPressed: loading || snapshot?.operations == null
+                      label: Text(_exporting ? 'Exporting…' : 'Export CSV'),
+                      onPressed: loading || _exporting
                           ? null
-                          : () => downloadCsv(
-                              'gainpath-operational-report.csv',
-                              snapshot!.unified != null
-                                  ? BusinessDashboardMetrics(snapshot, null)
-                                      .csv()
-                                  : snapshot.operations!.toCsv(snapshot))),
+                          : _tab == ReportsCategory.fitness
+                              ? (_workoutCubit?.state.report == null
+                                  ? null
+                                  : () => downloadCsv(
+                                      'gainpath-workout-activity.csv',
+                                      _workoutCubit!.state.report!.toCsv()))
+                              : _tab == ReportsCategory.engagement
+                                  ? (_reportingCubit?.gateway
+                                          is AdminCheckInReportingGateway
+                                      ? _exportEngagement
+                                      : null)
+                                  : snapshot?.operations == null
+                                      ? null
+                                      : () => downloadCsv(
+                                          'gainpath-operational-report.csv',
+                                          snapshot!.unified != null
+                                              ? BusinessDashboardMetrics(
+                                                      snapshot, null)
+                                                  .csv()
+                                              : snapshot.operations!
+                                                  .toCsv(snapshot))),
                 ],
               ],
             ),
@@ -974,4 +1059,14 @@ class _ReportsScreenState extends State<ReportsScreen> {
       ],
     );
   }
+}
+
+class _ReportTabBody extends StatelessWidget {
+  const _ReportTabBody({super.key, required this.visible, required this.child});
+  final bool visible;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => Offstage(
+      offstage: !visible, child: TickerMode(enabled: visible, child: child));
 }

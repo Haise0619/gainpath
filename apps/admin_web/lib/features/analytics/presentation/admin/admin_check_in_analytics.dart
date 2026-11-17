@@ -1,3 +1,4 @@
+import 'report_metric_grid.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
@@ -152,7 +153,7 @@ class _AdminCheckInAnalyticsState extends State<AdminCheckInAnalytics> {
     final text = Theme.of(context).textTheme,
         periods = _weekly ? r.weekly : r.daily;
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Wrap(spacing: 10, runSpacing: 10, children: [
+      ReportMetricGrid(children: [
         SizedBox(
             width: 210, child: StatTile('${r.claims}', 'Confirmed check-ins')),
         SizedBox(

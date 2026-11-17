@@ -63,7 +63,7 @@ void main() {
                     child: const ReportsScreen(live: true)),
                 fixture.OriginalLayoutGateway()))));
     await tester.pumpAndSettle();
-    expect(find.text('Reports & analytics'), findsOneWidget);
+    expect(find.text('Overview Analytics'), findsOneWidget);
     expect(find.text('Reporting period & coverage'), findsOneWidget);
     expect(tester.takeException(), isNull);
     await tester.runAsync(() async {

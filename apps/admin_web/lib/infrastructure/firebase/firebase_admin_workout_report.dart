@@ -212,6 +212,13 @@ AdminWorkoutReport parseAdminWorkoutReport(
         (daily.fold<double>(0, (n, d) => n + d.sum) - sum).abs() > 0.000001) {
       throw const FormatException('Form totals mismatch');
     }
+    final bands = f['scoreBands'] == null
+        ? null
+        : _counts(f['scoreBands'], {'below60', 'from60To79', 'from80To100'});
+    if (bands != null &&
+        bands.values.fold<int>(0, (sum, count) => sum + count) != count) {
+      throw const FormatException('Score distribution mismatch');
+    }
     scoredByExercise[identity.first] =
         (scoredByExercise[identity.first] ?? 0) + count;
     forms.add(WorkoutFormGroup(
@@ -221,6 +228,7 @@ AdminWorkoutReport parseAdminWorkoutReport(
         detectorVersion: identity[3],
         cameraView: identity[4],
         armMode: identity[5],
+        scoreBands: bands == null ? null : Map.unmodifiable(bands),
         scoredSessions: count,
         scoreSum: sum,
         daily: daily));

@@ -1,4 +1,5 @@
 import 'admin_report_presentation.dart';
+import '../../application/business_dashboard_metrics.dart';
 import 'package:flutter/material.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
 import '../../application/admin_reporting_gateway.dart';
@@ -113,6 +114,7 @@ class OriginalReportContext extends StatelessWidget {
           child: Text(
               '${reportCalendarDate(snapshot.query.range.start)} – ${reportCalendarDate(snapshot.query.range.end.subtract(const Duration(milliseconds: 1)))} · Malaysia (UTC+08:00) · '
               'Current account census; bookings by creation time; receipts by clearance time. '
+              '${snapshot.unified == null ? '' : BusinessDashboardMetrics.revenueDefinition} '
               'Read ${snapshot.operations!.sourceReadStartedAt.toUtc().add(adminReportZone).toIso8601String().substring(11, 19)}–'
               '${snapshot.capturedAt.toUtc().add(adminReportZone).toIso8601String().substring(11, 19)} UTC+08:00.',
               style: Theme.of(context).textTheme.bodySmall)));

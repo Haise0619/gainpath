@@ -139,15 +139,15 @@ void main() {
         originalLayoutApp(const ReportsScreen(live: true), gateway));
     await tester.pumpAndSettle();
     expect(find.byType(AdminOperationalReport), findsNothing);
-    expect(find.text('Reports & analytics'), findsOneWidget);
-    expect(find.text('Overview'), findsWidgets);
+    expect(find.text('Overview Analytics'), findsOneWidget);
+    expect(find.text('Overview Analytics'), findsOneWidget);
     expect(find.byType(RevenueSection), findsNothing);
-    expect(find.text('All branches'), findsOneWidget);
+    expect(find.text('All branches'), findsNothing);
     expect(find.text('MYR 89.00'), findsWidgets);
     expect(find.text('MYR 50.00'), findsWidgets);
-    expect(find.text('Export overview CSV'), findsOneWidget);
+    expect(find.text('Export CSV'), findsOneWidget);
     expect(find.text('Custom dates'), findsOneWidget);
-    await tester.tap(find.text('Financial'));
+    tester.state<ReportsScreenState>(find.byType(ReportsScreen)).selectCategory(ReportsCategory.financial);
     await tester.pumpAndSettle();
     expect(find.byType(RevenueSection), findsOneWidget);
     final revenue = tester
