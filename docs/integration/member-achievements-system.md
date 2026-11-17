@@ -50,7 +50,9 @@ APK 位于 `apps/mobile/build/app/outputs/flutter-apk/app-debug.apk`。SHA-256 �
 
 ## 部署
 
-正式启用需发布同一区域的 `appCheckInCommand`，然后发布包含收藏页的 Android 客户端。Cloud Function 目标为 `functions:appCheckInCommand`（asia-southeast1）。现有 Firestore Rules 已拒绝客户端直接读写此成就路径，无需发布 Rules、索引或迁移脚本。当前交付在本地验证，生产部署及设备安装待执行。
+2026 年 11 月 17 日已在 `gainpath-0619` 的 asia-southeast1 完成 `functions:appCheckInCommand` 源码更新。发布包保留原生产版签到实现，并开放新增的成就操作。包内测试确认连续签到 14 天仍每天发放 50 积分，旧版响应包含三枚徽章，成就操作返回八枚。线上源码 SHA-256 为 `4f17e42704e5f01b024874261d22fdb97ffd9c6168437f24d1138bb36d8c0c6e`，已与上传包比对。线上匿名请求返回 HTTP 401，既有 IAM、Rules 和另外 78 个 Functions 的配置通过比对。
+
+从提交 `ee3f2cb` 单独构建的 APK 位于 `build/member-achievements-release-20261117/clean-mobile/apps/mobile/build/app/outputs/flutter-apk/app-debug.apk`。SHA-256 为 `57c4e7a713c1e95d34b2408257d2b79de7341be9000f151c7036552576323bdf`。期间 Xiaomi 测试机已通过另一轮构建更新。设备 APK 与当时的本机构建哈希一致（`b71311ab528073eb30b62f5b0fbbdf7b1649fc898f0ebff0686dd16f51011148`），并确认包中含收藏页、解锁提示及分享图稿。设备保留该版本，实际训练和分享验收仍待完成。
 
 ## 真机验收
 
