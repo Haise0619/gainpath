@@ -103,11 +103,20 @@ class FirebaseDemoMemberRepositories {
       {'schemaVersion': 1, 'organizationId': transport.scope.organizationId};
   Future<MemberRecommendationPage> loadRecommendations(
       {required bool history, String? afterId}) async {
-    final raw = await transport.map('member.recommendation.list', {
+    final query = <String, Object?>{
       ..._scope,
       'history': history,
       'afterId': afterId,
-    });
+    };
+    Map<String, Object?> raw;
+    try {
+      raw = await transport.map('member.recommendation.list', {
+        ...query,
+        'includeRoutine': true,
+      });
+    } on Module13DemoUnavailable {
+      raw = await transport.map('member.recommendation.list', query);
+    }
     if (raw['schemaVersion'] != 1 ||
         raw['organizationId'] != transport.scope.organizationId ||
         raw['enabled'] != true ||
@@ -270,11 +279,20 @@ class FirebaseDemoInboxRepository implements Module9Repository {
       : const Stream.empty();
   @override
   Future<NoticePage> loadInbox({String? afterId}) async {
-    final raw = await transport.map('member.inbox', {
+    final query = <String, Object?>{
       'schemaVersion': 1,
       'organizationId': transport.scope.organizationId,
-      if (afterId != null) 'afterId': afterId
-    });
+      if (afterId != null) 'afterId': afterId,
+    };
+    Map<String, Object?> raw;
+    try {
+      raw = await transport.map('member.inbox', {
+        ...query,
+        'includeRoutine': true,
+      });
+    } on Module13DemoUnavailable {
+      raw = await transport.map('member.inbox', query);
+    }
     if (raw['schemaVersion'] != 1 ||
         raw['records'] is! List ||
         (raw['records'] as List).length > 30 ||
@@ -352,6 +370,32 @@ class FirebaseDemoTutorialCatalog implements PublishedRoutineCatalogRepository {
             'routineId': id
           })));
   @override
-  Future<PublishedRoutinePage> loadPage({String? afterId}) =>
-      Future.error(const Module13DemoUnavailable());
+  Future<PublishedRoutinePage> loadPage({String? afterId}) async {
+    if (afterId != null) return PublishedRoutinePage([]);
+    final raw = await transport.map('member.discovery', {
+      'schemaVersion': 1,
+      'organizationId': scope.organizationId,
+    });
+    final routines = raw['routines'];
+    if (raw['schemaVersion'] != 1 ||
+        raw['organizationId'] != scope.organizationId ||
+        routines is! List ||
+        routines.length > 20) {
+      throw const FormatException('Invalid published discovery.');
+    }
+    final items = <PublishedRoutine>[];
+    for (final row in routines) {
+      if (row is! Map ||
+          row['id'] is! String ||
+          row['data'] is! Map ||
+          (row['id'] as String).trim().isEmpty ||
+          (row['id'] as String).contains('/') ||
+          items.any((r) => r.id == row['id'])) {
+        throw const FormatException('Invalid published discovery item.');
+      }
+      items.add(PublishedRoutine.fromDocument(
+          row['id'] as String, Map<String, dynamic>.from(row['data'] as Map)));
+    }
+    return PublishedRoutinePage(items);
+  }
 }

@@ -63,13 +63,14 @@ export function createCanonicalRecommendationBackend(deps: RecommendationCommand
           enabled: !!deps.runtime, reason: deps.runtime ? null : CANONICAL_RECOMMENDATION_RELEASE.reason};
       }
       if (operation === 'member.recommendation.list') {
-        keys(data, ['schemaVersion', 'organizationId', 'history', 'afterId']);
+        keys(data, ['schemaVersion', 'organizationId', 'history', 'afterId','includeRoutine'],['schemaVersion','organizationId','history','afterId']);
         if (data.schemaVersion !== 1 || typeof data.history !== 'boolean' ||
+          data.includeRoutine!==undefined && typeof data.includeRoutine!=='boolean' ||
           data.afterId !== null && (typeof data.afterId !== 'string' || !/^[a-f0-9]{64}$/.test(data.afterId))) {
           throw new DomainError('invalid-argument', 'Invalid inbox query.');
         }
         if (deps.runtime) {
-          const page = await canonicalRecommendationPage({...deps, runtime: deps.runtime}, auth, org, data.afterId as string|null, false, data.history);
+          const page = await canonicalRecommendationPage({...deps, runtime: deps.runtime}, auth, org, data.afterId as string|null, false, data.history,data.includeRoutine===true);
           return {schemaVersion: 1, mode: 'accepted_workout', organizationId: org, enabled: true, reason: null,
             recommendations: page.records, nextAfterId: page.nextAfterId};
         }

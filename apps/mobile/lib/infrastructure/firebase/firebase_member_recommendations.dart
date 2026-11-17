@@ -1,4 +1,5 @@
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:gainpath_domain/gainpath_domain.dart' show SessionScope;
 import '../../features/recommendation/application/member_recommendation_repository.dart';
 import '../../features/recommendation/application/recommendation_consent_repository.dart';
@@ -87,11 +88,22 @@ class FirebaseMemberRecommendations {
     if (!enabled) {
       return const MemberRecommendationPage(records: [], enabled: false);
     }
-    final response = _map(await call('member.recommendation.list', {
+    final query = <String, Object?>{
       'schemaVersion': 1,
       'history': history,
       'afterId': afterId,
-    }));
+    };
+    Object? result;
+    try {
+      result = await call('member.recommendation.list', {
+        ...query,
+        'includeRoutine': true,
+      });
+    } on FirebaseFunctionsException catch (error) {
+      if (error.code != 'invalid-argument') rethrow;
+      result = await call('member.recommendation.list', query);
+    }
+    final response = _map(result);
     if (response['schemaVersion'] != 1 ||
         response['mode'] != 'accepted_workout' ||
         response['organizationId'] != scope.organizationId ||

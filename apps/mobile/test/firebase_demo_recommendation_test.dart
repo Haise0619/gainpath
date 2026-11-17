@@ -5,6 +5,56 @@ import 'package:gainpath_mobile/infrastructure/firebase/firebase_demo_recommenda
 
 void main() {
   test(
+      'FYP published discovery uses scoped transport and rejects foreign response',
+      () async {
+    final scope =
+        SessionScope(userId: 'demo-member', organizationId: 'gainpath');
+    var foreign = false;
+    final operations = <String>[];
+    final repo = FirebaseDemoMemberRepositories(Module13DemoTransport(
+        scope: scope,
+        role: AppRole.member,
+        isCurrent: () => true,
+        currentUid: () => scope.userId,
+        emailVerified: () => true,
+        appCheckReady: () async => true,
+        invoke: (_, body) async {
+          operations.add(body['operation'] as String);
+          return {
+            'schemaVersion': 1,
+            'organizationId': foreign ? 'other' : 'gainpath',
+            'routines': [
+              {
+                'id': 'published-1',
+                'data': {
+                  'schemaVersion': 1,
+                  'kind': 'routine',
+                  'status': 'published',
+                  'sourceBlueprintId': 'blueprint-1',
+                  'title': 'Published strength',
+                  'estimatedMinutes': 20,
+                  'difficulty': 'Beginner',
+                  'exercises': [
+                    {
+                      'exerciseId': 'squat',
+                      'name': 'Squat',
+                      'sets': 3,
+                      'reps': 8
+                    }
+                  ]
+                }
+              }
+            ],
+            'coaches': []
+          };
+        }));
+    expect((await repo.catalog.loadPage()).items.single.title,
+        'Published strength');
+    expect(operations, ['member.discovery']);
+    foreign = true;
+    await expectLater(repo.catalog.loadPage(), throwsFormatException);
+  });
+  test(
       'owned history fails closed on foreign payloads, malformed pages and repeated cursors',
       () async {
     for (final raw in [

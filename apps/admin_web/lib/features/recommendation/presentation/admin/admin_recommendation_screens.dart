@@ -67,7 +67,7 @@ class _RiskLeaderboardScreenState extends State<RiskLeaderboardScreen> {
                 for (final (tab, label) in const [
                   (RecommendationMonitorTab.overview, 'Overview'),
                   (RecommendationMonitorTab.history, 'History'),
-                  (RecommendationMonitorTab.attention, 'Needs Attention'),
+                  (RecommendationMonitorTab.attention, 'Delivery Issues'),
                 ])
                   ChoiceChip(
                     selectedColor: AppColors.primaryTint,
@@ -94,6 +94,7 @@ class _RiskLeaderboardScreenState extends State<RiskLeaderboardScreen> {
                         tab: _tab,
                         clock: widget.queueClock)
                     : RecommendationQueuePanel(
+                        readOnly: true,
                         tab: _tab,
                         repository: widget.queueRepository,
                         clock: widget.queueClock)),

@@ -1,5 +1,6 @@
 import 'dart:async';
 import '../../features/recommendation/application/member_recommendation_page_cache.dart';
+import '../../features/recommendation/application/published_recommendation_suggestion.dart';
 import '../../infrastructure/firebase/firebase_module9_repository.dart';
 import 'package:gainpath_data/gainpath_data.dart' show ScopedCommandTransport;
 import '../../infrastructure/firebase/firebase_fyp_dataset.dart';
@@ -61,6 +62,7 @@ Widget buildMemberRecommendationNotifications(AuthSession session,
                       FirebaseCoachDirectoryRepository(
                           scope: session.scope, isCurrent: current),
                   catalog: catalog ??
+                      scoped?.catalog ??
                       FirebasePublishedRoutineRepository(
                           scope: session.scope,
                           activeScope: () => current() ? session.scope : null),
@@ -124,6 +126,8 @@ class _RecommendationHostState extends State<MemberRecommendationHost> {
   late MemberRecommendationRepository _repository;
   late MemberRecommendationPageLoader _load;
   MemberRecommendationNavigator? _navigator;
+  Future<List<PublishedRecommendationSuggestion>>? _discovery;
+  DateTime? _discoveryLoadedAt;
   late MemberRecommendationPageCache _cache;
   Stream<void>? _updates;
   StreamController<void>? _signals;
@@ -149,6 +153,8 @@ class _RecommendationHostState extends State<MemberRecommendationHost> {
   }
 
   void _configure() {
+    _discovery = null;
+    _discoveryLoadedAt = null;
     final session = widget.session;
     bool current() =>
         mounted && widget.session == session && widget.isCurrent();
@@ -182,7 +188,6 @@ class _RecommendationHostState extends State<MemberRecommendationHost> {
     _signals = signals;
     _updates = _repository.enabled ? signals.stream : null;
     _navigator = null;
-    if (!_repository.enabled) return;
     _navigator = MemberRecommendationNavigator(
         session: session,
         repository: _repository,
@@ -192,6 +197,7 @@ class _RecommendationHostState extends State<MemberRecommendationHost> {
             FirebaseCoachDirectoryRepository(
                 scope: session.scope, isCurrent: current),
         catalog: widget.catalog ??
+            demo?.catalog ??
             FirebasePublishedRoutineRepository(
                 scope: session.scope,
                 activeScope: () => current() ? session.scope : null),
@@ -199,6 +205,28 @@ class _RecommendationHostState extends State<MemberRecommendationHost> {
         bookingListFactory: widget.bookingListFactory,
         availabilityFactory: widget.availabilityFactory,
         bookingNavigationEnabled: true);
+  }
+
+  Future<List<PublishedRecommendationSuggestion>> _loadDiscovery() async {
+    final navigator = _navigator;
+    if (navigator == null || !widget.isCurrent()) return [];
+    if (_discovery != null &&
+        _discoveryLoadedAt != null &&
+        DateTime.now().difference(_discoveryLoadedAt!) <
+            const Duration(seconds: 20)) {
+      return _discovery!;
+    }
+    final request = navigator.loadDiscovery();
+    _discovery = request;
+    _discoveryLoadedAt = DateTime.now();
+    try {
+      final items = await request;
+      _discoveryLoadedAt = DateTime.now();
+      return items;
+    } catch (_) {
+      if (identical(_discovery, request)) _discovery = null;
+      rethrow;
+    }
   }
 
   @override
@@ -221,13 +249,15 @@ class _RecommendationHostState extends State<MemberRecommendationHost> {
         context,
         MaterialPageRoute(
             builder: (_) => Scaffold(
-                appBar: AppBar(title: const Text('Recommendations')),
+                appBar: AppBar(title: const Text('Recommended for You')),
                 body: SafeArea(
                     child: SingleChildScrollView(
                         padding: const EdgeInsets.all(16),
                         child: MemberRecommendationsView(
                             repository: _repository,
                             loadPage: _load,
+                            loadDiscovery: _loadDiscovery,
+                            onOpenDiscovery: _navigator?.openDiscovery,
                             updates: _updates,
                             onInvalidate: _cache.invalidate,
                             isCurrent: widget.isCurrent,
@@ -247,6 +277,8 @@ class _RecommendationHostState extends State<MemberRecommendationHost> {
   Widget build(BuildContext context) => MemberRecommendationsView(
       repository: _repository,
       loadPage: _load,
+      loadDiscovery: _loadDiscovery,
+      onOpenDiscovery: _navigator?.openDiscovery,
       updates: _updates,
       onInvalidate: _cache.invalidate,
       isCurrent: widget.isCurrent,

@@ -1,5 +1,5 @@
 import {replayWorkoutHistory} from './workout-backup-history';
-import {workoutRecommendationDependencies} from './workout-backup-recommendation-events';
+import {workoutRecommendationDependencies,workoutRecommendationGeminiKey} from './workout-backup-recommendation-events';
 import {getWorkoutBackupRuntime} from './workout-backup-recommendation-runtime';
 import {getAuth} from 'firebase-admin/auth';
 import {getFirestore} from 'firebase-admin/firestore';
@@ -12,6 +12,7 @@ import {createCanonicalRecommendationAdmin} from './canonical-recommendation-adm
 
 /** Prepared export only. No deployment or admission policy is authorized. */
 export const module13MemberCommand = onCall({region: 'asia-southeast1', enforceAppCheck: true,
+  secrets:[workoutRecommendationGeminiKey],
   timeoutSeconds: 30, maxInstances: 2, concurrency: 20}, async request => {
   try {
     const db = getFirestore();

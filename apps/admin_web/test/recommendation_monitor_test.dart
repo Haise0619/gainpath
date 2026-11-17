@@ -73,7 +73,7 @@ void main() {
     expect(find.text('Delivered'), findsOneWidget);
     expect(find.text('Delivery unverified'), findsOneWidget);
 
-    await tester.tap(find.text('Needs Attention'));
+    await tester.tap(find.text('Delivery Issues'));
     await tester.pumpAndSettle();
     expect(find.text('Squat foundations'), findsOneWidget);
     expect(find.text('Sample Coach'), findsNothing);

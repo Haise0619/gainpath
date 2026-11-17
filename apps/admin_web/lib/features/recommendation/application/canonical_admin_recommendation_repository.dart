@@ -1,3 +1,6 @@
+import 'package:cloud_functions/cloud_functions.dart';
+import 'package:gainpath_data/gainpath_data.dart';
+
 import 'recommendation_queue.dart';
 
 typedef CanonicalAdminInvoke = Future<Object?> Function(
@@ -34,6 +37,60 @@ String _id(Object? value) {
   return id;
 }
 
+class RecommendationAiMetadata {
+  RecommendationAiMetadata._(this.method, this.workoutContext,
+      this.fitnessGoals, this.factors, this.model, this.technical);
+  final String method, workoutContext;
+  final List<String> fitnessGoals, factors;
+  final String? model;
+  final Map<String, Object?> technical;
+
+  factory RecommendationAiMetadata.parse(Object? value) {
+    final raw = _map(value);
+    if (!const ['gemini', 'rule_fallback'].contains(raw['method'])) {
+      throw const FormatException('Invalid recommendation method.');
+    }
+    List<String> strings(String key) {
+      final values = raw[key] ?? const [];
+      if (values is! List || values.length > 20) {
+        throw const FormatException('Invalid recommendation context.');
+      }
+      return List.unmodifiable(values.map((value) => _text(value, 500)));
+    }
+
+    final technical = <String, Object?>{};
+    for (final key in [
+      'candidateCount',
+      'latencyMillis',
+      'inputTokens',
+      'outputTokens'
+    ]) {
+      final value = raw[key];
+      if (value == null) continue;
+      if (value is! num || !value.isFinite || value < 0) {
+        throw const FormatException('Invalid recommendation metrics.');
+      }
+      technical[key] = value;
+    }
+    if (raw['changedOrder'] != null) {
+      if (raw['changedOrder'] is! bool) {
+        throw const FormatException('Invalid ranking metadata.');
+      }
+      technical['changedOrder'] = raw['changedOrder'];
+    }
+    if (raw['fallbackReason'] != null) {
+      technical['fallbackReason'] = _text(raw['fallbackReason'], 500);
+    }
+    return RecommendationAiMetadata._(
+        raw['method']! as String,
+        _text(raw['workoutContext'], 1500),
+        strings('fitnessGoals'),
+        strings('factors'),
+        raw['model'] == null ? null : _text(raw['model'], 128),
+        Map.unmodifiable(technical));
+  }
+}
+
 /// Accepted-workout records deliberately do not use the synthetic queue parser.
 class CanonicalAdminRecommendation {
   CanonicalAdminRecommendation._(
@@ -55,7 +112,8 @@ class CanonicalAdminRecommendation {
       this.expiresAt,
       this.deliveredAt,
       [this.evidenceSummary,
-      this.memberLabel]);
+      this.memberLabel,
+      this.ai]);
   final String id,
       organizationId,
       memberId,
@@ -73,6 +131,19 @@ class CanonicalAdminRecommendation {
   final DateTime createdAt, expiresAt;
   final DateTime? deliveredAt;
   final String? evidenceSummary, memberLabel;
+  final RecommendationAiMetadata? ai;
+  String get typeLabel => const {
+        'trainer': 'Coach',
+        'content': 'Tutorial',
+        'routine': 'Routine'
+      }[kind]!;
+  String get aiMethodLabel => status == 'withdrawn'
+      ? 'Withheld'
+      : ai == null
+          ? 'Rules'
+          : ai!.method == 'gemini'
+              ? 'Gemini'
+              : 'Rule fallback';
   bool actionable(DateTime now) =>
       status == 'pending' && expiresAt.isAfter(now.toUtc());
   factory CanonicalAdminRecommendation.parse(Object? raw, String org) {
@@ -88,7 +159,7 @@ class CanonicalAdminRecommendation {
     }
     if (redacted) {
       if (r['status'] != 'withdrawn' ||
-          !['trainer', 'content'].contains(r['kind'])) {
+          !['trainer', 'content', 'routine'].contains(r['kind'])) {
         throw const FormatException('Invalid redacted history.');
       }
       return CanonicalAdminRecommendation._(
@@ -118,7 +189,14 @@ class CanonicalAdminRecommendation {
     }
     final target = _map(s['target']);
     final kind = _text(target['kind'], 20);
-    RecommendationQueueTarget.parse(target, org, kind);
+    if (kind == 'routine') {
+      if (target['organizationId'] != org) {
+        throw const FormatException('Foreign routine destination.');
+      }
+      _text(target['routineId'], 128);
+    } else {
+      RecommendationQueueTarget.parse(target, org, kind);
+    }
     final created = _number(r['createdAtMillis']),
         expires = _number(r['expiresAtMillis']);
     final delivered =
@@ -171,7 +249,8 @@ class CanonicalAdminRecommendation {
             ? null
             : DateTime.fromMillisecondsSinceEpoch(delivered, isUtc: true),
         evidenceSummary,
-        r['memberLabel'] == null ? null : _text(r['memberLabel'], 120));
+        r['memberLabel'] == null ? null : _text(r['memberLabel'], 120),
+        s['ai'] == null ? null : RecommendationAiMetadata.parse(s['ai']));
   }
 }
 
@@ -252,7 +331,18 @@ class CanonicalAdminRecommendationRepository {
     _guard();
     if (_accessDenied) throw StateError('Recommendations require review.');
     if (afterId != null) _id(afterId);
-    final r = await _call('admin.queue.list', {'afterId': afterId});
+    Map<String, Object?> r;
+    try {
+      r = await _call('admin.queue.list', {
+        'afterId': afterId,
+        'includeRoutine': true,
+      });
+    } on FirebaseFunctionsException catch (error) {
+      if (error.code != 'invalid-argument') rethrow;
+      r = await _call('admin.queue.list', {'afterId': afterId});
+    } on Module13DemoUnavailable {
+      r = await _call('admin.queue.list', {'afterId': afterId});
+    }
     if (r['schemaVersion'] != 1 ||
         !const ['accepted_workout', 'workout_backup'].contains(r['mode']) ||
         r['organizationId'] != organizationId ||

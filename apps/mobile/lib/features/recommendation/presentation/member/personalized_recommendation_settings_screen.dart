@@ -315,7 +315,7 @@ String _explanation(RecommendationConsentPurpose purpose) => switch (purpose) {
       RecommendationConsentPurpose.exerciseInsights =>
         'Use recent synced workout results to find relevant exercise guidance.',
       RecommendationConsentPurpose.recommendationGeneration =>
-        'Suggest tutorials and optional Coaches based on your exercise activity and goals.',
+        'Suggest routines, tutorials and optional coaching based on your exercise activity and goals.',
       RecommendationConsentPurpose.externalAiInference =>
         'Let Gemini help rank eligible suggestions using minimal, anonymized context. Suggestions also work without Gemini.',
       RecommendationConsentPurpose.recommendationDelivery =>

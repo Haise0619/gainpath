@@ -1,14 +1,20 @@
 import type {TransactionPort} from '../../platform/firestore/store';
-import type {RecommendationLead, RecommendationKind, QueueTarget} from './recommendation-queue-contracts';
+import type {RecommendationLead, RecommendationKind, QueueTarget, CanonicalTarget} from './recommendation-queue-contracts';
 import type {LearningNeed} from './recommendation-ranking-contracts';
 import type {QueueSecurityDependencies} from './recommendation-queue-security';
 
 export interface CurrentRecommendationTarget {
-  target: QueueTarget;
+  target: CanonicalTarget;
   label: string;
   specialization: string | null;
   imageUrl: string | null;
   photoPath: string | null;
+  difficulty?: string;
+  durationMinutes?: number;
+  exerciseCount?: number;
+  priceMinor?: number;
+  currency?: string;
+  branchLabel?: string;
 }
 export interface RecommendationDeliveryDependencies extends QueueSecurityDependencies {
   /** Explicit trusted local composition, never a request field. Default off. */
@@ -23,7 +29,7 @@ export interface MemberRecommendationDetail {
   mode: 'synthetic_local';
   organizationId: string;
   recommendationId: string;
-  kind: RecommendationKind;
+  kind: RecommendationKind | 'routine';
   revision: number;
   state: MemberRecommendationState;
   title: string;
@@ -31,7 +37,7 @@ export interface MemberRecommendationDetail {
   exerciseLabel: string | null;
   objective: LearningNeed['objective'] | null;
   explanations: string[];
-  target: QueueTarget | null;
+  target: CanonicalTarget | null;
   targetLabel: string | null;
   specialization: string | null;
   imageUrl: string | null;
@@ -42,6 +48,13 @@ export interface MemberRecommendationDetail {
   readAtMillis: number | null;
   acknowledgedAtMillis: number | null;
   dismissedAtMillis: number | null;
+  difficulty?: string;
+  durationMinutes?: number;
+  exerciseCount?: number;
+  priceMinor?: number;
+  currency?: string;
+  branchLabel?: string;
+  aiMethod?: 'gemini'|'rule_fallback';
 }
 export interface RecommendationDeliveryReceipt {
   schemaVersion: 1;

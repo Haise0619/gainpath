@@ -1,5 +1,5 @@
 import { backupWorkout, listWorkoutBackups, type BackupStore } from '../workouts/workout-backup';
-import { createWorkoutBackupRuntime } from '../recommendation/workout-backup-recommendation-runtime';
+import { createWorkoutBackupRuntime, getConfiguredWorkoutRankingProvider } from '../recommendation/workout-backup-recommendation-runtime';
 import { createCanonicalRecommendationBackend } from '../recommendation/canonical-recommendation-backend';
 import { createCanonicalRecommendationAdmin } from '../recommendation/canonical-recommendation-admin';
 import { createCanonicalRecommendationLifecycle } from '../recommendation/canonical-recommendation-lifecycle';
@@ -32,7 +32,7 @@ import {createFypAssistantFirestore} from './fyp-assistant';
 import {fitnessAssistantHandler} from '../chatbot/chatbot-callable';
 import {HttpsError} from 'firebase-functions/v2/https';
 const modules=['getMembershipOverviewCommand','getCoachRatingsCommand','getMemberBookingOptionsCommand','getCoachAvailabilityCommand','getCoachRosterCommand','getBookingListCommand','module9MemberCommandCallable','adminReportingCommand','adminWorkoutReportingCommand','adminCheckInReportingCommand','workoutProgramCommand','getCoachCertificationsCommand','getCoachPublishedPhotoCommand'];
-const operations=new Set(['member.assistant','admin.insights','admin.configuration.get','admin.configuration.save','admin.configuration.choices','admin.queue.refresh','admin.queue.automatic','admin.queue.list','admin.queue.monitor','admin.queue.detail','admin.queue.decide','admin.queue.status','member.history','member.workoutHistory','member.workout.backup','workout.session.access','workout.admin.queue.list','workout.admin.queue.detail','workout.member.history.replay','workout.member.consent.get','workout.member.consent.set','workout.member.consent.notice','workout.member.recommendation.list','workout.member.recommendation.command','member.consent.get','member.consent.set','member.consent.notice','member.recommendation.command','member.inbox','member.recommendation.list','member.coach','member.routine','delivery.process',...modules.map(n=>`module/${n}`)]);
+const operations=new Set(['member.assistant','admin.insights','admin.configuration.get','admin.configuration.save','admin.configuration.choices','admin.queue.refresh','admin.queue.automatic','admin.queue.list','admin.queue.monitor','admin.queue.detail','admin.queue.decide','admin.queue.status','member.discovery','member.history','member.workoutHistory','member.workout.backup','workout.session.access','workout.admin.queue.list','workout.admin.queue.detail','workout.member.history.replay','workout.member.consent.get','workout.member.consent.set','workout.member.consent.notice','workout.member.recommendation.list','workout.member.recommendation.command','member.consent.get','member.consent.set','member.consent.notice','member.recommendation.command','member.inbox','member.recommendation.list','member.coach','member.routine','delivery.process',...modules.map(n=>`module/${n}`)]);
 export function parseFypEnvelope(raw:unknown):{operation:string;data:DocumentData}{
   const q=object(raw);keys(q,['schemaVersion','operation','data']);
   if(q.schemaVersion!==1||!operations.has(String(q.operation))||Buffer.byteLength(JSON.stringify(q))>16384)throw new DomainError('invalid-argument','Unsupported bounded dataset command.');
@@ -93,7 +93,7 @@ export function createFypDatasetBackend(options:{db:Firestore;auth:Pick<Auth,'ge
       const runtime = createWorkoutBackupRuntime(db, async uid => {
         const user = await c.readAuthIdentity(uid);
         return user.emailVerified && !user.disabled;
-      }, c.scope.rootPath);
+      }, c.scope.rootPath, {provider:getConfiguredWorkoutRankingProvider(),...(options.canonicalAdminRead?{unifiedAdminPagination:true as const}:{})});
       try {
         const ids = await createCanonicalRecommendationLifecycle({
           store: c.store, runtime, readAuthIdentity: c.readAuthIdentity, clock,
@@ -129,7 +129,7 @@ export function createFypDatasetBackend(options:{db:Firestore;auth:Pick<Auth,'ge
         const workoutRuntime = createWorkoutBackupRuntime(db, async uid => {
           const identity = await readAuthIdentity(uid);
           return identity.emailVerified && !identity.disabled;
-        }, scope.rootPath);
+        }, scope.rootPath, {provider:getConfiguredWorkoutRankingProvider(),...(options.canonicalAdminRead?{unifiedAdminPagination:true as const}:{})});
         const workoutDeps = {store, runtime: workoutRuntime, readAuthIdentity, clock};
         if (e.operation.startsWith('workout.')) {
           const operation = e.operation.slice('workout.'.length);
@@ -224,6 +224,20 @@ export function createFypDatasetBackend(options:{db:Firestore;auth:Pick<Auth,'ge
           })(request));
         }
         const memberIds=(source.members as {memberId:string}[]).map(m=>m.memberId),coachIds=source.coachIds as string[];
+        if(e.operation==='member.discovery'){
+          const q=object(request.data);keys(q,['schemaVersion','organizationId']);
+          if(q.schemaVersion!==1||scope.role!=='member')throw deny();
+          const routines=await store.transact(async tx=>{
+            const ids=Array.isArray(source.publicationIds)?source.publicationIds.slice(0,20):[];
+            const rows=await Promise.all(ids.map(async id=>({id,data:await tx.get(`orgs/gainpath/content/${id}`)})));
+            return rows.filter(row=>row.data?.status==='published'&&row.data.archived!==true&&row.data.isActive!==false);
+          });
+          const coaches=await store.transact(async tx=>{
+            const rows=await Promise.all(coachIds.slice(0,12).map(async id=>({id,data:await tx.get(`orgs/gainpath/coaches/${id}`)})));
+            return rows.filter(row=>row.data?.status==='published'&&row.data.certificationVerified===true);
+          });
+          return await finalize({schemaVersion:1,organizationId:scope.organizationId,routines,coaches});
+        }
         const adapters=await createModule13DemoDataAdapters({db,queryRoot:scope.rootPath,manifest:{seedId:scope.seedId,memberIds,coachIds,recordPaths:(run.sourcePaths as string[]).map(logical),noticePolicies},store,deps,readAuthIdentity,clock,observations:evidence});
         const deliveryDeps={...deps,resolveTarget:adapters.resolveTarget};
         let oldProject: Awaited<ReturnType<typeof createRecommendationNoticeProjector>>|undefined;
@@ -289,8 +303,8 @@ export function createFypDatasetBackend(options:{db:Firestore;auth:Pick<Auth,'ge
           }
           case'module/module9MemberCommandCallable':result=await fypModuleRead(e.operation,request,{...genericDeps,projectRecommendation});break;
           case 'member.recommendation.list': {
-            const q=object(request.data); keys(q,['schemaVersion','organizationId','history','afterId']);
-            if(q.schemaVersion!==1||typeof q.history!=='boolean'||q.afterId!==null&&
+            const q=object(request.data); keys(q,['schemaVersion','organizationId','history','afterId','includeRoutine'],['schemaVersion','organizationId','history','afterId']);
+            if(q.schemaVersion!==1||typeof q.history!=='boolean'||q.includeRoutine!==undefined&&typeof q.includeRoutine!=='boolean'||q.afterId!==null&&
               (typeof q.afterId!=='string'||!/^[A-Za-z0-9_-]{1,128}$/.test(q.afterId)))throw deny();
             const rows=await adapters.inboxReader.list(scope.organizationId,scope.uid,q.afterId as string|null ?? undefined);
             if(rows.length>31)throw deny();
@@ -301,6 +315,7 @@ export function createFypDatasetBackend(options:{db:Firestore;auth:Pick<Auth,'ge
               const batch=await Promise.all(rows.slice(offset,Math.min(offset+4,30)).map(async ({data})=>{
                 if(data.recipientId!==scope.uid)throw deny();
                 if(data.type!=='recommendation')return null;
+                if(data.recommendationKind==='routine'&&q.includeRoutine!==true)return null;
                 const id=data.recommendationId;
                 if(typeof id!=='string'||!/^[a-f0-9]{64}$/.test(id))throw deny();
                 const detail=data.mode==='workout_backup'?
@@ -315,7 +330,7 @@ export function createFypDatasetBackend(options:{db:Firestore;auth:Pick<Auth,'ge
               nextAfterId:rows.length>30?rows[29].id:null};
             break;
           }
-          case'member.inbox':{const q=object(request.data);keys(q,['schemaVersion','organizationId','afterId'],['schemaVersion','organizationId']);result=await module9MemberCommand(store,incoming.auth,{...q,action:'inbox'},clock,{...adapters.inboxReader,projectRecommendation});break;}
+          case'member.inbox':{const q=object(request.data);keys(q,['schemaVersion','organizationId','afterId','includeRoutine'],['schemaVersion','organizationId']);result=await module9MemberCommand(store,incoming.auth,{...q,action:'inbox'},clock,{...adapters.inboxReader,projectRecommendation});break;}
           case'member.coach':case'member.routine':{const q=object(request.data),coach=e.operation==='member.coach',field=coach?'coachId':'routineId';keys(q,['schemaVersion','organizationId',field]);if(q.schemaVersion!==1||typeof q[field]!=='string'||!(coach?coachIds:source.publicationIds as string[]).includes(String(q[field])))throw deny();result=await store.transact(tx=>tx.get(`orgs/gainpath/${coach?'coaches':'content'}/${q[field]}`));if(!result||(result as DocumentData).status!=='published')throw deny();break;}
           default:throw deny();
         }

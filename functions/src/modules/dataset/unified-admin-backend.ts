@@ -31,7 +31,25 @@ const fields:Record<string,string[]>={
 const deny=()=>new DomainError('permission-denied','Current unified Admin read access is required.');
 /** A source's cursor is its scanned frontier, including filtered rows. Never
  * advance past an unfinished source or later valid records could be skipped. */
-export function mergeRecommendationPages(pages: readonly {records:DocumentData[];nextAfterId:string|null}[]) {
+export function mergeRecommendationPages(pages: readonly {records:DocumentData[];nextAfterId:string|null;nextCreatedAtMillis?:number}[]) {
+ const combined=pages.flatMap(page=>page.records);
+ if((combined.length||pages.some(page=>Number.isSafeInteger(page.nextCreatedAtMillis))) &&
+   combined.every(row=>Number.isSafeInteger(row.createdAtMillis))){
+  const compare=(a:DocumentData,b:DocumentData)=>Number(b.createdAtMillis)-Number(a.createdAtMillis)||
+    String(b.id).localeCompare(String(a.id));
+  const rows=[...combined].sort(compare);
+  if(new Set(rows.map(row=>row.id)).size!==rows.length)throw deny();
+  const frontiers=pages.filter(page=>page.nextAfterId!==null).map(page=>{
+   const frontier=page.records.find(row=>row.id===page.nextAfterId) ??
+    (Number.isSafeInteger(page.nextCreatedAtMillis)?{id:page.nextAfterId,createdAtMillis:page.nextCreatedAtMillis}:null);
+   if(!frontier)throw deny();
+   return frontier;
+  });
+  if(rows.length>25)frontiers.push(rows[24]);
+  const boundary=frontiers.sort(compare)[0];
+  return {records:rows.filter(row=>!boundary||compare(row,boundary)<=0).slice(0,25),
+   nextAfterId:boundary?String(boundary.id):null};
+ }
  const rows=pages.flatMap(page=>page.records).sort((a,b)=>String(a.id).localeCompare(String(b.id)));
  if(new Set(rows.map(row=>row.id)).size!==rows.length)throw deny();
  const frontiers=pages.map(page=>page.nextAfterId).filter((id):id is string=>id!==null);
@@ -61,7 +79,7 @@ export function createUnifiedAdminBackend(options:{db:Firestore;auth:Pick<Auth,'
   if(e.operation==='admin.unified.recommendations') {
    const operation=String(d.operation),input=object(d.input);
    if(!['admin.queue.list','admin.queue.detail'].includes(operation))throw deny();
-   const normal=createCanonicalRecommendationAdmin({store:canonical,runtime:getWorkoutBackupRuntime(),clock,
+   const normal=createCanonicalRecommendationAdmin({store:canonical,runtime:getWorkoutBackupRuntime({unifiedAdminPagination:true}),clock,
     readAuthIdentity:async uid=>{const user=await auth.getUser(uid);return{uid:user.uid,email:user.email??'',disabled:user.disabled,
      emailVerified:user.emailVerified,tokensValidAfterMillis:user.tokensValidAfterTime?Date.parse(user.tokensValidAfterTime):0};}});
    const normalCall=()=>normal({...request,data:{schemaVersion:1,operation,data:input}});
@@ -71,10 +89,18 @@ export function createUnifiedAdminBackend(options:{db:Firestore;auth:Pick<Auth,'
     result=(await db.doc('orgs/gainpath/canonicalRecommendations/'+id).get()).exists?
       await normalCall():await call('workout.'+operation,input);
    } else {
-    const [existing,sample]=await Promise.all([normalCall(),call('workout.'+operation,input)]) as
-      {records:DocumentData[];nextAfterId:string|null}[];
+    const pages=await Promise.all([normalCall(),call('workout.'+operation,input)]) as
+      {records:DocumentData[];nextAfterId:string|null;nextCreatedAtMillis?:number}[];
+    for(const [index,page] of pages.entries()){
+     if(page.nextAfterId && !page.records.some(row=>row.id===page.nextAfterId)){
+      const root=index===0?'orgs/gainpath':UNIFIED_ROOT;
+      const frontier=(await db.doc(`${root}/canonicalRecommendations/${page.nextAfterId}`).get()).data();
+      if(!Number.isSafeInteger(frontier?.createdAtMillis))throw deny();
+      page.nextCreatedAtMillis=Number(frontier!.createdAtMillis);
+     }
+    }
     result={schemaVersion:1,mode:'accepted_workout',organizationId:'gainpath',enabled:true,reason:null,
-      ...mergeRecommendationPages([existing,sample])};
+      ...mergeRecommendationPages(pages)};
    }
   }
   else if(e.operation==='admin.unified.cohort')result=await call(String(d.operation),object(d.input));

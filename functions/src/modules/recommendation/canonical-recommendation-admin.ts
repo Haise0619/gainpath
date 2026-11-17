@@ -20,9 +20,10 @@ export function createCanonicalRecommendationAdmin(deps: RecommendationCommandDe
       if(!deps.runtime) throw new DomainError('failed-precondition','Canonical source and target policies require review.');
       const lifecycle=createCanonicalRecommendationLifecycle({...deps,runtime:deps.runtime});
       if(e.operation==='admin.queue.list') {
-        keys(q,['schemaVersion','organizationId','afterId']);
-        if(q.schemaVersion!==1||q.afterId!==null&&(typeof q.afterId!=='string'||!/^[a-f0-9]{64}$/.test(q.afterId)))throw new DomainError('invalid-argument','Invalid query.');
-        const page=await canonicalRecommendationPage({...deps,runtime:deps.runtime},auth,org,q.afterId as string|null,true);
+        keys(q,['schemaVersion','organizationId','afterId','includeRoutine'],['schemaVersion','organizationId','afterId']);
+        if(q.schemaVersion!==1||q.includeRoutine!==undefined&&typeof q.includeRoutine!=='boolean'||
+          q.afterId!==null&&(typeof q.afterId!=='string'||!/^[a-f0-9]{64}$/.test(q.afterId)))throw new DomainError('invalid-argument','Invalid query.');
+        const page=await canonicalRecommendationPage({...deps,runtime:deps.runtime},auth,org,q.afterId as string|null,true,false,q.includeRoutine===true);
         return{schemaVersion:1,mode:'accepted_workout',organizationId:org,enabled:true,reason:null,records:page.records,nextAfterId:page.nextAfterId};
       }
       if(e.operation==='admin.queue.detail'||e.operation==='delivery.process') {

@@ -37,16 +37,52 @@ async function boundedText(response: Response): Promise<string> {
   finally {reader.releaseLock();}
   return Buffer.concat(chunks).toString('utf8');
 }
-/** Credential supplied by existing GEMINI_API_KEY integration; never resolved at import time. */
-export function createGeminiRecommendationRanker(options: {apiKey:string; model?:string; fetcher?:typeof fetch; timeoutMillis?:number; clock?:()=>number; maxRequests?:number}): RankingProvider {
+export interface GeminiRankingOptions {
+  apiKey: string;
+  model?: string;
+  fetcher?: typeof fetch;
+  timeoutMillis?: number;
+  clock?: () => number;
+  maxRequests?: number;
+}
+interface GeminiRankingContract<T> {
+  assertRequest: (value: unknown) => asserts value is T;
+  systemPrompt: string;
+  responseSchema: Record<string, unknown>;
+  maxOutputTokens?: number;
+  maxRequestBytes?: number;
+  requestWindowMillis?: number;
+  includeSchemaInPrompt?: boolean;
+}
+/** Shared bounded transport. Credentials are resolved by the existing integration.
+ * Callers supply an allowlisted contract and validate the generated JSON locally. */
+export function createGeminiRankingProvider<T>(
+  options: GeminiRankingOptions, contract: GeminiRankingContract<T>,
+): (request: T) => Promise<RankingInference> {
   const model=options.model??process.env.GEMINI_CHAT_MODEL??'gemini-3.5-flash-lite';
-  const invoke:RankingProvider=async request => {
-    assertAnonymousRequest(request);
+  const maxOutputTokens = contract.maxOutputTokens ?? GEMINI_RANK_LIMITS.maxOutputTokens;
+  const maxRequestBytes = contract.maxRequestBytes ?? GEMINI_RANK_LIMITS.maxRequestBytes;
+  const window = contract.requestWindowMillis;
+  if (!Number.isSafeInteger(maxOutputTokens) || maxOutputTokens < 1 || maxOutputTokens > GEMINI_RANK_LIMITS.maxOutputTokens ||
+    !Number.isSafeInteger(maxRequestBytes) || maxRequestBytes < 1 || maxRequestBytes > GEMINI_RANK_LIMITS.maxRequestBytes ||
+    window !== undefined && (!Number.isSafeInteger(window) || window < 1000 || window > 300000)) {
+    throw new RecommendationProviderError('invalid_request');
+  }
+  const invoke = async (request: T): Promise<RankingInference> => {
     if(!options.apiKey||!/^[a-zA-Z0-9.-]{1,100}$/.test(model)) throw new RecommendationProviderError('authentication');
     const timeout=options.timeoutMillis??GEMINI_RANK_LIMITS.timeoutMillis;
     if(!Number.isInteger(timeout)||timeout<1||timeout>GEMINI_RANK_LIMITS.timeoutMillis) throw new RecommendationProviderError('invalid_request');
-    const body=JSON.stringify({systemInstruction:{parts:[{text:RECOMMENDATION_SYSTEM_PROMPT+'\nRequired output schema: '+JSON.stringify(RANKING_RESPONSE_SCHEMA)}]},contents:[{role:'user',parts:[{text:JSON.stringify(request)}]}],generationConfig:{temperature:0,maxOutputTokens:GEMINI_RANK_LIMITS.maxOutputTokens,responseMimeType:'application/json',responseSchema:geminiStructuralSchema()}});
-    if(Buffer.byteLength(body)>GEMINI_RANK_LIMITS.maxRequestBytes)throw new RecommendationProviderError('invalid_request');
+    const body = JSON.stringify({
+      systemInstruction: {parts: [{text: contract.systemPrompt +
+        (contract.includeSchemaInPrompt === false ? '' :
+          '\nRequired output schema: ' + JSON.stringify(contract.responseSchema))}]},
+      contents: [{role: 'user', parts: [{text: JSON.stringify(request)}]}],
+      generationConfig: {
+        temperature: 0, maxOutputTokens, responseMimeType: 'application/json',
+        responseSchema: geminiStructuralSchema(contract.responseSchema),
+      },
+    });
+    if(Buffer.byteLength(body)>maxRequestBytes)throw new RecommendationProviderError('invalid_request');
     const clock=options.clock??Date.now, start=clock(), controller=new AbortController(); let timer:ReturnType<typeof setTimeout>|undefined;
     const operation=async()=>{
       const response=await(options.fetcher??fetch)(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,{method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':options.apiKey},signal:controller.signal,body,redirect:'error'});
@@ -66,17 +102,31 @@ export function createGeminiRecommendationRanker(options: {apiKey:string; model?
   const limit=options.maxRequests??20;
   if(!Number.isSafeInteger(limit)||limit<1||limit>20)throw new RecommendationProviderError('invalid_request');
   let requests=0;
+  let windowStarted=(options.clock??Date.now)();
   const cache=new Map<string,{at:number;result:Promise<RankingInference>}>();
   return async request=>{
-    assertAnonymousRequest(request);
+    contract.assertRequest(request);
     const at=(options.clock??Date.now)();
     for(const [key,value]of cache)if(at-value.at>=300000||at<value.at)cache.delete(key);
+    if (window !== undefined && (at - windowStarted >= window || at < windowStarted)) {
+      requests = 0;
+      windowStarted = at;
+    }
     const key=createHash('sha256').update(JSON.stringify(request)).digest('hex'),prior=cache.get(key);
     if(prior)return {...await prior.result,cacheHit:true,usage:{inputTokens:0,outputTokens:0,thinkingTokens:0,totalTokens:0}};
     if(requests>=limit)throw new RecommendationProviderError('rate_limited');
     requests++;
+    if (cache.size >= 128) cache.delete(cache.keys().next().value!);
     const result=invoke(request);cache.set(key,{at,result});
     try{return await result;}catch(error){cache.delete(key);throw error;}
   };
 
+}
+/** Legacy experimental contract retains its existing prompt and total budget. */
+export function createGeminiRecommendationRanker(options: GeminiRankingOptions): RankingProvider {
+  return createGeminiRankingProvider(options, {
+    assertRequest: assertAnonymousRequest,
+    systemPrompt: RECOMMENDATION_SYSTEM_PROMPT,
+    responseSchema: RANKING_RESPONSE_SCHEMA,
+  });
 }

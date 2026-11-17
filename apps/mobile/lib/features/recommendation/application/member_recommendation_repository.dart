@@ -24,6 +24,13 @@ class MemberRecommendationDetail {
       this.specialization,
       this.imageUrl,
       this.photoPath,
+      this.difficulty,
+      this.durationMinutes,
+      this.exerciseCount,
+      this.priceMinor,
+      this.currency,
+      this.branchLabel,
+      this.aiMethod,
       this.deliveredAt,
       this.readAt,
       this.acknowledgedAt,
@@ -38,6 +45,8 @@ class MemberRecommendationDetail {
       specialization,
       imageUrl,
       photoPath;
+  final String? difficulty, currency, branchLabel, aiMethod;
+  final int? durationMinutes, exerciseCount, priceMinor;
   final List<String> explanations;
   final RecommendationTarget? target;
   final DateTime createdAt, expiresAt;
@@ -71,8 +80,18 @@ class MemberRecommendationDetail {
       'acknowledgedAtMillis',
       'dismissedAtMillis'
     };
+    const extraKeys = {
+      'difficulty',
+      'durationMinutes',
+      'exerciseCount',
+      'priceMinor',
+      'currency',
+      'branchLabel',
+      'aiMethod'
+    };
     if (raw is! Map ||
-        raw.length != keys.length ||
+        raw.keys
+            .any((key) => !keys.contains(key) && !extraKeys.contains(key)) ||
         !raw.keys.toSet().containsAll(keys) ||
         raw['schemaVersion'] != 1 ||
         !const ['synthetic_local', 'accepted_workout', 'workout_backup']
@@ -96,6 +115,15 @@ class MemberRecommendationDetail {
 
     String? optional(String key, {int max = 400}) =>
         raw[key] == null ? null : text(key, max: max);
+    int? number(String key, int max) {
+      final value = raw[key];
+      if (value == null) return null;
+      if (value is! int || value < 0 || value > max) {
+        throw const FormatException('Invalid recommendation metadata');
+      }
+      return value;
+    }
+
     DateTime? time(String key, {bool required = false}) {
       final v = raw[key];
       if (v == null && !required) return null;
@@ -106,6 +134,10 @@ class MemberRecommendationDetail {
     }
 
     final kind = recommendationKind(raw['kind']);
+    if (raw['aiMethod'] != null &&
+        !{'gemini', 'rule_fallback'}.contains(raw['aiMethod'])) {
+      throw const FormatException('Invalid recommendation method');
+    }
     final state = recommendationState(raw['state']);
     if (raw['revision'] == 0 &&
         (state != MemberRecommendationState.notDelivered ||
@@ -121,7 +153,7 @@ class MemberRecommendationDetail {
               'specialization',
               'imageUrl',
               'photoPath'
-            ].any((key) => raw[key] != null) ||
+            ].followedBy(extraKeys).any((key) => raw[key] != null) ||
             raw['explanations'] is! List ||
             (raw['explanations'] as List).isNotEmpty)) {
       throw const FormatException('Invalid prepared recommendation');
@@ -133,6 +165,8 @@ class MemberRecommendationDetail {
             kind != RecommendationKind.trainer) ||
         (target is ContentRecommendationTarget &&
             kind != RecommendationKind.content) ||
+        (target is RoutineRecommendationTarget &&
+            kind != RecommendationKind.routine) ||
         (state == MemberRecommendationState.available && target == null)) {
       throw const FormatException('Invalid recommendation destination');
     }
@@ -164,6 +198,13 @@ class MemberRecommendationDetail {
         specialization: optional('specialization'),
         imageUrl: optional('imageUrl', max: 2048),
         photoPath: optional('photoPath', max: 1024),
+        difficulty: optional('difficulty', max: 80),
+        durationMinutes: number('durationMinutes', 1440),
+        exerciseCount: number('exerciseCount', 50),
+        priceMinor: number('priceMinor', 1000000),
+        currency: optional('currency', max: 8),
+        branchLabel: optional('branchLabel', max: 200),
+        aiMethod: optional('aiMethod', max: 30),
         createdAt: created,
         expiresAt: expires,
         deliveredAt: time('deliveredAtMillis'),

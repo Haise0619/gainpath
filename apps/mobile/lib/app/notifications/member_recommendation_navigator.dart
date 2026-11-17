@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:gainpath_identity/gainpath_identity.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
 import 'package:gainpath_domain/coaching.dart';
 import 'package:gainpath_domain/identity.dart';
@@ -14,6 +16,10 @@ import '../../navigation/session_host.dart';
 import '../di/booking_factory.dart';
 import '../di/coach_profile_factory.dart';
 import '../routing/exercise_tutorial_route.dart';
+import '../routing/routine_journey_route.dart';
+import '../di/program_store_factory.dart';
+import '../../features/workout/presentation/member/routine_screen.dart';
+import '../../features/recommendation/application/published_recommendation_suggestion.dart';
 
 /// Rechecks the server-owned recommendation and resolves complete current models.
 /// Opening never reserves a slot or invokes the booking writer.
@@ -51,10 +57,15 @@ class MemberRecommendationNavigator {
               coachDirectory.scope == session.scope &&
               detail.organizationId == session.organizationId);
   void _check() {
+    _checkPublic();
+    if (!repository.isCurrent || repository.scope != session.scope) {
+      throw const MemberRecommendationUnavailable();
+    }
+  }
+
+  void _checkPublic() {
     if (!isCurrent() ||
-        !repository.isCurrent ||
         session.role != AppRole.member ||
-        repository.scope != session.scope ||
         coachDirectory.scope != session.scope ||
         catalog.scope != session.scope) {
       throw const MemberRecommendationUnavailable();
@@ -63,12 +74,12 @@ class MemberRecommendationNavigator {
 
   Future<PublishedRoutineExercise> resolveExercise(
       ContentRecommendationTarget target) async {
-    _check();
+    _checkPublic();
     if (target.organizationId != session.organizationId) {
       throw const MemberRecommendationUnavailable();
     }
     final routine = await catalog.loadById(target.routineId);
-    _check();
+    _checkPublic();
     if (routine == null ||
         routine.id != target.routineId ||
         target.exerciseIndex >= routine.exercises.length) {
@@ -84,6 +95,119 @@ class MemberRecommendationNavigator {
       throw const MemberRecommendationUnavailable();
     }
     return exercise;
+  }
+
+  Future<PublishedRoutine> resolveRoutine(
+      RoutineRecommendationTarget target) async {
+    _checkPublic();
+    if (target.organizationId != session.organizationId) {
+      throw const MemberRecommendationUnavailable();
+    }
+    final routine = await catalog.loadById(target.routineId);
+    _checkPublic();
+    if (routine == null ||
+        routine.id != target.routineId ||
+        routine.exercises.isEmpty) {
+      throw const MemberRecommendationUnavailable();
+    }
+    return routine;
+  }
+
+  Future<List<PublishedRecommendationSuggestion>> loadDiscovery() async {
+    _checkPublic();
+    final page = await catalog.loadPage();
+    _checkPublic();
+    final items = <PublishedRecommendationSuggestion>[];
+    for (final routine in page.items.take(3)) {
+      items.add(PublishedRecommendationSuggestion(
+          kind: RecommendationKind.routine,
+          target:
+              RoutineRecommendationTarget(session.organizationId, routine.id),
+          title: routine.title,
+          difficulty: routine.difficulty,
+          imageUrl: routine.exercises.isEmpty
+              ? null
+              : routine.exercises.first.imageUrl,
+          exerciseCount: routine.exercises.length,
+          durationMinutes: routine.estimatedMinutes));
+      final index = routine.exercises.indexWhere((e) =>
+          e.tutorial.steps.isNotEmpty || tutorialMediaUri(e.videoUrl) != null);
+      if (index >= 0) {
+        final exercise = routine.exercises[index];
+        items.add(PublishedRecommendationSuggestion(
+            kind: RecommendationKind.content,
+            target: ContentRecommendationTarget(session.organizationId,
+                routine.id, index, exercise.exerciseId, exercise.dayNumber),
+            title: exercise.name,
+            imageUrl: exercise.imageUrl,
+            difficulty: routine.difficulty));
+      }
+    }
+    return List.unmodifiable(items);
+  }
+
+  Future<void> openDiscovery(
+      BuildContext context, PublishedRecommendationSuggestion item) async {
+    _checkPublic();
+    final target = item.target;
+    if (target is RoutineRecommendationTarget) {
+      await _openRoutine(context, await resolveRoutine(target));
+    } else if (target is ContentRecommendationTarget) {
+      final exercise = await resolveExercise(target);
+      if (!context.mounted) return;
+      await Navigator.push<void>(
+          context,
+          MaterialPageRoute(
+              builder: (_) => tutorialPlayerFactory == null
+                  ? ExerciseTutorialRoute(
+                      scope: session.scope, exercise: exercise)
+                  : ExerciseTutorialRoute(
+                      scope: session.scope,
+                      exercise: exercise,
+                      playerFactory: tutorialPlayerFactory!)));
+    } else {
+      throw const MemberRecommendationUnavailable();
+    }
+  }
+
+  Future<void> _openRoutine(
+      BuildContext context, PublishedRoutine routine) async {
+    _checkPublic();
+    if (!context.mounted) return;
+    await Navigator.push<void>(
+        context,
+        MaterialPageRoute(
+            builder: (previewContext) => RoutineScreen(
+                organizationId: session.organizationId,
+                publishedRoutine: routine,
+                tutorialBuilder: (_, exercise) => ExerciseTutorialRoute(
+                    scope: session.scope, exercise: exercise),
+                onStartWorkout: () async {
+                  try {
+                    final current = await resolveRoutine(
+                        RoutineRecommendationTarget(
+                            session.organizationId, routine.id));
+                    if (!context.mounted || !previewContext.mounted) return;
+                    final auth = context.read<AuthBloc>();
+                    await Navigator.push<void>(
+                        previewContext,
+                        MaterialPageRoute(
+                            builder: (_) => BlocProvider.value(
+                                value: auth,
+                                child: RoutineJourneyRoute(
+                                    scope: session.scope,
+                                    routine: current,
+                                    programStoreFactory:
+                                        createProgramEnrollmentStore))));
+                  } catch (_) {
+                    if (previewContext.mounted) {
+                      ScaffoldMessenger.of(previewContext).showSnackBar(
+                          const SnackBar(
+                              content: Text(
+                                  'This routine is currently unavailable. Refresh and try again.')));
+                    }
+                  }
+                })));
   }
 
   Future<void> open(
@@ -185,6 +309,11 @@ class MemberRecommendationNavigator {
                       scope: session.scope,
                       exercise: exercise,
                       playerFactory: tutorialPlayerFactory!)));
+    } else if (target is RoutineRecommendationTarget) {
+      final routine = await resolveRoutine(target);
+      _check();
+      if (!context.mounted) return;
+      await _openRoutine(context, routine);
     } else {
       throw const MemberRecommendationUnavailable();
     }

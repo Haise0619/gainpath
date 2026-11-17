@@ -6,6 +6,7 @@ import 'package:gainpath_identity/gainpath_identity.dart';
 import 'package:gainpath_domain/coaching.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
 import '../../application/member_recommendation_repository.dart';
+import 'recommendation_content_card.dart';
 
 typedef MemberRecommendationOpener = Future<void> Function(
     BuildContext context, MemberRecommendationDetail detail);
@@ -328,9 +329,8 @@ class _MemberRecommendationSheetState extends State<MemberRecommendationSheet> {
                           _image(detail),
                           const SizedBox(height: 16),
                           Text(
-                              detail.kind == RecommendationKind.trainer
-                                  ? 'COACH GUIDANCE'
-                                  : 'EXERCISE TUTORIAL',
+                              recommendationTypeLabel(detail.kind)
+                                  .toUpperCase(),
                               style: Theme.of(context)
                                   .textTheme
                                   .labelLarge
@@ -345,6 +345,28 @@ class _MemberRecommendationSheetState extends State<MemberRecommendationSheet> {
                                 child: Text(detail.specialization!,
                                     style: const TextStyle(
                                         color: AppColors.inkSoft))),
+                          const SizedBox(height: 8),
+                          Wrap(spacing: 12, runSpacing: 8, children: [
+                            if (detail.difficulty != null)
+                              Text(detail.difficulty!),
+                            if (detail.durationMinutes != null)
+                              Text('${detail.durationMinutes} min'),
+                            if (detail.exerciseCount != null)
+                              Text('${detail.exerciseCount} exercises'),
+                            if (detail.branchLabel != null)
+                              Text(detail.branchLabel!),
+                            if (detail.priceMinor != null &&
+                                detail.currency != null)
+                              Text(
+                                  '${detail.currency} ${(detail.priceMinor! / 100).toStringAsFixed(2)}'),
+                          ]),
+                          if (detail.aiMethod == 'gemini')
+                            const Padding(
+                                padding: EdgeInsets.only(top: 12),
+                                child: Text('AI personalized',
+                                    style: TextStyle(
+                                        color: AppColors.primary,
+                                        fontWeight: FontWeight.w700))),
                           const SizedBox(height: 12),
                           Text(
                               recommendationPresentationReason(
@@ -401,10 +423,8 @@ class _MemberRecommendationSheetState extends State<MemberRecommendationSheet> {
                                             RecommendationKind.trainer
                                         ? Icons.person_search_rounded
                                         : Icons.play_circle_outline_rounded),
-                                    label: Text(detail.kind ==
-                                            RecommendationKind.trainer
-                                        ? 'View Coach'
-                                        : 'Watch Tutorial'))),
+                                    label: Text(recommendationActionLabel(
+                                        detail.kind)))),
                             if (detail.kind == RecommendationKind.trainer)
                               const Padding(
                                   padding: EdgeInsets.only(top: 8),

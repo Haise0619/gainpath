@@ -149,7 +149,7 @@ it('consent revocation redacts a previously available recommendation and assignm
  const assignment=db.doc(`datasetAssignments/${uid}`);await assignment.update({enabled:false,revision:2});await expect(rawCall(uid,'fypDatasetSessionCommand',{schemaVersion:1})).rejects.toThrow();
  await assignment.update({enabled:true,revision:1});proof.revocations=true;
 });
-it('saved workout automatically reaches the real inbox and Admin monitor without an Admin command', async () => {
+it('AI personalization saved workout automatically reaches the real inbox and Admin monitor without an Admin command', async () => {
   const uid = dataset.memberIds[1];
   // Keep this test focused on a newly saved camera-summary event. Separate
   // coverage below exercises permission-triggered replay of sample history.
@@ -178,7 +178,7 @@ it('saved workout automatically reaches the real inbox and Admin monitor without
   expect(rows.filter((r:any)=>r.kind==='content')).toHaveLength(1);
   const recommendation=rows.find((r:any)=>r.kind==='content');
   expect(recommendation).toMatchObject({mode:'workout_backup',state:'available',kind:'content'});
-  const inbox=await call(uid,'member.inbox',q());
+  const inbox=await call(uid,'member.inbox',q({includeRoutine:true}));
   expect(inbox.records.some((r:any)=>r.recommendation?.recommendationId===recommendation.recommendationId)).toBe(true);
   const monitor=await call(dataset.adminId,'workout.admin.queue.list',q({afterId:null}));
   expect(monitor.records.some((r:any)=>r.id===recommendation.recommendationId&&r.status==='delivered'&&r.memberId===uid)).toBe(true);
@@ -197,7 +197,7 @@ it('saved workout automatically reaches the real inbox and Admin monitor without
   expect((await call(uid,'workout.member.recommendation.list',q({history:false,afterId:null}))).recommendations.some((r:any)=>r.recommendationId===recommendation.recommendationId)).toBe(false);
   proof.workoutEventDelivered={id:recommendation.recommendationId,source:'unscored synthesized emulator workout payload',actualCamera:false};
 },60000);
-it('granting summary personalization automatically replays existing sample history once', async () => {
+it('AI personalization granting summary personalization automatically replays existing sample history once', async () => {
   const uid = dataset.memberIds[3];
   const notice = await call(uid, 'workout.member.consent.notice', q());
   let consent = await call(uid, 'workout.member.consent.get', {schemaVersion:2,organizationId:'gainpath'});
@@ -241,7 +241,9 @@ it('preserves every protected baseline and leaves paid/reward/workout acceptance
 
 it('bulk Member feed retains legacy history and measures authenticated baseline versus optimized calls',async()=>{
  const uid=dataset.memberIds[3],admin=dataset.adminId;
- const baseline=(actor:string,operation:string,data:unknown)=>rawCall(actor,'fypDatasetBaselineCommand',{schemaVersion:1,operation,data});
+ // Compare the supported Inbox-plus-detail request path with the bulk feed.
+ // The archived two-kind binary cannot decode the new saved Routine contract.
+ const baseline=(actor:string,operation:string,data:unknown)=>call(actor,operation,data);
  async function oldMember(){
   const inbox=await baseline(uid,'member.inbox',q());
   const records=[];let requests=1;
@@ -271,7 +273,7 @@ it('bulk Member feed retains legacy history and measures authenticated baseline 
  writeFileSync('../build/module13-final-optimization/performance.json',JSON.stringify(proof.optimizationPerformance,null,2));
 },120000);
 
-it('ordinary authenticated Member backup event delivers, replays, dismisses and is visible in unified Admin monitoring',async()=>{
+it('AI personalization ordinary authenticated Member backup event delivers, replays, dismisses and is visible in unified Admin monitoring',async()=>{
  const uid='baseline-member',admin='baseline-admin';
  const gate={schemaVersion:1,organizationId:'gainpath',cohortId:'fyp-v1',rootPath:FYP_ROOT,enabled:true,version:'unified-admin-v1'};
  await db.doc(UNIFIED_ADMIN_GATE).set(gate);
@@ -303,11 +305,18 @@ it('ordinary authenticated Member backup event delivers, replays, dismisses and 
  await rawCall(uid,'workoutBackupCommand',{action:'save',command});
  let rows:any[]=[];
  for(let attempt=0;attempt<40;attempt++){
-  rows=(await member('member.recommendation.list',q({history:false,afterId:null}))).recommendations;
+  rows=(await member('member.recommendation.list',q({history:false,afterId:null,includeRoutine:true}))).recommendations;
   if(rows.length)break;
   await new Promise(resolve=>setTimeout(resolve,500));
  }
- expect(rows).toHaveLength(1);const recommendation=rows[0];
+ expect(rows.filter((r:any)=>r.kind==='content')).toHaveLength(1);
+ expect(rows.filter((r:any)=>r.kind==='routine')).toHaveLength(1);
+ expect((await member('member.recommendation.list',q({history:false,afterId:null}))).recommendations
+  .map((r:any)=>r.kind)).toEqual(['content']);
+ const recommendation=rows.find((r:any)=>r.kind==='content');
+ const routine=rows.find((r:any)=>r.kind==='routine');
+ expect((await member('member.recommendation.command',q({recommendationId:routine.recommendationId,
+  action:'resolve',commandId:null,expectedRevision:null}))).target).toMatchObject({kind:'routine',organizationId:'gainpath'});
  expect(recommendation).toMatchObject({mode:'workout_backup',kind:'content',state:'available'});
  expect(recommendation.target.destination.routineId.startsWith('routine_v2_')).toBe(true);
  const resolved=await member('member.recommendation.command',q({recommendationId:recommendation.recommendationId,
@@ -315,8 +324,8 @@ it('ordinary authenticated Member backup event delivers, replays, dismisses and 
  expect(resolved.target).toEqual(recommendation.target);
  const saved=await db.doc(`orgs/gainpath/members/${uid}/workoutBackups/session-${id}`).get();expect(saved.exists).toBe(true);
  const inbox=(await db.collection('orgs/gainpath/notifications').where('recipientId','==',uid).get()).docs;
- expect(inbox).toHaveLength(1);expect(inbox[0].data().recommendationId).toBe(recommendation.recommendationId);
- const monitor=await call(admin,'admin.unified.recommendations',q({operation:'admin.queue.list',input:q({afterId:null})}));
+ expect(inbox).toHaveLength(2);expect(inbox.some(row=>row.data().recommendationId===recommendation.recommendationId)).toBe(true);
+ const monitor=await call(admin,'admin.unified.recommendations',q({operation:'admin.queue.list',input:q({afterId:null,includeRoutine:true})}));
  expect(monitor.records.some((r:any)=>r.memberId===uid&&r.id===recommendation.recommendationId)).toBe(true);
  expect(monitor.records.some((r:any)=>dataset.memberIds.includes(r.memberId))).toBe(true);
  const detail=await call(admin,'admin.unified.recommendations',q({operation:'admin.queue.detail',input:q({id:recommendation.recommendationId})}));
@@ -324,10 +333,51 @@ it('ordinary authenticated Member backup event delivers, replays, dismisses and 
  await expect(call(uid,'admin.unified.recommendations',q({operation:'admin.queue.list',input:q({afterId:null})}))).rejects.toThrow();
  await member('member.history.replay',q({afterId:null}));await member('member.history.replay',q({afterId:null}));
  await rawCall(uid,'workoutBackupCommand',{action:'save',command});
- expect((await db.collection('orgs/gainpath/notifications').where('recipientId','==',uid).get()).size).toBe(1);
+ expect((await db.collection('orgs/gainpath/notifications').where('recipientId','==',uid).get()).size).toBe(2);
  await member('member.recommendation.command',q({recommendationId:recommendation.recommendationId,
   action:'dismiss',commandId:'ordinary-dismiss',expectedRevision:recommendation.revision}));
- expect((await member('member.recommendation.list',q({history:false,afterId:null}))).recommendations).toHaveLength(0);
- expect((await member('member.recommendation.list',q({history:true,afterId:null}))).recommendations[0].state).toBe('dismissed');
+ expect((await member('member.recommendation.list',q({history:false,afterId:null}))).recommendations.some((r:any)=>r.recommendationId===recommendation.recommendationId)).toBe(false);
+ expect((await member('member.recommendation.list',q({history:true,afterId:null}))).recommendations.find((r:any)=>r.recommendationId===recommendation.recommendationId).state).toBe('dismissed');
  proof.ordinaryWorkoutEventDelivered={id:recommendation.recommendationId,source:'synthetic emulator payload',actualCamera:false,liveFirebase:false};
+},120000);
+
+it('AI personalization discovery returns real published FYP records without creating recommendations',async()=>{
+ const uid=dataset.memberIds[0],before=(await db.collection(`${FYP_ROOT}/canonicalRecommendations`).get()).size;
+ const response=await call(uid,'member.discovery',q());
+ expect(response.routines.length).toBeGreaterThan(0);
+ expect(response.routines.every((row:any)=>row.data.status==='published')).toBe(true);
+ expect(response.coaches.every((row:any)=>row.data.status==='published'&&row.data.certificationVerified===true)).toBe(true);
+ await expect(call(dataset.adminId,'member.discovery',q())).rejects.toThrow();
+ await expect(call(uid,'member.discovery',q({organizationId:'other'}))).rejects.toThrow();
+ expect((await db.collection(`${FYP_ROOT}/canonicalRecommendations`).get()).size).toBe(before);
+},60000);
+
+it('AI personalization Admin pages merge both sources by creation time without gaps or duplicate rows',async()=>{
+ const normal=(await db.collection('orgs/gainpath/canonicalRecommendations').get()).docs.find(row=>row.data().status==='delivered');
+ const scoped=(await db.collection(`${FYP_ROOT}/canonicalRecommendations`).get()).docs.find(row=>row.data().status==='delivered');
+ expect(normal).toBeTruthy();expect(scoped).toBeTruthy();
+ const paths:string[]=[],expected=new Set<string>(),now=Date.now();
+ try{
+  for(let index=0;index<55;index++){
+   const root=index%2===0?'orgs/gainpath':FYP_ROOT;
+   const template=(index%2===0?normal!:scoped!).data();
+   const id=fypDigest({test:'chronological-pagination',index});
+   const path=`${root}/canonicalRecommendations/${id}`;
+   await db.doc(path).create({...template,id,status:'pending',createdAtMillis:now-index*100,
+    deliveredAtMillis:null,readAtMillis:null,acknowledgedAtMillis:null,dismissedAtMillis:null});
+   paths.push(path);expected.add(id);
+  }
+  let afterId:string|null=null;
+  const seen:any[]=[];
+  for(let page=0;page<8;page++){
+   const result=await call('baseline-admin','admin.unified.recommendations',
+    q({operation:'admin.queue.list',input:q({afterId,includeRoutine:true})}));
+   seen.push(...result.records);afterId=result.nextAfterId;
+   if(afterId===null)break;
+  }
+  const ids=seen.map(row=>row.id);
+  expect(new Set(ids).size).toBe(ids.length);
+  expect(ids.filter(id=>expected.has(id))).toHaveLength(55);
+  for(let index=1;index<seen.length;index++)expect(seen[index-1].createdAtMillis).toBeGreaterThanOrEqual(seen[index].createdAtMillis);
+ }finally{for(const path of paths)await db.doc(path).delete();}
 },120000);

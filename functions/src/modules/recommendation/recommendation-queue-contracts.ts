@@ -8,6 +8,15 @@ export type RecommendationKind='trainer'|'content';
 export type RecommendationLeadStatus='pending'|'sent'|'dismissed'|'expired'|'stale'|'revoked';
 export type QueueTarget={kind:'trainer';coachId:string;branchId:string;observedStartAtMillis:number;observedEndAtMillis:number}
   |{kind:'content';destination:MemberContentDestination};
+export type CanonicalTarget = QueueTarget | {kind:'routine';organizationId:string;routineId:string};
+export function parseCanonicalTarget(raw:unknown, org:string):CanonicalTarget {
+  const target=object(raw);
+  if(target.kind!=='routine')return parseQueueTarget(raw,org);
+  keys(target,['kind','organizationId','routineId']);
+  if(target.organizationId!==org)throw queueFailure();
+  requiredIdentifier(target.routineId,'routine');
+  return structuredClone(target) as CanonicalTarget;
+}
 export interface RecommendationLead {
   schemaVersion:1;mode:'synthetic_local';leadId:string;organizationId:string;memberId:string;kind:RecommendationKind;
   exerciseId:string;objective:LearningNeed['objective'];level:LearningNeed['level'];

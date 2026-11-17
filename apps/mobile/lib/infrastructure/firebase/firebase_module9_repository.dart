@@ -83,8 +83,20 @@ class FirebaseModule9Repository implements Module9Repository {
 
   @override
   Future<NoticePage> loadInbox({String? afterId}) async {
-    final data = await _call('module9MemberCommandCallable',
-        {'action': 'inbox', if (afterId != null) 'afterId': afterId});
+    final query = <String, dynamic>{
+      'action': 'inbox',
+      if (afterId != null) 'afterId': afterId,
+    };
+    Map<String, dynamic> data;
+    try {
+      data = await _call('module9MemberCommandCallable', {
+        ...query,
+        'includeRoutine': true,
+      });
+    } on BookingException catch (error) {
+      if (error.code != 'invalid-argument') rethrow;
+      data = await _call('module9MemberCommandCallable', query);
+    }
     return NoticePage(
         (data['records'] as List)
             .map((r) => parseMemberNotice(r, _scope.organizationId))

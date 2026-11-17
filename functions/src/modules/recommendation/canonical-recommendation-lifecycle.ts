@@ -10,7 +10,8 @@ import type {InsightsAuth,FreshAuthIdentity} from './exercise-insights-contracts
 import {evaluateRecommendationConsentV2, type ReviewedConsentNoticePolicy} from './recommendation-consent-v2';
 import {requireRecommendationMember} from './recommendation-member-service';
 import {requireQueueAdmin} from './recommendation-queue-security';
-import {parseQueueTarget, queueText, type QueueTarget} from './recommendation-queue-contracts';
+import {parseCanonicalTarget, queueText, type CanonicalTarget} from './recommendation-queue-contracts';
+import type {WorkoutRankingContext, WorkoutRankingFactor} from './workout-recommendation-ranking';
 import type {CurrentRecommendationTarget, MemberRecommendationDetail} from './recommendation-member-contracts';
 import {OBJECTIVES} from './recommendation-ranking-contracts';
 
@@ -20,13 +21,19 @@ export interface CanonicalSuggestion {
   needKey: string; evidenceFingerprint: string; policyVersion: string; exerciseLabel: string; objective: string;
   evidenceSummary?: {assessedSessions:number;distinctDays:number;latestAtMillis:number};
   source?: {kind: 'synced_summary'|'recorded_history'; recordKey: string};
-  title: string; summary: string; explanations: string[]; target: QueueTarget; targetLabel: string;
+  title: string; summary: string; explanations: string[]; target: CanonicalTarget; targetLabel: string;
+  ai?: {method:'gemini'|'rule_fallback';workoutContext:string;fitnessGoals:string[];factors:WorkoutRankingFactor[];
+    context?:WorkoutRankingContext;model?:string;changedOrder?:boolean;candidateCount?:number;latencyMillis?:number;
+    inputTokens?:number|null;outputTokens?:number|null;thinkingTokens?:number|null;totalTokens?:number|null;
+    providerSource?:'gemini'|'mock_or_recorded';cacheHit?:boolean;fallbackReason?:string;
+    candidateDifficulty?:WorkoutRankingContext['experience'];candidateDuration?:WorkoutRankingContext['duration']};
 }
 /** Only trusted server composition may supply these reviewed adapters. Derivation
  * must abstain on missing schema/mode/quality; no network inference in a tx. */
 export interface ReviewedCanonicalRuntime {
   scopedDataset?: true;
   backupSuggestions?(tx: TransactionPort, org: string, member: string, key: string, now: number, historyStart: number): Promise<readonly CanonicalSuggestion[]>;
+  personalize?(suggestions:readonly CanonicalSuggestion[],allowAi:boolean):Promise<readonly CanonicalSuggestion[]>;
   reviewId: string; enabledTuples: readonly WorkoutModelTuple[]; notices: readonly ReviewedConsentNoticePolicy[];
   maximumAgeMillis: number; expiresAfterMillis: number; cooldownMillis: number;
   listAcceptedIds(tx: TransactionPort, org: string, member: string): Promise<readonly string[]>;
@@ -65,7 +72,7 @@ function record(raw: DocumentData | undefined, org: string, id: string, now=Numb
   return raw as CanonicalRecord;
 }
 function validateSuggestion(s: CanonicalSuggestion, org: string) {
-  keys(object(s),['needKey','evidenceFingerprint','policyVersion','exerciseLabel','objective','title','summary','explanations','target','targetLabel','evidenceSummary','source'],['needKey','evidenceFingerprint','policyVersion','exerciseLabel','objective','title','summary','explanations','target','targetLabel']);
+  keys(object(s),['needKey','evidenceFingerprint','policyVersion','exerciseLabel','objective','title','summary','explanations','target','targetLabel','evidenceSummary','source','ai'],['needKey','evidenceFingerprint','policyVersion','exerciseLabel','objective','title','summary','explanations','target','targetLabel']);
   if (s.source) {
     keys(object(s.source), ['kind','recordKey']);
     if (!['synced_summary','recorded_history'].includes(s.source.kind) || !/^session-[A-Za-z0-9_-]{1,128}$/.test(s.source.recordKey)) throw unavailable();
@@ -79,7 +86,10 @@ function validateSuggestion(s: CanonicalSuggestion, org: string) {
     const e=object(s.evidenceSummary);keys(e,['assessedSessions','distinctDays','latestAtMillis']);
     if(!Number.isSafeInteger(e.assessedSessions)||Number(e.assessedSessions)<1||Number(e.assessedSessions)>200||!Number.isSafeInteger(e.distinctDays)||Number(e.distinctDays)<1||Number(e.distinctDays)>Number(e.assessedSessions)||!Number.isSafeInteger(e.latestAtMillis)||Number(e.latestAtMillis)<=0)throw unavailable();
   }
-  parseQueueTarget(s.target, org);
+  if(s.ai && (!['gemini','rule_fallback'].includes(s.ai.method)||!queueText(s.ai.workoutContext,400)||
+    !Array.isArray(s.ai.fitnessGoals)||s.ai.fitnessGoals.length>6||s.ai.fitnessGoals.some(g=>!queueText(g,80))||
+    !Array.isArray(s.ai.factors)||s.ai.factors.length>12||s.ai.factors.some(f=>!queueText(f,80))))throw unavailable();
+  parseCanonicalTarget(s.target, org);
 }
 /** Verifies the actual server acceptance record and command receipt. A backup,
  * provenance string, or manually renamed synthetic row cannot pass this reader. */
@@ -135,7 +145,8 @@ export function createCanonicalRecommendationLifecycle(deps: CanonicalLifecycleD
     const decisions = purposes.map(p => evaluateRecommendationConsentV2(consent, {organizationId: org, memberId: member}, now, runtime.notices, p));
     if (decisions.some(d => !d.allowed)) throw unavailable();
     const allowed = decisions.filter(d => d.allowed);
-    return {fingerprint: digestOf(consent), historyStart: Math.max(...allowed.map(d => Number(d.historyStartAtMillis)))};
+    const external=evaluateRecommendationConsentV2(consent,{organizationId:org,memberId:member},now,runtime.notices,'externalAiInference');
+    return {fingerprint: digestOf(consent), historyStart: Math.max(...allowed.map(d => Number(d.historyStartAtMillis))),allowAi:external.allowed};
   }
   async function eligibleIdentity(member:string) {
     const identity=await deps.readAuthIdentity(member);
@@ -182,9 +193,35 @@ export function createCanonicalRecommendationLifecycle(deps: CanonicalLifecycleD
       if (!runtime.backupSuggestions || org !== 'gainpath' || !key.startsWith('session-')) return [];
       const now = nowOf();
       await eligibleIdentity(member);
+      // Provider I/O happens once between read and commit, outside retrying transactions.
+      const prepared = runtime.personalize ? await store.transact(async tx=>{
+        const consent=await privacy(tx,org,member,now,true);
+        const candidates=await runtime.backupSuggestions!(tx,org,member,key,now,consent.historyStart);
+        const eligible:CanonicalSuggestion[]=[];
+        for(const candidate of candidates){
+          validateSuggestion(candidate,org);
+          const id=digestOf({org,member,key,kind:candidate.target.kind,source:'workout_backup',consent:consent.fingerprint});
+          const fatiguePath=`orgs/${org}/canonicalRecommendationFatigue/${digestOf({member,need:candidate.needKey})}`;
+          const [old,fatigue]=await Promise.all([tx.get(path(org,id)),tx.get(fatiguePath)]);
+          if(!old && Number(fatigue?.untilMillis||0)<=now)eligible.push(candidate);
+        }
+        return {consent,candidates:eligible};
+      }):null;
+      if(prepared && !prepared.candidates.length)return [];
+      const ranked = prepared ? await runtime.personalize!(prepared.candidates,prepared.consent.allowAi):null;
+      await eligibleIdentity(member);
       return store.transact(async tx => {
         const consent = await privacy(tx, org, member, now, true);
-        const suggestions = await runtime.backupSuggestions!(tx, org, member, key, now, consent.historyStart);
+        if(prepared && consent.fingerprint!==prepared.consent.fingerprint)return [];
+        const fresh = await runtime.backupSuggestions!(tx, org, member, key, now, consent.historyStart);
+        const suggestions=ranked===null?fresh:ranked.flatMap(selected=>{
+          const baseline=prepared!.candidates.find(candidate=>candidate.needKey===selected.needKey&&
+            digestOf(candidate.target)===digestOf(selected.target));
+          if(baseline && fresh.some(candidate=>digestOf(candidate)===digestOf(baseline)))return[selected];
+          const fallback=fresh.find(candidate=>candidate.target.kind===selected.target.kind);
+          return fallback?[{...fallback,...(fallback.ai?{ai:{...fallback.ai,method:'rule_fallback' as const,
+            fallbackReason:'context_changed'}}:{})}]:[];
+        });
         const writes: (() => void)[] = [];
         const delivered: string[] = [];
         const kinds = new Set<string>();
@@ -316,6 +353,10 @@ export function createCanonicalRecommendationLifecycle(deps: CanonicalLifecycleD
             exerciseLabel:available?value.suggestion.exerciseLabel:null,objective:available?value.suggestion.objective as MemberRecommendationDetail['objective']:null,
             explanations:available?value.suggestion.explanations:[],target:available?target!.target:null,targetLabel:available?target!.label:null,
             specialization:available?target!.specialization:null,imageUrl:available?target!.imageUrl:null,photoPath:available?target!.photoPath:null,
+            ...(available?Object.fromEntries(['difficulty','durationMinutes','exerciseCount','priceMinor','currency','branchLabel']
+              .filter(k=>(target as unknown as Record<string,unknown>)[k]!==undefined)
+              .map(k=>[k,(target as unknown as Record<string,unknown>)[k]])):{}),
+            ...(available && value.suggestion.ai?{aiMethod:value.suggestion.ai.method}:{}),
             createdAtMillis:value.createdAtMillis,deliveredAtMillis:value.deliveredAtMillis,expiresAtMillis:value.expiresAtMillis,
             readAtMillis:value.readAtMillis,acknowledgedAtMillis:value.acknowledgedAtMillis,dismissedAtMillis:value.dismissedAtMillis};
         }

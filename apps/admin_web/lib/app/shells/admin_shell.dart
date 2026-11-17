@@ -807,102 +807,23 @@ class _BreadcrumbSegment extends StatelessWidget {
 class _NotificationButton extends StatelessWidget {
   const _NotificationButton();
 
-  static const _items = [
-    [
-      'Coach awaiting verification',
-      'Hafiz Aziz uploaded a certificate 2 days ago',
-      Icons.workspace_premium_rounded,
-      AppColors.warning
-    ],
-    [
-      '2 refund requests pending',
-      'Oldest submitted 3 days ago',
-      Icons.receipt_long_rounded,
-      AppColors.danger
-    ],
-    [
-      '3 members flagged at risk',
-      'Low form scores across recent sessions',
-      Icons.warning_amber_rounded,
-      AppColors.warning
-    ],
-  ];
-
   @override
-  Widget build(BuildContext context) {
-    return PopupMenuButton<int>(
+  Widget build(BuildContext context) => PopupMenuButton<int>(
       tooltip: 'Notifications',
       offset: const Offset(0, 46),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      itemBuilder: (context) => [
-        PopupMenuItem<int>(
-          enabled: false,
-          child: Text('Needs attention',
-              style: Theme.of(context).textTheme.labelSmall),
-        ),
-        ..._items.map((n) => PopupMenuItem<int>(
-              child: SizedBox(
-                width: 280,
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Container(
-                      width: 34,
-                      height: 34,
-                      margin: const EdgeInsets.only(top: 2),
-                      decoration: BoxDecoration(
-                        color: (n[3] as Color).withValues(alpha: 0.14),
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Icon(n[2] as IconData,
-                          size: 17, color: n[3] as Color),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(n[0] as String,
-                              style: const TextStyle(
-                                  fontSize: 13, fontWeight: FontWeight.w700)),
-                          Text(n[1] as String,
-                              style: const TextStyle(
-                                  fontSize: 11.5, color: AppColors.inkSoft),
-                              maxLines: 2),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            )),
-      ],
-      child: Container(
-        width: 40,
-        height: 40,
-        decoration: BoxDecoration(
-            color: AppColors.surfaceAlt,
-            borderRadius: BorderRadius.circular(10)),
-        child: Stack(
-          children: [
-            const Center(
-                child: Icon(Icons.notifications_outlined,
-                    size: 19, color: AppColors.ink)),
-            Positioned(
-              top: 9,
-              right: 9,
-              child: Container(
-                width: 8,
-                height: 8,
-                decoration: const BoxDecoration(
-                    color: AppColors.danger, shape: BoxShape.circle),
-              ),
-            ),
+      itemBuilder: (context) => const [
+            PopupMenuItem<int>(
+                enabled: false, child: Text('No notifications available')),
           ],
-        ),
-      ),
-    );
-  }
+      child: Container(
+          width: 40,
+          height: 40,
+          decoration: BoxDecoration(
+              color: AppColors.surfaceAlt,
+              borderRadius: BorderRadius.circular(10)),
+          child: const Icon(Icons.notifications_outlined,
+              size: 19, color: AppColors.ink)));
 }
 
 class _ProfileMenu extends StatelessWidget {

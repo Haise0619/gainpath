@@ -1,7 +1,7 @@
 import { getAuth, type Auth } from 'firebase-admin/auth';
 import { getFirestore, type Firestore } from 'firebase-admin/firestore';
 import { onDocumentCreated, onDocumentWritten } from 'firebase-functions/v2/firestore';
-import { workoutSummaryConsentReady } from './workout-backup-recommendation-events';
+import { workoutSummaryConsentReady,workoutRecommendationGeminiKey } from './workout-backup-recommendation-events';
 import { DomainError } from '../../platform/errors';
 import { createFypDatasetBackend } from '../dataset/fyp-backend';
 import { resolveFypRuntimeRelease, type FypRuntimeReleaseGrant } from '../dataset/fyp-runtime-release';
@@ -54,6 +54,7 @@ export const module13FypWorkoutBackupCreated = onDocumentCreated({
   region: 'asia-southeast1',
   document: 'orgs/{organizationId}/cohorts/{cohortId}/members/{memberId}/workoutBackups/{key}',
   retry: true, maxInstances: 2, timeoutSeconds: 120,
+  secrets:[workoutRecommendationGeminiKey],
 }, async event => {
   const {organizationId, cohortId, memberId, key} = event.params;
   if (organizationId !== 'gainpath' || cohortId !== 'fyp-v1' || !key.startsWith('session-')) return;
@@ -66,6 +67,7 @@ export const module13FypWorkoutBackupCreated = onDocumentCreated({
 export const module13FypWorkoutConsentChanged = onDocumentWritten({
   region: 'asia-southeast1', document: 'orgs/{organizationId}/cohorts/{cohortId}/recommendationConsent/{memberId}',
   retry: true, maxInstances: 1, timeoutSeconds: 120,
+  secrets:[workoutRecommendationGeminiKey],
 }, async event => {
   if (event.params.organizationId !== 'gainpath' || event.params.cohortId !== 'fyp-v1' ||
     !workoutSummaryConsentReady(event.data?.after.data()) || workoutSummaryConsentReady(event.data?.before.data())) return;

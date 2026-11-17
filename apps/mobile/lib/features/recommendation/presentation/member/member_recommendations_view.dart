@@ -5,6 +5,8 @@ import 'package:gainpath_domain/coaching.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
 import '../../application/member_recommendation_repository.dart';
 import 'member_recommendation_sheet.dart';
+import '../../application/published_recommendation_suggestion.dart';
+import 'recommendation_content_card.dart';
 
 /// The same delivered-only collection powers Home and the full history route.
 class MemberRecommendationsView extends StatefulWidget {
@@ -20,8 +22,13 @@ class MemberRecommendationsView extends StatefulWidget {
       this.onSettings,
       this.onViewAll,
       this.compact = false,
-      this.visible = true});
+      this.visible = true,
+      this.loadDiscovery,
+      this.onOpenDiscovery});
 
+  final PublishedRecommendationLoader? loadDiscovery;
+  final Future<void> Function(BuildContext, PublishedRecommendationSuggestion)?
+      onOpenDiscovery;
   final Stream<void>? updates;
   final VoidCallback? onInvalidate;
   final MemberRecommendationRepository repository;
@@ -38,6 +45,10 @@ class MemberRecommendationsView extends StatefulWidget {
 
 class _RecommendationsState extends State<MemberRecommendationsView> {
   final _records = <MemberRecommendationDetail>[];
+  List<PublishedRecommendationSuggestion> _discovery = [];
+  RecommendationKind? _filter;
+  bool _discoveryLoading = false;
+  int _discoveryGeneration = 0;
   bool _loading = true, _history = false, _enabled = true;
   String? _error, _next;
   int _generation = 0;
@@ -52,6 +63,7 @@ class _RecommendationsState extends State<MemberRecommendationsView> {
   void initState() {
     super.initState();
     _load();
+    _loadDiscovery();
     _listen();
   }
 
@@ -74,6 +86,7 @@ class _RecommendationsState extends State<MemberRecommendationsView> {
   void _refresh() {
     widget.onInvalidate?.call();
     _load();
+    _loadDiscovery();
   }
 
   @override
@@ -82,6 +95,8 @@ class _RecommendationsState extends State<MemberRecommendationsView> {
     if (oldWidget.updates != widget.updates) _listen();
     if (oldWidget.repository != widget.repository) {
       _records.clear();
+      _discovery = [];
+      _loadDiscovery();
       _next = null;
       _load();
     } else if (!oldWidget.visible && widget.visible) {
@@ -113,10 +128,46 @@ class _RecommendationsState extends State<MemberRecommendationsView> {
 
   @override
   void dispose() {
+    _discoveryGeneration++;
     _afterWorkoutRefresh?.cancel();
     _signalDebounce?.cancel();
     _updates?.cancel();
     super.dispose();
+  }
+
+  Future<void> _loadDiscovery() async {
+    final generation = ++_discoveryGeneration;
+    final loader = widget.loadDiscovery;
+    if (loader == null || !widget.isCurrent()) return;
+    setState(() => _discoveryLoading = true);
+    try {
+      final items = await loader();
+      if (!mounted ||
+          !widget.isCurrent() ||
+          generation != _discoveryGeneration) {
+        return;
+      }
+      setState(() => _discovery = items);
+    } catch (_) {
+      // Published catalog failure leaves refresh and personalization available.
+    } finally {
+      if (mounted && generation == _discoveryGeneration) {
+        setState(() => _discoveryLoading = false);
+      }
+    }
+  }
+
+  Future<void> _openDiscovery(PublishedRecommendationSuggestion item) async {
+    if (!widget.isCurrent() || widget.onOpenDiscovery == null) return;
+    try {
+      await widget.onOpenDiscovery!(context, item);
+    } catch (_) {
+      if (mounted && widget.isCurrent()) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text(
+                'This published item has changed. Refresh to explore available content.')));
+      }
+    }
   }
 
   Future<void> _load({bool more = false, bool quiet = false}) async {
@@ -128,6 +179,7 @@ class _RecommendationsState extends State<MemberRecommendationsView> {
         _enabled = false;
         _loading = false;
       });
+      _fetching = false;
       return;
     }
     setState(() {
@@ -254,64 +306,76 @@ class _RecommendationsState extends State<MemberRecommendationsView> {
   Widget build(BuildContext context) {
     if (!widget.isCurrent()) return const SizedBox.shrink();
     final text = Theme.of(context).textTheme;
-    final shown = widget.compact ? _records.take(1) : _records;
+    final filtered =
+        _records.where((r) => _filter == null || r.kind == _filter).toList();
+    final shown = widget.compact ? filtered.take(1) : filtered;
+    final discovery =
+        _discovery.where((r) => _filter == null || r.kind == _filter).toList();
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-      if (MediaQuery.textScalerOf(context).scale(18) > 25) ...[
-        Text(widget.compact ? 'Recommended for You' : 'Recommendations',
-            style: text.titleLarge),
-        Align(
-            alignment: AlignmentDirectional.centerEnd, child: _headerAction()),
-      ] else
-        Row(children: [
-          Expanded(
-              child: Text(
-                  widget.compact ? 'Recommended for You' : 'Recommendations',
-                  style: text.titleLarge)),
-          _headerAction(),
-        ]),
+      Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Expanded(
+            child: Text(
+                widget.compact
+                    ? 'Recommended for You'
+                    : 'Personalized Recommendations',
+                style: text.titleLarge?.copyWith(fontWeight: FontWeight.w800))),
+        _headerAction(),
+      ]),
       if (!widget.compact) ...[
-        const SizedBox(height: 12),
-        Wrap(spacing: 8, children: [
-          ChoiceChip(
-              label: const Text('For you'),
-              selected: !_history,
-              onSelected: _loading
-                  ? null
-                  : (_) {
-                      setState(() => _history = false);
-                      _load();
-                    }),
-          ChoiceChip(
-              label: const Text('History'),
-              selected: _history,
-              onSelected: _loading
-                  ? null
-                  : (_) {
-                      setState(() => _history = true);
-                      _load();
-                    }),
+        const SizedBox(height: 8),
+        Text('Your next step, shaped by your goals and recent training.',
+            style: text.bodyMedium),
+        const SizedBox(height: 16),
+        Wrap(spacing: 8, runSpacing: 8, children: [
+          _filterChip('For You', null),
+          _filterChip('Routines', RecommendationKind.routine),
+          _filterChip('Tutorials', RecommendationKind.content),
+          _filterChip('Coaches', RecommendationKind.trainer),
         ]),
+        const SizedBox(height: 8),
+        Wrap(
+            spacing: 8,
+            runSpacing: 4,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              TextButton(
+                  onPressed: _loading
+                      ? null
+                      : () {
+                          setState(() => _history = !_history);
+                          _load();
+                        },
+                  child: Text(_history ? 'Recent recommendations' : 'History')),
+              TextButton.icon(
+                  onPressed: _loading || _discoveryLoading ? null : _refresh,
+                  icon: const Icon(Icons.refresh_rounded),
+                  label: const Text('Refresh')),
+            ]),
         const SizedBox(height: 12),
       ],
-      if (_loading && _records.isEmpty)
-        const _RecommendationSkeleton()
-      else if (_error != null)
+      if (_loading && _records.isEmpty) const _RecommendationSkeleton(),
+      if (_error != null)
         _message(_error!,
             action: TextButton(
                 onPressed: _loading ? null : _refresh,
-                child: const Text('Try again')))
-      else if (_records.isEmpty)
+                child: const Text('Try again'))),
+      if (!_loading && filtered.isEmpty && (discovery.isEmpty || _history))
         _message(
-            !_enabled
-                ? 'Personalized suggestions will appear here when Recommendations is available for your account.'
-                : _history
-                    ? 'You have no recommendation history yet.'
-                    : 'You’re up to date. Helpful suggestions from your gym will appear here.',
-            action: widget.onSettings == null
-                ? null
-                : TextButton(
+            _history
+                ? 'Your saved recommendation history will appear here.'
+                : !_enabled
+                    ? 'Explore published workouts while personalization becomes available for your account.'
+                    : 'Ready for your next step? Explore published workouts or refresh after your next training session.',
+            action: Wrap(spacing: 8, children: [
+              if (widget.onSettings != null)
+                TextButton(
                     onPressed: widget.onSettings,
-                    child: const Text('Personalization settings'))),
+                    child: const Text('Personalization settings')),
+              if (_filter != null)
+                TextButton(
+                    onPressed: () => setState(() => _filter = null),
+                    child: const Text('Explore all recommendations')),
+            ])),
       for (final detail in shown) ...[
         RecommendationCard(
             detail: detail,
@@ -320,14 +384,56 @@ class _RecommendationsState extends State<MemberRecommendationsView> {
             onDetails: () => _detail(detail),
             onDismiss: detail.available ? () => _dismiss(detail) : null,
             photoBuilder: widget.photoBuilder),
-        const SizedBox(height: 12),
+        const SizedBox(height: 16),
       ],
+      if (filtered.isEmpty && !_history && discovery.isNotEmpty) ...[
+        if (!widget.compact) ...[
+          Text('Explore your gym', style: text.titleMedium),
+          const SizedBox(height: 4),
+          Text('General discovery from published content.',
+              style: text.bodyMedium),
+          const SizedBox(height: 12),
+        ],
+        for (final item in widget.compact ? discovery.take(1) : discovery) ...[
+          RecommendationContentCard(
+              kind: item.kind,
+              title: item.title,
+              reason:
+                  'Explore this published ${recommendationTypeLabel(item.kind).toLowerCase()} from your gym.',
+              general: true,
+              imageUrl: item.imageUrl,
+              difficulty: item.difficulty,
+              durationMinutes: item.durationMinutes,
+              exerciseCount: item.exerciseCount,
+              specialization: item.specialization,
+              branchLabel: item.branchLabel,
+              priceMinor: item.priceMinor,
+              currency: item.currency,
+              onOpen: () => _openDiscovery(item)),
+          const SizedBox(height: 16),
+        ],
+      ],
+      if (_discoveryLoading && _records.isEmpty)
+        const LinearProgressIndicator(),
       if (!widget.compact && _next != null)
         TextButton(
             onPressed: _loading ? null : () => _load(more: true),
             child: const Text('Load more')),
     ]);
   }
+
+  Widget _filterChip(String label, RecommendationKind? kind) => ChoiceChip(
+      label: Text(label),
+      selected: _filter == kind,
+      selectedColor: AppColors.primary,
+      backgroundColor: AppColors.surface,
+      checkmarkColor: AppColors.surface,
+      side: BorderSide(
+          color: _filter == kind ? AppColors.primary : AppColors.hairline),
+      labelStyle: TextStyle(
+          color: _filter == kind ? AppColors.surface : AppColors.ink,
+          fontWeight: FontWeight.w600),
+      onSelected: (_) => setState(() => _filter = kind));
 
   Widget _headerAction() {
     if (widget.compact && widget.onViewAll != null) {
@@ -372,103 +478,35 @@ class RecommendationCard extends StatelessWidget {
   final bool busy;
 
   @override
-  Widget build(BuildContext context) {
-    final trainer = detail.kind == RecommendationKind.trainer;
-    final theme = Theme.of(context).textTheme;
-    final uri = Uri.tryParse(detail.imageUrl ?? '');
-    final image = detail.available &&
-        uri?.scheme == 'https' &&
-        uri!.host.isNotEmpty &&
-        uri.userInfo.isEmpty;
-    final fallback = ColoredBox(
-        color: AppColors.primaryTint,
-        child: Center(
-            child: Icon(
-                trainer
-                    ? Icons.person_outline_rounded
-                    : Icons.play_circle_outline_rounded,
-                color: AppColors.primary,
-                size: 28)));
-    return Material(
-      color: AppColors.surface,
-      shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-          side: const BorderSide(color: AppColors.hairline)),
-      clipBehavior: Clip.antiAlias,
-      child: Padding(
-          padding: const EdgeInsets.all(14),
-          child:
-              Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-            Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              ClipRRect(
-                  borderRadius: BorderRadius.circular(12),
-                  child: SizedBox(
-                      width: 56,
-                      height: 56,
-                      child: trainer &&
-                              detail.photoPath != null &&
-                              photoBuilder != null &&
-                              detail.available
-                          ? photoBuilder!(context, detail)
-                          : image
-                              ? Image.network(uri.toString(),
-                                  fit: BoxFit.cover,
-                                  excludeFromSemantics: true,
-                                  errorBuilder: (_, __, ___) => fallback)
-                              : fallback)),
-              const SizedBox(width: 12),
-              Expanded(
-                  child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                    Text(trainer ? 'Coach guidance' : 'Exercise tutorial',
-                        style: theme.labelLarge
-                            ?.copyWith(color: AppColors.primary)),
-                    const SizedBox(height: 4),
-                    Text(detail.targetLabel ?? detail.title,
-                        style: theme.titleMedium
-                            ?.copyWith(fontWeight: FontWeight.w700)),
-                  ])),
-            ]),
-            const SizedBox(height: 12),
-            Text(
-                detail.available
-                    ? recommendationFriendlyReason(detail)
-                    : recommendationStateLabel(detail.state),
-                style: theme.bodyMedium),
-            if (detail.exerciseLabel != null) ...[
-              const SizedBox(height: 8),
-              Text(detail.exerciseLabel!, style: theme.labelLarge),
-            ],
-            const SizedBox(height: 12),
-            FilledButton(
-                onPressed: busy ? null : onOpen,
-                child: Text(
-                    detail.available
-                        ? trainer
-                            ? 'View Coach'
-                            : 'Watch Tutorial'
-                        : 'View details',
-                    textAlign: TextAlign.center)),
-            if (onDetails != null && detail.available)
-              TextButton(
-                  onPressed: busy ? null : onDetails,
-                  child: const Text('Why this recommendation?')),
-            if (onDismiss != null)
-              TextButton(
-                  onPressed: busy ? null : onDismiss,
-                  child: const Text('Dismiss')),
-          ])),
-    );
-  }
+  Widget build(BuildContext context) => RecommendationContentCard(
+      kind: detail.kind,
+      title: detail.targetLabel ?? detail.title,
+      reason: detail.available
+          ? recommendationFriendlyReason(detail)
+          : recommendationStateLabel(detail.state),
+      available: detail.available,
+      busy: busy,
+      newRecommendation: detail.readAt == null && detail.available,
+      imageUrl: detail.imageUrl,
+      photo: detail.available &&
+              detail.kind == RecommendationKind.trainer &&
+              detail.photoPath != null
+          ? photoBuilder?.call(context, detail)
+          : null,
+      difficulty: detail.difficulty,
+      durationMinutes: detail.durationMinutes,
+      exerciseCount: detail.exerciseCount,
+      specialization: detail.specialization,
+      branchLabel: detail.branchLabel,
+      priceMinor: detail.priceMinor,
+      currency: detail.currency,
+      onOpen: onOpen,
+      onDetails: detail.available ? onDetails : null,
+      onDismiss: onDismiss);
 }
 
 String recommendationFriendlyReason(MemberRecommendationDetail detail) =>
-    recommendationPresentationReason(
-        detail.explanations.isNotEmpty
-            ? detail.explanations.first
-            : detail.summary,
-        detail.exerciseLabel);
+    recommendationPresentationReason(detail.summary, detail.exerciseLabel);
 
 String recommendationStateLabel(MemberRecommendationState state) =>
     switch (state) {
@@ -492,9 +530,17 @@ class _RecommendationSkeleton extends StatelessWidget {
               borderRadius: BorderRadius.circular(16)),
           child:
               Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Container(
+                height: 144,
+                decoration: BoxDecoration(
+                    color: AppColors.primaryTint,
+                    borderRadius: BorderRadius.circular(16))),
+            const SizedBox(height: 16),
             Container(height: 14, width: 160, color: AppColors.surfaceAlt),
             const SizedBox(height: 12),
             Container(height: 12, color: AppColors.surfaceAlt),
+            const SizedBox(height: 12),
+            Container(height: 12, width: 200, color: AppColors.surfaceAlt),
             const SizedBox(height: 16),
             const LinearProgressIndicator(),
           ])));

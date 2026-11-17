@@ -70,7 +70,7 @@ void main() {
     final h = CanonicalAdminHarness();
     await show(t, h);
     expect(h.requests.map((r) => r['operation']), ['admin.queue.list']);
-    expect(find.text('Awaiting delivery: 1'), findsOneWidget);
+    expect(find.textContaining('1 loaded'), findsOneWidget);
     expect(find.text('Fictional educational dataset'), findsNothing);
     h.pendingDetail = Completer<Object?>();
     await t.tap(find.text('View'));
@@ -81,6 +81,7 @@ void main() {
     expect(find.text('Approve & Send'), findsNothing);
     expect(find.textContaining('Member account: member-1').hitTestable(),
         findsNothing);
+    await t.ensureVisible(find.text('Technical Details'));
     await t.tap(find.text('Technical Details'));
     await t.pumpAndSettle();
     expect(find.textContaining('Member account: member-1'), findsOneWidget);
@@ -99,12 +100,12 @@ void main() {
     expect(find.text('View'), findsNothing);
   });
   testWidgets(
-      'prepared records appear in Needs Attention without delivery actions',
+      'prepared records appear in Delivery Issues without delivery actions',
       (t) async {
     final h = CanonicalAdminHarness();
     h.record['status'] = 'prepared';
     await show(t, h);
-    await t.tap(find.text('Needs Attention'));
+    await t.tap(find.text('Delivery Issues'));
     await t.pumpAndSettle();
     expect(find.text('Delivery unverified'), findsOneWidget);
     await t.tap(find.text('View'));

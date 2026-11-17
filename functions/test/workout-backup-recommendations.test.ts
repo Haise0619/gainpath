@@ -10,6 +10,7 @@ import {canonicalRecommendationPage} from '../src/modules/recommendation/canonic
 import {createCanonicalRecommendationBackend} from '../src/modules/recommendation/canonical-recommendation-backend';
 import type {DocumentStore} from '../src/platform/firestore/store';
 import {createCanonicalRecommendationAdmin} from '../src/modules/recommendation/canonical-recommendation-admin';
+import type {WorkoutRankingProvider} from '../src/modules/recommendation/workout-recommendation-ranking';
 
 const org = 'gainpath', member = 'learner', root = 'orgs/' + org;
 const now = Date.parse('2026-11-14T00:00:00Z');
@@ -17,7 +18,7 @@ const workoutPath = root + '/members/' + member + '/workoutBackups';
 const consentPath = root + '/recommendationConsent/' + member;
 const auth = {uid: member, token: {email_verified: true}};
 
-function fixture(coachIsVerified: (uid:string)=>Promise<boolean> = async()=>false) {
+function fixture(coachIsVerified: (uid:string)=>Promise<boolean> = async()=>false, provider?:WorkoutRankingProvider) {
   const store = new MemoryStore();
   const docs = store.documents;
   docs.set(root, {status: 'active'});
@@ -47,12 +48,278 @@ function fixture(coachIsVerified: (uid:string)=>Promise<boolean> = async()=>fals
     get: async () => ({docs: [...docs].filter(([path]) => path.startsWith(prefix + '/') &&
       !path.slice(prefix.length + 1).includes('/')).map(([path, data]) => ({id: path.split('/').at(-1), ref: {path}, data: () => data}))}),
   });
-  const runtime = createWorkoutBackupRuntime({collection: query} as unknown as Firestore, coachIsVerified);
+  const runtime = createWorkoutBackupRuntime({collection: query} as unknown as Firestore, coachIsVerified, undefined, {provider});
   const deps = {store, runtime, clock: () => now, readAuthIdentity: async (uid: string) =>
     ({uid, email: 'learner@example.test', disabled: false, emailVerified: true, tokensValidAfterMillis: 0})};
   return {store, add, deps, deliver: (key: string) => evaluateSavedWorkout(deps, org, member, key),
     lifecycle: createCanonicalRecommendationLifecycle(deps)};
 }
+
+describe('AI personalized canonical delivery',()=>{
+  const grantAi=(f:ReturnType<typeof fixture>)=>{
+    const consent=f.store.documents.get(consentPath)!;
+    (consent.purposes as any).externalAiInference={...(consent.purposes as any).recommendationGeneration};
+    consent.revision=4;
+  };
+  const validInference=(request:Parameters<WorkoutRankingProvider>[0])=>({
+    providerSource:'mock_or_recorded' as const,cacheHit:false,model:'fixture-model',latencyMillis:2,
+    usage:{inputTokens:90,outputTokens:30,thinkingTokens:7,totalTokens:127},
+    text:JSON.stringify({recommendations:['content','routine','trainer'].flatMap(kind=>{
+      const candidates=request.candidates.filter(candidate=>candidate.kind===kind);
+      if(!candidates.length)return [];
+      return [{recommendationType:kind,selectedCandidateId:candidates[0].label,
+        ranking:candidates.map(candidate=>candidate.label),relevantWorkoutFactors:candidates[0].factors.slice(0,1)}];
+    })}),
+  });
+  const addRoutines=(f:ReturnType<typeof fixture>)=>{
+    for(const [id,minutes] of [['short',15],['long',45]] as const)f.store.documents.set(root+'/content/'+id,{
+      schemaVersion:2,kind:'routine_v2',status:'published',sourceBlueprintId:id,title:id+' foundations',
+      difficulty:'Beginner',estimatedMinutes:minutes,
+      exercises:[{entryId:id+'-squat',exerciseId:DEMO_EXERCISES.squat,name:'Squat',sets:2,reps:8,restSeconds:60,
+        executionMode:'aiTracked',tutorialSteps:[{title:'Setup',description:'Stand comfortably.',imageUrl:''}]}],
+    });
+  };
+  it('uses a permitted AI winner for actual Routine and Tutorial delivery and saves the method',async()=>{
+    let calls=0;
+    const provider:WorkoutRankingProvider=async request=>{
+      calls++;
+      return {providerSource:'mock_or_recorded',cacheHit:false,model:'test-model',latencyMillis:1,
+        usage:{inputTokens:90,outputTokens:30,thinkingTokens:0,totalTokens:120},
+        text:JSON.stringify({recommendations:['content','routine'].map(kind=>{
+          const rows=request.candidates.filter(c=>c.kind===kind);
+          const labels=rows.map(c=>c.label).reverse();
+          return {recommendationType:kind,selectedCandidateId:labels[0],ranking:labels,
+            relevantWorkoutFactors:['exercise_match']};
+        })})};
+    };
+    const f=fixture(undefined,provider);addRoutines(f);
+    const consent=f.store.documents.get(consentPath)!;
+    (consent.purposes as any).externalAiInference={...(consent.purposes as any).recommendationGeneration};
+    consent.revision=4;
+    const ids=await f.deliver(f.add('ai-routine',null));
+    expect(ids).toHaveLength(2);
+    expect(calls).toBe(1);
+    const records=ids.map(id=>f.store.documents.get(root+'/canonicalRecommendations/'+id)!);
+    expect(records.every(r=>(r.suggestion as any).ai.method==='gemini')).toBe(true);
+    const routine=records.find(r=>(r.suggestion as any).target.kind==='routine')!;
+    const detail=await f.lifecycle.member(auth,org,String(routine.id),'resolve',null,null);
+    expect(detail).toMatchObject({kind:'routine',aiMethod:'gemini',state:'available',exerciseCount:1});
+    expect([...f.store.documents.keys()].filter(p=>p.startsWith(root+'/notifications/'))).toHaveLength(2);
+    expect(await f.deliver('session-ai-routine')).toEqual([]);
+    expect(calls).toBe(1);
+  });
+  it('keeps three-kind target validation and permission boundaries with rule fallback',async()=>{
+    let calls=0;
+    const f=fixture(undefined,async()=>{calls++;throw Error('provider offline');});addRoutines(f);
+    const ids=await f.deliver(f.add('rules-routine',null));
+    expect(ids).toHaveLength(2);expect(calls).toBe(0);
+    const routineId=ids.find(id=>(f.store.documents.get(root+'/canonicalRecommendations/'+id)!.suggestion as any).target.kind==='routine')!;
+    expect(await f.lifecycle.member(auth,org,routineId,'resolve',null,null)).toMatchObject({kind:'routine',state:'available',aiMethod:'rule_fallback'});
+    f.store.documents.get(root+'/content/short')!.status='draft';
+    expect(await f.lifecycle.member(auth,org,routineId,'resolve',null,null)).toMatchObject({state:'unavailable',target:null});
+  });
+
+  it('runs provider calls outside transactions and persists their source, cache and full usage',async()=>{
+    let inTransaction=false,calls=0;
+    const f=fixture(undefined,async request=>{
+      calls++;expect(inTransaction).toBe(false);return validInference(request);
+    });
+    grantAi(f);addRoutines(f);
+    const store:DocumentStore={transact:work=>f.store.transact(async tx=>{
+      inTransaction=true;
+      try{return await work(tx);}finally{inTransaction=false;}
+    })};
+    const ids=await evaluateSavedWorkout({...f.deps,store},org,member,f.add('outside-transaction',null));
+    expect(calls).toBe(1);expect(ids).toHaveLength(2);
+    for(const id of ids)expect(f.store.documents.get(root+'/canonicalRecommendations/'+id)).toMatchObject({
+      suggestion:{ai:{method:'gemini',providerSource:'mock_or_recorded',cacheHit:false,thinkingTokens:7,totalTokens:127}},
+    });
+  });
+
+  it('ranks actual Tutorials, Routines and verified Coaches once and atomically delivers all three to Inbox',async()=>{
+    let calls=0;
+    const f=fixture(async()=>true,async request=>{
+      calls++;
+      expect(request.context).toMatchObject({
+        goal:'general_fitness',experience:'beginner',frequency:'occasional',duration:'short',
+      });
+      expect(request.context.form).toBeUndefined();
+      expect(new Set(request.candidates.map(candidate=>candidate.kind))).toEqual(new Set(['content','routine','trainer']));
+      const coach=request.candidates.find(candidate=>candidate.kind==='trainer')!;
+      expect(coach.factors).toContain('goal_match');
+      expect(coach.factors).toContain('coach_specialization');
+      expect(coach.factors).not.toContain('exercise_match');
+      expect(coach.factors).not.toContain('form_practice');
+      return {...validInference(request),text:JSON.stringify({recommendations:['content','routine','trainer'].map(kind=>{
+        const candidates=request.candidates.filter(candidate=>candidate.kind===kind).reverse();
+        return {recommendationType:kind,selectedCandidateId:candidates[0].label,
+          ranking:candidates.map(candidate=>candidate.label),relevantWorkoutFactors:candidates[0].factors.slice(0,1)};
+      })})};
+    });
+    const seed=await buildModule13DemoDataset({nowMillis:now});
+    for(const [path,data] of Object.entries(seed.documents)){
+      if(path.startsWith(root+'/coaches/')||path.startsWith(root+'/coachProfiles/')||
+        path.startsWith(root+'/coachAvailability/')||path.startsWith(root+'/branches/')||
+        path.startsWith(root+'/settings/')||seed.coachIds.some(uid=>path==='users/'+uid||path===root+'/members/'+uid)){
+        f.store.documents.set(path,data);
+      }
+    }
+    f.store.documents.get(root+'/members/'+member)!.branchIds=['main'];
+    f.store.documents.set(root+'/profiles/'+member,{
+      goals:['generalFitness'],experience:'beginner',preferredWorkoutDuration:15,
+    });
+    grantAi(f);addRoutines(f);
+    f.add('prior-three-kind-practice',null,{},now-4000);
+    const key=f.add('current-three-kind-practice',null);
+    const started=performance.now();
+    const ids=await f.deliver(key);
+    expect(ids).toHaveLength(3);expect(calls).toBe(1);
+    const records=ids.map(id=>f.store.documents.get(root+'/canonicalRecommendations/'+id)!);
+    expect(new Set(records.map(record=>(record.suggestion as any).target.kind))).toEqual(new Set(['content','routine','trainer']));
+    for(const id of ids){
+      expect(f.store.documents.has(root+'/canonicalRecommendationDeliveries/'+id)).toBe(true);
+      expect(f.store.documents.get(root+'/canonicalRecommendations/'+id)).toMatchObject({
+        status:'delivered',suggestion:{ai:{method:'gemini',providerSource:'mock_or_recorded'}},
+      });
+      expect(await f.lifecycle.member(auth,org,id,'resolve',null,null)).toMatchObject({state:'available',aiMethod:'gemini'});
+    }
+    expect(records.filter(record=>(record.suggestion as any).ai.changedOrder)).toHaveLength(3);
+    expect([...f.store.documents.keys()].filter(path=>path.startsWith(root+'/notifications/'))).toHaveLength(3);
+    expect(await f.deliver(key)).toEqual([]);
+    expect(await f.deliver(f.add('repeat-three-kind-practice',null))).toEqual([]);
+    expect(calls).toBe(1);
+    console.info(JSON.stringify({
+      measurement:'three_kind_memory_store_with_mocked_gemini',calls,delivered:ids.length,
+      durationMillis:performance.now()-started,realProviderCalls:0,
+    }));
+  });
+
+  it('uses rule delivery when a consented provider fails',async()=>{
+    let calls=0;
+    const f=fixture(undefined,async()=>{calls++;throw Error('private service failure');});
+    grantAi(f);addRoutines(f);
+    const ids=await f.deliver(f.add('consented-failure',null));
+    expect(ids).toHaveLength(2);expect(calls).toBe(1);
+    for(const id of ids)expect(f.store.documents.get(root+'/canonicalRecommendations/'+id)).toMatchObject({
+      suggestion:{ai:{method:'rule_fallback',fallbackReason:'provider_unavailable'}},status:'delivered',
+    });
+    expect([...f.store.documents.keys()].filter(path=>path.startsWith(root+'/notifications/'))).toHaveLength(2);
+    expect(JSON.stringify([...f.store.documents])).not.toContain('private service failure');
+  });
+
+  it('grounds Coach AI factors in the goal named in the minimized context for a multi-goal Member',async()=>{
+    let calls=0;
+    const f=fixture(async()=>true,async request=>{
+      calls++;
+      expect(request.context.goal).toBe('weight_management');
+      const coaches=request.candidates.filter(candidate=>candidate.kind==='trainer');
+      expect(coaches).toHaveLength(1);
+      expect(coaches[0].factors).not.toContain('goal_match');
+      expect(coaches[0].factors).not.toContain('coach_specialization');
+      return validInference(request);
+    });
+    const seed=await buildModule13DemoDataset({nowMillis:now});
+    for(const [path,data] of Object.entries(seed.documents)){
+      if(path.startsWith(root+'/coaches/')||path.startsWith(root+'/coachProfiles/')||
+        path.startsWith(root+'/coachAvailability/')||path.startsWith(root+'/branches/')||
+        path.startsWith(root+'/settings/')||seed.coachIds.some(uid=>path==='users/'+uid||path===root+'/members/'+uid)){
+        f.store.documents.set(path,data);
+      }
+    }
+    for(const [index,coachId] of seed.coachIds.entries()){
+      const coach=f.store.documents.get(root+'/coaches/'+coachId);
+      if(coach)Object.assign(coach,index===0?
+        {status:'published',specialty:'Strength training',specializationTags:['strength']}:{status:'draft'});
+    }
+    f.store.documents.get(root+'/members/'+member)!.branchIds=['main'];
+    f.store.documents.set(root+'/profiles/'+member,{goals:['loseWeight','buildMuscle'],experience:'beginner'});
+    grantAi(f);
+    f.add('prior-multigoal-practice',null,{},now-4000);
+    const ids=await f.deliver(f.add('current-multigoal-practice',null));
+    expect(calls).toBe(1);
+    const coaching=ids.map(id=>f.store.documents.get(root+'/canonicalRecommendations/'+id)!)
+      .find(record=>(record.suggestion as any).target.kind==='trainer');
+    expect(coaching).toBeDefined();
+    expect((coaching!.suggestion as any).summary).not.toMatch(/specializes in weight management/);
+  });
+
+  it('stops delivery if external AI consent is revoked while inference is pending',async()=>{
+    const f=fixture(undefined,async request=>{
+      const consent=f.store.documents.get(consentPath)!;
+      const purpose=(consent.purposes as any).externalAiInference;
+      Object.assign(purpose,{granted:false,revision:2,revokedAtMillis:now});
+      Object.assign(consent,{revision:5,updatedAtMillis:now});
+      return validInference(request);
+    });
+    grantAi(f);addRoutines(f);
+    expect(await f.deliver(f.add('midcall-revoke',null))).toEqual([]);
+    expect([...f.store.documents.keys()].filter(path=>path.startsWith(root+'/notifications/'))).toHaveLength(0);
+  });
+
+  it('falls back to a current target when a selected publication is removed during inference',async()=>{
+    const f=fixture(undefined,async request=>{
+      f.store.documents.delete(root+'/content/Beginner');
+      return validInference(request);
+    });
+    grantAi(f);
+    const ids=await f.deliver(f.add('midcall-deletion',null));
+    expect(ids).toHaveLength(1);
+    expect(f.store.documents.get(root+'/canonicalRecommendations/'+ids[0])).toMatchObject({
+      suggestion:{targetLabel:'Advanced Squat',ai:{method:'rule_fallback'}},status:'delivered',
+    });
+  });
+
+  it('discards stale profile claims when goals, duration and experience change during inference',async()=>{
+    const f=fixture(undefined,async request=>{
+      f.store.documents.set(root+'/profiles/'+member,{
+        goals:['buildMuscle'],experience:'advanced',preferredWorkoutDuration:45,
+      });
+      return validInference(request);
+    });
+    f.store.documents.set(root+'/profiles/'+member,{
+      goals:['generalFitness'],experience:'beginner',preferredWorkoutDuration:15,
+    });
+    grantAi(f);
+    const ids=await f.deliver(f.add('midcall-profile-change',null));
+    expect(ids).toHaveLength(1);
+    expect(f.store.documents.get(root+'/canonicalRecommendations/'+ids[0])).toMatchObject({
+      suggestion:{targetLabel:'Advanced Squat',ai:{
+        method:'rule_fallback',fitnessGoals:['buildMuscle'],
+        context:{goal:'muscle_gain',experience:'advanced',duration:'long'},
+      }},
+    });
+  });
+
+  it.each([
+    ['legacy routine',1,'routine',false,'aiTracked',false,true],
+    ['current routine',2,'routine_v2',false,'aiTracked',false,true],
+    ['retired AI execution',2,'routine_v2',true,'aiTracked',false,false],
+    ['retired manual execution',2,'routine_v2',true,'legacyManual',false,true],
+    ['missing timed media',2,'routine_v2',false,'videoGuidedTimed',false,false],
+    ['valid timed media',2,'routine_v2',false,'videoGuidedTimed',true,true],
+  ] as const)('validates executable published destinations for %s',async(_name,schemaVersion,kind,retired,mode,video,expected)=>{
+    const f=fixture();addRoutines(f);f.store.documents.delete(root+'/content/long');
+    const routine=f.store.documents.get(root+'/content/short')!;
+    Object.assign(routine,{schemaVersion,kind});
+    if(retired || mode==='videoGuidedTimed'){
+      const exerciseId=retired?'wall-push-up-side-v1':'fictional-timed-exercise';
+      f.store.documents.set(root+'/exerciseVideos/'+exerciseId,{
+        isActive:true,executionMode:retired?'aiTracked':'videoGuidedTimed',
+      });
+      (routine.exercises as any[]).push({
+        entryId:'second',exerciseId,name:'Additional movement',sets:1,restSeconds:30,executionMode:mode,
+        ...(mode==='videoGuidedTimed'?{durationSeconds:30}:{reps:8}),
+        ...(video?{videoUrl:'https://media.example.test/movement.mp4'}:{}),
+      });
+    }
+    const ids=await f.deliver(f.add('execution-'+schemaVersion+'-'+mode+'-'+video,null));
+    const routines=ids.map(id=>f.store.documents.get(root+'/canonicalRecommendations/'+id)!)
+      .filter(record=>(record.suggestion as any).target.kind==='routine');
+    expect(routines).toHaveLength(Number(expected));
+    if(expected)expect(await f.lifecycle.member(auth,org,String(routines[0].id),'resolve',null,null))
+      .toMatchObject({kind:'routine',state:'available',target:{routineId:'short'}});
+  });
+});
 
 describe('bounded recommendation pages and merged history API', () => {
   it('Admin detail performs one current projection rather than repeating the entire lookup',async()=>{

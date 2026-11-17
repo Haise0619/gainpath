@@ -12,9 +12,11 @@ class RoutineScreen extends StatelessWidget {
       {super.key,
       this.publishedRoutine,
       this.tutorialBuilder,
+      this.onStartWorkout,
       this.organizationId = ''});
   final PublishedRoutine? publishedRoutine;
   final String organizationId;
+  final VoidCallback? onStartWorkout;
   final Widget Function(BuildContext, PublishedRoutineExercise)?
       tutorialBuilder;
 
@@ -35,6 +37,13 @@ class RoutineScreen extends StatelessWidget {
                   : '${routine.length} exercises in order. Tap one to review its published tutorial.',
               style: Theme.of(context).textTheme.bodyLarge),
           const SizedBox(height: 16),
+          if (onStartWorkout != null) ...[
+            FilledButton.icon(
+                onPressed: onStartWorkout,
+                icon: const Icon(Icons.play_arrow_rounded),
+                label: const Text('Start Workout')),
+            const SizedBox(height: 16),
+          ],
           ...routine.asMap().entries.map((entry) {
             final i = entry.key;
             final e = entry.value;

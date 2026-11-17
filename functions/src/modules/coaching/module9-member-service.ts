@@ -4,13 +4,13 @@ import { DomainError } from '../../platform/errors';
 import { requiredIdentifier, InputValidationError } from '../../platform/validation';
 import { allowed, object, integer } from './coach-availability-contracts';
 import { currentBookingMembership, requireBookingOrganization } from './booking-validation';
-import {parseQueueTarget,type QueueTarget} from '../recommendation/recommendation-queue-contracts';
+import {parseCanonicalTarget,type CanonicalTarget} from '../recommendation/recommendation-queue-contracts';
 import type {MemberRecommendationState} from '../recommendation/recommendation-member-contracts';
 
 type Auth = { uid: string; token: Record<string, unknown> } | undefined;
 const isRecommendation=(data:DocumentData)=>data.type==='recommendation'||Object.hasOwn(data,'recommendationId')||Object.hasOwn(data,'recommendationKind');
 export interface SafeRecommendationNotice {
-  schemaVersion:1;recommendationId:string;kind:'trainer'|'content';state:MemberRecommendationState;expiresAtMillis:number;target:QueueTarget|null;
+  schemaVersion:1;recommendationId:string;kind:'trainer'|'content'|'routine';state:MemberRecommendationState;expiresAtMillis:number;target:CanonicalTarget|null;
 }
 export interface RecommendationNoticeProjection {title:string;message:string;recommendation:SafeRecommendationNotice}
 export interface NotificationReader {
@@ -21,7 +21,8 @@ export interface NotificationReader {
 export async function module9MemberCommand(store: DocumentStore, auth: Auth, raw: unknown, clock = Date.now, reader?: NotificationReader) {
   requireVerifiedEmail(auth);
   const d = object(raw);
-  allowed(d, ['schemaVersion', 'organizationId', 'action', 'enabled', 'expectedRevision', 'notificationId', 'afterId']);
+  allowed(d, ['schemaVersion', 'organizationId', 'action', 'enabled', 'expectedRevision', 'notificationId', 'afterId', 'includeRoutine']);
+  if(d.includeRoutine!==undefined&&(d.action!=='inbox'||typeof d.includeRoutine!=='boolean'))throw new InputValidationError('Invalid inbox options.');
   if (d.schemaVersion !== 1) throw new InputValidationError('schemaVersion 1 is required.');
   const org = requiredIdentifier(d.organizationId, 'organizationId'), uid = requiredIdentifier(auth!.uid, 'actorId');
   const authorize = async (tx: Parameters<Parameters<DocumentStore['transact']>[0]>[0]) => {
@@ -43,10 +44,11 @@ export async function module9MemberCommand(store: DocumentStore, auth: Auth, raw
       const record={ id, title: data.title, message: data.message, bookingId: data.bookingId ?? null, createdAtMillis: data.createdAtMillis, read: data.read };
       if(!isRecommendation(data)){records.push(record);continue;}
       if(data.type!=='recommendation')throw new DomainError('failed-precondition','Recommendation type requires review.');
+      if (data.recommendationKind==='routine' && d.includeRoutine!==true) continue;
       if(!reader.projectRecommendation){records.push({...record,title:'Recommendation unavailable',message:'Personalized recommendations are unavailable in this release.',bookingId:null});continue;}
       const p=await reader.projectRecommendation(org,uid,id,data),r=object(p.recommendation);
-      if(Object.keys(p).length!==3||Object.keys(p).some(k=>!['title','message','recommendation'].includes(k))||typeof p.title!=='string'||!p.title.trim()||p.title.length>200||typeof p.message!=='string'||p.message.length>500||Object.keys(r).length!==6||Object.keys(r).some(k=>!['schemaVersion','recommendationId','kind','state','expiresAtMillis','target'].includes(k))||r.schemaVersion!==1||r.recommendationId!==data.recommendationId||typeof r.recommendationId!=='string'||!/^[a-f0-9]{64}$/.test(r.recommendationId)||r.kind!==data.recommendationKind||(r.kind!=='trainer'&&r.kind!=='content')||!['available','not_delivered','expired','withdrawn','dismissed','unavailable'].includes(r.state as string)||!Number.isSafeInteger(r.expiresAtMillis)||Number(r.expiresAtMillis)<=0||(r.state==='available')!==(r.target!==null))throw new DomainError('failed-precondition','Recommendation projection requires review.');
-      const target=r.target===null?null:parseQueueTarget(r.target,org);if(target&&target.kind!==r.kind)throw new DomainError('failed-precondition','Recommendation kind mismatch.');
+      if(Object.keys(p).length!==3||Object.keys(p).some(k=>!['title','message','recommendation'].includes(k))||typeof p.title!=='string'||!p.title.trim()||p.title.length>200||typeof p.message!=='string'||p.message.length>500||Object.keys(r).length!==6||Object.keys(r).some(k=>!['schemaVersion','recommendationId','kind','state','expiresAtMillis','target'].includes(k))||r.schemaVersion!==1||r.recommendationId!==data.recommendationId||typeof r.recommendationId!=='string'||!/^[a-f0-9]{64}$/.test(r.recommendationId)||r.kind!==data.recommendationKind||(r.kind!=='trainer'&&r.kind!=='content'&&r.kind!=='routine')||!['available','not_delivered','expired','withdrawn','dismissed','unavailable'].includes(r.state as string)||!Number.isSafeInteger(r.expiresAtMillis)||Number(r.expiresAtMillis)<=0||(r.state==='available')!==(r.target!==null))throw new DomainError('failed-precondition','Recommendation projection requires review.');
+      const target=r.target===null?null:parseCanonicalTarget(r.target,org);if(target&&target.kind!==r.kind)throw new DomainError('failed-precondition','Recommendation kind mismatch.');
       records.push({...record,title:p.title,message:p.message,bookingId:null,recommendation:{schemaVersion:1,recommendationId:r.recommendationId,kind:r.kind,state:r.state,expiresAtMillis:r.expiresAtMillis,target}});
     }
     await store.transact(authorize);

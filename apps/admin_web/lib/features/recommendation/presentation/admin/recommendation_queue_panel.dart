@@ -12,9 +12,11 @@ class RecommendationQueuePanel extends StatefulWidget {
       this.history = false,
       this.tab,
       this.internalMaintenance = false,
+      this.readOnly = false,
       this.repository,
       this.clock});
   final bool trainer, history;
+  final bool readOnly;
   final RecommendationMonitorTab? tab;
 
   /// Internal diagnostics only; normal screens never expose generation.
@@ -28,8 +30,9 @@ class RecommendationQueuePanel extends StatefulWidget {
 
 class _RecommendationQueuePanelState extends State<RecommendationQueuePanel> {
   bool get _readOnly =>
+      widget.readOnly ||
       _repo is RecommendationReadOnlyPresentation &&
-      (_repo as RecommendationReadOnlyPresentation).readOnly;
+          (_repo as RecommendationReadOnlyPresentation).readOnly;
   RecommendationQueueRepository get _repo =>
       widget.repository ?? const UnavailableRecommendationQueueRepository();
   late String _kind;

@@ -11,6 +11,29 @@ import 'content_removal_ui_test.dart' show Catalog;
 
 void main() {
   setUpAll(() => GoogleFonts.config.allowRuntimeFetching = false);
+  testWidgets('notification bell has no static example alerts or unread badge',
+      (tester) async {
+    tester.view.physicalSize = const Size(1440, 1000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(TestAdminShellRepositories(
+        child: RepositoryProvider<TutorialRepository>.value(
+            value: Catalog(), child: const MaterialApp(home: AdminShell()))));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Notifications'));
+    await tester.pumpAndSettle();
+    expect(find.text('No notifications available'), findsOneWidget);
+    final menu = find.byType(PopupMenuItem<int>);
+    expect(
+        find.descendant(
+            of: menu, matching: find.textContaining('members flagged at risk')),
+        findsNothing);
+    expect(
+        find.descendant(
+            of: menu, matching: find.textContaining('refund requests pending')),
+        findsNothing);
+    expect(tester.takeException(), isNull);
+  });
   testWidgets(
       'normal launch enables catalog lifecycle and retains routine hold',
       (tester) async {
@@ -114,8 +137,7 @@ void main() {
     await tester.tap(find.text('Transactions').first);
     await tester.pumpAndSettle();
     expect(
-        find.text(
-            'Track membership and coaching payments across facilities.'),
+        find.text('Track membership and coaching payments across facilities.'),
         findsOneWidget);
 
     // 2. Click Refund Requests from inside the page sub-tab (.last)
@@ -141,8 +163,7 @@ void main() {
     await tester.tap(find.widgetWithText(InkWell, 'Transactions').first);
     await tester.pumpAndSettle();
     expect(
-        find.text(
-            'Track membership and coaching payments across facilities.'),
+        find.text('Track membership and coaching payments across facilities.'),
         findsOneWidget);
 
     // 5. Click Refund Requests from sidebar (.first)
@@ -157,8 +178,7 @@ void main() {
     await tester.tap(find.widgetWithText(InkWell, 'Transactions').last);
     await tester.pumpAndSettle();
     expect(
-        find.text(
-            'Track membership and coaching payments across facilities.'),
+        find.text('Track membership and coaching payments across facilities.'),
         findsOneWidget);
   });
 }

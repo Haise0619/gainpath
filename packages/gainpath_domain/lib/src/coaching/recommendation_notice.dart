@@ -1,4 +1,4 @@
-enum RecommendationKind { trainer, content }
+enum RecommendationKind { trainer, content, routine }
 
 enum MemberRecommendationState {
   available,
@@ -21,6 +21,7 @@ MemberRecommendationState recommendationState(Object? value) => switch (value) {
 RecommendationKind recommendationKind(Object? value) => switch (value) {
       'trainer' => RecommendationKind.trainer,
       'content' => RecommendationKind.content,
+      'routine' => RecommendationKind.routine,
       _ => throw const FormatException('Invalid recommendation kind'),
     };
 
@@ -31,6 +32,13 @@ sealed class RecommendationTarget {
       throw const FormatException('Invalid recommendation target');
     }
     final map = Map<String, Object?>.from(raw);
+    if (map['kind'] == 'routine' &&
+        map.length == 3 &&
+        map['organizationId'] == organizationId &&
+        _id(map['routineId'])) {
+      return RoutineRecommendationTarget(
+          organizationId, map['routineId'] as String);
+    }
     if (map['kind'] == 'trainer' &&
         map.length == 5 &&
         _id(map['coachId']) &&
@@ -93,6 +101,11 @@ class ContentRecommendationTarget extends RecommendationTarget {
   final int exerciseIndex, dayNumber;
 }
 
+class RoutineRecommendationTarget extends RecommendationTarget {
+  const RoutineRecommendationTarget(this.organizationId, this.routineId);
+  final String organizationId, routineId;
+}
+
 /// Minimal server-owned projection in the existing Member Notification Center.
 class RecommendationNotice {
   const RecommendationNotice(
@@ -120,10 +133,12 @@ class RecommendationNotice {
     final target = raw['target'] == null
         ? null
         : RecommendationTarget.parse(raw['target'], organizationId);
-    if ((kind == RecommendationKind.trainer &&
-            target is ContentRecommendationTarget) ||
-        (kind == RecommendationKind.content &&
-            target is TrainerRecommendationTarget)) {
+    if ((target is TrainerRecommendationTarget &&
+            kind != RecommendationKind.trainer) ||
+        (target is ContentRecommendationTarget &&
+            kind != RecommendationKind.content) ||
+        (target is RoutineRecommendationTarget &&
+            kind != RecommendationKind.routine)) {
       throw const FormatException('Mismatched recommendation target');
     }
     return RecommendationNotice(

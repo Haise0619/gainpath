@@ -50,6 +50,8 @@ class CanonicalAdminHarness {
       autoDeliver = false;
   Completer<Object?>? pendingDetail;
   Map<String, Object?> record = canonicalAdminRecord();
+  List<Map<String, Object?>>? records;
+  String? nextAfterId;
   final requests = <Map<String, Object?>>[];
   late final repository = CanonicalAdminRecommendationRepository(
       organizationId: 'synthetic-org',
@@ -73,8 +75,8 @@ class CanonicalAdminHarness {
           'schemaVersion': 1,
           'mode': 'accepted_workout',
           'organizationId': 'synthetic-org',
-          'records': [record],
-          'nextAfterId': null
+          'records': records ?? [record],
+          'nextAfterId': nextAfterId
         };
       case 'admin.queue.detail':
         if (pendingDetail != null) return pendingDetail!.future;

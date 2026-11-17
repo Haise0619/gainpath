@@ -26,7 +26,7 @@ void main() {
     await show(tester, const RiskLeaderboardScreen(), 1400);
     expect(find.text('Overview'), findsOneWidget);
     expect(find.text('History'), findsOneWidget);
-    expect(find.text('Needs Attention'), findsOneWidget);
+    expect(find.text('Delivery Issues'), findsOneWidget);
     expect(find.text('Exercise Guidance Insights'), findsOneWidget);
   });
 

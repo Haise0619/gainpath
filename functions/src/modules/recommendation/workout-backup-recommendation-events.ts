@@ -1,10 +1,12 @@
 import { getAuth } from 'firebase-admin/auth';
 import { getFirestore } from 'firebase-admin/firestore';
 import { onDocumentCreated, onDocumentWritten } from 'firebase-functions/v2/firestore';
+import {defineSecret} from 'firebase-functions/params';
 import { DomainError } from '../../platform/errors';
 import { FirestoreStore } from '../../platform/firestore/firestore-store';
 import { createCanonicalRecommendationLifecycle, type CanonicalLifecycleDependencies } from './canonical-recommendation-lifecycle';
 import { getWorkoutBackupRuntime } from './workout-backup-recommendation-runtime';
+export const workoutRecommendationGeminiKey=defineSecret('GEMINI_API_KEY');
 
 export async function evaluateSavedWorkout(deps: CanonicalLifecycleDependencies, org: string, member: string, key: string) {
   if (org !== 'gainpath' || !/^session-[A-Za-z0-9_-]{1,128}$/.test(key)) return [];
@@ -34,6 +36,7 @@ export function workoutRecommendationDependencies(): CanonicalLifecycleDependenc
 export const module13WorkoutBackupCreated = onDocumentCreated({
   region: 'asia-southeast1', document: 'orgs/{organizationId}/members/{memberId}/workoutBackups/{key}',
   retry: true, maxInstances: 2, timeoutSeconds: 120,
+  secrets:[workoutRecommendationGeminiKey],
 }, async event => {
   const {organizationId, memberId, key} = event.params;
   await evaluateSavedWorkout(workoutRecommendationDependencies(), organizationId, memberId, key);
@@ -48,6 +51,7 @@ export function workoutSummaryConsentReady(raw: unknown) {
 export const module13WorkoutConsentChanged = onDocumentWritten({
   region: 'asia-southeast1', document: 'orgs/{organizationId}/recommendationConsent/{memberId}',
   retry: true, maxInstances: 1, timeoutSeconds: 120,
+  secrets:[workoutRecommendationGeminiKey],
 }, async event => {
   if (event.params.organizationId !== 'gainpath' ||
     !workoutSummaryConsentReady(event.data?.after.data()) || workoutSummaryConsentReady(event.data?.before.data())) return;

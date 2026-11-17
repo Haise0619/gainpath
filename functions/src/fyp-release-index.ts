@@ -9,9 +9,10 @@ import {createFypDatasetBackend} from './modules/dataset/fyp-backend';
 import {resolveFypRuntimeRelease} from './modules/dataset/fyp-runtime-release';
 import {recommendationCommandError} from './modules/recommendation/recommendation-configuration';
 import {createUnifiedAdminBackend} from './modules/dataset/unified-admin-backend';
+import {workoutRecommendationGeminiKey} from './modules/recommendation/workout-backup-recommendation-events';
 if(!getApps().length)initializeApp();
 const options={region:'asia-southeast1',enforceAppCheck:true,memory:'512MiB',cpu:1,timeoutSeconds:540,maxInstances:1,concurrency:4} as const;
-const callable=(method:'session'|'command')=>onCall(options,async request=>{
+const callable=(method:'session'|'command')=>onCall({...options,...(method==='command'?{secrets:[workoutRecommendationGeminiKey]}:{})},async request=>{
   try{
     if(!request.auth||!request.app)throw new HttpsError('unauthenticated','Verified Auth and App Check are required.');
     const db=getFirestore(),release=await resolveFypRuntimeRelease(db);

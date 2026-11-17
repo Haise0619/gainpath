@@ -6,7 +6,7 @@ import {createCanonicalRecommendationLifecycle, type CanonicalLifecycleDependenc
 /** One read-only transaction snapshot per page. Never reuse privacy or target
  * checks across requests, and never use this store for delivery/mutations. */
 export async function canonicalRecommendationPage(deps: CanonicalLifecycleDependencies,
-  auth: InsightsAuth, org: string, after: string|null, admin: boolean, history = false) {
+  auth: InsightsAuth, org: string, after: string|null, admin: boolean, history = false, includeRoutine = true) {
   return deps.store.transact(async underlying => {
     const reads = new Map<string, Promise<DocumentData|undefined>>();
     const noWrite = () => {throw new Error('Recommendation pages are read-only.');};
@@ -32,9 +32,14 @@ export async function canonicalRecommendationPage(deps: CanonicalLifecycleDepend
     for (let offset = 0; offset < ids.length; offset += 4) {
       const batch = await Promise.all(ids.slice(offset, offset + 4).map(async id => {
         try {
-          if (admin) return await lifecycle.adminDetail(auth, org, id);
+          if (admin) {
+            const detail=await lifecycle.adminDetail(auth, org, id);
+            const kind='suggestion' in detail?detail.suggestion?.target.kind:detail.kind;
+            return includeRoutine||kind!=='routine'?detail:null;
+          }
           const detail = await lifecycle.member(auth, org, id, 'get', null, null);
-          return detail.deliveredAtMillis !== null && (history || detail.state === 'available') ? detail : null;
+          return detail.deliveredAtMillis !== null && (history || detail.state === 'available') &&
+            (includeRoutine || detail.kind!=='routine') ? detail : null;
         } catch (error) {
           if (error instanceof DomainError && (error.code === 'failed-precondition' ||
             !admin && error.code === 'permission-denied')) return null;
