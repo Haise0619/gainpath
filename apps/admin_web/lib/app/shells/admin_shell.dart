@@ -100,15 +100,6 @@ class AdminShell extends StatefulWidget {
 
 class _AdminShellState extends State<AdminShell> {
   late final FirebaseDemoAdminRepositories? _fypRecommendations = widget
-  late final AdminAiRepository? _adminAi = widget.liveSession == null
-      ? null
-      : AdminAiRepository(
-          organizationId: widget.liveSession!.scope.organizationId,
-          isCurrent: () =>
-              mounted &&
-              context.read<AuthBloc>().state.session?.scope ==
-                  widget.liveSession!.scope,
-        );
               .liveSession ==
           null
       ? null
