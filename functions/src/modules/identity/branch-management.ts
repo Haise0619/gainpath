@@ -80,7 +80,7 @@ export async function branchManagement(store: DocumentStore, list: BranchList, a
   const uid = auth!.uid;
   const root = `orgs/${org}`;
   const action = input.action;
-  if (action !== 'list' && action !== 'save' && action !== 'setHome') {
+  if (action !== 'list' && action !== 'save' && action !== 'setHome' && action !== 'setSelected') {
     throw new DomainError('invalid-argument', 'Unsupported branch action.');
   }
   const scope = async () => store.transact(async tx => {
@@ -96,7 +96,11 @@ export async function branchManagement(store: DocumentStore, list: BranchList, a
     if (!activeOnly && current.role !== 'admin') throw new DomainError('permission-denied', 'Admin access is required.');
     const user = await store.transact(tx => tx.get(`users/${uid}`));
     const homeBranchId = user?.organizationId === org ? (user.homeBranchId ?? user.primaryBranchId ?? current.branchIds[0]) : undefined;
+    const selected = user?.selectedBranchId;
+    const selection = typeof selected === 'string' && /^[A-Za-z0-9_-]{1,128}$/.test(selected)
+      ? await store.transact(tx => tx.get(`${root}/branches/${selected}`)) : undefined;
     return { records: rows.slice(0, 25).map(row => view(row.id, row.data)),
+      ...(selection?.status === 'active' ? { selectedBranchId: selected } : {}),
       ...(typeof homeBranchId === 'string' ? { homeBranchId } : {}),
       ...(rows.length > 25 ? { nextAfterId: rows[24].id } : {}) };
   }
@@ -106,13 +110,14 @@ export async function branchManagement(store: DocumentStore, list: BranchList, a
     await requireBookingOrganization(tx, org);
     const actor = await currentBookingMembership(tx, org, uid);
     const old = await tx.get(path);
-    if (action === 'setHome') {
+    if (action === 'setHome' || action === 'setSelected') {
       if (actor.role !== 'member' || old?.status !== 'active') {
         throw new DomainError('permission-denied', 'Select an active home branch.');
       }
       const user = await tx.get(`users/${uid}`);
-      tx.set(`users/${uid}`, { ...user, homeBranchId: id, updatedAtMillis: clock() });
-      return { homeBranchId: id };
+      const field = action === 'setHome' ? 'homeBranchId' : 'selectedBranchId';
+      tx.set(`users/${uid}`, { ...user, [field]: id, updatedAtMillis: clock() });
+      return { [field]: id };
     }
     if (actor.role !== 'admin') throw new DomainError('permission-denied', 'Admin access is required.');
     if (input.create === true && old) throw new DomainError('already-exists', 'This branch ID already exists.');

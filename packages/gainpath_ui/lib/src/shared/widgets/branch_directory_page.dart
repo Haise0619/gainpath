@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:latlong2/latlong.dart';
 import 'branch_map.dart';
+import 'branch_activity_page.dart';
 
 typedef BranchRequest = Future<Map<String, dynamic>> Function(
     Map<String, Object?> input);
@@ -14,6 +15,8 @@ class BranchDirectoryPage extends StatefulWidget {
     this.admin = false,
     this.onSelected,
     this.locate,
+    this.scanVisit,
+    this.pickCover,
   });
 
   final BranchRequest request;
@@ -21,6 +24,8 @@ class BranchDirectoryPage extends StatefulWidget {
   final bool admin;
   final ValueChanged<String>? onSelected;
   final Future<({double latitude, double longitude})> Function()? locate;
+  final Future<String?> Function(BuildContext context)? scanVisit;
+  final Future<String?> Function()? pickCover;
 
   @override
   State<BranchDirectoryPage> createState() => _BranchDirectoryPageState();
@@ -30,6 +35,7 @@ class _BranchDirectoryPageState extends State<BranchDirectoryPage> {
   List<Map<String, dynamic>> _branches = [];
   String? _home, _next;
   String _query = '';
+  String _statusFilter = 'all';
   bool _busy = false, _failed = false;
   bool _showMap = false, _locating = false;
   LatLng? _location;
@@ -76,6 +82,7 @@ class _BranchDirectoryPageState extends State<BranchDirectoryPage> {
       setState(() {
         _branches = [if (more) ..._branches, ...branches];
         _home = result['homeBranchId'] as String?;
+        _selection = result['selectedBranchId'] as String?;
         _next = result['nextAfterId'] as String?;
       });
     } catch (_) {
@@ -86,8 +93,6 @@ class _BranchDirectoryPageState extends State<BranchDirectoryPage> {
   }
 
   Future<void> _details(Map<String, dynamic> branch) async {
-    setState(() => _selection = branch['branchId'] as String);
-    widget.onSelected?.call(_selection!);
     final address = (branch['address'] as String?) ?? '';
     final latitude = branch['latitude'];
     final longitude = branch['longitude'];
@@ -97,6 +102,10 @@ class _BranchDirectoryPageState extends State<BranchDirectoryPage> {
     final hours = branch['openingHours'] as List?;
     final cover = branch['coverUrl'] as String?;
     final id = branch['branchId'] as String;
+    final stats = widget.admin
+        ? Future<Map<String, dynamic>>.sync(
+            () => widget.request({'action': 'branchStats', 'branchId': id}))
+        : null;
     final action = await showDialog<String>(
       context: context,
       builder: (context) => AlertDialog(
@@ -121,6 +130,32 @@ class _BranchDirectoryPageState extends State<BranchDirectoryPage> {
                     when phone.isNotEmpty)
                   Text(phone),
                 if (facilities.isNotEmpty) Text(facilities),
+                if (stats != null)
+                  FutureBuilder<Map<String, dynamic>>(
+                    future: stats,
+                    builder: (context, snapshot) {
+                      final result = snapshot.data;
+                      if (snapshot.hasError) {
+                        return const Text('Branch totals unavailable.');
+                      }
+                      if (result == null) {
+                        return const LinearProgressIndicator();
+                      }
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                        child: Wrap(spacing: 8, runSpacing: 4, children: [
+                          Chip(
+                              label:
+                                  Text('${result['coaches']} coach profiles')),
+                          Chip(
+                              label: Text(
+                                  '${result['equipment']} equipment units')),
+                          Chip(label: Text('${result['bookings']} bookings')),
+                          Chip(label: Text('${result['visits']} gym visits')),
+                        ]),
+                      );
+                    },
+                  ),
                 const SizedBox(height: 12),
                 if (hours == null || hours.length != 7)
                   const Text('Opening hours unavailable')
@@ -135,6 +170,20 @@ class _BranchDirectoryPageState extends State<BranchDirectoryPage> {
           ),
         ),
         actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, 'equipment'),
+            child: const Text('Equipment'),
+          ),
+          if (widget.admin)
+            TextButton(
+              onPressed: () => Navigator.pop(context, 'visits'),
+              child: const Text('Gym visits'),
+            )
+          else if (_selection != id)
+            TextButton(
+              onPressed: () => Navigator.pop(context, 'select'),
+              child: const Text('Use this branch'),
+            ),
           TextButton(
               onPressed: () => Navigator.pop(context),
               child: const Text('Close')),
@@ -159,6 +208,22 @@ class _BranchDirectoryPageState extends State<BranchDirectoryPage> {
       ),
     );
     if (!mounted || action == null) return;
+    if (action == 'equipment' || action == 'visits') {
+      await _activity(branch: branch, visits: action == 'visits');
+      return;
+    }
+    if (action == 'select') {
+      try {
+        await widget.request({'action': 'setSelected', 'branchId': id});
+        if (mounted) {
+          setState(() => _selection = id);
+          widget.onSelected?.call(id);
+        }
+      } catch (_) {
+        if (mounted) _notice('Could not select this branch.');
+      }
+      return;
+    }
     if (action == 'edit') {
       await _edit(branch);
     } else if (action == 'home') {
@@ -189,11 +254,50 @@ class _BranchDirectoryPageState extends State<BranchDirectoryPage> {
         .showSnackBar(SnackBar(content: Text(message)));
   }
 
+  Future<void> _activity(
+          {Map<String, dynamic>? branch, required bool visits}) =>
+      Navigator.of(context).push<void>(MaterialPageRoute(
+          builder: (_) => BranchActivityPage(
+                title: visits
+                    ? 'Gym visits'
+                    : '${branch?['displayName']} equipment',
+                request: widget.request,
+                branchId: branch?['branchId'] as String?,
+                visits: visits,
+                admin: widget.admin,
+              )));
+
+  Future<void> _checkIn() async {
+    final code = await widget.scanVisit!(context);
+    if (!mounted || code == null) return;
+    final match =
+        RegExp(r'^gainpath-visit:([A-Za-z0-9_-]{1,128}):([A-Za-z0-9_-]{32})$')
+            .firstMatch(code);
+    if (match == null) {
+      _notice('This is not a GainPath gym visit code.');
+      return;
+    }
+    try {
+      final result = await widget.request(
+          {'action': 'checkIn', 'branchId': match[1], 'token': match[2]});
+      if (mounted) {
+        _notice(result['duplicate'] == true
+            ? 'Visit already recorded.'
+            : 'Gym check-in successful.');
+      }
+    } catch (_) {
+      if (mounted) {
+        _notice(
+            'Check-in unavailable. Check your membership or ask for a fresh code.');
+      }
+    }
+  }
+
   Future<void> _edit([Map<String, dynamic>? branch]) async {
     final saved = await showDialog<bool>(
       context: context,
-      builder: (context) =>
-          _BranchEditor(branch: branch, request: widget.request),
+      builder: (context) => _BranchEditor(
+          branch: branch, request: widget.request, pickCover: widget.pickCover),
     );
     if (mounted && saved == true) await _load();
   }
@@ -202,9 +306,11 @@ class _BranchDirectoryPageState extends State<BranchDirectoryPage> {
   Widget build(BuildContext context) {
     final query = _query.toLowerCase().trim();
     final visible = _branches
-        .where((branch) => '${branch['displayName']} ${branch['address'] ?? ''}'
-            .toLowerCase()
-            .contains(query))
+        .where((branch) =>
+            (_statusFilter == 'all' || branch['status'] == _statusFilter) &&
+            '${branch['displayName']} ${branch['address'] ?? ''}'
+                .toLowerCase()
+                .contains(query))
         .toList();
     final location = _location;
     if (location != null) {
@@ -242,6 +348,26 @@ class _BranchDirectoryPageState extends State<BranchDirectoryPage> {
                   prefixIcon: Icon(Icons.search))),
           const SizedBox(height: 16),
           Wrap(spacing: 8, children: [
+            if (widget.admin)
+              for (final filter in const {
+                'all': 'All',
+                'active': 'Active',
+                'inactive': 'Inactive'
+              }.entries)
+                ChoiceChip(
+                    label: Text(filter.value),
+                    selected: _statusFilter == filter.key,
+                    onSelected: (_) =>
+                        setState(() => _statusFilter = filter.key)),
+            if (widget.scanVisit != null) ...[
+              OutlinedButton.icon(
+                  onPressed: _checkIn,
+                  icon: const Icon(Icons.qr_code_scanner),
+                  label: const Text('Gym check-in')),
+              TextButton(
+                  onPressed: () => _activity(visits: true),
+                  child: const Text('My gym visits')),
+            ],
             OutlinedButton.icon(
                 onPressed: () => setState(() => _showMap = !_showMap),
                 icon: const Icon(Icons.map_outlined),
@@ -272,7 +398,7 @@ class _BranchDirectoryPageState extends State<BranchDirectoryPage> {
           for (final branch in visible)
             Card(
               child: ListTile(
-                leading: const Icon(Icons.location_on_outlined),
+                leading: _branchThumbnail(branch['coverUrl']),
                 title: Text(branch['displayName'] as String? ?? 'Branch'),
                 subtitle: Text([
                   if (branch['branchId'] == _home) 'Home branch',
@@ -300,6 +426,19 @@ class _BranchDirectoryPageState extends State<BranchDirectoryPage> {
       ),
     );
   }
+}
+
+Widget _branchThumbnail(Object? url) {
+  const fallback = Icon(Icons.location_on_outlined);
+  if (url is! String || url.isEmpty) return fallback;
+  return ClipRRect(
+    borderRadius: BorderRadius.circular(8),
+    child: Image.network(url,
+        width: 48,
+        height: 48,
+        fit: BoxFit.cover,
+        errorBuilder: (context, error, stack) => fallback),
+  );
 }
 
 const _days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
@@ -341,9 +480,10 @@ String _openingStatus(List hours) {
 }
 
 class _BranchEditor extends StatefulWidget {
-  const _BranchEditor({this.branch, required this.request});
+  const _BranchEditor({this.branch, required this.request, this.pickCover});
   final Map<String, dynamic>? branch;
   final BranchRequest request;
+  final Future<String?> Function()? pickCover;
 
   @override
   State<_BranchEditor> createState() => _BranchEditorState();
@@ -386,6 +526,30 @@ class _BranchEditorState extends State<_BranchEditor> {
                 : label.replaceAll('–', '-'));
   });
   bool _busy = false;
+  late String? _cover = widget.branch?['coverUrl'] as String?;
+  bool _uploading = false;
+
+  Future<void> _upload() async {
+    setState(() {
+      _uploading = true;
+      _error = null;
+    });
+    try {
+      final encoded = await widget.pickCover!();
+      if (!mounted || encoded == null) return;
+      final result = await widget
+          .request({'action': 'uploadBranchCover', 'dataBase64': encoded});
+      if (mounted) setState(() => _cover = result['url'] as String);
+    } catch (_) {
+      if (mounted) {
+        setState(() => _error =
+            'Could not upload this image. Choose a JPG or PNG up to 2 MB.');
+      }
+    } finally {
+      if (mounted) setState(() => _uploading = false);
+    }
+  }
+
   bool _pickOnMap = false;
   String? _error;
 
@@ -455,6 +619,7 @@ class _BranchEditorState extends State<_BranchEditor> {
           'latitude': latitude,
           'longitude': longitude,
           'status': _active ? 'active' : 'inactive',
+          if (_cover != null) 'coverUrl': _cover,
           if (schedule.isNotEmpty) 'openingHours': schedule,
           'facilities': value('facilities')
               .split(',')
@@ -484,6 +649,17 @@ class _BranchEditorState extends State<_BranchEditor> {
             child: ListView(
               shrinkWrap: true,
               children: [
+                if (_cover case final String url when url.isNotEmpty)
+                  Image.network(url,
+                      height: 120,
+                      fit: BoxFit.cover,
+                      errorBuilder: (context, error, stack) =>
+                          const Text('Cover preview unavailable')),
+                if (widget.pickCover != null)
+                  OutlinedButton.icon(
+                      onPressed: _busy || _uploading ? null : _upload,
+                      icon: const Icon(Icons.image_outlined),
+                      label: Text(_uploading ? 'Uploading…' : 'Upload cover')),
                 OutlinedButton.icon(
                   onPressed: _busy
                       ? null
@@ -565,7 +741,7 @@ class _BranchEditorState extends State<_BranchEditor> {
               onPressed: _busy ? null : () => Navigator.pop(context),
               child: const Text('Cancel')),
           FilledButton(
-              onPressed: _busy ? null : _save,
+              onPressed: _busy || _uploading ? null : _save,
               child: Text(_busy ? 'Saving…' : 'Save branch')),
         ],
       );

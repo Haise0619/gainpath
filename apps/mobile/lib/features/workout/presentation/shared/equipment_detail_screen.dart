@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'equipment_tutorial_video.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
 import '../member/exercise_tutorial_screen.dart' show ExerciseTutorialScreen;
@@ -35,8 +36,12 @@ Widget _networkHero(String url, {BoxFit fit = BoxFit.cover}) {
 class EquipmentDetailScreen extends StatefulWidget {
   final GymEquipment equipment;
   final bool live;
+  final String? organizationId;
   const EquipmentDetailScreen(
-      {super.key, required this.equipment, this.live = false});
+      {super.key,
+      required this.equipment,
+      this.live = false,
+      this.organizationId});
 
   @override
   State<EquipmentDetailScreen> createState() => _EquipmentDetailScreenState();
@@ -49,10 +54,15 @@ class _EquipmentDetailScreenState extends State<EquipmentDetailScreen>
   late final AnimationController _progress;
   bool _playing = false;
   bool _finished = false;
+  Future<Map<String, dynamic>>? _branchStock;
 
   @override
   void initState() {
     super.initState();
+    final organization = widget.organizationId;
+    if (widget.live && organization != null) {
+      _branchStock = _readBranchStock(organization);
+    }
     _progress = AnimationController(vsync: this, duration: _demoDuration)
       ..addStatusListener((status) {
         if (status == AnimationStatus.completed) {
@@ -62,6 +72,18 @@ class _EquipmentDetailScreenState extends State<EquipmentDetailScreen>
           });
         }
       });
+  }
+
+  Future<Map<String, dynamic>> _readBranchStock(String organization) async {
+    final response =
+        await FirebaseFunctions.instanceFor(region: 'asia-southeast1')
+            .httpsCallable('branchManagementCommand')
+            .call({
+      'action': 'equipmentAvailability',
+      'organizationId': organization,
+      'equipmentId': widget.equipment.id
+    });
+    return Map<String, dynamic>.from(response.data as Map);
   }
 
   @override
@@ -100,6 +122,27 @@ class _EquipmentDetailScreenState extends State<EquipmentDetailScreen>
       appBar: AppBar(title: Text(equipment.name)),
       body: PageBody(
         children: [
+          if (_branchStock != null)
+            FutureBuilder<Map<String, dynamic>>(
+              future: _branchStock,
+              builder: (context, snapshot) {
+                final branch = snapshot.data;
+                if (snapshot.hasError) {
+                  return const Text('Branch inventory unavailable.');
+                }
+                if (branch == null) return const LinearProgressIndicator();
+                if (branch['branchName'] == null) {
+                  return const Text('Select a branch to check equipment.');
+                }
+                return Card(
+                    child: ListTile(
+                  title: Text(branch['branchName'] as String),
+                  subtitle: Text(branch['recorded'] == true
+                      ? '${branch['usable']} usable · ${branch['maintenance']} in maintenance'
+                      : 'This equipment is not listed at this branch.'),
+                ));
+              },
+            ),
           ClipRRect(
             borderRadius: BorderRadius.circular(18),
             child: Container(

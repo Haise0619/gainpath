@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { branchAnswer, branchQuestion } from './branch-answers';
 import { getFirestore, FieldPath, type Firestore } from 'firebase-admin/firestore';
 import { FirestoreStore } from '../../platform/firestore/firestore-store';
 import { readCoachIdentity } from '../coaching/coach-identity-reader';
@@ -65,6 +66,13 @@ export async function fitnessAssistantHandler(request: CallableRequest, dependen
       return { ok: true, bookmarks: state.bookmarks, contextMode:privateProviderApproved()?'private-approved':'public' };
     });
     if (input.action !== 'reply') return result;
+    const branchIntent = branchQuestion(input.text!);
+    if (branchIntent) {
+      const text = await branchAnswer(db, org, uid, branchIntent, now);
+      await reauthorize();
+      return { responseId: randomUUID(), text, sources: ['branch_directory'],
+        telemetry: { ...metrics, responseTimeMillis: Math.max(0, Date.now() - started) } };
+    }
     const progress = async () => {
       await reauthorize();
       const rows = await db.collection(`orgs/${org}/workoutSessions`).where('memberId', '==', uid).limit(101).get();

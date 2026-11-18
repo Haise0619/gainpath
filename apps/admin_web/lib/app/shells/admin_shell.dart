@@ -10,6 +10,8 @@ import '../../features/gamification/presentation/admin/reward_fulfilment_panel.d
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:cloud_functions/cloud_functions.dart';
+import 'dart:convert';
+import 'package:file_selector/file_selector.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:gainpath_identity/gainpath_identity.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
@@ -247,6 +249,16 @@ class _AdminShellState extends State<AdminShell> {
         'Manage gym locations',
         BranchDirectoryPage(
           admin: true,
+          pickCover: () async {
+            final file = await openFile(acceptedTypeGroups: const [
+              XTypeGroup(label: 'Images', extensions: ['jpg', 'jpeg', 'png']),
+            ]);
+            if (file == null) return null;
+            if (await file.length() > 2 * 1024 * 1024) {
+              throw StateError('Cover images must be 2 MB or less.');
+            }
+            return base64Encode(await file.readAsBytes());
+          },
           openDirections: (uri) => launchUrl(uri, webOnlyWindowName: '_blank'),
           request: (input) async {
             final result = await FirebaseFunctions.instanceFor(region: 'asia-southeast1')

@@ -15,6 +15,7 @@ import '../../features/workout/domain/routine_attempt.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../features/gamification/application/gamification_bloc.dart';
 import 'package:gainpath_domain/gamification.dart';
@@ -289,6 +290,9 @@ class _MemberHomeScreenState extends State<MemberHomeScreen>
                           icon: const Icon(Icons.location_on_outlined),
                           label: const Text('Find a gym'),
                           onPressed: () => _go(BranchDirectoryPage(
+                            scanVisit: (context) => Navigator.of(context).push<String>(
+                              MaterialPageRoute(builder: (_) => const _GymVisitScanner()),
+                            ),
                             locate: () async {
                               if (!await Geolocator.isLocationServiceEnabled()) {
                                 throw StateError('Turn on location services to find nearby gyms.');
@@ -1620,4 +1624,34 @@ class _MembershipStrip extends StatelessWidget {
       ),
     );
   }
+}
+
+class _GymVisitScanner extends StatefulWidget {
+  const _GymVisitScanner();
+  @override
+  State<_GymVisitScanner> createState() => _GymVisitScannerState();
+}
+
+class _GymVisitScannerState extends State<_GymVisitScanner> {
+  bool _done = false;
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    appBar: AppBar(title: const Text('Scan gym check-in')),
+    body: MobileScanner(
+      errorBuilder: (context, error) => const Center(
+        child: Text('Camera is unavailable. Check the app camera permission.'),
+      ),
+      onDetect: (capture) {
+        if (_done) return;
+        final value = capture.barcodes
+            .map((barcode) => barcode.rawValue)
+            .whereType<String>()
+            .firstOrNull;
+        if (value == null) return;
+        _done = true;
+        Navigator.pop(context, value);
+      },
+    ),
+  );
 }

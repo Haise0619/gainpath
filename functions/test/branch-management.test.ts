@@ -29,6 +29,12 @@ it('hides inactive branches from members and keeps home preference separate from
   expect(await branchManagement(store, list, actor('member'), request('setHome', { branchId: 'other' }))).toEqual({ homeBranchId: 'other' });
   expect(store.documents.get('orgs/gym/members/member')?.branchIds).toEqual(['main']);
   expect(store.documents.get('users/member')?.primaryBranchId).toBe('main');
+  expect(await branchManagement(store, list, actor('member'), request('setSelected', { branchId: 'main' }))).toEqual({ selectedBranchId: 'main' });
+  expect(await branchManagement(store, list, actor('member'), request('list'))).toMatchObject({
+    selectedBranchId: 'main', homeBranchId: 'other',
+  });
+  store.documents.set('orgs/gym/branches/main', { status: 'inactive' });
+  expect(await branchManagement(store, list, actor('member'), request('list'))).not.toHaveProperty('selectedBranchId');
   await expect(branchManagement(store, list, actor('member'), request('save', {
     branchId: 'main', branch: { displayName: 'Changed', status: 'active' },
   }))).rejects.toMatchObject({ code: 'permission-denied' });

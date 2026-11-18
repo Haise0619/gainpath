@@ -19,6 +19,15 @@
 
 ## Release and acceptance
 
+### Inventory, visits and branch preferences
+
+- Admin can upload a JPG or PNG cover up to 2 MB through the existing Firebase Storage upload implementation. The editor saves the returned cover URL with branch information. The public branch list and detail show images with fallbacks.
+- The account's selected branch is stored separately from Home Branch and omitted on read if inactive. Branch Equipment and scanner availability use existing equipment IDs. The scanner uses the stored selected branch, with Home Branch and the legacy primary branch as fallbacks. Inventory quantity tracks usable and maintenance units, not real-time occupancy.
+- Admin can add, edit or remove branch inventory associations and open branch visit history or display a five-minute QR. Member can scan the QR and open personal history. Check-in verifies existing gym-access capability, validates a server-stored token digest and uses an atomic visit ID plus a 15-minute branch cooldown. No gamification rewards or attendance claims are generated.
+- Branch Details now has live aggregate queries for coach profiles, equipment units, bookings and recorded visits. The assistant can answer narrowly recognized branch hours, directions and treadmill questions using stored facts, or direct a nearby query to the existing on-device locator without a Gemini call.
+- New storage paths: `orgs/{org}/branches/{branch}/equipmentInventory`, `gymCheckIn`, `gymVisitLatest`, `gymVisits`; Member history uses `orgs/{org}/members/{member}/gymVisits`. Branch cover objects are stored at `orgs/{org}/branchCovers/{sha256}`. Existing branch and equipment catalogs remain canonical.
+
 - The new callable has no cloud deployment in this slice. Its live client access requires an approved deployment and a review of the callable transport IAM. No Rules, secrets, billing or production records were modified.
-- Pending: cover upload, persistent selected branch context across screens, branch KPI and filtered drill-down, organization-wide booking access rollout, branch inventory, QR visits, branch reporting and AI integration.
+- Pending: full dashboard-level branch filtering and CSV analytics, authorized organization-wide booking and Coach filtering, management drill-down links, QR download, equipment compatibility for routines/programs and other-branch scanner lookup; recommendation, Content Planner and Outreach integration. Branch totals do not cover legacy home-member assignments. Assistant branch cards and coach availability intent are still pending.
+- Deployment still needs explicit approval to expose the new callable through Firebase callable transport. If scoped Storage access is missing, grant it separately. Existing Rules, Secrets, IAM and Billing were not changed.
 - Pending: full end-to-end acceptance, APK, Admin Web release build and actual rendered screenshots. For the directory slice, first verify Admin save and Member readback on a test branch, then check overnight hours, missing coordinates and Google Maps directions.

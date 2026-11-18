@@ -611,6 +611,7 @@ class _EquipmentScannerScreenState extends State<EquipmentScannerScreen>
                               MaterialPageRoute(
                                   builder: (_) => EquipmentDetailScreen(
                                       equipment: _suggestedMatch!,
+                                      organizationId: widget.organizationId,
                                       live: widget.connected))),
                           child: const Text('Confirm equipment')),
                     ]),
@@ -662,6 +663,7 @@ class _EquipmentScannerScreenState extends State<EquipmentScannerScreen>
                                       MaterialPageRoute(
                                         builder: (_) => EquipmentDetailScreen(
                                           equipment: eq,
+                                          organizationId: widget.organizationId,
                                           live: widget.connected,
                                         ),
                                       ),

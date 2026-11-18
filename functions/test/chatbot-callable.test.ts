@@ -12,6 +12,18 @@ function fixture() {
   return { records, set, db, request };
 }
 describe('fitness assistant actual handler', () => {
+  it('answers nearby gym questions with the local branch directory and no provider call', async () => {
+    const f = fixture();
+    f.records['orgs/g/members/u/chatbot/state'] = { acknowledgedRevision: 2 };
+    const fetcher = vi.fn<typeof fetch>();
+    const result = await fitnessAssistantHandler(
+      f.request({ action: 'reply', text: 'Which gym is nearest to me?' }),
+      { db: f.db, fetcher },
+    );
+    expect(result).toMatchObject({ text: expect.stringContaining('Find a gym'),
+      sources: ['branch_directory'], telemetry: { providerRequests: 0 } });
+    expect(fetcher).not.toHaveBeenCalled();
+  });
   it.each([
     ['Which equipment works my chest?','Your chest is targeted by the chest press. Adjust the seat before exercising.'],
     ['what can i eat healthy','Choose vegetables, whole grains and protein. Your body is supported by a varied diet.'],
