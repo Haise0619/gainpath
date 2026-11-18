@@ -118,8 +118,9 @@ export function createAdminAiService(deps:AdminAiDependencies){
       const old=await deps.store.transact(tx=>tx.get(previewPath));if(old&&Number(old.expiresAtMillis)>now()&&old.actorId===auth.uid&&old.consentFingerprint===analysis.privacy.fingerprint)return old.result;
       const key=analysis.latestKey??'fitness-profile';
       const candidates=await deps.store.transact(async tx=>{await requireQueueAdmin(tx,auth,org);await permission(tx,org,member,true);return deps.runtime.backupSuggestions?.(tx,org,member,key,now(),Math.max(analysis.privacy.boundary,now()-analysis.days*86400000))??[];});
-      const eligible:CanonicalSuggestion[]=await deps.store.transact(async tx=>{const list=[];for(const c of candidates){const fatigue=await tx.get(`orgs/${org}/canonicalRecommendationFatigue/${digestOf({member,need:c.needKey})}`);if(Number(fatigue?.untilMillis??0)<=now())list.push(c);}return list;});
-      if(!eligible.length)return{previewId:null,recommendations:[],message:'No eligible content is available outside the current cooldown.'};
+      // An explicit Admin outreach is independent of automatic recommendation fatigue.
+      const eligible:readonly CanonicalSuggestion[]=candidates;
+      if(!eligible.length)return{previewId:null,recommendations:[],message:'No eligible content is currently available for this member.'};
       const offered=eligible.slice(0,18).map((s,i)=>({id:'C'+(i+1),kind:s.target.kind,title:s.targetLabel,factors:s.ai?.factors??[],context:s.ai?.context??{}}));
       const invoke=deps.aiProvider??unavailable('Gemini is not configured for Admin assistance.');
       const inference=await invoke({task:'outreach',input:{features:{...offered[0]?.context,goals:analysis.goals,workouts:analysis.workouts,days:analysis.days,completedRoutines:analysis.completedRoutines,

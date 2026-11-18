@@ -8,6 +8,7 @@ import {assistanceFixture,admin} from '../test/support/admin-ai-fixture';
 import {createAdminAiService,firestoreAdminAiReader} from '../src/modules/recommendation/admin-ai-service';
 import {createCanonicalRecommendationAdmin} from '../src/modules/recommendation/canonical-recommendation-admin';
 import {createCanonicalRecommendationLifecycle} from '../src/modules/recommendation/canonical-recommendation-lifecycle';
+import {digestOf} from '../src/modules/workouts/workout-backup-validation';
 
 const project='demo-gainpath-admin-ai';
 if(process.env.GCLOUD_PROJECT!==project||!process.env.FIRESTORE_EMULATOR_HOST?.startsWith('127.0.0.1:')||!process.env.FIREBASE_AUTH_EMULATOR_HOST?.startsWith('127.0.0.1:'))throw new Error('Dedicated Auth and Firestore emulators required.');
@@ -16,6 +17,7 @@ const deps={...f.deps,store:new FirestoreStore(db),aiReader:firestoreAdminAiRead
 beforeAll(async()=>{
   await auth.createUser({uid:'admin',email:'admin@example.com',emailVerified:true});await auth.createUser({uid:'learner',email:'learner@example.com',emailVerified:true});
   const batch=db.batch();for(const [path,data]of f.d)batch.set(db.doc(path),data);await batch.commit();
+  const cooldowns=db.batch();for(const s of f.suggestions)cooldowns.set(db.doc('orgs/gainpath/canonicalRecommendationFatigue/'+digestOf({member:'learner',need:s.needKey})),{untilMillis:f.deps.clock!()+7*86400000,marker:'automatic-only'});await cooldowns.commit();
 });
 afterAll(async()=>{await deleteApp(app);});
 describe('Admin AI assistance on actual emulator transactions',()=>{
@@ -49,5 +51,8 @@ describe('Admin AI assistance on actual emulator transactions',()=>{
     await db.doc('orgs/gainpath/recommendationConsent/learner').update({'purposes.externalAiInference.granted':false});
     await expect(createAdminAiService(deps).execute(admin,'gainpath','admin.ai.outreach.generate',{schemaVersion:1,organizationId:'gainpath',memberId:'learner',days:30,requestId:'revoked-preview'})).rejects.toThrow();
     expect((await db.collection('orgs/gainpath/notifications').get()).size).toBe(3);
+  });
+  it('manual delivery left every existing automatic cooldown unchanged',async()=>{
+    for(const s of f.suggestions){const cooldown=await db.doc('orgs/gainpath/canonicalRecommendationFatigue/'+digestOf({member:'learner',need:s.needKey})).get();expect(cooldown.data()).toEqual({untilMillis:f.deps.clock!()+7*86400000,marker:'automatic-only'});}
   });
 });

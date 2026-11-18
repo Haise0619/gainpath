@@ -1,6 +1,20 @@
 # Module 13 — AI Content Planner & AI Member Outreach
 
-2026-11-18 · Local implementation accepted; subsequently the owner approved and deployed the three existing production entrypoints. **Code deployment and private Admin activation are verified; real Gemini/user-flow acceptance is pending the Admin login and test-recipient decision described below.** Earlier request budgets remain unchanged.
+2026-11-18 · Local implementation accepted; subsequently the owner approved and deployed the three existing production entrypoints. **Admin Outreach cooldown is now independent from automatic recommendations, as requested by the owner. Deployment is verified; browser/page acceptance remains paused by the owner.** Earlier request budgets remain unchanged, and the newly approved budget remains 0/3 used.
+
+## Current policy — manual Outreach is separate from automatic cooldown
+
+Automatic recommendations retain the existing seven-day cooldown. Explicit Admin Outreach does not read or write `canonicalRecommendationFatigue`, either during Generate/Send or when the member dismisses a manually sent item. The existing automatic cooldown documents are preserved, without clearing or expiring them. Same-preview Send retries remain idempotent; a new explicit Admin preview represents a separate manual sending intent and is not blocked by an automatic or previous manual seven-day timer.
+
+The two paths continue to share the existing canonical collection and Member Inbox; source `admin_outreach`, sender and preview identity separate manual records from automatic records. Consent, Admin authority, current member identity, current candidate context and real target eligibility (including Coach's continuous 60-minute availability) remain required.
+
+The correction was deployed **only to the same three approved entrypoints**, with source-only updates to two modules. No Secret/IAM/App Check/Rules/index or other Function changes were made. **201 backend tests, source/test TypeScript and 5 Auth/Firestore Emulator tests pass.** Regressions prove an automatic cooldown does not block manual sending, manual Send/dismiss leave automatic cooldowns untouched, exact retries do not duplicate Inbox delivery, and automatic cooldown still blocks automatic generation.
+
+The earlier proposal for an additional TEST account is superseded: no new account is needed solely to bypass automatic cooldown, and no account was created. A provider-free, read-only check using the existing dedicated member reaches the manual inference stage while its automatic candidates remain cooled down. That diagnostic deliberately has no Gemini provider; it is not an error in the deployed Secret configuration. No live inference or manual delivery has yet been performed.
+
+The owner explicitly chose to keep Computer Use stopped and defer page acceptance. No further browser control or real Gemini request was attempted. No Workout, profile or Consent record was modified.
+
+[Latest exact-source/configuration verification](../../build/module13-admin-ai/release/manual-cooldown/release-verified.json) · [201 backend regressions](../../build/module13-admin-ai/release/manual-cooldown-tests.log) · [5 Emulator checks](../../build/module13-admin-ai/release/manual-cooldown/emulator.log). Initial deployment details below are historical where they describe the former cooldown block.
 
 ## Approved production deployment checkpoint
 
@@ -12,7 +26,7 @@ Post-deployment checks: dedicated Member HTTPS access 200; current four-purpose 
 
 The user stopped Computer Use with physical Escape. Browser control was stopped and not resumed in that turn. The user was asked to log in to the ordinary Admin directly and confirm whether browser acceptance may resume; no password was requested.
 
-The existing dedicated member `m13-e2e-20261117` has all four current permissions. All seven existing test session sources have no candidates outside the seven-day cooldown. A provider-free production preflight therefore abstains. No cooldown was cleared, no records overwritten and no training/profile/Consent data was changed. A separate pending request asks whether one additional clearly marked TEST member with no Workout data may be created, to test initial-profile Coach Outreach without consuming extra automatic-generation requests. Until that approval, no new recipient is created and no Outreach inference is attempted.
+The existing dedicated member `m13-e2e-20261117` has all four current permissions. The initial preflight found all seven automatic test session sources under cooldown. That original blocker led to the owner's policy correction above; manual Outreach now ignores automatic cooldown. No cooldown was cleared, no records overwritten, no new test account created, and no training/profile/Consent data changed.
 
 The newly approved **3-request budget remains 0/3 used**, with no Generate request issued. The post-deployment backend regression passes **199 tests**. Planner live generation, Apply using real model results, Outreach Send, actual production receipts and screenshots are **not yet accepted**. Existing screenshots below remain labeled local fixtures/emulator captures.
 
@@ -40,8 +54,8 @@ Recommendations now groups Overview, AI Content Planner, AI Member Outreach, Del
 - Generate checks fresh Admin authority, member state/identity and four purpose permissions. It reuses existing qualified Tutorial/Routine/Coach candidates and anonymous contextual features. Gemini returns up to one candidate per type and a short editable message. There is no forced quota of three results and no Rules-generated prose represented as Gemini output.
 - Unknown IDs, duplicate kinds and unsupported evidence references are rejected. Medical claims are disallowed by prompt and a bounded output check. Model prose remains a draft for Admin review; reference validation is not a general factual-verification model.
 - Server-owned previews expire after 30 minutes and are bound to the requesting Admin, recipient and consent snapshot. Only selected messages are submitted to Send; the browser cannot substitute a target.
-- Send rechecks member identity, Admin access, current permissions, selected period, exact candidate context and destination, plus the existing seven-day fatigue/cooldown. Changed profile/features or targets require a new preview. Exact retry does not duplicate delivery.
-- Recommendation, existing Inbox notification, receipt and fatigue update commit atomically through the existing canonical lifecycle. Saved source is `suggestion.source.kind=admin_outreach`, sender is `suggestion.outreach.sentBy`, editable message is `suggestion.summary`, and method is `suggestion.ai.method=gemini`. Created/sent/delivery times use existing canonical fields.
+- Send rechecks member identity, Admin access, current permissions, selected period, exact candidate context and destination. Changed profile/features or targets require a new preview. Exact retry does not duplicate delivery. Automatic seven-day fatigue is not used by manual Outreach.
+- Recommendation, existing Inbox notification and receipt commit atomically through the existing canonical lifecycle. Manual delivery does not modify automatic fatigue. Saved source is `suggestion.source.kind=admin_outreach`, sender is `suggestion.outreach.sentBy`, editable message is `suggestion.summary`, and method is `suggestion.ai.method=gemini`. Created/sent/delivery times use existing canonical fields.
 - Member uses the same For You cards, detail sheet, Notification Center and target navigation. Admin Overview reads the same canonical collection, and Details displays source/sender/method/status.
 - Coach candidates retain current verification, specialty, shared branch and continuous **60-minute** availability checks. No booking/payment is created. Admin preview explains Basic/Premium booking requirements; existing Member upgrade restrictions remain in place.
 
@@ -58,7 +72,7 @@ Primary references: [Google Search Grounding](https://ai.google.dev/gemini-api/d
 - `functions/src/modules/recommendation/admin-ai-assistance.ts`: draft/outreach contracts, bounded adapter composition, validated activity decoding.
 - `functions/src/modules/recommendation/admin-ai-service.ts`: current data aggregation, analysis, previews and Send orchestration.
 - Existing `canonical-recommendation-admin.ts` / `canonical-recommendation-callables.ts`: new operations on the existing Admin callable, current Auth/App Check checks retained.
-- Existing `canonical-recommendation-lifecycle.ts`: optional outreach provenance and atomic delivery using existing receipt/Inbox/fatigue contracts.
+- Existing `canonical-recommendation-lifecycle.ts`: optional outreach provenance and atomic delivery using existing receipt/Inbox contracts; automatic fatigue remains isolated.
 - `apps/admin_web/lib/features/recommendation/application/admin_ai_repository.dart` and `admin_ai_drafts.dart`: authenticated commands and create-only seeds.
 - `apps/admin_web/lib/features/recommendation/presentation/admin/admin_ai_pages.dart`: two responsive Admin pages, loading/error/empty/success states, preview selection and messages.
 - Existing Admin sidebar, three content screens and canonical Details parser/panel: navigation, prefill and source/sender display.

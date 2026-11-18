@@ -65,7 +65,25 @@ describe('Admin-initiated outreach uses the existing canonical Inbox',()=>{
       const adminDetail=await lifecycle.adminDetail(admin,'gainpath',id) as any;
       expect(adminDetail.suggestion.source.kind).toBe('admin_outreach');expect(adminDetail.suggestion.outreach.sentBy).toBe('admin');
     }
-    const again=await f.call('outreach.generate',{days:30,memberId:member,requestId:'preview2'}) as any;expect(again.recommendations).toEqual([]);expect(f.calls()).toBe(1);
+    const again=await f.call('outreach.generate',{days:30,memberId:member,requestId:'preview2'}) as any;expect(again.recommendations).toHaveLength(3);expect(f.calls()).toBe(2);
+  });
+  it('manual generation and Send ignore automatic cooldown without changing its records',async()=>{
+    const f=assistanceFixture();
+    for(const s of f.suggestions)f.d.set(root+'/canonicalRecommendationFatigue/'+digestOf({member,need:s.needKey}),{untilMillis:now+7*86400000,marker:'preserve-automatic'});
+    const before=[...f.d].filter(([p])=>p.includes('/canonicalRecommendationFatigue/'));
+    const p=await f.call('outreach.generate',{days:30,memberId:member,requestId:'manual-despite-auto'}) as any;
+    expect(p.recommendations).toHaveLength(3);
+    const sent=await f.call('outreach.send',{previewId:p.previewId,selections:[{index:0,message:'Review this beginner guidance.'}]}) as any;
+    expect(sent.ids).toHaveLength(1);expect([...f.d].filter(([p])=>p.includes('/canonicalRecommendationFatigue/'))).toEqual(before);
+    const automatic=await createCanonicalRecommendationLifecycle(f.deps).backup('gainpath',member,'session-after-manual');expect(automatic).toEqual([]);
+  });
+  it('manual Send and Member dismissal do not create an automatic cooldown',async()=>{
+    const f=assistanceFixture(),p=await f.call('outreach.generate',{days:30,memberId:member,requestId:'manual1'}) as any;
+    const result=await f.call('outreach.send',{previewId:p.previewId,selections:[{index:0,message:'Review this beginner guidance.'}]}) as any;
+    const lifecycle=createCanonicalRecommendationLifecycle(f.deps);
+    await lifecycle.member({uid:member,token:{email_verified:true}},'gainpath',result.ids[0],'dismiss',1,'dismiss-manual');
+    expect([...f.d.keys()].filter(p=>p.includes('/canonicalRecommendationFatigue/'))).toEqual([]);
+    const automatic=await lifecycle.backup('gainpath',member,'session-after-manual');expect(automatic).toHaveLength(3);
   });
   it('revocation prevents generation and also blocks a previously generated Send',async()=>{
     const f=assistanceFixture(),p=await f.call('outreach.generate',{days:30,memberId:member,requestId:'preview1'}) as any;

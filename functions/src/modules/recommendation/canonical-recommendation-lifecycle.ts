@@ -194,7 +194,7 @@ export function createCanonicalRecommendationLifecycle(deps: CanonicalLifecycleD
     return target;
   }
   return {
-    /** Admin preview selection reuses current target checks, fatigue and atomic Inbox delivery. */
+    /** Explicit Admin outreach has its own preview identity and atomic delivery; automatic fatigue is untouched. */
     async outreach(auth:InsightsAuth,org:string,member:string,previewId:string,consentFingerprint:string,suggestions:readonly CanonicalSuggestion[]){
       runtimeReady(runtime);const now=nowOf();await eligibleIdentity(member);
       if(!/^[a-f0-9]{64}$/.test(previewId)||!suggestions.length||suggestions.length>3)throw unavailable();
@@ -209,13 +209,11 @@ export function createCanonicalRecommendationLifecycle(deps: CanonicalLifecycleD
           const id=digestOf({org,member,previewId,kind:suggestion.target.kind,source:'admin_outreach'});
           const old=await tx.get(path(org,id));
           if(old){const r=record(old,org,id,now);if(r.status!=='delivered'||r.suggestion.summary!==suggestion.summary)throw new DomainError('aborted','This recommendation was already sent with another message.');ids.push(id);continue;}
-          const fatiguePath=`orgs/${org}/canonicalRecommendationFatigue/${digestOf({member,need:suggestion.needKey})}`;
-          const fatigue=await tx.get(fatiguePath);if(Number(fatigue?.untilMillis??0)>now)throw new DomainError('failed-precondition','A similar recommendation was recently sent.');
           const fresh=await runtime.backupSuggestions?.(tx,org,member,suggestion.source.recordKey,now,Math.max(consent.historyStart,now-suggestion.outreach.analysisDays*86400000))??[];
           if(!fresh.some(c=>digestOf(c)===suggestion.outreach!.baselineFingerprint))throw new DomainError('failed-precondition','Member context or available content changed. Generate a fresh preview.');
           const target=await runtime.resolveTarget(tx,org,suggestion,now,member);if(!target||digestOf(target.target)!==digestOf(suggestion.target))throw unavailable();
           const r:CanonicalRecord={schemaVersion:1,mode:'workout_backup',organizationId:org,memberId:member,id,revision:1,status:'delivered',suggestion,consentFingerprint,createdAtMillis:now,expiresAtMillis:now+runtime.expiresAfterMillis,deliveredAtMillis:now,readAtMillis:null,acknowledgedAtMillis:null,dismissedAtMillis:null};
-          writes.push(()=>{tx.create(path(org,id),r);writeDelivery(tx,r,now);tx.set(fatiguePath,{untilMillis:now+runtime.cooldownMillis});});ids.push(id);
+          writes.push(()=>{tx.create(path(org,id),r);writeDelivery(tx,r,now);});ids.push(id);
         }
         writes.forEach(w=>w());return ids;
       });
@@ -328,7 +326,7 @@ export function createCanonicalRecommendationLifecycle(deps: CanonicalLifecycleD
         if(action==='send') await current(tx, r, now);
         const result = {id, revision: revision + 1, status: action === 'send' ? 'prepared' : 'dismissed'};
         tx.set(path(org, id), {...r, ...result, dismissedAtMillis: action === 'dismiss' ? now : null});
-        if(action==='dismiss')tx.set(`orgs/${org}/canonicalRecommendationFatigue/${digestOf({member:r.memberId,need:r.suggestion.needKey})}`,{untilMillis:now+runtime.cooldownMillis});
+        if(action==='dismiss'&&r.suggestion.source?.kind!=='admin_outreach')tx.set(`orgs/${org}/canonicalRecommendationFatigue/${digestOf({member:r.memberId,need:r.suggestion.needKey})}`,{untilMillis:now+runtime.cooldownMillis});
         tx.create(receiptPath, {fingerprint, result, actorId: auth.uid, atMillis: now}); return result;
       });
     },
@@ -352,7 +350,7 @@ export function createCanonicalRecommendationLifecycle(deps: CanonicalLifecycleD
         if (r.status !== 'prepared' || receipt || notification) throw unavailable();
         writeDelivery(tx, r, now);
         tx.set(path(org, id), {...r, status: 'delivered', revision: r.revision + 1, deliveredAtMillis: now});
-        tx.set(`orgs/${org}/canonicalRecommendationFatigue/${digestOf({member: r.memberId, need: r.suggestion.needKey})}`, {untilMillis: now + runtime.cooldownMillis});
+        if(r.suggestion.source?.kind!=='admin_outreach')tx.set(`orgs/${org}/canonicalRecommendationFatigue/${digestOf({member: r.memberId, need: r.suggestion.needKey})}`, {untilMillis: now + runtime.cooldownMillis});
         return {id, status: 'delivered' as const};
       });
     },
@@ -413,7 +411,7 @@ export function createCanonicalRecommendationLifecycle(deps: CanonicalLifecycleD
           // Read does not imply acknowledgment; neither implies booking/use.
           if(changed)tx.set(path(org, id), updated);
           if(action==='read'&&changed&&notification)tx.set(notificationPath,{...notification,read:true});
-          if(action==='dismiss')tx.set(`orgs/${org}/canonicalRecommendationFatigue/${digestOf({member:r.memberId,need:r.suggestion.needKey})}`,{untilMillis:now+runtime.cooldownMillis});
+          if(action==='dismiss'&&r.suggestion.source?.kind!=='admin_outreach')tx.set(`orgs/${org}/canonicalRecommendationFatigue/${digestOf({member:r.memberId,need:r.suggestion.needKey})}`,{untilMillis:now+runtime.cooldownMillis});
           if(action==='dismiss')state='dismissed';
           tx.create(commandPath, {schemaVersion:1,fingerprint,actorId:auth.uid,id,action,previousRevision:r.revision,revision:updated.revision,atMillis:now});
           return detail(updated);
