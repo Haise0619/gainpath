@@ -4,6 +4,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:gainpath_domain/workout.dart';
 import '../../domain/admin_workout_program_repository.dart';
 import 'routine_templates_screen.dart';
+import '../../../recommendation/application/admin_ai_drafts.dart';
 
 String _requestId() => List.generate(16,
         (_) => Random.secure().nextInt(256).toRadixString(16).padLeft(2, '0'))
@@ -13,7 +14,11 @@ String _requestId() => List.generate(16,
 /// developer registry's responsibility; targets are authored in Routine Builder.
 class WorkoutProgramsScreen extends StatefulWidget {
   const WorkoutProgramsScreen(
-      {super.key, this.repository, this.onOpenRoutineBuilder});
+      {super.key,
+      this.repository,
+      this.onOpenRoutineBuilder,
+      this.initialAiDraft});
+  final Map<String, dynamic>? initialAiDraft;
   final AdminWorkoutProgramRepository? repository;
   final VoidCallback? onOpenRoutineBuilder;
   @override
@@ -27,6 +32,7 @@ class _WorkoutProgramsScreenState extends State<WorkoutProgramsScreen> {
   final _title = TextEditingController();
   int _revision = 0, _week = 1, _generation = 0;
   bool _busy = false, _dirty = false;
+  bool _aiApplied = false;
   String? _error, _notice, _saveRequest, _publishRequest;
   int _stage = 0;
   void _selectStage(int stage) {
@@ -131,6 +137,11 @@ class _WorkoutProgramsScreenState extends State<WorkoutProgramsScreen> {
         _editing = null;
         _notice = null;
       });
+      if (widget.initialAiDraft != null && !_aiApplied) {
+        _aiApplied = true;
+        _edit(aiProgramSeed(widget.initialAiDraft!, 'program_${_requestId()}'),
+            0);
+      }
     } catch (_) {
       if (mounted && generation == _generation) {
         setState(() => _error =

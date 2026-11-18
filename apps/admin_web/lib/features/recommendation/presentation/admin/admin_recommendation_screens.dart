@@ -17,7 +17,11 @@ class RiskLeaderboardScreen extends StatefulWidget {
       this.insightsClock,
       this.queueRepository,
       this.queueClock,
-      this.canonicalRepository});
+      this.canonicalRepository,
+      this.initialInsights = false,
+      this.initialTab = RecommendationMonitorTab.overview});
+  final bool initialInsights;
+  final RecommendationMonitorTab initialTab;
   final CanonicalAdminRecommendationRepository? canonicalRepository;
   final bool live;
   final DateTime Function()? queueClock, insightsClock;
@@ -28,9 +32,8 @@ class RiskLeaderboardScreen extends StatefulWidget {
 }
 
 class _RiskLeaderboardScreenState extends State<RiskLeaderboardScreen> {
-  var _tab = RecommendationMonitorTab.overview;
-  bool _insights = false;
-  bool _earlier = false;
+  late var _tab = widget.initialTab;
+  late bool _insights = widget.initialInsights;
   @override
   Widget build(BuildContext context) => Scaffold(
       backgroundColor: Colors.transparent,
@@ -45,12 +48,6 @@ class _RiskLeaderboardScreenState extends State<RiskLeaderboardScreen> {
                 children: [
                   Text('Recommendations',
                       style: Theme.of(context).textTheme.headlineMedium),
-                  if (widget.canonicalRepository != null &&
-                      widget.queueRepository != null)
-                    TextButton(
-                        onPressed: () => setState(() => _earlier = !_earlier),
-                        child: Text(
-                            _earlier ? 'Workout records' : 'Earlier records')),
                   TextButton.icon(
                       onPressed: () => setState(() => _insights = !_insights),
                       icon: Icon(_insights
@@ -64,9 +61,10 @@ class _RiskLeaderboardScreenState extends State<RiskLeaderboardScreen> {
           Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20),
               child: Wrap(spacing: 8, runSpacing: 8, children: [
-                for (final (tab, label) in const [
+                for (final (tab, label) in [
                   (RecommendationMonitorTab.overview, 'Overview'),
-                  (RecommendationMonitorTab.history, 'History'),
+                  if (widget.canonicalRepository == null)
+                    (RecommendationMonitorTab.history, 'History'),
                   (RecommendationMonitorTab.attention, 'Delivery Issues'),
                 ])
                   ChoiceChip(
@@ -83,14 +81,9 @@ class _RiskLeaderboardScreenState extends State<RiskLeaderboardScreen> {
                 ? ExerciseInsightsPanel(
                     repository: widget.insightsRepository,
                     clock: widget.insightsClock)
-                : widget.canonicalRepository != null && !_earlier
+                : widget.canonicalRepository != null
                     ? CanonicalAdminRecommendationPanel(
                         repository: widget.canonicalRepository!,
-                        onUnavailable: widget.queueRepository == null
-                            ? null
-                            : () {
-                                if (mounted) setState(() => _earlier = true);
-                              },
                         tab: _tab,
                         clock: widget.queueClock)
                     : RecommendationQueuePanel(

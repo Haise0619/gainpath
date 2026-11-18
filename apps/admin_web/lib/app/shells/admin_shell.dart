@@ -39,6 +39,9 @@ import 'package:gainpath_domain/gainpath_domain.dart'
 import 'package:gainpath_domain/coaching.dart' show CoachAvailabilityRepository;
 import '../di/coach_availability_factory.dart';
 import '../di/booking_factory.dart';
+import '../../features/recommendation/application/admin_ai_repository.dart';
+import '../../features/recommendation/presentation/admin/admin_ai_pages.dart';
+import '../../features/recommendation/presentation/admin/recommendation_monitor.dart';
 import '../di/payment_review_factory.dart';
 import '../routing/app_routes.dart';
 
@@ -93,6 +96,15 @@ class AdminShell extends StatefulWidget {
 
 class _AdminShellState extends State<AdminShell> {
   late final FirebaseDemoAdminRepositories? _fypRecommendations = widget
+  late final AdminAiRepository? _adminAi = widget.liveSession == null
+      ? null
+      : AdminAiRepository(
+          organizationId: widget.liveSession!.scope.organizationId,
+          isCurrent: () =>
+              mounted &&
+              context.read<AuthBloc>().state.session?.scope ==
+                  widget.liveSession!.scope,
+        );
               .liveSession ==
           null
       ? null
@@ -167,8 +179,9 @@ class _AdminShellState extends State<AdminShell> {
     }
   }
 
-  String _pageSlug(_NavPage page) =>
-      page.label.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]+'), '-');
+  String _pageSlug(_NavPage page) => page.label == 'Overview'
+      ? 'recommendations'
+      : page.label.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]+'), '-');
   @override
   void dispose() {
     _reportRoutes?.removeListener(_readReportRoute);
@@ -224,16 +237,49 @@ class _AdminShellState extends State<AdminShell> {
               live: widget.liveSession != null,
               discardGuard: _coachReviewGuard)),
     ]),
-    _NavPage(
-        Icons.auto_awesome_outlined,
-        Icons.auto_awesome_rounded,
-        'Recommendations',
-        'Monitor recommendations and delivery history',
-        RiskLeaderboardScreen(
-            live: widget.liveSession != null,
-            insightsRepository: _fypRecommendations?.insights,
-            queueRepository: _fypRecommendations?.queue,
-            canonicalRepository: _canonicalRecommendations)),
+    _NavGroup(Icons.auto_awesome_outlined, Icons.auto_awesome_rounded,
+        'Recommendations', [
+      _NavPage(
+          Icons.dashboard_outlined,
+          Icons.dashboard_rounded,
+          'Overview',
+          'Monitor recommendations and delivery outcomes',
+          RiskLeaderboardScreen(
+              live: widget.liveSession != null,
+              insightsRepository: _fypRecommendations?.insights,
+              queueRepository: _fypRecommendations?.queue,
+              canonicalRepository: _canonicalRecommendations)),
+      _NavPage(
+          Icons.auto_awesome_outlined,
+          Icons.auto_awesome,
+          'AI Content Planner',
+          'Discover and draft new fitness content',
+          AiContentPlannerPage(repository: _adminAi)),
+      _NavPage(
+          Icons.people_alt_outlined,
+          Icons.people_alt,
+          'AI Member Outreach',
+          'Analyze active members and send personalized suggestions',
+          AiMemberOutreachPage(repository: _adminAi)),
+      _NavPage(
+          Icons.error_outline,
+          Icons.error,
+          'Delivery Issues',
+          'Review recommendation delivery outcomes',
+          RiskLeaderboardScreen(
+              live: widget.liveSession != null,
+              canonicalRepository: _canonicalRecommendations,
+              initialTab: RecommendationMonitorTab.attention)),
+      _NavPage(
+          Icons.insights_outlined,
+          Icons.insights,
+          'Exercise Guidance Insights',
+          'Review exercise guidance coverage',
+          RiskLeaderboardScreen(
+              live: widget.liveSession != null,
+              insightsRepository: _fypRecommendations?.insights,
+              initialInsights: true)),
+    ]),
     _NavGroup(Icons.payments_outlined, Icons.payments_rounded, 'Payments', [
       _NavPage(
           Icons.receipt_long_outlined,

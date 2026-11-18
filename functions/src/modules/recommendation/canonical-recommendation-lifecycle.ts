@@ -20,12 +20,14 @@ export interface CanonicalSuggestion {
   /** Stable need identity excludes catalog revisions and moving window bounds. */
   needKey: string; evidenceFingerprint: string; policyVersion: string; exerciseLabel: string; objective: string;
   evidenceSummary?: {assessedSessions:number;distinctDays:number;latestAtMillis:number};
-  source?: {kind: 'synced_summary'|'recorded_history'; recordKey: string};
+  source?: {kind: 'synced_summary'|'recorded_history'|'fitness_profile'|'admin_outreach'; recordKey: string};
+  outreach?: {sentBy:string;previewId:string;analysisDays:number;baselineFingerprint:string};
   title: string; summary: string; explanations: string[]; target: CanonicalTarget; targetLabel: string;
   ai?: {method:'gemini'|'rule_fallback';workoutContext:string;fitnessGoals:string[];factors:WorkoutRankingFactor[];
-    context?:WorkoutRankingContext;model?:string;changedOrder?:boolean;candidateCount?:number;latencyMillis?:number;
+    context?:WorkoutRankingContext;model?:string;changedOrder?:boolean;candidateCount?:number;
+    ruleFirstLabel?:string;geminiFirstLabel?:string;changedTopChoice?:boolean;latencyMillis?:number;
     inputTokens?:number|null;outputTokens?:number|null;thinkingTokens?:number|null;totalTokens?:number|null;
-    providerSource?:'gemini'|'mock_or_recorded';cacheHit?:boolean;fallbackReason?:string;
+    providerSource?:'gemini'|'mock_or_recorded';cacheHit?:boolean;fallbackReason?:string;validationFailure?:string;
     candidateDifficulty?:WorkoutRankingContext['experience'];candidateDuration?:WorkoutRankingContext['duration']};
 }
 /** Only trusted server composition may supply these reviewed adapters. Derivation
@@ -72,10 +74,17 @@ function record(raw: DocumentData | undefined, org: string, id: string, now=Numb
   return raw as CanonicalRecord;
 }
 function validateSuggestion(s: CanonicalSuggestion, org: string) {
-  keys(object(s),['needKey','evidenceFingerprint','policyVersion','exerciseLabel','objective','title','summary','explanations','target','targetLabel','evidenceSummary','source','ai'],['needKey','evidenceFingerprint','policyVersion','exerciseLabel','objective','title','summary','explanations','target','targetLabel']);
+  keys(object(s),['needKey','evidenceFingerprint','policyVersion','exerciseLabel','objective','title','summary','explanations','target','targetLabel','evidenceSummary','source','ai','outreach'],['needKey','evidenceFingerprint','policyVersion','exerciseLabel','objective','title','summary','explanations','target','targetLabel']);
+  if(s.outreach){keys(object(s.outreach),['sentBy','previewId','analysisDays','baselineFingerprint']);if(s.source?.kind!=='admin_outreach'||![7,30].includes(s.outreach.analysisDays)||!/^[a-f0-9]{64}$/.test(s.outreach.baselineFingerprint))throw unavailable();}
   if (s.source) {
     keys(object(s.source), ['kind','recordKey']);
-    if (!['synced_summary','recorded_history'].includes(s.source.kind) || !/^session-[A-Za-z0-9_-]{1,128}$/.test(s.source.recordKey)) throw unavailable();
+    if (s.source.kind === 'fitness_profile') {
+      if (s.source.recordKey !== 'fitness-profile' || s.target.kind !== 'trainer') throw unavailable();
+    } else if (s.source.kind==='admin_outreach') {
+      if(!s.outreach||!/^([a-f0-9]{64})$/.test(s.outreach.previewId)||!queueText(s.outreach.sentBy,128)||
+        s.source.recordKey!=='fitness-profile'&&!/^session-[A-Za-z0-9_-]{1,128}$/.test(s.source.recordKey))throw unavailable();
+    } else if (!['synced_summary','recorded_history'].includes(s.source.kind) ||
+      !/^session-[A-Za-z0-9_-]{1,128}$/.test(s.source.recordKey)) throw unavailable();
   }
   requiredIdentifier(s.needKey, 'need'); requiredIdentifier(s.policyVersion, 'policy');
   if (!/^[a-f0-9]{64}$/.test(s.evidenceFingerprint) || !s.exerciseLabel || s.exerciseLabel.length > 120 ||
@@ -185,17 +194,47 @@ export function createCanonicalRecommendationLifecycle(deps: CanonicalLifecycleD
     return target;
   }
   return {
+    /** Admin preview selection reuses current target checks, fatigue and atomic Inbox delivery. */
+    async outreach(auth:InsightsAuth,org:string,member:string,previewId:string,consentFingerprint:string,suggestions:readonly CanonicalSuggestion[]){
+      runtimeReady(runtime);const now=nowOf();await eligibleIdentity(member);
+      if(!/^[a-f0-9]{64}$/.test(previewId)||!suggestions.length||suggestions.length>3)throw unavailable();
+      return store.transact(async tx=>{
+        await requireQueueAdmin(tx,auth,org);const consent=await privacy(tx,org,member,now,true);
+        if(!consent.allowAi||consent.fingerprint!==consentFingerprint)throw unavailable();
+        const writes:(()=>void)[]=[],ids:string[]=[],kinds=new Set<string>();
+        for(const suggestion of suggestions){
+          validateSuggestion(suggestion,org);
+          if(suggestion.source?.kind!=='admin_outreach'||suggestion.outreach?.sentBy!==auth.uid||suggestion.outreach.previewId!==previewId||suggestion.ai?.method!=='gemini'||kinds.has(suggestion.target.kind))throw unavailable();
+          kinds.add(suggestion.target.kind);
+          const id=digestOf({org,member,previewId,kind:suggestion.target.kind,source:'admin_outreach'});
+          const old=await tx.get(path(org,id));
+          if(old){const r=record(old,org,id,now);if(r.status!=='delivered'||r.suggestion.summary!==suggestion.summary)throw new DomainError('aborted','This recommendation was already sent with another message.');ids.push(id);continue;}
+          const fatiguePath=`orgs/${org}/canonicalRecommendationFatigue/${digestOf({member,need:suggestion.needKey})}`;
+          const fatigue=await tx.get(fatiguePath);if(Number(fatigue?.untilMillis??0)>now)throw new DomainError('failed-precondition','A similar recommendation was recently sent.');
+          const fresh=await runtime.backupSuggestions?.(tx,org,member,suggestion.source.recordKey,now,Math.max(consent.historyStart,now-suggestion.outreach.analysisDays*86400000))??[];
+          if(!fresh.some(c=>digestOf(c)===suggestion.outreach!.baselineFingerprint))throw new DomainError('failed-precondition','Member context or available content changed. Generate a fresh preview.');
+          const target=await runtime.resolveTarget(tx,org,suggestion,now,member);if(!target||digestOf(target.target)!==digestOf(suggestion.target))throw unavailable();
+          const r:CanonicalRecord={schemaVersion:1,mode:'workout_backup',organizationId:org,memberId:member,id,revision:1,status:'delivered',suggestion,consentFingerprint,createdAtMillis:now,expiresAtMillis:now+runtime.expiresAfterMillis,deliveredAtMillis:now,readAtMillis:null,acknowledgedAtMillis:null,dismissedAtMillis:null};
+          writes.push(()=>{tx.create(path(org,id),r);writeDelivery(tx,r,now);tx.set(fatiguePath,{untilMillis:now+runtime.cooldownMillis});});ids.push(id);
+        }
+        writes.forEach(w=>w());return ids;
+      });
+    },
     async backup(org: string, member: string, key: string) {
       runtimeReady(runtime);
       requiredIdentifier(org, 'organization');
       requiredIdentifier(member, 'member');
-      if (!/^session-[A-Za-z0-9_-]{1,128}$/.test(key)) throw unavailable();
-      if (!runtime.backupSuggestions || org !== 'gainpath' || !key.startsWith('session-')) return [];
+      if (key !== 'fitness-profile' && !/^session-[A-Za-z0-9_-]{1,128}$/.test(key)) throw unavailable();
+      if (!runtime.backupSuggestions || org !== 'gainpath') return [];
       const now = nowOf();
       await eligibleIdentity(member);
       // Provider I/O happens once between read and commit, outside retrying transactions.
       const prepared = runtime.personalize ? await store.transact(async tx=>{
         const consent=await privacy(tx,org,member,now,true);
+        if (key === 'fitness-profile') {
+          const id=digestOf({org,member,key,kind:'trainer',source:'workout_backup',consent:consent.fingerprint});
+          if (await tx.get(path(org,id))) return {consent,candidates:[]};
+        }
         const candidates=await runtime.backupSuggestions!(tx,org,member,key,now,consent.historyStart);
         const eligible:CanonicalSuggestion[]=[];
         for(const candidate of candidates){
@@ -220,6 +259,7 @@ export function createCanonicalRecommendationLifecycle(deps: CanonicalLifecycleD
           if(baseline && fresh.some(candidate=>digestOf(candidate)===digestOf(baseline)))return[selected];
           const fallback=fresh.find(candidate=>candidate.target.kind===selected.target.kind);
           return fallback?[{...fallback,...(fallback.ai?{ai:{...fallback.ai,method:'rule_fallback' as const,
+            ruleFirstLabel:fallback.targetLabel,candidateCount:fresh.filter(candidate=>candidate.target.kind===selected.target.kind).length,
             fallbackReason:'context_changed'}}:{})}]:[];
         });
         const writes: (() => void)[] = [];

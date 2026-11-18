@@ -1,0 +1,53 @@
+import {beforeAll,afterAll,describe,it,expect} from 'vitest';
+import {mkdirSync,writeFileSync} from 'node:fs';
+import {initializeApp,deleteApp} from 'firebase-admin/app';
+import {getFirestore} from 'firebase-admin/firestore';
+import {getAuth} from 'firebase-admin/auth';
+import {FirestoreStore} from '../src/platform/firestore/firestore-store';
+import {assistanceFixture,admin} from '../test/support/admin-ai-fixture';
+import {createAdminAiService,firestoreAdminAiReader} from '../src/modules/recommendation/admin-ai-service';
+import {createCanonicalRecommendationAdmin} from '../src/modules/recommendation/canonical-recommendation-admin';
+import {createCanonicalRecommendationLifecycle} from '../src/modules/recommendation/canonical-recommendation-lifecycle';
+
+const project='demo-gainpath-admin-ai';
+if(process.env.GCLOUD_PROJECT!==project||!process.env.FIRESTORE_EMULATOR_HOST?.startsWith('127.0.0.1:')||!process.env.FIREBASE_AUTH_EMULATOR_HOST?.startsWith('127.0.0.1:'))throw new Error('Dedicated Auth and Firestore emulators required.');
+const app=initializeApp({projectId:project},'admin-ai-test'),db=getFirestore(app),auth=getAuth(app),f=assistanceFixture();
+const deps={...f.deps,store:new FirestoreStore(db),aiReader:firestoreAdminAiReader(db),readAuthIdentity:async(uid:string)=>{const u=await auth.getUser(uid);return{uid,email:u.email!,emailVerified:u.emailVerified,disabled:u.disabled,tokensValidAfterMillis:0};}};
+beforeAll(async()=>{
+  await auth.createUser({uid:'admin',email:'admin@example.com',emailVerified:true});await auth.createUser({uid:'learner',email:'learner@example.com',emailVerified:true});
+  const batch=db.batch();for(const [path,data]of f.d)batch.set(db.doc(path),data);await batch.commit();
+});
+afterAll(async()=>{await deleteApp(app);});
+describe('Admin AI assistance on actual emulator transactions',()=>{
+  let preview:any;
+  it('loads the real completed-summary ranking via the authenticated Admin command',async()=>{
+    const handler=createCanonicalRecommendationAdmin(deps);
+    const result=await handler({auth:admin,app:{appId:'emulator'},data:{schemaVersion:1,operation:'admin.ai.members',data:{schemaVersion:1,organizationId:'gainpath',days:30}}}) as any;
+    expect(result.members).toHaveLength(1);expect(result.members[0].workouts).toBe(1);
+    await expect(handler({auth:{...admin,uid:'learner'},app:{appId:'emulator'},data:{schemaVersion:1,operation:'admin.ai.members',data:{schemaVersion:1,organizationId:'gainpath',days:30}}})).rejects.toThrow();
+  });
+  it('stores a preview without prematurely creating recommendations',async()=>{
+    preview=await createAdminAiService(deps).execute(admin,'gainpath','admin.ai.outreach.generate',{schemaVersion:1,organizationId:'gainpath',memberId:'learner',days:30,requestId:'emulator-preview'});
+    expect(preview.recommendations).toHaveLength(3);expect((await db.collection('orgs/gainpath/canonicalRecommendations').get()).empty).toBe(true);
+  });
+  it('Send and exact retry create three canonical records, Inbox notifications and receipts',async()=>{
+    const service=createAdminAiService(deps),q={schemaVersion:1,organizationId:'gainpath',previewId:preview.previewId,selections:[0,1,2].map(index=>({index,message:'Review this beginner guidance.'}))};
+    const result=await service.execute(admin,'gainpath','admin.ai.outreach.send',q) as any;
+    expect(await service.execute(admin,'gainpath','admin.ai.outreach.send',q)).toEqual(result);
+    for(const collection of ['canonicalRecommendations','notifications','canonicalRecommendationDeliveries'])expect((await db.collection('orgs/gainpath/'+collection).get()).size).toBe(3);
+    const lifecycle=createCanonicalRecommendationLifecycle(deps);
+    const records=[];
+    for(const id of result.ids){
+      const resolved=await lifecycle.member({uid:'learner',token:{email_verified:true}},'gainpath',id,'resolve',null,null),saved=await lifecycle.adminDetail(admin,'gainpath',id);
+      expect(resolved).toMatchObject({state:'available',aiMethod:'gemini'});expect(saved).toMatchObject({suggestion:{source:{kind:'admin_outreach'}}});
+      records.push({id,saved,resolved,receipt:(await db.doc('orgs/gainpath/canonicalRecommendationDeliveries/'+id).get()).data()});
+    }
+    const notifications=(await db.collection('orgs/gainpath/notifications').get()).docs.map(d=>({id:d.id,...d.data()}));
+    mkdirSync('../build/module13-admin-ai',{recursive:true});writeFileSync('../build/module13-admin-ai/emulator-delivered.json',JSON.stringify({source:'local_emulator_with_fixture_inference',records,notifications},null,2));
+  });
+  it('revoked consent blocks another generation without any new records',async()=>{
+    await db.doc('orgs/gainpath/recommendationConsent/learner').update({'purposes.externalAiInference.granted':false});
+    await expect(createAdminAiService(deps).execute(admin,'gainpath','admin.ai.outreach.generate',{schemaVersion:1,organizationId:'gainpath',memberId:'learner',days:30,requestId:'revoked-preview'})).rejects.toThrow();
+    expect((await db.collection('orgs/gainpath/notifications').get()).size).toBe(3);
+  });
+});

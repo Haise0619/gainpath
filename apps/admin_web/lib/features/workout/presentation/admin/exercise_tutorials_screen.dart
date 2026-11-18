@@ -1,4 +1,5 @@
 import 'exercise_catalog_list.dart';
+import '../../../recommendation/application/admin_ai_drafts.dart';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:gainpath_domain/workout.dart';
@@ -36,7 +37,9 @@ Widget _networkHero(String url, {BoxFit fit = BoxFit.cover}) {
 /// was cramping it, so it gets its own page with a local breadcrumb
 /// instead, the way an AWS Console "Create" flow does.
 class ExerciseTutorialsScreen extends StatefulWidget {
-  const ExerciseTutorialsScreen({super.key, this.allowRemoval = true});
+  const ExerciseTutorialsScreen(
+      {super.key, this.allowRemoval = true, this.initialAiDraft});
+  final Map<String, dynamic>? initialAiDraft;
   final bool allowRemoval;
 
   @override
@@ -55,6 +58,7 @@ class _ExerciseTutorialsScreenState extends State<ExerciseTutorialsScreen> {
   @override
   void initState() {
     super.initState();
+    _creating = widget.initialAiDraft != null;
     _tutorialsFuture = context.read<TutorialRepository>().load();
   }
 
@@ -136,8 +140,9 @@ class _ExerciseTutorialsScreenState extends State<ExerciseTutorialsScreen> {
                           ExerciseVideoPreview(
                               url: item.videoUrl,
                               onReady: (value) {
-                                if (dialogContext.mounted)
+                                if (dialogContext.mounted) {
                                   update(() => ready = value);
+                                }
                               }),
                           const SizedBox(height: 12),
                           const Text(
@@ -190,7 +195,10 @@ class _ExerciseTutorialsScreenState extends State<ExerciseTutorialsScreen> {
   @override
   Widget build(BuildContext context) {
     if (_creating || _editing != null) {
-      return _TutorialFormPage(existing: _editing, onDone: _closeForm);
+      return _TutorialFormPage(
+          existing: _editing,
+          aiDraft: widget.initialAiDraft,
+          onDone: _closeForm);
     }
 
     return Scaffold(
@@ -237,15 +245,18 @@ class _ExerciseTutorialsScreenState extends State<ExerciseTutorialsScreen> {
 }
 
 class _TutorialFormPage extends StatefulWidget {
+  final Map<String, dynamic>? aiDraft;
   final TutorialVideo? existing;
   final VoidCallback onDone;
-  const _TutorialFormPage({this.existing, required this.onDone});
+  const _TutorialFormPage({this.existing, this.aiDraft, required this.onDone});
 
   @override
   State<_TutorialFormPage> createState() => _TutorialFormPageState();
 }
 
 class _TutorialFormPageState extends State<_TutorialFormPage> {
+  late final TutorialVideo? _seed = widget.existing ??
+      (widget.aiDraft == null ? null : aiExerciseSeed(widget.aiDraft!));
   static const _categories = [
     'Compound Lower-Body',
     'Compound Upper-Body',
@@ -256,46 +267,42 @@ class _TutorialFormPageState extends State<_TutorialFormPage> {
   static const _difficulties = ['Beginner', 'Intermediate', 'Advanced'];
 
   final _formKey = GlobalKey<FormState>();
-  late final _title = TextEditingController(text: widget.existing?.title ?? '')
+  late final _title = TextEditingController(text: _seed?.title ?? '')
     ..addListener(_repaint);
   late final _description =
-      TextEditingController(text: widget.existing?.description ?? '')
+      TextEditingController(text: _seed?.description ?? '')
         ..addListener(_repaint);
-  late final _equipment =
-      TextEditingController(text: widget.existing?.equipment ?? '');
-  late List<ExerciseTutorialStep> _steps =
-      List.of(widget.existing?.tutorialSteps ?? []);
-  late final _videoUrl =
-      TextEditingController(text: widget.existing?.videoUrl ?? '');
+  late final _equipment = TextEditingController(text: _seed?.equipment ?? '');
+  late List<ExerciseTutorialStep> _steps = List.of(_seed?.tutorialSteps ?? []);
+  late final _videoUrl = TextEditingController(text: _seed?.videoUrl ?? '');
   late final _thumbnailUrl =
-      TextEditingController(text: widget.existing?.thumbnailUrl ?? '')
+      TextEditingController(text: _seed?.thumbnailUrl ?? '')
         ..addListener(_repaint);
   late final _duration =
-      TextEditingController(text: '${widget.existing?.durationMin ?? 5}');
-  late final _sets = TextEditingController(
-      text: '${widget.existing?.defaultPrescription?.sets ?? 3}');
+      TextEditingController(text: '${_seed?.durationMin ?? 5}');
+  late final _sets =
+      TextEditingController(text: '${_seed?.defaultPrescription?.sets ?? 3}');
   late final _seconds = TextEditingController(
       text:
-          '${widget.existing?.defaultPrescription is TimedPrescription ? (widget.existing!.defaultPrescription as TimedPrescription).durationSeconds : 45}');
+          '${_seed?.defaultPrescription is TimedPrescription ? (_seed?.defaultPrescription as TimedPrescription).durationSeconds : 45}');
   late final _rest = TextEditingController(
-      text: '${widget.existing?.defaultPrescription?.restSeconds ?? 60}');
+      text: '${_seed?.defaultPrescription?.restSeconds ?? 60}');
   bool get _timed =>
       _catalogOnly &&
       (widget.existing == null ||
           widget.existing!.executionMode ==
               ExerciseExecutionMode.videoGuidedTimed);
-  late String _category = widget.existing?.category ?? _categories.first;
+  late String _category = _seed?.category ?? _categories.first;
   // Registered and older catalog entries can use categories outside the
   // creation presets. Preserve their exact saved value and avoid duplicates.
   late final _categoryOptions = <String>{
     ..._categories,
-    if (widget.existing != null) widget.existing!.category,
+    if (_seed != null) _seed.category,
   }.toList();
-  late String _difficulty = widget.existing?.difficulty ?? _difficulties.first;
-  late String _status = widget.existing?.status.label ?? 'Draft';
-  late String? _coversExercise = widget.existing?.coversExercise.isEmpty ?? true
-      ? null
-      : widget.existing!.coversExercise;
+  late String _difficulty = _seed?.difficulty ?? _difficulties.first;
+  late String _status = _seed?.status.label ?? 'Draft';
+  late String? _coversExercise =
+      _seed?.coversExercise.isEmpty ?? true ? null : _seed?.coversExercise;
 
   bool get _isEdit => widget.existing != null;
   bool get _catalogOnly =>

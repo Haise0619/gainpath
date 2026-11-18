@@ -6,16 +6,9 @@ import '../../application/recommendation_queue.dart' show malaysiaTime;
 
 class CanonicalAdminRecommendationPanel extends StatefulWidget {
   const CanonicalAdminRecommendationPanel(
-      {super.key,
-      required this.repository,
-      this.history = false,
-      this.tab,
-      this.onUnavailable,
-      this.clock});
+      {super.key, required this.repository, this.tab, this.clock});
   final CanonicalAdminRecommendationRepository repository;
-  final bool history;
   final RecommendationMonitorTab? tab;
-  final VoidCallback? onUnavailable;
   final DateTime Function()? clock;
   @override
   State<CanonicalAdminRecommendationPanel> createState() =>
@@ -101,10 +94,6 @@ class _CanonicalAdminRecommendationPanelState
       }
       if (!repo.isCurrent) {
         _lost();
-        return;
-      }
-      if (!repo.enabled && widget.onUnavailable != null) {
-        widget.onUnavailable!();
         return;
       }
       setState(() {
@@ -284,7 +273,47 @@ class _CanonicalAdminRecommendationPanelState
                                     child: Text(reason)),
                             ],
                             const SizedBox(height: 20),
+                            Text(
+                                lead.source == 'admin_outreach'
+                                    ? 'AI analysis & delivery'
+                                    : 'Ranking comparison',
+                                style: Theme.of(ctx).textTheme.titleMedium),
+                            const SizedBox(height: 8),
+                            _detailSection(
+                                'Recommendation source',
+                                lead.source == 'admin_outreach'
+                                    ? 'Admin outreach'
+                                    : 'Automatic'),
+                            if (lead.sentBy != null)
+                              _detailSection('Sent by', lead.sentBy!),
                             _detailSection('AI method', lead.aiMethodLabel),
+                            _detailSection(
+                                'Eligible candidates',
+                                lead.ai?.technical['candidateCount']
+                                        ?.toString() ??
+                                    'Not recorded'),
+                            if (lead.source == 'admin_outreach')
+                              _detailSection(
+                                  'Gemini selected content', lead.targetLabel)
+                            else ...[
+                              _detailSection('Rule-based first choice',
+                                  lead.ai?.ruleFirstLabel ?? 'Not recorded'),
+                              _detailSection(
+                                  'Gemini first choice',
+                                  lead.ai?.geminiFirstLabel ??
+                                      (lead.ai?.method == 'rule_fallback'
+                                          ? 'Rule-based result used'
+                                          : 'Not recorded')),
+                              _detailSection(
+                                  'Did Gemini change the first choice?',
+                                  switch (lead.ai?.changedTopChoice) {
+                                    true => 'Yes',
+                                    false => 'No',
+                                    null => lead.ai?.method == 'rule_fallback'
+                                        ? 'Rule-based result used'
+                                        : 'Not recorded',
+                                  }),
+                            ],
                             _detailSection('Delivery status', _label(lead)),
                             _detailSection('Created',
                                 '${malaysiaTime(lead.createdAt)} MYT'),
@@ -587,10 +616,7 @@ class _CanonicalAdminRecommendationPanelState
       LayoutBuilder(builder: (context, constraints) {
         final current = widget.repository.isCurrent;
         final records = current ? _records : <CanonicalAdminRecommendation>[];
-        final tab = widget.tab ??
-            (widget.history
-                ? RecommendationMonitorTab.history
-                : RecommendationMonitorTab.overview);
+        final tab = widget.tab ?? RecommendationMonitorTab.overview;
         final visible = records
             .where((record) =>
                 (tab != RecommendationMonitorTab.attention || _issue(record)) &&
@@ -632,15 +658,13 @@ class _CanonicalAdminRecommendationPanelState
                 Text(
                     tab == RecommendationMonitorTab.attention
                         ? 'Delivery issues'
-                        : tab == RecommendationMonitorTab.history
-                            ? 'Recommendation history'
-                            : 'Recent recommendations',
+                        : 'Recent recommendations',
                     style: Theme.of(context).textTheme.titleLarge),
                 const SizedBox(height: 4),
                 Text(
                     tab == RecommendationMonitorTab.attention
                         ? 'Prepared, expired before delivery or no longer eligible records.'
-                        : 'Automatically generated recommendations and their saved delivery outcomes.',
+                        : 'Automatic and gym-sent recommendations with their saved delivery outcomes.',
                     style: Theme.of(context).textTheme.bodyMedium),
                 const SizedBox(height: 16),
                 Wrap(spacing: 12, runSpacing: 12, children: [

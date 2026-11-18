@@ -1,3 +1,4 @@
+import '../../../recommendation/application/admin_ai_drafts.dart';
 import 'confirm_content_removal.dart';
 import 'routine_cover_field.dart';
 import 'package:flutter/material.dart';
@@ -15,6 +16,7 @@ Widget _networkHero(String url, {BoxFit fit = BoxFit.cover}) {
   return Image.network(
     url,
     fit: fit,
+    webHtmlElementStrategy: WebHtmlElementStrategy.prefer,
     loadingBuilder: (context, child, progress) =>
         progress == null ? child : Container(color: AppColors.surfaceAlt),
     errorBuilder: (context, error, stack) => const DecoratedBox(
@@ -31,7 +33,9 @@ Widget _networkHero(String url, {BoxFit fit = BoxFit.cover}) {
 /// genuinely a lot of content, the kind of "Create" flow that gets its
 /// own page in a real web console rather than a cramped popup.
 class RoutineTemplatesScreen extends StatefulWidget {
-  const RoutineTemplatesScreen({super.key, this.allowRemoval = true});
+  const RoutineTemplatesScreen(
+      {super.key, this.allowRemoval = true, this.initialAiDraft});
+  final Map<String, dynamic>? initialAiDraft;
   final bool allowRemoval;
 
   @override
@@ -49,6 +53,7 @@ class _RoutineTemplatesScreenState extends State<RoutineTemplatesScreen> {
   @override
   void initState() {
     super.initState();
+    _creating = widget.initialAiDraft != null;
     _templatesFuture = context.read<RoutineTemplateRepository>().load();
   }
 
@@ -113,7 +118,10 @@ class _RoutineTemplatesScreenState extends State<RoutineTemplatesScreen> {
   @override
   Widget build(BuildContext context) {
     if (_creating || _editing != null) {
-      return _TemplateFormPage(existing: _editing, onDone: _closeForm);
+      return _TemplateFormPage(
+          existing: _editing,
+          aiDraft: widget.initialAiDraft,
+          onDone: _closeForm);
     }
 
     return FutureBuilder<List<RoutineBlueprint>>(
@@ -439,15 +447,18 @@ class _DayDraft {
 }
 
 class _TemplateFormPage extends StatefulWidget {
+  final Map<String, dynamic>? aiDraft;
   final RoutineBlueprint? existing;
   final VoidCallback onDone;
-  const _TemplateFormPage({this.existing, required this.onDone});
+  const _TemplateFormPage({this.existing, this.aiDraft, required this.onDone});
 
   @override
   State<_TemplateFormPage> createState() => _TemplateFormPageState();
 }
 
 class _TemplateFormPageState extends State<_TemplateFormPage> {
+  late final RoutineBlueprint? _seed = widget.existing ??
+      (widget.aiDraft == null ? null : aiRoutineSeed(widget.aiDraft!));
   static const _levels = ['Beginner', 'Intermediate', 'Advanced'];
   static const _tagOptions = [
     'Fat loss',
@@ -457,22 +468,21 @@ class _TemplateFormPageState extends State<_TemplateFormPage> {
     'Mobility'
   ];
 
-  late final _name = TextEditingController(text: widget.existing?.name ?? '')
+  late final _name = TextEditingController(text: _seed?.name ?? '')
     ..addListener(_repaint);
-  late final _imageUrl =
-      TextEditingController(text: widget.existing?.imageUrl ?? '')
-        ..addListener(_repaint);
-  late final _goal = TextEditingController(text: widget.existing?.goal ?? '');
-  late final _duration = TextEditingController(
-      text: '${widget.existing?.sessionDurationMin ?? 45}');
-  late String _level = widget.existing?.level ?? _levels.first;
-  late final Set<String> _tags = {...(widget.existing?.tags ?? const [])};
+  late final _imageUrl = TextEditingController(text: _seed?.imageUrl ?? '')
+    ..addListener(_repaint);
+  late final _goal = TextEditingController(text: _seed?.goal ?? '');
+  late final _duration =
+      TextEditingController(text: '${_seed?.sessionDurationMin ?? 45}');
+  late String _level = _seed?.level ?? _levels.first;
+  late final Set<String> _tags = {...(_seed?.tags ?? const [])};
   late List<String> _equipmentNeeded = [
-    ...(widget.existing?.equipmentNeeded ?? const [])
+    ...(_seed?.equipmentNeeded ?? const [])
   ];
-  late final List<_DayDraft> _days = widget.existing == null
+  late final List<_DayDraft> _days = _seed == null
       ? [_DayDraft()]
-      : widget.existing!.days
+      : _seed.days
           .map((d) => _DayDraft(d.exercises
               .map((e) => _ExerciseDraft(
                   name: e.exerciseName,
@@ -504,9 +514,10 @@ class _TemplateFormPageState extends State<_TemplateFormPage> {
     } on FormatException catch (error) {
       if (mounted) setState(() => _coverError = error.message);
     } catch (_) {
-      if (mounted)
+      if (mounted) {
         setState(() => _coverError =
             'Could not open the image. Choose another JPG, PNG or WebP.');
+      }
     } finally {
       if (mounted) setState(() => _pickingCover = false);
     }
@@ -543,13 +554,15 @@ class _TemplateFormPageState extends State<_TemplateFormPage> {
       for (final day in _days) {
         for (final row in day.exercises) {
           try {
-            if (row.selectedExerciseId == null)
+            if (row.selectedExerciseId == null) {
               throw const FormatException('Select an exercise for every row.');
+            }
             final sets = int.tryParse(row.sets.text),
                 value = int.tryParse(row.reps.text),
                 rest = int.tryParse(row.rest.text);
-            if (sets == null || value == null || rest == null)
+            if (sets == null || value == null || rest == null) {
               throw const FormatException('Use whole target values.');
+            }
             final ExercisePrescription target =
                 row.mode == ExerciseExecutionMode.videoGuidedTimed
                     ? TimedPrescription(
@@ -995,6 +1008,7 @@ class _TemplateFormPageState extends State<_TemplateFormPage> {
                     Expanded(
                       child: DropdownButtonFormField<String>(
                         initialValue: _level,
+                        isExpanded: true,
                         decoration: const InputDecoration(
                             labelText: 'Level', isDense: true),
                         items: _levels

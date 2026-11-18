@@ -38,11 +38,20 @@ String _id(Object? value) {
 }
 
 class RecommendationAiMetadata {
-  RecommendationAiMetadata._(this.method, this.workoutContext,
-      this.fitnessGoals, this.factors, this.model, this.technical);
+  RecommendationAiMetadata._(
+      this.method,
+      this.workoutContext,
+      this.fitnessGoals,
+      this.factors,
+      this.model,
+      this.technical,
+      this.ruleFirstLabel,
+      this.geminiFirstLabel,
+      this.changedTopChoice);
   final String method, workoutContext;
   final List<String> fitnessGoals, factors;
-  final String? model;
+  final String? model, ruleFirstLabel, geminiFirstLabel;
+  final bool? changedTopChoice;
   final Map<String, Object?> technical;
 
   factory RecommendationAiMetadata.parse(Object? value) {
@@ -81,13 +90,21 @@ class RecommendationAiMetadata {
     if (raw['fallbackReason'] != null) {
       technical['fallbackReason'] = _text(raw['fallbackReason'], 500);
     }
+    final changedTopChoice = raw['changedTopChoice'];
+    if (changedTopChoice != null && changedTopChoice is! bool) {
+      throw const FormatException('Invalid top choice comparison.');
+    }
+    String? pick(String key) => raw[key] == null ? null : _text(raw[key], 200);
     return RecommendationAiMetadata._(
         raw['method']! as String,
         _text(raw['workoutContext'], 1500),
         strings('fitnessGoals'),
         strings('factors'),
         raw['model'] == null ? null : _text(raw['model'], 128),
-        Map.unmodifiable(technical));
+        Map.unmodifiable(technical),
+        pick('ruleFirstLabel'),
+        pick('geminiFirstLabel'),
+        changedTopChoice as bool?);
   }
 }
 
@@ -113,7 +130,11 @@ class CanonicalAdminRecommendation {
       this.deliveredAt,
       [this.evidenceSummary,
       this.memberLabel,
-      this.ai]);
+      this.ai,
+      this.source = 'automatic',
+      this.sentBy]);
+  final String source;
+  final String? sentBy;
   final String id,
       organizationId,
       memberId,
@@ -250,7 +271,11 @@ class CanonicalAdminRecommendation {
             : DateTime.fromMillisecondsSinceEpoch(delivered, isUtc: true),
         evidenceSummary,
         r['memberLabel'] == null ? null : _text(r['memberLabel'], 120),
-        s['ai'] == null ? null : RecommendationAiMetadata.parse(s['ai']));
+        s['ai'] == null ? null : RecommendationAiMetadata.parse(s['ai']),
+        (s['source'] as Map?)?['kind'] == 'admin_outreach'
+            ? 'admin_outreach'
+            : 'automatic',
+        (s['outreach'] as Map?)?['sentBy'] as String?);
   }
 }
 
