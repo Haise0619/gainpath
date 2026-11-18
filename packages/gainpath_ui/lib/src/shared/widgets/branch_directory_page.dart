@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:latlong2/latlong.dart';
+import 'branch_map.dart';
 
 typedef BranchRequest = Future<Map<String, dynamic>> Function(
     Map<String, Object?> input);
@@ -10,12 +13,14 @@ class BranchDirectoryPage extends StatefulWidget {
     required this.openDirections,
     this.admin = false,
     this.onSelected,
+    this.locate,
   });
 
   final BranchRequest request;
   final Future<bool> Function(Uri) openDirections;
   final bool admin;
   final ValueChanged<String>? onSelected;
+  final Future<({double latitude, double longitude})> Function()? locate;
 
   @override
   State<BranchDirectoryPage> createState() => _BranchDirectoryPageState();
@@ -26,6 +31,27 @@ class _BranchDirectoryPageState extends State<BranchDirectoryPage> {
   String? _home, _next;
   String _query = '';
   bool _busy = false, _failed = false;
+  bool _showMap = false, _locating = false;
+  LatLng? _location;
+  String? _selection;
+
+  Future<void> _useLocation() async {
+    setState(() => _locating = true);
+    try {
+      final point = await widget.locate!();
+      if (mounted) {
+        setState(() => _location = LatLng(point.latitude, point.longitude));
+      }
+    } on StateError catch (error) {
+      if (mounted) _notice(error.message);
+    } catch (_) {
+      if (mounted) {
+        _notice('Location is unavailable. You can still browse branches.');
+      }
+    } finally {
+      if (mounted) setState(() => _locating = false);
+    }
+  }
 
   @override
   void initState() {
@@ -60,6 +86,8 @@ class _BranchDirectoryPageState extends State<BranchDirectoryPage> {
   }
 
   Future<void> _details(Map<String, dynamic> branch) async {
+    setState(() => _selection = branch['branchId'] as String);
+    widget.onSelected?.call(_selection!);
     final address = (branch['address'] as String?) ?? '';
     final latitude = branch['latitude'];
     final longitude = branch['longitude'];
@@ -114,6 +142,11 @@ class _BranchDirectoryPageState extends State<BranchDirectoryPage> {
             TextButton(
                 onPressed: () => Navigator.pop(context, 'directions'),
                 child: const Text('Get directions')),
+          if (address.isNotEmpty)
+            TextButton(
+                onPressed: () =>
+                    Clipboard.setData(ClipboardData(text: address)),
+                child: const Text('Copy address')),
           if (widget.admin)
             FilledButton(
                 onPressed: () => Navigator.pop(context, 'edit'),
@@ -168,10 +201,22 @@ class _BranchDirectoryPageState extends State<BranchDirectoryPage> {
   @override
   Widget build(BuildContext context) {
     final query = _query.toLowerCase().trim();
-    final visible = _branches.where((branch) =>
-        '${branch['displayName']} ${branch['address'] ?? ''}'
+    final visible = _branches
+        .where((branch) => '${branch['displayName']} ${branch['address'] ?? ''}'
             .toLowerCase()
-            .contains(query));
+            .contains(query))
+        .toList();
+    final location = _location;
+    if (location != null) {
+      double distance(Map<String, dynamic> branch) =>
+          branchDistanceKm(branch, location) ?? double.infinity;
+      visible.sort((a, b) {
+        final order = distance(a).compareTo(distance(b));
+        return order != 0
+            ? order
+            : (a['branchId'] as String).compareTo(b['branchId'] as String);
+      });
+    }
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.admin ? 'Branch management' : 'Find a gym'),
@@ -196,6 +241,29 @@ class _BranchDirectoryPageState extends State<BranchDirectoryPage> {
                   labelText: 'Search branches',
                   prefixIcon: Icon(Icons.search))),
           const SizedBox(height: 16),
+          Wrap(spacing: 8, children: [
+            OutlinedButton.icon(
+                onPressed: () => setState(() => _showMap = !_showMap),
+                icon: const Icon(Icons.map_outlined),
+                label: Text(_showMap ? 'Hide map' : 'Show map')),
+            if (widget.locate != null)
+              OutlinedButton.icon(
+                  onPressed: _locating ? null : _useLocation,
+                  icon: const Icon(Icons.my_location),
+                  label: Text(
+                      _locating ? 'Finding location…' : 'Use my location')),
+          ]),
+          if (_showMap)
+            BranchMap(
+              key: ValueKey(
+                  (location, visible.map((b) => b['branchId']).join(','))),
+              branches: visible,
+              location: location,
+              selectedId: _selection,
+              onBranch: _details,
+            ),
+          if (location != null)
+            const Text('Approximate straight-line distance · loaded branches'),
           if (_busy) const LinearProgressIndicator(),
           if (_failed)
             const Text('Branches could not be loaded. Refresh to retry.'),
@@ -208,6 +276,12 @@ class _BranchDirectoryPageState extends State<BranchDirectoryPage> {
                 title: Text(branch['displayName'] as String? ?? 'Branch'),
                 subtitle: Text([
                   if (branch['branchId'] == _home) 'Home branch',
+                  if (branch['branchId'] == _selection) 'Selected branch',
+                  if ((location == null
+                          ? null
+                          : branchDistanceKm(branch, location))
+                      case final double km)
+                    '${km.toStringAsFixed(1)} km away',
                   if (widget.admin)
                     branch['status'] == 'active' ? 'Active' : 'Inactive',
                   if (branch['address'] case final String address
@@ -215,10 +289,7 @@ class _BranchDirectoryPageState extends State<BranchDirectoryPage> {
                     address,
                 ].join(' · ')),
                 trailing: const Icon(Icons.chevron_right),
-                onTap: () {
-                  widget.onSelected?.call(branch['branchId'] as String);
-                  _details(branch);
-                },
+                onTap: () => _details(branch),
               ),
             ),
           if (_next != null)
@@ -315,6 +386,7 @@ class _BranchEditorState extends State<_BranchEditor> {
                 : label.replaceAll('–', '-'));
   });
   bool _busy = false;
+  bool _pickOnMap = false;
   String? _error;
 
   @override
@@ -412,11 +484,42 @@ class _BranchEditorState extends State<_BranchEditor> {
             child: ListView(
               shrinkWrap: true,
               children: [
+                OutlinedButton.icon(
+                  onPressed: _busy
+                      ? null
+                      : () => setState(() => _pickOnMap = !_pickOnMap),
+                  icon: const Icon(Icons.map_outlined),
+                  label: Text(_pickOnMap
+                      ? 'Hide location picker'
+                      : 'Pick location on map'),
+                ),
+                if (_pickOnMap) ...[
+                  const Text(
+                      'Tap the map or drag the marker to set coordinates.'),
+                  BranchMap(
+                    pin: branchMapPoint({
+                      'latitude': double.tryParse(_values['latitude']!.text),
+                      'longitude': double.tryParse(_values['longitude']!.text),
+                    }),
+                    onPin: (point) => setState(() {
+                      _values['latitude']!.text =
+                          point.latitude.toStringAsFixed(6);
+                      _values['longitude']!.text =
+                          point.longitude.toStringAsFixed(6);
+                    }),
+                  ),
+                ],
                 for (final entry in _labels.entries)
                   Padding(
                     padding: const EdgeInsets.only(bottom: 12),
                     child: TextFormField(
                       controller: _values[entry.key],
+                      onChanged:
+                          entry.key == 'latitude' || entry.key == 'longitude'
+                              ? (_) {
+                                  if (_pickOnMap) setState(() {});
+                                }
+                              : null,
                       enabled: !_busy &&
                           (entry.key != 'branchId' || widget.branch == null),
                       decoration: InputDecoration(labelText: entry.value),

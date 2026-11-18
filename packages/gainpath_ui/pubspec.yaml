@@ -8,6 +8,8 @@ environment:
   sdk: '>=3.6.0 <4.0.0'
 
 dependencies:
+  flutter_map: 8.2.2
+  latlong2: ^0.9.1
   flutter_svg: ^2.3.0
   google_fonts: ^6.2.1
   web: ^1.0.0

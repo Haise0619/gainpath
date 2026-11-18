@@ -14,6 +14,7 @@ import '../../features/workout/data/published_routine.dart';
 import '../../features/workout/domain/routine_attempt.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_functions/cloud_functions.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../features/gamification/application/gamification_bloc.dart';
 import 'package:gainpath_domain/gamification.dart';
@@ -288,6 +289,26 @@ class _MemberHomeScreenState extends State<MemberHomeScreen>
                           icon: const Icon(Icons.location_on_outlined),
                           label: const Text('Find a gym'),
                           onPressed: () => _go(BranchDirectoryPage(
+                            locate: () async {
+                              if (!await Geolocator.isLocationServiceEnabled()) {
+                                throw StateError('Turn on location services to find nearby gyms.');
+                              }
+                              var permission = await Geolocator.checkPermission();
+                              if (permission == LocationPermission.denied) {
+                                permission = await Geolocator.requestPermission();
+                              }
+                              if (permission != LocationPermission.whileInUse &&
+                                  permission != LocationPermission.always) {
+                                throw StateError('Location access is off. You can still browse branches.');
+                              }
+                              final point = await Geolocator.getCurrentPosition(
+                                locationSettings: const LocationSettings(
+                                  accuracy: LocationAccuracy.medium,
+                                  timeLimit: Duration(seconds: 12),
+                                ),
+                              );
+                              return (latitude: point.latitude, longitude: point.longitude);
+                            },
                             openDirections: (uri) => launchUrl(uri, mode: LaunchMode.externalApplication),
                             request: (input) async {
                               final result = await FirebaseFunctions.instanceFor(region: 'asia-southeast1')
