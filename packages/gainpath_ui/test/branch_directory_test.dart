@@ -3,6 +3,28 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
 
 void main() {
+  testWidgets('Admin can display the branch visit QR', (tester) async {
+    await tester.pumpWidget(MaterialApp(home: BranchDirectoryPage(
+      admin: true,
+      openDirections: (_) async => true,
+      request: (input) async => switch (input['action']) {
+        'list' => {'records': [{'branchId': 'main', 'displayName': 'Main gym'}]},
+        'branchVisits' => {'records': []},
+        'issueVisitCode' => {'qr': 'fixture-token'},
+        _ => <String, dynamic>{},
+      },
+    )));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Main gym'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Gym visits'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Generate QR'));
+    await tester.pumpAndSettle();
+    expect(find.text('Gym check-in QR'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets(
       'nearby sorts branches without sending location to the repository',
       (tester) async {

@@ -79,8 +79,10 @@ class _BranchActivityPageState extends State<BranchActivityPage> {
           builder: (context) => AlertDialog(
                 title: const Text('Gym check-in QR'),
                 content: Column(mainAxisSize: MainAxisSize.min, children: [
-                  QrImageView(
-                      data: qr, size: 210, backgroundColor: Colors.white),
+                  SizedBox.square(
+                    dimension: 210,
+                    child: QrImageView(data: qr, backgroundColor: Colors.white),
+                  ),
                   const Text(
                       'Valid for 5 minutes. Generating a new code replaces this one.'),
                 ]),

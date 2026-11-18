@@ -644,6 +644,7 @@ class _BranchEditorState extends State<_BranchEditor> {
         title: Text(widget.branch == null ? 'Add branch' : 'Edit branch'),
         content: SizedBox(
           width: 480,
+          height: 540,
           child: Form(
             key: _form,
             child: ListView(
