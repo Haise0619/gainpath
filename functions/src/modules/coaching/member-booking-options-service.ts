@@ -33,7 +33,7 @@ export async function getMemberBookingOptionsService(store: DocumentStore,
     if (member.role !== 'member') throw new DomainError('permission-denied', 'Only Members can request booking options.');
     await requireBookingOrganization(tx, org);
     if(!rescheduleId) await requireMembershipCapability(tx,auth,org,'canBookCoach',clock());
-    const coach = await bookingCoachScope(tx, org, coachId, member.branchIds);
+    const coach = await bookingCoachScope(tx, org, coachId);
     const original = rescheduleId ? storedBooking(await tx.get(`orgs/${org}/bookings/${rescheduleId}`),org,rescheduleId) : undefined;
     if(original && (original.memberId!==uid || original.coachId!==coachId || original.durationMinutes!==durationMinutes))throw new DomainError('permission-denied','Only the owner can reschedule the original Coach and duration.');
     if(original && (original.status!=='confirmed' || original.startAtMillis-clock()<24*3600000))throw new DomainError('failed-precondition','Rescheduling requires a confirmed session at least 24 hours ahead.');

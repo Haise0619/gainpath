@@ -78,7 +78,7 @@ export async function memberBookingChange(store:DocumentStore,auth:Auth,raw:unkn
     if(action==='reschedule'){
       if(eligibility)throw eligibility;
       if(target!<=now||target!%SLOT||target===b.startAtMillis||target!<b.holdExpiresAtMillis)throw new InputValidationError('Choose a different future half-hour start.');
-      const coach=await bookingCoachScope(tx,org,b.coachId,actor.branchIds);
+      const coach=await bookingCoachScope(tx,org,b.coachId,[b.branchId]);
       if(!coach.permitted.includes(b.branchId))throw new DomainError('permission-denied','The original branch is no longer available.');
       const publication=await tx.get(`${root}/coaches/${b.coachId}`),cert=await tx.get(`${root}/coachProfiles/${b.coachId}/certificationState/current`);
       if(publication?.certificationVerified!==true||!Number.isSafeInteger(publication.approvedCertificationCount)||Number(publication.approvedCertificationCount)<1||cert?.certificationVerified!==true||!Number.isSafeInteger(cert.approvedCount)||Number(cert.approvedCount)<1)throw new DomainError('failed-precondition','The Coach must have approved credentials.');

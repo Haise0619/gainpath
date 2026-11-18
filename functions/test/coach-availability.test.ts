@@ -22,7 +22,9 @@ it('creates/reads/edits/removes a dated day and replays receipts without changin
   await expect(saveCoachAvailabilityDayService(store, auth('coach'), save('save', 0, []), () => now)).rejects.toMatchObject({ code: 'already-exists' });
   await saveCoachAvailabilityDayService(store, auth('coach'), save('edit', 1, [...windows, { branchId: 'other', startAtMillis: start + 7200000, endAtMillis: start + 9000000 }]), () => now + 2);
   const member = await getCoachAvailabilityService(store, auth('member'), read(), () => now);
-  expect(member.days.find(d => d.localDate === date)?.windows).toEqual(windows);
+  expect(member.days.find(d => d.localDate === date)?.windows).toEqual([
+    ...windows, { branchId: 'other', startAtMillis: start + 7200000, endAtMillis: start + 9000000 },
+  ]);
   expect(member.days.find(d => d.localDate === date)).not.toHaveProperty('revision');
   const admin = await getCoachAvailabilityService(store, auth('admin'), read(), () => now);
   expect(admin.days.find(d => d.localDate === date)?.windows).toHaveLength(2);

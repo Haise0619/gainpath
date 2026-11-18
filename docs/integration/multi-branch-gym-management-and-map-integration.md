@@ -1,5 +1,15 @@
 # Multi-branch gym management and map integration
 
+## Final-integration progress
+
+- Paid Member hold, slot options, verified payment confirmation, and same-branch rescheduling now follow the active activity branch. Coach publication, Coach assignments, overlapping-slot locks, organization membership and existing Basic/Premium entitlement controls still apply. The Member Coach Directory can match loaded published profiles against the saved Selected Branch. Existing price, checkout gateway and historical records were not edited.
+- Equipment lookup uses the exact equipment ID. If the selected gym has no usable stock, the callable checks up to 30 other branch records using batch reads and returns available alternatives. Directions use stored coordinates or address. The UI discloses the bounded result set.
+- Admin visit QR adds countdown, expiration, refresh, fullscreen and browser PNG download. Server token validity and duplicate protection remain authoritative.
+- Reports has a Branch report dialog using the active date range, including inactive branches and unassigned facts. It displays branch counts, coaching receipts, accepted workouts and visit metrics, with scope and dates in the CSV. Existing dashboard and membership revenue stay organization-wide. There is no new branch allocation on historical facts.
+- Validation: 137 focused unit tests and test TypeScript typecheck. Three branch widget tests and scoped Dart analysis. Eight booking/branch Firestore Emulator tests passed with Firebase CLI exit 0 using an isolated writable `XDG_CONFIG_HOME`. The earlier exit 2 followed passing Vitest and emulator shutdown; it is reproducible with the restricted default CLI configuration, not a failing fixture or startup failure. The branch emulator scenario was also rerun with the scoped report/date assertions.
+- Authorization received for the new Singapore callable and its single-service invoker binding. The user conditioned deployment on final integration completion. Production deployment, invoker changes and authenticated production checks have not occurred.
+- Remaining: explicit equipment ID mapping and compatibility in Exercise/Routine/Program, booking address/navigation and notifications, Coach Admin management and drill-down verification, full chart-level Branch filtering, richer assistant cards and schedules, automatic recommendation and Admin AI branch scopes, and complete screen-set/real-user acceptance.
+
 ## Phase 0 findings
 
 - The canonical branch collection already exists at `orgs/{orgId}/branches/{branchId}`. The read-only Firebase audit on 18 November 2026 found one active record, Main Branch, with no coordinates. No address or coordinates were fabricated.

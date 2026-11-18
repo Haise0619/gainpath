@@ -113,7 +113,7 @@ it('rejects malformed daily identity and rereads scope after the external Auth l
   await expect(read()).rejects.toMatchObject({ code: 'failed-precondition' });
   store.documents.delete(`orgs/org-1/bookingDays/${keyOf('member-1', '2026-10-02')}`);
   await expect(getMemberBookingOptionsService(store, auth, input, async () => {
-    store.documents.get('orgs/org-1/members/member-1')!.branchIds = [];
+    store.documents.get('orgs/org-1/members/member-1')!.status = 'inactive';
     return eligibleCoach('coach-1');
   }, () => now)).rejects.toMatchObject({ code: 'permission-denied' });
 });

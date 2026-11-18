@@ -1,3 +1,4 @@
+import { requireMembershipCapability } from './membership-capabilities';
 import { readVerifiedTargetMembershipEntitlement } from './membership-entitlement';
 import type { DocumentData, DocumentStore, TransactionPort } from '../../platform/firestore/store';
 import { requireVerifiedEmail } from '../../platform/auth-context';
@@ -78,7 +79,8 @@ export async function getBookingPaymentQuote(store: DocumentStore, auth: Auth, r
   return store.transact(async tx => {
     const member = await currentBookingMembership(tx, org, auth!.uid); await requireBookingOrganization(tx, org);
     if (member.role !== 'member') throw new DomainError('permission-denied', 'Only Members may start checkout.');
-    const quote = { schemaVersion: 1, ...await professionalQuote(tx, org, coachId, branchId, member.branchIds), durationMinutes: d.durationMinutes as number };
+    if (!member.branchIds.includes(branchId)) await requireMembershipCapability(tx, auth, org, 'canBookCoach', clock());
+    const quote = { schemaVersion: 1, ...await professionalQuote(tx, org, coachId, branchId, [branchId]), durationMinutes: d.durationMinutes as number };
     const reviewed = (result: BookingPaymentQuoteResult, voucher?: unknown) => d.includeQuoteToken === true ? {...result,serverNowMillis:clock(),quoteToken:financialToken(org,auth!.uid,coachId,branchId,d.durationMinutes as number,quote.amountMinor,result.amountMinor,voucher)} : result;
     if (d.includePremiumVoucher !== true && d.usePremiumVoucher !== true) return reviewed(quote);
     const voucher = await premiumCoachVoucherOffer(tx, auth, org, { ...quote, coachId, branchId }, clock());
@@ -131,7 +133,7 @@ async function createBookingPaymentInternal(store: DocumentStore, auth: Auth, ra
     const now = integer(clock(),1);
     if (b.status !== 'pending_hold' || now >= b.holdExpiresAtMillis) throw new DomainError('failed-precondition', 'This pending hold has closed. Choose a new available time.');
     const member = await currentBookingMembership(tx,org,uid);
-    const quote = await professionalQuote(tx,org,b.coachId,b.branchId,member.branchIds);
+    const quote = await professionalQuote(tx,org,b.coachId,b.branchId,[b.branchId]);
     const user = await tx.get(`users/${uid}`);
     const voucher = usePremiumVoucher ? await premiumCoachVoucherOffer(tx,auth,org,{...quote,coachId:b.coachId,branchId:b.branchId,durationMinutes:b.durationMinutes},now) : undefined;
     if (quoteToken !== undefined && voucher && (!voucher.snapshot || voucher.offer.status !== 'available')) throw new BookingQuoteChangedError();
@@ -201,8 +203,8 @@ export async function settleBookingPayment(store: DocumentStore, org: string, id
     else if (failures.some(Boolean)) reason = 'account_ineligible';
     if (!reason) try {
       const member = await currentBookingMembership(tx,org,b.memberId); await requireBookingOrganization(tx,org);
-      if (member.role !== 'member' || !member.branchIds.includes(b.branchId)) throw review();
-      const coach = await bookingCoachScope(tx,org,b.coachId,member.branchIds);
+      if (member.role !== 'member') throw review();
+      const coach = await bookingCoachScope(tx,org,b.coachId,[b.branchId]);
       if (!coach.permitted.includes(b.branchId)) throw review();
       await requireCredentials(tx,org,b.coachId,await tx.get(`orgs/${org}/coaches/${b.coachId}`));
       const policy = currentBookingPolicy(await tx.get(`orgs/${org}/settings/booking`));
@@ -280,7 +282,7 @@ export async function getBookingPaymentMethods(store:DocumentStore,auth:Auth,raw
     if(old)return {existingPayment:{...view(closeUnpaidCheckout(tx,org,id,payment(old,org,id),b.status,b.holdExpiresAtMillis,clock())),serverNowMillis:clock()}};
     if(b.status!=='pending_hold'||clock()>=b.holdExpiresAtMillis)throw new DomainError('failed-precondition','This reservation has ended. Choose another time.');
     const member=await currentBookingMembership(tx,org,uid);
-    const quote=await professionalQuote(tx,org,b.coachId,b.branchId,member.branchIds);
+    const quote=await professionalQuote(tx,org,b.coachId,b.branchId,[b.branchId]);
     const format=new Intl.DateTimeFormat('en-GB',{timeZone:b.timeZone,hour:'2-digit',minute:'2-digit',hourCycle:'h23',timeZoneName:'shortOffset'});
     return {session:{schemaVersion:1,...quote,quoteToken:financialToken(org,uid,b.coachId,b.branchId,b.durationMinutes,quote.amountMinor,quote.amountMinor),durationMinutes:b.durationMinutes,localDate:b.localDate,startLabel:format.format(b.startAtMillis),endLabel:format.format(b.endAtMillis),holdExpiresAtMillis:b.holdExpiresAtMillis}};
   });

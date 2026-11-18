@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:qr_flutter/qr_flutter.dart';
+import 'branch_visit_qr_dialog.dart';
 import 'branch_directory_page.dart' show BranchRequest;
 
 class BranchActivityPage extends StatefulWidget {
@@ -73,24 +73,11 @@ class _BranchActivityPageState extends State<BranchActivityPage> {
     try {
       final result = await _request('issueVisitCode');
       if (!mounted) return;
-      final qr = result['qr'] as String;
       await showDialog<void>(
           context: context,
-          builder: (context) => AlertDialog(
-                title: const Text('Gym check-in QR'),
-                content: Column(mainAxisSize: MainAxisSize.min, children: [
-                  SizedBox.square(
-                    dimension: 210,
-                    child: QrImageView(data: qr, backgroundColor: Colors.white),
-                  ),
-                  const Text(
-                      'Valid for 5 minutes. Generating a new code replaces this one.'),
-                ]),
-                actions: [
-                  TextButton(
-                      onPressed: () => Navigator.pop(context),
-                      child: const Text('Close'))
-                ],
+          builder: (_) => BranchVisitQrDialog(
+                first: result,
+                refresh: () => _request('issueVisitCode'),
               ));
     } catch (_) {
       if (mounted) {

@@ -1,4 +1,5 @@
 import '../../application/admin_check_in_reporting.dart';
+import 'branch_report_dialog.dart';
 import 'admin_remaining_analytics.dart';
 import 'package:flutter/material.dart';
 import 'package:gainpath_domain/coaching.dart';
@@ -38,11 +39,13 @@ class ReportsScreen extends StatefulWidget {
       this.category = ReportsCategory.overview,
       this.active = true,
       this.now = DateTime.now,
-      this.onCategoryChanged});
+      this.onCategoryChanged,
+      this.branchRequest});
   final ReportsCategory category;
   final bool active;
   final DateTime Function() now;
   final ValueChanged<ReportsCategory>? onCategoryChanged;
+  final BranchRequest? branchRequest;
 
   @override
   State<ReportsScreen> createState() => ReportsScreenState();
@@ -308,6 +311,18 @@ class ReportsScreenState extends State<ReportsScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         _header(context),
+                        if (widget.branchRequest != null)
+                          TextButton.icon(
+                            icon: const Icon(Icons.location_on_outlined),
+                            label: const Text('Branch report'),
+                            onPressed: () => showDialog<void>(
+                              context: context,
+                              builder: (_) => BranchReportDialog(
+                                request: widget.branchRequest!,
+                                range: _filterQuery().range,
+                              ),
+                            ),
+                          ),
                         const SizedBox(height: 12),
                       ],
                     ),

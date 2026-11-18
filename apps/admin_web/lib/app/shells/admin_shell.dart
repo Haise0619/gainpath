@@ -659,6 +659,12 @@ class _AdminShellState extends State<AdminShell> {
                             return ReportsScreen(
                                 key: const ValueKey('retained-reports'),
                                 live: session != null,
+                                branchRequest: session == null ? null : (input) async {
+                                  final result = await FirebaseFunctions.instanceFor(region: 'asia-southeast1')
+                                      .httpsCallable('branchManagementCommand')
+                                      .call({...input, 'organizationId': session.scope.organizationId});
+                                  return Map<String, dynamic>.from(result.data as Map);
+                                },
                                 active: _inReports,
                                 category: _lastReportCategory,
                                 onCategoryChanged: (category) =>

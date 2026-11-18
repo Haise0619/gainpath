@@ -46,6 +46,18 @@ it('quotes authoritative minor units and creates only one bill for concurrent/re
   expect((await createBookingPayment(store, auth(), input(), gateway, eligibleCoach, () => now)).status).toBe('awaiting_payment');
   expect(creates).toBe(1);
 });
+it('uses the activity branch for quote and verified clearance outside legacy member assignments', async () => {
+  store.documents.get('orgs/org-1/members/member-1')!.branchIds = ['branch-2'];
+  const quote = await getBookingPaymentQuote(store, auth(), {
+    schemaVersion: 1, organizationId: 'org-1', coachId: 'coach-1',
+    branchId: 'branch-1', durationMinutes: 60,
+  }, () => now);
+  expect(quote.branchName).toBe('Fixture Branch');
+  await createBookingPayment(store, auth(), input(), gateway, eligibleCoach, () => now);
+  expect(await settleBookingPayment(store, 'org-1', id, bill(true), eligibleCoach, () => now + 1000))
+    .toMatchObject({ status: 'confirmed' });
+  expect(store.documents.get(`orgs/org-1/transactions/${id}`)?.branchId).toBe('branch-1');
+});
 it('independent provider read confirms once, promotes own locks/day and makes expiry harmless', async () => {
   await createBookingPayment(store, auth(), input(), gateway, eligibleCoach, () => now);
   const result = await readBookingPayment(store, auth(), input(), gateway, eligibleCoach, () => now + 1000);

@@ -1,10 +1,41 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_functions/cloud_functions.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'equipment_tutorial_video.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
 import '../member/exercise_tutorial_screen.dart' show ExerciseTutorialScreen;
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:gainpath_domain/workout.dart';
+
+String? _destination(Map location) {
+  final latitude = location['latitude'], longitude = location['longitude'];
+  if (latitude is num &&
+      longitude is num &&
+      latitude.isFinite &&
+      longitude.isFinite &&
+      latitude.abs() <= 90 &&
+      longitude.abs() <= 180) {
+    return '$latitude,$longitude';
+  }
+  final address = location['address'];
+  return address is String && address.trim().isNotEmpty ? address : null;
+}
+
+Future<void> _openBranchDirections(BuildContext context, Map location) async {
+  final destination = _destination(location);
+  if (destination == null) return;
+  final uri = Uri.https(
+      'www.google.com', '/maps/dir/', {'api': '1', 'destination': destination});
+  try {
+    if (await launchUrl(uri, mode: LaunchMode.externalApplication)) return;
+  } catch (_) {
+    // Keep inventory visible when a device cannot launch Maps.
+  }
+  if (context.mounted) {
+    ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not open directions.')));
+  }
+}
 
 /// Defensive network image loader: a broken/slow link never breaks the
 /// layout — the same pattern used across onboarding, profile setup, and
@@ -131,16 +162,36 @@ class _EquipmentDetailScreenState extends State<EquipmentDetailScreen>
                   return const Text('Branch inventory unavailable.');
                 }
                 if (branch == null) return const LinearProgressIndicator();
-                if (branch['branchName'] == null) {
-                  return const Text('Select a branch to check equipment.');
-                }
+                final alternatives =
+                    branch['otherBranches'] as List? ?? const [];
                 return Card(
-                    child: ListTile(
-                  title: Text(branch['branchName'] as String),
-                  subtitle: Text(branch['recorded'] == true
-                      ? '${branch['usable']} usable · ${branch['maintenance']} in maintenance'
-                      : 'This equipment is not listed at this branch.'),
-                ));
+                    child: Column(children: [
+                  ListTile(
+                    title: Text(
+                        branch['branchName'] as String? ?? 'Select a branch'),
+                    subtitle: Text(branch['branchName'] == null
+                        ? 'Choose a gym to check its inventory.'
+                        : branch['recorded'] == true
+                            ? '${branch['usable']} usable · ${branch['maintenance']} in maintenance'
+                            : 'This equipment is not listed at this branch.'),
+                  ),
+                  for (final location in alternatives.whereType<Map>())
+                    ListTile(
+                      title: Text(location['branchName'] as String),
+                      subtitle: Text(
+                          '${location['usable']} usable · recorded inventory'),
+                      trailing: TextButton(
+                        onPressed: _destination(location) == null
+                            ? null
+                            : () => _openBranchDirections(context, location),
+                        child: const Text('Directions'),
+                      ),
+                    ),
+                  if (branch['otherBranchesPartial'] == true)
+                    const ListTile(
+                        subtitle: Text(
+                            'Other branch results are limited to the first 30 locations.')),
+                ]));
               },
             ),
           ClipRRect(

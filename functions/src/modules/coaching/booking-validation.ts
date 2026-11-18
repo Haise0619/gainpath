@@ -31,15 +31,14 @@ export async function requireBookingOrganization(tx: TransactionPort, org: strin
 }
 export async function authorizeBookingCreate(tx: TransactionPort, org: string, actorId: string, input: CreateBookingHoldInput) {
   const actor = await currentBookingMembership(tx, org, actorId);
-  requireBranchAccess(actor, input.branchId);
+  if (actor.role !== 'member') requireBranchAccess(actor, input.branchId);
   if (!['member', 'staff', 'admin'].includes(actor.role) || (actor.role === 'member' && actorId !== input.memberId)) throw new DomainError('permission-denied', 'Cannot book for this member.');
   const member = await currentBookingMembership(tx, org, input.memberId);
-  requireBranchAccess(member, input.branchId);
   if (member.role !== 'member') throw new DomainError('permission-denied', 'The booking recipient must be a member.');
   await requireBookingOrganization(tx, org);
   return member;
 }
-export async function bookingCoachScope(tx: TransactionPort, org: string, coachId: string, memberBranches: readonly string[]) {
+export async function bookingCoachScope(tx: TransactionPort, org: string, coachId: string, memberBranches?: readonly string[]) {
   let coach;
   try { coach = await currentBookingMembership(tx, org, coachId); }
   catch { throw new DomainError('failed-precondition', 'Coach unavailable.'); }
@@ -49,7 +48,7 @@ export async function bookingCoachScope(tx: TransactionPort, org: string, coachI
   try { published = branchIds(publication.branchIds); }
   catch { throw new DomainError('failed-precondition', 'Coach publication needs review.'); }
   const permitted: string[] = [];
-  for (const id of coach.branchIds) if (memberBranches.includes(id) && published.includes(id)
+  for (const id of coach.branchIds) if ((memberBranches === undefined || memberBranches.includes(id)) && published.includes(id)
     && (await tx.get(`orgs/${org}/branches/${id}`))?.status === 'active') permitted.push(id);
   if (!permitted.length) throw new DomainError('permission-denied', 'No permitted Coach branches are available.');
   return { assigned: coach.branchIds, permitted };

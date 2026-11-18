@@ -44,6 +44,8 @@ it('binds signed-in visits to an active branch and deduplicates retries and refr
   const { store, run } = fixture();
   const first = await run('branch-admin', 'issueVisitCode') as { qr: string };
   const token = first.qr.split(':')[2];
+  await expect(run('member-1', 'checkIn', { token }, now + 300000))
+    .rejects.toMatchObject({ code: 'failed-precondition' });
   expect(await run('member-1', 'checkIn', { token })).toMatchObject({ duplicate: false });
   expect(await run('member-1', 'checkIn', { token })).toMatchObject({ duplicate: true });
   const fresh = await run('branch-admin', 'issueVisitCode', {}, now + 2000) as { qr: string };

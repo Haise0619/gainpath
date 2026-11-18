@@ -1,7 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import { requireVerifiedEmail } from '../../platform/auth-context';
 import { DomainError } from '../../platform/errors';
-import type { DocumentData, DocumentStore, TransactionPort } from '../../platform/firestore/store';
+import { readAll, type DocumentData, type DocumentStore, type TransactionPort } from '../../platform/firestore/store';
 import { keyOf } from '../../platform/idempotency';
 import { requiredIdentifier } from '../../platform/validation';
 import { requireMembershipCapability } from '../commerce/membership-capabilities';
@@ -44,7 +44,7 @@ export async function branchOperations(store: DocumentStore, rows: OperationsRea
 
   if (action === 'equipmentAvailability') {
     const equipmentId = requiredIdentifier(input.equipmentId, 'equipmentId');
-    return store.transact(async tx => {
+    const selected = await store.transact<DocumentData>(async tx => {
       await authorize(tx);
       const user = await tx.get(`users/${uid}`);
       for (const candidate of new Set([user?.selectedBranchId, user?.homeBranchId, user?.primaryBranchId])) {
@@ -59,6 +59,25 @@ export async function branchOperations(store: DocumentStore, rows: OperationsRea
             maintenance: item!.maintenance } : {}) };
       }
       return { recorded: false };
+    });
+    if (Number(selected.usable) > 0) return { ...selected, otherBranches: [] };
+    const locations = await rows(`${root}/branches`, 'id');
+    return store.transact(async tx => {
+      await authorize(tx);
+      const candidates = locations.slice(0, 30).filter(row => row.id !== selected.branchId);
+      const branches = await readAll(tx, candidates.map(row => `${root}/branches/${row.id}`));
+      const stock = await readAll(tx, candidates.map(row => `${root}/branches/${row.id}/equipmentInventory/${equipmentId}`));
+      const otherBranches = candidates.flatMap((row, index) => {
+        const location = branches[index], item = stock[index];
+        if (location?.status !== 'active' || typeof location.displayName !== 'string'
+          || !item || item.removed === true || !count(item.quantity) || !count(item.maintenance)
+          || item.quantity <= item.maintenance) return [];
+        return [{ branchId: row.id, branchName: location.displayName, usable: item.quantity - item.maintenance,
+          ...(typeof location.address === 'string' ? { address: location.address } : {}),
+          ...(typeof location.latitude === 'number' && typeof location.longitude === 'number'
+            ? { latitude: location.latitude, longitude: location.longitude } : {}) }];
+      });
+      return { ...selected, otherBranches, otherBranchesPartial: locations.length > 30 };
     });
   }
 

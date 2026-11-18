@@ -3,6 +3,7 @@ import { getFirestore } from 'firebase-admin/firestore';
 import { expect, it } from 'vitest';
 import { FirestoreStore } from '../src/platform/firestore/firestore-store';
 import { branchOperations } from '../src/modules/identity/branch-operations';
+import { readBranchReport } from '../src/modules/analytics/branch-report';
 import { now, seeds } from '../test/booking-fixture';
 
 it('deduplicates concurrent physical visit calls with real Firestore transactions', async () => {
@@ -31,6 +32,14 @@ it('deduplicates concurrent physical visit calls with real Firestore transaction
     const snapshot = await db.collection('orgs/org-1/branches/visit-fixture/gymVisits').get();
     expect(snapshot.docs).toHaveLength(1);
     expect(await invoke('member-1', 'myVisits')).toMatchObject({ records: [{ branchId: 'visit-fixture' }] });
+    const report = await readBranchReport(db, 'org-1', {
+      branchId: 'visit-fixture', startAtMillis: now - 1, endAtMillis: now + 1,
+    });
+    expect(report).toMatchObject({ gymVisits: 1, uniqueVisitors: 1, repeatVisitors: 0, bookingsCreated: 0 });
+    const later = await readBranchReport(db, 'org-1', {
+      branchId: 'visit-fixture', startAtMillis: now + 1, endAtMillis: now + 2,
+    });
+    expect(later.gymVisits).toBe(0);
   } finally {
     await db.terminate();
     await deleteApp(app);

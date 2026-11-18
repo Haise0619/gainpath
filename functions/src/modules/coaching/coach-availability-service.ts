@@ -1,4 +1,6 @@
 import { requireActiveMembership, requireVerifiedEmail } from '../../platform/auth-context';
+import { resolveMembershipEntitlement } from '../commerce/membership-entitlement';
+import { membershipCapabilities } from '../commerce/membership-capabilities';
 import type { DocumentStore, TransactionPort } from '../../platform/firestore/store';
 import { readAll } from '../../platform/firestore/store';
 import { prefetchReads } from '../../platform/firestore/prefetch-reads';
@@ -22,7 +24,8 @@ async function membership(tx: TransactionPort, org: string, uid: string) {
   const user = await tx.get(`users/${uid}`), data = await tx.get(`orgs/${org}/members/${uid}`);
   const member = requireActiveMembership(data);
   if (user?.organizationId !== org || data?.organizationId !== org) throw new DomainError('permission-denied', 'Current organization access is required.');
-  return { ...member, branchIds: member.role === 'admin' && member.branchIds.length === 0 ? [] : branchIds(member.branchIds) };
+  const acceptsEmpty = member.role === 'admin' || member.role === 'member';
+  return { ...member, branchIds: acceptsEmpty && member.branchIds.length === 0 ? [] : branchIds(member.branchIds) };
 }
 async function activeBranches(tx: TransactionPort, root: string, ids: readonly string[], required: boolean) {
   const active: string[] = [];
@@ -66,7 +69,11 @@ export async function getCoachAvailabilityService(store: DocumentStore, auth: Au
       const publication = await details.get(`${root}/coaches/${coachId}`);
       if (publication?.status !== 'published' || !Array.isArray(publication.branchIds)) throw new DomainError('failed-precondition', 'Coach schedule is not published.');
       const publishedBranches = publication.branchIds;
-      visible = active.filter(id => actor.branchIds.includes(id) && publishedBranches.includes(id));
+      const publishedActive = active.filter(id => publishedBranches.includes(id));
+      const outsideLegacy = publishedActive.some(id => !actor.branchIds.includes(id));
+      const organizationWide = outsideLegacy &&
+        membershipCapabilities(await resolveMembershipEntitlement(tx, auth, org, now)).canBrowseCoaches;
+      visible = organizationWide ? publishedActive : publishedActive.filter(id => actor.branchIds.includes(id));
     }
     if (!visible.length) throw new DomainError('permission-denied', 'No permitted Coach branches are available.');
     const days: AvailabilityDayResult[] = [];

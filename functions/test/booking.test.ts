@@ -9,6 +9,19 @@ let store: MemoryStore;
 let clock: number;
 const execute = (input = command, uid = 'member-1') => createBookingHoldService(store, uid, input, eligibleCoach, () => clock);
 beforeEach(() => { store = new MemoryStore(); clock = now; Object.entries(seeds).forEach(([p, d]) => store.documents.set(p, structuredClone(d))); });
+it('allows a paid member to book an active branch outside their legacy assignments', async () => {
+  const member = store.documents.get('orgs/org-1/members/member-1')!;
+  member.branchIds = ['branch-2'];
+  const held = await execute();
+  expect(store.documents.get(`orgs/org-1/bookings/${held.bookingId}`)?.branchId).toBe('branch-1');
+  expect(member.branchIds).toEqual(['branch-2']);
+});
+
+it('keeps inactive branches closed to organization-wide bookings', async () => {
+  store.documents.get('orgs/org-1/members/member-1')!.branchIds = ['branch-2'];
+  store.documents.get('orgs/org-1/branches/branch-1')!.status = 'inactive';
+  await expect(execute()).rejects.toMatchObject({ code: 'permission-denied' });
+});
 it('denies a new Free booking but preserves replay of an already created commitment after expiry', async()=>{
   store.documents.delete('orgs/org-1/membershipAccounts/member-1');
   await expect(execute()).rejects.toMatchObject({code:'permission-denied'});

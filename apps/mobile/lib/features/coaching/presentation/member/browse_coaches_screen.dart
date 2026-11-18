@@ -21,7 +21,8 @@ class BrowseCoachesScreen extends StatefulWidget {
       this.liveRepository,
       this.isCurrent,
       this.onOpenPublished,
-      this.bookingsBuilder, this.onMessages, this.enforceMembership = false, this.membershipAccessRepository});
+      this.bookingsBuilder, this.onMessages, this.enforceMembership = false, this.membershipAccessRepository,
+      this.loadSelectedBranch});
   final bool live;
   final CoachDirectoryRepository? liveRepository;
   final bool Function()? isCurrent;
@@ -30,6 +31,7 @@ class BrowseCoachesScreen extends StatefulWidget {
   final bool enforceMembership;
   final MembershipAccessRepository? membershipAccessRepository;
   final VoidCallback? onMessages;
+  final Future<String?> Function()? loadSelectedBranch;
   @override
   State<BrowseCoachesScreen> createState() => _BrowseCoachesScreenState();
 }
@@ -39,6 +41,9 @@ class _BrowseCoachesScreenState extends State<BrowseCoachesScreen> {
   _SortBy _sortBy = _SortBy.rating;
   final _searchController = TextEditingController();
   String _query = '';
+  String? _selectedBranch;
+  bool _filterBranch = false;
+  int _branchRead = 0;
   CoachDirectoryCubit? _directory;
   int _tab = 0;
   Widget? _bookings;
@@ -49,11 +54,30 @@ class _BrowseCoachesScreenState extends State<BrowseCoachesScreen> {
   }
 
   void _bind() {
+    final read = ++_branchRead;
+    final loader = widget.loadSelectedBranch;
+    if (loader != null) {
+      _loadBranch(loader, read);
+    }
     if (widget.liveRepository != null) {
       _directory = CoachDirectoryCubit(
           repository: widget.liveRepository!,
           isCurrent: () => widget.isCurrent?.call() == true)
         ..refresh();
+    }
+  }
+
+  Future<void> _loadBranch(Future<String?> Function() loader, int read) async {
+    try {
+      final branch = await loader();
+      if (mounted && read == _branchRead && widget.isCurrent?.call() == true) {
+        setState(() {
+          _selectedBranch = branch;
+          _filterBranch = branch != null;
+        });
+      }
+    } catch (_) {
+      // Directory remains usable if the branch preference cannot load.
     }
   }
 
@@ -69,6 +93,8 @@ class _BrowseCoachesScreenState extends State<BrowseCoachesScreen> {
       _directory = null;
       _searchController.clear();
       _query = '';
+      _selectedBranch = null;
+      _filterBranch = false;
       _specialtyFilter = 'All';
       _tab = 0;
       _bookings = null;
@@ -88,6 +114,7 @@ class _BrowseCoachesScreenState extends State<BrowseCoachesScreen> {
         _searchController.clear();
         _specialtyFilter = 'All';
         _sortBy = _SortBy.rating;
+        _filterBranch = false;
       });
   Widget _tabs(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
@@ -533,14 +560,15 @@ class _BrowseCoachesScreenState extends State<BrowseCoachesScreen> {
       'All',
       ...{for (final c in coaches) c.specialty}
     ];
-    final filtered = _query.trim().isNotEmpty ||
+    final filtered = _filterBranch || _query.trim().isNotEmpty ||
         _specialtyFilter != 'All' ||
         _sortBy != _SortBy.rating;
     final hasNarrowingFilters =
-        _query.trim().isNotEmpty || _specialtyFilter != 'All';
+        _query.trim().isNotEmpty || _specialtyFilter != 'All' || _filterBranch;
     final visible = coaches.where((c) {
       final q = _query.trim().toLowerCase();
-      return (_specialtyFilter == 'All' || c.specialty == _specialtyFilter) &&
+      return (!_filterBranch || published[c.id]?.branchIds.contains(_selectedBranch) == true) &&
+          (_specialtyFilter == 'All' || c.specialty == _specialtyFilter) &&
           (q.isEmpty ||
               c.name.toLowerCase().contains(q) ||
               c.specialty.toLowerCase().contains(q) ||
@@ -872,6 +900,15 @@ class _BrowseCoachesScreenState extends State<BrowseCoachesScreen> {
                                                 icon: const Icon(Icons.tune_rounded, size: 22))),
                                       ]),
                                   const SizedBox(height: 12),
+                                  if (_selectedBranch != null)
+                                    Align(
+                                      alignment: Alignment.centerLeft,
+                                      child: FilterChip(
+                                        label: const Text('Selected branch'),
+                                        selected: _filterBranch,
+                                        onSelected: (value) => setState(() => _filterBranch = value),
+                                      ),
+                                    ),
                                   SingleChildScrollView(
                                       scrollDirection: Axis.horizontal,
                                       child: Row(

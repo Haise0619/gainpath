@@ -3,6 +3,7 @@ import '../../infrastructure/firebase/firebase_module9_repository.dart';
 import '../../infrastructure/firebase/firebase_google_integration.dart';
 import '../../infrastructure/android_coach_statement_exporter.dart';
 import 'package:flutter/material.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import '../../infrastructure/firebase/firebase_consultation_notes_repository.dart';
 import '../../infrastructure/firebase/firebase_coach_booking_cancellation_repository.dart';
 import '../../infrastructure/firebase/firebase_client_posture_repository.dart';
@@ -108,6 +109,14 @@ Widget buildFirebaseCoachDirectory(AuthSession session,
               FirebaseCoachDirectoryRepository(
                   scope: session.scope, isCurrent: isCurrent);
           return BrowseCoachesScreen(
+              loadSelectedBranch: factory == null ? () async {
+                if (!isCurrent()) return null;
+                final result = await FirebaseFunctions.instanceFor(region: 'asia-southeast1')
+                    .httpsCallable('branchManagementCommand')
+                    .call({'action': 'list', 'organizationId': session.scope.organizationId});
+                if (!isCurrent() || result.data is! Map) return null;
+                return (result.data as Map)['selectedBranchId'] as String?;
+              } : null,
               enforceMembership: factory == null,
               onMessages: () => Navigator.push(
                   context,

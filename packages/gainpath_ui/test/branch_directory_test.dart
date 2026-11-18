@@ -4,13 +4,21 @@ import 'package:gainpath_ui/gainpath_ui.dart';
 
 void main() {
   testWidgets('Admin can display the branch visit QR', (tester) async {
-    await tester.pumpWidget(MaterialApp(home: BranchDirectoryPage(
+    await tester.pumpWidget(MaterialApp(
+        home: BranchDirectoryPage(
       admin: true,
       openDirections: (_) async => true,
       request: (input) async => switch (input['action']) {
-        'list' => {'records': [{'branchId': 'main', 'displayName': 'Main gym'}]},
+        'list' => {
+            'records': [
+              {'branchId': 'main', 'displayName': 'Main gym'}
+            ]
+          },
         'branchVisits' => {'records': []},
-        'issueVisitCode' => {'qr': 'fixture-token'},
+        'issueVisitCode' => {
+            'qr': 'fixture-token',
+            'expiresAtMillis': DateTime.now().millisecondsSinceEpoch + 300000
+          },
         _ => <String, dynamic>{},
       },
     )));
@@ -22,6 +30,11 @@ void main() {
     await tester.tap(find.text('Generate QR'));
     await tester.pumpAndSettle();
     expect(find.text('Gym check-in QR'), findsOneWidget);
+    await tester.tap(find.text('Fullscreen'));
+    await tester.pumpAndSettle();
+    expect(find.text('Exit fullscreen'), findsOneWidget);
+    await tester.tap(find.text('Close'));
+    await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
   });
 
