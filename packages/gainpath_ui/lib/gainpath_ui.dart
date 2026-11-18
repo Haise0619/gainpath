@@ -11,3 +11,4 @@ export 'src/account/change_password_sheet.dart';
 export 'src/account/forgot_password_sheet.dart';
 export 'src/google_integration_panel.dart';
 export 'src/shared/widgets/payment_method_icon.dart';
+export 'src/shared/widgets/branch_directory_page.dart';

@@ -1,4 +1,5 @@
 import { initializeApp } from 'firebase-admin/app';
+export { branchManagementCommand } from './modules/identity/branch-callable';
 
 initializeApp();
 

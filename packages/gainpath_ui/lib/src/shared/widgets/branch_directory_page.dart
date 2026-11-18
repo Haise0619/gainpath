@@ -1,0 +1,469 @@
+import 'package:flutter/material.dart';
+
+typedef BranchRequest = Future<Map<String, dynamic>> Function(
+    Map<String, Object?> input);
+
+class BranchDirectoryPage extends StatefulWidget {
+  const BranchDirectoryPage({
+    super.key,
+    required this.request,
+    required this.openDirections,
+    this.admin = false,
+    this.onSelected,
+  });
+
+  final BranchRequest request;
+  final Future<bool> Function(Uri) openDirections;
+  final bool admin;
+  final ValueChanged<String>? onSelected;
+
+  @override
+  State<BranchDirectoryPage> createState() => _BranchDirectoryPageState();
+}
+
+class _BranchDirectoryPageState extends State<BranchDirectoryPage> {
+  List<Map<String, dynamic>> _branches = [];
+  String? _home, _next;
+  String _query = '';
+  bool _busy = false, _failed = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load({bool more = false}) async {
+    if (_busy) return;
+    setState(() {
+      _busy = true;
+      _failed = false;
+    });
+    try {
+      final result = await widget.request({
+        'action': 'list',
+        if (more) 'afterId': _next,
+      });
+      if (!mounted) return;
+      final branches = (result['records'] as List)
+          .map((value) => Map<String, dynamic>.from(value as Map));
+      setState(() {
+        _branches = [if (more) ..._branches, ...branches];
+        _home = result['homeBranchId'] as String?;
+        _next = result['nextAfterId'] as String?;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _failed = true);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _details(Map<String, dynamic> branch) async {
+    final address = (branch['address'] as String?) ?? '';
+    final latitude = branch['latitude'];
+    final longitude = branch['longitude'];
+    final destination =
+        latitude is num && longitude is num ? '$latitude,$longitude' : address;
+    final facilities = (branch['facilities'] as List?)?.join(' · ') ?? '';
+    final hours = branch['openingHours'] as List?;
+    final cover = branch['coverUrl'] as String?;
+    final id = branch['branchId'] as String;
+    final action = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(branch['displayName'] as String? ?? 'Branch'),
+        content: SingleChildScrollView(
+          child: SizedBox(
+            width: 440,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (cover != null && cover.isNotEmpty)
+                  Image.network(cover,
+                      height: 150,
+                      fit: BoxFit.cover,
+                      errorBuilder: (context, error, stack) =>
+                          const SizedBox.shrink()),
+                if (address.isNotEmpty) Text(address),
+                if (branch['description'] case final String description
+                    when description.isNotEmpty)
+                  Text(description),
+                if (branch['contactPhone'] case final String phone
+                    when phone.isNotEmpty)
+                  Text(phone),
+                if (facilities.isNotEmpty) Text(facilities),
+                const SizedBox(height: 12),
+                if (hours == null || hours.length != 7)
+                  const Text('Opening hours unavailable')
+                else ...[
+                  Text(_openingStatus(hours)),
+                  const SizedBox(height: 8),
+                  for (var i = 0; i < 7; i++)
+                    Text('${_days[i]}  ${_dayLabel(hours[i])}'),
+                ],
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Close')),
+          if (destination.isNotEmpty)
+            TextButton(
+                onPressed: () => Navigator.pop(context, 'directions'),
+                child: const Text('Get directions')),
+          if (widget.admin)
+            FilledButton(
+                onPressed: () => Navigator.pop(context, 'edit'),
+                child: const Text('Edit branch'))
+          else if (_home != id)
+            FilledButton(
+                onPressed: () => Navigator.pop(context, 'home'),
+                child: const Text('Set as home branch')),
+        ],
+      ),
+    );
+    if (!mounted || action == null) return;
+    if (action == 'edit') {
+      await _edit(branch);
+    } else if (action == 'home') {
+      try {
+        await widget.request({'action': 'setHome', 'branchId': id});
+        if (mounted) await _load();
+      } catch (_) {
+        if (mounted) _notice('Could not update the home branch.');
+      }
+    } else if (action == 'directions') {
+      try {
+        final opened = await widget
+            .openDirections(Uri.https('www.google.com', '/maps/dir/', {
+          'api': '1',
+          'destination': destination,
+          'travelmode': 'driving',
+          'dir_action': 'navigate',
+        }));
+        if (!opened && mounted) _notice('Could not open directions.');
+      } catch (_) {
+        if (mounted) _notice('Could not open directions.');
+      }
+    }
+  }
+
+  void _notice(String message) {
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  Future<void> _edit([Map<String, dynamic>? branch]) async {
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (context) =>
+          _BranchEditor(branch: branch, request: widget.request),
+    );
+    if (mounted && saved == true) await _load();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final query = _query.toLowerCase().trim();
+    final visible = _branches.where((branch) =>
+        '${branch['displayName']} ${branch['address'] ?? ''}'
+            .toLowerCase()
+            .contains(query));
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(widget.admin ? 'Branch management' : 'Find a gym'),
+        actions: [
+          IconButton(
+              tooltip: 'Refresh',
+              onPressed: _busy ? null : () => _load(),
+              icon: const Icon(Icons.refresh)),
+          if (widget.admin)
+            TextButton.icon(
+                onPressed: _busy ? null : () => _edit(),
+                icon: const Icon(Icons.add),
+                label: const Text('Add branch')),
+        ],
+      ),
+      body: ListView(
+        padding: const EdgeInsets.all(20),
+        children: [
+          TextField(
+              onChanged: (value) => setState(() => _query = value),
+              decoration: const InputDecoration(
+                  labelText: 'Search branches',
+                  prefixIcon: Icon(Icons.search))),
+          const SizedBox(height: 16),
+          if (_busy) const LinearProgressIndicator(),
+          if (_failed)
+            const Text('Branches could not be loaded. Refresh to retry.'),
+          if (!_busy && !_failed && visible.isEmpty)
+            const Text('No matching branches.'),
+          for (final branch in visible)
+            Card(
+              child: ListTile(
+                leading: const Icon(Icons.location_on_outlined),
+                title: Text(branch['displayName'] as String? ?? 'Branch'),
+                subtitle: Text([
+                  if (branch['branchId'] == _home) 'Home branch',
+                  if (widget.admin)
+                    branch['status'] == 'active' ? 'Active' : 'Inactive',
+                  if (branch['address'] case final String address
+                      when address.isNotEmpty)
+                    address,
+                ].join(' · ')),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () {
+                  widget.onSelected?.call(branch['branchId'] as String);
+                  _details(branch);
+                },
+              ),
+            ),
+          if (_next != null)
+            TextButton(
+                onPressed: _busy ? null : () => _load(more: true),
+                child: const Text('Load more')),
+        ],
+      ),
+    );
+  }
+}
+
+const _days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+
+String _dayLabel(Object? value) {
+  if (value is! Map) return 'Unavailable';
+  if (value['closed'] == true) return 'Closed';
+  if (value['allDay'] == true) return 'Open 24 hours';
+  return '${value['open']}–${value['close']}';
+}
+
+String _openingStatus(List hours) {
+  final local = DateTime.now().toUtc().add(const Duration(hours: 8));
+  final today = hours[local.weekday - 1];
+  final yesterday = hours[(local.weekday + 5) % 7];
+  final minute = local.hour * 60 + local.minute;
+  int? parse(Object? value) {
+    if (value is! String ||
+        !RegExp(r'^([01]\d|2[0-3]):[0-5]\d$').hasMatch(value)) {
+      return null;
+    }
+    return int.parse(value.substring(0, 2)) * 60 +
+        int.parse(value.substring(3));
+  }
+
+  bool open(Object? value, {required bool previous}) {
+    if (value is! Map || value['closed'] == true) return false;
+    if (value['allDay'] == true) return !previous;
+    final start = parse(value['open']), end = parse(value['close']);
+    if (start == null || end == null) return false;
+    return previous
+        ? start > end && minute < end
+        : minute >= start && (start > end || minute < end);
+  }
+
+  return open(today, previous: false) || open(yesterday, previous: true)
+      ? 'Open now · MYT'
+      : 'Closed now · MYT';
+}
+
+class _BranchEditor extends StatefulWidget {
+  const _BranchEditor({this.branch, required this.request});
+  final Map<String, dynamic>? branch;
+  final BranchRequest request;
+
+  @override
+  State<_BranchEditor> createState() => _BranchEditorState();
+}
+
+class _BranchEditorState extends State<_BranchEditor> {
+  final _form = GlobalKey<FormState>();
+  static const _labels = {
+    'branchId': 'Branch ID',
+    'displayName': 'Branch name',
+    'description': 'Description',
+    'address': 'Full address',
+    'city': 'City',
+    'state': 'State',
+    'postalCode': 'Postal code',
+    'country': 'Country',
+    'contactPhone': 'Phone',
+    'contactEmail': 'Email',
+    'latitude': 'Latitude',
+    'longitude': 'Longitude',
+    'facilities': 'Facilities (comma-separated)',
+  };
+  late final _values = {
+    for (final key in _labels.keys)
+      key: TextEditingController(
+          text: key == 'facilities'
+              ? (widget.branch?[key] as List?)?.join(', ')
+              : widget.branch?[key]?.toString()),
+  };
+  late bool _active = widget.branch?['status'] != 'inactive';
+  late final _hours = List.generate(7, (index) {
+    final hours = widget.branch?['openingHours'];
+    final saved = hours is List && hours.length == 7 ? hours[index] : null;
+    final label = _dayLabel(saved);
+    return TextEditingController(
+        text: label == 'Unavailable'
+            ? ''
+            : label == 'Open 24 hours'
+                ? '24 hours'
+                : label.replaceAll('–', '-'));
+  });
+  bool _busy = false;
+  String? _error;
+
+  @override
+  void dispose() {
+    for (final controller in _values.values) {
+      controller.dispose();
+    }
+    for (final controller in _hours) {
+      controller.dispose();
+    }
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    if (!_form.currentState!.validate()) return;
+    final schedule = <Map<String, Object>>[];
+    if (_hours.any((controller) => controller.text.trim().isNotEmpty)) {
+      final slot = RegExp(r'^([01]\d|2[0-3]):[0-5]\d-([01]\d|2[0-3]):[0-5]\d$');
+      for (final controller in _hours) {
+        final input = controller.text.trim().toLowerCase();
+        if (input == 'closed') {
+          schedule.add({'closed': true});
+        } else if (input == '24 hours') {
+          schedule.add({'allDay': true});
+        } else if (slot.hasMatch(input) &&
+            input.substring(0, 5) != input.substring(6)) {
+          schedule.add(
+              {'open': input.substring(0, 5), 'close': input.substring(6)});
+        } else {
+          setState(() => _error =
+              'Set all seven days. Use HH:mm-HH:mm, Closed, or 24 hours.');
+          return;
+        }
+      }
+    }
+    String value(String key) => _values[key]!.text.trim();
+    final latitude = double.tryParse(value('latitude'));
+    final longitude = double.tryParse(value('longitude'));
+    if ((value('latitude').isNotEmpty || value('longitude').isNotEmpty) &&
+        (latitude == null ||
+            longitude == null ||
+            !latitude.isFinite ||
+            !longitude.isFinite ||
+            latitude.abs() > 90 ||
+            longitude.abs() > 180)) {
+      setState(() => _error = 'Enter valid latitude and longitude.');
+      return;
+    }
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      await widget.request({
+        'action': 'save',
+        'branchId': value('branchId'),
+        'create': widget.branch == null,
+        'branch': {
+          for (final key in _labels.keys.where((key) => ![
+                'branchId',
+                'latitude',
+                'longitude',
+                'facilities'
+              ].contains(key)))
+            key: value(key),
+          'latitude': latitude,
+          'longitude': longitude,
+          'status': _active ? 'active' : 'inactive',
+          if (schedule.isNotEmpty) 'openingHours': schedule,
+          'facilities': value('facilities')
+              .split(',')
+              .map((part) => part.trim())
+              .where((part) => part.isNotEmpty)
+              .toList(),
+        },
+      });
+      if (mounted) Navigator.pop(context, true);
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _busy = false;
+          _error = 'Branch could not be saved. Check the details and retry.';
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+        title: Text(widget.branch == null ? 'Add branch' : 'Edit branch'),
+        content: SizedBox(
+          width: 480,
+          child: Form(
+            key: _form,
+            child: ListView(
+              shrinkWrap: true,
+              children: [
+                for (final entry in _labels.entries)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: TextFormField(
+                      controller: _values[entry.key],
+                      enabled: !_busy &&
+                          (entry.key != 'branchId' || widget.branch == null),
+                      decoration: InputDecoration(labelText: entry.value),
+                      validator: (value) {
+                        if (entry.key == 'branchId' &&
+                            !RegExp(r'^[A-Za-z0-9_-]{1,128}$')
+                                .hasMatch(value?.trim() ?? '')) {
+                          return 'Use letters, numbers, hyphens or underscores.';
+                        }
+                        if (entry.key == 'displayName' &&
+                            (value?.trim().isEmpty ?? true)) {
+                          return 'Enter the branch name.';
+                        }
+                        return null;
+                      },
+                    ),
+                  ),
+                const Text('Opening hours · MYT'),
+                for (var day = 0; day < _days.length; day++)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: TextFormField(
+                      enabled: !_busy,
+                      controller: _hours[day],
+                      decoration: InputDecoration(
+                          labelText: _days[day],
+                          hintText: '08:00-22:00, Closed, or 24 hours'),
+                    ),
+                  ),
+                SwitchListTile(
+                    title: const Text('Active'),
+                    value: _active,
+                    onChanged: _busy
+                        ? null
+                        : (value) => setState(() => _active = value)),
+                if (_error != null) Text(_error!),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+              onPressed: _busy ? null : () => Navigator.pop(context),
+              child: const Text('Cancel')),
+          FilledButton(
+              onPressed: _busy ? null : _save,
+              child: Text(_busy ? 'Saving…' : 'Save branch')),
+        ],
+      );
+}

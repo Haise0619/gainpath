@@ -9,6 +9,8 @@ import '../../features/gamification/reward_fulfilment_repository.dart';
 import '../../features/gamification/presentation/admin/reward_fulfilment_panel.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:cloud_functions/cloud_functions.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:gainpath_identity/gainpath_identity.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
 import '../../features/analytics/presentation/admin/admin_dashboard_screens.dart';
@@ -237,6 +239,23 @@ class _AdminShellState extends State<AdminShell> {
               live: widget.liveSession != null,
               discardGuard: _coachReviewGuard)),
     ]),
+    if (widget.liveSession != null)
+      _NavPage(
+        Icons.location_on_outlined,
+        Icons.location_on,
+        'Branches',
+        'Manage gym locations',
+        BranchDirectoryPage(
+          admin: true,
+          openDirections: (uri) => launchUrl(uri, webOnlyWindowName: '_blank'),
+          request: (input) async {
+            final result = await FirebaseFunctions.instanceFor(region: 'asia-southeast1')
+                .httpsCallable('branchManagementCommand')
+                .call({...input, 'organizationId': widget.liveSession!.scope.organizationId});
+            return Map<String, dynamic>.from(result.data as Map);
+          },
+        ),
+      ),
     _NavGroup(Icons.auto_awesome_outlined, Icons.auto_awesome_rounded,
         'Recommendations', [
       _NavPage(

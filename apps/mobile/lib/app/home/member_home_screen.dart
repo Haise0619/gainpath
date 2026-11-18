@@ -13,6 +13,8 @@ import 'package:gainpath_domain/gainpath_domain.dart' as domain
 import '../../features/workout/data/published_routine.dart';
 import '../../features/workout/domain/routine_attempt.dart';
 import 'package:flutter/material.dart';
+import 'package:cloud_functions/cloud_functions.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../features/gamification/application/gamification_bloc.dart';
 import 'package:gainpath_domain/gamification.dart';
 import 'package:gainpath_domain/coaching.dart';
@@ -276,6 +278,28 @@ class _MemberHomeScreenState extends State<MemberHomeScreen>
           controller: _homeScroll,
           physics: const AlwaysScrollableScrollPhysics(),
           slivers: [
+                if (widget.liveSession case final session?)
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: TextButton.icon(
+                          icon: const Icon(Icons.location_on_outlined),
+                          label: const Text('Find a gym'),
+                          onPressed: () => _go(BranchDirectoryPage(
+                            openDirections: (uri) => launchUrl(uri, mode: LaunchMode.externalApplication),
+                            request: (input) async {
+                              final result = await FirebaseFunctions.instanceFor(region: 'asia-southeast1')
+                                  .httpsCallable('branchManagementCommand')
+                                  .call({...input, 'organizationId': session.scope.organizationId});
+                              return Map<String, dynamic>.from(result.data as Map);
+                            },
+                          )),
+                        ),
+                      ),
+                    ),
+                  ),
                 _HeroHeader(
                     greeting: _greeting,
                     firstName: firstName,
