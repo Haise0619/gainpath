@@ -1,6 +1,22 @@
 # Module 13 — AI Content Planner & AI Member Outreach
 
-2026-11-18 · Local implementation and acceptance. **Not deployed to production. No real Gemini request, production data write, new Secret, IAM/Rules change or phone installation in this task.** The previous Module 13 Gemini request budgets remain exhausted and unchanged.
+2026-11-18 · Local implementation accepted; subsequently the owner approved and deployed the three existing production entrypoints. **Code deployment and private Admin activation are verified; real Gemini/user-flow acceptance is pending the Admin login and test-recipient decision described below.** Earlier request budgets remain unchanged.
+
+## Approved production deployment checkpoint
+
+Only `module13AdminCommand`, `module13MemberCommand` and `fypDatasetCommand` were updated. Existing `GEMINI_API_KEY` was bound to the Admin callable; no Secret was created or changed. Exact deployed source, service settings, existing IAM/App Check, Rules/indexes and the other **76 Functions** were verified preserved. The apparent Admin baseline mismatch was reconciled to the previously verified 15-second-timeout release archive (`d49f4618…`), before deployment. Rollback archives/configurations are retained under `build/module13-admin-ai/release`.
+
+The original private Admin URL **http://localhost:7359/** now serves the new bundle with registered existing App Check configuration and a verified served SHA256 `2bb2501781dfbb7f05b93fe1f6cd615666daa823333632849c9dc362df67cc6e`. Previous bundle is retained in `release/admin-before`. No public Hosting was changed.
+
+Post-deployment checks: dedicated Member HTTPS access 200; current four-purpose consent read 200; the Member is correctly denied Admin AI access (403). Normal Admin service reads against live Firestore pass and return one legitimate ranked member; signed-in normal Admin HTTPS/browser acceptance remains pending. CLI-based temporary Admin token signing was denied `iam.serviceAccounts.signBlob`; no IAM permission change was attempted.
+
+The user stopped Computer Use with physical Escape. Browser control was stopped and not resumed in that turn. The user was asked to log in to the ordinary Admin directly and confirm whether browser acceptance may resume; no password was requested.
+
+The existing dedicated member `m13-e2e-20261117` has all four current permissions. All seven existing test session sources have no candidates outside the seven-day cooldown. A provider-free production preflight therefore abstains. No cooldown was cleared, no records overwritten and no training/profile/Consent data was changed. A separate pending request asks whether one additional clearly marked TEST member with no Workout data may be created, to test initial-profile Coach Outreach without consuming extra automatic-generation requests. Until that approval, no new recipient is created and no Outreach inference is attempted.
+
+The newly approved **3-request budget remains 0/3 used**, with no Generate request issued. The post-deployment backend regression passes **199 tests**. Planner live generation, Apply using real model results, Outreach Send, actual production receipts and screenshots are **not yet accepted**. Existing screenshots below remain labeled local fixtures/emulator captures.
+
+[Deployment verification](../../build/module13-admin-ai/release/release-verified.json) · [Read-only compatibility](../../build/module13-admin-ai/release/compatibility-readonly.json) · [Admin activation](../../build/module13-admin-ai/release/admin-activated.json) · [Request budget](../../build/module13-admin-ai/release/request-budget.json) · [Acceptance checkpoint](../../build/module13-admin-ai/release/acceptance-checkpoint.json) · [Post-deployment regressions](../../build/module13-admin-ai/release/backend-regression.log).
 
 ## Delivered behavior
 
@@ -95,9 +111,9 @@ These are actual Flutter widget captures with explicit synthetic fixture data or
 - [Member Coach](../../build/module13-admin-ai/screenshots/member-trainer-card.png)
 - [Member Inbox](../../build/module13-admin-ai/screenshots/member-inbox.png)
 
-## Minimal production rollout and outstanding acceptance
+## Original rollout scope and outstanding acceptance
 
-No rollout has been performed. Review/approval is required for the following concrete scope:
+The following was the original proposed scope. The owner has since approved and completed items 1–3; the new three-request budget is approved but unused. Current blockers and precise status are recorded at the top of this report:
 
 1. Update existing `module13AdminCommand` source with the new operations and **bind the existing `GEMINI_API_KEY` Secret**. This is a new Secret binding on this callable, not a new credential. No IAM, Firestore Rules/index or Membership/payment changes are required.
 2. Update `module13MemberCommand` and `fypDatasetCommand` readers with the same optional outreach-source validation so production Member and unified Admin can read the new records. Keep the same dataset routing and current service settings. Current automatic backup event functions do not consume the new Admin preview API and need no new inference behavior. If packaging a shared archive, separately verify unchanged ranking sources/registered entrypoints and service configuration before deployment.
@@ -106,4 +122,4 @@ No rollout has been performed. Review/approval is required for the following con
 5. With approved dedicated test identities/data only, verify true HTTPS callable invocation, real model output/latency/tokens, existing Add forms' media upload/Save/Publish, and one selected Outreach Send. Test-account activity is deliberately excluded from real Top 10; an approved clearly labeled local/emulator activity fixture can demonstrate that table without relabeling artificial workouts as real performance. Normal production Admin can inspect any approved delivered test recommendation.
 6. Reconfirm actual availability and expiry-sensitive Coach navigation without payment. Retain all written test paths/receipts and produce an inventory before any cleanup. No cleanup was performed here.
 
-The new features are locally implemented and testable, but **real Gemini generation and production Outreach delivery remain unverified** until that approved rollout. Local fixture latency/token values are not real model measurements.
+The new features are deployed, but **real Gemini generation and production Outreach delivery remain unverified** pending the above acceptance prerequisites. Local fixture latency/token values are not real model measurements.
