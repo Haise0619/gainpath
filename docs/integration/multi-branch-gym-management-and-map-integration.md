@@ -7,22 +7,22 @@
 | Item | Status |
 |---|---|
 | Core branch regression | Tested in 339 backend tests, 16 Member Flutter tests, 16 Admin report Flutter tests and one Firestore Emulator integration test. The Emulator CLI exited 0. The follow-up assistant and recommendation suite passed 67 tests, overlapping with the core set. |
-| Release 1 | Deployed: booking hold, booking options, booking change, payment quote/create/read, both regional payment webhooks, and Assistant branch facts/card. Verified source-only updates. Private Admin Web is active on localhost:7359. |
+| Release 1 | Deployed: booking hold, booking options, public Coach availability read, booking change, payment quote/create/read, both regional payment webhooks, and Assistant branch facts/card. Verified source-only updates. Private Admin Web is active on localhost:7359. |
 | Production callable verification | Anonymous list returned HTTP 401 UNAUTHENTICATED. An existing verified TEST identity plus a registered App Check token returned HTTP 200 and one branch from the read-only list. |
 | Booking navigation | Implemented in saved booking details, confirmed payment, reschedule and in-app notices. Signed-in device Maps check pending. |
-| Admin Coach Management and drill-downs | Pending. |
+| Admin Coach Management and drill-downs | Existing Admin schedule can locally filter published windows by assigned branch. Multi-branch assignment editing and management drill-downs remain pending. |
 | Reports scope and CSV | Existing branch dialog and scoped CSV. Added completed/cancelled appointment counts in local code. Global filter and chart/table integration pending. |
 | Assistant branch card | Local card with cover, address, status and actions for View branch and Get directions. Existing available-slot component remains in use. The Flutter fixture card render passed and produced build/chatbot-message-refinement/screenshots/branch-card.png. The branch facts/card payload is deployed. Signed-in visual acceptance and the separate Coach availability response enhancement remain pending. |
 | Automatic Coach recommendations | Local runtime prefers accepted workout branch or Home Branch, and expands eligible branches for verified paid members. Production release and full integration validation pending. |
 | AI Content Planner | Cancelled — Intentional Scope Reduction. Existing organization-wide analysis stays in effect. |
-| AI Member Outreach | Implemented locally: Home Branch filter for Top Active Members and Search Members, and Home Branch in Member Analysis, with primaryBranchId as the legacy fallback. Release 2 deployment pending. Gym Visit Analysis, extended branch context and Gemini prompt changes are cancelled by intentional scope reduction. |
+| AI Member Outreach | Implemented locally: Home Branch filter for Top Active Members and Search Members, and Home Branch in Member Analysis, with primaryBranchId as the legacy fallback. 27 backend tests and TypeScript typecheck passed. Release 2 deployment pending. Gym Visit Analysis, extended branch context and Gemini prompt changes are cancelled by intentional scope reduction. |
 | Release 2 | Pending remaining implementation and regression. |
 | Builds and rendered screenshots | Release 1 private Admin Web build was activated and its served SHA-256 verified. Android arm64 Debug APK built from current working source. Assistant screenshot is a Flutter fixture. |
 
 ### Release 1 production evidence
 
-- Eight Booking/Payment source overlays passed 111 package-level regressions. The Assistant card overlay passed a provider-free handler test. Each submitted version was confirmed ACTIVE, with matching downloadable ZIP hash and unchanged service configuration and IAM. Booking hold and options opened only after payment and booking change revisions had been verified.
-- The Android build completed on JDK 21 using the existing dependency versions after running Gradle outside the restricted process environment. The Admin bundle was built with the registered private App Check configuration, and both the previous bundle and new served hash were retained. Source commit: 9097274.
+- Eight Booking/Payment source overlays passed 111 package-level regressions. The Assistant card overlay passed a provider-free handler test and the Coach availability read overlay passed 24 package tests. Each submitted version was confirmed ACTIVE, with matching downloadable ZIP hash and unchanged service configuration and IAM. Booking hold and options opened only after payment and booking change revisions had been verified.
+- The Android build completed on JDK 21 using the existing dependency versions after running Gradle outside the restricted process environment. The Admin bundle was built with the registered private App Check configuration, and both the previous bundle and new served hash were retained. The current Android APK SHA-256 is e6f86073392fbef7e50e1068b0fed24ab9e4892d8fc8cd312d9ed0b6eaf8859b. Source commits include 9097274 and 73a25b9.
 
 - Rollback ZIPs and function metadata for Booking, Payment, both webhook regions and Assistant are captured under build/multi-branch-release/release1-baselines. The existing payment checkout uses getBookingPaymentCommand for method discovery. No standalone getBookingPaymentMethodsCommand was found in the Singapore inventory. Regional payment packages differ, so use the existing package for each endpoint as its update baseline.
 
