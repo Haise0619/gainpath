@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'widgets/booking_location.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:gainpath_domain/coaching.dart';
@@ -507,6 +508,11 @@ class _BookingDetailsScreenState extends State<BookingDetailsScreen> {
                             ),
                           ),
                           const SizedBox(height: 2),
+                          if (r != null)
+                            BookingLocation(
+                              bookingId: r.bookingId,
+                              organizationId: r.organizationId,
+                            ),
                           const Text(
                             'Please arrive 5 minutes before your scheduled appointment.',
                             style: TextStyle(

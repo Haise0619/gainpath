@@ -59,15 +59,20 @@ export function personalMetricsIntent(text: string): boolean {
       /\b(workouts?|exercises?|reps|repetitions|sessions?)\b.{0,50}\b(i've|did i|have i|i have|i completed|i logged|i tracked)\b/.test(question);
 }
 /** Only explicit availability/date questions use deterministic slot discovery. */
-export function coachAvailabilityRequest(text:string):{dayOffset?:0|1;localDate?:string}|undefined{
+export function coachAvailabilityRequest(text:string):{dayOffset?:0|1;localDate?:string;coachName?:string;selectedBranch?:boolean}|undefined{
  const q=text.toLowerCase().replace(/\b(tomm?or+ow|tmr|tmrw)\b/g,'tomorrow').replace(/\bcoachs\b/g,'coaches');
+ const named = /^\s*is (?:coach )?([\p{L}][\p{L} '-]{0,79}?) (?:available|free) (today|tomorrow|\d{4}-\d{2}-\d{2})\s*\??\s*$/u.exec(q);
+ if (named) return { coachName: named[1], ...(named[2] === 'today' ? { dayOffset: 0 }
+   : named[2] === 'tomorrow' ? { dayOffset: 1 } : { localDate: named[2] }) };
+ const selectedBranch = /\b(?:this|my|the selected) (?:branch|gym)\b/.test(q);
  const concise=/^\s*(?:coach(?:es|ing)?|(?:personal )?trainers?)\s+(?:(?:on|for)\s+)?(?:today|tomorrow|\d{4}-\d{2}-\d{2})\s*\??\s*$/.test(q);
  if(!/\b(coach(?:es|ing)?|trainers?)\b/.test(q)||!concise&&!/\b(available|availability|avaliable|availble|open|free|find|show|any|which|book|booking|slots?|times?)\b/.test(q)
    ||/\b(cancel|reschedule|booked|my bookings|did i book)\b/.test(q))return undefined;
  const date=q.match(/\b\d{4}-\d{2}-\d{2}\b/)?.[0];
- if(date)return{localDate:date};
- if(/\btomorrow\b/.test(q))return{dayOffset:1};
- if(/\btoday\b/.test(q))return{dayOffset:0};
+ const scope = selectedBranch ? { selectedBranch: true } : {};
+ if(date)return{localDate:date,...scope};
+ if(/\btomorrow\b/.test(q))return{dayOffset:1,...scope};
+ if(/\btoday\b/.test(q)||selectedBranch)return{dayOffset:0,...scope};
  return undefined;
 }
 export function unsupportedPersonalMetrics(text: string): boolean {

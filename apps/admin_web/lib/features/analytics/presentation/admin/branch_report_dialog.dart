@@ -51,9 +51,14 @@ class _BranchReportDialogState extends State<BranchReportDialog> {
           ('Maintenance units · current', result['maintenanceUnits']),
         ],
         ('Bookings created', result['bookingsCreated']),
+        ('Completed sessions · appointment date', result['completedSessions']),
+        ('Cancelled sessions · appointment date', result['cancelledSessions']),
         (
           'Coaching receipts · RM',
-          ((result['coachingMinor'] as num? ?? 0) / 100).toStringAsFixed(2)
+          switch (result['coachingMinor']) {
+            final num value => (value / 100).toStringAsFixed(2),
+            _ => null,
+          }
         ),
         ('Accepted workouts with this scope', result['acceptedWorkouts']),
         if (_branch != 'unassigned') ...[

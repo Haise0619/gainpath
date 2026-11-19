@@ -17,6 +17,7 @@ class BranchDirectoryPage extends StatefulWidget {
     this.locate,
     this.scanVisit,
     this.pickCover,
+    this.initialDetails,
   });
 
   final BranchRequest request;
@@ -26,6 +27,7 @@ class BranchDirectoryPage extends StatefulWidget {
   final Future<({double latitude, double longitude})> Function()? locate;
   final Future<String?> Function(BuildContext context)? scanVisit;
   final Future<String?> Function()? pickCover;
+  final Map<String, dynamic>? initialDetails;
 
   @override
   State<BranchDirectoryPage> createState() => _BranchDirectoryPageState();
@@ -63,6 +65,12 @@ class _BranchDirectoryPageState extends State<BranchDirectoryPage> {
   void initState() {
     super.initState();
     _load();
+    final details = widget.initialDetails;
+    if (details != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _details(details);
+      });
+    }
   }
 
   Future<void> _load({bool more = false}) async {
@@ -160,7 +168,7 @@ class _BranchDirectoryPageState extends State<BranchDirectoryPage> {
                 if (hours == null || hours.length != 7)
                   const Text('Opening hours unavailable')
                 else ...[
-                  Text(_openingStatus(hours)),
+                  Text(branchOpeningStatus(hours)),
                   const SizedBox(height: 8),
                   for (var i = 0; i < 7; i++)
                     Text('${_days[i]}  ${_dayLabel(hours[i])}'),
@@ -450,7 +458,8 @@ String _dayLabel(Object? value) {
   return '${value['open']}–${value['close']}';
 }
 
-String _openingStatus(List hours) {
+String branchOpeningStatus(List hours) {
+  if (hours.length != 7) return 'Opening hours unavailable';
   final local = DateTime.now().toUtc().add(const Duration(hours: 8));
   final today = hours[local.weekday - 1];
   final yesterday = hours[(local.weekday + 5) % 7];

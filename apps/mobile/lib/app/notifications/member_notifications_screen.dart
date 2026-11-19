@@ -5,6 +5,7 @@ import 'package:gainpath_domain/coaching.dart';
 import 'package:gainpath_domain/gainpath_domain.dart' show AuthSession;
 import 'package:gainpath_ui/gainpath_ui.dart';
 import '../di/booking_factory.dart';
+import '../../features/coaching/presentation/member/widgets/booking_location.dart';
 import '../../features/recommendation/application/member_recommendation_repository.dart';
 import '../../features/recommendation/presentation/member/member_recommendation_sheet.dart';
 
@@ -322,12 +323,38 @@ class _MemberNotificationsScreenState extends State<MemberNotificationsScreen> {
     if (!_current) return;
 
     // 2. Destination routing
-    if (item.bookingId != null) {
-      if (widget.onOpenBookings != null) {
-        widget.onOpenBookings!();
-      } else {
-        showToast(context, 'Opening booking details.');
-      }
+    final bookingId = item.bookingId;
+    if (bookingId != null) {
+      await showDialog<void>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: Text(item.title),
+          content: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(item.message),
+                BookingLocation(bookingId: bookingId, showName: true),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Close'),
+            ),
+            if (widget.onOpenBookings != null)
+              FilledButton(
+                onPressed: () {
+                  Navigator.pop(dialogContext);
+                  if (_current) widget.onOpenBookings!();
+                },
+                child: const Text('View My Bookings'),
+              ),
+          ],
+        ),
+      );
       return;
     }
 

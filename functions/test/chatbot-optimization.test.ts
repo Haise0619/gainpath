@@ -35,6 +35,8 @@ it('returns trusted terminal tool facts without paying for a discarded continuat
 it('understands concise booking-date questions and common tomorrow shorthand without treating old bookings as availability',()=>{
  for(const text of ['available coach in tomorrow','Which coach can I book tomorrow?','coaching tomorrow','any coaches available tmr?','find a trainer tmrw','avaliable coach tommorow'])expect(coachAvailabilityRequest(text)).toEqual({dayOffset:1});
  for(const text of ['I booked a coach tomorrow','cancel my booking tomorrow','reschedule my coach tomorrow','What is progressive overload?'])expect(coachAvailabilityRequest(text)).toBeUndefined();
+ expect(coachAvailabilityRequest('Is Jackson available tomorrow?')).toEqual({ coachName: 'jackson', dayOffset: 1 });
+ expect(coachAvailabilityRequest('Which coaches are available at this branch?')).toEqual({ selectedBranch: true, dayOffset: 0 });
 });
 it('only routes genuine personal training-record intent to metrics, never arbitrary history or trends',()=>{
  for(const text of ['What did I eat yesterday?','I ate healthy yesterday, what can I eat today?','What benefits did I have last month?','What about my diet?','What about my chest equipment?','nutrition trends','Which equipment works my chest?','How many reps should I do?','How do I track progress?'])expect(personalMetricsIntent(text),text).toBe(false);

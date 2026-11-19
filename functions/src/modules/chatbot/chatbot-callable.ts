@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { branchAnswer, branchQuestion } from './branch-answers';
+import { branchAnswer, branchQuestion, selectedGym } from './branch-answers';
 import { getFirestore, FieldPath, type Firestore } from 'firebase-admin/firestore';
 import { FirestoreStore } from '../../platform/firestore/firestore-store';
 import { readCoachIdentity } from '../coaching/coach-identity-reader';
@@ -68,9 +68,11 @@ export async function fitnessAssistantHandler(request: CallableRequest, dependen
     if (input.action !== 'reply') return result;
     const branchIntent = branchQuestion(input.text!);
     if (branchIntent) {
-      const text = await branchAnswer(db, org, uid, branchIntent, now);
+      let branchCard: Record<string, unknown> | undefined;
+      const text = await branchAnswer(db, org, uid, branchIntent, now, branch => { branchCard = branch; });
       await reauthorize();
       return { responseId: randomUUID(), text, sources: ['branch_directory'],
+        ...(branchCard ? { branchCard } : {}),
         telemetry: { ...metrics, responseTimeMillis: Math.max(0, Date.now() - started) } };
     }
     const progress = async () => {
@@ -116,17 +118,24 @@ export async function fitnessAssistantHandler(request: CallableRequest, dependen
       throw new HttpsError('invalid-argument', 'Unknown read tool.');
     };
     let text: string;
+    const availabilityRequest = coachAvailabilityRequest(input.text!);
     if (unsafeRequest(input.text!)) text = SAFETY_REPLY;
-    else if(coachAvailabilityRequest(input.text!)){
+    else if(availabilityRequest){
       await reauthorize();
-      coachAvailability=await withinAssistantDeadline(bookingTools.availableCoaches(coachAvailabilityRequest(input.text!)!),40000);
+      const gym = availabilityRequest.selectedBranch ? await selectedGym(db, org, uid) : undefined;
+      if (availabilityRequest.selectedBranch && !gym) {
+        await reauthorize();
+        return { responseId: randomUUID(), text: 'Choose an active branch in Find a gym, then ask again.',
+          sources: ['branch_directory'], telemetry: { ...metrics, responseTimeMillis: Math.max(0, Date.now() - started) } };
+      }
+      coachAvailability=await withinAssistantDeadline(bookingTools.availableCoaches({...availabilityRequest, branchId: gym?.id}),40000);
       metrics.toolCalls=bookingTools.availabilityToolCalls;
       sources.add('list_coaches');sources.add('get_coaching_options');
-      const relativeDay=coachAvailabilityRequest(input.text!)?.dayOffset;
+      const relativeDay=availabilityRequest.dayOffset;
       const when=`${relativeDay===1?'Tomorrow · ':relativeDay===0?'Today · ':''}${coachAvailability.localDate} (${coachAvailability.timeZone})`;
       text=coachAvailability.items.length
-        ? `These Coaches have verified 60-minute times on ${when}. Nothing is reserved or paid. Review a time in checkout; price and availability are checked again.${coachAvailability.truncated?' This is a limited selection; additional Coaches or times may exist.':''}`
-        : `No eligible 60-minute times were found on ${when} in the checked Coach directory page.${coachAvailability.truncated?' More Coaches may exist on another page.':''} This does not mean every Coach is unavailable. Try another date or browse Coaches.`;
+        ? `These Coaches have verified 60-minute times on ${when}${gym ? ` at ${gym.name}` : ''}. Review a time in checkout to confirm current price and availability.${coachAvailability.truncated?' Additional Coaches or times may exist.':''}`
+        : `No eligible 60-minute times ${availabilityRequest.coachName ? `for ${availabilityRequest.coachName} ` : ''}were found on ${when}${gym ? ` at ${gym.name}` : ''} in the checked Coach directory page.${coachAvailability.truncated?' More Coaches may exist on another page.':''} Try another date or browse Coaches.`;
     }
     else if (personalMetricsIntent(input.text!)) {
       const facts = await progress();

@@ -1,6 +1,9 @@
 import 'assistant_reply_view.dart';
 import 'assistant_reply_view_model.dart';
 import 'package:flutter/material.dart';
+import 'package:cloud_functions/cloud_functions.dart';
+import 'package:url_launcher/url_launcher.dart';
+import '../../../../app/routing/branch_directions.dart';
 import 'package:flutter/services.dart';
 import '../../application/chat_bloc.dart';
 import 'package:syncfusion_flutter_charts/charts.dart';
@@ -523,6 +526,10 @@ class _Bubble extends StatelessWidget {
                 Padding(
                     padding: const EdgeInsets.only(top: 12),
                     child: _EquipmentCard(equipment: equipment)),
+              if (attachment case BranchChatAttachment gym)
+                Padding(
+                    padding: const EdgeInsets.only(top: 12),
+                    child: _BranchChatCard(gym: gym)),
               if (attachment
                   case ProgressChartAttachment(
                     :final title,
@@ -613,6 +620,59 @@ class _Bubble extends StatelessWidget {
       child: compact
           ? Tooltip(message: label, excludeFromSemantics: true, child: content)
           : content,
+    );
+  }
+}
+
+class _BranchChatCard extends StatelessWidget {
+  const _BranchChatCard({required this.gym});
+  final BranchChatAttachment gym;
+
+  @override
+  Widget build(BuildContext context) {
+    final branch = gym.branch;
+    final cover = branch['coverUrl'];
+    final address = branch['address'];
+    final hours = branch['openingHours'];
+    return Panel(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (cover is String && cover.isNotEmpty)
+            ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: SizedBox(height: 126, width: double.infinity, child: _networkHero(cover)),
+            ),
+          Text(branch['displayName'] as String, style: Theme.of(context).textTheme.titleMedium),
+          if (address is String && address.isNotEmpty) Text(address),
+          Text(branchOpeningStatus(hours is List ? hours : const [])),
+          Wrap(
+            children: [
+              TextButton(
+                onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(
+                  builder: (_) => BranchDirectoryPage(
+                    initialDetails: branch,
+                    request: (input) async {
+                      final result = await FirebaseFunctions.instanceFor(region: 'asia-southeast1')
+                          .httpsCallable('branchManagementCommand')
+                          .call({'organizationId': gym.organizationId, ...input});
+                      return Map<String, dynamic>.from(result.data as Map);
+                    },
+                    openDirections: (uri) => launchUrl(uri, mode: LaunchMode.externalApplication),
+                  ),
+                )),
+                child: const Text('View branch'),
+              ),
+              if (branchDestination(branch) != null)
+                TextButton.icon(
+                  onPressed: () => openBranchDirections(context, branch),
+                  icon: const Icon(Icons.directions_outlined),
+                  label: const Text('Get directions'),
+                ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 }

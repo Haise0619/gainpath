@@ -243,13 +243,19 @@ class FirebaseChatRepository extends ChatRepository {
     final availability = data['coachAvailability'] == null
         ? null
         : CoachAvailabilityAttachment.fromJson(data['coachAvailability']);
+    final branch = data['branchCard'];
+    final branchCard = branch is Map &&
+            branch['branchId'] is String &&
+            branch['displayName'] is String
+        ? BranchChatAttachment(scope.organizationId, Map<String, dynamic>.from(branch))
+        : null;
     if (contextVersion == _contextVersion && coachDirectory != null) {
       _suggestedCoachIds.addAll(coachDirectory.coaches.map((c) => c.coachId));
     }
     return ChatMessage(answer, false,
         id: id,
         attachment: data['bookingSuggestion'] == null
-            ? availability ?? coachDirectory
+            ? availability ?? coachDirectory ?? branchCard
             : BookingSuggestionAttachment.fromJson(
                 Map<String, dynamic>.from(data['bookingSuggestion'] as Map)),
         sources: data['sources'] is List

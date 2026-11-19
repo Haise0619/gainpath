@@ -50,7 +50,7 @@ export class AssistantBookingTools {
  /** Explicit date intent is resolved without an AI-generated date or slot.
   * All candidates on this bounded directory page are checked; never call an
   * eligible directory entry "available" before the existing slot service. */
- async availableCoaches(request:{dayOffset?:0|1;localDate?:string}):Promise<AssistantCoachAvailability>{
+ async availableCoaches(request:{dayOffset?:0|1;localDate?:string;coachName?:string;branchId?:string}):Promise<AssistantCoachAvailability>{
    await this.scope();
    const policy=await this.store.transact(async tx=>{
      await currentBookingMembership(tx,this.org,this.auth!.uid);await requireBookingOrganization(tx,this.org);
@@ -60,11 +60,15 @@ export class AssistantBookingTools {
    const day=request.localDate??new Date(dateEpoch(today)+(request.dayOffset??0)*86400000).toISOString().slice(0,10);
    dateEpoch(day);
    this.availabilityToolCalls=1;
-   const directory=await this.execute('list_coaches',{}) as {items:{coachId:string}[];nextAfterCoachId?:string};
-   const pages=await mapAssistantCandidates(directory.items,async coach=>{
+   const directory=await this.execute('list_coaches',{}) as {items:{coachId:string;name:string}[];nextAfterCoachId?:string};
+   const name = request.coachName?.trim().toLowerCase();
+   const candidates = directory.items.filter(coach => !name || coach.name.toLowerCase().trim() === name
+     || coach.name.toLowerCase().trim().split(/\s+/)[0] === name);
+   const pages=await mapAssistantCandidates(candidates,async coach=>{
      this.availabilityToolCalls++;
      const value=await this.execute('get_coaching_options',{coachId:coach.coachId,localDate:day,durationMinutes:60}) as {items:({coachName:string;branchName:string;branchId:string;startAtMillis:number;endAtMillis:number;startLabel:string;endLabel:string;amountMinor:number;currency:'MYR'})[]};
-     return value.items.map(slot=>({coachId:coach.coachId,name:slot.coachName,branchId:slot.branchId,branchName:slot.branchName,startAtMillis:slot.startAtMillis,endAtMillis:slot.endAtMillis,startLabel:slot.startLabel,endLabel:slot.endLabel,amountMinor:slot.amountMinor,currency:slot.currency}));
+     return value.items.filter(slot => !request.branchId || slot.branchId === request.branchId)
+       .map(slot=>({coachId:coach.coachId,name:slot.coachName,branchId:slot.branchId,branchName:slot.branchName,startAtMillis:slot.startAtMillis,endAtMillis:slot.endAtMillis,startLabel:slot.startLabel,endLabel:slot.endLabel,amountMinor:slot.amountMinor,currency:slot.currency}));
    });
    this.context=undefined;
    await this.scope();
@@ -83,7 +87,7 @@ export class AssistantBookingTools {
      const candidates=await mapAssistantCandidates(ids.slice(0,20),async coachId=>{
        try{
          const failure=await coachEligibilityFailure(this.identity,coachId);if(failure)throw failure;
-         const branches=await this.store.transact(async tx=>{const m=await currentBookingMembership(tx,this.org,this.auth!.uid);return (await bookingCoachScope(tx,this.org,coachId,m.branchIds)).permitted;});
+         const branches=await this.store.transact(async tx=>{await currentBookingMembership(tx,this.org,this.auth!.uid);return (await bookingCoachScope(tx,this.org,coachId)).permitted;});
          const quote=await getBookingPaymentQuote(this.store,this.auth,{schemaVersion:1,organizationId:this.org,coachId,branchId:branches[0],durationMinutes:60});
          return {coachId,name:quote.coachName,branchId:branches[0],branchName:quote.branchName,amountMinor:quote.amountMinor,currency:quote.currency};
        }catch(e){if(!(e instanceof DomainError)||!['permission-denied','failed-precondition','not-found'].includes(e.code))throw e;}

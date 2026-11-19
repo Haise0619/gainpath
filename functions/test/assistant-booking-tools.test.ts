@@ -37,6 +37,12 @@ it('finds actual tomorrow slots in the organization timezone without reserving a
  expect(result.items[0]).toMatchObject({coachId:'coach-1',name:'Fixture Coach',branchId:'branch-1',amountMinor:12500,startAtMillis:start});
  expect([...store.documents]).toEqual(before);
 });
+it('filters verified slots by the requested Coach name and branch', async () => {
+ const matching = await make().availableCoaches({ dayOffset: 1, coachName: 'fixture', branchId: 'branch-1' });
+ expect(matching.items[0]).toMatchObject({ coachId: 'coach-1', branchId: 'branch-1' });
+ expect((await make().availableCoaches({ dayOffset: 1, coachName: 'another' })).items).toEqual([]);
+ expect((await make().availableCoaches({ dayOffset: 1, branchId: 'branch-2' })).items).toEqual([]);
+});
 it('uses the organization calendar across UTC midnight and month-end, not the client date',async()=>{
  const late=Date.parse('2026-10-31T20:00:00Z');
  const tools=new AssistantBookingTools(store,auth,'org-1',async()=>[],eligibleCoach,()=>late);

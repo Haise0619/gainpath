@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
 import 'package:gainpath_domain/coaching.dart';
+import 'widgets/booking_location.dart';
 
 /// Confirmation uses the verified booking/payment response.
 /// Payment responses retain the checkout schedule after rescheduling.
@@ -82,6 +83,8 @@ class BookingConfirmedScreen extends StatelessWidget {
                 DetailRow('Date & time', dateLabel),
                 const Divider(height: 24, color: AppColors.hairline),
                 DetailRow('Location', branch),
+                if (payment != null)
+                  BookingLocation(bookingId: payment.bookingId),
                 const Divider(height: 24, color: AppColors.hairline),
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),

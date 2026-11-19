@@ -50,3 +50,18 @@ it('validates coordinates and preserves existing branch fields on an Admin edit'
   })).resolves.toMatchObject({ branch: { latitude: 3.12, timeZone: 'Asia/Kuala_Lumpur' } });
   expect(store.documents.get('orgs/gym/branches/main')?.legacyField).toBe(true);
 });
+
+it('returns the booking owner’s historical location even after a branch change', async () => {
+  const store = fixture();
+  store.documents.set('orgs/gym/branches/old', {
+    status: 'inactive', displayName: 'Old', address: 'Recorded address',
+  });
+  store.documents.set('orgs/gym/bookings/owned', { memberId: 'member', branchId: 'old' });
+  store.documents.set('orgs/gym/bookings/private', { memberId: 'someone-else', branchId: 'old' });
+  const lookup = (bookingId: string) =>
+    branchManagement(store, list, actor('member'), request('bookingLocation', { bookingId }));
+  await expect(lookup('owned')).resolves.toEqual({
+    branch: { branchId: 'old', displayName: 'Old', address: 'Recorded address' },
+  });
+  await expect(lookup('private')).rejects.toMatchObject({ code: 'permission-denied' });
+});

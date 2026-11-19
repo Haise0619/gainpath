@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:gainpath_domain/gainpath_domain.dart';
 import 'package:gainpath_domain/coaching.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
+import 'widgets/booking_location.dart';
 
 class MemberBookingChangeScreen extends StatefulWidget {
   const MemberBookingChangeScreen(
@@ -202,6 +203,12 @@ class _ChangeState extends State<MemberBookingChangeScreen> {
               title: Text(
                   widget.reschedule ? 'Reschedule session' : 'Cancel session')),
           body: PageBody(children: [
+            if (widget.reschedule)
+              BookingLocation(
+                bookingId: widget.booking.bookingId,
+                organizationId: widget.booking.organizationId,
+                showName: true,
+              ),
             Panel(
                 child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,

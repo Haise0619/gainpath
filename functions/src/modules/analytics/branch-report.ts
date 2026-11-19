@@ -68,6 +68,10 @@ export async function readBranchReport(db: Firestore, org: string, input: Record
     equipmentUnits: liveStock.reduce((sum, item) => sum + (clockNumber(item.quantity) ? item.quantity : 0), 0),
     maintenanceUnits: liveStock.reduce((sum, item) => sum + (clockNumber(item.maintenance) ? item.maintenance : 0), 0),
     bookingsCreated: booked.length,
+    completedSessions: bookings.filter(item => matches(item.branchId)
+      && item.status === 'completed' && inRange(item.startAtMillis)).length,
+    cancelledSessions: bookings.filter(item => matches(item.branchId)
+      && item.status === 'cancelled' && inRange(item.startAtMillis)).length,
     coachingMinor: cleared.reduce((sum, item) => sum + (clockNumber(item.amountMinor) ? item.amountMinor : 0), 0),
     acceptedWorkouts: workouts.filter(item => matches(item.branchId) && item.status === 'accepted' && inRange(item.acceptedAtMillis)).length,
     gymVisits: hourCounts.reduce((sum, count) => sum + count, 0),

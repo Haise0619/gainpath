@@ -80,13 +80,30 @@ export async function branchManagement(store: DocumentStore, list: BranchList, a
   const uid = auth!.uid;
   const root = `orgs/${org}`;
   const action = input.action;
-  if (action !== 'list' && action !== 'save' && action !== 'setHome' && action !== 'setSelected') {
+  if (action !== 'list' && action !== 'save' && action !== 'setHome' && action !== 'setSelected' && action !== 'bookingLocation') {
     throw new DomainError('invalid-argument', 'Unsupported branch action.');
   }
   const scope = async () => store.transact(async tx => {
     await requireBookingOrganization(tx, org);
     return currentBookingMembership(tx, org, uid);
   });
+  if (action === 'bookingLocation') {
+    const bookingId = requiredIdentifier(input.bookingId, 'bookingId');
+    return store.transact(async tx => {
+      await requireBookingOrganization(tx, org);
+      const actor = await currentBookingMembership(tx, org, uid);
+      const booking = await tx.get(`${root}/bookings/${bookingId}`);
+      if (actor.role !== 'member' || booking?.memberId !== uid) {
+        throw new DomainError('permission-denied', 'Booking location is unavailable.');
+      }
+      const id = requiredIdentifier(booking.branchId, 'branchId');
+      const branch = await tx.get(`${root}/branches/${id}`);
+      return branch ? { branch: { branchId: id, ...Object.fromEntries(
+        ['displayName', 'address', 'latitude', 'longitude']
+          .filter(key => branch[key] !== undefined).map(key => [key, branch[key]])),
+      } } : {};
+    });
+  }
   if (action === 'list') {
     const actor = await scope();
     const activeOnly = actor.role !== 'admin';

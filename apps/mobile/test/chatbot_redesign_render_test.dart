@@ -48,6 +48,7 @@ void main() {
     ('welcome', 390.0, 1.0),
     ('large-text', 320.0, 2.0),
     ('workout-card', 390.0, 1.0),
+    ('branch-card', 390.0, 1.0),
     ('keyboard', 360.0, 1.0),
     ('general-reply', 390.0, 1.0),
     ('general-reply-keyboard', 320.0, 2.0),
@@ -118,6 +119,15 @@ void main() {
           '- Cables: try a light chest fly.\n\n'
           'Start with a load you can move smoothly for each rep.';
       if (general) repo.reply = const ChatMessage(answer, false);
+      if (scenario.$1 == 'branch-card') {
+        repo.reply = ChatMessage('Here are the recorded branch details.', false,
+            attachment: BranchChatAttachment('fixture-org', {
+              'branchId': 'north',
+              'displayName': 'North Gym',
+              'address': 'Fixture address',
+              'openingHours': List.generate(7, (_) => {'allDay': true}),
+            }));
+      }
       final key = GlobalKey();
       await tester.pumpWidget(RepositoryProvider<ChatRepository>.value(
           value: repo,
@@ -132,6 +142,15 @@ void main() {
                   key: key,
                   child: ChatbotScreen(connected: true, onOpenFact: (_) {})))));
       await tester.pumpAndSettle();
+      if (scenario.$1 == 'branch-card') {
+        await tester.enterText(find.byType(TextField), 'How do I get to this gym?');
+        await tester.tap(find.byTooltip('Send message'));
+        await tester.pumpAndSettle();
+        expect(find.text('North Gym'), findsOneWidget);
+        expect(find.text('Fixture address'), findsOneWidget);
+        expect(find.text('View branch'), findsOneWidget);
+        expect(find.text('Get directions'), findsOneWidget);
+      }
       if (scenario.$1 == 'workout-card') {
         await tester.ensureVisible(find.text('Training help'));
         await tester.tap(find.text('Training help'));
@@ -184,6 +203,12 @@ void main() {
         await tester.pumpAndSettle();
         expect(repo.savedAdvice.single, contains('Completed repetitions: 12'));
         expect(repo.savedAdvice.single, contains('Not assessed'));
+      }
+      if (scenario.$1 == 'branch-card') {
+        await tester.ensureVisible(find.text('View branch'));
+        await tester.tap(find.text('View branch'));
+        await tester.pumpAndSettle();
+        expect(find.widgetWithText(AlertDialog, 'North Gym'), findsOneWidget);
       }
     });
   }
