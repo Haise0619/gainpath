@@ -16,6 +16,7 @@ class AdminCoachScheduleView extends StatefulWidget {
 }
 
 class _AdminCoachScheduleViewState extends State<AdminCoachScheduleView> {
+  String? _branch;
   late Future<CoachAvailabilityContext> future =
       widget.repository.load(coachId: widget.coachId);
   Future<CoachRosterSnapshot>? roster;
@@ -56,6 +57,8 @@ class _AdminCoachScheduleViewState extends State<AdminCoachScheduleView> {
                   child: Text('Coach schedule unavailable. Refresh to retry.'));
             }
             final data = snapshot.data!;
+            final branches = [...data.assignedBranchIds]..sort();
+            final branchFilter = branches.contains(_branch) ? _branch : null;
             if (roster == null) _loadRoster();
             final first = data.days.first.localDate;
             final next = DateTime.parse('${first}T00:00:00Z')
@@ -68,6 +71,18 @@ class _AdminCoachScheduleViewState extends State<AdminCoachScheduleView> {
                 .substring(0, 10);
             return PageBody(children: [
               Text('Organization time: ${data.timeZone}'),
+              if (branches.isNotEmpty)
+                DropdownButton<String>(
+                  value: branchFilter ?? '',
+                  items: [
+                    const DropdownMenuItem(
+                        value: '', child: Text('All branches')),
+                    for (final branch in branches)
+                      DropdownMenuItem(value: branch, child: Text(branch)),
+                  ],
+                  onChanged: (branch) =>
+                      setState(() => _branch = branch == '' ? null : branch),
+                ),
               if (roster != null)
                 FutureBuilder<CoachRosterSnapshot>(
                     future: roster,
@@ -155,9 +170,11 @@ class _AdminCoachScheduleViewState extends State<AdminCoachScheduleView> {
               for (final day in data.days) ...[
                 Text(day.localDate,
                     style: Theme.of(context).textTheme.titleMedium),
-                if (day.windows.isEmpty)
+                if (!day.windows.any(
+                    (w) => branchFilter == null || w.branchId == branchFilter))
                   const Text('No permitted availability windows.'),
-                for (final w in day.windows)
+                for (final w in day.windows.where(
+                    (w) => branchFilter == null || w.branchId == branchFilter))
                   ListTile(
                       contentPadding: EdgeInsets.zero,
                       title: Text(
