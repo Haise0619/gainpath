@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
+import 'package:syncfusion_flutter_charts/charts.dart';
 
 class BranchReportDialog extends StatefulWidget {
   const BranchReportDialog(
@@ -20,6 +21,7 @@ class BranchReportDialog extends StatefulWidget {
 }
 
 class _BranchReportDialogState extends State<BranchReportDialog> {
+  int _dailyLimit = 15;
   late final Future<List<Map<String, dynamic>>> _branches =
       loadReportBranches(widget.request);
   late String? _branch = widget.fixedScope;
@@ -83,6 +85,75 @@ class _BranchReportDialogState extends State<BranchReportDialog> {
       .toIso8601String()
       .substring(0, 16)
       .replaceFirst('T', ' ');
+
+  List<(String, String)> get _dailyColumns => switch (widget.category) {
+        'Financial' => [('coachingMinor', 'Coaching receipts (RM)')],
+        'Fitness' => [('workouts', 'Accepted workouts')],
+        'Coaching' => [('bookings', 'Bookings'), ('completed', 'Completed'),
+            ('cancelled', 'Cancelled')],
+        'Engagement' => [('visits', 'Recorded visits')],
+        _ => [('bookings', 'Bookings'), ('workouts', 'Accepted workouts'),
+            ('visits', 'Recorded visits'), ('coachingMinor', 'Coaching receipts (RM)')],
+      };
+
+  num? _value(Map row, String field) {
+    final value = row[field];
+    return value is num ? (field == 'coachingMinor' ? value / 100 : value) : null;
+  }
+
+  Widget _dailyTrend(List<Map> rows) {
+    final columns = _dailyColumns.where((column) =>
+        rows.any((row) => _value(row, column.$1) != null)).toList();
+    if (columns.isEmpty) return const Text('Daily activity unavailable for this selection.');
+    final (metric, label) = columns.first;
+    final first = DateTime.parse(rows.first['date'] as String);
+    final last = DateTime.parse(rows.last['date'] as String);
+    return Column(children: [
+      SizedBox(
+        height: 230,
+        child: SfCartesianChart(
+          title: ChartTitle(text: label),
+            primaryXAxis: DateTimeAxis(
+              minimum: first == last ? first.subtract(const Duration(days: 1)) : first,
+              maximum: first == last ? last.add(const Duration(days: 1)) : last,
+              rangePadding: ChartRangePadding.none,
+            ),
+          tooltipBehavior: TooltipBehavior(enable: true),
+          series: <CartesianSeries<Map, DateTime>>[
+            LineSeries<Map, DateTime>(
+              dataSource: rows,
+              xValueMapper: (row, _) => DateTime.parse(row['date'] as String),
+              yValueMapper: (row, _) => _value(row, metric),
+              markerSettings: const MarkerSettings(isVisible: true),
+            ),
+          ],
+        ),
+      ),
+      SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: DataTable(
+          columns: [
+            const DataColumn(label: Text('Date (MYT)')),
+            for (final (_, label) in columns)
+              DataColumn(label: Text(label), numeric: true),
+          ],
+          rows: [
+            for (final row in rows.reversed.take(_dailyLimit))
+              DataRow(cells: [
+                DataCell(Text(row['date'] as String)),
+                for (final (key, _) in columns)
+                  DataCell(Text(_value(row, key)?.toString() ?? '—')),
+              ]),
+          ],
+        ),
+      ),
+      if (rows.length > _dailyLimit)
+        TextButton(
+          onPressed: () => setState(() => _dailyLimit += 15),
+          child: const Text('Show more dates'),
+        ),
+    ]);
+  }
 
   Widget? _scopeChart(Map<String, dynamic> result) {
     final metrics = switch (widget.category) {
@@ -165,8 +236,14 @@ class _BranchReportDialogState extends State<BranchReportDialog> {
               return const Text('Branch report unavailable for this range.');
             }
             final result = snapshot.data!;
+            final daily = (result['daily'] as List? ?? const [])
+                .whereType<Map>()
+                .where((row) => row['date'] is String &&
+                    DateTime.tryParse(row['date'] as String) != null)
+                .toList();
             return Column(children: [
               if (_scopeChart(result) case final Widget chart) chart,
+              if (widget.embedded) _dailyTrend(daily),
               for (final (label, value) in _metrics(result))
                 ListTile(
                     dense: true,
@@ -184,6 +261,12 @@ class _BranchReportDialogState extends State<BranchReportDialog> {
                   ['End MYT (exclusive)', _myt(widget.range.end)],
                   ['Metric', 'Value'],
                   for (final (label, value) in _metrics(result)) [label, value],
+                  if (daily.isNotEmpty) ...[
+                    [],
+                    ['Date (MYT)', for (final (_, label) in _dailyColumns) label],
+                    for (final row in daily)
+                      [row['date'], for (final (key, _) in _dailyColumns) _value(row, key)],
+                  ],
                 ]),
               ),
             ]);

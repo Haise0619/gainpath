@@ -23,6 +23,8 @@ class BranchDirectoryPage extends StatefulWidget {
     this.initialDetails,
     this.onOpenReports,
     this.onOpenCoaches,
+    this.onOpenBookings,
+    this.onOpenMembers,
   });
 
   final BranchRequest request;
@@ -35,6 +37,8 @@ class BranchDirectoryPage extends StatefulWidget {
   final Map<String, dynamic>? initialDetails;
   final ValueChanged<String>? onOpenReports;
   final ValueChanged<String>? onOpenCoaches;
+  final ValueChanged<String>? onOpenBookings;
+  final ValueChanged<String>? onOpenMembers;
 
   @override
   State<BranchDirectoryPage> createState() => _BranchDirectoryPageState();
@@ -186,6 +190,16 @@ class _BranchDirectoryPageState extends State<BranchDirectoryPage> {
           ),
         ),
         actions: [
+          if (widget.admin && widget.onOpenMembers != null)
+            TextButton(
+              onPressed: () => Navigator.pop(context, 'members'),
+              child: const Text('Members'),
+            ),
+          if (widget.admin && widget.onOpenBookings != null)
+            TextButton(
+              onPressed: () => Navigator.pop(context, 'bookings'),
+              child: const Text('Bookings'),
+            ),
           if (widget.admin && widget.onOpenCoaches != null)
             TextButton(
               onPressed: () => Navigator.pop(context, 'coaches'),
@@ -234,6 +248,14 @@ class _BranchDirectoryPageState extends State<BranchDirectoryPage> {
       ),
     );
     if (!mounted || action == null) return;
+    if (action == 'members') {
+      widget.onOpenMembers?.call(id);
+      return;
+    }
+    if (action == 'bookings') {
+      widget.onOpenBookings?.call(id);
+      return;
+    }
     if (action == 'coaches') {
       widget.onOpenCoaches?.call(id);
       return;

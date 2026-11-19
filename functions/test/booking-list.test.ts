@@ -23,6 +23,13 @@ beforeEach(() => {
   store.documents.set('orgs/org-1/members/admin-1', { organizationId: 'org-1', role: 'admin', status: 'active', branchIds: [] });
   store.documents.set('orgs/org-1/bookings/booking-1', structuredClone(record));
 });
+it('scopes Admin bookings by the actual booking branch and rejects Member access', async () => {
+  await expect(read('member-1', {branchId: 'branch-1'}))
+    .rejects.toMatchObject({code: 'permission-denied'});
+  const page = await read('admin-1', {branchId: 'branch-1'});
+  expect(queries.at(-1)).toMatchObject({ownerField: 'branchId', ownerId: 'branch-1'});
+  expect(page.records.map(record => record.branchId)).toEqual(['branch-1']);
+});
 it('keeps cancelled records compatible with old readers unless the new resolution is requested', async () => {
   Object.assign(store.documents.get('orgs/org-1/bookings/booking-1')!, {
     status: 'cancelled', resolution: 'member_confirmed_cancelled', resolvedAtMillis: now,

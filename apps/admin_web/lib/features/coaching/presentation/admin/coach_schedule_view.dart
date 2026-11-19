@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:flutter/material.dart';
 import 'package:gainpath_domain/coaching.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
@@ -7,16 +9,19 @@ class AdminCoachScheduleView extends StatefulWidget {
       {super.key,
       required this.repository,
       required this.coachId,
-      required this.isCurrent});
+      required this.isCurrent,
+      this.branchRequest});
   final CoachAvailabilityRepository repository;
   final String coachId;
   final bool Function() isCurrent;
+  final BranchRequest? branchRequest;
   @override
   State<AdminCoachScheduleView> createState() => _AdminCoachScheduleViewState();
 }
 
 class _AdminCoachScheduleViewState extends State<AdminCoachScheduleView> {
   String? _branch;
+  bool _saving = false;
   late Future<CoachAvailabilityContext> future =
       widget.repository.load(coachId: widget.coachId);
   Future<CoachRosterSnapshot>? roster;
@@ -31,9 +36,168 @@ class _AdminCoachScheduleViewState extends State<AdminCoachScheduleView> {
   void _load([String? date]) => setState(() {
     future = widget.repository.load(coachId: widget.coachId, firstLocalDate: date);
   });
+
+  Future<void> _editAssignments() async {
+    final request = widget.branchRequest;
+    if (_saving || request == null || !widget.isCurrent()) return;
+    setState(() => _saving = true);
+    try {
+      final current = await request({
+        'action': 'coachAssignments', 'coachId': widget.coachId,
+      });
+      final expected = List<String>.from(current['branchIds'] as List);
+      final selection = expected.toSet();
+      final options = <String, String>{for (final id in expected) id: id};
+      String? cursor;
+      final cursors = <String>{};
+      do {
+        final page = await request({'action': 'list', if (cursor != null) 'afterId': cursor});
+        for (final row in page['records'] as List) {
+          if (row['status'] == 'active' || selection.contains(row['branchId'])) {
+            options[row['branchId'] as String] =
+                '${row['displayName']}${row['status'] == 'active' ? '' : ' (inactive)'}';
+          }
+        }
+        cursor = page['nextAfterId'] as String?;
+        if (cursor != null && !cursors.add(cursor)) throw StateError('Branch list did not advance.');
+      } while (cursor != null);
+      if (!mounted || !widget.isCurrent()) return;
+      final result = await showDialog<List<String>>(
+        context: context,
+        builder: (context) => StatefulBuilder(builder: (context, update) =>
+          AlertDialog(
+            title: const Text('Assigned branches'),
+            content: SingleChildScrollView(
+              child: Column(mainAxisSize: MainAxisSize.min, children: [
+                for (final option in options.entries)
+                  CheckboxListTile(
+                    title: Text(option.value),
+                    value: selection.contains(option.key),
+                    onChanged: (checked) => update(() {
+                      if (checked == true) {
+                        selection.add(option.key);
+                      } else {
+                        selection.remove(option.key);
+                      }
+                    }),
+                  ),
+              ]),
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+              FilledButton(
+                onPressed: selection.isEmpty || selection.length > 8
+                    ? null : () => Navigator.pop(context, selection.toList()..sort()),
+                child: const Text('Save assignments'),
+              ),
+            ],
+          ),
+        ),
+      );
+      if (result == null || !mounted || !widget.isCurrent()) return;
+      await request({
+        'action': 'saveCoachAssignments', 'coachId': widget.coachId,
+        'expectedBranchIds': expected, 'branchIds': result,
+      });
+      if (mounted && widget.isCurrent()) {
+        roster = null;
+        _load();
+      }
+    } catch (_) {
+      if (mounted && widget.isCurrent()) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Assignments could not be saved. Check active schedule windows and refresh.'),
+        ));
+      }
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  Future<void> _edit(
+    CoachAvailabilityContext schedule,
+    CoachAvailabilityDay day,
+    DatedCoachWindow? original,
+  ) async {
+    if (_saving || !widget.isCurrent()) return;
+    var branch = original?.branchId ?? _branch ?? schedule.assignedBranchIds.first;
+    if (!schedule.assignedBranchIds.contains(branch)) {
+      branch = schedule.assignedBranchIds.first;
+    }
+    int? start = original?.startAtMillis, end = original?.endAtMillis;
+    final replacement = await showDialog<List<DatedCoachWindow>>(
+      context: context,
+      builder: (context) => StatefulBuilder(builder: (context, update) =>
+        AlertDialog(
+          title: Text(original == null ? 'Add availability' : 'Edit availability'),
+          content: Column(mainAxisSize: MainAxisSize.min, children: [
+            DropdownButtonFormField<String>(
+              initialValue: branch,
+              decoration: const InputDecoration(labelText: 'Branch'),
+              items: [for (final id in schedule.assignedBranchIds)
+                DropdownMenuItem(value: id, child: Text(id))],
+              onChanged: (value) { if (value != null) update(() => branch = value); },
+            ),
+            for (final isStart in [true, false])
+              DropdownButtonFormField<int>(
+                initialValue: isStart ? start : end,
+                decoration: InputDecoration(labelText: isStart ? 'Start' : 'End'),
+                items: [for (final time in day.boundaries)
+                  DropdownMenuItem(value: time.atMillis, child: Text(time.label))],
+                onChanged: (value) => update(() {
+                  if (isStart) { start = value; } else { end = value; }
+                }),
+              ),
+          ]),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+            if (original != null)
+              TextButton(
+                onPressed: () => Navigator.pop(context,
+                    day.windows.where((window) => !identical(window, original)).toList()),
+                child: const Text('Remove'),
+              ),
+            FilledButton(
+              onPressed: start == null || end == null || start! >= end!
+                  ? null : () => Navigator.pop(context, [
+                    ...day.windows.where((window) => !identical(window, original)),
+                    DatedCoachWindow(branchId: branch, startAtMillis: start!, endAtMillis: end!),
+                  ]),
+              child: const Text('Save availability'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (replacement == null || !mounted || !widget.isCurrent()) return;
+    setState(() => _saving = true);
+    final random = Random.secure();
+    final requestId = List.generate(16, (_) => random.nextInt(256)
+        .toRadixString(16).padLeft(2, '0')).join();
+    try {
+      await widget.repository.save(
+        baseline: day, context: schedule, windows: replacement, requestId: requestId,
+      );
+      if (mounted && widget.isCurrent()) _load(schedule.days.first.localDate);
+    } catch (error) {
+      if (mounted && widget.isCurrent()) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(error is CoachAvailabilityException
+              ? error.message : 'Could not save availability.'),
+        ));
+      }
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
   @override
   Widget build(BuildContext context) => Scaffold(
       appBar: AppBar(title: const Text('Coach schedule'), actions: [
+        if (widget.branchRequest != null)
+          TextButton(
+            onPressed: _saving ? null : _editAssignments,
+            child: const Text('Edit assigned branches'),
+          ),
         IconButton(
             tooltip: 'Refresh schedule',
             onPressed: () {
@@ -71,6 +235,7 @@ class _AdminCoachScheduleViewState extends State<AdminCoachScheduleView> {
                 .substring(0, 10);
             return PageBody(children: [
               Text('Organization time: ${data.timeZone}'),
+              Text('Assigned branches: ${branches.join(', ')}'),
               if (branches.isNotEmpty)
                 DropdownButton<String>(
                   value: branchFilter ?? '',
@@ -146,7 +311,7 @@ class _AdminCoachScheduleViewState extends State<AdminCoachScheduleView> {
                                         : block.reason)),
                           ]));
                     }),
-              const Text('Coach schedule; booking unavailable.'),
+              if (_saving) const LinearProgressIndicator(),
               Row(children: [
                 TextButton(
                     onPressed: first == data.todayLocalDate
@@ -170,6 +335,11 @@ class _AdminCoachScheduleViewState extends State<AdminCoachScheduleView> {
               for (final day in data.days) ...[
                 Text(day.localDate,
                     style: Theme.of(context).textTheme.titleMedium),
+                if (day.editable && day.boundaries.isNotEmpty && branches.isNotEmpty)
+                  TextButton(
+                    onPressed: _saving ? null : () => _edit(data, day, null),
+                    child: const Text('Add availability'),
+                  ),
                 if (!day.windows.any(
                     (w) => branchFilter == null || w.branchId == branchFilter))
                   const Text('No permitted availability windows.'),
@@ -179,7 +349,14 @@ class _AdminCoachScheduleViewState extends State<AdminCoachScheduleView> {
                       contentPadding: EdgeInsets.zero,
                       title: Text(
                           '${day.labelFor(w.startAtMillis)} – ${day.labelFor(w.endAtMillis)}'),
-                      subtitle: Text(w.branchId))
+                      subtitle: Text(w.branchId),
+                      trailing: day.editable && day.boundaries.isNotEmpty
+                          ? IconButton(
+                            tooltip: 'Edit availability',
+                            onPressed: _saving ? null : () => _edit(data, day, w),
+                            icon: const Icon(Icons.edit_outlined),
+                          )
+                          : null)
               ],
             ]);
           }));

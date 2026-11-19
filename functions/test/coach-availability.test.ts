@@ -12,6 +12,21 @@ import type { DocumentStore } from '../src/platform/firestore/store';
 import { org, root, now, date, start, auth, windows, seeds, read, save } from './coach-availability.fixture';
 function setup() { const store = new MemoryStore(); Object.entries(seeds()).forEach(([p, v]) => store.documents.set(p, v)); return store; }
 const path = `${root}/coachAvailability/coach/days/${date}`;
+it('lets Admin edit the actual Coach and rejects overlapping windows across branches', async () => {
+  const store = setup();
+  const input = {...save(), coachId: 'coach'};
+  await expect(saveCoachAvailabilityDayService(store, auth('member'), input, () => now))
+    .rejects.toMatchObject({code: 'permission-denied'});
+  const saved = await saveCoachAvailabilityDayService(store, auth('admin'), input, () => now);
+  expect(saved.coachId).toBe('coach');
+  expect(store.documents.get(path)?.windows).toEqual(windows);
+  const overlapping = {...save('overlap', 1, [
+    windows[0], {...windows[0], branchId: 'other'},
+  ]), coachId: 'coach'};
+  await expect(saveCoachAvailabilityDayService(store, auth('admin'), overlapping, () => now))
+    .rejects.toBeDefined();
+  expect(store.documents.get(path)?.windows).toEqual(windows);
+});
 it('creates/reads/edits/removes a dated day and replays receipts without changing protected data', async () => {
   const store = setup();
   const context = await getCoachAvailabilityService(store, auth('coach'), read(), () => now);

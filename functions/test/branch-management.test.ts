@@ -21,6 +21,27 @@ function fixture() {
   return store;
 }
 
+it('updates Coach membership and publication together using the expected assignment', async () => {
+  const store = fixture();
+  store.documents.set('users/coach', {organizationId: 'gym'});
+  store.documents.set('orgs/gym/members/coach', {organizationId: 'gym',
+    role: 'coach', status: 'active', branchIds: ['main']});
+  store.documents.set('orgs/gym/coaches/coach', {status: 'published',
+    revision: 2, branchIds: ['main'], displayName: 'Fixture Coach'});
+  const change = request('saveCoachAssignments', {
+    coachId: 'coach', expectedBranchIds: ['main'], branchIds: ['other', 'main'],
+  });
+  await expect(branchManagement(store,list,actor('member'),change))
+    .rejects.toMatchObject({code: 'permission-denied'});
+  await expect(branchManagement(store,list,actor('admin'),change))
+    .resolves.toEqual({branchIds: ['main', 'other']});
+  expect(store.documents.get('orgs/gym/coaches/coach')).toMatchObject({
+    revision: 3, displayName: 'Fixture Coach', branchIds: ['main', 'other'],
+  });
+  await expect(branchManagement(store,list,actor('admin'),change))
+    .rejects.toMatchObject({code: 'aborted'});
+});
+
 it('hides inactive branches from members and keeps home preference separate from booking access', async () => {
   const store = fixture();
   expect(await branchManagement(store, list, actor('member'), request('list'))).toMatchObject({

@@ -3,6 +3,10 @@ import { DomainError } from '../../platform/errors';
 import type { DocumentData, DocumentStore } from '../../platform/firestore/store';
 import { requiredIdentifier } from '../../platform/validation';
 import { currentBookingMembership, requireBookingOrganization } from '../coaching/booking-validation';
+import { currentBookingPolicy } from '../coaching/booking-validation';
+import { branchIds, localDate, plusDate } from '../coaching/coach-availability-contracts';
+import { storedRoster } from '../coaching/coach-roster-contracts';
+import { readAll } from '../../platform/firestore/store';
 
 type Actor = { uid: string; token: Record<string, unknown> } | undefined;
 type BranchRow = { id: string; data: DocumentData };
@@ -80,13 +84,72 @@ export async function branchManagement(store: DocumentStore, list: BranchList, a
   const uid = auth!.uid;
   const root = `orgs/${org}`;
   const action = input.action;
-  if (action !== 'list' && action !== 'save' && action !== 'setHome' && action !== 'setSelected' && action !== 'bookingLocation') {
+  if (action !== 'list' && action !== 'save' && action !== 'setHome' && action !== 'setSelected' && action !== 'bookingLocation' && action !== 'saveCoachAssignments' && action !== 'coachAssignments') {
     throw new DomainError('invalid-argument', 'Unsupported branch action.');
   }
   const scope = async () => store.transact(async tx => {
     await requireBookingOrganization(tx, org);
     return currentBookingMembership(tx, org, uid);
   });
+  if (action === 'coachAssignments') {
+    const coachId = requiredIdentifier(input.coachId, 'coachId');
+    return store.transact(async tx => {
+      await requireBookingOrganization(tx, org);
+      if ((await currentBookingMembership(tx, org, uid)).role !== 'admin') {
+        throw new DomainError('permission-denied', 'Admin access is required.');
+      }
+      const coach = await currentBookingMembership(tx, org, coachId);
+      if (coach.role !== 'coach') throw new DomainError('failed-precondition', 'Coach is unavailable.');
+      return {branchIds: coach.branchIds};
+    });
+  }
+  if (action === 'saveCoachAssignments') {
+    const coachId = requiredIdentifier(input.coachId, 'coachId');
+    const assigned = branchIds(input.branchIds);
+    const expected = branchIds(input.expectedBranchIds);
+    return store.transact(async tx => {
+      await requireBookingOrganization(tx, org);
+      if ((await currentBookingMembership(tx, org, uid)).role !== 'admin') {
+        throw new DomainError('permission-denied', 'Admin access is required.');
+      }
+      const coach = await currentBookingMembership(tx, org, coachId);
+      if (coach.role !== 'coach') throw new DomainError('failed-precondition', 'Coach is unavailable.');
+      if (JSON.stringify(coach.branchIds) !== JSON.stringify(expected)) {
+        throw new DomainError('aborted', 'Coach assignments changed. Refresh before retrying.');
+      }
+      const branches = await readAll(tx, assigned.map(id => `${root}/branches/${id}`));
+      if (branches.some((branch, index) => !branch ||
+        (branch.status !== 'active' && !expected.includes(assigned[index])))) {
+        throw new DomainError('failed-precondition', 'New assignments must use active branches.');
+      }
+      const removed = expected.filter(id => !assigned.includes(id));
+      const memberPath = `${root}/members/${coachId}`;
+      const profilePath = `${root}/coaches/${coachId}`;
+      const [member, publication] = await readAll(tx, [memberPath, profilePath]);
+      if (removed.length) {
+        const policy = currentBookingPolicy(await tx.get(`${root}/settings/booking`));
+        const today = localDate(clock(), policy.timeZone);
+        const availability = `${root}/coachAvailability/${coachId}`;
+        const roster = storedRoster(await tx.get(availability), policy.timeZone, expected);
+        const days = await readAll(tx, Array.from({length: 31}, (_, i) =>
+          `${availability}/days/${plusDate(today, i)}`));
+        if (roster.weeklyAvailability?.schedule.some(day => removed.includes(day.branchId)) ||
+          days.some(day => Array.isArray(day?.windows) && day.windows.some(window => removed.includes(window?.branchId)))) {
+          throw new DomainError('failed-precondition', 'Move or remove current schedule windows before removing that branch.');
+        }
+      }
+      const updatedAtMillis = clock();
+      if (publication?.status === 'published') {
+        if (!Number.isSafeInteger(publication.revision) || Number(publication.revision) < 1) {
+          throw new DomainError('failed-precondition', 'Coach publication requires review.');
+        }
+        tx.set(profilePath, {...publication, branchIds: assigned,
+          revision: Number(publication.revision) + 1, updatedAtMillis});
+      }
+      tx.set(memberPath, {...member, branchIds: assigned, updatedAtMillis});
+      return {branchIds: assigned};
+    });
+  }
   if (action === 'bookingLocation') {
     const bookingId = requiredIdentifier(input.bookingId, 'bookingId');
     return store.transact(async tx => {

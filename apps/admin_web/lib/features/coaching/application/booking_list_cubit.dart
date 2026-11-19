@@ -12,11 +12,12 @@ class BookingListState {
 
 class BookingListCubit extends Cubit<BookingListState> {
   BookingListCubit(
-      {required this.repository, required this.isCurrent, this.coachId})
+      {required this.repository, required this.isCurrent, this.coachId, this.branchId})
       : super(const BookingListState());
   final BookingListRepository repository;
   final bool Function() isCurrent;
   final String? coachId;
+  final String? branchId;
   int _generation = 0;
   bool _current(int generation) {
     if (isClosed) return false;
@@ -44,7 +45,17 @@ class BookingListCubit extends Cubit<BookingListState> {
         records: more ? previous.records : const [],
         busy: true));
     try {
-      final page = await repository.load(
+      final source = repository;
+      final branch = branchId;
+      if (branch != null && source is! BranchBookingListRepository) {
+        throw const BookingException('failed-precondition');
+      }
+      final page = branch != null
+          ? await (source as BranchBookingListRepository).loadBranch(
+              branch,
+              firstLocalDate: more ? previous.page!.firstLocalDate : null,
+              cursor: more ? previous.page!.nextCursor : null)
+          : await source.load(
           coachId: coachId,
           firstLocalDate: more ? previous.page!.firstLocalDate : null,
           cursor: more ? previous.page!.nextCursor : null);

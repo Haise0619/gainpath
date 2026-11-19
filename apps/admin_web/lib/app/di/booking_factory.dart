@@ -10,10 +10,12 @@ class AdminBookingListRoute extends StatefulWidget {
       {super.key,
       required this.session,
       required this.repository,
-      required this.coachId});
+      this.coachId,
+      this.branchId});
   final AuthSession session;
   final BookingListRepository repository;
-  final String coachId;
+  final String? coachId;
+  final String? branchId;
   @override
   State<AdminBookingListRoute> createState() => _AdminBookingListRouteState();
 }
@@ -43,6 +45,7 @@ class _AdminBookingListRouteState extends State<AdminBookingListRoute> {
           ? AdminBookingListView(
               repository: widget.repository,
               coachId: widget.coachId,
+              branchId: widget.branchId,
               isCurrent: guard!.isCurrent)
           : const Scaffold(
               body: Center(

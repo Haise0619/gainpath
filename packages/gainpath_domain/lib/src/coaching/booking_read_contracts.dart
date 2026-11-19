@@ -647,5 +647,10 @@ abstract interface class BookingListRepository {
       BookingCursor? cursor});
 }
 
+abstract interface class BranchBookingListRepository {
+  Future<BookingPage> loadBranch(String branchId,
+      {String? firstLocalDate, BookingCursor? cursor});
+}
+
 // Keep validators internal to the public booking contract surface.
 String _bookingIdValue(dynamic value) => bookingId(value);

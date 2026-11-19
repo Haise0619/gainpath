@@ -67,9 +67,11 @@ class _InitialsAvatar extends StatelessWidget {
 /// card with clean search, segmented status filters, SaaS data table,
 /// and smooth pagination while maintaining complete backward compatibility.
 class MembersScreen extends StatefulWidget {
-  const MembersScreen({super.key, this.live = false});
+  const MembersScreen({super.key, this.live = false, this.branchId, this.branchRequest});
 
   final bool live;
+  final String? branchId;
+  final BranchRequest? branchRequest;
 
   @override
   State<MembersScreen> createState() => _MembersScreenState();
@@ -116,8 +118,10 @@ class _MembersScreenState extends State<MembersScreen> {
       _liveNext = null;
     });
     try {
-      final result =
-          await context.read<AdminMemberDirectoryRepository>().loadPage(
+      final request = widget.branchRequest;
+      final result = widget.branchId != null && request != null
+          ? await _loadBranch(request)
+          : await context.read<AdminMemberDirectoryRepository>().loadPage(
                 query: _query,
                 status: _status,
                 afterId: _liveCursors.last,
@@ -136,6 +140,23 @@ class _MembersScreenState extends State<MembersScreen> {
             'Could not load members. Check your Admin access and retry.';
       });
     }
+  }
+
+  Future<AdminMemberPage> _loadBranch(BranchRequest request) async {
+    final response = await request({
+      'action': 'branchMembers',
+      'branchId': widget.branchId,
+      'query': _query,
+      'status': _status,
+      if (_liveCursors.last != null) 'afterId': _liveCursors.last,
+    });
+    return AdminMemberPage(
+      (response['records'] as List).map((row) => AdminMemberRecord(
+        id: row['id'] as String, name: row['name'] as String,
+        email: row['email'] as String, status: row['status'] as String,
+      )).toList(),
+      nextCursor: response['nextAfterId'] as String?,
+    );
   }
 
   void _onSearch(String value) {

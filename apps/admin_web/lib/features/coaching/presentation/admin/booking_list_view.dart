@@ -10,10 +10,12 @@ class AdminBookingListView extends StatefulWidget {
       required this.repository,
       required this.isCurrent,
       this.coachId,
+      this.branchId,
       this.title = 'Coach bookings'});
   final BookingListRepository repository;
   final bool Function() isCurrent;
   final String? coachId;
+  final String? branchId;
   final String title;
   @override
   State<AdminBookingListView> createState() => _AdminBookingListViewState();
@@ -23,6 +25,7 @@ class _AdminBookingListViewState extends State<AdminBookingListView> {
   late final controller = BookingListCubit(
       repository: widget.repository,
       isCurrent: widget.isCurrent,
+      branchId: widget.branchId,
       coachId: widget.coachId)
     ..refresh();
   @override
@@ -46,7 +49,10 @@ class _AdminBookingListViewState extends State<AdminBookingListView> {
               return const Center(
                   child: Text('Bookings unavailable for this session.'));
             }
+            final records = state.records
+                .where((record) => widget.branchId == null || record.branchId == widget.branchId);
             return ListView(padding: const EdgeInsets.all(16), children: [
+              if (widget.branchId != null) Text('Branch: ${widget.branchId}'),
               const Text(
                   'Upcoming persisted records. Holds are not paid reservations. No confirmation or payment is available here.'),
               if (state.busy) const LinearProgressIndicator(),
@@ -54,9 +60,11 @@ class _AdminBookingListViewState extends State<AdminBookingListView> {
               if (state.page != null)
                 Text(
                     '${state.page!.firstLocalDate} – ${state.page!.throughLocalDate} · ${state.page!.timeZone}'),
-              if (!state.busy && state.page != null && state.records.isEmpty)
-                const Text('No bookings in this upcoming range.'),
-              for (final record in state.records)
+              if (!state.busy && state.page != null && records.isEmpty)
+                Text(state.page?.nextCursor != null
+                    ? 'No matching bookings in the loaded results. Load more to continue.'
+                    : 'No bookings in this upcoming range.'),
+              for (final record in records)
                 Card(
                     child: Padding(
                         padding: const EdgeInsets.all(16),

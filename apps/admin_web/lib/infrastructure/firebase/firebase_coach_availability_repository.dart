@@ -69,8 +69,7 @@ class FirebaseCoachAvailabilityRepository
       required CoachAvailabilityContext context,
       required List<DatedCoachWindow> windows,
       required String requestId}) async {
-    if (context.coachId != scope.userId ||
-        !baseline.editable ||
+    if (!baseline.editable ||
         baseline.revision == null ||
         context.policyVersion == null) {
       throw const CoachAvailabilityException('permission-denied');
@@ -79,6 +78,7 @@ class FirebaseCoachAvailabilityRepository
         await _call('saveCoachAvailabilityDayCommand', {
       'schemaVersion': 1,
       'organizationId': scope.organizationId,
+      if (context.coachId != scope.userId) 'coachId': context.coachId,
       'requestId': requestId,
       'localDate': baseline.localDate,
       'expectedRevision': baseline.revision,
@@ -88,7 +88,7 @@ class FirebaseCoachAvailabilityRepository
       'expectedCoachBranchIds': context.assignedBranchIds,
       'windows': windows.map((w) => w.toJson()).toList()
     }));
-    if (result.coachId != scope.userId ||
+    if (result.coachId != context.coachId ||
         result.localDate != baseline.localDate ||
         result.requestId != requestId) {
       throw const CoachAvailabilityException('failed-precondition');

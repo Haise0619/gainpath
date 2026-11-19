@@ -56,7 +56,14 @@ void main() {
                 {'branchId': 'old', 'displayName': 'Old Gym', 'status': 'inactive'},
               ]};
             }
-            return {'branchName': 'Old Gym', 'acceptedWorkouts': 14};
+            return {
+              'branchName': 'Old Gym',
+              'acceptedWorkouts': 14,
+              'daily': [
+                {'date': '2026-11-16', 'workouts': 5},
+                {'date': '2026-11-18', 'workouts': 9},
+              ],
+            };
           },
         )))),
         gateway,
@@ -78,6 +85,7 @@ void main() {
     await show(ReportsCategory.fitness);
     expect(find.text('Old Gym (inactive)'), findsOneWidget);
     expect(find.text('Accepted workouts with this scope'), findsOneWidget);
+    expect(find.text('Date (MYT)'), findsOneWidget);
     expect(requests.last['startAtMillis'], range['startAtMillis']);
     expect(requests.where((r) => r['action'] == 'list'), hasLength(1));
     if (render) {

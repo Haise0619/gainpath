@@ -7,7 +7,8 @@ typedef BookingListCallable = Future<Map<String, dynamic>> Function(
     String, Map<String, dynamic>);
 
 /// Read-only Admin transport. Regional reads require configured App Check.
-class FirebaseBookingListRepository implements BookingListRepository {
+class FirebaseBookingListRepository
+    implements BookingListRepository, BranchBookingListRepository {
   FirebaseBookingListRepository(
       {required this.scope,
       required this.isCurrent,
@@ -35,24 +36,38 @@ class FirebaseBookingListRepository implements BookingListRepository {
       {String? coachId,
       String? firstLocalDate,
       int? dayCount,
-      BookingCursor? cursor}) async {
+      BookingCursor? cursor}) =>
+      _load(coachId: coachId, firstLocalDate: firstLocalDate, dayCount: dayCount, cursor: cursor);
+
+  @override
+  Future<BookingPage> loadBranch(String branchId,
+          {String? firstLocalDate, BookingCursor? cursor}) =>
+      _load(branchId: branchId, firstLocalDate: firstLocalDate, cursor: cursor);
+
+  Future<BookingPage> _load({String? coachId, String? branchId,
+      String? firstLocalDate, int? dayCount, BookingCursor? cursor}) async {
     _check();
-    if (coachId == null) throw const BookingException('permission-denied');
+    if (coachId == null && branchId == null) throw const BookingException('permission-denied');
     try {
       final result = await _call('getBookingListCommand', {
         'schemaVersion': 1,
         'organizationId': scope.organizationId,
-        'coachId': coachId,
+        if (coachId != null) 'coachId': coachId,
+        if (branchId != null) 'branchId': branchId,
         'includeSelectedPaymentMethod': true,
         if (firstLocalDate != null) 'firstLocalDate': firstLocalDate,
         if (dayCount != null) 'dayCount': dayCount,
         if (cursor != null) 'cursor': cursor.toJson()
       });
       _check();
-      return BookingPage.fromJson(result,
+      final page = BookingPage.fromJson(result,
           expectedOrganizationId: scope.organizationId,
           expectedCoachId: coachId,
           expectedFirstLocalDate: firstLocalDate);
+      if (branchId != null && page.records.any((row) => row.branchId != branchId)) {
+        throw const FormatException('Unexpected booking branch');
+      }
+      return page;
     } on FirebaseException catch (error) {
       _check();
       throw BookingException(error.code);

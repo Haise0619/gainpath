@@ -48,16 +48,40 @@ export async function readBranchReport(db: Firestore, org: string, input: Record
     && (branchId ? Array.isArray(item.branchIds) && item.branchIds.includes(branchId)
       : !Array.isArray(item.branchIds) || item.branchIds.length === 0)).length;
   const booked = bookings.filter(item => matches(item.branchId) && inRange(item.createdAtMillis));
+  const completed = bookings.filter(item => matches(item.branchId)
+    && item.status === 'completed' && inRange(item.startAtMillis));
+  const cancelled = bookings.filter(item => matches(item.branchId)
+    && item.status === 'cancelled' && inRange(item.startAtMillis));
+  const accepted = workouts.filter(item => matches(item.branchId)
+    && item.status === 'accepted' && inRange(item.acceptedAtMillis));
   const cleared = payments.filter(item => item.type === 'CoachingBooking' && matches(item.branchId)
     && item.paymentStatus === 'cleared' && item.fulfilmentStatus === 'confirmed'
     && [undefined, 'none', 'rejected'].includes(item.refundStatus as string | undefined)
     && inRange(item.paymentVerifiedAtMillis));
   const visitorCounts = new Map<string, number>();
   const hourCounts = Array<number>(24).fill(0);
+  type Daily = { date: string; bookings: number; completed: number; cancelled: number;
+    coachingMinor: number; workouts: number; visits: number | null };
+  const daily = new Map<string, Daily>();
+  const increment = (instant: number, metric: Exclude<keyof Daily, 'date'>, amount = 1) => {
+    const date = new Date(instant + 8 * 3600000).toISOString().slice(0, 10);
+    const row = daily.get(date) ?? { date, bookings: 0, completed: 0, cancelled: 0,
+      coachingMinor: 0, workouts: 0, visits: ref ? 0 : null };
+    row[metric] = (row[metric] ?? 0) + amount;
+    daily.set(date, row);
+  };
+  for (const item of booked) increment(Number(item.createdAtMillis), 'bookings');
+  for (const item of completed) increment(Number(item.startAtMillis), 'completed');
+  for (const item of cancelled) increment(Number(item.startAtMillis), 'cancelled');
+  for (const item of cleared) {
+    if (clockNumber(item.amountMinor)) increment(Number(item.paymentVerifiedAtMillis), 'coachingMinor', item.amountMinor);
+  }
+  for (const item of accepted) increment(Number(item.acceptedAtMillis), 'workouts');
   for (const item of visits) {
     if (typeof item.memberId !== 'string' || !inRange(item.checkedInAtMillis)) continue;
     visitorCounts.set(item.memberId, (visitorCounts.get(item.memberId) ?? 0) + 1);
     hourCounts[new Date(Number(item.checkedInAtMillis) + 8 * 3600000).getUTCHours()]++;
+    increment(item.checkedInAtMillis as number, 'visits');
   }
   const liveStock = equipment.filter(item => item.removed !== true);
   return {
@@ -68,12 +92,11 @@ export async function readBranchReport(db: Firestore, org: string, input: Record
     equipmentUnits: liveStock.reduce((sum, item) => sum + (clockNumber(item.quantity) ? item.quantity : 0), 0),
     maintenanceUnits: liveStock.reduce((sum, item) => sum + (clockNumber(item.maintenance) ? item.maintenance : 0), 0),
     bookingsCreated: booked.length,
-    completedSessions: bookings.filter(item => matches(item.branchId)
-      && item.status === 'completed' && inRange(item.startAtMillis)).length,
-    cancelledSessions: bookings.filter(item => matches(item.branchId)
-      && item.status === 'cancelled' && inRange(item.startAtMillis)).length,
+    completedSessions: completed.length,
+    cancelledSessions: cancelled.length,
     coachingMinor: cleared.reduce((sum, item) => sum + (clockNumber(item.amountMinor) ? item.amountMinor : 0), 0),
-    acceptedWorkouts: workouts.filter(item => matches(item.branchId) && item.status === 'accepted' && inRange(item.acceptedAtMillis)).length,
+    acceptedWorkouts: accepted.length,
+    daily: [...daily.values()].sort((a, b) => a.date.localeCompare(b.date)),
     gymVisits: hourCounts.reduce((sum, count) => sum + count, 0),
     uniqueVisitors: visitorCounts.size,
     repeatVisitors: [...visitorCounts.values()].filter(count => count > 1).length,

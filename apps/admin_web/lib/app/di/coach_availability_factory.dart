@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:gainpath_domain/coaching.dart';
 import 'package:gainpath_domain/gainpath_domain.dart' show AuthSession;
@@ -45,7 +46,15 @@ class _AdminCoachScheduleRouteState extends State<AdminCoachScheduleRoute> {
           ? AdminCoachScheduleView(
               repository: widget.repository,
               coachId: widget.coachId,
-              isCurrent: guard!.isCurrent)
+              isCurrent: guard!.isCurrent,
+              branchRequest: (input) async {
+                if (!guard!.isCurrent()) throw StateError('Admin session changed.');
+                final response = await FirebaseFunctions.instanceFor(region: 'asia-southeast1')
+                    .httpsCallable('branchManagementCommand')
+                    .call({...input, 'organizationId': widget.session.scope.organizationId});
+                if (!guard!.isCurrent()) throw StateError('Admin session changed.');
+                return Map<String, dynamic>.from(response.data as Map);
+              })
           : const Scaffold(
               body: Center(
                   child: Text('Schedule unavailable for this session.'))));

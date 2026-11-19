@@ -36,10 +36,15 @@ it('deduplicates concurrent physical visit calls with real Firestore transaction
       branchId: 'visit-fixture', startAtMillis: now - 1, endAtMillis: now + 1,
     });
     expect(report).toMatchObject({ gymVisits: 1, uniqueVisitors: 1, repeatVisitors: 0, bookingsCreated: 0 });
+    expect(report.daily).toEqual([{
+      date: new Date(now + 8 * 3600000).toISOString().slice(0, 10),
+      bookings: 0, completed: 0, cancelled: 0, coachingMinor: 0, workouts: 0, visits: 1,
+    }]);
     const later = await readBranchReport(db, 'org-1', {
       branchId: 'visit-fixture', startAtMillis: now + 1, endAtMillis: now + 2,
     });
     expect(later.gymVisits).toBe(0);
+    expect(later.daily).toEqual([]);
   } finally {
     await db.terminate();
     await deleteApp(app);

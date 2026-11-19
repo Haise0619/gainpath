@@ -251,6 +251,43 @@ class _AdminShellState extends State<AdminShell> {
         'Manage gym locations',
         BranchDirectoryPage(
           admin: true,
+          onOpenBookings: (branchId) {
+            final session = widget.liveSession;
+            if (session == null) return;
+            final bookings = context.read<BookingListRepository>();
+            Navigator.of(context).push(MaterialPageRoute<void>(
+              builder: (_) => AdminBookingListRoute(
+                session: session,
+                repository: bookings,
+                branchId: branchId,
+              ),
+            ));
+          },
+          onOpenMembers: (branchId) {
+            final session = widget.liveSession;
+            if (session == null) return;
+            Navigator.of(context).push(MaterialPageRoute<void>(
+              builder: (_) => Scaffold(
+                appBar: AppBar(title: Text('Members · $branchId')),
+                body: MembersScreen(
+                  live: true,
+                  branchId: branchId,
+                  branchRequest: (input) async {
+                    if (context.read<AuthBloc>().state.session?.scope != session.scope) {
+                      throw StateError('Admin session changed.');
+                    }
+                    final response = await FirebaseFunctions.instanceFor(region: 'asia-southeast1')
+                        .httpsCallable('branchManagementCommand')
+                        .call({...input, 'organizationId': session.scope.organizationId});
+                    if (!mounted || context.read<AuthBloc>().state.session?.scope != session.scope) {
+                      throw StateError('Admin session changed.');
+                    }
+                    return Map<String, dynamic>.from(response.data as Map);
+                  },
+                ),
+              ),
+            ));
+          },
           onOpenReports: (branchId) {
             setState(() => _reportDrillDownBranch = branchId);
             _select(_reportsIndex);

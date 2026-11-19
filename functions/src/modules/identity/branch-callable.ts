@@ -25,7 +25,7 @@ export const branchManagementCommand = onCall({ region: 'asia-southeast1', enfor
       await store.transact(tx => authorizeAdminReport(tx, request.auth!, org));
       return report;
     }
-    if (input?.action === 'branchStats') {
+    if (input?.action === 'branchStats' || input?.action === 'branchMembers') {
       requireVerifiedEmail(request.auth);
       const org = requiredIdentifier(input.organizationId, 'organizationId');
       const branchId = requiredIdentifier(input.branchId, 'branchId');
@@ -41,6 +41,38 @@ export const branchManagementCommand = onCall({ region: 'asia-southeast1', enfor
         }
       });
       await authorize();
+      if (input.action === 'branchMembers') {
+        const query = typeof input.query === 'string' ? input.query.trim().toLowerCase().slice(0, 100) : '';
+        const status = typeof input.status === 'string' ? input.status.toLowerCase() : 'all';
+        const after = input.afterId === undefined ? undefined : requiredIdentifier(input.afterId, 'afterId');
+        const users = db.collection('users').where('organizationId', '==', org);
+        const snapshots = await Promise.all(['homeBranchId', 'primaryBranchId'].map(field =>
+          users.where(field, '==', branchId).limit(501).get()));
+        if (snapshots.some(snapshot => snapshot.size > 500)) {
+          throw new HttpsError('resource-exhausted', 'Branch member list exceeds the available review limit.');
+        }
+        const ids = [...new Set(snapshots.flatMap(snapshot => snapshot.docs
+          .filter(doc => (doc.get('homeBranchId') ?? doc.get('primaryBranchId')) === branchId)
+          .map(doc => doc.id)))].filter(id => !after || id > after).sort();
+        const members = [];
+        for (let offset = 0; offset < ids.length && members.length < 21; offset += 50) {
+          const batch = await db.getAll(...ids.slice(offset, offset + 50)
+            .map(id => db.doc(`${root}/members/${id}`)));
+          for (const doc of batch) {
+            const data = doc.data();
+            if (data?.organizationId !== org || data.role !== 'member' ||
+              typeof data.status !== 'string' || (status !== 'all' && data.status !== status)) continue;
+            const email = typeof data.email === 'string' ? data.email : '';
+            const name = typeof data.displayName === 'string' ? data.displayName : email || doc.id;
+            if (query && ![doc.id, name, email].some(value => value.toLowerCase().includes(query))) continue;
+            members.push({ id: doc.id, name, email, status: data.status });
+            if (members.length === 21) break;
+          }
+        }
+        await authorize();
+        return { records: members.slice(0, 20),
+          ...(members.length > 20 ? { nextAfterId: members[19].id } : {}) };
+      }
       const path = `${root}/branches/${branchId}`;
       const [coaches, equipment, bookings, visits] = await Promise.all([
         db.collection(`${root}/coaches`).where('branchIds', 'array-contains', branchId).count().get(),

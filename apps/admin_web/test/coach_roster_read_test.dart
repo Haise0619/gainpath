@@ -57,6 +57,42 @@ class _Roster extends ScheduleFake implements CoachRosterRepository {
 
 void main() {
   setUpAll(() => GoogleFonts.config.allowRuntimeFetching = false);
+  testWidgets('Admin edits assignments using active branch IDs', (tester) async {
+    final changes = <Map<String, Object?>>[];
+    await tester.pumpWidget(MaterialApp(home: AdminCoachScheduleView(
+      repository: _Roster(),
+      coachId: 'coach',
+      isCurrent: () => true,
+      branchRequest: (input) async {
+        switch (input['action']) {
+          case 'coachAssignments':
+            return {'branchIds': ['main']};
+          case 'list':
+            return {'records': [
+              {'branchId': 'main', 'displayName': 'Main Gym', 'status': 'active'},
+              {'branchId': 'north', 'displayName': 'North Gym', 'status': 'active'},
+              {'branchId': 'closed', 'displayName': 'Closed Gym', 'status': 'inactive'},
+            ]};
+          default:
+            changes.add(input);
+            return {'branchIds': ['main', 'north']};
+        }
+      },
+    )));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Edit assigned branches'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.text('Closed Gym'), findsNothing);
+    await tester.tap(find.text('North Gym'));
+    await tester.pump();
+    await tester.tap(find.text('Save assignments'));
+    await tester.pumpAndSettle();
+    expect(changes.single, {
+      'action': 'saveCoachAssignments', 'coachId': 'coach',
+      'expectedBranchIds': ['main'], 'branchIds': ['main', 'north'],
+    });
+  });
   testWidgets(
       'Admin reads private hours, reasons and limits with no write controls',
       (tester) async {

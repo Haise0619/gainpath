@@ -9,7 +9,7 @@ import { storedBooking, type BookingResolution } from './booking-record';
 import { currentBookingMembership, currentBookingPolicy, requireBookingOrganization } from './booking-validation';
 import {selectedPaymentProjection,type SelectedPaymentMetadata} from '../commerce/booking-payment-selection';
 export interface BookingCursor { startAtMillis: number; bookingId: string }
-export interface BookingQuery { organizationId: string; ownerField: 'memberId' | 'coachId'; ownerId: string; branchIds?: readonly string[]; firstStartAtMillis: number; throughStartAtMillis: number; cursor?: BookingCursor; limit: 21 }
+export interface BookingQuery { organizationId: string; ownerField: 'memberId' | 'coachId' | 'branchId'; ownerId: string; branchIds?: readonly string[]; firstStartAtMillis: number; throughStartAtMillis: number; cursor?: BookingCursor; limit: 21 }
 export interface BookingQueryReader { read(query: BookingQuery): Promise<{ path: string; data: DocumentData }[]> }
 export interface PersistedBookingRecord extends Partial<SelectedPaymentMetadata> {
   schemaVersion: 1; bookingId: string; organizationId: string; memberId: string; coachId: string; branchId: string; requestId: string;
@@ -49,7 +49,7 @@ function project(row: { path: string; data: DocumentData }, q: BookingQuery, inc
 }
 export async function getBookingListService(store: DocumentStore, auth: { uid: string; token: Record<string, unknown> } | undefined, raw: unknown, reader: BookingQueryReader, clock = Date.now): Promise<BookingPage> {
   requireVerifiedEmail(auth);
-  const input = object(raw); allowed(input, ['schemaVersion', 'organizationId', 'coachId', 'firstLocalDate', 'dayCount', 'cursor', 'includeParticipantNames', 'includeCancellationDetails', 'includeReviewDetails', 'includeMemberChangeDetails', 'includePaymentDetails','includeSelectedPaymentMethod']);
+  const input = object(raw); allowed(input, ['schemaVersion', 'organizationId', 'coachId', 'branchId', 'firstLocalDate', 'dayCount', 'cursor', 'includeParticipantNames', 'includeCancellationDetails', 'includeReviewDetails', 'includeMemberChangeDetails', 'includePaymentDetails','includeSelectedPaymentMethod']);
   if(input.includeSelectedPaymentMethod!==undefined&&typeof input.includeSelectedPaymentMethod!=='boolean')throw new InputValidationError('Invalid payment method projection.');
   if (input.includePaymentDetails !== undefined && typeof input.includePaymentDetails !== 'boolean') throw new InputValidationError('includePaymentDetails must be a boolean.');
   if (input.includeMemberChangeDetails !== undefined && typeof input.includeMemberChangeDetails !== 'boolean') throw new InputValidationError('includeMemberChangeDetails must be a boolean.');
@@ -59,6 +59,8 @@ export async function getBookingListService(store: DocumentStore, auth: { uid: s
   if (input.schemaVersion !== 1) throw new InputValidationError('schemaVersion 1 is required.');
   const org = requiredIdentifier(input.organizationId, 'organizationId'), uid = requiredIdentifier(auth!.uid, 'actorId');
   const selectedCoach = input.coachId === undefined ? undefined : requiredIdentifier(input.coachId, 'coachId');
+  const selectedBranch = input.branchId === undefined ? undefined : requiredIdentifier(input.branchId, 'branchId');
+  if (selectedCoach && selectedBranch) throw new InputValidationError('Choose a Coach or branch scope.');
   if (input.firstLocalDate !== undefined) dateEpoch(input.firstLocalDate);
   const dayCount = input.dayCount === undefined ? 31 : integer(input.dayCount, 1, 31);
   let cursor: BookingCursor | undefined;
@@ -75,8 +77,14 @@ export async function getBookingListService(store: DocumentStore, auth: { uid: s
     const actor = await currentBookingMembership(facts, org, uid);
     await requireBookingOrganization(facts, org);
     const policy = currentBookingPolicy(await facts.get(`orgs/${org}/settings/booking`));
-    let ownerField: 'memberId' | 'coachId', ownerId: string, activeBranches: string[] | undefined;
-    if (actor.role === 'member') { ownerField = 'memberId'; ownerId = uid; if (selectedCoach !== undefined) throw new DomainError('permission-denied', 'Member scope uses the authenticated owner.'); }
+    let ownerField: BookingQuery['ownerField'], ownerId: string, activeBranches: string[] | undefined;
+    if (selectedBranch !== undefined) {
+      if (actor.role !== 'admin' || !await tx.get(`orgs/${org}/branches/${selectedBranch}`)) {
+        throw new DomainError('permission-denied', 'Admin branch scope is unavailable.');
+      }
+      ownerField = 'branchId'; ownerId = selectedBranch;
+    }
+    else if (actor.role === 'member') { ownerField = 'memberId'; ownerId = uid; if (selectedCoach !== undefined) throw new DomainError('permission-denied', 'Member scope uses the authenticated owner.'); }
     else if (actor.role === 'coach') {
       ownerField = 'coachId'; ownerId = uid;
       if (selectedCoach !== undefined && selectedCoach !== uid) throw new DomainError('permission-denied', 'Coach scope uses the authenticated owner.');
@@ -121,7 +129,7 @@ export async function getBookingListService(store: DocumentStore, auth: { uid: s
       const name = member?.organizationId === org ? member.displayName : undefined;
       if (typeof name === 'string' && name.trim() && name.trim().length <= 120) record.memberDisplayName = name.trim();
       const payment = values[memberIds.length + i];
-      if(input.includeSelectedPaymentMethod===true&&payment?.schemaVersion===1&&payment.environment==='sandbox'&&payment.provider==='billplz'&&payment.organizationId===org&&payment.bookingId===record.bookingId&&payment.memberId===record.memberId&&payment.coachId===record.coachId&&payment.branchId===record.branchId)Object.assign(record,selectedPaymentProjection(payment));
+      if(input.includeSelectedPaymentMethod===true&&payment?.schemaVersion===1&&payment.environment==='sandbox'&&['billplz','xendit'].includes(String(payment.provider))&&payment.organizationId===org&&payment.bookingId===record.bookingId&&payment.memberId===record.memberId&&payment.coachId===record.coachId&&payment.branchId===record.branchId)Object.assign(record,selectedPaymentProjection(payment));
       if (payment && Number.isSafeInteger(payment.amountMinor) && Number(payment.amountMinor) >= 0) record.feeMinor = Number(payment.amountMinor);
       if (input.includePaymentDetails === true && payment?.schemaVersion === 1
           && payment.organizationId === org && payment.bookingId === record.bookingId

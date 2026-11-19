@@ -88,7 +88,7 @@ export async function getCoachAvailabilityService(store: DocumentStore, auth: Au
       const day: AvailabilityDayResult = { localDate: date, windows: (beyondAdvanceWindow ? [] : actor.role === 'member' ? stored.windows : stored.baseWindows).filter(w => visible.includes(w.branchId)) };
       const grid = dateGrid(date, policy.timeZone), visibleEndpoints = new Set(day.windows.flatMap(w => [w.startAtMillis, w.endAtMillis]));
       day.displayTimes = grid.boundaries.filter(b => visibleEndpoints.has(b.atMillis));
-      if (actor.role !== 'member') Object.assign(day, { revision: stored.revision, reviewRequired: stored.reviewRequired, editable: actor.role === 'coach' && date > today && !stored.reviewRequired, boundaries: actor.role === 'coach' ? grid.boundaries : [] });
+      if (actor.role !== 'member') Object.assign(day, { revision: stored.revision, reviewRequired: stored.reviewRequired, editable: date > today && !stored.reviewRequired, boundaries: grid.boundaries });
       days.push(day);
     }
     return { schemaVersion: 1, coachId, serverNowMillis: now, todayLocalDate: today, timeZone: policy.timeZone, assignedBranchIds: visible, days,
@@ -96,25 +96,31 @@ export async function getCoachAvailabilityService(store: DocumentStore, auth: Au
   });
 }
 export async function saveCoachAvailabilityDayService(store: DocumentStore, auth: Auth, raw: unknown, clock = Date.now): Promise<AvailabilitySaveResult> {
-  const { input, uid, org } = context(auth, raw, ['schemaVersion', 'organizationId', 'requestId', 'localDate', 'expectedRevision', 'expectedRosterRevision', 'expectedPolicyVersion', 'expectedTimeZone', 'expectedCoachBranchIds', 'windows']);
+  const { input, uid, org } = context(auth, raw, ['schemaVersion', 'organizationId', 'coachId', 'requestId', 'localDate', 'expectedRevision', 'expectedRosterRevision', 'expectedPolicyVersion', 'expectedTimeZone', 'expectedCoachBranchIds', 'windows']);
+  const coachId = input.coachId === undefined ? uid : requiredIdentifier(input.coachId, 'coachId');
   const requestId = requiredIdentifier(input.requestId, 'requestId'), date = String(input.localDate); dateEpoch(date);
   const expected = integer(input.expectedRevision, 0, Number.MAX_SAFE_INTEGER - 1), expectedBranches = branchIds(input.expectedCoachBranchIds);
   if (typeof input.expectedPolicyVersion !== 'string' || typeof input.expectedTimeZone !== 'string') throw new InputValidationError('Original scheduling policy is required.');
   const expectedPolicyVersion = input.expectedPolicyVersion, expectedTimeZone = input.expectedTimeZone;
   const expectedRosterRevision = input.expectedRosterRevision === undefined ? 0 : integer(input.expectedRosterRevision, 0, Number.MAX_SAFE_INTEGER - 1);
-  const root = `orgs/${org}`, path = `${root}/coachAvailability/${uid}/days/${date}`;
+  const root = `orgs/${org}`, path = `${root}/coachAvailability/${coachId}/days/${date}`;
   // Canonical inputs and expectations live outside the retryable callback.
   const submitted = normalizeWindows(input.windows, date, expectedTimeZone, expectedBranches);
   // Preserve fingerprints of pre-roster commands when their revision is zero.
   const fingerprintParts = [org, date, expected, expectedPolicyVersion, expectedTimeZone, expectedBranches, submitted];
-  const fingerprint = keyOf(...fingerprintParts, ...(expectedRosterRevision ? [expectedRosterRevision] : []));
+  const fingerprint = keyOf(...fingerprintParts, ...(expectedRosterRevision ? [expectedRosterRevision] : []),
+    ...(input.coachId === undefined ? [] : ['adminCoach', coachId]));
   const receiptPath = `${root}/commandReceipts/${keyOf('saveCoachAvailabilityDay', uid, requestId)}`;
   return store.transact(async tx => {
     const actor = await membership(tx, org, uid);
-    if (actor.role !== 'coach') throw new DomainError('permission-denied', 'Only the current Coach can edit their schedule.');
+    if (input.coachId === undefined ? actor.role !== 'coach' : actor.role !== 'admin') {
+      throw new DomainError('permission-denied', 'Schedule editing is unavailable for this account.');
+    }
+    const coach = coachId === uid ? actor : await membership(tx, org, coachId);
+    if (coach.role !== 'coach') throw new DomainError('failed-precondition', 'Coach is unavailable.');
     if ((await tx.get(root))?.status !== 'active') throw new DomainError('failed-precondition', 'Organization unavailable.');
-    await activeBranches(tx, root, actor.branchIds, true);
-    if (JSON.stringify(actor.branchIds) !== JSON.stringify(expectedBranches)) throw new DomainError('aborted', 'Coach branches changed. Discard and reload.');
+    await activeBranches(tx, root, coach.branchIds, true);
+    if (JSON.stringify(coach.branchIds) !== JSON.stringify(expectedBranches)) throw new DomainError('aborted', 'Coach branches changed. Discard and reload.');
     const receipt = await tx.get(receiptPath);
     if (receipt) {
       if (receipt.fingerprint !== fingerprint) throw new DomainError('already-exists', 'The request ID belongs to another schedule edit.');
@@ -124,26 +130,26 @@ export async function saveCoachAvailabilityDayService(store: DocumentStore, auth
     const policy = bookingPolicy(await tx.get(`${root}/settings/booking`)), now = clock(), today = localDate(now, policy.timeZone);
     if (policy.policyVersion !== expectedPolicyVersion || policy.timeZone !== expectedTimeZone) throw new DomainError('aborted', 'Scheduling policy changed. Discard and reload.');
     if (date <= today || date > plusDate(today, 30)) throw new InputValidationError('Only tomorrow through 30 days ahead can be edited.');
-    const roster = storedRoster(await tx.get(`${root}/coachAvailability/${uid}`), policy.timeZone, actor.branchIds);
+    const roster = storedRoster(await tx.get(`${root}/coachAvailability/${coachId}`), policy.timeZone, coach.branchIds);
     if (roster.revision !== expectedRosterRevision) throw new DomainError('aborted', 'The roster changed. Discard and reload.');
-    const current = await tx.get(path), baseline = resolveRosterDay(current, date, policy.timeZone, actor.branchIds, roster);
+    const current = await tx.get(path), baseline = resolveRosterDay(current, date, policy.timeZone, coach.branchIds, roster);
     if (baseline.reviewRequired) throw new DomainError('failed-precondition', 'Legacy schedule requires authorized review.');
     if (baseline.revision !== expected) throw new DomainError('aborted', 'The schedule changed. Discard and reload.');
     if (JSON.stringify(baseline.baseWindows) === JSON.stringify(submitted)) throw new InputValidationError('Change at least one scheduling window.');
     const coverage = (list: AvailabilityWindow[], slot: number) => list.find(w => w.startAtMillis <= slot && w.endAtMillis >= slot + SLOT)?.branchId;
     const slots = dateGrid(date, policy.timeZone).slots;
-    const locks = await readAll(tx, slots.map(slot => `${root}/slotLocks/${keyOf(uid, slot)}`));
+    const locks = await readAll(tx, slots.map(slot => `${root}/slotLocks/${keyOf(coachId, slot)}`));
     for (const [i, slot] of slots.entries()) {
       const lock = locks[i]; if (!lock) continue;
       const validId = (value: unknown) => typeof value === 'string' && /^[A-Za-z0-9_-]{1,128}$/.test(value);
-      if (lock.schemaVersion !== 1 || lock.coachId !== uid || !validId(lock.branchId) || !validId(lock.bookingId) || (lock.status !== 'confirmed' && lock.status !== 'pending_hold')
+      if (lock.schemaVersion !== 1 || lock.coachId !== coachId || !validId(lock.branchId) || !validId(lock.bookingId) || (lock.status !== 'confirmed' && lock.status !== 'pending_hold')
         || (lock.status === 'pending_hold' && (!Number.isSafeInteger(lock.expiresAtMillis) || Number(lock.expiresAtMillis) < 1 || Number(lock.expiresAtMillis) > slot))) throw new DomainError('failed-precondition', 'A reservation lock requires authorized review.');
       if (lock.status === 'confirmed' || Number(lock.expiresAtMillis) > now) {
         if (coverage(baseline.windows, slot) !== lock.branchId) throw new DomainError('failed-precondition', 'Stored schedule and reservation disagree.');
         if (coverage(maskWindows(submitted, roster.exceptions), slot) !== lock.branchId) throw new DomainError('aborted', 'Reserved time must remain on its original branch.');
       }
     }
-    const result: AvailabilitySaveResult = { schemaVersion: 1, requestId, coachId: uid, localDate: date, revision: expected + 1, outcome: submitted.length ? 'saved' : 'removed' };
+    const result: AvailabilitySaveResult = { schemaVersion: 1, requestId, coachId, localDate: date, revision: expected + 1, outcome: submitted.length ? 'saved' : 'removed' };
     tx.set(path, { schemaVersion: 1, windows: submitted, revision: result.revision, timeZone: policy.timeZone, policyVersion: policy.policyVersion, createdAtMillis: current?.createdAtMillis ?? now, updatedAtMillis: now });
     tx.create(receiptPath, { schemaVersion: 1, command: 'saveCoachAvailabilityDay', actorId: uid, fingerprint, createdAtMillis: now, result });
     return result;
