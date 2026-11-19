@@ -21,7 +21,11 @@
 
 ### Release 2 verification
 
-- 70 backend tests for Outreach search, automatic recommendation, and Coach availability passed along with TypeScript typecheck. Admin Reports fixture verifies retention of inactive branch scope and date range across category navigation. No Firebase, IAM, Rules, Billing, provider or production data changes were made in this turn.
+- 70 backend tests for Outreach search, automatic recommendation, and Coach availability passed along with TypeScript typecheck. 23 Admin Flutter tests, six shared Branch Flutter tests and eight Domain tests passed. The Firestore Emulator transaction suite passed. Admin Reports fixture verifies retention of inactive branch scope and date range across category navigation, and that the organization-wide CSV action is hidden while a branch is selected. The rendered fixture is build/multi-branch-release/release2-reports-fixture.png. No Firebase, IAM, Rules, Billing, provider or production data changes were made in this turn.
+
+- Local Admin build is active on localhost:7359. Served SHA-256: 55b5e9313f34d4c4dd8fab14bb052b511ee855fcee202819747bbd6d2576c3a9. Android arm64 Debug builds successfully, SHA-256: 1b0fc93277ca5b6aab243bc029cdea863af7a21416039f0f3a97c964c69321e7. Android Studio run configurations were retained. Release 2 commits: 8bca151 and 31034e4. Outreach source and its test remain in the working tree alongside other existing AI changes.
+- Manual acceptance pending: open Branch Details and select Coaches or Reports, verify the selected branch, choose a historical or unassigned scope, switch report tabs, change dates and compare CSV totals. Verify Outreach search and member analysis after deploying the corresponding backend.
+- Recovery point: renew the authorized Firebase CLI login, download the live Module 13 and changed branch report package baselines, compare and test source overlays, and verify deployed source and test-identity Callable responses. Multi-branch assignment editing, Admin schedule writes, Members and Bookings drill-downs, and full scoped trend/detail reports still require implementation.
 
 ### Release 1 production evidence
 
