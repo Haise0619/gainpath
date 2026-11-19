@@ -5,6 +5,30 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
 
 void main() {
+  testWidgets('Admin branch detail passes the actual branch ID to drill-downs',
+      (tester) async {
+    final routes = <String>[];
+    await tester.pumpWidget(MaterialApp(
+      home: BranchDirectoryPage(
+        admin: true,
+        openDirections: (_) async => true,
+        onOpenCoaches: (branchId) => routes.add('coaches/$branchId'),
+        onOpenReports: (branchId) => routes.add('reports/$branchId'),
+        request: (input) async => input['action'] == 'list'
+            ? {'records': [{'branchId': 'north', 'displayName': 'North Gym'}]}
+            : {'coaches': 1, 'equipment': 0, 'bookings': 0, 'visits': 0},
+      ),
+    ));
+    await tester.pumpAndSettle();
+    for (final label in ['Coaches', 'Reports']) {
+      await tester.tap(find.text('North Gym'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(label));
+      await tester.pumpAndSettle();
+    }
+    expect(routes, ['coaches/north', 'reports/north']);
+  });
+
   testWidgets('a selected cover previews before upload finishes',
       (tester) async {
     final upload = Completer<Map<String, dynamic>>();

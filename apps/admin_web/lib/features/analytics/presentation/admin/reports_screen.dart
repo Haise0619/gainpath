@@ -68,6 +68,7 @@ class ReportsScreenState extends State<ReportsScreen> {
   DateTimeRange? _customDates;
   String? _branch;
   String? _reportScope;
+  int _branchRefresh = 0;
   Future<List<Map<String, dynamic>>>? _reportBranches;
   AdminReportingCubit? _reportingCubit;
   AdminWorkoutReportingCubit? _workoutCubit;
@@ -366,6 +367,7 @@ class ReportsScreenState extends State<ReportsScreen> {
                                 trailing: Text(membershipRevenue),
                               ),
                             BranchReportDialog(
+                              key: ValueKey(_branchRefresh),
                               request: widget.branchRequest!,
                               range: (_query ??= _filterQuery()).range,
                               fixedScope: _reportScope,
@@ -865,7 +867,9 @@ class ReportsScreenState extends State<ReportsScreen> {
                       }),
                   IconButton(
                       tooltip: 'Refresh reports',
-                      onPressed: loading
+                      onPressed: _reportScope != null
+                          ? () => setState(() => _branchRefresh++)
+                          : loading
                           ? null
                           : () {
                               setState(() => _refreshTokens[_tab] =
@@ -878,7 +882,7 @@ class ReportsScreenState extends State<ReportsScreen> {
                               }
                             },
                       icon: const Icon(Icons.refresh_rounded, size: 18)),
-                  TextButton.icon(
+                  if (_reportScope == null) TextButton.icon(
                       icon: const Icon(Icons.download_rounded, size: 17),
                       label: Text(_exporting ? 'Exporting…' : 'Export CSV'),
                       onPressed: loading || _exporting

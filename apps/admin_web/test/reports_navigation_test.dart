@@ -3,6 +3,7 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:gainpath_admin_web/app/shells/admin_shell.dart';
@@ -24,10 +25,28 @@ void main() {
     addTearDown(tester.view.reset);
     final requests = <Map<String, Object?>>[];
     final captureKey = GlobalKey();
+    const render = bool.fromEnvironment('GAINPATH_RENDER_BRANCH_REPORT');
+    if (render) {
+      await tester.runAsync(() async {
+        final font = await File('../mobile/assets/fonts/Barlow-Regular.ttf')
+            .readAsBytes();
+        await (FontLoader('BranchFixture')..addFont(Future.value(ByteData.sublistView(font))))
+            .load();
+        final icons = await File(
+                'C:/flutter/bin/cache/artifacts/material_fonts/MaterialIcons-Regular.otf')
+            .readAsBytes();
+        await (FontLoader('MaterialIcons')
+              ..addFont(Future.value(ByteData.sublistView(icons))))
+            .load();
+      });
+    }
     final gateway = original.OriginalLayoutGateway();
     Future<void> show(ReportsCategory category) async {
       await tester.pumpWidget(original.originalLayoutApp(
-        RepaintBoundary(key: captureKey, child: ReportsScreen(
+        RepaintBoundary(key: captureKey, child: ColoredBox(
+          color: const Color(0xFFF6F3FC), child: Theme(
+            data: ThemeData(fontFamily: render ? 'BranchFixture' : null),
+            child: ReportsScreen(
           live: true,
           category: category,
           branchRequest: (input) async {
@@ -39,7 +58,7 @@ void main() {
             }
             return {'branchName': 'Old Gym', 'acceptedWorkouts': 14};
           },
-        )),
+        )))),
         gateway,
       ));
       await tester.pumpAndSettle();
@@ -50,6 +69,8 @@ void main() {
     await tester.tap(find.text('Old Gym (inactive)').last);
     await tester.pumpAndSettle();
     expect(requests.last, containsPair('branchId', 'old'));
+    expect(find.text('Export CSV'), findsNothing);
+    expect(find.text('Export branch CSV'), findsOneWidget);
     await tester.tap(find.text('7 days'));
     await tester.pumpAndSettle();
     final range = requests.last;
@@ -59,7 +80,7 @@ void main() {
     expect(find.text('Accepted workouts with this scope'), findsOneWidget);
     expect(requests.last['startAtMillis'], range['startAtMillis']);
     expect(requests.where((r) => r['action'] == 'list'), hasLength(1));
-    if (const bool.fromEnvironment('GAINPATH_RENDER_BRANCH_REPORT')) {
+    if (render) {
       await tester.runAsync(() async {
         final boundary =
             captureKey.currentContext!.findRenderObject()! as RenderRepaintBoundary;
