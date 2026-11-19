@@ -1,4 +1,8 @@
+import 'dart:io';
+import 'dart:ui' as ui;
+
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:gainpath_admin_web/app/shells/admin_shell.dart';
@@ -13,6 +17,63 @@ import 'admin_workout_reporting_ui_test.dart' show WorkoutUiGateway;
 
 void main() {
   setUpAll(() => GoogleFonts.config.allowRuntimeFetching = false);
+  testWidgets('branch scope and dates persist across report categories',
+      (tester) async {
+    tester.view.physicalSize = const Size(1440, 1000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final requests = <Map<String, Object?>>[];
+    final captureKey = GlobalKey();
+    final gateway = original.OriginalLayoutGateway();
+    Future<void> show(ReportsCategory category) async {
+      await tester.pumpWidget(original.originalLayoutApp(
+        RepaintBoundary(key: captureKey, child: ReportsScreen(
+          live: true,
+          category: category,
+          branchRequest: (input) async {
+            requests.add(input);
+            if (input['action'] == 'list') {
+              return {'records': [
+                {'branchId': 'old', 'displayName': 'Old Gym', 'status': 'inactive'},
+              ]};
+            }
+            return {'branchName': 'Old Gym', 'acceptedWorkouts': 14};
+          },
+        )),
+        gateway,
+      ));
+      await tester.pumpAndSettle();
+    }
+    await show(ReportsCategory.overview);
+    await tester.tap(find.text('All branches'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Old Gym (inactive)').last);
+    await tester.pumpAndSettle();
+    expect(requests.last, containsPair('branchId', 'old'));
+    await tester.tap(find.text('7 days'));
+    await tester.pumpAndSettle();
+    final range = requests.last;
+    expect(range, containsPair('branchId', 'old'));
+    await show(ReportsCategory.fitness);
+    expect(find.text('Old Gym (inactive)'), findsOneWidget);
+    expect(find.text('Accepted workouts with this scope'), findsOneWidget);
+    expect(requests.last['startAtMillis'], range['startAtMillis']);
+    expect(requests.where((r) => r['action'] == 'list'), hasLength(1));
+    if (const bool.fromEnvironment('GAINPATH_RENDER_BRANCH_REPORT')) {
+      await tester.runAsync(() async {
+        final boundary =
+            captureKey.currentContext!.findRenderObject()! as RenderRepaintBoundary;
+        final image = await boundary.toImage();
+        try {
+          final png = await image.toByteData(format: ui.ImageByteFormat.png);
+          await File('../../build/multi-branch-release/release2-reports-fixture.png')
+              .writeAsBytes(png!.buffer.asUint8List());
+        } finally {
+          image.dispose();
+        }
+      });
+    }
+  });
   testWidgets(
       'returning to same category retains fresh workouts and refreshes expired data',
       (tester) async {

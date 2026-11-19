@@ -99,6 +99,8 @@ class AdminShell extends StatefulWidget {
 }
 
 class _AdminShellState extends State<AdminShell> {
+  String? _reportDrillDownBranch;
+  String? _coachDrillDownBranch;
   late final AdminAiRepository? _adminAi = widget.liveSession == null
       ? null
       : AdminAiRepository(
@@ -249,6 +251,20 @@ class _AdminShellState extends State<AdminShell> {
         'Manage gym locations',
         BranchDirectoryPage(
           admin: true,
+          onOpenReports: (branchId) {
+            setState(() => _reportDrillDownBranch = branchId);
+            _select(_reportsIndex);
+          },
+          onOpenCoaches: (branchId) {
+            final index = _flatPages.indexWhere((page) => page.label == 'Coaches');
+            if (index < 0) return;
+            setState(() {
+              _coachDrillDownBranch = branchId;
+              _scopedCoachIdForBookings = null;
+              _scopedCoachIdForSchedule = null;
+            });
+            _select(index);
+          },
           pickCover: () async {
             final file = await openFile(acceptedTypeGroups: const [
               XTypeGroup(label: 'Images', extensions: ['jpg', 'jpeg', 'png']),
@@ -659,6 +675,7 @@ class _AdminShellState extends State<AdminShell> {
                             return ReportsScreen(
                                 key: const ValueKey('retained-reports'),
                                 live: session != null,
+                                initialBranchId: _reportDrillDownBranch,
                                 branchRequest: session == null ? null : (input) async {
                                   final result = await FirebaseFunctions.instanceFor(region: 'asia-southeast1')
                                       .httpsCallable('branchManagementCommand')
@@ -693,6 +710,7 @@ class _AdminShellState extends State<AdminShell> {
                             }
                             return CoachesScreen(
                                 key: ValueKey(_notificationReviewGeneration),
+                                initialBranchId: _coachDrillDownBranch,
                                 initialCoachId: _scopedCoachIdForReview ??
                                     _notificationCoachId,
                                 discardGuard: _coachReviewGuard,

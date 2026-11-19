@@ -40,12 +40,14 @@ class ReportsScreen extends StatefulWidget {
       this.active = true,
       this.now = DateTime.now,
       this.onCategoryChanged,
+      this.initialBranchId,
       this.branchRequest});
   final ReportsCategory category;
   final bool active;
   final DateTime Function() now;
   final ValueChanged<ReportsCategory>? onCategoryChanged;
   final BranchRequest? branchRequest;
+  final String? initialBranchId;
 
   @override
   State<ReportsScreen> createState() => ReportsScreenState();
@@ -65,6 +67,8 @@ class ReportsScreenState extends State<ReportsScreen> {
   int? _days;
   DateTimeRange? _customDates;
   String? _branch;
+  String? _reportScope;
+  Future<List<Map<String, dynamic>>>? _reportBranches;
   AdminReportingCubit? _reportingCubit;
   AdminWorkoutReportingCubit? _workoutCubit;
   DateTime? _lastWorkoutRequestAt;
@@ -93,6 +97,9 @@ class ReportsScreenState extends State<ReportsScreen> {
   @override
   void initState() {
     super.initState();
+    if (widget.initialBranchId != null) {
+      _reportScope = 'branch:${widget.initialBranchId}';
+    }
     _tab = widget.category;
     _visitedTabs
       ..clear()
@@ -102,6 +109,14 @@ class ReportsScreenState extends State<ReportsScreen> {
   @override
   void didUpdateWidget(covariant ReportsScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if ((oldWidget.branchRequest == null) != (widget.branchRequest == null)) {
+      _reportBranches = null;
+      _reportScope = null;
+    }
+    if (oldWidget.initialBranchId != widget.initialBranchId &&
+        widget.initialBranchId != null) {
+      _reportScope = 'branch:${widget.initialBranchId}';
+    }
     if (oldWidget.category != widget.category ||
         (!oldWidget.active && widget.active)) {
       selectCategory(widget.category, resume: true);
@@ -311,18 +326,7 @@ class ReportsScreenState extends State<ReportsScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         _header(context),
-                        if (widget.branchRequest != null)
-                          TextButton.icon(
-                            icon: const Icon(Icons.location_on_outlined),
-                            label: const Text('Branch report'),
-                            onPressed: () => showDialog<void>(
-                              context: context,
-                              builder: (_) => BranchReportDialog(
-                                request: widget.branchRequest!,
-                                range: _filterQuery().range,
-                              ),
-                            ),
-                          ),
+                        if (widget.branchRequest != null) _branchSelector(),
                         const SizedBox(height: 12),
                       ],
                     ),
@@ -334,7 +338,9 @@ class ReportsScreenState extends State<ReportsScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          if (_usesBusinessReport && reportingState != null)
+                          if (_reportScope == null &&
+                              _usesBusinessReport &&
+                              reportingState != null)
                             AdminReportingFeedback(
                                 state: reportingState,
                                 onRetry: _reportingCubit!.refresh),
@@ -350,10 +356,26 @@ class ReportsScreenState extends State<ReportsScreen> {
                                 snapshot: _usesBusinessReport ? snapshot : null,
                                 loading: _usesBusinessReport &&
                                     (reportingState?.isLoading ?? false)),
-                          if (_usesBusinessReport && ops != null)
-                            OriginalReportContext(snapshot: snapshot!),
                           const SizedBox(height: 14),
-                          if (_visitedTabs.contains(ReportsCategory.overview))
+                          if (_reportScope != null) ...[
+                            if (_tab == ReportsCategory.financial ||
+                                _tab == ReportsCategory.overview)
+                              ListTile(
+                                title: const Text(
+                                    'Membership revenue · Organization-wide'),
+                                trailing: Text(membershipRevenue),
+                              ),
+                            BranchReportDialog(
+                              request: widget.branchRequest!,
+                              range: (_query ??= _filterQuery()).range,
+                              fixedScope: _reportScope,
+                              embedded: true,
+                              category: _tab.label,
+                            ),
+                          ],
+                          if (_reportScope == null && _usesBusinessReport && ops != null)
+                            OriginalReportContext(snapshot: snapshot!),
+                          if (_reportScope == null && _visitedTabs.contains(ReportsCategory.overview))
                             _ReportTabBody(
                               key: const ValueKey(ReportsCategory.overview),
                               visible: _tab == ReportsCategory.overview,
@@ -453,7 +475,8 @@ class ReportsScreenState extends State<ReportsScreen> {
                                     const SizedBox(height: 20),
                                   ],
                                   if (ops != null) ...[
-                                    const Eyebrow('Recent membership receipts'),
+                                    const Eyebrow(
+                                        'Recent membership receipts'),
                                     Panel(
                                         child: OriginalReceiptTrend(
                                             snapshot: snapshot!,
@@ -498,7 +521,8 @@ class ReportsScreenState extends State<ReportsScreen> {
                                 ],
                               ),
                             ),
-                          if (_visitedTabs.contains(ReportsCategory.financial))
+                          if (_reportScope == null && _visitedTabs
+                              .contains(ReportsCategory.financial))
                             _ReportTabBody(
                               key: const ValueKey(ReportsCategory.financial),
                               visible: _tab == ReportsCategory.financial,
@@ -523,7 +547,8 @@ class ReportsScreenState extends State<ReportsScreen> {
                                               const SizedBox(width: 20),
                                               Expanded(
                                                   flex: 2,
-                                                  child: _branchColumn(context,
+                                                  child: _branchColumn(
+                                                      context,
                                                       snapshot: snapshot)),
                                             ],
                                           ),
@@ -552,7 +577,7 @@ class ReportsScreenState extends State<ReportsScreen> {
                                 ],
                               ),
                             ),
-                          if (_visitedTabs.contains(ReportsCategory.fitness))
+                          if (_reportScope == null && _visitedTabs.contains(ReportsCategory.fitness))
                             _ReportTabBody(
                               key: const ValueKey(ReportsCategory.fitness),
                               visible: _tab == ReportsCategory.fitness,
@@ -586,7 +611,7 @@ class ReportsScreenState extends State<ReportsScreen> {
                                 ],
                               ),
                             ),
-                          if (_visitedTabs.contains(ReportsCategory.coaching))
+                          if (_reportScope == null && _visitedTabs.contains(ReportsCategory.coaching))
                             _ReportTabBody(
                               key: const ValueKey(ReportsCategory.coaching),
                               visible: _tab == ReportsCategory.coaching,
@@ -611,7 +636,8 @@ class ReportsScreenState extends State<ReportsScreen> {
                                 ],
                               ),
                             ),
-                          if (_visitedTabs.contains(ReportsCategory.engagement))
+                          if (_reportScope == null && _visitedTabs
+                              .contains(ReportsCategory.engagement))
                             _ReportTabBody(
                               key: const ValueKey(ReportsCategory.engagement),
                               visible: _tab == ReportsCategory.engagement,
@@ -650,8 +676,8 @@ class ReportsScreenState extends State<ReportsScreen> {
                                       anchorKey: _rewardsKey,
                                       live: widget.live,
                                       query: _operational
-                                          ? (_sectionQueries[
-                                                  ReportsCategory.engagement] ??
+                                          ? (_sectionQueries[ReportsCategory
+                                                  .engagement] ??
                                               _query)
                                           : null,
                                       refreshToken: _refreshTokens[
@@ -661,8 +687,8 @@ class ReportsScreenState extends State<ReportsScreen> {
                                       anchorKey: _gamificationKey,
                                       live: widget.live,
                                       query: _operational
-                                          ? (_sectionQueries[
-                                                  ReportsCategory.engagement] ??
+                                          ? (_sectionQueries[ReportsCategory
+                                                  .engagement] ??
                                               _query)
                                           : null,
                                       refreshToken: _refreshTokens[
@@ -686,6 +712,40 @@ class ReportsScreenState extends State<ReportsScreen> {
 
   bool get _usesBusinessReport =>
       _tab != ReportsCategory.fitness && _tab != ReportsCategory.engagement;
+
+  Widget _branchSelector() => FutureBuilder<List<Map<String, dynamic>>>(
+        future: _reportBranches ??= loadReportBranches(widget.branchRequest!),
+        builder: (context, snapshot) {
+          if (snapshot.hasError) {
+            return TextButton(
+              onPressed: () => setState(() => _reportBranches = null),
+              child: const Text('Branches unavailable · Retry'),
+            );
+          }
+          if (!snapshot.hasData) return const LinearProgressIndicator();
+          return DropdownButton<String>(
+            value: _reportScope == 'unassigned' ||
+                    snapshot.data!.any((branch) => 'branch:${branch['branchId']}' == _reportScope)
+                ? _reportScope
+                : '',
+            items: [
+              const DropdownMenuItem(value: '', child: Text('All branches')),
+              const DropdownMenuItem(
+                  value: 'unassigned', child: Text('Unassigned records')),
+              for (final branch in snapshot.data!)
+                DropdownMenuItem(
+                  value: 'branch:${branch['branchId']}',
+                  child: Text(
+                      '${branch['displayName']}${branch['status'] == 'inactive' ? ' (inactive)' : ''}'),
+                ),
+            ],
+            onChanged: (value) => setState(() {
+              _reportScope = value == '' ? null : value;
+              _query ??= _filterQuery();
+            }),
+          );
+        },
+      );
 
   Widget _header(BuildContext context) => Text('${_tab.label} Analytics',
       style: Theme.of(context)
@@ -759,7 +819,7 @@ class ReportsScreenState extends State<ReportsScreen> {
                     height: 20,
                     color: AppColors.hairline,
                     margin: const EdgeInsets.symmetric(horizontal: 4)),
-                if (!_operational)
+                if (!_operational && widget.branchRequest == null)
                   DropdownButtonHideUnderline(
                     child: DropdownButton<String?>(
                       value: _branch,

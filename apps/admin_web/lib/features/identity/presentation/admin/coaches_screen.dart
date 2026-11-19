@@ -37,10 +37,12 @@ class CoachesScreen extends StatefulWidget {
       this.onOpenSchedule,
       this.onOpenBookings,
       this.initialCoachId,
+      this.initialBranchId,
       this.initialCoachGeneration = 0,
       this.discardGuard,
       this.onReviewChanged});
   final String? initialCoachId;
+  final String? initialBranchId;
   final int initialCoachGeneration;
   final CoachReviewDiscardGuard? discardGuard;
   final bool live;
@@ -66,6 +68,7 @@ class _CoachesScreenState extends State<CoachesScreen> {
   @override
   void initState() {
     super.initState();
+    _selectedBranch = widget.initialBranchId ?? 'Branch';
     _discardGuard = widget.discardGuard ?? CoachReviewDiscardGuard();
   }
 
@@ -82,6 +85,9 @@ class _CoachesScreenState extends State<CoachesScreen> {
   @override
   void didUpdateWidget(covariant CoachesScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.initialBranchId != widget.initialBranchId) {
+      _selectedBranch = widget.initialBranchId ?? 'Branch';
+    }
     if (widget.initialCoachId != oldWidget.initialCoachId) {
       _activeReviewTab = 0;
       _showAllProfileFields = false;

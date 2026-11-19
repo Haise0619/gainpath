@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:latlong2/latlong.dart';
@@ -18,6 +21,8 @@ class BranchDirectoryPage extends StatefulWidget {
     this.scanVisit,
     this.pickCover,
     this.initialDetails,
+    this.onOpenReports,
+    this.onOpenCoaches,
   });
 
   final BranchRequest request;
@@ -28,6 +33,8 @@ class BranchDirectoryPage extends StatefulWidget {
   final Future<String?> Function(BuildContext context)? scanVisit;
   final Future<String?> Function()? pickCover;
   final Map<String, dynamic>? initialDetails;
+  final ValueChanged<String>? onOpenReports;
+  final ValueChanged<String>? onOpenCoaches;
 
   @override
   State<BranchDirectoryPage> createState() => _BranchDirectoryPageState();
@@ -126,6 +133,7 @@ class _BranchDirectoryPageState extends State<BranchDirectoryPage> {
               children: [
                 if (cover != null && cover.isNotEmpty)
                   Image.network(cover,
+                      webHtmlElementStrategy: WebHtmlElementStrategy.fallback,
                       height: 150,
                       fit: BoxFit.cover,
                       errorBuilder: (context, error, stack) =>
@@ -178,6 +186,16 @@ class _BranchDirectoryPageState extends State<BranchDirectoryPage> {
           ),
         ),
         actions: [
+          if (widget.admin && widget.onOpenCoaches != null)
+            TextButton(
+              onPressed: () => Navigator.pop(context, 'coaches'),
+              child: const Text('Coaches'),
+            ),
+          if (widget.admin && widget.onOpenReports != null)
+            TextButton(
+              onPressed: () => Navigator.pop(context, 'reports'),
+              child: const Text('Reports'),
+            ),
           TextButton(
             onPressed: () => Navigator.pop(context, 'equipment'),
             child: const Text('Equipment'),
@@ -216,6 +234,14 @@ class _BranchDirectoryPageState extends State<BranchDirectoryPage> {
       ),
     );
     if (!mounted || action == null) return;
+    if (action == 'coaches') {
+      widget.onOpenCoaches?.call(id);
+      return;
+    }
+    if (action == 'reports') {
+      widget.onOpenReports?.call(id);
+      return;
+    }
     if (action == 'equipment' || action == 'visits') {
       await _activity(branch: branch, visits: action == 'visits');
       return;
@@ -307,7 +333,10 @@ class _BranchDirectoryPageState extends State<BranchDirectoryPage> {
       builder: (context) => _BranchEditor(
           branch: branch, request: widget.request, pickCover: widget.pickCover),
     );
-    if (mounted && saved == true) await _load();
+    if (mounted && saved == true) {
+      _notice(branch == null ? 'Branch added.' : 'Branch saved.');
+      await _load();
+    }
   }
 
   @override
@@ -442,6 +471,7 @@ Widget _branchThumbnail(Object? url) {
   return ClipRRect(
     borderRadius: BorderRadius.circular(8),
     child: Image.network(url,
+        webHtmlElementStrategy: WebHtmlElementStrategy.fallback,
         width: 48,
         height: 48,
         fit: BoxFit.cover,
@@ -536,6 +566,8 @@ class _BranchEditorState extends State<_BranchEditor> {
   });
   bool _busy = false;
   late String? _cover = widget.branch?['coverUrl'] as String?;
+  Uint8List? _coverPreview;
+  bool _coverUploadFailed = false;
   bool _uploading = false;
 
   Future<void> _upload() async {
@@ -546,13 +578,24 @@ class _BranchEditorState extends State<_BranchEditor> {
     try {
       final encoded = await widget.pickCover!();
       if (!mounted || encoded == null) return;
+      final bytes = base64Decode(encoded);
+      setState(() {
+        _coverPreview = bytes;
+        _coverUploadFailed = false;
+      });
       final result = await widget
           .request({'action': 'uploadBranchCover', 'dataBase64': encoded});
-      if (mounted) setState(() => _cover = result['url'] as String);
+      final url = result['url'];
+      if (url is! String || url.isEmpty) throw StateError('Missing cover URL');
+      if (mounted) setState(() => _cover = url);
     } catch (_) {
       if (mounted) {
-        setState(() => _error =
-            'Could not upload this image. Choose a JPG or PNG up to 2 MB.');
+        setState(() {
+          _coverUploadFailed = _coverPreview != null;
+          _error = _coverUploadFailed
+              ? 'Cover upload failed. Try again or discard the selected cover.'
+              : 'Could not open the image. Choose a JPG or PNG up to 2 MB.';
+        });
       }
     } finally {
       if (mounted) setState(() => _uploading = false);
@@ -574,7 +617,26 @@ class _BranchEditorState extends State<_BranchEditor> {
   }
 
   Future<void> _save() async {
-    if (!_form.currentState!.validate()) return;
+    if (_busy || _uploading) return;
+    if (_coverUploadFailed) {
+      setState(() => _error =
+          'Upload the selected cover again or discard it before saving.');
+      return;
+    }
+    String value(String key) => _values[key]!.text.trim();
+    final branchId = value('branchId');
+    final name = value('displayName');
+    if (!RegExp(r'^[A-Za-z0-9_-]{1,128}$').hasMatch(branchId)) {
+      _form.currentState?.validate();
+      setState(() => _error =
+          'Enter a branch ID using letters, numbers, hyphens or underscores.');
+      return;
+    }
+    if (name.isEmpty || name.length > 120) {
+      _form.currentState?.validate();
+      setState(() => _error = 'Enter a branch name of up to 120 characters.');
+      return;
+    }
     final schedule = <Map<String, Object>>[];
     if (_hours.any((controller) => controller.text.trim().isNotEmpty)) {
       final slot = RegExp(r'^([01]\d|2[0-3]):[0-5]\d-([01]\d|2[0-3]):[0-5]\d$');
@@ -595,7 +657,6 @@ class _BranchEditorState extends State<_BranchEditor> {
         }
       }
     }
-    String value(String key) => _values[key]!.text.trim();
     final latitude = double.tryParse(value('latitude'));
     final longitude = double.tryParse(value('longitude'));
     if ((value('latitude').isNotEmpty || value('longitude').isNotEmpty) &&
@@ -659,8 +720,17 @@ class _BranchEditorState extends State<_BranchEditor> {
             child: ListView(
               shrinkWrap: true,
               children: [
-                if (_cover case final String url when url.isNotEmpty)
+                if (_coverPreview case final Uint8List bytes)
+                  Image.memory(
+                    bytes,
+                    height: 130,
+                    fit: BoxFit.cover,
+                    errorBuilder: (context, error, stack) =>
+                        const Text('Cover preview unavailable'),
+                  )
+                else if (_cover case final String url when url.isNotEmpty)
                   Image.network(url,
+                      webHtmlElementStrategy: WebHtmlElementStrategy.fallback,
                       height: 120,
                       fit: BoxFit.cover,
                       errorBuilder: (context, error, stack) =>
@@ -670,6 +740,15 @@ class _BranchEditorState extends State<_BranchEditor> {
                       onPressed: _busy || _uploading ? null : _upload,
                       icon: const Icon(Icons.image_outlined),
                       label: Text(_uploading ? 'Uploading…' : 'Upload cover')),
+                if (_coverUploadFailed)
+                  TextButton(
+                    onPressed: _uploading ? null : () => setState(() {
+                      _coverPreview = null;
+                      _coverUploadFailed = false;
+                      _error = null;
+                    }),
+                    child: const Text('Discard selected cover'),
+                  ),
                 OutlinedButton.icon(
                   onPressed: _busy
                       ? null
@@ -741,12 +820,20 @@ class _BranchEditorState extends State<_BranchEditor> {
                     onChanged: _busy
                         ? null
                         : (value) => setState(() => _active = value)),
-                if (_error != null) Text(_error!),
               ],
             ),
           ),
         ),
         actions: [
+          if (_error case final String error)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Semantics(
+                liveRegion: true,
+                child: Text(error,
+                    style: TextStyle(color: Theme.of(context).colorScheme.error)),
+              ),
+            ),
           TextButton(
               onPressed: _busy ? null : () => Navigator.pop(context),
               child: const Text('Cancel')),

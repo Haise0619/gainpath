@@ -1,8 +1,82 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gainpath_ui/gainpath_ui.dart';
 
 void main() {
+  testWidgets('a selected cover previews before upload finishes',
+      (tester) async {
+    final upload = Completer<Map<String, dynamic>>();
+    await tester.pumpWidget(MaterialApp(
+      home: BranchDirectoryPage(
+        admin: true,
+        openDirections: (_) async => true,
+        pickCover: () async =>
+            'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a2ioAAAAASUVORK5CYII=',
+        request: (input) async => input['action'] == 'uploadBranchCover'
+            ? upload.future
+            : {'records': []},
+      ),
+    ));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Add branch'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Upload cover'));
+    await tester.pumpAndSettle();
+    expect(find.byWidgetPredicate((widget) =>
+        widget is Image && widget.image is MemoryImage), findsOneWidget);
+    expect(tester.widget<FilledButton>(
+        find.widgetWithText(FilledButton, 'Save branch')).onPressed, isNull);
+    upload.completeError(StateError('fixture upload rejected'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Cover upload failed').hitTestable(), findsOneWidget);
+    await tester.tap(find.text('Discard selected cover'));
+    await tester.pumpAndSettle();
+    expect(find.byType(Image), findsNothing);
+  });
+
+  testWidgets('branch save errors stay visible beside the save button',
+      (tester) async {
+    var saves = 0;
+    await tester.pumpWidget(MaterialApp(
+      home: BranchDirectoryPage(
+        admin: true,
+        openDirections: (_) async => true,
+        request: (input) async {
+          if (input['action'] == 'save') {
+            saves++;
+            if (saves == 1) throw StateError('fixture rejection');
+          }
+          return {'records': []};
+        },
+      ),
+    ));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Add branch'));
+    await tester.pumpAndSettle();
+    final editorList =
+        find.descendant(of: find.byType(AlertDialog), matching: find.byType(ListView));
+    await tester.drag(editorList, const Offset(0, -2000));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Save branch'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Enter a branch ID').hitTestable(), findsOneWidget);
+    expect(saves, 0);
+    await tester.drag(editorList, const Offset(0, 2000));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.widgetWithText(TextFormField, 'Branch ID'), 'north');
+    await tester.enterText(find.widgetWithText(TextFormField, 'Branch name'), 'North Gym');
+    await tester.tap(find.text('Save branch'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Branch could not be saved').hitTestable(), findsOneWidget);
+    await tester.tap(find.text('Save branch'));
+    await tester.pumpAndSettle();
+    expect(saves, 2);
+    expect(find.byType(AlertDialog), findsNothing);
+    expect(find.text('Branch added.'), findsOneWidget);
+  });
+
   testWidgets('Admin can display the branch visit QR', (tester) async {
     await tester.pumpWidget(MaterialApp(
         home: BranchDirectoryPage(

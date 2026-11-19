@@ -10,14 +10,18 @@
 | Release 1 | Deployed: booking hold, booking options, public Coach availability read, booking change, payment quote/create/read, both regional payment webhooks, and Assistant branch facts/card. Verified source-only updates. Private Admin Web is active on localhost:7359. |
 | Production callable verification | Anonymous list returned HTTP 401 UNAUTHENTICATED. An existing verified TEST identity plus a registered App Check token returned HTTP 200 and one branch from the read-only list. |
 | Booking navigation | Implemented in saved booking details, confirmed payment, reschedule and in-app notices. Signed-in device Maps check pending. |
-| Admin Coach Management and drill-downs | Existing Admin schedule can locally filter published windows by assigned branch. Multi-branch assignment editing and management drill-downs remain pending. |
-| Reports scope and CSV | Existing branch dialog and scoped CSV. Added completed/cancelled appointment counts in local code. Global filter and chart/table integration pending. |
+| Admin Coach Management and drill-downs | Implemented: existing Coach schedule filters published windows by assigned branch. Branch Details links to the existing scoped Coaches and Reports pages; Equipment and Gym Visits keep their existing branch entry points. Member and Booking links, assignment editing and Admin schedule writes remain pending. |
+| Reports scope and CSV | Implemented locally: top-level branch scope with inactive and unassigned choices, retained date range, scoped metrics and CSV across Reports tabs. Organization-wide membership revenue remains explicitly labeled. Scoped results use the existing Branch Report aggregation. Branch-level trend series and detailed tables remain pending. |
 | Assistant branch card | Local card with cover, address, status and actions for View branch and Get directions. Existing available-slot component remains in use. The Flutter fixture card render passed and produced build/chatbot-message-refinement/screenshots/branch-card.png. The branch facts/card payload is deployed. Signed-in visual acceptance and the separate Coach availability response enhancement remain pending. |
 | Automatic Coach recommendations | Local runtime prefers accepted workout branch or Home Branch, and expands eligible branches for verified paid members. Production release and full integration validation pending. |
 | AI Content Planner | Cancelled — Intentional Scope Reduction. Existing organization-wide analysis stays in effect. |
 | AI Member Outreach | Implemented locally: Home Branch filter for Top Active Members and Search Members, and Home Branch in Member Analysis, with primaryBranchId as the legacy fallback. 27 backend tests and TypeScript typecheck passed. Release 2 deployment pending. Gym Visit Analysis, extended branch context and Gemini prompt changes are cancelled by intentional scope reduction. |
-| Release 2 | Pending remaining implementation and regression. |
+| Release 2 | Blocked for production verification and deployment: Firebase CLI credentials expired and requested reauthentication. Local implementation and tests are noted above. |
 | Builds and rendered screenshots | Release 1 private Admin Web build was activated and its served SHA-256 verified. Android arm64 Debug APK built from current working source. Assistant screenshot is a Flutter fixture. |
+
+### Release 2 verification
+
+- 70 backend tests for Outreach search, automatic recommendation, and Coach availability passed along with TypeScript typecheck. Admin Reports fixture verifies retention of inactive branch scope and date range across category navigation. No Firebase, IAM, Rules, Billing, provider or production data changes were made in this turn.
 
 ### Release 1 production evidence
 
