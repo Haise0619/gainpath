@@ -85,7 +85,7 @@ export async function adminReport(store:DocumentStore,auth:Auth,raw:unknown,read
    const membership=['MembershipPurchase','MembershipRenewal'].includes(String(p.kind));
    const coaching=p.type==='CoachingBooking'&&!membership;
    const cleared=membership?p.clearedAtMillis:p.paymentVerifiedAtMillis;
-   if(p.schemaVersion!==1||p.environment!=='sandbox'||p.provider!=='billplz'||p.currency!=='MYR'||
+   if(p.schemaVersion!==1||p.environment!=='sandbox'||(p.provider!=='billplz'&&!(coaching&&p.provider==='xendit'))||p.currency!=='MYR'||
      (!membership&&!coaching)||(membership?p.transactionId!==id:p.bookingId!==id)||
      !integer(p.amountMinor)||p.amountMinor<1||!integer(cleared)||cleared===0||typeof p.billId!=='string'||!p.billId||
      !['confirmed','reconciliation_required'].includes(String(p.fulfilmentStatus)))throw fail();

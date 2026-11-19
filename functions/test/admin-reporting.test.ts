@@ -22,6 +22,24 @@ it('separates trusted confirmed receipts from pending, reconciliation and refund
   const r=await run();expect(r.receipts).toMatchObject({confirmedMinor:13900,membershipMinor:8900,coachingMinor:5000,confirmedCount:2,reviewMinor:17800,reviewCount:2,refundedMinor:8900,refundedCount:1});
   expect(r.daily.reduce((n,d)=>n+d.receiptsMinor,0)).toBe(13900);
 });
+it('schema 2 includes confirmed Xendit coaching and counts uncertain attempts only as pending', async () => {
+  const coaching = { kind: undefined, type: 'CoachingBooking', transactionId: undefined,
+    provider: 'xendit', createdAtMillis: start + 1000, amountMinor: 10000 };
+  rows.transactions = [
+    payment('membership'),
+    payment('pending', { ...coaching, bookingId: 'pending', paymentStatus: 'pending',
+      fulfilmentStatus: 'reconciliation_required', resolutionReason: 'bill_creation_uncertain',
+      billId: undefined, clearedAtMillis: undefined }),
+    payment('verified', { ...coaching, bookingId: 'verified', paymentVerifiedAtMillis: start + 2000 }),
+  ];
+  const r = await adminReport(store, auth, { ...input, schemaVersion: 2 }, reader, () => now);
+  expect(r.receipts).toMatchObject({ confirmedCount: 2, membershipMinor: 8900, coachingMinor: 10000 });
+  expect(r.commerce?.membership.coaching).toMatchObject({ confirmedCount: 1, confirmedMinor: 10000,
+    statuses: { pending: 1, cleared: 1 } });
+  rows.transactions = [payment('membership', { provider: 'xendit' })];
+  await expect(adminReport(store, auth, { ...input, schemaVersion: 2 }, reader, () => now))
+    .rejects.toMatchObject({ code: 'failed-precondition' });
+});
 it('Malaysia instants are start-inclusive and end-exclusive; pending never earns',async()=>{
   rows.transactions=[payment('a',{clearedAtMillis:start-1}),payment('b',{clearedAtMillis:start}),payment('c',{clearedAtMillis:end}),payment('d',{paymentStatus:'pending'})];
   const r=await run();expect(r.receipts.confirmedMinor).toBe(8900);expect(r.daily[0].date).toBe('2026-10-25');

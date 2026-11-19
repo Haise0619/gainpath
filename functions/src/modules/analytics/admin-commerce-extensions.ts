@@ -42,7 +42,7 @@ export async function commerceExtensions(store:DocumentStore,auth:Auth,org:strin
  const plans=new Map<string,ReturnType<typeof metric>>(),coaching=metric();
  for(const {data:p} of payments){
   if(p.organizationId!==org)throw fail();const membership=['MembershipPurchase','MembershipRenewal'].includes(String(p.kind));if(!membership&&p.type!=='CoachingBooking')throw fail();
-  if(p.schemaVersion!==1||p.environment!=='sandbox'||p.provider!=='billplz'||p.currency!=='MYR'||!integer(p.amountMinor))throw fail();
+  if(p.schemaVersion!==1||p.environment!=='sandbox'||(p.provider!=='billplz'&&(membership||p.provider!=='xendit'))||p.currency!=='MYR'||!integer(p.amountMinor))throw fail();
   const planId=membership?(id(p.planId)?p.planId:'unknown'):'coaching';if(membership&&!plans.has(planId))plans.set(planId,metric());const t=membership?plans.get(planId)!:coaching;
   if(inside(p.createdAtMillis)){const status=typeof p.paymentStatus==='string'?p.paymentStatus:'unknown';t.statuses[status]=(t.statuses[status]??0)+1;const refund=typeof p.refundStatus==='string'?p.refundStatus:'none';t.refundStatuses[refund]=(t.refundStatuses[refund]??0)+1;}
   const at=membership?p.clearedAtMillis:p.paymentVerifiedAtMillis;if(p.paymentStatus!=='cleared'||!integer(at)||at>now)continue;

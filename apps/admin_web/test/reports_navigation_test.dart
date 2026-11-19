@@ -18,19 +18,20 @@ import 'admin_workout_reporting_ui_test.dart' show WorkoutUiGateway;
 
 void main() {
   setUpAll(() => GoogleFonts.config.allowRuntimeFetching = false);
-  testWidgets('branch scope and dates persist across report categories',
-      (tester) async {
+  testWidgets('branch scope belongs only to Branch Analytics', (tester) async {
     tester.view.physicalSize = const Size(1440, 1000);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
     final requests = <Map<String, Object?>>[];
     final captureKey = GlobalKey();
-    const render = bool.fromEnvironment('GAINPATH_RENDER_BRANCH_REPORT');
+    final render =
+        Platform.environment['GAINPATH_RENDER_BRANCH_REPORT'] == 'true';
     if (render) {
       await tester.runAsync(() async {
         final font = await File('../mobile/assets/fonts/Barlow-Regular.ttf')
             .readAsBytes();
-        await (FontLoader('BranchFixture')..addFont(Future.value(ByteData.sublistView(font))))
+        await (FontLoader('BranchFixture')
+              ..addFont(Future.value(ByteData.sublistView(font))))
             .load();
         final icons = await File(
                 'C:/flutter/bin/cache/artifacts/material_fonts/MaterialIcons-Regular.otf')
@@ -43,65 +44,124 @@ void main() {
     final gateway = original.OriginalLayoutGateway();
     Future<void> show(ReportsCategory category) async {
       await tester.pumpWidget(original.originalLayoutApp(
-        RepaintBoundary(key: captureKey, child: ColoredBox(
-          color: const Color(0xFFF6F3FC), child: Theme(
-            data: ThemeData(fontFamily: render ? 'BranchFixture' : null),
-            child: ReportsScreen(
-          live: true,
-          category: category,
-          branchRequest: (input) async {
-            requests.add(input);
-            if (input['action'] == 'list') {
-              return {'records': [
-                {'branchId': 'old', 'displayName': 'Old Gym', 'status': 'inactive'},
-              ]};
-            }
-            return {
-              'branchName': 'Old Gym',
-              'acceptedWorkouts': 14,
-              'daily': [
-                {'date': '2026-11-16', 'workouts': 5},
-                {'date': '2026-11-18', 'workouts': 9},
-              ],
-            };
-          },
-        )))),
+        RepaintBoundary(
+            key: captureKey,
+            child: ColoredBox(
+                color: const Color(0xFFF6F3FC),
+                child: Theme(
+                    data:
+                        ThemeData(fontFamily: render ? 'BranchFixture' : null),
+                    child: ReportsScreen(
+                      live: true,
+                      category: category,
+                      branchRequest: (input) async {
+                        requests.add(input);
+                        if (input['action'] == 'list') {
+                          return {
+                            'records': [
+                              {
+                                'branchId': 'old',
+                                'displayName': 'Old Gym',
+                                'status': 'inactive'
+                              },
+                            ]
+                          };
+                        }
+                        if (input['scope'] == 'all') {
+                          return {
+                            'branchName': 'All branches',
+                            'activeBranches': 1,
+                            'branches': [
+                              {
+                                'branchId': 'old',
+                                'branchName': 'Old Gym',
+                                'status': 'inactive',
+                                'homeMembers': 3,
+                                'assignedCoaches': 2,
+                                'gymVisits': 4,
+                                'bookingsCreated': 3,
+                                'completedSessions': 2,
+                                'coachingMinor': 20000
+                              },
+                            ]
+                          };
+                        }
+                        return {
+                          'branchName': 'Old Gym',
+                          'homeMembers': 3,
+                          'assignedCoaches': 2,
+                          'equipmentUnits': 12,
+                          'usableUnits': 10,
+                          'maintenanceUnits': 2,
+                          'acceptedWorkouts': 14,
+                          'daily': [
+                            {
+                              'date': '2026-11-16',
+                              'visits': 3,
+                              'bookings': 1,
+                              'completed': 1,
+                              'cancelled': 0,
+                              'coachingMinor': 10000
+                            },
+                            {
+                              'date': '2026-11-18',
+                              'visits': 1,
+                              'bookings': 2,
+                              'completed': 1,
+                              'cancelled': 0,
+                              'coachingMinor': 10000
+                            },
+                          ],
+                        };
+                      },
+                    )))),
         gateway,
       ));
       await tester.pumpAndSettle();
     }
-    await show(ReportsCategory.overview);
-    await tester.tap(find.text('All branches'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Old Gym (inactive)').last);
-    await tester.pumpAndSettle();
-    expect(requests.last, containsPair('branchId', 'old'));
-    expect(find.text('Export CSV'), findsNothing);
-    expect(find.text('Export branch CSV'), findsOneWidget);
-    await tester.tap(find.text('7 days'));
-    await tester.pumpAndSettle();
-    final range = requests.last;
-    expect(range, containsPair('branchId', 'old'));
-    await show(ReportsCategory.fitness);
-    expect(find.text('Old Gym (inactive)'), findsOneWidget);
-    expect(find.text('Accepted workouts with this scope'), findsOneWidget);
-    expect(find.text('Date (MYT)'), findsOneWidget);
-    expect(requests.last['startAtMillis'], range['startAtMillis']);
-    expect(requests.where((r) => r['action'] == 'list'), hasLength(1));
-    if (render) {
+
+    Future<void> capture(String name) async {
+      if (!render) return;
       await tester.runAsync(() async {
-        final boundary =
-            captureKey.currentContext!.findRenderObject()! as RenderRepaintBoundary;
+        final boundary = captureKey.currentContext!.findRenderObject()!
+            as RenderRepaintBoundary;
         final image = await boundary.toImage();
         try {
           final png = await image.toByteData(format: ui.ImageByteFormat.png);
-          await File('../../build/multi-branch-release/release2-reports-fixture.png')
+          await File(
+                  '../../build/multi-branch-release/phase6-fixture-$name.png')
               .writeAsBytes(png!.buffer.asUint8List());
         } finally {
           image.dispose();
         }
       });
     }
+
+    await show(ReportsCategory.overview);
+    expect(find.text('All branches'), findsNothing);
+    expect(requests, isEmpty);
+    await capture('overview');
+    await show(ReportsCategory.branches);
+    expect(requests.any((r) => r['scope'] == 'all'), isTrue);
+    expect(find.text('View details'), findsOneWidget);
+    await capture('all-branches');
+    await tester.ensureVisible(find.text('View details'));
+    await tester.tap(find.text('View details'));
+    await tester.pumpAndSettle();
+    expect(requests.last, containsPair('branchId', 'old'));
+    expect(find.text('Export branch CSV'), findsOneWidget);
+    await tester.ensureVisible(find.text('7 days'));
+    await tester.tap(find.text('7 days'));
+    await tester.pumpAndSettle();
+    expect(requests.last, containsPair('branchId', 'old'));
+    await capture('specific-branch');
+    for (final category
+        in ReportsCategory.values.where((c) => c != ReportsCategory.branches)) {
+      await show(category);
+      expect(find.text('Old Gym (inactive)'), findsNothing);
+      expect(find.text('All branches'), findsNothing);
+    }
+    expect(requests.where((r) => r['action'] == 'list'), hasLength(1));
   });
   testWidgets(
       'returning to same category retains fresh workouts and refreshes expired data',
@@ -205,7 +265,11 @@ void main() {
               .state<ReportsScreenState>(find.byType(ReportsScreen))
               .selectCategory(category);
           await tester.pumpAndSettle();
-          expect(find.text('${category.label} Analytics'), findsOneWidget);
+          expect(
+              find.text(category == ReportsCategory.branches
+                  ? 'Branch Analytics'
+                  : '${category.label} Analytics'),
+              findsOneWidget);
           expect(tester.takeException(), isNull, reason: category.name);
         }
       });

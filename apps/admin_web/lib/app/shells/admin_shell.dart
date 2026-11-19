@@ -289,8 +289,8 @@ class _AdminShellState extends State<AdminShell> {
             ));
           },
           onOpenReports: (branchId) {
-            setState(() => _reportDrillDownBranch = branchId);
-            _select(_reportsIndex);
+            _select(_reportsIndex + ReportsCategory.branches.index,
+                reportBranch: branchId);
           },
           onOpenCoaches: (branchId) {
             final index = _flatPages.indexWhere((page) => page.label == 'Coaches');
@@ -591,13 +591,15 @@ class _AdminShellState extends State<AdminShell> {
     return crumbs;
   }
 
-  void _select(int flatIndex, {bool updateHistory = true}) async {
+  void _select(int flatIndex,
+      {bool updateHistory = true, String? reportBranch}) async {
     if (flatIndex < 0) return;
     if (flatIndex != _index && !await _coachReviewGuard.canLeave()) return;
     if (!mounted) return;
     final owner = _groupLabelFor(flatIndex);
     setState(() {
       _index = flatIndex;
+      _reportDrillDownBranch = reportBranch;
       _scopedCoachIdForBookings = null;
       _scopedCoachIdForSchedule = null;
       _scopedCoachIdForReview = null;

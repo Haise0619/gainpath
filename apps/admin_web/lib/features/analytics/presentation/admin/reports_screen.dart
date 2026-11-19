@@ -25,7 +25,8 @@ enum ReportsCategory {
   financial('Financial'),
   fitness('Fitness'),
   coaching('Coaching'),
-  engagement('Engagement');
+  engagement('Engagement'),
+  branches('Branches');
 
   const ReportsCategory(this.label);
   final String label;
@@ -66,7 +67,6 @@ class ReportsScreenState extends State<ReportsScreen> {
 
   int? _days;
   DateTimeRange? _customDates;
-  String? _branch;
   String? _reportScope;
   int _branchRefresh = 0;
   Future<List<Map<String, dynamic>>>? _reportBranches;
@@ -114,9 +114,10 @@ class ReportsScreenState extends State<ReportsScreen> {
       _reportBranches = null;
       _reportScope = null;
     }
-    if (oldWidget.initialBranchId != widget.initialBranchId &&
-        widget.initialBranchId != null) {
-      _reportScope = 'branch:${widget.initialBranchId}';
+    if (oldWidget.initialBranchId != widget.initialBranchId) {
+      _reportScope = widget.initialBranchId == null
+          ? null
+          : 'branch:${widget.initialBranchId}';
     }
     if (oldWidget.category != widget.category ||
         (!oldWidget.active && widget.active)) {
@@ -167,8 +168,8 @@ class ReportsScreenState extends State<ReportsScreen> {
   }
 
   AdminReportQuery _filterQuery() {
-    if (_operational) {
-      return operationalDateQuery(DateTime.now(),
+    if (_operational || _tab == ReportsCategory.branches) {
+      return operationalDateQuery(widget.now(),
           days: _days, calendarRange: _customDates);
     }
     final now = widget.now();
@@ -176,7 +177,7 @@ class ReportsScreenState extends State<ReportsScreen> {
         ? DateTime.fromMillisecondsSinceEpoch(0)
         : now.subtract(Duration(days: _days!));
     return AdminReportQuery(
-        range: DateTimeRange(start: start, end: now), branchId: _branch);
+        range: DateTimeRange(start: start, end: now), branchId: null);
   }
 
   void _onFilterChanged() {
@@ -247,6 +248,7 @@ class ReportsScreenState extends State<ReportsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (_tab == ReportsCategory.branches) return _buildBranchAnalytics();
     if (_reportingCubit != null) {
       return BlocBuilder<AdminReportingCubit, AdminReportingState>(
         bloc: _reportingCubit,
@@ -263,7 +265,7 @@ class ReportsScreenState extends State<ReportsScreen> {
 
   Widget _buildReport(BuildContext context, AdminReportingSnapshot? snapshot,
       {AdminReportingState? reportingState}) {
-    final filter = ReportFilter(days: _days, branch: _branch);
+    final filter = ReportFilter(days: _days);
 
     final completed = context
         .read<BookingRepository>()
@@ -327,7 +329,6 @@ class ReportsScreenState extends State<ReportsScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         _header(context),
-                        if (widget.branchRequest != null) _branchSelector(),
                         const SizedBox(height: 12),
                       ],
                     ),
@@ -339,9 +340,7 @@ class ReportsScreenState extends State<ReportsScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          if (_reportScope == null &&
-                              _usesBusinessReport &&
-                              reportingState != null)
+                          if (_usesBusinessReport && reportingState != null)
                             AdminReportingFeedback(
                                 state: reportingState,
                                 onRetry: _reportingCubit!.refresh),
@@ -358,26 +357,9 @@ class ReportsScreenState extends State<ReportsScreen> {
                                 loading: _usesBusinessReport &&
                                     (reportingState?.isLoading ?? false)),
                           const SizedBox(height: 14),
-                          if (_reportScope != null) ...[
-                            if (_tab == ReportsCategory.financial ||
-                                _tab == ReportsCategory.overview)
-                              ListTile(
-                                title: const Text(
-                                    'Membership revenue · Organization-wide'),
-                                trailing: Text(membershipRevenue),
-                              ),
-                            BranchReportDialog(
-                              key: ValueKey(_branchRefresh),
-                              request: widget.branchRequest!,
-                              range: (_query ??= _filterQuery()).range,
-                              fixedScope: _reportScope,
-                              embedded: true,
-                              category: _tab.label,
-                            ),
-                          ],
-                          if (_reportScope == null && _usesBusinessReport && ops != null)
+                          if (_usesBusinessReport && ops != null)
                             OriginalReportContext(snapshot: snapshot!),
-                          if (_reportScope == null && _visitedTabs.contains(ReportsCategory.overview))
+                          if (_visitedTabs.contains(ReportsCategory.overview))
                             _ReportTabBody(
                               key: const ValueKey(ReportsCategory.overview),
                               visible: _tab == ReportsCategory.overview,
@@ -477,8 +459,7 @@ class ReportsScreenState extends State<ReportsScreen> {
                                     const SizedBox(height: 20),
                                   ],
                                   if (ops != null) ...[
-                                    const Eyebrow(
-                                        'Recent membership receipts'),
+                                    const Eyebrow('Recent membership receipts'),
                                     Panel(
                                         child: OriginalReceiptTrend(
                                             snapshot: snapshot!,
@@ -523,8 +504,7 @@ class ReportsScreenState extends State<ReportsScreen> {
                                 ],
                               ),
                             ),
-                          if (_reportScope == null && _visitedTabs
-                              .contains(ReportsCategory.financial))
+                          if (_visitedTabs.contains(ReportsCategory.financial))
                             _ReportTabBody(
                               key: const ValueKey(ReportsCategory.financial),
                               visible: _tab == ReportsCategory.financial,
@@ -549,8 +529,7 @@ class ReportsScreenState extends State<ReportsScreen> {
                                               const SizedBox(width: 20),
                                               Expanded(
                                                   flex: 2,
-                                                  child: _branchColumn(
-                                                      context,
+                                                  child: _branchColumn(context,
                                                       snapshot: snapshot)),
                                             ],
                                           ),
@@ -579,7 +558,7 @@ class ReportsScreenState extends State<ReportsScreen> {
                                 ],
                               ),
                             ),
-                          if (_reportScope == null && _visitedTabs.contains(ReportsCategory.fitness))
+                          if (_visitedTabs.contains(ReportsCategory.fitness))
                             _ReportTabBody(
                               key: const ValueKey(ReportsCategory.fitness),
                               visible: _tab == ReportsCategory.fitness,
@@ -613,7 +592,7 @@ class ReportsScreenState extends State<ReportsScreen> {
                                 ],
                               ),
                             ),
-                          if (_reportScope == null && _visitedTabs.contains(ReportsCategory.coaching))
+                          if (_visitedTabs.contains(ReportsCategory.coaching))
                             _ReportTabBody(
                               key: const ValueKey(ReportsCategory.coaching),
                               visible: _tab == ReportsCategory.coaching,
@@ -638,8 +617,7 @@ class ReportsScreenState extends State<ReportsScreen> {
                                 ],
                               ),
                             ),
-                          if (_reportScope == null && _visitedTabs
-                              .contains(ReportsCategory.engagement))
+                          if (_visitedTabs.contains(ReportsCategory.engagement))
                             _ReportTabBody(
                               key: const ValueKey(ReportsCategory.engagement),
                               visible: _tab == ReportsCategory.engagement,
@@ -678,8 +656,8 @@ class ReportsScreenState extends State<ReportsScreen> {
                                       anchorKey: _rewardsKey,
                                       live: widget.live,
                                       query: _operational
-                                          ? (_sectionQueries[ReportsCategory
-                                                  .engagement] ??
+                                          ? (_sectionQueries[
+                                                  ReportsCategory.engagement] ??
                                               _query)
                                           : null,
                                       refreshToken: _refreshTokens[
@@ -689,8 +667,8 @@ class ReportsScreenState extends State<ReportsScreen> {
                                       anchorKey: _gamificationKey,
                                       live: widget.live,
                                       query: _operational
-                                          ? (_sectionQueries[ReportsCategory
-                                                  .engagement] ??
+                                          ? (_sectionQueries[
+                                                  ReportsCategory.engagement] ??
                                               _query)
                                           : null,
                                       refreshToken: _refreshTokens[
@@ -712,8 +690,43 @@ class ReportsScreenState extends State<ReportsScreen> {
     );
   }
 
+  Widget _buildBranchAnalytics() {
+    final request = widget.branchRequest;
+    return Scaffold(
+      backgroundColor: Colors.transparent,
+      body: ListView(
+        controller: _scrollController,
+        padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+        children: [
+          Text('Branch Analytics',
+              style: Theme.of(context)
+                  .textTheme
+                  .titleLarge
+                  ?.copyWith(fontWeight: FontWeight.w700)),
+          const Text('Monitor gym locations and operational performance.'),
+          const SizedBox(height: 12),
+          _toolbar(),
+          const SizedBox(height: 14),
+          if (request == null)
+            const Text('Branch analytics is unavailable for this session.')
+          else
+            BranchReportDialog(
+              key: ValueKey(_branchRefresh),
+              request: request,
+              range: (_query ??= _filterQuery()).range,
+              fixedScope: _reportScope ?? 'all',
+              embedded: true,
+              onSelectScope: (scope) => setState(() => _reportScope = scope),
+            ),
+        ],
+      ),
+    );
+  }
+
   bool get _usesBusinessReport =>
-      _tab != ReportsCategory.fitness && _tab != ReportsCategory.engagement;
+      _tab == ReportsCategory.overview ||
+      _tab == ReportsCategory.financial ||
+      _tab == ReportsCategory.coaching;
 
   Widget _branchSelector() => FutureBuilder<List<Map<String, dynamic>>>(
         future: _reportBranches ??= loadReportBranches(widget.branchRequest!),
@@ -727,7 +740,8 @@ class ReportsScreenState extends State<ReportsScreen> {
           if (!snapshot.hasData) return const LinearProgressIndicator();
           return DropdownButton<String>(
             value: _reportScope == 'unassigned' ||
-                    snapshot.data!.any((branch) => 'branch:${branch['branchId']}' == _reportScope)
+                    snapshot.data!.any((branch) =>
+                        'branch:${branch['branchId']}' == _reportScope)
                 ? _reportScope
                 : '',
             items: [
@@ -821,33 +835,10 @@ class ReportsScreenState extends State<ReportsScreen> {
                     height: 20,
                     color: AppColors.hairline,
                     margin: const EdgeInsets.symmetric(horizontal: 4)),
-                if (!_operational && widget.branchRequest == null)
-                  DropdownButtonHideUnderline(
-                    child: DropdownButton<String?>(
-                      value: _branch,
-                      hint: const Text('All branches',
-                          style: TextStyle(fontSize: 12.5)),
-                      isDense: true,
-                      style: const TextStyle(
-                          fontSize: 12.5,
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.ink),
-                      items: [
-                        const DropdownMenuItem(
-                            value: null, child: Text('All branches')),
-                        ...context.read<UserAccountRepository>().branches.map(
-                            (b) => DropdownMenuItem(
-                                value: b.name, child: Text(b.name))),
-                      ],
-                      onChanged: _operational
-                          ? null
-                          : (v) => setState(() {
-                                _branch = v;
-                                _onFilterChanged();
-                              }),
-                    ),
-                  ),
-                if (_operational) ...[
+                if (_tab == ReportsCategory.branches &&
+                    widget.branchRequest != null)
+                  _branchSelector(),
+                if (_operational || _tab == ReportsCategory.branches) ...[
                   TextButton.icon(
                       icon: const Icon(Icons.date_range_outlined, size: 16),
                       label: const Text('Custom dates'),
@@ -867,47 +858,48 @@ class ReportsScreenState extends State<ReportsScreen> {
                       }),
                   IconButton(
                       tooltip: 'Refresh reports',
-                      onPressed: _reportScope != null
+                      onPressed: _tab == ReportsCategory.branches
                           ? () => setState(() => _branchRefresh++)
                           : loading
-                          ? null
-                          : () {
-                              setState(() => _refreshTokens[_tab] =
-                                  (_refreshTokens[_tab] ?? 0) + 1);
-                              if (_usesWorkoutReport) {
-                                _ensureWorkouts(force: true);
-                              }
-                              if (_usesBusinessReport) {
-                                _reportingCubit?.refresh();
-                              }
-                            },
+                              ? null
+                              : () {
+                                  setState(() => _refreshTokens[_tab] =
+                                      (_refreshTokens[_tab] ?? 0) + 1);
+                                  if (_usesWorkoutReport) {
+                                    _ensureWorkouts(force: true);
+                                  }
+                                  if (_usesBusinessReport) {
+                                    _reportingCubit?.refresh();
+                                  }
+                                },
                       icon: const Icon(Icons.refresh_rounded, size: 18)),
-                  if (_reportScope == null) TextButton.icon(
-                      icon: const Icon(Icons.download_rounded, size: 17),
-                      label: Text(_exporting ? 'Exporting…' : 'Export CSV'),
-                      onPressed: loading || _exporting
-                          ? null
-                          : _tab == ReportsCategory.fitness
-                              ? (_workoutCubit?.state.report == null
-                                  ? null
-                                  : () => downloadCsv(
-                                      'gainpath-workout-activity.csv',
-                                      _workoutCubit!.state.report!.toCsv()))
-                              : _tab == ReportsCategory.engagement
-                                  ? (_reportingCubit?.gateway
-                                          is AdminCheckInReportingGateway
-                                      ? _exportEngagement
-                                      : null)
-                                  : snapshot?.operations == null
-                                      ? null
-                                      : () => downloadCsv(
-                                          'gainpath-operational-report.csv',
-                                          snapshot!.unified != null
-                                              ? BusinessDashboardMetrics(
-                                                      snapshot, null)
-                                                  .csv()
-                                              : snapshot.operations!
-                                                  .toCsv(snapshot))),
+                  if (_tab != ReportsCategory.branches)
+                    TextButton.icon(
+                        icon: const Icon(Icons.download_rounded, size: 17),
+                        label: Text(_exporting ? 'Exporting…' : 'Export CSV'),
+                        onPressed: loading || _exporting
+                            ? null
+                            : _tab == ReportsCategory.fitness
+                                ? (_workoutCubit?.state.report == null
+                                    ? null
+                                    : () => downloadCsv(
+                                        'gainpath-workout-activity.csv',
+                                        _workoutCubit!.state.report!.toCsv()))
+                                : _tab == ReportsCategory.engagement
+                                    ? (_reportingCubit?.gateway
+                                            is AdminCheckInReportingGateway
+                                        ? _exportEngagement
+                                        : null)
+                                    : snapshot?.operations == null
+                                        ? null
+                                        : () => downloadCsv(
+                                            'gainpath-operational-report.csv',
+                                            snapshot!.unified != null
+                                                ? BusinessDashboardMetrics(
+                                                        snapshot, null)
+                                                    .csv()
+                                                : snapshot.operations!
+                                                    .toCsv(snapshot))),
                 ],
               ],
             ),
