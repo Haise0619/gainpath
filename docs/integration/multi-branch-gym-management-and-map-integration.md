@@ -1,5 +1,38 @@
 # Multi-branch gym management and map integration
 
+## Phase 6 — Reports simplification (19 November 2026)
+
+**Superseded — Replaced by Dedicated Branch Analytics:** Global Branch Filter across all Reports Categories.
+
+**Root cause:** The schema-2 Organization-wide commerce extension rejected every non-Billplz payment during source validation, before pending records were excluded from receipt totals. Its provider contract fell out of sync with the direct core aggregation after Xendit integration. The deployed unified Admin endpoint also retained the older Billplz-only base validator, so cleared Xendit receipts failed there even after the extension predicate was corrected. The same organization source scan ran for short and all-recorded date windows. Specific branches used the separate Branch Report reader. Fitness and Engagement used independent sources. The fix permits Xendit for coaching while retaining strict cleared-receipt checks and excluding pending records from receipts.
+
+**Implemented:** Overview, Financial, Fitness, Coaching and Engagement keep organization-wide scope and their existing reporting components. Reports → Branches uses the existing authorized branch callable for All branches comparisons, inactive branches, Unassigned records and individual branch trends, inventory snapshots, daily tables and CSV. Branch Details → Reports opens Branch Analytics with the selected branch. Confirmed sandbox coaching receipts and actual revenue are separate. Actual revenue is unavailable under the current sandbox contract.
+
+**Tested:** 151 focused backend tests, including booking settlement and Xendit checkout, TypeScript test typecheck and Functions build. 39 Flutter reporting tests passed and the final navigation/dialog rerun passed 11 tests with clean scoped Dart analysis. 14 Firestore Emulator tests passed across organization and branch reporting. Rendered screenshots use synthetic fixture data: `build/multi-branch-release/phase6-fixture-overview.png`, `phase6-fixture-all-branches.png` and `phase6-fixture-specific-branch.png` in the same directory.
+
+**Release build:** Existing private App Check configuration and enabled Recommendations flag. Localhost:7359 serves the exact release bundle SHA-256 `74a801af167ae26d6cfdb76abe0254bcac08fb21406a7df5891b5e19fc36e6c9`. Previous bundles were retained. Android Studio's existing Admin configuration was retained. The Member app did not require a rebuild.
+
+**Deployed:** Singapore `adminReportingCommand` (revision `adminreportingcommand-00004-zav`), `fypDatasetCommand` (normal Admin UI, revision `fypdatasetcommand-00022-ziz`) and `branchManagementCommand` (revision `branchmanagementcommand-00003-yes`). Active status, exact source hashes, runtime settings and IAM were verified. Rollback ZIPs and metadata are retained under `build/multi-branch-release/phase6-org-dsIWat`, `phase6-unified-Mr1La5` and `phase6-branch-report-du09Qa`.
+
+**Production verification boundary:** The existing test identity passed Auth and App Check, but lacks access to the canonical organization. The exact production packages passed read-only canonical data replay for All recorded dates, 7, 30 and 90 days, and for branch comparison, both branches and Unassigned. The existing authenticated FYP Admin received 200 on its own cohort, canonical access was correctly denied, and anonymous requests returned 401. Signed-in canonical Admin browser and Callable acceptance are still pending. No production payment, booking, inventory or notification records were written.
+
+**Manual acceptance pending**
+
+1. Open Reports → Overview. Run All recorded dates, 7 days, 30 days, 90 days and a custom MYT range. Refresh and confirm CSV includes the same reporting scope.
+2. Open Financial, Fitness, Coaching and Engagement. Verify date range, refresh and CSV on each and confirm the Branch filter appears only under Reports → Branches.
+3. Open Reports → Branches from the sidebar. Check All branches comparison, use View details, and compare date-scoped KPIs, daily rows and CSV. Change dates and check that inventory and assignments remain current snapshots.
+4. Switch to an inactive branch and Unassigned. Check the report explicitly shows unavailable data when applicable. Confirm that pending sandbox attempts are excluded from receipts and membership receipts remain organization-wide.
+5. Open Branch Details → Reports for each test branch. Verify the correct Branch Analytics filter is selected and can be cleared.
+
+
+## Phase 5 acceptance follow-up
+
+- The 20 November 2026 01:00 MYT booking stores its actual activity branch and 60-minute duration. The related RM100 Xendit attempt was pending with reconciliation_required / bill_creation_uncertain. Neither a provider session ID nor a checkout URL was persisted. The callable returned HTTP 200 on 19 November 2026 around 12:32 MYT. The raw provider response was not retained, so the exact reason for this individual provider outcome is unverified. No payment or lock was changed.
+- The adapters previously accepted Xendit short links only. The mock test now exercises a documented checkout-staging.xendit.co session URL. The TypeScript gateway and Dart checkout URL validation support the documented HTTPS hosts with a constrained session path.
+- The only updated production function was createBookingPaymentCommand in Singapore. Its source-only overlay, runtime configuration and IAM were verified. Original and staged ZIPs are retained under build/multi-branch-release/phase5-baselines and phase5-overlay.
+- The Member Coach Directory loads the active branch names and all Coach directory pages before applying location, search and specialty filters. Local browsing does not persist branch preference changes. Coach cards show known assigned branch names.
+- Verified 65 targeted backend tests, backend compilation, 19 Member Flutter tests, and Android Debug arm64 build. Real Browser / Xendit Sandbox acceptance remains manual.
+
 ## Current delivery status
 
 - **Implemented:** Admin can edit Coach assignments and dated availability in the existing schedule view. Writes reuse revisions, branch IDs and global Coach slot locks. Branch Details opens scoped Members and Bookings alongside the existing drill-downs. Member scope uses Home Branch with primaryBranchId fallback. Reports shows daily trend, date details and scoped CSV. Automatic Coach matching and Outreach Home Branch filtering retain the existing recommendation flow.
