@@ -37,11 +37,13 @@ export class PasswordRecovery {
     if (claims?.admin || claims?.staff || claims?.superAdmin ||
         (claims?.role && !['member', 'coach'].includes(String(claims.role)))) return false;
     const profile = (await this.db.doc(`users/${user.uid}`).get()).data();
-    if (!profile || !['member', 'coach'].includes(profile.role) ||
-        typeof profile.organizationId !== 'string' || !profile.organizationId || profile.organizationId.includes('/')) return false;
+    if (typeof profile?.organizationId !== 'string' || !profile.organizationId ||
+        profile.organizationId.includes('/')) return false;
     const membership = (await this.db.doc(`orgs/${profile.organizationId}/members/${user.uid}`).get()).data();
-    return membership?.status === 'active' && membership.role === profile.role &&
-      membership.organizationId === profile.organizationId;
+    // Registration stores the authoritative role on the organization membership.
+    return membership?.status === 'active' && ['member', 'coach'].includes(membership.role) &&
+      membership.organizationId === profile.organizationId &&
+      (profile.role === undefined || profile.role === membership.role);
   }
 
   async execute(input: unknown) {

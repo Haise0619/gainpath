@@ -24,7 +24,7 @@ async function main() {
   const user = await auth.createUser({ email, password: original, emailVerified: true });
   const otherUser = await auth.createUser({ email: other, password: original });
   for (const account of [user, otherUser]) {
-    await db.doc('users/' + account.uid).set({ role: 'member', organizationId: 'gym', points: 30 });
+    await db.doc('users/' + account.uid).set({ organizationId: 'gym', points: 30 });
     await db.doc('orgs/gym/members/' + account.uid)
       .set({ role: 'member', organizationId: 'gym', status: 'active' });
   }
@@ -103,7 +103,9 @@ async function main() {
 
   const adminEmail = 'admin@example.test';
   const admin = await auth.createUser({ email: adminEmail, password: original });
-  await db.doc('users/' + admin.uid).set({ role: 'admin', organizationId: 'gym' });
+  await db.doc('users/' + admin.uid).set({ organizationId: 'gym' });
+  await db.doc('orgs/gym/members/' + admin.uid)
+    .set({ role: 'admin', organizationId: 'gym', status: 'active' });
   const before = messages.length;
   await send(adminEmail);
   assert.equal(messages.length, before);
