@@ -81,3 +81,4 @@ export { adminMemberProvisioning } from './modules/identity/admin-member-provisi
 export { supportRequestCommand } from './modules/support/support-request';
 export { complianceCommand } from './modules/compliance/compliance-callable';
 export { groupClassesCommand } from './modules/group-classes/group-classes-callable';
+export { passwordRecovery } from './modules/identity/password-recovery-callable';
