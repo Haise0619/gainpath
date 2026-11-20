@@ -14,6 +14,7 @@ import { branchOperations, branchOperationsActions } from './branch-operations';
 import { readBranchReport } from '../analytics/branch-report';
 import { readOperationsCalendar } from '../analytics/operations-calendar';
 import { authorizeAdminReport } from '../analytics/admin-reporting';
+import { readMemberAnnouncements } from '../content/member-announcements';
 
 export const branchManagementCommand = onCall({ region: 'asia-southeast1', enforceAppCheck: true }, async request => {
   try {
@@ -40,6 +41,13 @@ export const branchManagementCommand = onCall({ region: 'asia-southeast1', enfor
     }
     if (input?.action === 'calendarEvents' || input?.action === 'calendarInsights') {
       return await readOperationsCalendar(db, request.auth, input);
+    }
+    if (input?.action === 'memberAnnouncements') {
+      requireVerifiedEmail(request.auth);
+      const org = requiredIdentifier(input.organizationId, 'organizationId');
+      const afterId = input.afterId == null
+        ? undefined : requiredIdentifier(input.afterId, 'afterId');
+      return await readMemberAnnouncements(db, org, request.auth!.uid, afterId);
     }
     if (input?.action === 'branchReport') {
       requireVerifiedEmail(request.auth);

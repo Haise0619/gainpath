@@ -2,6 +2,11 @@ import { readFileSync } from 'node:fs';
 import { initializeTestEnvironment, assertFails, type RulesTestEnvironment } from '@firebase/rules-unit-testing';
 import { collection, deleteDoc, doc, getDoc, getDocs, limit, orderBy, documentId, query, runTransaction, serverTimestamp, setDoc, updateDoc, where } from 'firebase/firestore';
 import { afterAll, beforeAll, beforeEach, expect, it } from 'vitest';
+import { deleteApp, initializeApp } from 'firebase-admin/app';
+import { getFirestore, Timestamp } from 'firebase-admin/firestore';
+import { readMemberAnnouncements } from '../src/modules/content/member-announcements';
+
+const app = initializeApp({ projectId: 'demo-gainpath' }, 'announcement-emulator');
 
 let env: RulesTestEnvironment;
 beforeAll(async () => {
@@ -10,7 +15,7 @@ beforeAll(async () => {
     rules: readFileSync(process.env.GAINPATH_ANNOUNCEMENT_RULES_FILE ?? '../firebase/firestore.rules', 'utf8'),
   }});
 });
-afterAll(async () => { await env?.cleanup(); });
+afterAll(async () => { await env?.cleanup(); await deleteApp(app); });
 beforeEach(async () => {
   await env.clearFirestore();
   await env.withSecurityRulesDisabled(async c => {
@@ -25,19 +30,21 @@ const path = 'orgs/o/announcements/a';
 const draft = () => ({schemaVersion: 1, title: 'Development fixture', body: 'Emulator only', status: 'draft', revision: 1,
   validFrom: new Date('2026-01-01'), validTo: new Date('2027-01-01'), publishedAt: null, createdAt: serverTimestamp(), updatedAt: serverTimestamp(), createdBy: 'admin', updatedBy: 'admin'});
 
-it('Admin draft -> edit -> publish -> scoped Member refresh -> deactivate, preserving identity', async () => {
+it('Admin draft -> edit -> publish -> callable read -> deactivate, preserving identity', async () => {
   const admin = dbFor('admin'), member = dbFor('member');
   const ref = doc(admin, path);
   await setDoc(ref, draft());
   await assertFails(getDoc(doc(member, path)));
   const published = () => getDocs(query(collection(member, 'orgs/o/announcements'), where('status', '==', 'published'), orderBy(documentId()), limit(20)));
-  expect((await published()).empty).toBe(true);
+  await assertFails(published());
   const original = (await getDoc(ref)).data()!;
   await updateDoc(ref, {title: 'Updated fixture', status: 'published', publishedAt: serverTimestamp(), revision: 2, updatedAt: serverTimestamp(), updatedBy: 'admin'});
-  expect((await published()).docs.map(d => d.data().title)).toEqual(['Updated fixture']);
+  await assertFails(published());
+  expect((await readMemberAnnouncements(getFirestore(app), 'o', 'member', undefined,
+    Timestamp.fromDate(new Date('2026-11-20T00:00:00+08:00')))).records.map(d => d.title)).toEqual(['Updated fixture']);
   expect((await getDoc(ref)).data()!.createdAt).toEqual(original.createdAt);
   await updateDoc(ref, {status: 'inactive', revision: 3, updatedAt: serverTimestamp(), updatedBy: 'admin'});
-  expect((await published()).empty).toBe(true);
+  await assertFails(published());
   expect((await getDoc(ref)).data()!.revision).toBe(3);
   await assertFails(deleteDoc(ref));
 });
@@ -62,7 +69,7 @@ it('keeps Staff content authority; rejects stale revisions, invalid dates and im
   const patch = {revision: 2, updatedBy: 'staff', updatedAt: serverTimestamp()};
   await updateDoc(doc(staff, path), {...patch, body: 'Staff edit'});
   await assertFails(updateDoc(doc(staff, path), {...patch, body: 'Stale'}));
-  for (const bad of [{validTo: new Date('2025-01-01')}, {createdBy: 'staff'}, {schemaVersion: 2}, {body: ''}, {title: 'x'.repeat(121)}, {extraField: true}]) {
+  for (const bad of [{status: 'published', validTo: new Date('2025-01-01'), publishedAt: serverTimestamp()}, {createdBy: 'staff'}, {schemaVersion: 2}, {status: 'published', body: '', publishedAt: serverTimestamp()}, {title: 'x'.repeat(121)}, {extraField: true}]) {
     await assertFails(updateDoc(doc(staff, path), {...patch, revision: 3, ...bad}));
   }
   const originalRevision = 2;
@@ -73,4 +80,35 @@ it('keeps Staff content authority; rejects stale revisions, invalid dates and im
     tx.update(doc(staff, path), {...patch, revision: 3, body: 'Stale editor'});
   })).rejects.toThrow('Reload required');
   expect((await getDoc(doc(admin, path))).data()!.body).toBe('Second editor');
+});
+
+it('checks audience targets and uses saved home and active selected branches at the server clock', async () => {
+  const admin = dbFor('admin');
+  await env.withSecurityRulesDisabled(async c => {
+    for (const [path, status] of [['orgs/o/branches/main','active'], ['orgs/o/branches/east','active'],
+      ['orgs/o/branches/west','inactive'], ['orgs/other/branches/foreign','active']]) {
+      await setDoc(doc(c.firestore(), path), { status, displayName: path.split('/').at(-1) });
+    }
+    await updateDoc(doc(c.firestore(), 'users/member'), {primaryBranchId: 'main', selectedBranchId: 'east'});
+  });
+  const start = new Date('2026-11-20T00:00:00+08:00');
+  const end = new Date('2026-11-21T00:00:00+08:00');
+  const published = () => ({...draft(), status: 'published', validFrom: start, validTo: end, publishedAt: serverTimestamp()});
+  const targeted = (ids: string[]) => ({...published(), audienceScope: 'branches', targetBranchIds: ids});
+  const ref = (id: string) => doc(admin, `orgs/o/announcements/${id}`);
+  for (const id of ['foreign', 'west', 'invalid/id']) {
+    await assertFails(setDoc(ref('rejected'), targeted([id])));
+  }
+  await assertFails(setDoc(ref('empty'), targeted([])));
+  await setDoc(ref('global'), published());
+  await setDoc(ref('both'), {...targeted(['main', 'east']), priority: 'important'});
+  await setDoc(ref('east'), targeted(['east']));
+  const read = (time: Date, org = 'o') =>
+    readMemberAnnouncements(getFirestore(app), org, 'member', undefined, Timestamp.fromDate(time));
+  expect((await read(new Date(start.getTime() - 1))).records).toEqual([]);
+  expect((await read(start)).records.map(record => record.id)).toEqual(['both', 'east', 'global']);
+  expect((await read(end)).records).toEqual([]);
+  await expect(read(start, 'other')).rejects.toMatchObject({code: 'permission-denied'});
+  await env.withSecurityRulesDisabled(c => updateDoc(doc(c.firestore(), 'orgs/o/branches/east'), {status: 'inactive'}));
+  expect((await read(start)).records.map(record => record.id)).toEqual(['both', 'global']);
 });
