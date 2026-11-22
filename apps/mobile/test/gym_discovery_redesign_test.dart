@@ -352,9 +352,9 @@ void main() {
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
 
-    final now = DateTime(2026, 11, 19, 14, 30);
-    final earlier = DateTime(2026, 11, 19, 9, 15);
-    final yesterday = DateTime(2026, 11, 18, 18, 45);
+    final now = DateTime.parse('2026-11-19T14:30:00+08:00');
+    final earlier = DateTime.parse('2026-11-19T09:15:00+08:00');
+    final yesterday = DateTime.parse('2026-11-18T18:45:00+08:00');
 
     await tester.pumpWidget(MaterialApp(
       theme: ThemeData(

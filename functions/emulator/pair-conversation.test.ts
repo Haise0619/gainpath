@@ -2,37 +2,15 @@ import { initializeApp, deleteApp, type App } from 'firebase-admin/app';
 import { getFirestore, type Firestore } from 'firebase-admin/firestore';
 import { beforeAll, beforeEach, afterAll, expect, it, vi } from 'vitest';
 import { FirestoreConversationStore } from '../src/modules/coaching/pair-conversation-store';
-import { pairConversation, type PairResponse } from '../src/modules/coaching/pair-conversation-service';
+import { pairConversation } from '../src/modules/coaching/pair-conversation-service';
 import { seeds, now, start } from '../test/booking-fixture';
+import { settleConcurrentEmulatorRequests } from './loopback-emulator';
 
 let app: App, db: Firestore;
 const input = { schemaVersion: 2, organizationId: 'org-1', bookingId: 'pair-booking-1' };
 const auth = (uid: string) => ({ uid, token: { email_verified: true } });
 const call = (uid = 'member-1', fields = {}, time = now) => pairConversation(new FirestoreConversationStore(db), auth(uid), { ...input, ...fields }, () => time);
 const sendQuestion = () => call('member-1', { requestId: 'same', text: 'Shared question' });
-
-async function completeDuplicateSends(
-  attempts: readonly PromiseSettledResult<PairResponse>[],
-  resend: () => Promise<PairResponse>,
-): Promise<PairResponse[]> {
-  const responses: PairResponse[] = [];
-  for (const attempt of attempts) {
-    if (attempt.status === 'fulfilled') {
-      responses.push(attempt.value);
-      continue;
-    }
-    const error: unknown = attempt.reason;
-    // The emulator may close a contending transaction before the SDK re-sends
-    // its read (googleapis/google-cloud-node#9693). Replay the same request once
-    // here, after all concurrent attempts have settled.
-    if (!(error instanceof Error) || !('code' in error) || error.code !== 3 ||
-        !('details' in error) || error.details !== 'Transaction is invalid or closed.') {
-      throw error;
-    }
-    responses.push(await resend());
-  }
-  return responses;
-}
 
 async function expectSingleQuestion(conversationId: string) {
   const thread = db.doc('orgs/org-1/coachingConversations/' + conversationId);
@@ -61,9 +39,11 @@ beforeEach(async () => {
 afterAll(async () => { await db?.terminate(); if (app) await deleteApp(app); });
 it('uses transactional compound queries, deduplicates simultaneous sends and preserves booking records', async () => {
   const before = (await db.doc('orgs/org-1/bookings/pair-booking-1').get()).data();
-  const attempts = await Promise.allSettled(Array.from({ length: 4 }, sendQuestion));
-  expect(attempts.some(attempt => attempt.status === 'fulfilled')).toBe(true);
-  const responses = await completeDuplicateSends(attempts, sendQuestion);
+  const settled = await settleConcurrentEmulatorRequests(Array.from({ length: 4 }, () => sendQuestion));
+  const responses = settled.map(result => {
+    if (result.status === 'rejected') throw result.reason;
+    return result.value;
+  });
   expect(responses).toEqual(Array(4).fill(responses[0]));
   await expectSingleQuestion(responses[0].conversationId);
   await call('coach-1', { bookingId: 'pair-booking-2', requestId: 'reply', text: 'Shared reply' });
@@ -79,16 +59,28 @@ it('replays only the emulator closed-transaction status, once, without duplicati
   const invalid = Object.assign(new Error('Invalid argument'), { code: 3, details: 'Invalid query.' });
   const otherCode = Object.assign(new Error('Unrelated status'), { code: 7, details: closed.details });
   const committed = await sendQuestion();
-  const resend = vi.fn(sendQuestion);
-
-  await expect(completeDuplicateSends([{ status: 'rejected', reason: closed }], resend)).resolves.toEqual([committed]);
-  await expect(completeDuplicateSends([{ status: 'rejected', reason: invalid }], resend)).rejects.toBe(invalid);
-  await expect(completeDuplicateSends([{ status: 'rejected', reason: otherCode }], resend)).rejects.toBe(otherCode);
-  expect(resend).toHaveBeenCalledTimes(1);
-
-  resend.mockRejectedValueOnce(closed);
-  await expect(completeDuplicateSends([{ status: 'rejected', reason: closed }], resend)).rejects.toBe(closed);
+  const winner = async () => committed;
+  const resend = vi.fn(sendQuestion).mockRejectedValueOnce(closed);
+  expect((await settleConcurrentEmulatorRequests([winner, resend]))[1])
+    .toEqual({ status: 'fulfilled', value: committed });
   expect(resend).toHaveBeenCalledTimes(2);
+
+  for (const error of [invalid, otherCode]) {
+    const failed = vi.fn(sendQuestion).mockRejectedValue(error);
+    expect((await settleConcurrentEmulatorRequests([winner, failed]))[1])
+      .toEqual({ status: 'rejected', reason: error });
+    expect(failed).toHaveBeenCalledTimes(1);
+  }
+
+  const closedAgain = vi.fn(sendQuestion).mockRejectedValue(closed);
+  expect((await settleConcurrentEmulatorRequests([winner, closedAgain]))[1])
+    .toEqual({ status: 'rejected', reason: closed });
+  expect(closedAgain).toHaveBeenCalledTimes(2);
+
+  const noWinner = vi.fn(sendQuestion).mockRejectedValue(closed);
+  expect((await settleConcurrentEmulatorRequests([noWinner, noWinner]))[0])
+    .toEqual({ status: 'rejected', reason: closed });
+  expect(noWinner).toHaveBeenCalledTimes(2);
   await expectSingleQuestion(committed.conversationId);
 });
 
